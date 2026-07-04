@@ -1,0 +1,647 @@
+import re
+import datetime
+from fastapi import APIRouter, Request, Form, HTTPException, Query
+from fastapi.responses import JSONResponse
+from sqlalchemy import desc, or_, and_, func
+from sqlalchemy.orm import selectinload
+
+from models import User, Post, Follow, Like, Boost, Notification, Novel, Episode, get_session
+from routes.auth import require_auth, get_current_user
+from activitypub import broadcast_to_followers, _post_to_inbox
+from config import BASE_URL, MAX_POST_LENGTH
+
+router = APIRouter(prefix="/api")
+
+
+# ── helpers ──
+
+def _post_json(p, session, user):
+    liked = session.query(Like).filter_by(user_id=user.id, post_id=p.id).first() is not None
+    boosted = session.query(Boost).filter_by(user_id=user.id, post_id=p.id).first() is not None
+    latest_boost = session.query(Boost).filter_by(post_id=p.id).order_by(desc(Boost.created_at)).first()
+    booster = session.query(User).get(latest_boost.user_id) if latest_boost else None
+    return {
+        "id": p.id,
+        "content": p.content,
+        "summary": p.summary or "",
+        "visibility": p.visibility or "public",
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+        "author": _user_json(p.author),
+        "likes_count": p.likes_count,
+        "boosts_count": p.boosts_count,
+        "replies_count": p.replies_count,
+        "liked": liked,
+        "boosted": boosted,
+        "is_mine": p.author_id == user.id,
+        "reply_context": _reply_context(p),
+        "boosted_by": _user_json(booster) if booster and booster.id != p.author_id else None,
+    }
+
+
+def _user_json(u):
+    return {
+        "id": u.id,
+        "username": u.username,
+        "display_name": u.display_name or u.username,
+        "avatar": u.profile_image or "",
+        "summary": u.summary or "",
+        "is_admin": u.is_admin,
+    }
+
+
+def _reply_context(p):
+    parent = p.parent if hasattr(p, 'parent') else None
+    if not parent:
+        return None
+    return {
+        "id": parent.id,
+        "content": parent.content[:200] if parent.content else "",
+        "author": _user_json(parent.author),
+    }
+
+
+def _can_view(post, viewer, session):
+    if post.is_deleted:
+        return False
+    if post.author_id == viewer.id:
+        return True
+    v = post.visibility or "public"
+    if v in ("public", "home"):
+        return True
+    if v == "followers":
+        return session.query(Follow).filter_by(
+            follower_id=viewer.id, following_id=post.author_id, accepted=True
+        ).first() is not None
+    if v == "mention":
+        if post.mentioned_user_ids and viewer.id in post.mentioned_user_ids:
+            return True
+        if viewer.username and f"@{viewer.username}" in (post.content or ""):
+            return True
+        return False
+    return True
+
+
+def _parse_mentions(content):
+    mentioned = set(re.findall(r'@(\w+)', content))
+    if not mentioned:
+        return []
+    with get_session() as s:
+        users = s.query(User).filter(User.username.in_(mentioned)).all()
+        return [u.id for u in users]
+
+
+TIMELINE_LABELS = {
+    "federated": "연합", "local": "로컬", "social": "소셜", "home": "홈",
+}
+
+
+# ── Auth API ──
+
+@router.get("/auth/me")
+def api_me(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    return _user_json(user)
+
+
+@router.post("/auth/login")
+def api_login(request: Request, username: str = Form(...), password: str = Form(...)):
+    from routes.auth import hash_password, verify_password, create_session
+    with get_session() as s:
+        db_user = s.query(User).filter_by(username=username, is_remote=False).first()
+        if not db_user:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        stored = db_user.password_hash
+        if ":" not in stored:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        salt, hval = stored.split(":", 1)
+        if not verify_password(password, salt, hval):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        token = create_session(db_user.id)
+        resp = JSONResponse(_user_json(db_user))
+        resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/")
+        return resp
+
+
+@router.post("/auth/register")
+def api_register(request: Request, username: str = Form(...), password: str = Form(...),
+                 display_name: str = Form("")):
+    from routes.auth import hash_password, create_session
+    from crypto_utils import generate_keypair
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="Username and password required")
+    if len(username) < 3 or len(password) < 6:
+        raise HTTPException(status_code=400, detail="Username (3+) and password (6+) required")
+    with get_session() as s:
+        existing = s.query(User).filter_by(username=username).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Username already taken")
+        salt, pwd_hash = hash_password(password)
+        priv_key, pub_key = generate_keypair()
+        user = User(
+            username=username,
+            display_name=display_name or username,
+            password_hash=salt + ":" + pwd_hash,
+            private_key=priv_key, public_key=pub_key,
+            is_remote=False,
+        )
+        s.add(user)
+        s.commit()
+        user.ap_id = f"{BASE_URL}/users/{user.username}"
+        s.commit()
+        token = create_session(user.id)
+        resp = JSONResponse(_user_json(user))
+        resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/")
+        return resp
+
+
+@router.post("/auth/logout")
+def api_logout(request: Request):
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie("session")
+    return resp
+
+
+# ── Timeline API ──
+
+def _get_feed(user, tl_type, session, limit=10, offset=0):
+    if tl_type == "home":
+        following_ids = [f.following_id for f in session.query(Follow).filter_by(
+            follower_id=user.id, accepted=True
+        ).all()]
+        following_ids.append(user.id)
+        boosted_ids = [b.post_id for b in session.query(Boost).filter_by(user_id=user.id).all()]
+        posts = session.query(Post).options(
+            selectinload(Post.parent).selectinload(Post.author)
+        ).filter(
+            or_(
+                Post.author_id.in_(following_ids),
+                Post.id.in_(boosted_ids),
+            ),
+            Post.is_deleted == False,
+        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
+        posts = [p for p in posts if _can_view(p, user, session)]
+    elif tl_type == "social":
+        following_ids = [f.following_id for f in session.query(Follow).filter_by(
+            follower_id=user.id, accepted=True
+        ).all()]
+        following_ids.append(user.id)
+        local_ids = [u.id for u in session.query(User).filter_by(is_remote=False).all()]
+        posts = session.query(Post).options(
+            selectinload(Post.parent).selectinload(Post.author)
+        ).filter(
+            or_(
+                Post.author_id.in_(following_ids),
+                and_(Post.author_id.in_(local_ids), Post.visibility == "public"),
+            ),
+            Post.is_deleted == False,
+        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
+        posts = [p for p in posts if _can_view(p, user, session)]
+    elif tl_type == "local":
+        local_ids = [u.id for u in session.query(User).filter_by(is_remote=False).all()]
+        posts = session.query(Post).options(
+            selectinload(Post.parent).selectinload(Post.author)
+        ).filter(
+            Post.author_id.in_(local_ids),
+            Post.visibility == "public",
+            Post.is_deleted == False,
+        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
+    else:
+        posts = session.query(Post).options(
+            selectinload(Post.parent).selectinload(Post.author)
+        ).filter(
+            Post.visibility == "public",
+            Post.is_deleted == False,
+        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
+    has_more = len(posts) > limit
+    return [_post_json(p, session, user) for p in posts[:limit]], has_more
+
+
+@router.get("/timeline/{tl_type}")
+def api_timeline(request: Request, tl_type: str, limit: int = Query(10), offset: int = Query(0)):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    if tl_type not in TIMELINE_LABELS:
+        tl_type = "home"
+    with get_session() as s:
+        feed, has_more = _get_feed(user, tl_type, s, limit=limit, offset=offset)
+    return {"posts": feed, "timeline_type": tl_type, "has_more": has_more}
+
+
+# ── Post CRUD ──
+
+@router.get("/posts/{post_id}")
+def api_get_post(request: Request, post_id: int):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    with get_session() as s:
+        post = s.query(Post).options(
+            selectinload(Post.author),
+            selectinload(Post.parent).selectinload(Post.author),
+        ).filter_by(id=post_id, is_deleted=False).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        if not _can_view(post, user, s):
+            raise HTTPException(status_code=403, detail="Cannot view this post")
+        result = _post_json(post, s, user)
+        # replies
+        replies = s.query(Post).options(
+            selectinload(Post.author)
+        ).filter_by(in_reply_to_id=post_id, is_deleted=False).order_by(Post.created_at).all()
+        result["replies"] = [_post_json(r, s, user) for r in replies if _can_view(r, user, s)]
+        # ancestors
+        ancestors = []
+        cur = post.parent
+        while cur:
+            ancestors.insert(0, _post_json(cur, s, user))
+            cur = cur.parent
+        result["ancestors"] = ancestors
+    return result
+
+
+@router.post("/posts")
+def api_create_post(
+    request: Request,
+    content: str = Form(...),
+    summary: str = Form(""),
+    visibility: str = Form("public"),
+    parent_id: int = Form(None),
+):
+    user = require_auth(request)
+    if not content.strip():
+        raise HTTPException(status_code=400, detail="Content cannot be empty")
+    total_len = len(content) + len(summary)
+    if total_len > MAX_POST_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Total length exceeds {MAX_POST_LENGTH}")
+    if visibility not in ("public", "home", "followers", "mention"):
+        visibility = "public"
+
+    mentioned_ids = _parse_mentions(content)
+    with get_session() as s:
+        post = Post(
+            author_id=user.id,
+            content=content,
+            summary=summary,
+            visibility=visibility,
+            in_reply_to_id=parent_id,
+            mentioned_user_ids=mentioned_ids,
+            ap_id="",
+        )
+        s.add(post)
+        s.flush()
+        post.ap_id = f"{BASE_URL}/posts/{post.id}"
+        if parent_id:
+            parent = s.query(Post).filter_by(id=parent_id).first()
+            if parent:
+                pass
+        s.commit()
+
+        # notify mentioned users
+        for mu_id in mentioned_ids:
+            if mu_id != user.id:
+                notif = Notification(user_id=mu_id, from_user_id=user.id, notification_type="mention", post_id=post.id)
+                s.add(notif)
+        if parent_id:
+            parent = s.query(Post).filter_by(id=parent_id).first()
+            if parent and parent.author_id != user.id:
+                notif = Notification(user_id=parent.author_id, from_user_id=user.id, notification_type="reply", post_id=post.id)
+                s.add(notif)
+        s.commit()
+
+        try:
+            create_activity = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": f"{BASE_URL}/activities/create/{post.id}",
+                "type": "Create",
+                "actor": user.actor_uri(),
+                "object": post.to_ap_note(),
+            }
+            if visibility == "mention":
+                if post.mentioned_user_ids:
+                    with get_session() as ap_s:
+                        mu_users = ap_s.query(User).filter(
+                            User.id.in_(post.mentioned_user_ids), User.is_remote == True
+                        ).all()
+                        for mu in mu_users:
+                            _post_to_inbox(mu.inbox_uri(), create_activity, user)
+            else:
+                broadcast_to_followers(user, create_activity)
+        except Exception:
+            pass
+
+        return _post_json(post, s, user)
+
+
+@router.post("/posts/{post_id}/edit")
+def api_edit_post(request: Request, post_id: int, content: str = Form(...), summary: str = Form("")):
+    user = require_auth(request)
+    if not content.strip():
+        raise HTTPException(status_code=400, detail="Content cannot be empty")
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id, author_id=user.id).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        post.content = content
+        post.summary = summary
+        s.commit()
+        return _post_json(post, s, user)
+
+
+@router.post("/posts/{post_id}/delete")
+def api_delete_post(request: Request, post_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id, author_id=user.id).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        post.is_deleted = True
+        s.commit()
+    return {"ok": True}
+
+
+@router.post("/posts/{post_id}/like")
+def api_like_post(request: Request, post_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
+        if not existing:
+            s.add(Like(user_id=user.id, post_id=post_id))
+            if post.author_id != user.id:
+                s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
+            s.commit()
+    return {"ok": True}
+
+
+@router.post("/posts/{post_id}/unlike")
+def api_unlike_post(request: Request, post_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
+        if existing:
+            s.delete(existing)
+            s.commit()
+    return {"ok": True}
+
+
+@router.post("/posts/{post_id}/boost")
+def api_boost_post(request: Request, post_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        existing = s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
+        if not existing:
+            s.add(Boost(user_id=user.id, post_id=post_id))
+            twentieth = s.query(Post.created_at).filter(
+                Post.is_deleted == False,
+            ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(19).limit(1).scalar()
+            if twentieth and post.created_at and post.created_at < twentieth:
+                post.bumped_at = datetime.datetime.now(datetime.timezone.utc)
+            if post.author_id != user.id:
+                s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id))
+            s.commit()
+    return {"ok": True}
+
+
+@router.post("/posts/{post_id}/unboost")
+def api_unboost_post(request: Request, post_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        existing = s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
+        if existing:
+            s.delete(existing)
+            remaining = s.query(Boost).filter_by(post_id=post_id).count()
+            if remaining == 0:
+                post.bumped_at = None
+            s.commit()
+    return {"ok": True}
+
+
+# ── User / Profile API ──
+
+@router.get("/users/{username}")
+def api_get_profile(request: Request, username: str):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    with get_session() as s:
+        profile = s.query(User).filter_by(username=username, is_remote=False).first()
+        if not profile:
+            raise HTTPException(status_code=404, detail="User not found")
+        boosted_ids = [b.post_id for b in s.query(Boost).filter_by(user_id=profile.id).all()]
+        posts = s.query(Post).options(
+            selectinload(Post.author)
+        ).filter(
+            or_(
+                Post.author_id == profile.id,
+                Post.id.in_(boosted_ids),
+            ),
+            Post.is_deleted == False,
+        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).limit(50).all()
+        posts = [p for p in posts if _can_view(p, user, s)]
+        followers_count = s.query(Follow).filter_by(following_id=profile.id, accepted=True).count()
+        following_count = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).count()
+        is_following = s.query(Follow).filter_by(
+            follower_id=user.id, following_id=profile.id, accepted=True
+        ).first() is not None
+        novels = s.query(Novel).filter_by(author_id=profile.id).order_by(desc(Novel.updated_at)).all()
+        followers = s.query(Follow).filter_by(following_id=profile.id, accepted=True).all()
+        following = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).all()
+        return {
+            "profile": _user_json(profile),
+            "posts": [_post_json(p, s, user) for p in posts],
+            "novels": [_novel_json(n) for n in novels],
+            "followers": [{"user": _user_json(f.follower)} for f in followers],
+            "following": [{"user": _user_json(f.following)} for f in following],
+            "followers_count": followers_count,
+            "following_count": following_count,
+            "is_following": is_following,
+            "is_mine": profile.id == user.id,
+        }
+
+
+@router.post("/users/{username}/follow")
+def api_follow(request: Request, username: str):
+    user = require_auth(request)
+    with get_session() as s:
+        target = s.query(User).filter_by(username=username, is_remote=False).first()
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found")
+        if target.id == user.id:
+            raise HTTPException(status_code=400, detail="Cannot follow yourself")
+        existing = s.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
+        if not existing:
+            s.add(Follow(follower_id=user.id, following_id=target.id, accepted=True))
+            s.add(Notification(user_id=target.id, from_user_id=user.id, notification_type="follow"))
+            s.commit()
+    return {"ok": True}
+
+
+@router.post("/users/{username}/unfollow")
+def api_unfollow(request: Request, username: str):
+    user = require_auth(request)
+    with get_session() as s:
+        target = s.query(User).filter_by(username=username, is_remote=False).first()
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found")
+        existing = s.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
+        if existing:
+            s.delete(existing)
+            s.commit()
+    return {"ok": True}
+
+
+@router.get("/users/{username}/followers")
+def api_followers(request: Request, username: str):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    with get_session() as s:
+        target = s.query(User).filter_by(username=username, is_remote=False).first()
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found")
+        follows = s.query(Follow).filter_by(following_id=target.id, accepted=True).all()
+        users = [s.query(User).get(f.follower_id) for f in follows]
+    return {"users": [_user_json(u) for u in users if u]}
+
+
+@router.get("/users/{username}/following")
+def api_following(request: Request, username: str):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    with get_session() as s:
+        target = s.query(User).filter_by(username=username, is_remote=False).first()
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found")
+        follows = s.query(Follow).filter_by(follower_id=target.id, accepted=True).all()
+        users = [s.query(User).get(f.following_id) for f in follows]
+    return {"users": [_user_json(u) for u in users if u]}
+
+
+# ── Notifications API ──
+
+@router.get("/notifications")
+def api_notifications(request: Request, filter_type: str = Query("")):
+    user = require_auth(request)
+    with get_session() as s:
+        q = s.query(Notification).filter_by(user_id=user.id)
+        if filter_type:
+            q = q.filter_by(notification_type=filter_type)
+        notifs = q.order_by(desc(Notification.created_at)).limit(50).all()
+
+        result = []
+        for n in notifs:
+            from_user = s.query(User).get(n.from_user_id) if n.from_user_id else None
+            post = s.query(Post).get(n.post_id) if n.post_id else None
+            item = {
+                "id": n.id,
+                "type": n.notification_type,
+                "created_at": n.created_at.isoformat() if n.created_at else None,
+                "is_read": n.is_read,
+                "from_user": _user_json(from_user) if from_user else None,
+                "post": _post_json(post, s, user) if post and not post.is_deleted and _can_view(post, user, s) else None,
+            }
+            result.append(item)
+
+        # mark as read
+        s.query(Notification).filter_by(user_id=user.id, is_read=False).update({"is_read": True})
+        s.commit()
+
+    return {"notifications": result}
+
+
+# ── Novels / Episodes API ──
+
+@router.get("/novels")
+def api_novels(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    with get_session() as s:
+        novels = s.query(Novel).filter_by(is_published=True).order_by(desc(Novel.updated_at)).all()
+    return {"novels": [_novel_json(n) for n in novels]}
+
+
+@router.get("/novels/my")
+def api_my_novels(request: Request):
+    user = require_auth(request)
+    with get_session() as s:
+        novels = s.query(Novel).filter_by(author_id=user.id).order_by(desc(Novel.updated_at)).all()
+    return {"novels": [_novel_json(n) for n in novels]}
+
+
+def _novel_json(n):
+    return {
+        "id": n.id,
+        "title": n.title,
+        "description": n.description or "",
+        "tags": n.tags or "",
+        "is_completed": n.is_completed,
+        "is_published": n.is_published,
+        "episode_count": n.episode_count or 0,
+        "created_at": n.created_at.isoformat() if n.created_at else None,
+        "updated_at": n.updated_at.isoformat() if n.updated_at else None,
+        "author_id": n.author_id,
+    }
+
+
+@router.get("/novels/{novel_id}")
+def api_get_novel(request: Request, novel_id: int):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    with get_session() as s:
+        novel = s.query(Novel).filter_by(id=novel_id).first()
+        if not novel:
+            raise HTTPException(status_code=404, detail="Novel not found")
+        episodes = s.query(Episode).filter_by(novel_id=novel_id).order_by(Episode.episode_number).all()
+        author = s.query(User).get(novel.author_id)
+    return {
+        "novel": _novel_json(novel),
+        "episodes": [_episode_json(e) for e in episodes],
+        "author": _user_json(author) if author else None,
+    }
+
+
+def _episode_json(e):
+    return {
+        "id": e.id,
+        "novel_id": e.novel_id,
+        "episode_number": e.episode_number,
+        "title": e.title,
+        "content": e.content,
+        "created_at": e.created_at.isoformat() if e.created_at else None,
+        "updated_at": e.updated_at.isoformat() if e.updated_at else None,
+    }
+
+
+@router.get("/explore")
+def api_explore(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    with get_session() as s:
+        local_ids = [u.id for u in s.query(User).filter_by(is_remote=False).all()]
+        posts = s.query(Post).options(
+            selectinload(Post.author)
+        ).filter(
+            Post.author_id.in_(local_ids),
+            Post.visibility == "public",
+            Post.is_deleted == False,
+            Post.in_reply_to_id == None,
+        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).limit(30).all()
+        return {"posts": [_post_json(p, s, user) for p in posts]}

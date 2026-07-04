@@ -134,6 +134,7 @@ class Post(Base):
     is_deleted = Column(Boolean, default=False)
     is_pinned = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now)
+    bumped_at = Column(DateTime(timezone=True), nullable=True)
 
     author = relationship("User", back_populates="posts", foreign_keys=[author_id], lazy="selectin")
     parent = relationship("Post", back_populates="replies", remote_side=[id], lazy="selectin")
@@ -301,6 +302,12 @@ def init_db():
     try:
         with Session(engine) as session:
             session.execute(text("ALTER TABLE novels ADD COLUMN visibility VARCHAR(16) DEFAULT 'public' NOT NULL"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE posts ADD COLUMN bumped_at DATETIME"))
             session.commit()
     except Exception:
         pass

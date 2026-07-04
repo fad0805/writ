@@ -1,5 +1,4 @@
-import html, re, os, urllib.request
-from uuid import uuid4
+import html, re
 from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import RedirectResponse, HTMLResponse
 from sqlalchemy import desc, or_, and_
@@ -8,7 +7,7 @@ from sqlalchemy.orm import selectinload
 from models import User, Post, Follow, Like, Boost, Notification, Novel, get_session
 from routes.auth import require_auth, get_current_user
 from activitypub import broadcast_to_followers, _post_to_inbox
-from config import BASE_URL, DOMAIN, MAX_POST_LENGTH
+from config import BASE_URL, MAX_POST_LENGTH
 
 from routes.ui_components import _icon, _avatar_html, _save_avatar, ICONS
 
@@ -1050,6 +1049,8 @@ def _post_card(p, liked=False, boosted=False, user=None):
     reply_preview = html.escape((p_content or "").replace("\n", " ")[:180], quote=True)
     reply_author = html.escape(display_name or username, quote=True)
     
+    # p_created_at = p.created_at # Not used here, removing for brevity
+    # Actions
     actions = f"""  <div class="post-actions" onclick="event.stopPropagation()">
     <button type="button" class="action-btn" onclick="openReplyModal({p_id}, this.dataset.author, this.dataset.content)" data-author="{reply_author}" data-content="{reply_preview}">{_icon("reply")} {p_replies_count}</button>
     <form method="post" action="/post/{p_id}/{"unlike" if liked else "like"}" class="inline-form">
@@ -1057,13 +1058,15 @@ def _post_card(p, liked=False, boosted=False, user=None):
     </form>
     <form method="post" action="/post/{p_id}/{"unboost" if boosted else "boost"}" class="inline-form">
       <button type="submit" class="action-btn {"boosted" if boosted else ""}">{_icon("refresh")} {p_boosts_count}</button>
-    </form>"""
-    
+    </form>
+    <div style="flex:1"></div>
+"""
+
     if user and author_id == user.id:
         actions += f"""
-    <a href="/post/{p_id}" class="action-btn">{_icon("edit")}</a>
+    <a href="javascript:void(0)" class="action-btn" onclick="openEditModal({p_id}, '{p_content.replace(chr(10), '\\n')}', '{p_summary}')">{_icon("edit")}</a>
     <form method="post" action="/post/{p_id}/delete" class="inline-form">
-      <button type="submit" class="action-btn" onclick="return confirm('삭제하시겠습니까?') && event.stopPropagation()">{_icon("trash")}</button>
+      <button type="submit" class="action-btn" style="color:var(--danger)" onclick="return confirm('삭제하시겠습니까?') && event.stopPropagation()">{_icon("trash")}</button>
     </form>"""
     actions += "\n  </div>"
     
@@ -1095,73 +1098,112 @@ def render_timeline(user, feed, notifications, timeline_type="federated"):
 <body>
 <div class="layout">
 {_sidebar(user, active_nav="timeline", notifications=notifications)}
-  <main class="main-content">
-    <div class="post-form">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <h3>새 글 작성</h3>
-        <div class="char-count" id="post-count-wrap" style="margin-bottom:0;padding-right:1ch"><span id="post-count">0</span>/{MAX_POST_LENGTH}</div>
-      </div>
-      <form method="post" action="/post">
-        <textarea name="content" id="post-content" data-max-length="{MAX_POST_LENGTH}" rows="3" placeholder="무슨 생각을 하고 계신가요?" required oninput="updatePostCount()" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter')this.form.requestSubmit()"></textarea>
-        <input type="text" name="summary" id="post-summary" placeholder="CW (선택사항)" class="cw-input" oninput="updatePostCount()">
-        <script src="/static/char-highlight.js"></script>
-        <script>function updatePostCount(){{var a=document.getElementById('post-content'),b=document.getElementById('post-summary'),c=document.getElementById('post-count'),e=a.value.length+b.value.length;c.textContent=e;var t=a.closest('.post-form')||a.parentNode;t.classList.toggle('over-limit',e>{MAX_POST_LENGTH});t.classList.toggle('near-limit',e>{MAX_POST_LENGTH-50}&&e<={MAX_POST_LENGTH})}}</script>
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-          <div class="visibility-selector" style="margin-bottom:0">
-            <label><input type="radio" name="visibility" value="public" checked>{_icon("globe")} 공개</label>
-            <label><input type="radio" name="visibility" value="home">{_icon("home")} 홈</label>
-            <label><input type="radio" name="visibility" value="followers">{_icon("lock")} 팔로워</label>
-            <label><input type="radio" name="visibility" value="mention">{_icon("mail")} 멘션</label>
-          </div>
-          <button type="submit" class="btn btn-primary">게시</button>
-        </div>
-      </form>
-    </div>
-    <div class="timeline-tabs">{timeline_nav}</div>
-    <div class="feed">
-      {"<p class='empty-state'>표시할 글이 없습니다.</p>" if not feed else items}
-    </div>
-  </main>
-  {_right_sidebar(user)}
-</div>
-<div class="reply-modal-backdrop" id="reply-modal" onclick="closeReplyModal()">
-  <div class="reply-modal" onclick="event.stopPropagation()">
-    <button type="button" class="reply-modal-close" onclick="closeReplyModal()">×</button>
-    <h3>답글 작성</h3>
-    <div class="reply-modal-original">
-      <strong id="reply-modal-author"></strong>
-      <p id="reply-modal-content"></p>
-    </div>
-    <form method="post" id="reply-modal-form">
-      <textarea name="content" rows="4" placeholder="답글을 입력하세요..." required maxlength="{MAX_POST_LENGTH}" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter')this.form.requestSubmit()"></textarea>
-      <div class="reply-form-footer">
-        <div class="visibility-selector">
-          <label><input type="radio" name="visibility" value="public" checked>{_icon("globe")} 공개</label>
-          <label><input type="radio" name="visibility" value="home">{_icon("home")} 홈</label>
-          <label><input type="radio" name="visibility" value="followers">{_icon("lock")} 팔로워</label>
-          <label><input type="radio" name="visibility" value="mention">{_icon("mail")} 멘션</label>
-        </div>
-        <button type="submit" class="btn btn-primary">답글</button>
-      </div>
-    </form>
+<main class="main-content">
+<div class="post-form">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h3>새 글 작성</h3>
+    <div class="char-count" id="post-count-wrap" style="margin-bottom:0;padding-right:1ch"><span id="post-count">0</span>/{MAX_POST_LENGTH}</div>
   </div>
+  <form method="post" action="/post">
+    <textarea name="content" id="post-content" data-max-length="{MAX_POST_LENGTH}" rows="3" placeholder="무슨 생각을 하고 계신가요?" required oninput="updatePostCount()" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter')this.form.requestSubmit()"></textarea>
+    <input type="text" name="summary" id="post-summary" placeholder="CW (선택사항)" class="cw-input" oninput="updatePostCount()">
+    <script src="/static/char-highlight.js"></script>
+    <script>function updatePostCount(){{var a=document.getElementById('post-content'),b=document.getElementById('post-summary'),c=document.getElementById('post-count'),e=a.value.length+b.value.length;c.textContent=e;var t=a.closest('.post-form')||a.parentNode;t.classList.toggle('over-limit',e>{MAX_POST_LENGTH});t.classList.toggle('near-limit',e>{MAX_POST_LENGTH-50}&&e<={MAX_POST_LENGTH})}}</script>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+      <div class="visibility-selector" style="margin-bottom:0">
+        <label><input type="radio" name="visibility" value="public" checked>{_icon("globe")} 공개</label>
+        <label><input type="radio" name="visibility" value="home">{_icon("home")} 홈</label>
+        <label><input type="radio" name="visibility" value="followers">{_icon("lock")} 팔로워</label>
+        <label><input type="radio" name="visibility" value="mention">{_icon("mail")} 멘션</label>
+      </div>
+      <button type="submit" class="btn btn-primary">게시</button>
+    </div>
+  </form>
+</div>
+<div class="timeline-tabs">{timeline_nav}</div>
+<div class="feed">
+  {"<p class='empty-state'>표시할 글이 없습니다.</p>" if not feed else items}
+</div>
+</main>
+{_right_sidebar(user)}
+</div>
+
+<div class="reply-modal-backdrop" id="reply-modal" onclick="closeReplyModal()">
+<div class="reply-modal" onclick="event.stopPropagation()">
+<button type="button" class="reply-modal-close" onclick="closeReplyModal()">×</button>
+<h3>답글 작성</h3>
+<div class="reply-modal-original">
+  <strong id="reply-modal-author"></strong>
+  <p id="reply-modal-content"></p>
+</div>
+<form method="post" id="reply-modal-form">
+  <textarea name="content" rows="4" placeholder="답글을 입력하세요..." required maxlength="{MAX_POST_LENGTH}" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter')this.form.requestSubmit()"></textarea>
+  <div class="reply-form-footer">
+    <div class="visibility-selector">
+      <label><input type="radio" name="visibility" value="public" checked>{_icon("globe")} 공개</label>
+      <label><input type="radio" name="visibility" value="home">{_icon("home")} 홈</label>
+      <label><input type="radio" name="visibility" value="followers">{_icon("lock")} 팔로워</label>
+      <label><input type="radio" name="visibility" value="mention">{_icon("mail")} 멘션</label>
+    </div>
+    <button type="submit" class="btn btn-primary">답글</button>
+  </div>
+</form>
+</div>
+</div>
+
+<div class="reply-modal-backdrop" id="edit-modal" onclick="closeEditModal()">
+<div class="reply-modal" onclick="event.stopPropagation()">
+<button type="button" class="reply-modal-close" onclick="closeEditModal()">×</button>
+<h3>글 수정</h3>
+<div class="reply-modal-original">
+  <strong>수정 전 원문</strong>
+  <p id="edit-modal-original-content"></p>
+</div>
+<form method="post" id="edit-modal-form">
+  <textarea name="content" rows="4" placeholder="내용을 수정하세요..." required maxlength="{{MAX_POST_LENGTH}}"></textarea>
+  <input type="text" name="summary" placeholder="CW (선택사항)" class="cw-input" style="margin-top:10px">
+  <div class="reply-form-footer" style="margin-top:15px">
+    <div></div>
+    <button type="submit" class="btn btn-primary">수정</button>
+  </div>
+</form>
+</div>
 </div>
 <script>
 function openReplyModal(postId, author, content) {{
-  var modal = document.getElementById('reply-modal');
-  var form = document.getElementById('reply-modal-form');
-  form.action = '/post/' + postId + '/reply';
-  document.getElementById('reply-modal-author').textContent = author;
-  document.getElementById('reply-modal-content').textContent = content;
-  form.querySelector('textarea').value = '';
-  modal.classList.add('active');
-  setTimeout(function() {{ form.querySelector('textarea').focus(); }}, 0);
+var modal = document.getElementById('reply-modal');
+var form = document.getElementById('reply-modal-form');
+form.action = '/post/' + postId + '/reply';
+document.getElementById('reply-modal-author').textContent = author;
+document.getElementById('reply-modal-content').textContent = content;
+form.querySelector('textarea').value = '';
+modal.classList.add('active');
+setTimeout(function() {{ form.querySelector('textarea').focus(); }}, 0);
 }}
 function closeReplyModal() {{
-  document.getElementById('reply-modal').classList.remove('active');
+document.getElementById('reply-modal').classList.remove('active');
+}}
+function openEditModal(postId, content, summary) {{
+var modal = document.getElementById('edit-modal');
+var form = document.getElementById('edit-modal-form');
+form.action = '/post/' + postId + '/edit';
+form.querySelector('textarea').value = content;
+form.querySelector('input[name="summary"]').value = summary;
+document.getElementById('edit-modal-original-content').textContent = content;
+modal.classList.add('active');
+setTimeout(function() {{ form.querySelector('textarea').focus(); }}, 0);
+}}
+function closeEditModal() {{
+document.getElementById('edit-modal').classList.remove('active');
 }}
 document.addEventListener('keydown', function(e) {{
-  if (e.key === 'Escape') closeReplyModal();
+if (e.key === 'Escape') {{
+closeReplyModal();
+closeEditModal();
+if (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT') {{
+  document.activeElement.blur();
+}}
+}}
 }});
 </script>
 <script src="/static/theme.js"></script></body>
@@ -1237,28 +1279,16 @@ def render_post_detail(user, post, replies, liked, boosted, parent_post=None, an
       </div>
       {_cw(post.content, post.summary)}
       <div class="post-actions">
-        <button type="button" class="action-btn" onclick="openReplyModal({post.id}, this.dataset.author, this.dataset.content)" data-author="{reply_author}" data-content="{reply_preview}">{_icon("reply")} {post.replies_count}</button>
-        <form method="post" action="/post/{post.id}/{"unlike" if liked else "like"}" class="inline-form">
-          <button type="submit" class="action-btn {"liked" if liked else ""}">{_icon("star_filled") if liked else _icon("star")} {post.likes_count}</button>
+        <button type="button" class="action-btn" onclick="openReplyModal({post.id}, this.dataset.author, this.dataset.content)" data-author="{{reply_author}}" data-content="{{reply_preview}}">{_icon("reply")} {post.replies_count}</button>
+        <form method="post" action="/post/{post.id}/{{"unlike" if liked else "like"}}" class="inline-form">
+          <button type="submit" class="action-btn {{"liked" if liked else ""}}">{_icon("star_filled") if liked else _icon("star")} {post.likes_count}</button>
         </form>
-        <form method="post" action="/post/{post.id}/{"unboost" if boosted else "boost"}" class="inline-form">
-          <button type="submit" class="action-btn {"boosted" if boosted else ""}">{_icon("refresh")} {post.boosts_count}</button>
+        <form method="post" action="/post/{post.id}/{{"unboost" if boosted else "boost"}}" class="inline-form">
+          <button type="submit" class="action-btn {{"boosted" if boosted else ""}}">{_icon("refresh")} {post.boosts_count}</button>
         </form>
-        {f'<a href="#" class="action-btn" onclick="document.getElementById(\'edit-form\').style.display=\'block\';this.style.display=\'none\';return false">{_icon("edit")}</a>' if post.author_id == user.id else ""}
+        {f'<a href="javascript:void(0)" class="action-btn" onclick="openEditModal({post.id}, \'{post.content.replace(chr(10), "\\n")}\', \'{post.summary or ""}\')">{_icon("edit")}</a>' if post.author_id == user.id else ""}
         {f'<form method="post" action="/post/{post.id}/delete" class="inline-form"><button type="submit" class="action-btn" onclick="return confirm(\'삭제하시겠습니까?\')">{_icon("trash")}</button></form>' if post.author_id == user.id else ""}
       </div>
-      {f'''
-      <div id="edit-form" style="display:none;margin-top:12px">
-        <form method="post" action="/post/{post.id}/edit">
-          <textarea name="content" rows="3" style="margin-bottom:8px">{post.content}</textarea>
-          <input type="text" name="summary" value="{post.summary or ""}" placeholder="CW" class="cw-input">
-          <div style="display:flex;gap:8px;justify-content:flex-end">
-            <button type="submit" class="btn btn-primary btn-small">저장</button>
-            <button type="button" class="btn btn-outline btn-small" onclick="document.getElementById(\'edit-form\').style.display=\'none\';document.querySelector(\'[onclick*=\\\\\'edit-form\\\\\']\').style.display=\'\'">취소</button>
-          </div>
-        </form>
-      </div>
-      ''' if post.author_id == user.id else ""}
     </div>
 
     <div class="thread-list thread-list-below">
@@ -1277,15 +1307,34 @@ def render_post_detail(user, post, replies, liked, boosted, parent_post=None, an
       <p id="reply-modal-content"></p>
     </div>
     <form method="post" id="reply-modal-form">
-      <textarea name="content" rows="4" placeholder="답글을 입력하세요..." required maxlength="{MAX_POST_LENGTH}" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter')this.form.requestSubmit()"></textarea>
+      <textarea name="content" rows="4" placeholder="답글을 입력하세요..." required maxlength="{{MAX_POST_LENGTH}}" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter')this.form.requestSubmit()"></textarea>
       <div class="reply-form-footer">
         <div class="visibility-selector">
-          <label><input type="radio" name="visibility" value="public" checked>{_icon("globe")} 공개</label>
-          <label><input type="radio" name="visibility" value="home">{_icon("home")} 홈</label>
-          <label><input type="radio" name="visibility" value="followers">{_icon("lock")} 팔로워</label>
-          <label><input type="radio" name="visibility" value="mention">{_icon("mail")} 멘션</label>
+          <label><input type="radio" name="visibility" value="public" checked>{{_icon("globe")}} 공개</label>
+          <label><input type="radio" name="visibility" value="home">{{_icon("home")}} 홈</label>
+          <label><input type="radio" name="visibility" value="followers">{{_icon("lock")}} 팔로워</label>
+          <label><input type="radio" name="visibility" value="mention">{{_icon("mail")}} 멘션</label>
         </div>
         <button type="submit" class="btn btn-primary">답글</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="reply-modal-backdrop" id="edit-modal" onclick="closeEditModal()">
+  <div class="reply-modal" onclick="event.stopPropagation()">
+    <button type="button" class="reply-modal-close" onclick="closeEditModal()">×</button>
+    <h3>글 수정</h3>
+    <div class="reply-modal-original">
+      <strong>수정 전 원문</strong>
+      <p id="edit-modal-original-content"></p>
+    </div>
+    <form method="post" id="edit-modal-form">
+      <textarea name="content" rows="4" placeholder="내용을 수정하세요..." required maxlength="{{MAX_POST_LENGTH}}"></textarea>
+      <input type="text" name="summary" placeholder="CW (선택사항)" class="cw-input" style="margin-top:10px">
+      <div class="reply-form-footer" style="margin-top:15px">
+        <div></div>
+        <button type="submit" class="btn btn-primary">수정</button>
       </div>
     </form>
   </div>
@@ -1304,8 +1353,27 @@ function openReplyModal(postId, author, content) {{
 function closeReplyModal() {{
   document.getElementById('reply-modal').classList.remove('active');
 }}
+function openEditModal(postId, content, summary) {{
+  var modal = document.getElementById('edit-modal');
+  var form = document.getElementById('edit-modal-form');
+  form.action = '/post/' + postId + '/edit';
+  form.querySelector('textarea').value = content;
+  form.querySelector('input[name="summary"]').value = summary;
+  document.getElementById('edit-modal-original-content').textContent = content;
+  modal.classList.add('active');
+  setTimeout(function() {{ form.querySelector('textarea').focus(); }}, 0);
+}}
+function closeEditModal() {{
+  document.getElementById('edit-modal').classList.remove('active');
+}}
 document.addEventListener('keydown', function(e) {{
-  if (e.key === 'Escape') closeReplyModal();
+  if (e.key === 'Escape') {{
+    closeReplyModal();
+    closeEditModal();
+    if (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT') {{
+      document.activeElement.blur();
+    }}
+  }}
 }});
 </script>
 <script src="/static/theme.js"></script></body>
@@ -1427,6 +1495,7 @@ def render_profile(user, profile_user, posts, followers_count, following_count, 
         f'  <strong class="profile-novel-title">{n.title}</strong>'
         f'  <span class="profile-novel-meta">{n.episode_count}화 · {"완결" if n.is_completed else "연재중"}</span>'
         f'  <p class="profile-novel-desc">{n.description or "설명 없음"}</p>'
+        f'  <p class="novel-tags" style="margin-top:4px;font-size:0.85em;color:var(--accent);display:flex;align-items:center;gap:4px">{_icon("tag")}{n.tags or ""}</p>'
         f'</a>'
         for n in novels
     )
@@ -1691,6 +1760,25 @@ def render_notifications(user, notifs, filter_type=""):
     </form>
   </div>
 </div>
+
+<div class="reply-modal-backdrop" id="edit-modal" onclick="closeEditModal()">
+  <div class="reply-modal" onclick="event.stopPropagation()">
+    <button type="button" class="reply-modal-close" onclick="closeEditModal()">×</button>
+    <h3>글 수정</h3>
+    <div class="reply-modal-original">
+      <strong>수정 전 원문</strong>
+      <p id="edit-modal-original-content"></p>
+    </div>
+    <form method="post" id="edit-modal-form">
+      <textarea name="content" rows="4" placeholder="내용을 수정하세요..." required maxlength="{{MAX_POST_LENGTH}}"></textarea>
+      <input type="text" name="summary" placeholder="CW (선택사항)" class="cw-input" style="margin-top:10px">
+      <div class="reply-form-footer" style="margin-top:15px">
+        <div></div>
+        <button type="submit" class="btn btn-primary">수정</button>
+      </div>
+    </form>
+  </div>
+</div>
 <script>
 function openReplyModal(postId, author, content) {{
   var modal = document.getElementById('reply-modal');
@@ -1705,8 +1793,27 @@ function openReplyModal(postId, author, content) {{
 function closeReplyModal() {{
   document.getElementById('reply-modal').classList.remove('active');
 }}
+function openEditModal(postId, content, summary) {{
+  var modal = document.getElementById('edit-modal');
+  var form = document.getElementById('edit-modal-form');
+  form.action = '/post/' + postId + '/edit';
+  form.querySelector('textarea').value = content;
+  form.querySelector('input[name="summary"]').value = summary;
+  document.getElementById('edit-modal-original-content').textContent = content;
+  modal.classList.add('active');
+  setTimeout(function() {{ form.querySelector('textarea').focus(); }}, 0);
+}}
+function closeEditModal() {{
+  document.getElementById('edit-modal').classList.remove('active');
+}}
 document.addEventListener('keydown', function(e) {{
-  if (e.key === 'Escape') closeReplyModal();
+  if (e.key === 'Escape') {{
+    closeReplyModal();
+    closeEditModal();
+    if (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT') {{
+      document.activeElement.blur();
+    }}
+  }}
 }});
 </script>
 <script src="/static/theme.js"></script></body>

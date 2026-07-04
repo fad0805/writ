@@ -1,9 +1,6 @@
-import html, re, os, urllib.request
+import re, os, urllib.request
 from uuid import uuid4
-from fastapi import Request
-from sqlalchemy import desc
-from models import User, Post, Follow, Like, Boost, Notification, Novel, get_session
-from config import BASE_URL, DOMAIN, MAX_POST_LENGTH
+from models import User, get_session
 
 AVATAR_DIR = "static/uploads/avatars"
 

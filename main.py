@@ -1,26 +1,21 @@
 import json
-import hashlib
-from urllib.parse import urlparse
 
-import httpx
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse, Response, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import or_
 
 from config import BASE_URL, DOMAIN
 from models import User, Follow, Post, get_session, init_db
-from routes.auth import router as auth_router, get_current_user
+from routes.auth import router as auth_router
 from routes.sns import router as sns_router
 from routes.blog import router as blog_router
 from routes.admin import router as admin_router
+from routes.api import router as api_router
 from activitypub import (
-    get_actor, get_outbox, get_followers, get_following,
-    handle_inbox, _post_to_inbox, _resolve_actor, generate_keypair,
+    get_outbox, get_followers, get_following, handle_inbox
 )
-from crypto_utils import verify_signature
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -104,11 +99,11 @@ def seed_default_data():
 
         session.commit()
 
-app = FastAPI(title="SNS + Novel Blog", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="WRIT, the sns for writers", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -160,6 +155,11 @@ def webfinger(resource: str = ""):
             },
         ],
     })
+
+
+@app.get('/favicon.ico', include_in_schema=False)
+async def favicon():
+    return FileResponse('static/favicon.ico')
 
 
 @app.get("/users/{username}")
@@ -286,6 +286,7 @@ app.include_router(auth_router)
 app.include_router(sns_router)
 app.include_router(blog_router)
 app.include_router(admin_router)
+app.include_router(api_router)
 
 
 @app.get("/api/v1/instance")

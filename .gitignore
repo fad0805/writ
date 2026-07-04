@@ -12,3 +12,15 @@ __pycache__
 
 uploads/*
 !uploads/.gitkeep
+static/uploads/*
+
+.DS_Store
+
+# Next.js
+web/node_modules/
+web/.next/
+web/out/
+web/public/*.svg
+web/AGENTS.md
+web/CLAUDE.md
+web/README.md
