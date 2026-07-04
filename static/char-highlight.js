@@ -45,5 +45,19 @@ function sync() {
 content.addEventListener('scroll', function(){ highlight.scrollTop = content.scrollTop; highlight.scrollLeft = content.scrollLeft; });
 content.addEventListener('input', sync);
 if (summary) summary.addEventListener('input', sync);
+var form = content.form;
+if (form) {
+  form.addEventListener('submit', function(e) {
+    var total = content.value.length + (summary ? summary.value.length : 0);
+    if (total <= limit) return;
+    e.preventDefault();
+    var submit = form.querySelector('button[type="submit"]');
+    wrap.classList.remove('shake');
+    void wrap.offsetWidth;
+    wrap.classList.add('shake');
+    if (submit) submit.classList.add('over-limit-submit');
+    content.focus();
+  });
+}
 sync();
 })();

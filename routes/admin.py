@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import RedirectResponse, HTMLResponse
 
-from models import User, Post, Novel, Episode, Follow, get_session
+from models import User, Post, Novel, Episode, get_session
 from routes.auth import require_auth, get_current_user
 from routes.sns import _icon
 
@@ -77,7 +77,6 @@ def admin_dashboard(request: Request):
         post_count = session.query(Post).filter_by(is_deleted=False).count()
         novel_count = session.query(Novel).count()
         episode_count = session.query(Episode).count()
-        follow_count = session.query(Follow).count()
 
     content = f"""
     <div class="stats-grid">
@@ -86,7 +85,6 @@ def admin_dashboard(request: Request):
       <div class="stat-card"><div class="stat-value">{post_count}</div><div class="stat-label">포스트</div></div>
       <div class="stat-card"><div class="stat-value">{novel_count}</div><div class="stat-label">소설</div></div>
       <div class="stat-card"><div class="stat-value">{episode_count}</div><div class="stat-label">에피소드</div></div>
-      <div class="stat-card"><div class="stat-value">{follow_count}</div><div class="stat-label">팔로우 관계</div></div>
     </div>
     <p style="color:var(--text-muted)">관리자 대시보드에 오신 것을 환영합니다.</p>
     """

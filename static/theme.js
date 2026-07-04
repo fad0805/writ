@@ -14,9 +14,40 @@
     setTheme(t === 'dark');
     b.onclick = function() { setTheme(!document.body.className.includes('dark')); };
   }
+  function isTypingTarget(target) {
+    return target && target.closest && target.closest('input,textarea,select,button,a');
+  }
+  function showShortcutHelp() {
+    var modal = document.getElementById('shortcut-help-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'shortcut-help-modal';
+      modal.className = 'shortcut-help-backdrop';
+      modal.innerHTML = '<div class="shortcut-help" onclick="event.stopPropagation()"><button type="button" class="shortcut-help-close" aria-label="닫기">×</button><h3>단축키</h3><dl><dt>n</dt><dd>새 글 작성으로 이동</dd><dt>d</dt><dd>테마 변경</dd><dt>?</dt><dd>단축키 보기</dd></dl></div>';
+      modal.onclick = hideShortcutHelp;
+      modal.querySelector('.shortcut-help-close').onclick = hideShortcutHelp;
+      document.body.appendChild(modal);
+    }
+    modal.classList.add('active');
+  }
+  function hideShortcutHelp() {
+    var modal = document.getElementById('shortcut-help-modal');
+    if (modal) modal.classList.remove('active');
+  }
   document.addEventListener('keydown', function(e) {
-    if (e.key === 'd' && !e.ctrlKey && !e.metaKey && !e.target.closest('input,textarea,select,button,a')) {
+    if (e.key === 'Escape') hideShortcutHelp();
+    if (e.ctrlKey || e.metaKey || isTypingTarget(e.target)) return;
+    if (e.key === 'd') {
       setTheme(!document.body.className.includes('dark'));
+    } else if (e.key === 'n') {
+      var postContent = document.getElementById('post-content');
+      if (postContent) {
+        e.preventDefault();
+        postContent.focus();
+      }
+    } else if (e.key === '?') {
+      e.preventDefault();
+      showShortcutHelp();
     }
   });
 })();

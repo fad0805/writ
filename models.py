@@ -227,6 +227,8 @@ class Novel(Base):
     tags = Column(String(512), default="")
     is_completed = Column(Boolean, default=False)
     is_published = Column(Boolean, default=True)
+    # Visibility: public(listed), unlisted(profile/url), private(author only)
+    visibility = Column(String(16), default="public", nullable=False)
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
 
@@ -293,6 +295,18 @@ def init_db():
     try:
         with Session(engine) as session:
             session.execute(text("ALTER TABLE posts ADD COLUMN is_pinned BOOLEAN DEFAULT 0"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE novels ADD COLUMN visibility VARCHAR(16) DEFAULT 'public' NOT NULL"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("UPDATE novels SET visibility = 'private' WHERE is_published = 0"))
             session.commit()
     except Exception:
         pass

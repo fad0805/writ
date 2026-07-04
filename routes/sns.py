@@ -1,4 +1,4 @@
-import re, os, urllib.request
+import html, re, os, urllib.request
 from uuid import uuid4
 from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import RedirectResponse, HTMLResponse
@@ -10,64 +10,14 @@ from routes.auth import require_auth, get_current_user
 from activitypub import broadcast_to_followers, _post_to_inbox
 from config import BASE_URL, DOMAIN, MAX_POST_LENGTH
 
-AVATAR_DIR = "static/uploads/avatars"
-
-def _save_avatar(image_url, user_id):
-    if not image_url:
-        return ""
-    os.makedirs(AVATAR_DIR, exist_ok=True)
-    ext = image_url.rsplit(".", 1)[-1].lower() if "." in image_url else "jpg"
-    if ext not in ("jpg", "jpeg", "png", "gif", "webp"):
-        ext = "jpg"
-    filename = f"u{user_id}_{uuid4().hex[:8]}.{ext}"
-    filepath = os.path.join(AVATAR_DIR, filename)
-    try:
-        urllib.request.urlretrieve(image_url, filepath)
-        return f"/{filepath}"
-    except Exception:
-        return ""
-
-def _avatar_html(user, size=40, cls=""):
-    if user.profile_image:
-        return f'<img src="{user.profile_image}" alt="" class="{cls}">'
-    initial = (user.display_name or user.username)[0].upper()
-    bg = f"hsl({hash(user.username) % 360}, 55%, 50%)"
-    fs = size // 2
-    r = size // 5
-    return f'<div class="{cls}" style="width:{size}px;height:{size}px;min-width:{size}px;border-radius:{r}px;background:{bg};display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;font-size:{fs}px">{initial}</div>'
+from routes.ui_components import _icon, _avatar_html, _save_avatar, ICONS
 
 router = APIRouter()
 
-ICONS = {
-    "home": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1V9.5z"/></svg>',
-    "home_solid": '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"><path d="M12 3L2 9.5V20a1 1 0 001 1h6v-6h6v6h6a1 1 0 001-1V9.5L12 3z"/></svg>',
-    "bell": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>',
-    "bell_solid": '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>',
-    "book": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>',
-    "book_solid": '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>',
-    "books": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="12" y="5" width="3" height="16" rx="1"/><rect x="17" y="2" width="5" height="19" rx="1"/></svg>',
-    "books_solid": '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="12" y="5" width="3" height="16" rx="1"/><rect x="17" y="2" width="5" height="19" rx="1"/></svg>',
-    "user": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
-    "user_solid": '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
-    "settings": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.32 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
-    "moon": '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>',
-    "globe": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>',
-    "buildings": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="9" y1="6" x2="9" y2="10"/><line x1="15" y1="6" x2="15" y2="10"/></svg>',
-    "users": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>',
-    "lock": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>',
-    "mail": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
-    "star": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
-    "star_filled": '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
-    "reply": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
-    "refresh": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>',
-    "check": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
-    "edit": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
-    "eye": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
-    "tag": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>',
-    "bar_chart": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
-    "document": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
-    "trash": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>',
-}
+AVATAR_DIR = "static/uploads/avatars"
+# Removed local _save_avatar and _avatar_html definitions as they are now in ui_components.py
+# If sns.py needs them, it should use the imported ones.
+# Actually I need to make sure I don't break existing calls.
 
 def _icon(name):
     return ICONS.get(name, "")
@@ -146,7 +96,9 @@ def _get_timeline_posts(user, timeline_type, session):
             follower_id=user.id, accepted=True
         ).all()]
         following_ids.append(user.id)
-        posts = session.query(Post).filter(
+        posts = session.query(Post).options(
+            selectinload(Post.parent).selectinload(Post.author)
+        ).filter(
             Post.author_id.in_(following_ids),
             Post.is_deleted == False,
         ).order_by(desc(Post.created_at)).limit(50).all()
@@ -158,7 +110,9 @@ def _get_timeline_posts(user, timeline_type, session):
         ).all()]
         following_ids.append(user.id)
         local_ids = [u.id for u in session.query(User).filter_by(is_remote=False).all()]
-        posts = session.query(Post).filter(
+        posts = session.query(Post).options(
+            selectinload(Post.parent).selectinload(Post.author)
+        ).filter(
             or_(
                 Post.author_id.in_(following_ids),
                 and_(Post.author_id.in_(local_ids), Post.visibility == "public"),
@@ -169,14 +123,18 @@ def _get_timeline_posts(user, timeline_type, session):
 
     elif timeline_type == "local":
         local_ids = [u.id for u in session.query(User).filter_by(is_remote=False).all()]
-        posts = session.query(Post).filter(
+        posts = session.query(Post).options(
+            selectinload(Post.parent).selectinload(Post.author)
+        ).filter(
             Post.author_id.in_(local_ids),
             Post.visibility == "public",
             Post.is_deleted == False,
         ).order_by(desc(Post.created_at)).limit(50).all()
 
     else:  # federated
-        posts = session.query(Post).filter(
+        posts = session.query(Post).options(
+            selectinload(Post.parent).selectinload(Post.author)
+        ).filter(
             Post.visibility == "public",
             Post.is_deleted == False,
         ).order_by(desc(Post.created_at)).limit(50).all()
@@ -309,7 +267,9 @@ def delete_post(request: Request, post_id: int):
         }
         broadcast_to_followers(user, delete_activity)
 
-    return RedirectResponse(url=request.headers.get("referer", "/"), status_code=303)
+    referer = request.headers.get("referer", "/")
+    redirect_url = "/timeline/home" if referer.endswith(f"/post/{post_id}") else referer
+    return RedirectResponse(url=redirect_url, status_code=303)
 
 
 @router.post("/post/{post_id}/edit")
@@ -478,6 +438,47 @@ def view_post(request: Request, post_id: int):
         if not can_view_post(post, user, session):
             raise HTTPException(status_code=403, detail="이 글을 볼 수 없습니다")
 
+        parent_post = None
+        if post.in_reply_to_id:
+            parent_post = session.query(Post).filter_by(
+                id=post.in_reply_to_id, is_deleted=False
+            ).first()
+            if parent_post and not can_view_post(parent_post, user, session):
+                parent_post = None
+
+        ancestors = []
+        ancestor_cursor = post
+        seen_parent_ids = set()
+        while ancestor_cursor.in_reply_to_id and ancestor_cursor.in_reply_to_id not in seen_parent_ids:
+            seen_parent_ids.add(ancestor_cursor.in_reply_to_id)
+            candidate = session.query(Post).filter_by(
+                id=ancestor_cursor.in_reply_to_id, is_deleted=False
+            ).first()
+            if not candidate or not can_view_post(candidate, user, session):
+                break
+            ancestors.append(candidate)
+            ancestor_cursor = candidate
+        ancestors.reverse()
+
+        thread_candidates = session.query(Post).options(
+            selectinload(Post.author),
+            selectinload(Post.parent).selectinload(Post.author),
+        ).filter_by(is_deleted=False).order_by(Post.created_at).all()
+        thread_candidates = [p for p in thread_candidates if can_view_post(p, user, session)]
+        children_by_parent = {}
+        for candidate in thread_candidates:
+            children_by_parent.setdefault(candidate.in_reply_to_id, []).append(candidate)
+        descendant_posts = []
+        visited_thread_ids = set()
+        def collect_descendants(current, depth=0):
+            if current.id in visited_thread_ids:
+                return
+            visited_thread_ids.add(current.id)
+            for child in children_by_parent.get(current.id, []):
+                descendant_posts.append((child, depth))
+                collect_descendants(child, depth + 1)
+        collect_descendants(post, 0)
+
         replies = session.query(Post).filter_by(
             in_reply_to_id=post.id, is_deleted=False
         ).all()
@@ -488,7 +489,7 @@ def view_post(request: Request, post_id: int):
         liked = session.query(Like).filter_by(user_id=user.id, post_id=post.id).first() is not None
         boosted = session.query(Boost).filter_by(user_id=user.id, post_id=post.id).first() is not None
 
-    return HTMLResponse(render_post_detail(user, post, replies, liked, boosted))
+    return HTMLResponse(render_post_detail(user, post, replies, liked, boosted, parent_post, ancestors, descendant_posts))
 
 
 @router.post("/post/{post_id}/reply")
@@ -507,21 +508,54 @@ def reply_to_post(request: Request, post_id: int, content: str = Form(...), visi
         if not parent:
             raise HTTPException(status_code=404, detail="Post not found")
 
+        # Collect unique thread participants
+        thread_usernames = set()
+        curr = parent
+        while curr:
+            if curr.author_id != user.id:
+                thread_usernames.add(curr.author.username)
+            curr = curr.parent
+
+        final_content = content.strip()
+        # Add mentions if not already present
+        for username in thread_usernames:
+            mention = f"@{username}"
+            if mention not in final_content:
+                final_content = f"{mention} {final_content}"
+        
+        final_content = final_content.strip()
+        
+        if len(final_content) > MAX_POST_LENGTH:
+            raise HTTPException(status_code=400, detail=f"Content exceeds {MAX_POST_LENGTH} characters")
+
         from models import Post as PostModel
         reply = PostModel(
             author_id=user.id,
-            content=content,
+            content=final_content,
             visibility=visibility,
-            mentioned_user_ids=parse_mentions(content),
+            mentioned_user_ids=parse_mentions(final_content),
             in_reply_to_id=parent.id,
             in_reply_to_ap_id=parent.ap_id,
         )
         session.add(reply)
         session.flush()
         reply.ap_id = f"{BASE_URL}/posts/{reply.id}"
-        session.commit()
-
+        
+        # Create notifications for mentioned local users
+        mentioned_ids = parse_mentions(final_content)
+        for uid in mentioned_ids:
+            if uid != user.id:
+                n = Notification(
+                    user_id=uid,
+                    from_user_id=user.id,
+                    notification_type="mention",
+                    post_id=reply.id,
+                )
+                session.add(n)
+        
         if parent.author_id != user.id:
+            # Check if this parent notification is already handled by mention logic
+            is_already_mentioned = parent.author_id in mentioned_ids
             n = Notification(
                 user_id=parent.author_id,
                 from_user_id=user.id,
@@ -544,7 +578,28 @@ def reply_to_post(request: Request, post_id: int, content: str = Form(...), visi
 
             session.commit()
 
-    return RedirectResponse(url=f"/post/{post_id}", status_code=303)
+    return RedirectResponse(url=request.headers.get("referer", f"/post/{post_id}"), status_code=303)
+
+
+@router.get("/users/settings", response_class=HTMLResponse)
+def settings_page(request: Request):
+    user = require_auth(request)
+    return HTMLResponse(render_user_settings(user))
+
+
+@router.post("/users/settings")
+def update_settings(request: Request, image_url: str = Form(""),
+                    display_name: str = Form(""), summary: str = Form("")):
+    user = require_auth(request)
+    with get_session() as session:
+        db_user = session.query(User).filter_by(id=user.id).first()
+        if db_user:
+            local_path = _save_avatar(image_url, db_user.id) if image_url and image_url != db_user.profile_image else ""
+            db_user.profile_image = local_path or image_url
+            db_user.display_name = display_name
+            db_user.summary = summary
+            session.commit()
+    return RedirectResponse(url="/users/settings?saved=1", status_code=303)
 
 
 @router.get("/users/{username}", response_class=HTMLResponse)
@@ -581,6 +636,12 @@ def view_profile(request: Request, username: str):
                 "replies_count": p.replies_count,
                 "liked": liked,
                 "boosted": boosted,
+                "parent": {
+                    "id": p.parent.id,
+                    "author_name": p.parent.author.display_name or p.parent.author.username,
+                    "username": p.parent.author.username,
+                    "content": p.parent.content,
+                } if p.parent else None,
             })
 
         followers_count = session.query(Follow).filter_by(
@@ -594,9 +655,14 @@ def view_profile(request: Request, username: str):
             follower_id=user.id, following_id=profile_user.id, accepted=True
         ).first() is not None
 
-        novels = session.query(Novel).filter_by(
-            author_id=profile_user.id, is_published=True
-        ).order_by(desc(Novel.updated_at)).all()
+        novel_query = session.query(Novel).filter(Novel.author_id == profile_user.id)
+        if profile_user.id == user.id:
+            novels = novel_query.order_by(desc(Novel.updated_at)).all()
+        else:
+            novels = novel_query.filter(
+                Novel.is_published == True,
+                Novel.visibility.in_(("public", "unlisted")),
+            ).order_by(desc(Novel.updated_at)).all()
 
         followers = session.query(Follow).filter_by(
             following_id=profile_user.id, accepted=True
@@ -714,18 +780,27 @@ def update_profile(request: Request, image_url: str = Form(""),
 @router.get("/notifications", response_class=HTMLResponse)
 def view_notifications(request: Request, type: str = ""):
     user = get_current_user(request)
+    notifs = []
     if not user:
         return RedirectResponse(url="/login")
 
     with get_session() as session:
         q = session.query(Notification).filter_by(user_id=user.id)
-        if type:
+        if type == "mention":
+            q = q.filter(Notification.notification_type.in_(["mention", "reply"]), Notification.post.has(Post.visibility != "mention"))
+        elif type == "direct":
+            q = q.filter(Notification.notification_type.in_(["mention", "reply"]), Notification.post.has(Post.visibility == "mention"))
+        elif type:
             q = q.filter(Notification.notification_type == type)
+        
+        # Add a print or log here to debug
+        # print(f"DEBUG: Type={type}, Query={q}")
+        
         notifs_raw = q.options(
-            selectinload(Notification.from_user)
+            selectinload(Notification.from_user),
+            selectinload(Notification.post).selectinload(Post.author)
         ).order_by(desc(Notification.created_at)).limit(50).all()
         # Build dicts while session is open
-        notifs = []
         for n in notifs_raw:
             a = n.from_user
             notifs.append({
@@ -735,15 +810,34 @@ def view_notifications(request: Request, type: str = ""):
                 "from_user_display_name": a.display_name,
                 "from_user_avatar_html": _avatar_html(a, 24, "sidebar-avatar"),
                 "post_id": n.post_id,
+                "post": {
+                    "id": n.post.id,
+                    "content": n.post.content,
+                    "summary": n.post.summary,
+                    "author": {
+                        "id": n.post.author.id,
+                        "username": n.post.author.username,
+                        "display_name": n.post.author.display_name,
+                        "profile_image": n.post.author.profile_image,
+                    },
+                    "created_at": n.post.created_at,
+                    "likes_count": n.post.likes_count,
+                    "boosts_count": n.post.boosts_count,
+                    "replies_count": n.post.replies_count,
+                    "visibility": n.post.visibility,
+                    "liked": session.query(Like).filter_by(user_id=user.id, post_id=n.post.id).first() is not None,
+                    "boosted": session.query(Boost).filter_by(user_id=user.id, post_id=n.post.id).first() is not None,
+                } if n.post else None,
                 "is_read": n.is_read,
                 "created_at": n.created_at,
             })
-
         # Mark all as read
         session.query(Notification).filter_by(user_id=user.id, is_read=False).update(
             {"is_read": True}
         )
         session.commit()
+
+
 
     return HTMLResponse(render_notifications(user, notifs, type))
 
@@ -779,16 +873,37 @@ def _cw(content, summary):
     linked = _link_mentions(content)
     if not summary:
         return f'<div class="post-content">{linked}</div>'
-    return f'<details class="cw-box"><summary>⚠️ {summary}</summary><div class="post-content">{linked}</div></details>'
+    return f'<details class="cw-box"><summary onclick="event.stopPropagation()">⚠️ {summary}</summary><div class="post-content">{linked}</div></details>'
+
+def _reply_context_html(post, parent=None):
+    parent = parent or (post.get("parent") if isinstance(post, dict) else getattr(post, "parent", None))
+    if not parent:
+        return ""
+    parent_id = parent["id"] if isinstance(parent, dict) else parent.id
+    author = parent["author_name"] if isinstance(parent, dict) else (parent.author.display_name or parent.author.username)
+    username = parent["username"] if isinstance(parent, dict) else parent.author.username
+    content = parent["content"] if isinstance(parent, dict) else parent.content
+    summary = (content or "").replace("\n", " ")[:90]
+    if len(content or "") > 90:
+        summary += "..."
+    return f'''<a href="/post/{parent_id}" class="reply-context" onclick="event.stopPropagation()">
+      <span class="reply-context-label">답글 대상</span>
+      <strong>{author}</strong><span>@{username}</span>
+      <p>{summary}</p>
+    </a>'''
 
 def _vis_badge(p):
     vis = p["visibility"] if isinstance(p, dict) else p.visibility
     icon = VISIBILITY_ICONS.get(vis, "")
     return f'<span class="vis-badge vis-{vis}">{_icon(icon)}</span>'
 
+def _vis_badge_from_data(vis):
+    icon = VISIBILITY_ICONS.get(vis, "")
+    return f'<span class="vis-badge vis-{vis}">{_icon(icon)}</span>'
+
 def _timeline_tabs(current_tl):
     tabs = ""
-    for tl_key in ("federated", "local", "social", "home"):
+    for tl_key in ("home", "social", "local", "federated"):
         active = ' class="active"' if tl_key == current_tl else ""
         label = TIMELINE_LABELS[tl_key]
         icon = _icon(TIMELINE_ICONS[tl_key])
@@ -798,26 +913,41 @@ def _timeline_tabs(current_tl):
 
 def _sidebar(user, active_nav=None, notifications=None):
     nav_items = [
-        ("timeline", "/timeline/home", f'{_icon("home_solid")} 타임라인',
-         ' <span class="notif-dot"></span>' if notifications else ""),
-        ("notifications", "/notifications", f'{_icon("bell_solid")} 알림', ""),
+        ("timeline", "/timeline/home", f'{_icon("home_solid")} 타임라인', ""),
+        ("notifications", "/notifications", f'{_icon("bell_solid")} 알림' + 
+         ('<span class="notif-dot"></span>' if notifications else ""), ""),
+        ("divider1", None, None, None),
+        ("explore", "/explore", f'{_icon("search")} 탐색', ""),
+        ("divider2", None, None, None),
         ("my_novels", "/novels/my", f'{_icon("book_solid")} 내 소설', ""),
         ("all_novels", "/novels", f'{_icon("books_solid")} 모든 소설', ""),
+        ("divider3", None, None, None),
         ("profile", f"/users/{user.username}", f'{_icon("user_solid")} 내 프로필', ""),
+        ("divider4", None, None, None),
+        ("settings", "/users/settings", f'{_icon("settings")} 설정 관리', ""),
     ]
     links = ""
     for key, href, label, suffix in nav_items:
+        if key.startswith("divider"):
+            links += '      <li class="nav-divider"></li>\n'
+            continue
         cls = ' class="active"' if key == active_nav else ""
-        links += f'      <li><a href="{href}"{cls}>{label}{suffix}</a></li>\n'
+        label_html = label
+        if suffix:
+            label_html = f'<span style="display:flex; align-items:center; width:100%">{label}{suffix}</span>'
+        links += f'      <li><a href="{href}"{cls}>{label_html}</a></li>\n'
     if getattr(user, 'is_admin', False):
         links += f'      <li><a href="/admin">{_icon("settings")} 관리</a></li>\n'
 
     return f"""  <nav class="sidebar">
     <div class="sidebar-header"><h2><a href="/timeline/home" class="sidebar-home-link">{_icon("books")} SNS+Novel</a></h2></div>
+    <form action="/search" method="get" class="sidebar-search">
+      <input type="text" name="q" placeholder="검색..." class="sidebar-search-input">
+    </form>
       <a href="/users/{user.username}" class="user-info-link">
         <div class="user-info">
           {_avatar_html(user, 40, "sidebar-avatar")}
-          <div>
+          <div class="user-info-text-mini">
             <strong>{user.display_name or user.username}</strong>
             <span>@{user.username}</span>
           </div>
@@ -880,34 +1010,77 @@ def _right_sidebar(user):
   </aside>"""
 
 
-def _post_card(p, liked, boosted, user):
+def _post_card(p, liked=False, boosted=False, user=None):
+    if not p: return ""
+    # p is a dict now in notifications, let's handle both objects and dicts
+    if isinstance(p, dict):
+        p_id = p["id"]
+        p_content = p["content"]
+        p_summary = p["summary"]
+        p_author = p["author"]
+        p_created_at = p["created_at"]
+        p_likes_count = p["likes_count"]
+        p_boosts_count = p["boosts_count"]
+        p_replies_count = p["replies_count"]
+        p_visibility = p["visibility"]
+        p_reply_context = "" # No easy context for dicts
+    else:
+        p_id = p.id
+        p_content = p.content
+        p_summary = p.summary
+        p_author = p.author
+        p_created_at = p.created_at
+        p_likes_count = p.likes_count
+        p_boosts_count = p.boosts_count
+        p_replies_count = p.replies_count
+        p_visibility = p.visibility
+        p_reply_context = _reply_context_html(p)
+
+    if isinstance(p_author, dict):
+        author_id = p_author.get("id")
+        display_name = p_author.get("display_name")
+        username = p_author.get("username")
+        profile_image = p_author.get("profile_image")
+    else:
+        author_id = p_author.id
+        display_name = p_author.display_name
+        username = p_author.username
+        profile_image = p_author.profile_image
+
+    reply_preview = html.escape((p_content or "").replace("\n", " ")[:180], quote=True)
+    reply_author = html.escape(display_name or username, quote=True)
+    
     actions = f"""  <div class="post-actions" onclick="event.stopPropagation()">
-    <a href="/post/{p.id}" class="action-btn">{_icon("reply")} {p.replies_count}</a>
-    <form method="post" action="/post/{p.id}/{"unlike" if liked else "like"}" class="inline-form">
-      <button type="submit" class="action-btn {"liked" if liked else ""}">{_icon("star_filled") if liked else _icon("star")} {p.likes_count}</button>
+    <button type="button" class="action-btn" onclick="openReplyModal({p_id}, this.dataset.author, this.dataset.content)" data-author="{reply_author}" data-content="{reply_preview}">{_icon("reply")} {p_replies_count}</button>
+    <form method="post" action="/post/{p_id}/{"unlike" if liked else "like"}" class="inline-form">
+      <button type="submit" class="action-btn {"liked" if liked else ""}">{_icon("star_filled") if liked else _icon("star")} {p_likes_count}</button>
     </form>
-    <form method="post" action="/post/{p.id}/{"unboost" if boosted else "boost"}" class="inline-form">
-      <button type="submit" class="action-btn {"boosted" if boosted else ""}">{_icon("refresh")} {p.boosts_count}</button>
+    <form method="post" action="/post/{p_id}/{"unboost" if boosted else "boost"}" class="inline-form">
+      <button type="submit" class="action-btn {"boosted" if boosted else ""}">{_icon("refresh")} {p_boosts_count}</button>
     </form>"""
-    if p.author_id == user.id:
+    
+    if user and author_id == user.id:
         actions += f"""
-    <a href="/post/{p.id}" class="action-btn">{_icon("edit")}</a>
-    <form method="post" action="/post/{p.id}/delete" class="inline-form">
+    <a href="/post/{p_id}" class="action-btn">{_icon("edit")}</a>
+    <form method="post" action="/post/{p_id}/delete" class="inline-form">
       <button type="submit" class="action-btn" onclick="return confirm('삭제하시겠습니까?') && event.stopPropagation()">{_icon("trash")}</button>
     </form>"""
     actions += "\n  </div>"
-    return f"""<div class="post-card" onclick="location.href='/post/{p.id}'">
-  <div class="post-header" onclick="event.stopPropagation()">
-    <a href="/users/{p.author.username}" class="post-author">{p.author.display_name or p.author.username}</a>
-    <span class="post-username">@{p.author.username}</span>
-    <span class="post-time">{_vis_badge(p)} {p.created_at.strftime("%Y-%m-%d %H:%M")}</span>
+    
+    return f"""<div class="post-card" onclick="location.href='/post/{p_id}'">
+  <div class="post-header">
+    {_avatar_html(p_author, 28, "post-author-avatar")}
+    <a href="/post/{p_id}" class="post-author">{display_name or username}</a>
+    <span class="post-username">@{username}</span>
+    <span class="post-time">{_vis_badge_from_data(p_visibility)} {p_created_at.strftime("%Y-%m-%d %H:%M")}</span>
   </div>
-  {_cw(p.content, p.summary)}
+  {p_reply_context}
+  {_cw(p_content, p_summary)}
 {actions}
 </div>"""
 
 def render_timeline(user, feed, notifications, timeline_type="federated"):
-    items = "".join(_post_card(p, liked, boosted, user) for p, liked, boosted in feed)
+    items = "".join(_post_card(p, liked=liked, boosted=boosted, user=user) for p, liked, boosted in feed)
 
     timeline_nav = _timeline_tabs(timeline_type)
 
@@ -951,20 +1124,95 @@ def render_timeline(user, feed, notifications, timeline_type="federated"):
   </main>
   {_right_sidebar(user)}
 </div>
+<div class="reply-modal-backdrop" id="reply-modal" onclick="closeReplyModal()">
+  <div class="reply-modal" onclick="event.stopPropagation()">
+    <button type="button" class="reply-modal-close" onclick="closeReplyModal()">×</button>
+    <h3>답글 작성</h3>
+    <div class="reply-modal-original">
+      <strong id="reply-modal-author"></strong>
+      <p id="reply-modal-content"></p>
+    </div>
+    <form method="post" id="reply-modal-form">
+      <textarea name="content" rows="4" placeholder="답글을 입력하세요..." required maxlength="{MAX_POST_LENGTH}" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter')this.form.requestSubmit()"></textarea>
+      <div class="reply-form-footer">
+        <div class="visibility-selector">
+          <label><input type="radio" name="visibility" value="public" checked>{_icon("globe")} 공개</label>
+          <label><input type="radio" name="visibility" value="home">{_icon("home")} 홈</label>
+          <label><input type="radio" name="visibility" value="followers">{_icon("lock")} 팔로워</label>
+          <label><input type="radio" name="visibility" value="mention">{_icon("mail")} 멘션</label>
+        </div>
+        <button type="submit" class="btn btn-primary">답글</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+function openReplyModal(postId, author, content) {{
+  var modal = document.getElementById('reply-modal');
+  var form = document.getElementById('reply-modal-form');
+  form.action = '/post/' + postId + '/reply';
+  document.getElementById('reply-modal-author').textContent = author;
+  document.getElementById('reply-modal-content').textContent = content;
+  form.querySelector('textarea').value = '';
+  modal.classList.add('active');
+  setTimeout(function() {{ form.querySelector('textarea').focus(); }}, 0);
+}}
+function closeReplyModal() {{
+  document.getElementById('reply-modal').classList.remove('active');
+}}
+document.addEventListener('keydown', function(e) {{
+  if (e.key === 'Escape') closeReplyModal();
+}});
+</script>
 <script src="/static/theme.js"></script></body>
 </html>"""
 
 
-def render_post_detail(user, post, replies, liked, boosted):
-    reply_items = "".join(
-        f'<div class="post-card reply">'
+def render_post_detail(user, post, replies, liked, boosted, parent_post=None, ancestors=None, descendant_posts=None):
+    reply_preview = html.escape((post.content or "").replace("\n", " ")[:180], quote=True)
+    reply_author = html.escape(post.author.display_name or post.author.username, quote=True)
+    ancestors = ancestors or []
+    descendant_posts = descendant_posts or []
+
+    ancestor_items = "".join(
+        f'<div class="thread-post ancestor" style="--thread-depth:{min(depth, 6)}" onclick="location.href=\'/post/{t.id}\'">'
         f'  <div class="post-header">'
-        f'    <a href="/users/{r.author.username}" class="post-author">{r.author.display_name or r.author.username}</a>'
+        f'    {_avatar_html(t.author, 24, "post-author-avatar")}'
+        f'    <a href="/post/{t.id}" class="post-author">{t.author.display_name or t.author.username}</a>'
+        f'    <span class="post-username">@{t.author.username}</span>'
+        f'    <span class="post-time">{_vis_badge(t)} {t.created_at.strftime("%Y-%m-%d %H:%M")}</span>'
+        f'  </div>'
+        f'  {_cw(t.content, t.summary)}'
+        f'</div>'
+        for depth, t in enumerate(ancestors)
+    )
+
+    reply_items = "".join(
+        f'<div class="post-card reply" onclick="location.href=\'/post/{r.id}\'">'
+        f'  <div class="post-header">'
+        f'    {_avatar_html(r.author, 28, "post-author-avatar")}'
+        f'    <a href="/post/{r.id}" class="post-author">{r.author.display_name or r.author.username}</a>'
+        f'    <span class="post-username">@{r.author.username}</span>'
         f'    <span class="post-time">{_vis_badge(r)} {r.created_at.strftime("%Y-%m-%d %H:%M")}</span>'
         f'  </div>'
+        f'  {_reply_context_html(r, post)}'
         f'  {_cw(r.content, r.summary)}'
         f'</div>'
         for r in replies
+    )
+
+    descendant_items = "".join(
+        f'<div class="thread-post descendant" style="--thread-depth:{min(depth, 6)}" onclick="location.href=\'/post/{t.id}\'">'
+        f'  <div class="post-header">'
+        f'    {_avatar_html(t.author, 24, "post-author-avatar")}'
+        f'    <a href="/post/{t.id}" class="post-author">{t.author.display_name or t.author.username}</a>'
+        f'    <span class="post-username">@{t.author.username}</span>'
+        f'    <span class="post-time">{_vis_badge(t)} {t.created_at.strftime("%Y-%m-%d %H:%M")}</span>'
+        f'  </div>'
+        f'  {_reply_context_html(t) if depth else ""}'
+        f'  {_cw(t.content, t.summary)}'
+        f'</div>'
+        for t, depth in descendant_posts
     )
 
     return f"""<!DOCTYPE html>
@@ -978,16 +1226,18 @@ def render_post_detail(user, post, replies, liked, boosted):
 <body>
 <div class="layout">
 {_sidebar(user)}
-  <main class="main-content">
+      <main class="main-content">
+    {f'<div class="thread-list thread-list-above">{ancestor_items}</div>' if ancestors else ''}
     <div class="post-card post-detail">
       <div class="post-header">
-        <a href="/users/{post.author.username}" class="post-author">{post.author.display_name or post.author.username}</a>
+        {_avatar_html(post.author, 28, "post-author-avatar")}
+        <a href="/post/{post.id}" class="post-author">{post.author.display_name or post.author.username}</a>
         <span class="post-username">@{post.author.username}</span>
         <span class="post-time">{_vis_badge(post)} {post.created_at.strftime("%Y-%m-%d %H:%M")}</span>
       </div>
       {_cw(post.content, post.summary)}
       <div class="post-actions">
-        <a href="/post/{post.id}" class="action-btn">{_icon("reply")} {post.replies_count}</a>
+        <button type="button" class="action-btn" onclick="openReplyModal({post.id}, this.dataset.author, this.dataset.content)" data-author="{reply_author}" data-content="{reply_preview}">{_icon("reply")} {post.replies_count}</button>
         <form method="post" action="/post/{post.id}/{"unlike" if liked else "like"}" class="inline-form">
           <button type="submit" class="action-btn {"liked" if liked else ""}">{_icon("star_filled") if liked else _icon("star")} {post.likes_count}</button>
         </form>
@@ -1011,10 +1261,24 @@ def render_post_detail(user, post, replies, liked, boosted):
       ''' if post.author_id == user.id else ""}
     </div>
 
-    <div class="reply-form">
-      <h4>답글 작성</h4>
-      <form method="post" action="/post/{post.id}/reply">
-        <textarea name="content" rows="2" placeholder="답글을 입력하세요..." required maxlength="{MAX_POST_LENGTH}"></textarea>
+    <div class="thread-list thread-list-below">
+      {descendant_items if descendant_items else ""}
+    </div>
+
+  </main>
+  {_right_sidebar(user)}
+</div>
+<div class="reply-modal-backdrop" id="reply-modal" onclick="closeReplyModal()">
+  <div class="reply-modal" onclick="event.stopPropagation()">
+    <button type="button" class="reply-modal-close" onclick="closeReplyModal()">×</button>
+    <h3>답글 작성</h3>
+    <div class="reply-modal-original">
+      <strong id="reply-modal-author"></strong>
+      <p id="reply-modal-content"></p>
+    </div>
+    <form method="post" id="reply-modal-form">
+      <textarea name="content" rows="4" placeholder="답글을 입력하세요..." required maxlength="{MAX_POST_LENGTH}" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter')this.form.requestSubmit()"></textarea>
+      <div class="reply-form-footer">
         <div class="visibility-selector">
           <label><input type="radio" name="visibility" value="public" checked>{_icon("globe")} 공개</label>
           <label><input type="radio" name="visibility" value="home">{_icon("home")} 홈</label>
@@ -1022,16 +1286,28 @@ def render_post_detail(user, post, replies, liked, boosted):
           <label><input type="radio" name="visibility" value="mention">{_icon("mail")} 멘션</label>
         </div>
         <button type="submit" class="btn btn-primary">답글</button>
-      </form>
-    </div>
-
-    <div class="replies">
-      <h4>답글 ({len(replies)})</h4>
-      {reply_items if reply_items else "<p class='empty-state'>아직 답글이 없습니다.</p>"}
-    </div>
-  </main>
-  {_right_sidebar(user)}
+      </div>
+    </form>
+  </div>
 </div>
+<script>
+function openReplyModal(postId, author, content) {{
+  var modal = document.getElementById('reply-modal');
+  var form = document.getElementById('reply-modal-form');
+  form.action = '/post/' + postId + '/reply';
+  document.getElementById('reply-modal-author').textContent = author;
+  document.getElementById('reply-modal-content').textContent = content;
+  form.querySelector('textarea').value = '';
+  modal.classList.add('active');
+  setTimeout(function() {{ form.querySelector('textarea').focus(); }}, 0);
+}}
+function closeReplyModal() {{
+  document.getElementById('reply-modal').classList.remove('active');
+}}
+document.addEventListener('keydown', function(e) {{
+  if (e.key === 'Escape') closeReplyModal();
+}});
+</script>
 <script src="/static/theme.js"></script></body>
 </html>"""
 
@@ -1079,13 +1355,59 @@ def render_profile_edit(user):
 </html>"""
 
 
+def render_user_settings(user):
+    return f"""<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>설정 관리 - SNS+소설 블로그</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="layout">
+{_sidebar(user, active_nav="settings")}
+  <main class="main-content">
+    <div class="page-header">
+      <h2>{_icon("settings")} 설정 관리</h2>
+    </div>
+    <form method="post" action="/users/settings" class="novel-form">
+      <div class="form-group">
+        <label>프로필 이미지</label>
+        {_avatar_html(user, 80, "profile-avatar")}
+      </div>
+      <div class="form-group">
+        <label for="image_url">이미지 URL</label>
+        <input type="text" id="image_url" name="image_url" value="{user.profile_image or ''}" placeholder="https://example.com/avatar.jpg">
+      </div>
+      <div class="form-group">
+        <label for="display_name">표시 이름</label>
+        <input type="text" id="display_name" name="display_name" value="{user.display_name or ''}" placeholder="사용자 표시 이름">
+      </div>
+      <div class="form-group">
+        <label for="summary">소개글</label>
+        <textarea id="summary" name="summary" rows="3" placeholder="자기소개">{user.summary or ''}</textarea>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">설정 저장</button>
+      </div>
+    </form>
+  </main>
+  {_right_sidebar(user)}
+</div>
+<script src="/static/theme.js"></script></body>
+</html>"""
+
+
 def render_profile(user, profile_user, posts, followers_count, following_count, is_following, novels, followers, following):
     items = "".join(
         f'<div class="post-card" onclick="location.href=\'/post/{p["id"]}\'">'
-        f'  <div class="post-header" onclick="event.stopPropagation()">'
+        f'  <div class="post-header">'
+        f'    {_avatar_html(profile_user, 28, "post-author-avatar")}'
         f'    <span class="post-author">{profile_user.display_name or profile_user.username}</span>'
         f'    <span class="post-time">{_vis_badge(p)} {p["created_at"].strftime("%Y-%m-%d %H:%M")}</span>'
         f'  </div>'
+        f'  {_reply_context_html(p)}'
         f'  {_cw(p["content"], p["summary"])}'
         f'  <div class="post-actions" onclick="event.stopPropagation()">'
         f'    <a href="/post/{p["id"]}" class="action-btn">{_icon("reply")} {p["replies_count"]}</a>'
@@ -1212,7 +1534,7 @@ function switchTab(name) {
 
 
 def render_explore(user, feed):
-    items = "".join(_post_card(p, liked, boosted, user) for p, liked, boosted in feed)
+    items = "".join(_post_card(p, liked=liked, boosted=boosted, user=user) for p, liked, boosted in feed)
 
     return f"""<!DOCTYPE html>
 <html lang="ko">
@@ -1279,19 +1601,32 @@ def render_mentions(user, posts):
 
 
 def render_notifications(user, notifs, filter_type=""):
+    # Restore missing icons in sns.py if needed (though they should be imported from ui_components)
+    # The ICONS dictionary imported from ui_components should already contain "mention" and "direct"
+    
+    notif_icons = {
+        "follow": "user_solid",
+        "like": "star_filled",
+        "boost": "refresh",
+        "reply": "mention",
+        "mention": "mention",
+        "post": "bell_solid",
+    }
+
     items = "".join(
         f'<div class="notif-card">'
-        f'  <div class="notif-icon">{n["notification_type"]}</div>'
+        f'  <div class="notif-icon">{_icon(notif_icons.get(n["notification_type"], "bell"))}</div>'
         f'  <div class="notif-body">'
         f'    {n["from_user_avatar_html"]}'
         f'    <a href="/users/{n["from_user_username"]}"><strong>{n["from_user_display_name"] or n["from_user_username"]}</strong></a>'
-        f'    {"님이 회원님을 팔로우했습니다" if n["notification_type"] == "follow" else ""}'
-        f'    {"님이 회원님의 글을 즐겨찾기했습니다" if n["notification_type"] == "like" else ""}'
-        f'    {"님이 회원님의 글을 부스트했습니다" if n["notification_type"] == "boost" else ""}'
-        f'    {"님이 회원님의 글에 답글을 달았습니다" if n["notification_type"] == "reply" else ""}'
-        f'    {"님이 새 글을 작성했습니다" if n["notification_type"] == "post" else ""}'
-        f'    {"님이 회원님을 멘션했습니다" if n["notification_type"] == "mention" else ""}'
+        f'    {"님"}'
+        f'    {"이 회원님을 팔로우했습니다" if n["notification_type"] == "follow" else ""}'
+        f'    {"이 회원님의 글을 즐겨찾기했습니다" if n["notification_type"] == "like" else ""}'
+        f'    {"이 회원님의 글을 부스트했습니다" if n["notification_type"] == "boost" else ""}'
+        f'    {"이 회원님을 언급했습니다" if n["notification_type"] in ["reply", "mention"] else ""}'
+        f'    {"이 새 글을 작성했습니다" if n["notification_type"] == "post" else ""}'
         f'    <span class="notif-time">{n["created_at"].strftime("%m-%d %H:%M") if n["created_at"] else ""}</span>'
+        f'    {_post_card(n["post"], liked=n["post"].get("liked", False), boosted=n["post"].get("boosted", False), user=user) if n.get("post") else ""}'
         f'  </div>'
         f'</div>'
         for n in notifs
@@ -1299,10 +1634,10 @@ def render_notifications(user, notifs, filter_type=""):
 
     notif_filters = [
         ("", "전체", _icon("bell")),
+        ("mention", "멘션", _icon("mention")),
         ("like", "즐겨찾기", _icon("star_filled")),
         ("boost", "재게시", _icon("refresh")),
-        ("follow", "팔로우", _icon("user_solid")),
-        ("mention", "멘션", _icon("mail")),
+        ("direct", "다이렉트", _icon("direct")),
     ]
     filter_tabs = "".join(
         f'<a href="/notifications{"?type=" + k if k else ""}" class="notif-tab{" active" if k == filter_type else ""}">{v}</a>'
@@ -1331,11 +1666,48 @@ def render_notifications(user, notifs, filter_type=""):
     <div class="notif-list">
       {items if items else "<p class='empty-state'>알림이 없습니다.</p>"}
     </div>
-    <div class="notif-list">
-      {items if items else "<p class='empty-state'>알림이 없습니다.</p>"}
-    </div>
   </main>
   {_right_sidebar(user)}
 </div>
+<div class="reply-modal-backdrop" id="reply-modal" onclick="closeReplyModal()">
+  <div class="reply-modal" onclick="event.stopPropagation()">
+    <button type="button" class="reply-modal-close" onclick="closeReplyModal()">×</button>
+    <h3>답글 작성</h3>
+    <div class="reply-modal-original">
+      <strong id="reply-modal-author"></strong>
+      <p id="reply-modal-content"></p>
+    </div>
+    <form method="post" id="reply-modal-form">
+      <textarea name="content" rows="4" placeholder="답글을 입력하세요..." required maxlength="{MAX_POST_LENGTH}" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter')this.form.requestSubmit()"></textarea>
+      <div class="reply-form-footer">
+        <div class="visibility-selector">
+          <label><input type="radio" name="visibility" value="public" checked>{_icon("globe")} 공개</label>
+          <label><input type="radio" name="visibility" value="home">{_icon("home")} 홈</label>
+          <label><input type="radio" name="visibility" value="followers">{_icon("lock")} 팔로워</label>
+          <label><input type="radio" name="visibility" value="mention">{_icon("mail")} 멘션</label>
+        </div>
+        <button type="submit" class="btn btn-primary">답글</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+function openReplyModal(postId, author, content) {{
+  var modal = document.getElementById('reply-modal');
+  var form = document.getElementById('reply-modal-form');
+  form.action = '/post/' + postId + '/reply';
+  document.getElementById('reply-modal-author').textContent = author;
+  document.getElementById('reply-modal-content').textContent = content;
+  form.querySelector('textarea').value = '';
+  modal.classList.add('active');
+  setTimeout(function() {{ form.querySelector('textarea').focus(); }}, 0);
+}}
+function closeReplyModal() {{
+  document.getElementById('reply-modal').classList.remove('active');
+}}
+document.addEventListener('keydown', function(e) {{
+  if (e.key === 'Escape') closeReplyModal();
+}});
+</script>
 <script src="/static/theme.js"></script></body>
 </html>"""

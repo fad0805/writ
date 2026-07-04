@@ -10,6 +10,30 @@ from config import BASE_URL
 
 router = APIRouter()
 
+NOVEL_VISIBILITY_LABELS = {
+    "public": "전체공개",
+    "unlisted": "공개",
+    "private": "비공개",
+}
+
+
+def _can_view_novel(novel, user):
+    return novel.visibility != "private" or novel.author_id == user.id
+
+
+def _novel_visibility_label(novel):
+    visibility = getattr(novel, "visibility", None) or ("public" if novel.is_published else "private")
+    return NOVEL_VISIBILITY_LABELS.get(visibility, "전체공개")
+
+
+def _novel_visibility_selector(current="public"):
+    return f'''<div class="visibility-selector novel-visibility-selector">
+      <label><input type="radio" name="visibility" value="public" {"checked" if current == "public" else ""}>{_icon("globe")} 전체공개</label>
+      <label><input type="radio" name="visibility" value="unlisted" {"checked" if current == "unlisted" else ""}>{_icon("eye")} 공개</label>
+      <label><input type="radio" name="visibility" value="private" {"checked" if current == "private" else ""}>{_icon("lock")} 비공개</label>
+    </div>
+    <p class="form-help">전체공개는 모든 소설 목록에 노출되고, 공개는 작가 프로필과 URL로만 접근할 수 있습니다.</p>'''
+
 
 
 @router.get("/novels", response_class=HTMLResponse)
@@ -19,7 +43,7 @@ def novel_list(request: Request):
         return RedirectResponse(url="/login")
 
     with get_session() as session:
-        novels = session.query(Novel).filter_by(is_published=True).order_by(
+        novels = session.query(Novel).filter_by(is_published=True, visibility="public").order_by(
             desc(Novel.updated_at)
         ).limit(50).all()
 
@@ -46,10 +70,12 @@ def new_novel_page(request: Request):
 
 @router.post("/novels/new")
 def create_novel(request: Request, title: str = Form(...), description: str = Form(""),
-                 tags: str = Form("")):
+                 tags: str = Form(""), visibility: str = Form("public")):
     user = require_auth(request)
     if not title.strip():
         raise HTTPException(status_code=400, detail="Title is required")
+    if visibility not in ("public", "unlisted", "private"):
+        visibility = "public"
 
     with get_session() as session:
         novel = Novel(
@@ -57,6 +83,8 @@ def create_novel(request: Request, title: str = Form(...), description: str = Fo
             title=title,
             description=description,
             tags=tags,
+            visibility=visibility,
+            is_published=visibility != "private",
         )
         session.add(novel)
         session.commit()
@@ -73,10 +101,13 @@ def novel_detail(request: Request, novel_id: int):
         novel = session.query(Novel).filter_by(id=novel_id).first()
         if not novel:
             raise HTTPException(status_code=404, detail="Novel not found")
+        if not _can_view_novel(novel, user):
+            raise HTTPException(status_code=403, detail="이 소설을 볼 수 없습니다")
 
-        episodes = session.query(Episode).filter_by(
-            novel_id=novel.id, is_published=True
-        ).order_by(Episode.episode_number).all()
+        episode_query = session.query(Episode).filter_by(novel_id=novel.id)
+        if novel.author_id != user.id:
+            episode_query = episode_query.filter_by(is_published=True)
+        episodes = episode_query.order_by(Episode.episode_number).all()
 
     return HTMLResponse(render_novel_detail(user, novel, episodes))
 
@@ -96,18 +127,22 @@ def edit_novel_page(request: Request, novel_id: int):
 @router.post("/novels/{novel_id}/edit")
 def edit_novel(request: Request, novel_id: int, title: str = Form(...),
                description: str = Form(""), tags: str = Form(""),
-               is_completed: bool = Form(False)):
+               is_completed: bool = Form(False), visibility: str = Form("public")):
     user = require_auth(request)
 
     with get_session() as session:
         novel = session.query(Novel).filter_by(id=novel_id, author_id=user.id).first()
         if not novel:
             raise HTTPException(status_code=404, detail="Novel not found")
+        if visibility not in ("public", "unlisted", "private"):
+            visibility = "public"
 
         novel.title = title
         novel.description = description
         novel.tags = tags
         novel.is_completed = is_completed
+        novel.visibility = visibility
+        novel.is_published = visibility != "private"
         session.commit()
 
     return RedirectResponse(url=f"/novels/{novel_id}", status_code=303)
@@ -221,22 +256,27 @@ def episode_detail(request: Request, novel_id: int, episode_id: int):
             raise HTTPException(status_code=404, detail="Episode not found")
 
         novel = episode.novel
+        if not _can_view_novel(novel, user) or (not episode.is_published and novel.author_id != user.id):
+            raise HTTPException(status_code=403, detail="이 에피소드를 볼 수 없습니다")
 
         # Increment view count
         episode.views += 1
         session.commit()
 
-        prev_ep = session.query(Episode).filter(
+        prev_ep_query = session.query(Episode).filter(
             Episode.novel_id == novel_id,
             Episode.episode_number < episode.episode_number,
-            Episode.is_published == True,
-        ).order_by(desc(Episode.episode_number)).first()
-
-        next_ep = session.query(Episode).filter(
+        )
+        next_ep_query = session.query(Episode).filter(
             Episode.novel_id == novel_id,
             Episode.episode_number > episode.episode_number,
-            Episode.is_published == True,
-        ).order_by(Episode.episode_number).first()
+        )
+        if novel.author_id != user.id:
+            prev_ep_query = prev_ep_query.filter(Episode.is_published == True)
+            next_ep_query = next_ep_query.filter(Episode.is_published == True)
+        prev_ep = prev_ep_query.order_by(desc(Episode.episode_number)).first()
+
+        next_ep = next_ep_query.order_by(Episode.episode_number).first()
 
     return HTMLResponse(render_episode_detail(user, novel, episode, prev_ep, next_ep))
 
@@ -324,6 +364,7 @@ def render_novel_list(user, novels):
         f'    <p class="novel-desc">{n.description[:200]}{"..." if len(n.description) > 200 else ""}</p>'
         f'    <div class="novel-meta">'
         f'      <span>{_icon("book")} {n.episode_count}화</span>'
+        f'      <span>{_icon("eye")} {_novel_visibility_label(n)}</span>'
         f'      <span>{_icon("check") + " 완결" if n.is_completed else _icon("edit") + " 연재중"}</span>'
         f'      <span>{_icon("eye")} {n.total_views}</span>'
         f'    </div>'
@@ -350,6 +391,7 @@ def render_my_novels(user, novels):
         f'    <p class="novel-desc">{n.description[:200]}{"..." if len(n.description) > 200 else ""}</p>'
         f'    <div class="novel-meta">'
         f'      <span>{_icon("book")} {n.episode_count}화</span>'
+        f'      <span>{_icon("eye")} {_novel_visibility_label(n)}</span>'
         f'      <span>{_icon("check") + " 완결" if n.is_completed else _icon("edit") + " 연재중"}</span>'
         f'    </div>'
         f'    <div class="novel-actions">'
@@ -400,6 +442,10 @@ def render_new_novel(user):
         <label for="tags">태그 (쉼표로 구분)</label>
         <input type="text" id="tags" name="tags" placeholder="판타지, 로맨스, SF">
       </div>
+      <div class="form-group">
+        <label>공개 설정</label>
+        {_novel_visibility_selector("public")}
+      </div>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">만들기</button>
       </div>
@@ -424,7 +470,7 @@ def render_edit_novel(user, novel):
 <div class="layout">
 {_sidebar(user)}
   <main class="main-content">
-    <h2>소설 편집: {novel.title}</h2>
+    <h2>소설 편집</h2>
     <form method="post" action="/novels/{novel.id}/edit" class="novel-form">
       <div class="form-group">
         <label for="title">제목</label>
@@ -437,6 +483,10 @@ def render_edit_novel(user, novel):
       <div class="form-group">
         <label for="tags">태그</label>
         <input type="text" id="tags" name="tags" value="{novel.tags}">
+      </div>
+      <div class="form-group">
+        <label>공개 설정</label>
+        {_novel_visibility_selector(getattr(novel, "visibility", None) or ("public" if novel.is_published else "private"))}
       </div>
       <div class="form-group">
         <label>
@@ -502,6 +552,7 @@ def render_novel_detail(user, novel, episodes):
         <span>{_icon("check") + " 완결" if novel.is_completed else _icon("edit") + " 연재중"}</span>
         <span>{_icon("book")} 총 {novel.episode_count}화</span>
         <span>{_icon("eye")} 총 {novel.total_views}회 조회</span>
+        <span>{_icon("eye")} {_novel_visibility_label(novel)}</span>
       </div>
       <p class="novel-description">{novel.description or ""}</p>
       {f'<p class="novel-tags">{_icon("tag")} {novel.tags}</p>' if novel.tags else ""}
@@ -524,14 +575,14 @@ def render_new_episode(user, novel):
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>새 에피소드 - {novel.title}</title>
+<title>{novel.title}</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <div class="layout">
 {_sidebar(user)}
   <main class="main-content">
-    <h2>새 에피소드: {novel.title}</h2>
+    <h2>{novel.title}</h2>
     <form method="post" action="/novels/{novel.id}/episodes/new" class="episode-form">
       <div class="form-group">
         <label for="title">에피소드 제목</label>
@@ -634,14 +685,14 @@ def render_edit_episode(user, episode):
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>에피소드 편집 - {episode.title}</title>
+<title>{episode.title}</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <div class="layout">
 {_sidebar(user)}
   <main class="main-content">
-    <h2>에피소드 편집: {novel.title} - {episode.title}</h2>
+    <h2>{novel.title}</h2>
     <form method="post" action="/novels/{novel.id}/episodes/{episode.id}/edit" class="episode-form">
       <div class="form-group">
         <label for="title">에피소드 제목</label>
