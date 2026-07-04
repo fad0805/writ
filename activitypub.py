@@ -1,0 +1,618 @@
+import datetime
+import json
+import hashlib
+from typing import Optional
+from urllib.parse import urlparse
+
+import httpx
+from sqlalchemy import or_
+
+from models import User, Post, Follow, Like, Boost, Notification, get_session
+from config import BASE_URL, PUBLIC_URI
+from crypto_utils import generate_keypair, sign_string, verify_signature
+
+
+def get_actor(username: str):
+    with get_session() as session:
+        user = session.query(User).filter_by(username=username).first()
+        if not user:
+            return None
+        return user.to_ap_actor()
+
+
+def get_outbox(username: str, page: Optional[int] = None):
+    with get_session() as session:
+        user = session.query(User).filter_by(username=username).first()
+        if not user:
+            return None
+
+        query = session.query(Post).filter(
+            Post.author_id == user.id,
+            Post.is_deleted == False,
+            Post.novel_id.is_(None),
+            Post.visibility == "public",
+        ).order_by(Post.created_at.desc())
+
+        total = query.count()
+        if page is not None:
+            offset = (page - 1) * 20
+            posts = query.offset(offset).limit(20).all()
+            items = [p.to_ap_note() for p in posts]
+            outbox_url = user.outbox_uri()
+            return {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": f"{outbox_url}?page={page}",
+                "type": "OrderedCollectionPage",
+                "totalItems": total,
+                "partOf": outbox_url,
+                "orderedItems": items,
+                "next": f"{outbox_url}?page={page + 1}" if offset + 20 < total else None,
+                "prev": f"{outbox_url}?page={page - 1}" if page > 1 else None,
+            }
+        else:
+            return {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": outbox_url,
+                "type": "OrderedCollection",
+                "totalItems": total,
+                "first": f"{outbox_url}?page=1",
+            }
+
+
+def get_followers(username: str, page: Optional[int] = None):
+    with get_session() as session:
+        user = session.query(User).filter_by(username=username).first()
+        if not user:
+            return None
+
+        query = session.query(Follow).filter(
+            Follow.following_id == user.id,
+            Follow.accepted == True,
+        )
+
+        total = query.count()
+        url = user.followers_uri()
+
+        if page is not None:
+            offset = (page - 1) * 20
+            follows = query.offset(offset).limit(20).all()
+            items = [f.follower.actor_uri() for f in follows]
+            return {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": f"{url}?page={page}",
+                "type": "OrderedCollectionPage",
+                "totalItems": total,
+                "partOf": url,
+                "orderedItems": items,
+            }
+        else:
+            return {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": url,
+                "type": "OrderedCollection",
+                "totalItems": total,
+                "first": f"{url}?page=1",
+            }
+
+
+def get_following(username: str, page: Optional[int] = None):
+    with get_session() as session:
+        user = session.query(User).filter_by(username=username).first()
+        if not user:
+            return None
+
+        query = session.query(Follow).filter(
+            Follow.follower_id == user.id,
+            Follow.accepted == True,
+        )
+
+        total = query.count()
+        url = user.following_uri()
+
+        if page is not None:
+            offset = (page - 1) * 20
+            follows = query.offset(offset).limit(20).all()
+            items = [f.following.actor_uri() for f in follows]
+            return {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": f"{url}?page={page}",
+                "type": "OrderedCollectionPage",
+                "totalItems": total,
+                "partOf": url,
+                "orderedItems": items,
+            }
+        else:
+            return {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": url,
+                "type": "OrderedCollection",
+                "totalItems": total,
+                "first": f"{url}?page=1",
+            }
+
+
+def handle_inbox(activity: dict) -> tuple[int, str]:
+    atype = activity.get("type")
+    actor = activity.get("actor")
+
+    if isinstance(actor, list):
+        actor = actor[0]
+
+    if atype == "Follow":
+        return _handle_follow(activity)
+    elif atype == "Accept":
+        return _handle_accept(activity)
+    elif atype == "Create":
+        return _handle_create(activity)
+    elif atype == "Like":
+        return _handle_like(activity)
+    elif atype == "Announce":
+        return _handle_announce(activity)
+    elif atype == "Undo":
+        return _handle_undo(activity)
+    elif atype == "Delete":
+        return _handle_delete(activity)
+    else:
+        return (202, f"Accepted {atype}")
+
+
+def _resolve_actor(actor_url: str) -> Optional[User]:
+    with get_session() as session:
+        user = session.query(User).filter(
+            or_(User.remote_url == actor_url, User.actor_uri() == actor_url)
+        ).first()
+        if user:
+            return user
+
+    # Fetch remote actor
+    try:
+        resp = httpx.get(actor_url, headers={"Accept": "application/activity+json"}, timeout=10)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+    except Exception:
+        return None
+
+    preferred_username = data.get("preferredUsername", "")
+    if not preferred_username:
+        return None
+
+    parsed = urlparse(actor_url)
+    domain = parsed.netloc
+
+    public_key_pem = ""
+    if "publicKey" in data:
+        public_key_pem = data["publicKey"].get("publicKeyPem", "")
+
+    with get_session() as session:
+        existing = session.query(User).filter_by(remote_url=actor_url).first()
+        if existing:
+            existing.public_key = public_key_pem
+            existing.display_name = data.get("name", existing.display_name)
+            existing.summary = data.get("summary", existing.summary)
+            session.commit()
+            return existing
+
+        # Use a unique local identifier for remote user
+        local_username = f"{preferred_username}@{domain}"
+        # Ensure uniqueness
+        base_username = local_username
+        counter = 1
+        while session.query(User).filter_by(username=local_username).first():
+            local_username = f"{base_username}_{counter}"
+            counter += 1
+
+        priv, pub = generate_keypair()
+        user = User(
+            username=local_username,
+            display_name=data.get("name", preferred_username),
+            summary=data.get("summary", ""),
+            password_hash="remote_user",
+            private_key=priv,
+            public_key=public_key_pem or pub,
+            is_remote=True,
+            remote_url=actor_url,
+            shared_inbox_url=data.get("endpoints", {}).get("sharedInbox", ""),
+        )
+        session.add(user)
+        session.commit()
+        return user
+
+
+def _handle_follow(activity: dict) -> tuple[int, str]:
+    actor_url = activity["actor"] if isinstance(activity["actor"], str) else activity["actor"][0]
+    object_url = activity["object"]
+    activity_id = activity.get("id", "")
+
+    local_username = object_url.rstrip("/").split("/")[-1]
+
+    with get_session() as session:
+        target = session.query(User).filter_by(username=local_username, is_remote=False).first()
+        if not target:
+            return (404, "Target user not found")
+
+        follower = _resolve_actor(actor_url)
+        if not follower:
+            return (404, "Follower not found")
+
+        existing = session.query(Follow).filter_by(
+            follower_id=follower.id, following_id=target.id
+        ).first()
+        if not existing:
+            follow = Follow(follower_id=follower.id, following_id=target.id, accepted=True)
+            session.add(follow)
+            notification = Notification(
+                user_id=target.id,
+                from_user_id=follower.id,
+                notification_type="follow",
+            )
+            session.add(notification)
+            session.commit()
+
+    # Send Accept
+    _send_accept(actor_url, activity_id, target)
+
+    return (200, "Followed")
+
+
+def _send_accept(actor_url: str, activity_id: str, target: User):
+    accept = {
+        "@context": "https://www.w3.org/ns/activitystreams",
+        "id": f"{target.actor_uri()}#accepts/{activity_id.split('/')[-1]}",
+        "type": "Accept",
+        "actor": target.actor_uri(),
+        "object": {
+            "id": activity_id,
+            "type": "Follow",
+            "actor": actor_url,
+            "object": target.actor_uri(),
+        },
+    }
+    _post_to_inbox(actor_url, accept, target)
+
+
+def _handle_accept(activity: dict) -> tuple[int, str]:
+    obj = activity.get("object", {})
+    if isinstance(obj, dict):
+        actor_url = obj.get("actor", "")
+    else:
+        actor_url = ""
+
+    if not actor_url:
+        return (200, "OK")
+
+    with get_session() as session:
+        local_user = session.query(User).filter_by(is_remote=False).first()
+        if not local_user:
+            return (200, "OK")
+
+        following_remote = _resolve_actor(actor_url)
+        if not following_remote:
+            return (200, "OK")
+
+        follow_rel = session.query(Follow).filter_by(
+            follower_id=local_user.id,
+            following_id=following_remote.id,
+        ).first()
+        if follow_rel:
+            follow_rel.accepted = True
+            session.commit()
+
+    return (200, "Accepted follow")
+
+
+def _handle_create(activity: dict) -> tuple[int, str]:
+    obj = activity.get("object", {})
+    if isinstance(obj, dict) and obj.get("type") == "Note":
+        actor_url = activity["actor"] if isinstance(activity["actor"], str) else activity["actor"][0]
+        actor = _resolve_actor(actor_url)
+        if not actor:
+            return (404, "Actor not found")
+
+        post_id = obj.get("id", "")
+        content = obj.get("content", "")
+        summary = obj.get("summary", "")
+        in_reply_to = obj.get("inReplyTo", "")
+
+        # Determine visibility from to/cc
+        to = obj.get("to", [])
+        if isinstance(to, str):
+            to = [to]
+        visibility = "public"
+        if "https://www.w3.org/ns/activitystreams#Public" not in to:
+            visibility = "home"
+
+        with get_session() as session:
+            existing = session.query(Post).filter_by(ap_id=post_id).first()
+            if existing:
+                return (200, "Already exists")
+
+            reply_to_post = None
+            if in_reply_to:
+                reply_to_post = session.query(Post).filter_by(ap_id=in_reply_to).first()
+
+            # Parse mentioned users from content
+            import re
+            mentioned_names = set(re.findall(r'@(\w+)', content or ""))
+            mentioned_ids = []
+            if mentioned_names:
+                mentioned = session.query(User).filter(
+                    User.username.in_(mentioned_names)
+                ).all()
+                mentioned_ids = [u.id for u in mentioned]
+
+            post = Post(
+                author_id=actor.id,
+                content=content,
+                summary=summary,
+                visibility=visibility,
+                mentioned_user_ids=mentioned_ids,
+                ap_id=post_id,
+                in_reply_to_ap_id=in_reply_to,
+                in_reply_to_id=reply_to_post.id if reply_to_post else None,
+            )
+            session.add(post)
+            session.flush()
+
+            # Notify local users mentioned or replied to
+            if reply_to_post:
+                n = Notification(
+                    user_id=reply_to_post.author_id,
+                    from_user_id=actor.id,
+                    notification_type="reply",
+                    post_id=post.id,
+                )
+                session.add(n)
+
+            # Notify local followers
+            followers = session.query(Follow).filter(
+                Follow.following_id == actor.id,
+            ).all()
+            for f in followers:
+                if not f.follower.is_remote:
+                    n = Notification(
+                        user_id=f.follower.id,
+                        from_user_id=actor.id,
+                        notification_type="post",
+                        post_id=post.id,
+                    )
+                    session.add(n)
+
+            session.commit()
+
+        return (200, "Created")
+    return (200, "OK")
+
+
+def _handle_like(activity: dict) -> tuple[int, str]:
+    actor_url = activity["actor"] if isinstance(activity["actor"], str) else activity["actor"][0]
+    object_url = activity["object"] if isinstance(activity.get("object"), str) else ""
+    activity_id = activity.get("id", "")
+
+    if not object_url:
+        return (200, "OK")
+
+    actor = _resolve_actor(actor_url)
+    if not actor:
+        return (404, "Actor not found")
+
+    with get_session() as session:
+        post = session.query(Post).filter_by(ap_id=object_url).first()
+        if not post:
+            return (200, "OK")
+
+        existing = session.query(Like).filter_by(user_id=actor.id, post_id=post.id).first()
+        if existing:
+            return (200, "Already liked")
+
+        like = Like(
+            user_id=actor.id,
+            post_id=post.id,
+            ap_id=activity_id or f"{BASE_URL}/likes/{activity_id.split('/')[-1]}",
+        )
+        session.add(like)
+
+        n = Notification(
+            user_id=post.author_id,
+            from_user_id=actor.id,
+            notification_type="like",
+            post_id=post.id,
+        )
+        session.add(n)
+        session.commit()
+
+    return (200, "Liked")
+
+
+def _handle_announce(activity: dict) -> tuple[int, str]:
+    actor_url = activity["actor"] if isinstance(activity["actor"], str) else activity["actor"][0]
+    object_url = activity["object"] if isinstance(activity.get("object"), str) else ""
+    activity_id = activity.get("id", "")
+
+    if not object_url:
+        return (200, "OK")
+
+    actor = _resolve_actor(actor_url)
+    if not actor:
+        return (404, "Actor not found")
+
+    with get_session() as session:
+        post = session.query(Post).filter_by(ap_id=object_url).first()
+        if not post:
+            return (200, "OK")
+
+        existing = session.query(Boost).filter_by(user_id=actor.id, post_id=post.id).first()
+        if existing:
+            return (200, "Already boosted")
+
+        boost = Boost(
+            user_id=actor.id,
+            post_id=post.id,
+            ap_id=activity_id or f"{BASE_URL}/boosts/{activity_id.split('/')[-1]}",
+        )
+        session.add(boost)
+
+        n = Notification(
+            user_id=post.author_id,
+            from_user_id=actor.id,
+            notification_type="boost",
+            post_id=post.id,
+        )
+        session.add(n)
+        session.commit()
+
+    return (200, "Announced")
+
+
+def _handle_undo(activity: dict) -> tuple[int, str]:
+    obj = activity.get("object", {})
+    obj_type = obj.get("type", "") if isinstance(obj, dict) else ""
+
+    if obj_type == "Follow":
+        actor_url = obj.get("actor", activity.get("actor", ""))
+        object_url = obj.get("object", "")
+        if isinstance(actor_url, list):
+            actor_url = actor_url[0]
+
+        local_username = object_url.rstrip("/").split("/")[-1]
+        with get_session() as session:
+            target = session.query(User).filter_by(username=local_username, is_remote=False).first()
+            if not target:
+                return (200, "OK")
+            follower = session.query(User).filter_by(remote_url=actor_url).first()
+            if not follower:
+                return (200, "OK")
+            session.query(Follow).filter_by(
+                follower_id=follower.id, following_id=target.id
+            ).delete()
+            session.commit()
+
+        return (200, "Unfollowed")
+
+    elif obj_type == "Like":
+        actor_url = activity.get("actor", "")
+        object_url = obj.get("object", "") if isinstance(obj, dict) else ""
+        if isinstance(actor_url, list):
+            actor_url = actor_url[0]
+
+        with get_session() as session:
+            actor = session.query(User).filter_by(remote_url=actor_url).first()
+            if not actor:
+                return (200, "OK")
+            post = session.query(Post).filter_by(ap_id=object_url).first()
+            if not post:
+                return (200, "OK")
+            session.query(Like).filter_by(user_id=actor.id, post_id=post.id).delete()
+            session.commit()
+
+        return (200, "Unliked")
+
+    elif obj_type == "Announce":
+        actor_url = activity.get("actor", "")
+        object_url = obj.get("object", "") if isinstance(obj, dict) else ""
+        if isinstance(actor_url, list):
+            actor_url = actor_url[0]
+
+        with get_session() as session:
+            actor = session.query(User).filter_by(remote_url=actor_url).first()
+            if not actor:
+                return (200, "OK")
+            post = session.query(Post).filter_by(ap_id=object_url).first()
+            if not post:
+                return (200, "OK")
+            session.query(Boost).filter_by(user_id=actor.id, post_id=post.id).delete()
+            session.commit()
+
+        return (200, "Unboosted")
+
+    return (200, "OK")
+
+
+def _handle_delete(activity: dict) -> tuple[int, str]:
+    object_url = activity.get("object", "")
+    if isinstance(object_url, dict):
+        object_url = object_url.get("id", "")
+
+    if not object_url:
+        return (200, "OK")
+
+    with get_session() as session:
+        post = session.query(Post).filter_by(ap_id=object_url).first()
+        if post:
+            post.is_deleted = True
+            session.commit()
+
+    return (200, "Deleted")
+
+
+def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
+    body = json.dumps(activity, ensure_ascii=False).encode("utf-8")
+    digest = hashlib.sha256(body).hexdigest()
+    date = datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%a, %d %b %Y %H:%M:%S GMT"
+    )
+
+    parsed = urlparse(inbox_url)
+    path = parsed.path or "/"
+    signed_string = f"(request-target): post {path}\nhost: {parsed.netloc}\ndate: {date}\ndigest: SHA-256={digest}"
+
+    signature = sign_string(signed_string, sender.private_key)
+    signature_header = (
+        f'keyId="{sender.actor_uri()}#main-key",'
+        f'algorithm="rsa-sha256",'
+        f'headers="(request-target) host date digest",'
+        f'signature="{signature}"'
+    )
+
+    headers = {
+        "Content-Type": "application/activity+json",
+        "Signature": signature_header,
+        "Date": date,
+        "Digest": f"SHA-256={digest}",
+        "Host": parsed.netloc,
+    }
+
+    try:
+        httpx.post(inbox_url, content=body, headers=headers, timeout=10)
+    except Exception:
+        pass
+
+
+def send_to_shared_inbox(user: User, activity: dict):
+    body = json.dumps(activity, ensure_ascii=False).encode("utf-8")
+    digest = hashlib.sha256(body).hexdigest()
+    date = datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%a, %d %b %Y %H:%M:%S GMT"
+    )
+
+    with get_session() as session:
+        followers = session.query(Follow).filter(
+            Follow.follower_id == user.id,
+            Follow.following.has(is_remote=True),
+        ).all()
+
+    sent = set()
+    for f in followers:
+        target = f.following
+        inbox = target.shared_inbox_url or target.inbox_uri()
+        if inbox in sent:
+            continue
+        sent.add(inbox)
+        _post_to_inbox(inbox, activity, user)
+
+
+def broadcast_to_followers(user: User, activity: dict):
+    with get_session() as session:
+        followers = session.query(Follow).filter(
+            Follow.following_id == user.id,
+            Follow.follower.has(is_remote=True),
+        ).all()
+
+    sent = set()
+    for f in followers:
+        follower = f.follower
+        inbox = follower.shared_inbox_url or follower.inbox_uri()
+        if inbox in sent:
+            continue
+        sent.add(inbox)
+        _post_to_inbox(inbox, activity, user)
