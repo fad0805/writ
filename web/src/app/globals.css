@@ -1343,6 +1343,80 @@ input:focus {
 .no-border { border: none; background: none; }
 .cursor-pointer { cursor: pointer; }
 .text-center { text-align: center; }
+.items-start { align-items: flex-start; }
+.justify-end { justify-content: flex-end; }
+.self-start { align-self: flex-start; }
+.object-cover { object-fit: cover; }
+.text-accent { color: var(--accent); }
+.text-muted { color: var(--text-muted); }
+.text-white { color: var(--text-white); }
+.bg-tertiary { background: var(--bg-tertiary); }
+.bg-secondary { background: var(--bg-secondary); }
+.bg-input { background: var(--input-bg); }
+.border-default { border: 1px solid var(--border); }
+.rounded-4 { border-radius: 4px; }
+.rounded-6 { border-radius: 6px; }
+.rounded-8 { border-radius: 8px; }
+.rounded-12 { border-radius: 12px; }
+.aspect-3-4 { aspect-ratio: 3/4; }
+.w-56 { width: 56px; }
+.w-80 { width: 80px; }
+.w-120 { width: 120px; }
+.tag-wrapper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  cursor: text;
+}
+.tag-wrapper.shake {
+  animation: textarea-shake 0.28s ease-in-out;
+}
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-size: 0.8em;
+  margin: 5px 0 5px 4px;
+}
+.tag-chip button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 1.1em;
+  padding: 0;
+  line-height: 1;
+}
+.tag-text-input {
+  border: none !important;
+  line-height: 1.6;
+  background: transparent;
+  outline: none;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.88em;
+  flex: 1;
+  min-width: 60px;
+  padding: 2px 0;
+  caret-color: var(--text-muted);
+}
+.tag-text-input::placeholder {
+  color: var(--text-dim);
+  font-size: 0.88em;
+}
+.follow-btn {
+  font-size: 0.82em;
+  width: 80px;
+  justify-content: center;
+}
 
 /* ── Icon alignment ── */
 .icon-wrap { display: inline-flex !important; align-items: center; line-height: 1; vertical-align: middle; }

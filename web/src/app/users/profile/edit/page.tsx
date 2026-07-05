@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { api, User } from "@/lib/api";
 import Icon from "@/components/Icon";
 import { avatarColor } from "@/lib/avatar";
+import TextareaHighlight from "@/components/TextareaHighlight";
 import ImageCropper from "@/components/ImageCropper";
 import { useAuth } from "@/lib/auth";
 
@@ -135,7 +136,8 @@ export default function ProfileEditPage() {
         </div>
         <div className="form-group">
           <label>소개글</label>
-          <textarea value={summary} onChange={(e) => setSummary(e.target.value)} rows={3} placeholder="자기소개" />
+          <TextareaHighlight value={summary} onChange={(v) => setSummary(v)} placeholder="자기소개" maxLength={3000} cwLength={0} rows={3} />
+          <div className="char-count">{summary.length}/{3000}</div>
         </div>
         <div className="form-actions">
           <button type="submit" disabled={submitting} className="btn btn-primary">저장</button>

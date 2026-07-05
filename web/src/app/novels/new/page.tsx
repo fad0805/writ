@@ -2,6 +2,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Icon from "@/components/Icon";
+import TextareaHighlight from "@/components/TextareaHighlight";
+import TagInput from "@/components/TagInput";
 import Link from "next/link";
 
 export default function NewNovelPage() {
@@ -42,16 +44,12 @@ export default function NewNovelPage() {
         </div>
         <div className="form-group">
           <label>설명</label>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} />
+          <TextareaHighlight value={description} onChange={(v) => setDescription(v)} placeholder="" maxLength={500} cwLength={0} rows={4} />
+          <div className="char-count">{description.length}/{500}</div>
         </div>
         <div className="form-group">
-          <label>태그</label>
-          <input type="text" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="태그를 입력하고 스페이스를 누르세요" />
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-            {tags.split(/[ ,]+/).filter(Boolean).map((t, i) => (
-              <span key={i} style={{ padding: "2px 8px", borderRadius: 4, background: "var(--bg-tertiary)", border: "1px solid var(--border)", color: "var(--accent)", fontSize: "0.85em" }}>{t}</span>
-            ))}
-          </div>
+          <label>태그 (최대 10개)</label>
+          <TagInput value={tags} onChange={(v) => setTags(v)} />
         </div>
         <div className="form-group">
           <label>표지 이미지 URL</label>
