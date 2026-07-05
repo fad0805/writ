@@ -139,6 +139,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
           <Link href={`/@${post.author.username}`} className="post-username" onClick={(e) => e.stopPropagation()}>
             @{post.author.username}
           </Link>
+          {post.author.is_locked && <Icon name="lock_filled" style={{ fontSize: "0.65em", verticalAlign: "middle", color: "var(--text-muted)", marginLeft: 2 }} />}
           <span className="post-time">
             <span className={`vis-badge vis-${post.visibility}`}>
               <Icon name={VIS_ICONS[post.visibility] || "globe"} />

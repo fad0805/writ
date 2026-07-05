@@ -51,6 +51,7 @@ class User(Base):
     default_visibility = Column(String(16), default="public")
     series_default_visibility = Column(String(16), default="public")
     episode_default_visibility = Column(String(16), default="public")
+    is_locked = Column(Boolean, default=False)
 
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
@@ -382,6 +383,12 @@ def init_db():
     try:
         with Session(engine) as session:
             session.execute(text("ALTER TABLE users ADD COLUMN episode_default_visibility VARCHAR(16) DEFAULT 'public'"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE users ADD COLUMN is_locked BOOLEAN DEFAULT FALSE"))
             session.commit()
     except Exception:
         pass

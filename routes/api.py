@@ -52,6 +52,7 @@ def _user_json(u):
         "avatar": u.profile_image or "",
         "summary": u.summary or "",
         "is_admin": u.is_admin,
+        "is_locked": u.is_locked or False,
         "default_visibility": u.default_visibility or "public",
         "series_default_visibility": u.series_default_visibility or "public",
         "episode_default_visibility": u.episode_default_visibility or "public",
@@ -564,6 +565,15 @@ def api_get_profile(request: Request, username: str):
         is_following = s.query(Follow).filter_by(
             follower_id=user.id, following_id=profile.id, accepted=True
         ).first() is not None if user else False
+        is_follow_pending = s.query(Follow).filter_by(
+            follower_id=user.id, following_id=profile.id, accepted=False
+        ).first() is not None if user else False
+        has_pending_follower = s.query(Follow).filter_by(
+            follower_id=profile.id, following_id=user.id, accepted=False
+        ).first() is not None if user else False
+        is_follower = s.query(Follow).filter_by(
+            follower_id=profile.id, following_id=user.id, accepted=True
+        ).first() is not None if user else False
         novels = s.query(Novel).filter_by(author_id=profile.id).order_by(desc(Novel.updated_at)).all()
         followers = s.query(Follow).filter_by(following_id=profile.id, accepted=True).all()
         following = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).all()
@@ -576,6 +586,9 @@ def api_get_profile(request: Request, username: str):
             "followers_count": followers_count,
             "following_count": following_count,
             "is_following": is_following,
+            "is_follow_pending": is_follow_pending,
+            "has_pending_follower": has_pending_follower,
+            "is_follower": is_follower,
             "is_mine": profile.id == user.id if user else False,
         }
 
@@ -591,11 +604,69 @@ def api_follow(request: Request, username: str):
             raise HTTPException(status_code=400, detail="Cannot follow yourself")
         existing = s.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
         if not existing:
-            s.add(Follow(follower_id=user.id, following_id=target.id, accepted=True))
-            s.add(Notification(user_id=target.id, from_user_id=user.id, notification_type="follow"))
+            accepted = not target.is_locked
+            s.add(Follow(follower_id=user.id, following_id=target.id, accepted=accepted))
+            existing_notif = s.query(Notification).filter_by(
+                from_user_id=user.id, user_id=target.id
+            ).filter(Notification.notification_type.in_(["follow", "follow_request"])).first()
+            if not existing_notif:
+                s.add(Notification(user_id=target.id, from_user_id=user.id, notification_type="follow_request" if not accepted else "follow"))
             s.commit()
     return {"ok": True}
 
+
+@router.post("/users/{username}/approve-follow")
+def api_approve_follow(request: Request, username: str):
+    user = require_auth(request)
+    with get_session() as s:
+        target = s.query(Follow).filter_by(
+            following_id=user.id
+        ).join(User, Follow.follower_id == User.id).filter(User.username == username).first()
+        if not target:
+            raise HTTPException(status_code=404, detail="Follow request not found")
+        target.accepted = True
+        s.query(Notification).filter_by(
+            from_user_id=target.follower_id, user_id=user.id, notification_type="follow_request"
+        ).update({"notification_type": "follow"})
+        s.commit()
+    return {"ok": True}
+
+@router.post("/users/{username}/remove-follower")
+def api_remove_follower(request: Request, username: str):
+    user = require_auth(request)
+    with get_session() as s:
+        follower = s.query(User).filter_by(username=username).first()
+        if not follower:
+            raise HTTPException(status_code=404, detail="User not found")
+        follow = s.query(Follow).filter_by(
+            follower_id=follower.id, following_id=user.id
+        ).first()
+        if not follow:
+            raise HTTPException(status_code=404, detail="Not following you")
+        s.query(Notification).filter(
+            Notification.from_user_id == follower.id,
+            Notification.user_id == user.id,
+            Notification.notification_type.in_(["follow", "follow_request"])
+        ).delete(synchronize_session=False)
+        s.delete(follow)
+        s.commit()
+    return {"ok": True}
+
+@router.post("/users/{username}/reject-follow")
+def api_reject_follow(request: Request, username: str):
+    user = require_auth(request)
+    with get_session() as s:
+        target = s.query(Follow).filter_by(
+            following_id=user.id
+        ).join(User, Follow.follower_id == User.id).filter(User.username == username).first()
+        if not target:
+            raise HTTPException(status_code=404, detail="Follow request not found")
+        s.query(Notification).filter_by(
+            from_user_id=target.follower_id, user_id=user.id, notification_type="follow_request"
+        ).delete()
+        s.delete(target)
+        s.commit()
+    return {"ok": True}
 
 @router.post("/users/{username}/unfollow")
 def api_unfollow(request: Request, username: str):
@@ -607,9 +678,11 @@ def api_unfollow(request: Request, username: str):
         existing = s.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
         if existing:
             s.delete(existing)
-            s.query(Notification).filter_by(
-                from_user_id=user.id, user_id=target.id, notification_type="follow"
-            ).delete()
+            s.query(Notification).filter(
+                Notification.from_user_id == user.id,
+                Notification.user_id == target.id,
+                Notification.notification_type.in_(["follow", "follow_request"])
+            ).delete(synchronize_session=False)
             s.commit()
     return {"ok": True}
 
@@ -723,7 +796,9 @@ def api_notifications(request: Request, filter_type: str = Query("")):
     user = require_auth(request)
     with get_session() as s:
         q = s.query(Notification).filter_by(user_id=user.id)
-        if filter_type:
+        if filter_type == "follow":
+            q = q.filter(Notification.notification_type.in_(["follow", "follow_request"]))
+        elif filter_type:
             q = q.filter_by(notification_type=filter_type)
         notifs = q.order_by(desc(Notification.created_at)).limit(50).all()
 
@@ -1055,7 +1130,8 @@ def _cleanup_avatars():
 @router.post("/settings/update")
 def api_update_settings(request: Request, default_visibility: str = Form("public"),
                         series_default_visibility: str = Form("public"),
-                        episode_default_visibility: str = Form("public")):
+                        episode_default_visibility: str = Form("public"),
+                        is_locked: bool = Form(False)):
     user = require_auth(request)
     valid_post = ("public", "home", "followers", "mention")
     valid_series = ("public", "unlisted", "private")
@@ -1070,6 +1146,7 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
         db.default_visibility = default_visibility
         db.series_default_visibility = series_default_visibility
         db.episode_default_visibility = episode_default_visibility
+        db.is_locked = is_locked
         s.commit()
     return {"ok": True}
 

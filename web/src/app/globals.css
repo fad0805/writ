@@ -1037,6 +1037,11 @@ input:focus {
   margin-left: auto;
 }
 
+/* ── Checkbox ── */
+input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
 /* ── Sidebar widgets (right) ── */
 .notif-mini-list {
   max-height: 420px;

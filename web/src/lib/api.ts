@@ -35,7 +35,10 @@ export interface User {
   avatar: string;
   summary: string;
   is_admin: boolean;
+  is_locked?: boolean;
   default_visibility?: string;
+  series_default_visibility?: string;
+  episode_default_visibility?: string;
 }
 
 export interface PostData {
@@ -154,6 +157,9 @@ export const api = {
       followers_count: number;
       following_count: number;
       is_following: boolean;
+      is_follow_pending: boolean;
+      has_pending_follower: boolean;
+      is_follower: boolean;
       is_mine: boolean;
     }>(`/api/users/${username}`),
   follow: (username: string) => request<{ ok: boolean }>(`/api/users/${username}/follow`, { method: "POST" }),

@@ -13,14 +13,17 @@ export default function SettingsPage() {
   const [defaultVis, setDefaultVis] = useState("public");
   const [seriesDefaultVis, setSeriesDefaultVis] = useState("public");
   const [episodeDefaultVis, setEpisodeDefaultVis] = useState("public");
+  const [isLocked, setIsLocked] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     api.me().then((u) => {
-      setDefaultVis((u as any).default_visibility || "public");
-      setSeriesDefaultVis((u as any).series_default_visibility || "public");
-      setEpisodeDefaultVis((u as any).episode_default_visibility || "public");
+      const user = u as any;
+      setDefaultVis(user.default_visibility || "public");
+      setSeriesDefaultVis(user.series_default_visibility || "public");
+      setEpisodeDefaultVis(user.episode_default_visibility || "public");
+      setIsLocked(user.is_locked || false);
       setLoading(false);
     }).catch(() => router.push("/login"));
   }, [router]);
@@ -45,6 +48,7 @@ export default function SettingsPage() {
       form.append("default_visibility", defaultVis);
       form.append("series_default_visibility", seriesDefaultVis);
       form.append("episode_default_visibility", episodeDefaultVis);
+      form.append("is_locked", isLocked ? "true" : "");
       const res = await fetch("/api/settings/update", {
         method: "POST",
         credentials: "include",
@@ -78,6 +82,13 @@ export default function SettingsPage() {
           <label>에피소드 홍보글 기본 공개 설정</label>
           <VisibilitySelector value={episodeDefaultVis} onChange={(v) => setEpisodeDefaultVis(v)} />
           <p className="form-help">새 에피소드 홍보글에 기본으로 적용될 공개 범위입니다.</p>
+        </div>
+        <div className="form-group">
+          <label>
+            <input type="checkbox" checked={isLocked} onChange={(e) => setIsLocked(e.target.checked)} />
+            {" "}<Icon name="lock" /> 팔로워 수동 승인
+          </label>
+          <p className="form-help">켜면 다른 사용자가 팔로우할 때 수동으로 승인해야 팔로워가 됩니다.</p>
         </div>
         <div className="form-actions">
           <button type="submit" disabled={submitting} className="btn btn-primary">설정 저장</button>

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api, NotificationData, User } from "@/lib/api";
 import Link from "next/link";
 import PostCard from "@/components/PostCard";
@@ -22,6 +22,7 @@ const FILTERS = [
 
 const NOTIF_ICONS: Record<string, string> = {
   follow: "user_solid",
+  follow_request: "user_solid",
   like: "star_filled",
   boost: "refresh",
   reply: "mention",
@@ -66,6 +67,7 @@ export default function NotificationsPage() {
 
   const typeText = (t: string) => {
     if (t === "follow") return "님이 회원님을 팔로우했습니다";
+    if (t === "follow_request") return "님이 회원님을 팔로우 요청했습니다";
     if (t === "like") return "님이 회원님의 글을 즐겨찾기했습니다";
     if (t === "boost") return "님이 회원님의 글을 부스트했습니다";
     if (t === "reply" || t === "mention") return "님이 회원님을 언급했습니다";
@@ -78,6 +80,20 @@ export default function NotificationsPage() {
     const d = new Date(t);
     return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   };
+
+  const handleApprove = useCallback(async (username: string) => {
+    try {
+      await fetch(`/api/users/${username}/approve-follow`, { method: "POST", credentials: "include" });
+      setNotifs((prev) => prev.filter((n) => !(n.type === "follow_request" && n.from_user?.username === username)));
+    } catch {}
+  }, []);
+
+  const handleReject = useCallback(async (username: string) => {
+    try {
+      await fetch(`/api/users/${username}/reject-follow`, { method: "POST", credentials: "include" });
+      setNotifs((prev) => prev.filter((n) => !(n.type === "follow_request" && n.from_user?.username === username)));
+    } catch {}
+  }, []);
 
   const handleMarkAllRead = async () => {
     try {
@@ -140,6 +156,12 @@ export default function NotificationsPage() {
               )}{" "}
               {typeText(n.type)}
               <span className="notif-time">{fmtTime(n.created_at)}</span>
+              {n.type === "follow_request" && n.from_user && (
+                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                  <button onClick={() => handleApprove(n.from_user!.username)} className="btn btn-primary btn-small" style={{ fontSize: "0.8em" }}>수락</button>
+                  <button onClick={() => handleReject(n.from_user!.username)} className="btn btn-small" style={{ fontSize: "0.8em", color: "var(--text-muted)" }}>거절</button>
+                </div>
+              )}
               {n.post && <PostCard post={n.post} />}
             </div>
           </div>

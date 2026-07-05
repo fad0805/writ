@@ -8,11 +8,13 @@ import { hashColor } from "@/lib/avatar";
 import Link from "next/link";
 import Avatar from "@/components/Avatar";
 import MentionModal from "@/components/MentionModal";
+import ConfirmModal from "@/components/ConfirmModal";
 
 export default function ProfilePage() {
   const params = useParams();
   const router = useRouter();
   const [showMention, setShowMention] = useState(false);
+  const [showRemoveFollower, setShowRemoveFollower] = useState(false);
   const username = params.username as string;
   const [profile, setProfile] = useState<User | null>(null);
   const [posts, setPosts] = useState<PostData[]>([]);
@@ -22,6 +24,10 @@ export default function ProfilePage() {
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowPending, setIsFollowPending] = useState(false);
+  const [hasPendingFollower, setHasPendingFollower] = useState(false);
+  const [isFollower, setIsFollower] = useState(false);
+  const [approvedFollower, setApprovedFollower] = useState<boolean | null>(null);
   const [isMine, setIsMine] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("posts");
@@ -33,7 +39,7 @@ export default function ProfilePage() {
       setProfile(d.profile); setPosts(d.posts); setNovels(d.novels);
       setFollowers(d.followers); setFollowing(d.following);
       setFollowersCount(d.followers_count); setFollowingCount(d.following_count);
-      setIsFollowing(d.is_following); setIsMine(d.is_mine);
+      setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setHasPendingFollower(d.has_pending_follower); setIsMine(d.is_mine);
     } catch {}
     setLoading(false);
   }, [username]);
@@ -44,7 +50,7 @@ export default function ProfilePage() {
         setProfile(d.profile); setPosts(d.posts); setNovels(d.novels);
         setFollowers(d.followers); setFollowing(d.following);
         setFollowersCount(d.followers_count); setFollowingCount(d.following_count);
-        setIsFollowing(d.is_following); setIsMine(d.is_mine);
+      setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setHasPendingFollower(d.has_pending_follower); setIsFollower(d.is_follower); setApprovedFollower(null); setIsMine(d.is_mine);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -56,7 +62,8 @@ export default function ProfilePage() {
   const toggleFollow = async () => {
     try {
       if (isFollowing) { await api.unfollow(username); setIsFollowing(false); setFollowersCount(followersCount - 1); }
-      else { await api.follow(username); setIsFollowing(true); setFollowersCount(followersCount + 1); }
+      else if (isFollowPending) { await api.unfollow(username); setIsFollowPending(false); }
+      else { await api.follow(username); if (profile?.is_locked) setIsFollowPending(true); else { setIsFollowing(true); setFollowersCount(followersCount + 1); } }
       window.dispatchEvent(new Event("followchange"));
     } catch {}
   };
@@ -68,13 +75,32 @@ export default function ProfilePage() {
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
             <Avatar user={profile} className="profile-avatar" />
             {!isMine && (
-              <button onClick={toggleFollow} className={`btn btn-small ${isFollowing ? "btn-outline" : "btn-primary"}`} style={{ fontSize: "0.82em", width: 80, justifyContent: "center", marginBottom: 12 }}>
-                {isFollowing ? "언팔로우" : "팔로우"}
+              <button onClick={toggleFollow} className={`btn btn-small ${isFollowing ? "btn-outline" : isFollowPending ? "btn-outline" : "btn-primary"}`} style={{ fontSize: "0.82em", width: 80, justifyContent: "center", marginBottom: 12 }}>
+                {isFollowing ? "언팔로우" : isFollowPending ? "요청됨" : "팔로우"}
               </button>
             )}
           </div>
           <div className="profile-info-text" style={{ position: "relative" }}>
-            <h2>{profile.display_name}</h2>
+            {(isFollower || hasPendingFollower || approvedFollower === true) && (
+              <div style={{ position: "absolute", top: 0, right: 0, display: "flex", gap: 6, zIndex: 1, alignItems: "center" }}>
+                {(isFollower || approvedFollower === true) && (
+                  <span
+                    onClick={() => setShowRemoveFollower(true)}
+                    style={{ fontSize: "0.82em", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}
+                    title="팔로워 삭제"
+                  >
+                    <Icon name="user_solid" size={14} /> {isFollowing || approvedFollower === true ? "맞팔로우" : "내 팔로워"}
+                  </span>
+                )}
+                {hasPendingFollower && (
+                  <>
+                    <button onClick={async () => { await fetch(`/api/users/${profile.username}/approve-follow`, { method: "POST", credentials: "include" }); setHasPendingFollower(false); setApprovedFollower(true); }} className="btn btn-primary btn-small" style={{ fontSize: "0.82em" }}>팔로우 수락</button>
+                    <button onClick={async () => { await fetch(`/api/users/${profile.username}/reject-follow`, { method: "POST", credentials: "include" }); setHasPendingFollower(false); setApprovedFollower(false); }} className="btn btn-small" style={{ fontSize: "0.82em", color: "var(--text-muted)" }}>거절</button>
+                  </>
+                )}
+              </div>
+            )}
+            <h2>{profile.display_name} {profile.is_locked && <Icon name="lock_filled" style={{ fontSize: "0.7em", verticalAlign: "middle", color: "var(--text-muted)" }} />}</h2>
             <p className="profile-username">@{profile.username}</p>
             {profile.summary && (
               <p className="profile-summary" dangerouslySetInnerHTML={{
@@ -107,6 +133,16 @@ export default function ProfilePage() {
         </div>
       </div>
       {showMention && <MentionModal username={profile.username} onClose={() => setShowMention(false)} onDone={() => setShowMention(false)} />}
+      {showRemoveFollower && (
+        <ConfirmModal
+          message="팔로워를 삭제하시겠습니까?"
+          onConfirm={async () => {
+            await fetch(`/api/users/${profile.username}/remove-follower`, { method: "POST", credentials: "include" });
+            setIsFollower(false); setApprovedFollower(null); setShowRemoveFollower(false);
+          }}
+          onCancel={() => setShowRemoveFollower(false)}
+        />
+      )}
       <div className="profile-stats">
         <span className={`profile-stat ${tab === "posts" ? "active" : ""}`} onClick={() => setTab("posts")}><strong>{posts.length}</strong> 게시글</span>
         <span className={`profile-stat ${tab === "novels" ? "active" : ""}`} onClick={() => setTab("novels")}><strong>{novels.length}</strong> 시리즈</span>

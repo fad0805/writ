@@ -36,10 +36,12 @@ export default function Sidebar() {
     };
     check();
     const handler = () => { setUnreadNotifs(0); };
+    const profileHandler = () => refresh();
     window.addEventListener("notificationsread", handler);
+    window.addEventListener("profilechange", profileHandler);
     const interval = setInterval(check, 30000);
-    return () => { clearInterval(interval); window.removeEventListener("notificationsread", handler); };
-  }, [user]);
+    return () => { clearInterval(interval); window.removeEventListener("notificationsread", handler); window.removeEventListener("profilechange", profileHandler); };
+  }, [user, refresh]);
   useEffect(() => {
     setIsDark(document.body.classList.contains("dark-theme"));
     const handler = () => setIsDark(document.body.classList.contains("dark-theme"));
@@ -153,7 +155,7 @@ export default function Sidebar() {
         <div className="user-info">
            <Avatar user={user} className="sidebar-avatar rounded-[8px] flex items-center justify-center text-white font-bold text-lg" />
           <div className="user-info-text-mini">
-            <strong>{user.display_name}</strong>
+            <strong>{user.display_name} {user.is_locked && <Icon name="lock_filled" style={{ fontSize: "0.65em", verticalAlign: "middle", color: "var(--text-muted)", marginLeft: 2 }} />}</strong>
             <span>@{user.username}</span>
           </div>
         </div>
