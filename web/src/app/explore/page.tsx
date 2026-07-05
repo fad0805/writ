@@ -4,6 +4,7 @@ import { api, PostData, NovelData, User } from "@/lib/api";
 import PostCard from "@/components/PostCard";
 import Icon from "@/components/Icon";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { hashColor } from "@/lib/avatar";
 import Avatar from "@/components/Avatar";
 
@@ -16,6 +17,7 @@ export default function ExplorePage() {
   const [searched, setSearched] = useState(false);
   const [fetchedUrl, setFetchedUrl] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchParams = useSearchParams();
 
   const loadExplore = useCallback(() => {
     setLoading(true); setSearched(false); setFetchedUrl(null);
@@ -52,9 +54,8 @@ export default function ExplorePage() {
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const urlParam = params.get("url");
-    const qParam = params.get("q");
+    const urlParam = searchParams.get("url");
+    const qParam = searchParams.get("q");
     if (urlParam) {
       setInputValue(urlParam);
       handleUrlFetch(urlParam);
@@ -64,7 +65,7 @@ export default function ExplorePage() {
     } else {
       loadExplore();
     }
-  }, [loadExplore, doSearch, handleUrlFetch]);
+  }, [searchParams, loadExplore, doSearch, handleUrlFetch]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
