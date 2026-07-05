@@ -22,8 +22,21 @@ export default function Sidebar() {
   const router = useRouter();
   const [isDark, setIsDark] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [unreadNotifs, setUnreadNotifs] = useState(0);
 
   useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    if (!user) return;
+    const check = () => {
+      fetch("/api/notifications/unread-count", { credentials: "include" })
+        .then((r) => r.json())
+        .then((d) => setUnreadNotifs(d.count || 0))
+        .catch(() => {});
+    };
+    check();
+    const interval = setInterval(check, 30000);
+    return () => clearInterval(interval);
+  }, [user]);
   useEffect(() => {
     setIsDark(document.body.classList.contains("dark-theme"));
     const handler = () => setIsDark(document.body.classList.contains("dark-theme"));
@@ -55,7 +68,7 @@ export default function Sidebar() {
     return (
       <aside className="sidebar">
         <div className="sidebar-header">
-          <Link href="/timeline/home" className="sidebar-home-link"><h2>WRIT</h2></Link>
+          <Link href="/timeline/home" className="sidebar-home-link"><h2><span style={{ display: "inline-block", width: 28, height: 28, backgroundColor: "var(--accent)", mask: "url(/writ.svg) center/contain no-repeat", WebkitMask: "url(/writ.svg) center/contain no-repeat", verticalAlign: "middle" }} />WRIT</h2></Link>
         </div>
       </aside>
     );
@@ -65,7 +78,7 @@ export default function Sidebar() {
     return (
       <aside className="sidebar">
         <div className="sidebar-header">
-          <Link href="/timeline/home" className="sidebar-home-link"><h2>WRIT</h2></Link>
+          <Link href="/timeline/home" className="sidebar-home-link"><h2><span style={{ display: "inline-block", width: 28, height: 28, backgroundColor: "var(--accent)", mask: "url(/writ.svg) center/contain no-repeat", WebkitMask: "url(/writ.svg) center/contain no-repeat", verticalAlign: "middle" }} />WRIT</h2></Link>
         </div>
         <div className="spacer" />
         <div className="sidebar-login-btns">
@@ -80,11 +93,27 @@ export default function Sidebar() {
     <aside className="sidebar">
       <div className="sidebar-header">
         <Link href="/timeline/home" className="sidebar-home-link">
-          <h2>WRIT</h2>
+          <h2><span style={{ display: "inline-block", width: 28, height: 28, backgroundColor: "var(--accent)", mask: "url(/writ.svg) center/contain no-repeat", WebkitMask: "url(/writ.svg) center/contain no-repeat", verticalAlign: "middle" }} />WRIT</h2>
         </Link>
       </div>
-      <form className="sidebar-search" onSubmit={(e) => e.preventDefault()}>
-        <input type="text" name="q" placeholder="검색..." className="sidebar-search-input" />
+      <form className="sidebar-search" onSubmit={async (e) => {
+        e.preventDefault();
+        const q = (e.target as HTMLFormElement).q.value.trim();
+        if (!q) return;
+        if (q.startsWith("http")) {
+          try {
+            const form = new FormData();
+            form.append("url", q);
+            const res = await fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form });
+          if (res.ok) router.push("/timeline/home");
+          else { const text = await res.text().catch(() => ""); alert("불러오기 실패: " + text.slice(0, 100)); }
+        } catch (e: any) { alert("불러오기 실패: " + (e.message || "")); }
+        }
+      }} style={{ position: "relative" }}>
+        <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", zIndex: 1, color: "var(--text-muted)", display: "flex", alignItems: "center", cursor: "pointer" }} onClick={(ev) => { const f = (ev.target as HTMLElement).closest('form'); if (f) f.requestSubmit(); }}>
+          <Icon name="search" size={14} />
+        </span>
+        <input type="text" name="q" placeholder="검색..." className="sidebar-search-input" style={{ paddingLeft: 30 }} />
       </form>
       <Link href={`/profile/${user.username}`} className="user-info-link">
         <div className="user-info">
@@ -103,6 +132,7 @@ export default function Sidebar() {
         </NavItem>
         <NavItem href="/notifications" active={isActive("/notifications")}>
           <Icon name="bell_solid" /> 알림
+          {unreadNotifs > 0 && <span className="notif-dot" />}
         </NavItem>
         <li className="nav-divider" />
         <NavItem href="/explore" active={isActive("/explore")}>
@@ -110,10 +140,10 @@ export default function Sidebar() {
         </NavItem>
         <li className="nav-divider" />
         <NavItem href="/novels/my" active={isActive("/novels/my")}>
-          <Icon name="book_solid" /> 내 소설
+          <Icon name="book_solid" /> 내 시리즈
         </NavItem>
         <NavItem href="/novels" active={isActive("/novels")}>
-          <Icon name="books_solid" /> 모든 소설
+          <Icon name="books_solid" /> 모든 시리즈
         </NavItem>
         <li className="nav-divider" />
         <NavItem href={`/profile/${user.username}`} active={isActive(`/profile/${user.username}`)}>

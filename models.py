@@ -2,7 +2,7 @@ import datetime
 import uuid
 from sqlalchemy import (
     create_engine, Column, Integer, String, Text, DateTime, Boolean,
-    ForeignKey, JSON, Index, event, text
+    ForeignKey, JSON, Index, event, text, Table
 )
 from sqlalchemy.orm import DeclarativeBase, relationship, Session
 
@@ -216,6 +216,21 @@ class Boost(Base):
     post = relationship("Post", back_populates="boosts", lazy="selectin")
 
 
+novel_tags = Table(
+    "novel_tags", Base.metadata,
+    Column("novel_id", Integer, ForeignKey("novels.id"), primary_key=True),
+    Column("tag_id", Integer, ForeignKey("tags.id"), primary_key=True),
+)
+
+
+class Tag(Base):
+    __tablename__ = "tags"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(128), unique=True, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+
 class Novel(Base):
     __tablename__ = "novels"
 
@@ -228,7 +243,6 @@ class Novel(Base):
     tags = Column(String(512), default="")
     is_completed = Column(Boolean, default=False)
     is_published = Column(Boolean, default=True)
-    # Visibility: public(listed), unlisted(profile/url), private(author only)
     visibility = Column(String(16), default="public", nullable=False)
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
@@ -236,6 +250,7 @@ class Novel(Base):
     author = relationship("User", back_populates="novels", lazy="selectin")
     episodes = relationship("Episode", back_populates="novel", cascade="all, delete-orphan",
                             order_by="Episode.episode_number", lazy="selectin")
+    tag_list = relationship("Tag", secondary=novel_tags, lazy="selectin")
 
     @property
     def episode_count(self):

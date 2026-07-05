@@ -75,12 +75,16 @@ export interface NovelData {
   id: number;
   title: string;
   description: string;
+  cover_image: string;
   tags: string;
   is_completed: boolean;
   is_published: boolean;
   episode_count: number;
+  total_views: number;
+  visibility: string;
   created_at: string | null;
   updated_at: string | null;
+  author: User | null;
   author_id: number;
 }
 
@@ -90,6 +94,9 @@ export interface EpisodeData {
   episode_number: number;
   title: string;
   content: string;
+  summary: string;
+  views: number;
+  is_published: boolean;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -106,7 +113,10 @@ export const api = {
     ),
 
   // Posts
-  getPost: (id: number) => request<PostData>(`/api/posts/${id}`),
+  getPost: (id: number, reply_offset = 0, reply_limit = 5) =>
+    request<PostData & { total_replies: number; has_more_replies: boolean }>(
+      `/api/posts/${id}?reply_offset=${reply_offset}&reply_limit=${reply_limit}`
+    ),
   createPost: (data: { content: string; summary?: string; visibility?: string; parent_id?: number }) =>
     formRequest<PostData>("/api/posts", data),
   editPost: (id: number, data: { content: string; summary?: string }) =>
@@ -144,6 +154,11 @@ export const api = {
   // Novels
   getNovels: () => request<{ novels: NovelData[] }>("/api/novels"),
   getMyNovels: () => request<{ novels: NovelData[] }>("/api/novels/my"),
+  getNovel: (id: number) => request<{ novel: NovelData; episodes: EpisodeData[]; author: User; is_mine: boolean }>(`/api/novels/${id}`),
+  getEpisode: (id: number, eid: number) => request<{
+    episode: EpisodeData; novel: NovelData; is_mine: boolean;
+    prev_episode: EpisodeData | null; next_episode: EpisodeData | null;
+  }>(`/api/novels/${id}/episodes/${eid}`),
 
   // Explore
   explore: () => request<{ posts: PostData[] }>("/api/explore"),

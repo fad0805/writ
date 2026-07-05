@@ -5,7 +5,6 @@ from typing import Optional
 from urllib.parse import urlparse
 
 import httpx
-from sqlalchemy import or_
 
 from models import User, Post, Follow, Like, Boost, Notification, get_session
 from config import BASE_URL, PUBLIC_URI
@@ -158,9 +157,7 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
 
 def _resolve_actor(actor_url: str) -> Optional[User]:
     with get_session() as session:
-        user = session.query(User).filter(
-            or_(User.remote_url == actor_url, User.actor_uri() == actor_url)
-        ).first()
+        user = session.query(User).filter_by(remote_url=actor_url).first()
         if user:
             return user
 

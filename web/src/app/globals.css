@@ -34,9 +34,9 @@
   --text-muted: #888;
   --text-dim: #666;
   --text-white: #fff;
-  --accent: #689f38;
-  --accent-hover: #558b2f;
-  --accent-light: #8bc34a;
+  --accent: #4a7a28;
+  --accent-hover: #3d6621;
+  --accent-light: #689f38;
   --danger: #e74c3c;
   --danger-hover: #c0392b;
   --card-hover: #3b612144;
@@ -86,7 +86,11 @@ a:hover { color: var(--accent-light); text-decoration: none; }
   margin-bottom: 20px;
   padding-bottom: 15px;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
+
 
 .user-info {
   display: flex;
@@ -687,19 +691,16 @@ input:focus {
 /* ── Profile ── */
 
 .profile-header {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 25px;
-  margin-bottom: 25px;
+  padding: 20px 0 0;
 }
 
 .profile-info {
   display: flex;
   gap: 16px;
   align-items: flex-start;
-  margin-bottom: 20px;
   position: relative;
+  margin-left: 4px;
+  margin-right: 30px;
 }
 .profile-info h2 { margin-bottom: 5px; }
 
@@ -708,9 +709,15 @@ input:focus {
   border-radius: 12px;
   object-fit: cover;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 2em;
+  font-weight: bold;
 }
 
-.profile-info-text { flex: 1; }
+.profile-info-text { flex: 1; min-width: 0; box-sizing: border-box; }
 .profile-username {
   color: var(--text-muted);
   margin-bottom: 10px;
@@ -724,8 +731,10 @@ input:focus {
   display: flex;
   gap: 0;
   color: var(--text-muted);
-  margin-bottom: 15px;
+  margin-bottom: 16px;
   border-bottom: 2px solid var(--border);
+  width: 100%;
+  padding: 0;
 }
 .profile-stat {
   padding: 10px 18px;
@@ -916,6 +925,135 @@ input:focus {
   margin-top: 6px;
   line-height: 1.4;
 }
+/* ── Page header ── */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+/* ── Novel detail header ── */
+.novel-header {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 25px;
+  margin-bottom: 20px;
+}
+.novel-status {
+  display: flex;
+  gap: 15px;
+  color: var(--text-muted);
+  font-size: 0.9em;
+  margin: 10px 0;
+}
+.novel-description {
+  color: var(--text-secondary);
+  margin: 10px 0;
+}
+.author-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-bottom: 20px;
+}
+
+/* ── Episode reader ── */
+.episode-content {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 30px;
+  margin-bottom: 20px;
+}
+.episode-content h2 { margin-bottom: 10px; }
+.episode-content .episode-meta { margin-bottom: 20px; }
+.episode-summary {
+  background: var(--bg-tertiary);
+  border-left: 3px solid var(--accent);
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.episode-body {
+  line-height: 1.8;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+.episode-navigation {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin: 20px 0;
+  flex-wrap: wrap;
+}
+
+/* ── Episode list ── */
+.episode-list {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+.episode-list h3 {
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 0;
+}
+.episode-item {
+  display: flex;
+  gap: 15px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.episode-item:hover { border-color: var(--card-hover); }
+.episode-item:last-child { border-bottom: 2px solid var(--border); }
+.episode-number {
+  color: var(--accent);
+  font-weight: 600;
+  min-width: 70px;
+  font-size: 0.9em;
+}
+.episode-info { flex: 1; }
+.episode-title {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.episode-meta {
+  color: var(--text-dim);
+  font-size: 0.8em;
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* ── Novel card grid ── */
+.novel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.novel-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.novel-card:hover { border-color: var(--card-hover); }
+.novel-card-body { padding: 20px; }
+.novel-card-body h3 a { color: var(--text-white); }
+.novel-card-body h3 { margin-bottom: 8px; font-size: 1.1em; }
+.novel-author { color: var(--text-muted); font-size: 0.85em; margin-bottom: 10px; }
+.novel-desc { color: var(--text-muted); font-size: 0.9em; margin-bottom: 12px; }
+.novel-meta { display: flex; gap: 12px; color: var(--text-muted); font-size: 0.85em; flex-wrap: wrap; }
+.novel-actions { margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end; }
+
 .novel-tags {
   margin-top: 4px;
   font-size: 0.85em;
@@ -1036,6 +1174,19 @@ input:focus {
 .thread-post:hover { border-color: var(--card-hover); }
 
 .reply-form-footer .visibility-selector { margin-bottom: 0; }
+
+.announce-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.announce-group > label {
+  font-size: 0.9em;
+  color: var(--text-secondary);
+}
+.announce-vis {
+  margin-left: 0;
+}
 
 /* ── Boost badge ── */
 .boost-badge {
@@ -1211,6 +1362,24 @@ input:focus {
   font-size: 0.9em;
 }
 .subtitle { color: var(--text-muted); margin-bottom: 20px; }
+.novel-form,
+.episode-form {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 25px;
+}
+.form-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+.form-help {
+  color: var(--text-dim);
+  font-size: 0.82em;
+  margin-top: 6px;
+}
 .form-group { margin-bottom: 15px; }
 .form-group label {
   display: block;

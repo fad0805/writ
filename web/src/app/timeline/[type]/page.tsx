@@ -25,6 +25,7 @@ export default function TimelinePage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const load = async () => {
@@ -51,7 +52,23 @@ export default function TimelinePage() {
     setLoadingMore(false);
   }, [tlType, posts.length, loadingMore, hasMore]);
 
-  useEffect(() => { load(); }, [tlType]);
+  useEffect(() => { load(); }, [tlType, refreshKey]);
+
+  useEffect(() => {
+    const handler = () => load();
+    window.addEventListener("followchange", handler);
+    return () => window.removeEventListener("followchange", handler);
+  }, [tlType]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      api.timeline(tlType, LIMIT, 0).then((data) => {
+        setPosts(data.posts);
+        setHasMore(data.has_more);
+      }).catch(() => {});
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [tlType]);
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -69,7 +86,7 @@ export default function TimelinePage() {
   return (
     <>
       <div className="post-form">
-        <PostForm />
+        <PostForm onDone={() => setRefreshKey((k) => k + 1)} />
       </div>
       <div className="timeline-tabs">
         {TABS.map((t) => (

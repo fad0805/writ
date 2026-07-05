@@ -16,7 +16,7 @@ function linkifyMentions(text: string): string {
   return text.replace(/@(\w+)/g, '<a href="/profile/$1" class="mention-link">@$1</a>');
 }
 
-export default function PostCard({ post, onUpdate, current }: { post: PostData; onUpdate?: () => void; current?: boolean }) {
+export default function PostCard({ post, onUpdate, current, hideContext }: { post: PostData; onUpdate?: () => void; current?: boolean; hideContext?: boolean }) {
   const router = useRouter();
   const [showReply, setShowReply] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
@@ -53,20 +53,24 @@ export default function PostCard({ post, onUpdate, current }: { post: PostData; 
 
   return (
     <>
-      <div className={`post-card${current ? " current" : ""}`} onClick={() => router.push(`/post/${post.id}`)}>
+      <div className={`post-card${current ? " current" : ""}`} onClick={(e) => { if ((e.target as HTMLElement).closest('a')) return; router.push(`/post/${post.id}`); }}>
         {post.boosted_by && (
           <div className="boost-badge">
             <Icon name="refresh" size={12} /> {post.boosted_by.display_name || post.boosted_by.username}님이 부스트
           </div>
         )}
         <div className="post-header">
-          <div className="post-author-avatar flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: avatarColor(post.author.username) }}>
-            {(post.author.display_name || post.author.username)[0]}
-          </div>
-          <Link href={`/post/${post.id}`} className="post-author" onClick={(e) => e.stopPropagation()}>
+          <Link href={`/profile/${post.author.username}`} className="post-author-avatar-link" onClick={(e) => e.stopPropagation()} style={{ textDecoration: "none" }}>
+            <div className="post-author-avatar flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: avatarColor(post.author.username) }}>
+              {(post.author.display_name || post.author.username)[0]}
+            </div>
+          </Link>
+          <Link href={`/profile/${post.author.username}`} className="post-author" onClick={(e) => e.stopPropagation()}>
             {post.author.display_name}
           </Link>
-          <span className="post-username">@{post.author.username}</span>
+          <Link href={`/profile/${post.author.username}`} className="post-username" onClick={(e) => e.stopPropagation()}>
+            @{post.author.username}
+          </Link>
           <span className="post-time">
             <span className={`vis-badge vis-${post.visibility}`}>
               <Icon name={VIS_ICONS[post.visibility] || "globe"} />
@@ -74,7 +78,7 @@ export default function PostCard({ post, onUpdate, current }: { post: PostData; 
             {timeStr}
           </span>
         </div>
-        {post.reply_context && (
+        {!hideContext && post.reply_context && (
           <Link href={`/post/${post.reply_context.id}`} className="reply-context" onClick={(e) => e.stopPropagation()}>
             <span className="reply-context-label">답글 대상</span>
             <strong>{post.reply_context.author.display_name || post.reply_context.author.username}</strong>

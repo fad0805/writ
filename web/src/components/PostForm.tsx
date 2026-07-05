@@ -14,8 +14,8 @@ const VIS_OPTIONS = [
   { value: "mention", label: "멘션", icon: "mail" },
 ];
 
-export default function PostForm({ parentId, onDone, placeholder }: { parentId?: number; onDone?: () => void; placeholder?: string }) {
-  const [content, setContent] = useState("");
+export default function PostForm({ parentId, onDone, placeholder, initialContent }: { parentId?: number; onDone?: () => void; placeholder?: string; initialContent?: string }) {
+  const [content, setContent] = useState(initialContent || "");
   const [summary, setSummary] = useState("");
   const [visibility, setVisibility] = useState("public");
   const [submitting, setSubmitting] = useState(false);

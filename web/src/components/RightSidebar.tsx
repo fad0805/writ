@@ -23,7 +23,7 @@ export default function RightSidebar() {
   return (
     <aside className="right-sidebar">
       <div className="widget">
-        <h4><Icon name="book" /> 내 소설</h4>
+        <h4><Icon name="book" /> 내 시리즈</h4>
         <div className="novel-mini-list">
           {visibleNovels.length > 0 ? visibleNovels.map((n) => (
             <Link key={n.id} href={`/novels/${n.id}`} className="novel-mini-card">
@@ -31,18 +31,18 @@ export default function RightSidebar() {
               <span>총 {n.episode_count}화</span>
             </Link>
           )) : (
-            <p className="empty-small">연재 중인 소설이 없습니다.</p>
+            <p className="empty-small">연재 중인 시리즈가 없습니다.</p>
           )}
         </div>
         {extraCount > 0 && (
           <div className="more-link-wrap">
             <Link href="/novels/my" className="more-link">
-              더보기 +{extraCount}개
+              더보기 +{extraCount}
             </Link>
           </div>
         )}
         <Link href="/novels/new" className="btn btn-primary btn-small full-width-btn">
-          + 새 소설 시작하기
+          + 새 시리즈 시작하기
         </Link>
       </div>
       <div className="widget">

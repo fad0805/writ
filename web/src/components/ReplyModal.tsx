@@ -1,5 +1,5 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { PostData } from "@/lib/api";
 import PostForm from "./PostForm";
 
@@ -10,6 +10,14 @@ export default function ReplyModal({ post, onClose, onDone }: { post: PostData; 
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
+  const mentions = useMemo(() => {
+    const set = new Set<string>();
+    const matches = post.content.match(/@(\w+)/g);
+    if (matches) matches.forEach((m) => set.add(m));
+    set.add(`@${post.author.username}`);
+    return Array.from(set).join(" ") + (set.size > 0 ? " " : "");
+  }, [post]);
+
   return (
     <div className="reply-modal-backdrop active" onClick={onClose}>
       <div className="reply-modal" onClick={(e) => e.stopPropagation()}>
@@ -19,7 +27,7 @@ export default function ReplyModal({ post, onClose, onDone }: { post: PostData; 
           <strong>{post.author.display_name} <span className="reply-modal-handle">@{post.author.username}</span></strong>
           <p className="reply-modal-content">{post.content}</p>
         </div>
-        <PostForm parentId={post.id} placeholder="답글을 입력하세요..." onDone={onDone} />
+        <PostForm key={post.id} parentId={post.id} placeholder="답글을 입력하세요..." onDone={onDone} initialContent={mentions} />
       </div>
     </div>
   );
