@@ -16,8 +16,8 @@ router = APIRouter(prefix="/api")
 # ── helpers ──
 
 def _post_json(p, session, user):
-    liked = session.query(Like).filter_by(user_id=user.id, post_id=p.id).first() is not None
-    boosted = session.query(Boost).filter_by(user_id=user.id, post_id=p.id).first() is not None
+    liked = session.query(Like).filter_by(user_id=user.id, post_id=p.id).first() is not None if user else False
+    boosted = session.query(Boost).filter_by(user_id=user.id, post_id=p.id).first() is not None if user else False
     latest_boost = session.query(Boost).filter_by(post_id=p.id).order_by(desc(Boost.created_at)).first()
     booster = session.query(User).get(latest_boost.user_id) if latest_boost else None
     return {
@@ -32,7 +32,7 @@ def _post_json(p, session, user):
         "replies_count": p.replies_count,
         "liked": liked,
         "boosted": boosted,
-        "is_mine": p.author_id == user.id,
+        "is_mine": p.author_id == user.id if user else False,
         "reply_context": _reply_context(p),
         "boosted_by": _user_json(booster) if booster and booster.id != p.author_id else None,
     }
@@ -63,11 +63,13 @@ def _reply_context(p):
 def _can_view(post, viewer, session):
     if post.is_deleted:
         return False
-    if post.author_id == viewer.id:
+    if viewer and post.author_id == viewer.id:
         return True
     v = post.visibility or "public"
     if v in ("public", "home"):
         return True
+    if not viewer:
+        return False
     if v == "followers":
         return session.query(Follow).filter_by(
             follower_id=viewer.id, following_id=post.author_id, accepted=True
@@ -450,8 +452,6 @@ def api_unboost_post(request: Request, post_id: int):
 @router.get("/users/{username}")
 def api_get_profile(request: Request, username: str):
     user = get_current_user(request)
-    if not user:
-        return JSONResponse({"error": "Not authenticated"}, status_code=401)
     with get_session() as s:
         profile = s.query(User).filter_by(username=username).first()
         if not profile:
@@ -471,7 +471,7 @@ def api_get_profile(request: Request, username: str):
         following_count = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).count()
         is_following = s.query(Follow).filter_by(
             follower_id=user.id, following_id=profile.id, accepted=True
-        ).first() is not None
+        ).first() is not None if user else False
         novels = s.query(Novel).filter_by(author_id=profile.id).order_by(desc(Novel.updated_at)).all()
         followers = s.query(Follow).filter_by(following_id=profile.id, accepted=True).all()
         following = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).all()
@@ -484,7 +484,7 @@ def api_get_profile(request: Request, username: str):
             "followers_count": followers_count,
             "following_count": following_count,
             "is_following": is_following,
-            "is_mine": profile.id == user.id,
+            "is_mine": profile.id == user.id if user else False,
         }
 
 
@@ -586,9 +586,6 @@ def api_notifications(request: Request, filter_type: str = Query("")):
 
 @router.get("/novels")
 def api_novels(request: Request):
-    user = get_current_user(request)
-    if not user:
-        return JSONResponse({"error": "Not authenticated"}, status_code=401)
     with get_session() as s:
         novels = s.query(Novel).filter_by(is_published=True).order_by(desc(Novel.updated_at)).all()
         result = {"novels": [_novel_json(n, s) for n in novels]}
@@ -876,8 +873,6 @@ def api_update_profile(request: Request, display_name: str = Form(""), summary: 
 @router.get("/explore")
 def api_explore(request: Request):
     user = get_current_user(request)
-    if not user:
-        return JSONResponse({"error": "Not authenticated"}, status_code=401)
     with get_session() as s:
         local_ids = [u.id for u in s.query(User).filter_by(is_remote=False).all()]
         posts = s.query(Post).options(
@@ -889,6 +884,85 @@ def api_explore(request: Request):
             Post.in_reply_to_id == None,
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).limit(30).all()
         return {"posts": [_post_json(p, s, user) for p in posts]}
+
+
+@router.get("/search")
+def api_search(request: Request, q: str = Query("")):
+    user = get_current_user(request)
+    query = q.strip()
+    if not query:
+        return {"posts": [], "novels": [], "users": []}
+    with get_session() as s:
+        pattern = f"%{query}%"
+        posts = s.query(Post).options(selectinload(Post.author)).filter(
+            Post.content.ilike(pattern),
+            Post.visibility == "public",
+            Post.is_deleted == False,
+            Post.in_reply_to_id == None,
+        ).order_by(desc(Post.created_at)).limit(20).all()
+        novels = s.query(Novel).options(selectinload(Novel.author)).filter(
+            or_(Novel.title.ilike(pattern), Novel.description.ilike(pattern)),
+            Novel.is_published == True,
+        ).order_by(desc(Novel.updated_at)).limit(20).all()
+        users = s.query(User).filter(
+            User.is_remote == False,
+            or_(User.username.ilike(pattern), User.display_name.ilike(pattern)),
+        ).limit(20).all()
+        return {
+            "posts": [_post_json(p, s, user) for p in posts],
+            "novels": [_novel_json(n, s) for n in novels],
+            "users": [_user_json(u) for u in users],
+        }
+
+
+@router.get("/users/autocomplete")
+def api_users_autocomplete(request: Request, q: str = Query("")):
+    user = get_current_user(request)
+    query = q.strip().lstrip("@")
+    if not query:
+        return {"users": []}
+    with get_session() as s:
+        pattern = f"{query}%"
+        matches = s.query(User).filter(
+            User.is_remote == False,
+            User.username.ilike(pattern),
+        ).limit(20).all()
+        if not matches:
+            return {"users": []}
+        following_ids = {f.following_id for f in s.query(Follow).filter_by(
+            follower_id=user.id, accepted=True
+        ).all()} if user else set()
+        mentioned_ids = set()
+        if user:
+            recent_posts = s.query(Post.mentioned_user_ids).filter(
+                Post.author_id == user.id,
+                Post.mentioned_user_ids != None,
+            ).order_by(desc(Post.created_at)).limit(50).all()
+            for row in recent_posts:
+                mids = row[0]
+                if isinstance(mids, list):
+                    for mid in mids:
+                        if isinstance(mid, int):
+                            mentioned_ids.add(mid)
+        match_ids = {m.id for m in matches}
+        follows_mentioned = sorted(
+            [m for m in matches if m.id in following_ids and m.id in mentioned_ids],
+            key=lambda m: (m.display_name or m.username).lower()
+        )
+        follows_only = sorted(
+            [m for m in matches if m.id in following_ids and m.id not in mentioned_ids],
+            key=lambda m: (m.display_name or m.username).lower()
+        )
+        mentioned_only = sorted(
+            [m for m in matches if m.id not in following_ids and m.id in mentioned_ids],
+            key=lambda m: (m.display_name or m.username).lower()
+        )
+        others = sorted(
+            [m for m in matches if m.id not in following_ids and m.id not in mentioned_ids],
+            key=lambda m: (m.display_name or m.username).lower()
+        )
+        ordered = follows_mentioned + follows_only + mentioned_only + others
+        return {"users": [_user_json(u) for u in ordered]}
 
 
 def _fetch_and_save_ap_object(obj, user):

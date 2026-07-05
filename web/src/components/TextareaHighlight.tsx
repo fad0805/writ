@@ -1,13 +1,14 @@
 "use client";
-import { useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback, useEffect, useState } from "react";
 
 export default function TextareaHighlight({
-  value, onChange, placeholder, maxLength, cwLength, ...props
+  value, onChange, placeholder, maxLength, cwLength, textareaRef: externalRef, ...props
 }: {
   value: string; onChange: (v: string) => void; placeholder?: string;
   maxLength: number; cwLength: number;
   rows?: number; required?: boolean;
   onKeyDown?: (e: React.KeyboardEvent) => void;
+  textareaRef?: (el: HTMLTextAreaElement | null) => void;
 }) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
@@ -32,6 +33,11 @@ export default function TextareaHighlight({
     return () => ta.removeEventListener("scroll", sync);
   }, [sync]);
 
+  const setTextareaRef = useCallback((el: HTMLTextAreaElement | null) => {
+    (taRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = el;
+    if (externalRef) externalRef(el);
+  }, [externalRef]);
+
   return (
     <div className="textarea-wrap">
       <pre ref={preRef} className="textarea-highlight" aria-hidden="true">
@@ -39,7 +45,7 @@ export default function TextareaHighlight({
         {after && <mark>{after}</mark>}
       </pre>
       <textarea
-        ref={taRef}
+        ref={setTextareaRef}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}

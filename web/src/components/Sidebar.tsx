@@ -17,7 +17,7 @@ function NavItem({ href, active, children }: { href: string; active: boolean; ch
 }
 
 export default function Sidebar() {
-  const { user, loading } = useAuth();
+  const { user, loading, refresh } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [isDark, setIsDark] = useState(false);
@@ -52,6 +52,7 @@ export default function Sidebar() {
   const handleLogout = async () => {
     const { api } = await import("@/lib/api");
     await api.logout();
+    await refresh();
     router.push("/login");
   };
 
@@ -68,7 +69,7 @@ export default function Sidebar() {
     return (
       <aside className="sidebar">
         <div className="sidebar-header">
-          <Link href="/timeline/home" className="sidebar-home-link"><h2><span style={{ display: "inline-block", width: 28, height: 28, backgroundColor: "var(--accent)", mask: "url(/writ.svg) center/contain no-repeat", WebkitMask: "url(/writ.svg) center/contain no-repeat", verticalAlign: "middle" }} />WRIT</h2></Link>
+          <Link href="/timeline/home" className="sidebar-home-link"><h2><span style={{ display: "inline-block", width: 28, height: 28, backgroundColor: "var(--accent)", mask: "url(/logo.svg) center/contain no-repeat", WebkitMask: "url(/logo.svg) center/contain no-repeat", verticalAlign: "middle" }} />WRIT</h2></Link>
         </div>
       </aside>
     );
@@ -78,9 +79,21 @@ export default function Sidebar() {
     return (
       <aside className="sidebar">
         <div className="sidebar-header">
-          <Link href="/timeline/home" className="sidebar-home-link"><h2><span style={{ display: "inline-block", width: 28, height: 28, backgroundColor: "var(--accent)", mask: "url(/writ.svg) center/contain no-repeat", WebkitMask: "url(/writ.svg) center/contain no-repeat", verticalAlign: "middle" }} />WRIT</h2></Link>
+          <Link href="/timeline/home" className="sidebar-home-link"><h2><span style={{ display: "inline-block", width: 28, height: 28, backgroundColor: "var(--accent)", mask: "url(/logo.svg) center/contain no-repeat", WebkitMask: "url(/logo.svg) center/contain no-repeat", verticalAlign: "middle" }} />WRIT</h2></Link>
         </div>
+        <ul className="nav-links">
+          <NavItem href="/explore" active={isActive("/explore")}>
+            <Icon name="search" /> 탐색
+          </NavItem>
+          <li className="nav-divider" />
+          <NavItem href="/novels" active={isActive("/novels")}>
+            <Icon name="books_solid" /> 모든 시리즈
+          </NavItem>
+        </ul>
         <div className="spacer" />
+        <button className="theme-toggle" onClick={toggleTheme}>
+          <Icon name={isDark ? "star" : "moon"} /> {isDark ? "라이트모드" : "다크모드"}
+        </button>
         <div className="sidebar-login-btns">
           <Link href="/login" className="btn btn-primary sidebar-login-btn">로그인</Link>
           <Link href="/register" className="btn btn-outline sidebar-login-btn">가입</Link>
@@ -93,7 +106,7 @@ export default function Sidebar() {
     <aside className="sidebar">
       <div className="sidebar-header">
         <Link href="/timeline/home" className="sidebar-home-link">
-          <h2><span style={{ display: "inline-block", width: 28, height: 28, backgroundColor: "var(--accent)", mask: "url(/writ.svg) center/contain no-repeat", WebkitMask: "url(/writ.svg) center/contain no-repeat", verticalAlign: "middle" }} />WRIT</h2>
+          <h2><span style={{ display: "inline-block", width: 28, height: 28, backgroundColor: "var(--accent)", mask: "url(/logo.svg) center/contain no-repeat", WebkitMask: "url(/logo.svg) center/contain no-repeat", verticalAlign: "middle" }} />WRIT</h2>
         </Link>
       </div>
       <form className="sidebar-search" onSubmit={async (e) => {

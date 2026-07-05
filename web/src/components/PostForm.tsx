@@ -1,6 +1,6 @@
 "use client";
-import { useState, useRef } from "react";
-import { api } from "@/lib/api";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { api, User } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import Icon from "./Icon";
 import TextareaHighlight from "./TextareaHighlight";
@@ -21,11 +21,108 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [submitting, setSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
   const router = useRouter();
+
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [mentionUsers, setMentionUsers] = useState<User[]>([]);
+  const [mentionIdx, setMentionIdx] = useState(0);
+  const [mentionStart, setMentionStart] = useState(-1);
+  const mentionRef = useRef<HTMLDivElement>(null);
 
   const totalLen = content.length + summary.length;
   const nearLimit = totalLen > MAX_LENGTH - 50 && totalLen <= MAX_LENGTH;
   const overLimit = totalLen > MAX_LENGTH;
+
+  const detectMention = useCallback((val: string, cursor: number) => {
+    const before = val.slice(0, cursor);
+    const atIdx = before.lastIndexOf("@");
+    if (atIdx === -1 || (atIdx > 0 && !/\s/.test(val[atIdx - 1]))) {
+      setMentionStart(-1);
+      setMentionQuery("");
+      setMentionUsers([]);
+      return;
+    }
+    const partial = before.slice(atIdx + 1);
+    if (partial.length === 0 || /[\s@]/.test(partial)) {
+      setMentionStart(-1);
+      setMentionQuery("");
+      setMentionUsers([]);
+      return;
+    }
+    setMentionStart(atIdx);
+    setMentionQuery(partial);
+  }, []);
+
+  useEffect(() => {
+    if (!mentionQuery) { setMentionUsers([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const res = await api.autocomplete(mentionQuery);
+        setMentionUsers(res.users);
+        setMentionIdx(0);
+      } catch { setMentionUsers([]); }
+    }, 100);
+    return () => clearTimeout(t);
+  }, [mentionQuery]);
+
+  const insertMention = useCallback((u: User) => {
+    if (mentionStart === -1) return;
+    const before = content.slice(0, mentionStart);
+    const after = content.slice(mentionStart + mentionQuery.length + 1);
+    const inserted = `${before}@${u.username} ${after}`;
+    setContent(inserted);
+    setMentionStart(-1);
+    setMentionQuery("");
+    setMentionUsers([]);
+    requestAnimationFrame(() => {
+      const ta = taRef.current;
+      if (ta) {
+        const pos = before.length + u.username.length + 2;
+        ta.setSelectionRange(pos, pos);
+        ta.focus();
+      }
+    });
+  }, [content, mentionStart, mentionQuery]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      formRef.current?.requestSubmit();
+      return;
+    }
+    if (mentionUsers.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMentionIdx((i) => Math.min(i + 1, mentionUsers.length - 1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMentionIdx((i) => Math.max(i - 1, 0));
+      } else if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        if (mentionUsers[mentionIdx]) insertMention(mentionUsers[mentionIdx]);
+      } else if (e.key === "Escape") {
+        setMentionUsers([]);
+      }
+    }
+  };
+
+  const handleContentChange = (val: string) => {
+    setContent(val);
+  };
+
+  const handleTaRef = useCallback((ta: HTMLTextAreaElement | null) => {
+    taRef.current = ta;
+    if (ta) {
+      const handler = () => {
+        if (ta === document.activeElement) {
+          detectMention(ta.value, ta.selectionStart);
+        }
+      };
+      ta.addEventListener("input", handler);
+      ta.addEventListener("click", handler);
+      ta.addEventListener("keyup", handler);
+    }
+  }, [detectMention]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,19 +146,40 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   };
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className={overLimit ? "over-limit" : nearLimit ? "near-limit" : ""}>
+    <form ref={formRef} onSubmit={handleSubmit} className={overLimit ? "over-limit" : nearLimit ? "near-limit" : ""} style={{ position: "relative" }}>
       <div ref={wrapRef}>
         <TextareaHighlight
           value={content}
-          onChange={(v) => setContent(v)}
-          placeholder={placeholder || "무슨 생각을 하고 계신가요?"}
+          onChange={handleContentChange}
+          placeholder={placeholder || "어떤 걸 쓰고 계신가요?"}
           maxLength={MAX_LENGTH}
           cwLength={summary.length}
           rows={3}
           required
-          onKeyDown={(e: any) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { formRef.current?.requestSubmit(); } }}
+          onKeyDown={handleKeyDown}
+          textareaRef={handleTaRef}
         />
       </div>
+      {mentionUsers.length > 0 && (
+        <div ref={mentionRef} className="mention-dropdown">
+          {mentionUsers.map((u, i) => (
+            <div
+              key={u.id}
+              className={`mention-option ${i === mentionIdx ? "active" : ""}`}
+              onMouseDown={(e) => { e.preventDefault(); insertMention(u); }}
+              onMouseEnter={() => setMentionIdx(i)}
+            >
+              <div className="mention-option-avatar" style={{ backgroundColor: `hsl(${hashCode(u.username) % 360}, 55%, 50%)` }}>
+                {(u.display_name || u.username)[0]}
+              </div>
+              <div className="mention-option-info">
+                <strong>{u.display_name}</strong>
+                <span>@{u.username}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       <input
         type="text"
         value={summary}
@@ -88,4 +206,10 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       </div>
     </form>
   );
+}
+
+function hashCode(s: string) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h) + s.charCodeAt(i);
+  return Math.abs(h);
 }

@@ -17,6 +17,10 @@ export default function RightSidebar() {
     api.getNotifications().then((d) => setNotifs(d.notifications.slice(0, 5))).catch(() => {});
   }, [user]);
 
+  if (!user) {
+    return <aside className="right-sidebar" />;
+  }
+
   const visibleNovels = novels.slice(0, 3);
   const extraCount = novels.length - 3;
 

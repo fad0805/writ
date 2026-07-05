@@ -88,6 +88,12 @@ export interface NovelData {
   author_id: number;
 }
 
+export interface SearchResults {
+  posts: PostData[];
+  novels: NovelData[];
+  users: User[];
+}
+
 export interface EpisodeData {
   id: number;
   novel_id: number;
@@ -162,6 +168,8 @@ export const api = {
 
   // Explore
   explore: () => request<{ posts: PostData[] }>("/api/explore"),
+  search: (q: string) => request<SearchResults>(`/api/search?q=${encodeURIComponent(q)}`),
+  autocomplete: (q: string) => request<{ users: User[] }>(`/api/users/autocomplete?q=${encodeURIComponent(q)}`),
 
   // Auth actions
   login: async (username: string, password: string) => {

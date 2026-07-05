@@ -10,7 +10,6 @@ from config import BASE_URL, DOMAIN
 from models import User, Follow, Post, get_session, init_db
 from routes.auth import router as auth_router
 from routes.sns import router as sns_router
-from routes.blog import router as blog_router
 from routes.admin import router as admin_router
 from routes.api import router as api_router
 from activitypub import (
@@ -177,9 +176,9 @@ def user_actor(request: Request, username: str):
             return JSONResponse(content=user.to_ap_actor(),
                                 media_type="application/activity+json")
 
-        # Browser request — delegate to the profile route in sns_router
-        from routes.sns import view_profile
-        return view_profile(request, username)
+        # Browser request — redirect to web frontend
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=f"http://localhost:3000/users/{username}")
     finally:
         session.close()
 
@@ -284,7 +283,6 @@ def well_known_nodeinfo():
 
 app.include_router(auth_router)
 app.include_router(sns_router)
-app.include_router(blog_router)
 app.include_router(admin_router)
 app.include_router(api_router)
 
