@@ -23,6 +23,7 @@ def _post_json(p, session, user):
     booster = session.query(User).get(latest_boost.user_id) if latest_boost else None
     return {
         "id": p.id,
+        "number": p.number or "",
         "content": p.content,
         "summary": p.summary or "",
         "visibility": p.visibility or "public",
@@ -56,6 +57,7 @@ def _reply_context(p):
         return None
     return {
         "id": parent.id,
+        "number": parent.number or "",
         "content": parent.content[:200] if parent.content else "",
         "author": _user_json(parent.author),
     }
@@ -734,19 +736,21 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
         s.flush()
         if announce:
             import secrets
-            post_number = secrets.token_hex(4)
+            import secrets
+            ep_post_number = secrets.token_hex(4)
             post = Post(
                 author_id=user.id,
                 content=f'📖 <a href="{BASE_URL}/novels/{novel.id}/episodes/{episode.id}">[{novel.title}] {next_num}화: {title}</a>\n\n{summary or ""}',
                 summary=f"[소설] {novel.title} - {next_num}화",
                 visibility=visibility,
-                number=post_number,
+                number=ep_post_number,
                 novel_id=novel.id,
                 episode_id=episode.id,
+                ap_id="",
             )
             s.add(post)
             s.flush()
-            post.ap_id = f"{BASE_URL}/@{user.username}/{post.number}"
+            post.ap_id = f"{BASE_URL}/@{user.username}/{ep_post_number}"
             episode.announcement_post_id = post.id
             s.flush()
             try:
@@ -919,6 +923,36 @@ def api_update_profile(request: Request, display_name: str = Form(""), summary: 
         s.commit()
     _cleanup_avatars()
     return {"ok": True}
+
+
+@router.get("/by-series-number/{username}/{number}")
+def api_by_series_number(request: Request, username: str, number: str):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    with get_session() as s:
+        author = s.query(User).filter_by(username=username).first()
+        if not author:
+            raise HTTPException(status_code=404, detail="User not found")
+        novel = s.query(Novel).filter_by(author_id=author.id, number=number).first()
+        if not novel:
+            raise HTTPException(status_code=404, detail="Novel not found")
+        return {"id": novel.id}
+
+
+@router.get("/by-number/{username}/{number}")
+def api_by_number(request: Request, username: str, number: str):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    with get_session() as s:
+        author = s.query(User).filter_by(username=username).first()
+        if not author:
+            raise HTTPException(status_code=404, detail="User not found")
+        post = s.query(Post).filter_by(author_id=author.id, number=number).first()
+        if not post or not _can_view(post, user, s):
+            raise HTTPException(status_code=404, detail="Post not found")
+        return _post_json(post, s, user)
 
 
 @router.get("/explore")

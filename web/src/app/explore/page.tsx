@@ -139,7 +139,7 @@ export default function ExplorePage() {
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <h3 style={{ fontSize: "1em", marginBottom: 4 }}>{n.title}</h3>
                             <p className="novel-author" style={{ marginBottom: 6 }}>
-                              by <a href={`/profile/${n.author?.username}`} onClick={(e) => e.stopPropagation()} style={{ color: "var(--accent)" }}>{n.author?.display_name || n.author?.username}</a>
+                              by <a href={`/@${n.author?.username}`} onClick={(e) => e.stopPropagation()} style={{ color: "var(--accent)" }}>{n.author?.display_name || n.author?.username}</a>
                             </p>
                             <p className="novel-desc" style={{ marginBottom: 6 }}>{(n.description || "").slice(0, 120)}{n.description && n.description.length > 120 ? "..." : ""}</p>
                             <div className="novel-meta">
@@ -158,7 +158,7 @@ export default function ExplorePage() {
                   <h4 className="search-section-title"><Icon name="users" /> 사용자</h4>
                   <div className="user-search-list">
                     {users.map((u) => (
-                      <Link key={u.id} href={`/profile/${u.username}`} className="user-search-card">
+                      <Link key={u.id} href={`/@${u.username}`} className="user-search-card">
                         <Avatar user={u} className="sidebar-avatar rounded-[8px]" style={{ width: 36, height: 36, minWidth: 36, borderRadius: 8, fontSize: 16 }} />
                         <div>
                           <strong>{u.display_name}</strong>

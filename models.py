@@ -330,7 +330,43 @@ def init_db():
         pass
     try:
         with Session(engine) as session:
+            session.execute(text("ALTER TABLE posts ADD COLUMN number VARCHAR(16) DEFAULT ''"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
             session.execute(text("UPDATE novels SET visibility = 'private' WHERE is_published = 0"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE novels ADD COLUMN cover_image VARCHAR(512) DEFAULT ''"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE novels ADD COLUMN number VARCHAR(16) DEFAULT ''"))
+            session.commit()
+    except Exception:
+        pass
+    # Fill missing post numbers
+    try:
+        with Session(engine) as session:
+            import secrets
+            for post in session.query(Post).filter(Post.number == "").all():
+                post.number = secrets.token_hex(4)
+            session.commit()
+    except Exception:
+        pass
+    # Fill missing novel numbers
+    try:
+        with Session(engine) as session:
+            import secrets
+            for novel in session.query(Novel).filter(Novel.number == "").all():
+                novel.number = secrets.token_hex(4)
             session.commit()
     except Exception:
         pass

@@ -10,12 +10,19 @@ export default function RightSidebar() {
   const { user } = useAuth();
   const [novels, setNovels] = useState<NovelData[]>([]);
   const [notifs, setNotifs] = useState<NotificationData[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!user) return;
     api.getMyNovels().then((d) => setNovels(d.novels)).catch(() => {});
     api.getNotifications().then((d) => setNotifs(d.notifications.slice(0, 5))).catch(() => {});
-  }, [user]);
+  }, [user, refreshKey]);
+
+  useEffect(() => {
+    const handler = () => setRefreshKey((k) => k + 1);
+    window.addEventListener("novelchange", handler);
+    return () => window.removeEventListener("novelchange", handler);
+  }, []);
 
   if (!user) {
     return <aside className="right-sidebar" />;
@@ -23,6 +30,8 @@ export default function RightSidebar() {
 
   const visibleNovels = novels.slice(0, 3);
   const extraCount = novels.length - 3;
+  const hasNovels = novels.length > 0;
+  const showButtonInline = !hasNovels;
 
   return (
     <aside className="right-sidebar">
@@ -30,14 +39,12 @@ export default function RightSidebar() {
         <h4><Icon name="book" /> 내 시리즈</h4>
         <div className="novel-mini-list">
           {visibleNovels.length > 0 ? visibleNovels.map((n) => (
-            <Link key={n.id} href={`/novels/${n.id}`} className="novel-mini-card">
+            <Link key={n.id} href={n.number ? `/@${user?.username}/series/${n.number}` : `/novels/${n.id}`} className="novel-mini-card">
               <strong>{n.title}</strong>
               <span>총 {n.episode_count}화</span>
             </Link>
           )) : (
-            <Link href="/novels/new" className="btn btn-primary btn-small full-width-btn">
-            + 새 시리즈 시작하기
-          </Link>
+            <p className="empty-small">연재 중인 시리즈가 없습니다.</p>
           )}
         </div>
         {extraCount > 0 && (
@@ -47,6 +54,9 @@ export default function RightSidebar() {
             </Link>
           </div>
         )}
+        <Link href="/novels/new" className="btn btn-primary btn-small full-width-btn">
+          + 새 시리즈 시작하기
+        </Link>
       </div>
       <div className="widget">
         <h4><Icon name="bell" /> 알림</h4>

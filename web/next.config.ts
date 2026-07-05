@@ -15,6 +15,11 @@ const nextConfig: NextConfig = {
         source: "/uploads/:path*",
         destination: "http://localhost:8000/uploads/:path*",
       },
+      {
+        source: "/@:username",
+        destination: "/profile/:username",
+      },
+
     ];
   },
 };

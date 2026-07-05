@@ -94,7 +94,7 @@ export default function NotificationsPage() {
             </div>
             <div className="notif-body">
               {n.from_user && (
-                <Link href={`/profile/${n.from_user.username}`} style={{ fontWeight: 600 }}>
+                <Link href={`/@${n.from_user.username}`} style={{ fontWeight: 600 }}>
                   {n.from_user.display_name}
                 </Link>
               )}{" "}

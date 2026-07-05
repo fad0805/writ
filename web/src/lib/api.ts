@@ -39,6 +39,7 @@ export interface User {
 
 export interface PostData {
   id: number;
+  number: string;
   content: string;
   summary: string;
   visibility: string;
@@ -58,6 +59,7 @@ export interface PostData {
 
 export interface ReplyContext {
   id: number;
+  number: string;
   content: string;
   author: User;
 }
@@ -73,6 +75,7 @@ export interface NotificationData {
 
 export interface NovelData {
   id: number;
+  number: string;
   title: string;
   description: string;
   cover_image: string;

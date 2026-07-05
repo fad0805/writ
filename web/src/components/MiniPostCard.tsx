@@ -33,7 +33,7 @@ export default function MiniPostCard({ post, notifType }: { post: PostData; noti
   const iconColor = notifType ? TYPE_COLORS[notifType] || "var(--text-muted)" : "var(--text-muted)";
   return (
     <Link
-      href={`/post/${post.id}`}
+      href={post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`}
       style={{
         display: "flex",
         gap: 8,

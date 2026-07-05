@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { api, User, PostData, NovelData } from "@/lib/api";
 import PostCard from "@/components/PostCard";
 import Icon from "@/components/Icon";
+import { hashColor } from "@/lib/avatar";
 import Avatar from "@/components/Avatar";
 import Link from "next/link";
 
@@ -52,18 +53,21 @@ export default function ProfilePage() {
     <>
       <div className="profile-header">
         <div className="profile-info">
-          <Avatar user={profile} className="profile-avatar" />
-          <div className="profile-info-text">
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+            <Avatar user={profile} className="profile-avatar" />
+            {!isMine && (
+              <button onClick={toggleFollow} className={`btn btn-small ${isFollowing ? "btn-outline" : "btn-primary"}`} style={{ fontSize: "0.82em", width: 80, justifyContent: "center", marginBottom: 12 }}>
+                {isFollowing ? "언팔로우" : "팔로우"}
+              </button>
+            )}
+          </div>
+          <div className="profile-info-text" style={{ position: "relative" }}>
             <h2>{profile.display_name}</h2>
             <p className="profile-username">@{profile.username}</p>
             {profile.summary && <p className="profile-summary">{profile.summary}</p>}
-            {isMine ? (
-              <button onClick={() => router.push("/users/profile/edit")} style={{ position: "absolute", bottom: 0, right: -20, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.85em", display: "flex", alignItems: "center", gap: 3 }}>
+            {isMine && (
+              <button onClick={() => router.push("/users/profile/edit")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.85em", display: "flex", alignItems: "center", gap: 3, padding: 0 }}>
                 <Icon name="edit" /> 편집
-              </button>
-            ) : (
-              <button onClick={toggleFollow} className={`btn ${isFollowing ? "btn-outline" : "btn-primary"}`}>
-                <Icon name={isFollowing ? "user" : "user_solid"} /> {isFollowing ? "언팔로우" : "팔로우"}
               </button>
             )}
           </div>
@@ -82,18 +86,29 @@ export default function ProfilePage() {
 
       <div id="tab-novels" className="profile-novel-list" style={{ display: tab === "novels" ? "flex" : "none" }}>
         {novels.length === 0 ? <p className="empty-state">시리즈가 없습니다.</p> : novels.map((n) => (
-          <Link key={n.id} href={`/novels/${n.id}`} className="profile-novel" style={{ display: "block", textDecoration: "none", color: "inherit" }}>
-            <strong className="profile-novel-title">{n.title}</strong>
-            <span className="profile-novel-meta">{n.episode_count}화 · {n.is_completed ? "완결" : "연재중"}</span>
-            <p className="profile-novel-desc">{n.description || "설명 없음"}</p>
-            {n.tags && <p className="novel-tags"><Icon name="tag" />{n.tags.split(/[ ,]+/).filter(Boolean).map((t, i) => <span key={i} style={{ marginRight: 6 }}>{t}</span>)}</p>}
+          <Link key={n.id} href={n.number ? `/@${n.author?.username}/series/${n.number}` : `/novels/${n.id}`} className="profile-novel" style={{ display: "flex", gap: 14, textDecoration: "none", color: "inherit" }}>
+            <div style={{ width: 56, aspectRatio: "3/4", borderRadius: 6, flexShrink: 0, overflow: "hidden" }}>
+              {n.cover_image ? (
+                <img src={n.cover_image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <div style={{ width: "100%", height: "100%", backgroundColor: hashColor(n.title), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "1em", fontWeight: "bold" }}>
+                  <Icon name="book" size={16} />
+                </div>
+              )}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <strong className="profile-novel-title">{n.title}</strong>
+              <span className="profile-novel-meta">{n.episode_count}화 · {n.is_completed ? "완결" : "연재중"}</span>
+              <p className="profile-novel-desc">{n.description || "설명 없음"}</p>
+              {n.tags && <p className="novel-tags"><Icon name="tag" />{n.tags.split(/[ ,]+/).filter(Boolean).map((t, i) => <span key={i} style={{ marginRight: 6 }}>{t}</span>)}</p>}
+            </div>
           </Link>
         ))}
       </div>
 
       <div id="tab-following" className="profile-tab-content" style={{ display: tab === "following" ? "block" : "none" }}>
         {following.length === 0 ? <p className="empty-state">팔로잉이 없습니다.</p> : following.map((f) => (
-          <Link key={f.user.id} href={`/profile/${f.user.username}`} className="post-card" style={{ display: "block", textDecoration: "none", color: "inherit" }}>
+          <Link key={f.user.id} href={`/@${f.user.username}`} className="post-card" style={{ display: "block", textDecoration: "none", color: "inherit" }}>
             <div className="profile-user-row">
               <Avatar user={f.user} className="sidebar-avatar" />
               <div>
@@ -107,7 +122,7 @@ export default function ProfilePage() {
 
       <div id="tab-followers" className="profile-tab-content" style={{ display: tab === "followers" ? "block" : "none" }}>
         {followers.length === 0 ? <p className="empty-state">팔로워가 없습니다.</p> : followers.map((f) => (
-          <Link key={f.user.id} href={`/profile/${f.user.username}`} className="post-card" style={{ display: "block", textDecoration: "none", color: "inherit" }}>
+          <Link key={f.user.id} href={`/@${f.user.username}`} className="post-card" style={{ display: "block", textDecoration: "none", color: "inherit" }}>
             <div className="profile-user-row">
               <Avatar user={f.user} className="sidebar-avatar" />
               <div>

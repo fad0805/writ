@@ -231,6 +231,38 @@ async def user_inbox(request: Request, username: str):
     return JSONResponse({"status": status, "message": message})
 
 
+@app.get("/@{username}/series/{number}")
+def get_series_by_number(request: Request, username: str, number: str):
+    from routes.sns import _sidebar, _right_sidebar
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login")
+    with get_session() as s:
+        author = s.query(User).filter_by(username=username).first()
+        if not author:
+            raise HTTPException(status_code=404, detail="Not found")
+        novel = s.query(Novel).filter_by(author_id=author.id, number=number).first()
+        if not novel:
+            raise HTTPException(status_code=404, detail="Not found")
+    return RedirectResponse(url=f"/novels/{novel.id}")
+
+
+@app.get("/@{username}/{number}")
+def get_post_by_number(request: Request, username: str, number: str):
+    accept = request.headers.get("Accept", "")
+    with get_session() as s:
+        user = s.query(User).filter_by(username=username).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Not found")
+        post = s.query(Post).filter_by(author_id=user.id, number=number, is_deleted=False).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Not found")
+        if "application/activity+json" in accept or "application/ld+json" in accept:
+            return JSONResponse(content=post.to_ap_note(),
+                                media_type="application/activity+json")
+        return RedirectResponse(url=f"/@{username}/{number}")
+
+
 @app.get("/posts/{post_id}")
 def get_post(request: Request, post_id: int):
     accept = request.headers.get("Accept", "")

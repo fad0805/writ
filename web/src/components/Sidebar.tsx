@@ -62,7 +62,7 @@ export default function Sidebar() {
     if (href === "/timeline/home") return pathname.startsWith("/timeline");
     if (href === "/novels/my") return pathname === "/novels/my";
     if (href === "/novels") return pathname === "/novels";
-    if (user && href === `/profile/${user.username}`) return pathname === `/profile/${user.username}`;
+    if (user && href === `/@${user.username}`) return pathname === `/@${user.username}`;
     return pathname === href || pathname.startsWith(href + "/") || pathname.startsWith(href + "?");
   };
 
@@ -126,7 +126,7 @@ export default function Sidebar() {
           </span>
         )}
       </form>
-      <Link href={`/profile/${user.username}`} className="user-info-link">
+      <Link href={`/@${user.username}`} className="user-info-link">
         <div className="user-info">
            <Avatar user={user} className="sidebar-avatar rounded-[8px] flex items-center justify-center text-white font-bold text-lg" />
           <div className="user-info-text-mini">
@@ -155,7 +155,7 @@ export default function Sidebar() {
           <Icon name="books_solid" /> 모든 시리즈
         </NavItem>
         <li className="nav-divider" />
-        <NavItem href={`/profile/${user.username}`} active={isActive(`/profile/${user.username}`)}>
+        <NavItem href={`/@${user.username}`} active={isActive(`/@${user.username}`)}>
           <Icon name="user_solid" /> 내 프로필
         </NavItem>
         <li className="nav-divider" />

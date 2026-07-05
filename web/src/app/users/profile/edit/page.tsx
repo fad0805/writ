@@ -97,7 +97,7 @@ export default function ProfileEditPage() {
       form.append("summary", summary);
       if (imageFile) form.append("image", imageFile);
       const res = await fetch("/api/profile/update", { method: "POST", credentials: "include", body: form });
-      if (res.ok) { await refreshAuth(); router.push(`/profile/${user?.username}`); }
+      if (res.ok) { await refreshAuth(); router.push(`/@${user?.username}`); }
       else alert("저장 실패");
     } catch { alert("저장 실패"); }
     setSubmitting(false);

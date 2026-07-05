@@ -108,7 +108,7 @@ export default function EditNovelPage() {
               if (!confirm("정말 삭제하시겠습니까?")) return;
               try {
                 const res = await fetch(`/api/novels/${params.id}/delete`, { method: "POST", credentials: "include" });
-                if (res.ok) router.push("/novels/my");
+                if (res.ok) { window.dispatchEvent(new Event("novelchange")); router.push("/novels/my"); }
               } catch {}
             }}
             style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.85em", padding: 0, marginLeft: 4 }}

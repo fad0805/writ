@@ -24,7 +24,7 @@ export default function NovelsPage() {
         ) : novels.length === 0 ? (
           <p className="empty-state">아직 등록된 시리즈가 없습니다.</p>
         ) : novels.map((n) => (
-          <div key={n.id} className="novel-card" onClick={() => window.location.href = `/novels/${n.id}`} style={{ cursor: "pointer" }}>
+          <div key={n.id} className="novel-card" onClick={() => window.location.href = `/@${n.author?.username}/series/${n.number}`} style={{ cursor: "pointer" }}>
             <div className="novel-card-body" style={{ display: "flex", gap: 14 }}>
               <div style={{ width: 80, aspectRatio: "3/4", borderRadius: 6, flexShrink: 0, overflow: "hidden" }}>
                 {n.cover_image ? (
@@ -38,7 +38,7 @@ export default function NovelsPage() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <h3 style={{ fontSize: "1em", marginBottom: 4 }}>{n.title}</h3>
                 <p className="novel-author" style={{ marginBottom: 6 }}>
-                  by <a href={`/profile/${n.author?.username}`} onClick={(e) => e.stopPropagation()} style={{ color: "var(--accent)" }}>{n.author?.display_name || n.author?.username}</a>
+                  by <a href={`/@${n.author?.username}`} onClick={(e) => e.stopPropagation()} style={{ color: "var(--accent)" }}>{n.author?.display_name || n.author?.username}</a>
                 </p>
                 <p className="novel-desc" style={{ marginBottom: 6 }}>{(n.description || "").slice(0, 120)}{n.description && n.description.length > 120 ? "..." : ""}</p>
                 <div className="novel-meta">

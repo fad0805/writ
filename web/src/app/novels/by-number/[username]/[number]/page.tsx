@@ -6,7 +6,7 @@ import Icon from "@/components/Icon";
 import Link from "next/link";
 import { hashColor } from "@/lib/avatar";
 
-export default function NovelDetailPage() {
+export default function NovelByNumberPage() {
   const params = useParams();
   const router = useRouter();
   const [novel, setNovel] = useState<NovelData | null>(null);
@@ -16,10 +16,24 @@ export default function NovelDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getNovel(Number(params.id))
-      .then((d) => { setNovel(d.novel); setEpisodes(d.episodes); setAuthor(d.author); setIsMine(d.is_mine); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [params.id]);
+    fetch(`/api/by-series-number/${params.username}/${params.number}`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.id) { setLoading(false); return; }
+        api.getNovel(d.id).then((nd) => {
+          setNovel(nd.novel); setEpisodes(nd.episodes);
+          setAuthor(nd.author); setIsMine(nd.is_mine); setLoading(false);
+        }).catch(() => setLoading(false));
+      }).catch(() => setLoading(false));
+  }, [params.username, params.number]);
+
+  const handleDelete = async () => {
+    if (!confirm("정말 삭제하시겠습니까?")) return;
+    try {
+      const res = await fetch(`/api/novels/${novel?.id}/delete`, { method: "POST", credentials: "include" });
+      if (res.ok) router.push("/novels/my");
+    } catch {}
+  };
 
   if (loading) return <p className="empty-state">로딩 중...</p>;
   if (!novel) return <p className="empty-state">시리즈를 찾을 수 없습니다.</p>;
