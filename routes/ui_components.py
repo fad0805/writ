@@ -1,7 +1,8 @@
 import os, urllib.request
 from uuid import uuid4
+from config import AVATAR_STORAGE_PATH, AVATAR_URL_PREFIX
 
-AVATAR_DIR = "static/uploads/avatars"
+AVATAR_DIR = AVATAR_STORAGE_PATH
 
 def _save_avatar(image_url, user_id):
     if not image_url:
@@ -14,6 +15,6 @@ def _save_avatar(image_url, user_id):
     filepath = os.path.join(AVATAR_DIR, filename)
     try:
         urllib.request.urlretrieve(image_url, filepath)
-        return f"/{filepath}"
+        return f"{AVATAR_URL_PREFIX}/{filename}"
     except Exception:
         return ""

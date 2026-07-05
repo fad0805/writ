@@ -6,7 +6,7 @@ import { useState } from "react";
 import EditModal from "./EditModal";
 import ReplyModal from "./ReplyModal";
 import Icon from "./Icon";
-import { avatarColor } from "@/lib/avatar";
+import Avatar from "./Avatar";
 
 const VIS_ICONS: Record<string, string> = {
   public: "globe", home: "home", followers: "lock", mention: "mail",
@@ -61,9 +61,7 @@ export default function PostCard({ post, onUpdate, current, hideContext }: { pos
         )}
         <div className="post-header">
           <Link href={`/profile/${post.author.username}`} className="post-author-avatar-link" onClick={(e) => e.stopPropagation()} style={{ textDecoration: "none" }}>
-            <div className="post-author-avatar flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: avatarColor(post.author.username) }}>
-              {(post.author.display_name || post.author.username)[0]}
-            </div>
+            <Avatar user={post.author} className="post-author-avatar flex items-center justify-center text-white font-bold text-sm" />
           </Link>
           <Link href={`/profile/${post.author.username}`} className="post-author" onClick={(e) => e.stopPropagation()}>
             {post.author.display_name}

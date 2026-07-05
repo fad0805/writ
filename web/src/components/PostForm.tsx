@@ -151,7 +151,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         <TextareaHighlight
           value={content}
           onChange={handleContentChange}
-          placeholder={placeholder || "어떤 걸 쓰고 계신가요?"}
+          placeholder={placeholder || "무얼 쓰고 계신가요?"}
           maxLength={MAX_LENGTH}
           cwLength={summary.length}
           rows={3}
@@ -169,9 +169,13 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
               onMouseDown={(e) => { e.preventDefault(); insertMention(u); }}
               onMouseEnter={() => setMentionIdx(i)}
             >
-              <div className="mention-option-avatar" style={{ backgroundColor: `hsl(${hashCode(u.username) % 360}, 55%, 50%)` }}>
-                {(u.display_name || u.username)[0]}
-              </div>
+              {u.avatar ? (
+                <img src={u.avatar} alt="" className="mention-option-avatar" style={{ objectFit: "cover" }} />
+              ) : (
+                <div className="mention-option-avatar" style={{ backgroundColor: `hsl(${hashCode(u.username) % 360}, 55%, 50%)` }}>
+                  {(u.display_name || u.username)[0]}
+                </div>
+              )}
               <div className="mention-option-info">
                 <strong>{u.display_name}</strong>
                 <span>@{u.username}</span>

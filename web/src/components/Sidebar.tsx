@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/auth";
 import { useRouter, usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import Icon from "./Icon";
-import { avatarColor } from "@/lib/avatar";
+import Avatar from "./Avatar";
 
 function NavItem({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
   return (
@@ -23,6 +23,7 @@ export default function Sidebar() {
   const [isDark, setIsDark] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
+  const [sidebarQ, setSidebarQ] = useState("");
 
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => {
@@ -113,26 +114,21 @@ export default function Sidebar() {
         e.preventDefault();
         const q = (e.target as HTMLFormElement).q.value.trim();
         if (!q) return;
-        if (q.startsWith("http")) {
-          try {
-            const form = new FormData();
-            form.append("url", q);
-            const res = await fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form });
-          if (res.ok) router.push("/timeline/home");
-          else { const text = await res.text().catch(() => ""); alert("불러오기 실패: " + text.slice(0, 100)); }
-        } catch (e: any) { alert("불러오기 실패: " + (e.message || "")); }
-        }
+        router.push(q.startsWith("http") ? `/explore?url=${encodeURIComponent(q)}` : `/explore?q=${encodeURIComponent(q)}`);
       }} style={{ position: "relative" }}>
         <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", zIndex: 1, color: "var(--text-muted)", display: "flex", alignItems: "center", cursor: "pointer" }} onClick={(ev) => { const f = (ev.target as HTMLElement).closest('form'); if (f) f.requestSubmit(); }}>
           <Icon name="search" size={14} />
         </span>
-        <input type="text" name="q" placeholder="검색..." className="sidebar-search-input" style={{ paddingLeft: 30 }} />
+        <input type="text" name="q" placeholder="검색..." className="sidebar-search-input" style={{ paddingLeft: 30, paddingRight: 30 }} value={sidebarQ} onChange={e => setSidebarQ(e.target.value)} />
+        {sidebarQ && (
+          <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", zIndex: 1, color: "var(--text-muted)", display: "flex", alignItems: "center", cursor: "pointer", opacity: 0.6 }} onClick={() => setSidebarQ("")}>
+            <Icon name="x" size={14} />
+          </span>
+        )}
       </form>
       <Link href={`/profile/${user.username}`} className="user-info-link">
         <div className="user-info">
-          <div className="sidebar-avatar rounded-[8px] flex items-center justify-center text-white font-bold text-lg" style={{ backgroundColor: avatarColor(user.username) }}>
-            {(user.display_name || user.username)[0]}
-          </div>
+           <Avatar user={user} className="sidebar-avatar rounded-[8px] flex items-center justify-center text-white font-bold text-lg" />
           <div className="user-info-text-mini">
             <strong>{user.display_name}</strong>
             <span>@{user.username}</span>

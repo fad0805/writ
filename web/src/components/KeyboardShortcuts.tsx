@@ -1,8 +1,10 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
+import PostForm from "./PostForm";
 
 export default function KeyboardShortcuts() {
   const [showHelp, setShowHelp] = useState(false);
+  const [showPostModal, setShowPostModal] = useState(false);
 
   const handleKey = useCallback((e: KeyboardEvent) => {
     const tag = (document.activeElement?.tagName || "").toLowerCase();
@@ -13,6 +15,7 @@ export default function KeyboardShortcuts() {
         (document.activeElement as HTMLElement)?.blur();
       }
       setShowHelp(false);
+      setShowPostModal(false);
       return;
     }
 
@@ -24,15 +27,7 @@ export default function KeyboardShortcuts() {
 
     if (e.key === "n" && !isEditing) {
       e.preventDefault();
-      const ta = document.querySelector<HTMLTextAreaElement>(
-        ".post-form textarea, .feed .post-form + div textarea"
-      );
-      if (!ta) {
-        const anyTa = document.querySelector<HTMLTextAreaElement>("textarea");
-        if (anyTa) anyTa.focus();
-      } else {
-        ta.focus();
-      }
+      setShowPostModal(true);
       return;
     }
 
@@ -57,21 +52,33 @@ export default function KeyboardShortcuts() {
   }, [handleKey]);
 
   return (
-    <div
-      className={`shortcut-help-backdrop ${showHelp ? "active" : ""}`}
-      onClick={() => setShowHelp(false)}
-    >
-      <div className="shortcut-help" onClick={(e) => e.stopPropagation()}>
-        <button className="shortcut-help-close" onClick={() => setShowHelp(false)}>×</button>
-        <h3>키보드 단축키</h3>
-        <dl>
-          <dt>n</dt><dd>새 글 작성</dd>
-          <dt>s</dt><dd>검색창</dd>
-          <dt>d</dt><dd>테마 전환</dd>
-          <dt>?</dt><dd>도움말</dd>
-          <dt>Esc</dt><dd>입력 포커스 해제</dd>
-        </dl>
+    <>
+      <div
+        className={`shortcut-help-backdrop ${showHelp ? "active" : ""}`}
+        onClick={() => setShowHelp(false)}
+      >
+        <div className="shortcut-help" onClick={(e) => e.stopPropagation()}>
+          <button className="shortcut-help-close" onClick={() => setShowHelp(false)}>×</button>
+          <h3>키보드 단축키</h3>
+          <dl>
+            <dt>n</dt><dd>새 글 작성</dd>
+            <dt>s</dt><dd>검색창</dd>
+            <dt>d</dt><dd>테마 전환</dd>
+            <dt>?</dt><dd>도움말</dd>
+            <dt>Esc</dt><dd>입력 포커스 해제 / 모달 닫기</dd>
+          </dl>
+        </div>
       </div>
-    </div>
+
+      {showPostModal && (
+        <div className="reply-modal-backdrop active" onClick={() => setShowPostModal(false)}>
+          <div className="reply-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+            <button className="reply-modal-close" onClick={() => setShowPostModal(false)}>×</button>
+            <h3>새 글 작성</h3>
+            <PostForm onDone={() => setShowPostModal(false)} />
+          </div>
+        </div>
+      )}
+    </>
   );
 }

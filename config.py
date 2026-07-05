@@ -25,3 +25,7 @@ PAGE_SIZE = 20
 
 # SNS
 MAX_POST_LENGTH = int(os.environ.get("MAX_POST_LENGTH", "500"))
+
+# File storage
+AVATAR_STORAGE_PATH = os.environ.get("AVATAR_STORAGE_PATH", "uploads/avatars")
+AVATAR_URL_PREFIX = os.environ.get("AVATAR_URL_PREFIX", "/uploads/avatars")

@@ -208,7 +208,7 @@ a:hover { color: var(--accent-light); text-decoration: none; }
 }
 input[type="text"].explore-search-input {
   width: 100%;
-  padding: 10px 14px 10px 30px;
+  padding: 10px 32px 10px 30px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--bg-secondary);
@@ -218,6 +218,21 @@ input[type="text"].explore-search-input {
 input[type="text"].explore-search-input:focus {
   outline: none;
   border-color: var(--accent);
+}
+.explore-search-clear {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.explore-search-clear:hover {
+  opacity: 1;
 }
 
 .sidebar-btn {
@@ -787,6 +802,53 @@ input:focus {
   font-weight: bold;
 }
 
+/* ── Profile edit ── */
+
+.profile-edit-avatar-wrap {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  min-height: 64px;
+}
+
+.profile-edit-avatar-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+  display: block;
+}
+
+.profile-edit-avatar-thumb.fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.profile-edit-file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 1px;
+}
+
+.profile-edit-file-label {
+  cursor: pointer;
+}
+
+.profile-edit-file-name {
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .profile-info-text { flex: 1; min-width: 0; box-sizing: border-box; }
 .profile-username {
   color: var(--text-muted);
@@ -1340,6 +1402,18 @@ input:focus {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
+}
+.fetched-url-label {
+  font-size: 0.8em;
+  color: var(--text-muted);
+  opacity: 0.6;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
 }
 .user-search-list {
   display: flex;

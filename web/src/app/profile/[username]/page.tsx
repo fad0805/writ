@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { api, User, PostData, NovelData } from "@/lib/api";
 import PostCard from "@/components/PostCard";
 import Icon from "@/components/Icon";
-import { avatarColor } from "@/lib/avatar";
+import Avatar from "@/components/Avatar";
 import Link from "next/link";
 
 export default function ProfilePage() {
@@ -52,9 +52,7 @@ export default function ProfilePage() {
     <>
       <div className="profile-header">
         <div className="profile-info">
-          <div className="profile-avatar" style={{ backgroundColor: avatarColor(profile.username) }}>
-            {(profile.display_name || profile.username)[0]}
-          </div>
+          <Avatar user={profile} className="profile-avatar" />
           <div className="profile-info-text">
             <h2>{profile.display_name}</h2>
             <p className="profile-username">@{profile.username}</p>
@@ -97,9 +95,7 @@ export default function ProfilePage() {
         {following.length === 0 ? <p className="empty-state">팔로잉이 없습니다.</p> : following.map((f) => (
           <Link key={f.user.id} href={`/profile/${f.user.username}`} className="post-card" style={{ display: "block", textDecoration: "none", color: "inherit" }}>
             <div className="profile-user-row">
-              <div className="sidebar-avatar" style={{ backgroundColor: avatarColor(f.user.username) }}>
-                {(f.user.display_name || f.user.username)[0]}
-              </div>
+              <Avatar user={f.user} className="sidebar-avatar" />
               <div>
                 <strong style={{ color: "var(--text-white)" }}>{f.user.display_name}</strong>
                 <br /><span className="text-muted">@{f.user.username}</span>
@@ -113,9 +109,7 @@ export default function ProfilePage() {
         {followers.length === 0 ? <p className="empty-state">팔로워가 없습니다.</p> : followers.map((f) => (
           <Link key={f.user.id} href={`/profile/${f.user.username}`} className="post-card" style={{ display: "block", textDecoration: "none", color: "inherit" }}>
             <div className="profile-user-row">
-              <div className="sidebar-avatar" style={{ backgroundColor: avatarColor(f.user.username) }}>
-                {(f.user.display_name || f.user.username)[0]}
-              </div>
+              <Avatar user={f.user} className="sidebar-avatar" />
               <div>
                 <strong style={{ color: "var(--text-white)" }}>{f.user.display_name}</strong>
                 <br /><span className="text-muted">@{f.user.username}</span>

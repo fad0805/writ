@@ -3,7 +3,7 @@ import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api, User } from "@/lib/api";
 import Link from "next/link";
-import { avatarColor } from "@/lib/avatar";
+import Avatar from "@/components/Avatar";
 
 export default function FollowingPage() {
   const params = useParams();
@@ -27,9 +27,7 @@ export default function FollowingPage() {
       ) : (
         users.map((u) => (
           <Link key={u.id} href={`/profile/${u.username}`} className="post-card user-row-card">
-            <div className="post-author-avatar bg-[var(--accent)] flex items-center justify-center text-white font-bold">
-              {(u.display_name || u.username)[0]}
-            </div>
+            <Avatar user={u} className="post-author-avatar bg-[var(--accent)] flex items-center justify-center text-white font-bold" />
             <div>
               <div className="post-author">{u.display_name}</div>
               <div className="post-username">@{u.username}</div>

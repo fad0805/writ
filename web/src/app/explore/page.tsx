@@ -5,7 +5,8 @@ import PostCard from "@/components/PostCard";
 import Icon from "@/components/Icon";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { hashColor, avatarColor } from "@/lib/avatar";
+import { hashColor } from "@/lib/avatar";
+import Avatar from "@/components/Avatar";
 
 export default function ExplorePage() {
   const [posts, setPosts] = useState<PostData[]>([]);
@@ -13,20 +14,20 @@ export default function ExplorePage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [inputValue, setInputValue] = useState("");
   const [searched, setSearched] = useState(false);
+  const [fetchedUrl, setFetchedUrl] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   const loadExplore = () => {
-    setLoading(true); setSearched(false);
+    setLoading(true); setSearched(false); setFetchedUrl(null);
     api.explore().then((d) => { setPosts(d.posts); setNovels([]); setUsers([]); setLoading(false); }).catch(() => setLoading(false));
   };
 
-  useEffect(() => { loadExplore(); }, []);
-
   const doSearch = async (q: string) => {
     if (!q.trim()) { loadExplore(); return; }
-    setLoading(true); setSearched(true);
+    setLoading(true); setSearched(true); setFetchedUrl(null);
     try {
       const res = await api.search(q.trim());
       setPosts(res.posts);
@@ -36,19 +37,47 @@ export default function ExplorePage() {
     setLoading(false);
   };
 
+  const handleUrlFetch = async (url: string) => {
+    setLoading(true); setSearched(true); setFetchedUrl(null);
+    try {
+      const form = new FormData();
+      form.append("url", url);
+      const res = await fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form });
+      if (res.ok) {
+        const post: PostData = await res.json();
+        setPosts([post]);
+        setNovels([]);
+        setUsers([]);
+        setFetchedUrl(url);
+      } else { const text = await res.text().catch(() => ""); alert("불러오기 실패: " + text.slice(0, 100)); setPosts([]); setNovels([]); setUsers([]); }
+    } catch (e: any) { alert("불러오기 실패: " + (e.message || "")); setPosts([]); setNovels([]); setUsers([]); }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlParam = params.get("url");
+    const qParam = params.get("q");
+    if (urlParam) {
+      setInputValue(urlParam);
+      setQuery(urlParam);
+      handleUrlFetch(urlParam);
+    } else if (qParam) {
+      setInputValue(qParam);
+      setQuery(qParam);
+      doSearch(qParam);
+    } else {
+      loadExplore();
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const q = inputRef.current?.value.trim() || "";
     setQuery(q);
     if (!q) { loadExplore(); return; }
     if (q.startsWith("http")) {
-      try {
-        const form = new FormData();
-        form.append("url", q);
-        const res = await fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form });
-        if (res.ok) router.push("/timeline/home");
-        else { const text = await res.text().catch(() => ""); alert("불러오기 실패: " + text.slice(0, 100)); }
-      } catch (e: any) { alert("불러오기 실패: " + (e.message || "")); }
+      handleUrlFetch(q);
       return;
     }
     doSearch(q);
@@ -61,7 +90,12 @@ export default function ExplorePage() {
         <span className="explore-search-icon" onClick={(ev) => { const f = (ev.target as HTMLElement).closest('form'); if (f) f.requestSubmit(); }}>
           <Icon name="search" size={14} />
         </span>
-        <input ref={inputRef} type="text" name="q" placeholder="검색..." className="explore-search-input" defaultValue={query} />
+        <input ref={inputRef} type="text" name="q" placeholder="검색..." className="explore-search-input" value={inputValue} onChange={e => setInputValue(e.target.value)} />
+        {inputValue && (
+          <span className="explore-search-clear" onClick={() => { setInputValue(""); setQuery(""); loadExplore(); }}>
+            <Icon name="x" size={14} />
+          </span>
+        )}
       </form>
       {loading ? (
         <div className="empty-state">로딩 중...</div>
@@ -71,7 +105,16 @@ export default function ExplorePage() {
             <div className="empty-state">검색 결과가 없습니다.</div>
           ) : (
             <>
-              {posts.length > 0 && (
+              {fetchedUrl && posts.length > 0 && (
+                <>
+                  <h4 className="search-section-title">
+                    <Icon name="globe" /> 리모트 게시글
+                    <span className="fetched-url-label">{fetchedUrl}</span>
+                  </h4>
+                  {posts.map((p) => <PostCard key={p.id} post={p} />)}
+                </>
+              )}
+              {!fetchedUrl && posts.length > 0 && (
                 <>
                   <h4 className="search-section-title"><Icon name="globe" /> 게시글</h4>
                   {posts.map((p) => <PostCard key={p.id} post={p} />)}
@@ -116,9 +159,7 @@ export default function ExplorePage() {
                   <div className="user-search-list">
                     {users.map((u) => (
                       <Link key={u.id} href={`/profile/${u.username}`} className="user-search-card">
-                        <div className="sidebar-avatar rounded-[8px] flex items-center justify-center text-white font-bold text-lg" style={{ backgroundColor: avatarColor(u.username), width: 36, height: 36, minWidth: 36, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: "bold", fontSize: 16 }}>
-                          {(u.display_name || u.username)[0]}
-                        </div>
+                        <Avatar user={u} className="sidebar-avatar rounded-[8px]" style={{ width: 36, height: 36, minWidth: 36, borderRadius: 8, fontSize: 16 }} />
                         <div>
                           <strong>{u.display_name}</strong>
                           <span>@{u.username}</span>

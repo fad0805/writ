@@ -114,6 +114,7 @@ class Post(Base):
 
     id = Column(Integer, primary_key=True)
     uuid = Column(String(36), default=generate_uuid, unique=True, nullable=False)
+    number = Column(String(16), default="", nullable=False)
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     content = Column(Text, nullable=False)
     summary = Column(String(512), default="")
@@ -236,6 +237,7 @@ class Novel(Base):
 
     id = Column(Integer, primary_key=True)
     uuid = Column(String(36), default=generate_uuid, unique=True, nullable=False)
+    number = Column(String(16), default="", nullable=False)
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     title = Column(String(256), nullable=False)
     description = Column(Text, default="")

@@ -1,8 +1,9 @@
 import re
 import datetime
-from fastapi import APIRouter, Request, Form, HTTPException, Query
+from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File
 from fastapi.responses import JSONResponse
 from sqlalchemy import desc, or_, and_, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from models import User, Post, Follow, Like, Boost, Notification, Novel, Episode, Tag, get_session
@@ -298,6 +299,8 @@ def api_create_post(
 
     mentioned_ids = _parse_mentions(content)
     with get_session() as s:
+        import secrets
+        post_number = secrets.token_hex(4)
         post = Post(
             author_id=user.id,
             content=content,
@@ -305,11 +308,12 @@ def api_create_post(
             visibility=visibility,
             in_reply_to_id=parent_id,
             mentioned_user_ids=mentioned_ids,
+            number=post_number,
             ap_id="",
         )
         s.add(post)
         s.flush()
-        post.ap_id = f"{BASE_URL}/posts/{post.id}"
+        post.ap_id = f"{BASE_URL}/@{user.username}/{post.number}"
         if parent_id:
             parent = s.query(Post).filter_by(id=parent_id).first()
             if parent:
@@ -624,6 +628,7 @@ def _novel_json(n, s=None):
     tag_names = " ".join(t.name for t in (n.tag_list or [])) if n.tag_list else (n.tags or "")
     return {
         "id": n.id,
+        "number": n.number or "",
         "title": n.title,
         "description": n.description or "",
         "cover_image": n.cover_image or "",
@@ -650,8 +655,11 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
     if visibility not in ("public", "unlisted", "private"):
         visibility = "public"
     with get_session() as s:
+        import secrets
+        novel_number = secrets.token_hex(4)
         novel = Novel(author_id=user.id, title=title, description=description, tags=tags,
-                      visibility=visibility, is_published=visibility != "private", cover_image=cover_image)
+                      visibility=visibility, is_published=visibility != "private",
+                      cover_image=cover_image, number=novel_number)
         s.add(novel)
         s.flush()
         _sync_tags(novel, s)
@@ -725,17 +733,20 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
         s.add(episode)
         s.flush()
         if announce:
+            import secrets
+            post_number = secrets.token_hex(4)
             post = Post(
                 author_id=user.id,
                 content=f'📖 <a href="{BASE_URL}/novels/{novel.id}/episodes/{episode.id}">[{novel.title}] {next_num}화: {title}</a>\n\n{summary or ""}',
                 summary=f"[소설] {novel.title} - {next_num}화",
                 visibility=visibility,
+                number=post_number,
                 novel_id=novel.id,
                 episode_id=episode.id,
             )
             s.add(post)
             s.flush()
-            post.ap_id = f"{BASE_URL}/posts/{post.id}"
+            post.ap_id = f"{BASE_URL}/@{user.username}/{post.number}"
             episode.announcement_post_id = post.id
             s.flush()
             try:
@@ -854,19 +865,59 @@ def _episode_json(e):
     }
 
 
+def _cleanup_avatars():
+    import os, time
+    from config import AVATAR_STORAGE_PATH
+    if not os.path.isdir(AVATAR_STORAGE_PATH):
+        return
+    with get_session() as s:
+        used = set()
+        for u in s.query(User).filter(User.profile_image != "").all():
+            path = u.profile_image.lstrip("/")
+            abspath = os.path.abspath(path) if os.path.isfile(path) else None
+            if abspath:
+                used.add(abspath)
+    now = time.time()
+    for fname in os.listdir(AVATAR_STORAGE_PATH):
+        fpath = os.path.join(AVATAR_STORAGE_PATH, fname)
+        if not os.path.isfile(fpath):
+            continue
+        if os.path.abspath(fpath) in used:
+            continue
+        if now - os.path.getmtime(fpath) > 86400:
+            os.remove(fpath)
+
+
 @router.post("/profile/update")
 def api_update_profile(request: Request, display_name: str = Form(""), summary: str = Form(""),
-                       image_url: str = Form("")):
+                       image: UploadFile = File(None)):
+    from config import AVATAR_STORAGE_PATH, AVATAR_URL_PREFIX
     user = require_auth(request)
     with get_session() as s:
         db = s.query(User).filter_by(id=user.id).first()
         db.display_name = display_name
         db.summary = summary
-        if image_url:
-            from routes.ui_components import _save_avatar
-            local_path = _save_avatar(image_url, user.id)
-            db.profile_image = local_path or image_url
+        if image and image.filename:
+            import os
+            os.makedirs(AVATAR_STORAGE_PATH, exist_ok=True)
+            ext = (image.filename.rsplit(".", 1)[-1] if "." in image.filename else "jpg").lower()
+            if ext not in ("jpg", "jpeg", "png", "gif", "webp"):
+                ext = "jpg"
+            from uuid import uuid4
+            filename = f"u{user.id}_{uuid4().hex[:8]}.{ext}"
+            filepath = os.path.join(AVATAR_STORAGE_PATH, filename)
+            with open(filepath, "wb") as f:
+                f.write(image.file.read())
+            new_path = f"{AVATAR_URL_PREFIX}/{filename}"
+            old = db.profile_image
+            db.profile_image = new_path
+            s.flush()
+            if old:
+                old_path = old.lstrip("/")
+                if os.path.isfile(old_path) and os.path.abspath(old_path) != os.path.abspath(filepath):
+                    os.remove(old_path)
         s.commit()
+    _cleanup_avatars()
     return {"ok": True}
 
 
@@ -985,6 +1036,22 @@ def _fetch_and_save_ap_object(obj, user):
         if u:
             author_id = u.id
     if not author_id:
+        # fallback: try parsing username from attributed_to URL
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(attributed_to)
+            domain = parsed.netloc
+            preferred = parsed.path.rstrip("/").split("/")[-1]
+            local_username = f"{preferred}@{domain}"
+            with get_session() as qs:
+                u = qs.query(User).filter_by(username=local_username).first()
+                if u:
+                    u.remote_url = attributed_to
+                    qs.commit()
+                    author_id = u.id
+        except Exception:
+            pass
+    if not author_id:
         return None
 
     ap_id = obj.get("id", "")
@@ -1004,6 +1071,12 @@ def _fetch_and_save_ap_object(obj, user):
 
         in_reply_to_ap_id = obj.get("inReplyTo", "")
 
+        in_reply_to_id = None
+        if in_reply_to_ap_id:
+            parent = s.query(Post).filter_by(ap_id=in_reply_to_ap_id).first()
+            if parent:
+                in_reply_to_id = parent.id
+
         post = Post(
             author_id=author_id,
             content=content,
@@ -1011,6 +1084,7 @@ def _fetch_and_save_ap_object(obj, user):
             visibility="public",
             ap_id=ap_id,
             in_reply_to_ap_id=in_reply_to_ap_id,
+            in_reply_to_id=in_reply_to_id,
             mentioned_user_ids=mentioned_ids,
         )
         published = obj.get("published", "")
@@ -1020,7 +1094,14 @@ def _fetch_and_save_ap_object(obj, user):
             except Exception:
                 pass
         s.add(post)
-        s.commit()
+        try:
+            s.commit()
+        except IntegrityError:
+            s.rollback()
+            existing = s.query(Post).filter_by(ap_id=ap_id).first()
+            if existing:
+                return _post_json(existing, s, user)
+            return None
         return _post_json(post, s, user)
 
 
@@ -1090,7 +1171,10 @@ def api_fetch_post(request: Request, url: str = Form(...)):
             if parent_data:
                 parent_obj = parent_data.get("object", parent_data)
                 fetch_thread(parent_obj, depth + 1)
-                _fetch_and_save_ap_object(parent_obj, user)
+                try:
+                    _fetch_and_save_ap_object(parent_obj, user)
+                except Exception:
+                    pass
 
     fetch_thread(obj)
 

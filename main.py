@@ -20,6 +20,11 @@ from activitypub import (
 async def lifespan(app: FastAPI):
     init_db()
     seed_default_data()
+    try:
+        from routes.api import _cleanup_avatars
+        _cleanup_avatars()
+    except Exception:
+        pass
     yield
 
 
@@ -70,8 +75,8 @@ def seed_default_data():
         print(f"✅ Admin account created: admin / {admin_password}")
 
         # author1's posts
-        p1 = Post(author_id=author1.id, content="안녕하세요, 소설을 시작합니다!", visibility="public")
-        p2 = Post(author_id=author1.id, content="오늘은 첫 번째 에피소드를 썼어요.", visibility="home")
+        p1 = Post(author_id=author1.id, content="안녕하세요, 소설을 시작합니다!", visibility="public", number="a1b2c3d4")
+        p2 = Post(author_id=author1.id, content="오늘은 첫 번째 에피소드를 썼어요.", visibility="home", number="e5f6g7h8")
         session.add_all([p1, p2])
 
         # author1's novels
@@ -89,12 +94,12 @@ def seed_default_data():
         session.add(follow)
 
         # reader1's post
-        p3 = Post(author_id=reader1.id, content="재미있는 소설 추천 받아요!", visibility="public")
+        p3 = Post(author_id=reader1.id, content="재미있는 소설 추천 받아요!", visibility="public", number="i9j0k1l2")
         session.add(p3)
 
         # Set AP IDs
         for post in [p1, p2, p3]:
-            post.ap_id = f"{BASE_URL}/posts/{post.id}"
+            post.ap_id = f"{BASE_URL}/@{post.author.username}/{post.number}"
 
         session.commit()
 
@@ -240,6 +245,56 @@ def get_post(request: Request, post_id: int):
                                 media_type="application/activity+json")
 
         return RedirectResponse(url=f"/post/{post_id}")
+
+
+@app.get("/@{username}")
+def get_user_by_handle(request: Request, username: str):
+    accept = request.headers.get("Accept", "")
+
+    with get_session() as session:
+        user = session.query(User).filter_by(username=username, is_remote=False).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Not found")
+
+        if "application/activity+json" in accept or "application/ld+json" in accept:
+            return JSONResponse(content=user.to_ap_actor(),
+                                media_type="application/activity+json")
+
+        return RedirectResponse(url=f"http://localhost:3000/profile/{username}")
+
+
+@app.get("/@{username}/{number}")
+def get_post_by_handle(request: Request, username: str, number: str):
+    accept = request.headers.get("Accept", "")
+
+    with get_session() as session:
+        user = session.query(User).filter_by(username=username, is_remote=False).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Not found")
+        post = session.query(Post).filter_by(author_id=user.id, number=number, is_deleted=False).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Not found")
+
+        if "application/activity+json" in accept or "application/ld+json" in accept:
+            return JSONResponse(content=post.to_ap_note(),
+                                media_type="application/activity+json")
+
+        return RedirectResponse(url=f"/post/{post.id}")
+
+
+@app.get("/@{username}/series/{number}")
+def get_series_by_handle(request: Request, username: str, number: str):
+    accept = request.headers.get("Accept", "")
+
+    with get_session() as session:
+        user = session.query(User).filter_by(username=username, is_remote=False).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Not found")
+        novel = session.query(Novel).filter_by(author_id=user.id, number=number).first()
+        if not novel:
+            raise HTTPException(status_code=404, detail="Not found")
+
+        return RedirectResponse(url=f"http://localhost:3000/novels/{novel.id}")
 
 
 @app.get("/nodeinfo/2.0")

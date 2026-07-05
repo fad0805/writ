@@ -35,7 +35,9 @@ export default function RightSidebar() {
               <span>총 {n.episode_count}화</span>
             </Link>
           )) : (
-            <p className="empty-small">연재 중인 시리즈가 없습니다.</p>
+            <Link href="/novels/new" className="btn btn-primary btn-small full-width-btn">
+            + 새 시리즈 시작하기
+          </Link>
           )}
         </div>
         {extraCount > 0 && (
@@ -45,9 +47,6 @@ export default function RightSidebar() {
             </Link>
           </div>
         )}
-        <Link href="/novels/new" className="btn btn-primary btn-small full-width-btn">
-          + 새 시리즈 시작하기
-        </Link>
       </div>
       <div className="widget">
         <h4><Icon name="bell" /> 알림</h4>

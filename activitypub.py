@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 import httpx
 
 from models import User, Post, Follow, Like, Boost, Notification, get_session
+from sqlalchemy.exc import IntegrityError
 from config import BASE_URL, PUBLIC_URI
 from crypto_utils import generate_keypair, sign_string, verify_signature
 
@@ -155,6 +156,28 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
         return (202, f"Accepted {atype}")
 
 
+def _save_remote_avatar(avatar_url: str, local_username: str) -> str:
+    """Download remote avatar and save locally, return profile_image path."""
+    from config import AVATAR_STORAGE_PATH, AVATAR_URL_PREFIX
+    import os
+    os.makedirs(AVATAR_STORAGE_PATH, exist_ok=True)
+    ext = avatar_url.rsplit(".", 1)[-1].lower() if "." in avatar_url else "jpg"
+    if ext not in ("jpg", "jpeg", "png", "gif", "webp"):
+        ext = "jpg"
+    from uuid import uuid4
+    filename = f"{local_username}_{uuid4().hex[:8]}.{ext}"
+    filepath = os.path.join(AVATAR_STORAGE_PATH, filename)
+    try:
+        resp = httpx.get(avatar_url, timeout=10)
+        if resp.status_code == 200:
+            with open(filepath, "wb") as f:
+                f.write(resp.content)
+            return f"{AVATAR_URL_PREFIX}/{filename}"
+    except Exception:
+        pass
+    return ""
+
+
 def _resolve_actor(actor_url: str) -> Optional[User]:
     with get_session() as session:
         user = session.query(User).filter_by(remote_url=actor_url).first()
@@ -176,6 +199,15 @@ def _resolve_actor(actor_url: str) -> Optional[User]:
 
     parsed = urlparse(actor_url)
     domain = parsed.netloc
+    local_username = f"{preferred_username}@{domain}"
+
+    # Extract avatar URL
+    avatar_url = ""
+    icon = data.get("icon", {})
+    if isinstance(icon, dict):
+        avatar_url = icon.get("url", "")
+    elif isinstance(icon, list):
+        avatar_url = icon[0].get("url", "") if icon else ""
 
     public_key_pem = ""
     if "publicKey" in data:
@@ -187,11 +219,23 @@ def _resolve_actor(actor_url: str) -> Optional[User]:
             existing.public_key = public_key_pem
             existing.display_name = data.get("name", existing.display_name)
             existing.summary = data.get("summary", existing.summary)
+            if avatar_url and not existing.profile_image:
+                existing.profile_image = _save_remote_avatar(avatar_url, local_username.replace("@", "_"))
             session.commit()
             return existing
 
-        # Use a unique local identifier for remote user
-        local_username = f"{preferred_username}@{domain}"
+        # Also check by username in case remote_url is missing/stale
+        by_username = session.query(User).filter_by(username=local_username).first()
+        if by_username:
+            by_username.remote_url = actor_url
+            by_username.public_key = public_key_pem or by_username.public_key
+            by_username.display_name = data.get("name", by_username.display_name)
+            by_username.summary = data.get("summary", by_username.summary)
+            if avatar_url and not by_username.profile_image:
+                by_username.profile_image = _save_remote_avatar(avatar_url, local_username.replace("@", "_"))
+            session.commit()
+            return by_username
+
         # Ensure uniqueness
         base_username = local_username
         counter = 1
@@ -200,6 +244,7 @@ def _resolve_actor(actor_url: str) -> Optional[User]:
             counter += 1
 
         priv, pub = generate_keypair()
+        profile_image = _save_remote_avatar(avatar_url, local_username.replace("@", "_")) if avatar_url else ""
         user = User(
             username=local_username,
             display_name=data.get("name", preferred_username),
@@ -210,6 +255,7 @@ def _resolve_actor(actor_url: str) -> Optional[User]:
             is_remote=True,
             remote_url=actor_url,
             shared_inbox_url=data.get("endpoints", {}).get("sharedInbox", ""),
+            profile_image=profile_image,
         )
         session.add(user)
         session.commit()
