@@ -1,11 +1,14 @@
 "use client";
 import { useState, useEffect } from "react";
 import { PostData, api } from "@/lib/api";
+import EmojiPicker from "./EmojiPicker";
 
 export default function EditModal({ post, onClose, onDone }: { post: PostData; onClose: () => void; onDone?: () => void }) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
+    const ta = document.querySelector<HTMLTextAreaElement>(".reply-modal textarea, .reply-modal .textarea-ta");
+    setTimeout(() => ta?.focus(), 100);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
   const [content, setContent] = useState(post.content);
@@ -48,7 +51,9 @@ export default function EditModal({ post, onClose, onDone }: { post: PostData; o
             placeholder="CW (선택사항)"
             className="cw-input"
           />
-          <div className="edit-modal-footer">
+          <div className="edit-modal-footer" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <EmojiPicker onEmoji={(e) => setContent(content + e)} />
+            <div style={{ flex: 1 }} />
             <button type="submit" disabled={submitting || !content.trim()} className="btn btn-primary">
               {submitting ? "..." : "수정"}
             </button>

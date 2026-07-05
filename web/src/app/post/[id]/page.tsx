@@ -38,7 +38,7 @@ export default function PostDetailPage() {
   const offsetRef = useRef(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     offsetRef.current = 0;
     try {
@@ -49,9 +49,20 @@ export default function PostDetailPage() {
       setHasMore(data.has_more_replies);
     } catch {}
     setLoading(false);
-  };
+  }, [params.id]);
 
-  useEffect(() => { load(); }, [params.id]);
+  useEffect(() => {
+    offsetRef.current = 0;
+    api.getPost(Number(params.id), 0, 5)
+      .then((data) => {
+        setPost(data);
+        setReplies(data.replies || []);
+        setTotalReplies(data.total_replies);
+        setHasMore(data.has_more_replies);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [params.id]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
@@ -86,7 +97,7 @@ export default function PostDetailPage() {
       {ancestors.map((a) => (
         <div key={a.id} style={{ marginLeft: 20 }}><PostCard post={a} hideContext /></div>
       ))}
-      <PostCard post={post} onUpdate={load} current hideContext />
+      <PostCard post={post} onUpdate={load} onDelete={() => window.history.back()} current hideContext />
       <div className="thread-list">
         <h4>답글 {totalReplies}개</h4>
         <ThreadList posts={replies} parentId={post.id} depth={0} />

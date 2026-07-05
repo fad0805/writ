@@ -2,7 +2,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import Link from "next/link";
+import EpisodeEditor from "@/components/EpisodeEditor";
 
 export default function EditEpisodePage() {
   const params = useParams();
@@ -30,7 +30,8 @@ export default function EditEpisodePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !content.trim() || submitting) return;
+    const cleanContent = content.replace(/<[^>]*>/g, "").trim();
+    if (!title.trim() || !cleanContent || submitting) return;
     setSubmitting(true);
     try {
       const form = new FormData();
@@ -61,7 +62,7 @@ export default function EditEpisodePage() {
         </div>
         <div className="form-group">
           <label>내용</label>
-          <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={20} required />
+          <EpisodeEditor value={content} onChange={(v) => setContent(v)} />
         </div>
         <div className="form-group">
           <label>

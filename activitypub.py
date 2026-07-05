@@ -160,19 +160,23 @@ def _save_remote_avatar(avatar_url: str, local_username: str) -> str:
     """Download remote avatar and save locally, return profile_image path."""
     from config import AVATAR_STORAGE_PATH, AVATAR_URL_PREFIX
     import os
-    os.makedirs(AVATAR_STORAGE_PATH, exist_ok=True)
+    remote_dir = os.path.join(AVATAR_STORAGE_PATH, "remote")
+    os.makedirs(remote_dir, exist_ok=True)
     ext = avatar_url.rsplit(".", 1)[-1].lower() if "." in avatar_url else "jpg"
     if ext not in ("jpg", "jpeg", "png", "gif", "webp"):
         ext = "jpg"
     from uuid import uuid4
+    import time
+    timestamp = int(time.time())
     filename = f"{local_username}_{uuid4().hex[:8]}.{ext}"
-    filepath = os.path.join(AVATAR_STORAGE_PATH, filename)
+    filepath = os.path.join(remote_dir, filename)
     try:
         resp = httpx.get(avatar_url, timeout=10)
         if resp.status_code == 200:
             with open(filepath, "wb") as f:
                 f.write(resp.content)
-            return f"{AVATAR_URL_PREFIX}/{filename}"
+            os.utime(filepath, (timestamp, timestamp))
+            return f"{AVATAR_URL_PREFIX}/remote/{filename}"
     except Exception:
         pass
     return ""

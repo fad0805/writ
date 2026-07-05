@@ -2,28 +2,39 @@
 import { PostData, api } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import EditModal from "./EditModal";
 import ReplyModal from "./ReplyModal";
 import Icon from "./Icon";
 import Avatar from "./Avatar";
+import MiniPostCard from "./MiniPostCard";
+import { useAuth } from "@/lib/auth";
 
 const VIS_ICONS: Record<string, string> = {
   public: "globe", home: "home", followers: "lock", mention: "mail",
 };
 
-function linkifyMentions(text: string): string {
-  return text.replace(/@(\w+(?:@[\w.-]+)?)/g, (match, handle) => {
-    return `<a href="/@${handle}" class="mention-link">@${handle}</a>`;
+function rewriteLinks(text: string): string {
+  // Replace external ActivityPub links with local handles
+  text = text.replace(
+    /<a\s+href="https?:\/\/([^"/]+)\/@(\w+)"[^>]*>@?\w*<\/a>/gi,
+    (_m: string, domain: string, user: string) =>
+      `<a href="/@${user}@${domain}" class="mention-link">@${user}@${domain}</a>`
+  );
+  // Convert plain @mentions outside of existing <a> tags
+  return text.replace(/(^|>|\s)@(\w+(?:@[\w.-]+)?)/g, (_m, before, handle) => {
+    return `${before}<a href="/@${handle}" class="mention-link">@${handle}</a>`;
   });
 }
 
-export default function PostCard({ post, onUpdate, current, hideContext }: { post: PostData; onUpdate?: () => void; current?: boolean; hideContext?: boolean }) {
+export default function PostCard({ post, onUpdate, onDelete, current, hideContext, selected }: { post: PostData; onUpdate?: () => void; onDelete?: () => void; current?: boolean; hideContext?: boolean; selected?: boolean }) {
   const router = useRouter();
+  const { user: currentUser } = useAuth();
   const [showReply, setShowReply] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [liked, setLiked] = useState(post.liked);
   const [boosted, setBoosted] = useState(post.boosted);
+  const [bookmarked, setBookmarked] = useState(post.bookmarked);
   const [likesCount, setLikesCount] = useState(post.likes_count);
   const [boostsCount, setBoostsCount] = useState(post.boosts_count);
 
@@ -31,6 +42,13 @@ export default function PostCard({ post, onUpdate, current, hideContext }: { pos
     try {
       if (liked) { await api.unlike(post.id); setLiked(false); setLikesCount(Math.max(0, likesCount - 1)); }
       else { await api.like(post.id); setLiked(true); setLikesCount(likesCount + 1); }
+    } catch {}
+  };
+
+  const toggleBookmark = async () => {
+    try {
+      if (bookmarked) { await api.unbookmark(post.id); setBookmarked(false); }
+      else { await api.bookmark(post.id); setBookmarked(true); }
     } catch {}
   };
 
@@ -42,8 +60,9 @@ export default function PostCard({ post, onUpdate, current, hideContext }: { pos
   };
 
   const handleDelete = async () => {
-    if (!confirm("삭제하시겠습니까?")) return;
-    try { await api.deletePost(post.id); if (onUpdate) onUpdate(); } catch {}
+    const isAdminDeletingOther = currentUser?.is_admin && !post.is_mine;
+    if (!confirm(isAdminDeletingOther ? "관리자 권한으로 이 게시글을 삭제하시겠습니까?" : "삭제하시겠습니까?")) return;
+    try { await api.deletePost(post.id); if (onDelete) onDelete(); else if (onUpdate) onUpdate(); } catch {}
   };
 
   const timeStr = post.created_at ? new Date(post.created_at).toLocaleString("ko-KR", {
@@ -51,11 +70,60 @@ export default function PostCard({ post, onUpdate, current, hideContext }: { pos
     hour: "2-digit", minute: "2-digit", hour12: false,
   }).replace(/\. /g, "-").replace(/\.$/, "") : "";
 
-  const contentHtml = linkifyMentions(post.content);
+  const [quoteUrl, setQuoteUrl] = useState("");
+  const contentHtml = (() => {
+    let html = rewriteLinks(post.content);
+    if (quoteUrl) {
+      html = html.replace(new RegExp(`<a[^>]*>${quoteUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</a>`, 'gi'), '');
+      html = html.replace(/<span class="quote-inline">\s*RE:\s*<\/span>/gi, '');
+    }
+    return html;
+  })();
+
+  // Extract quoted post URL from content
+  const [quotedPost, setQuotedPost] = useState<PostData | null>(null);
+  const [loadingQuote, setLoadingQuote] = useState(false);
+  useEffect(() => {
+    const newFormat = post.content.match(/https?:\/\/([^/]+)\/@(\w+(?:@[\w.-]+)?)\/([a-f0-9]+)/);
+    const oldFormat = post.content.match(/https?:\/\/[^/]+\/post\/(\d+)/);
+    const anyUrl = post.content.match(/https?:\/\/[^\s<>"']+/);
+    const url = newFormat?.[0] || oldFormat?.[0] || anyUrl?.[0];
+    if (!url) return;
+    setQuoteUrl(url);
+    setLoadingQuote(true);
+    if (newFormat) {
+      const domain = newFormat[1];
+      const username = newFormat[2];
+      const number = newFormat[3];
+      const isLocal = domain === window.location.host;
+      if (isLocal) {
+        fetch(`/api/by-number/${username}/${number}`, { credentials: "include" })
+          .then(r => r.json()).then(d => { setQuotedPost(d); setLoadingQuote(false); })
+          .catch(() => setLoadingQuote(false));
+      } else {
+        const fullUrl = `https://${domain}/@${username}/${number}`;
+        const form = new FormData(); form.append("url", fullUrl);
+        fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form })
+          .then(r => r.json()).then(d => { setQuotedPost(d); setLoadingQuote(false); })
+          .catch(() => setLoadingQuote(false));
+      }
+    } else if (oldFormat) {
+      const postId = oldFormat[1];
+      fetch(`/api/posts/${postId}?reply_limit=0&reply_offset=0`, { credentials: "include" })
+        .then(r => r.json()).then(d => { setQuotedPost(d); setLoadingQuote(false); })
+        .catch(() => setLoadingQuote(false));
+    } else {
+      const form = new FormData(); form.append("url", anyUrl![0]);
+      fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form })
+        .then(r => { if (r.ok) return r.json(); throw new Error(); })
+        .then(d => { setQuotedPost(d); setLoadingQuote(false); })
+        .catch(() => setLoadingQuote(false));
+    }
+  }, [post.content]);
 
   return (
     <>
-      <div className={`post-card${current ? " current" : ""}${post.visibility === "mention" ? " mention-card" : ""}`} onClick={(e) => { if ((e.target as HTMLElement).closest('a')) return; router.push(post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`); }}>
+      <div className={`post-card${current ? " current" : ""}${selected ? " selected" : ""}${post.visibility === "mention" ? " mention-card" : ""}`} onClick={(e) => { if ((e.target as HTMLElement).closest('a')) return; router.push(post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`); }}>
         {post.boosted_by && (
           <div className="boost-badge">
             <Icon name="refresh" size={12} /> {post.boosted_by.display_name || post.boosted_by.username}님이 부스트
@@ -75,7 +143,11 @@ export default function PostCard({ post, onUpdate, current, hideContext }: { pos
             <span className={`vis-badge vis-${post.visibility}`}>
               <Icon name={VIS_ICONS[post.visibility] || "globe"} />
             </span>
-            {timeStr}
+            {post.ap_id && post.ap_id.startsWith("http") && post.author?.username?.includes("@") ? (
+              <a href={post.ap_id} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()} style={{ color: "inherit", textDecoration: "none" }}>{timeStr}</a>
+            ) : (
+              timeStr
+            )}
           </span>
         </div>
         {!hideContext && post.reply_context && (
@@ -94,6 +166,8 @@ export default function PostCard({ post, onUpdate, current, hideContext }: { pos
         ) : (
           <div className="post-content" dangerouslySetInnerHTML={{ __html: contentHtml }} />
         )}
+        {loadingQuote && <div className="empty-small" style={{ padding: "8px 0" }}>인용 불러오는 중...</div>}
+        {quotedPost && <div style={{ margin: "8px 0" }}><MiniPostCard post={quotedPost} /></div>}
         <div className="post-actions" onClick={(e) => e.stopPropagation()}>
           <button onClick={() => { setShowReply(!showReply); }} className="action-btn">
             <Icon name="reply" /> {post.replies_count}
@@ -108,8 +182,11 @@ export default function PostCard({ post, onUpdate, current, hideContext }: { pos
               <Icon name="refresh" /> {boostsCount}
             </button>
           </form>
+            <button onClick={(e) => { e.stopPropagation(); toggleBookmark(); }} className={`action-btn${bookmarked ? " bookmarked" : ""}`} style={{ color: bookmarked ? "#5b7db5" : undefined }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill={bookmarked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          </button>
           <div className="spacer" />
-          {post.is_mine && (
+          {(post.is_mine || currentUser?.is_admin) && (
             <>
               <button onClick={() => setShowEdit(true)} className="action-btn">
                 <Icon name="edit" />

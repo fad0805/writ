@@ -1,11 +1,10 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { api, NovelData } from "@/lib/api";
-import Icon from "@/components/Icon";
+import { api } from "@/lib/api";
 import TextareaHighlight from "@/components/TextareaHighlight";
 import TagInput from "@/components/TagInput";
-import Link from "next/link";
+import SeriesVisibilitySelector from "@/components/SeriesVisibilitySelector";
 
 export default function EditNovelPage() {
   const params = useParams();
@@ -79,18 +78,7 @@ export default function EditNovelPage() {
         </div>
         <div className="form-group">
           <label>공개 설정</label>
-          <div className="visibility-selector" style={{ fontSize: "0.82em" }}>
-            {[
-              { value: "public", label: "전체공개", icon: "globe" },
-              { value: "unlisted", label: "공개", icon: "eye" },
-              { value: "private", label: "비공개", icon: "lock" },
-            ].map((v) => (
-              <label key={v.value}>
-                <input type="radio" name="visibility" value={v.value} checked={visibility === v.value} onChange={() => setVisibility(v.value)} />
-                <Icon name={v.icon} /> {v.label}
-              </label>
-            ))}
-          </div>
+          <SeriesVisibilitySelector value={visibility} onChange={(v) => setVisibility(v)} />
           <p className="form-help">전체공개는 모든 시리즈 목록에 노출되고, 공개는 작가 프로필과 URL로만 접근할 수 있습니다.</p>
         </div>
         <div className="form-group" style={{ marginLeft: 4 }}>

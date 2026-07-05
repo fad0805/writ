@@ -2,22 +2,21 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { api, User } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import Icon from "./Icon";
 import TextareaHighlight from "./TextareaHighlight";
+import EmojiPicker from "./EmojiPicker";
+import VisibilitySelector from "./VisibilitySelector";
+import { useAuth } from "@/lib/auth";
 
 const MAX_LENGTH = 500;
 
-const VIS_OPTIONS = [
-  { value: "public", label: "공개", icon: "globe" },
-  { value: "home", label: "홈", icon: "home" },
-  { value: "followers", label: "팔로워", icon: "lock" },
-  { value: "mention", label: "멘션", icon: "mail" },
-];
-
-export default function PostForm({ parentId, onDone, placeholder, initialContent }: { parentId?: number; onDone?: () => void; placeholder?: string; initialContent?: string }) {
+export default function PostForm({ parentId, onDone, placeholder, initialContent, initialVisibility }: { parentId?: number; onDone?: () => void; placeholder?: string; initialContent?: string; initialVisibility?: string }) {
   const [content, setContent] = useState(initialContent || "");
   const [summary, setSummary] = useState("");
-  const [visibility, setVisibility] = useState("public");
+  const { user: authUser } = useAuth();
+  const [visibilityOverride, setVisibilityOverride] = useState<string | null>(
+    initialVisibility || null
+  );
+  const visibility = visibilityOverride ?? authUser?.default_visibility ?? "public";
   const [submitting, setSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -55,7 +54,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   }, []);
 
   useEffect(() => {
-    if (!mentionQuery) { setMentionUsers([]); return; }
+    if (!mentionQuery) return;
     const t = setTimeout(async () => {
       try {
         const res = await api.autocomplete(mentionQuery);
@@ -141,7 +140,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       setContent(""); setSummary("");
       if (onDone) onDone();
       else router.refresh();
-    } catch (err: any) { alert(err.message); }
+    } catch (err: unknown) { alert(err instanceof Error ? err.message : "오류가 발생했습니다"); }
     setSubmitting(false);
   };
 
@@ -193,15 +192,9 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { formRef.current?.requestSubmit(); } }}
       />
       <div className="reply-form-footer">
-        <div className="visibility-selector">
-          {VIS_OPTIONS.map((v) => (
-            <label key={v.value}>
-              <input type="radio" name="visibility" value={v.value} checked={visibility === v.value} onChange={() => setVisibility(v.value)} />
-              <Icon name={v.icon} /> {v.label}
-            </label>
-          ))}
-        </div>
+        <VisibilitySelector value={visibility} onChange={(v) => setVisibilityOverride(v)} includeMention />
         <div className="form-footer-right">
+          <EmojiPicker onEmoji={(e) => setContent(content + e)} />
           <span className="char-count char-count-inline">{totalLen}/{MAX_LENGTH}</span>
           <button type="submit" disabled={submitting || !content.trim()} className="btn btn-primary">
             {submitting ? "..." : parentId ? "답글" : "게시"}

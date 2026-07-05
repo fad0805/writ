@@ -4,6 +4,17 @@ import { PostData } from "@/lib/api";
 import Link from "next/link";
 import Icon from "./Icon";
 
+function rewriteLinks(text: string): string {
+  text = text.replace(
+    /<a\s+href="https?:\/\/([^"/]+)\/@(\w+)"[^>]*>@?\w*<\/a>/gi,
+    (_m: string, domain: string, user: string) =>
+      `<a href="/@${user}@${domain}" class="mention-link">@${user}@${domain}</a>`
+  );
+  return text.replace(/(^|>|\s)@(\w+(?:@[\w.-]+)?)/g, (_m, before, handle) => {
+    return `${before}<a href="/@${handle}" class="mention-link">@${handle}</a>`;
+  });
+}
+
 const LIGHT_BG: Record<string, string> = {
   boost: "rgba(104, 159, 56, 0.1)",
   like: "rgba(241, 196, 15, 0.12)",
@@ -31,6 +42,7 @@ export default function MiniPostCard({ post, notifType }: { post: PostData; noti
     ? (isDark ? DARK_BG[notifType] : LIGHT_BG[notifType]) || "var(--bg-tertiary)"
     : "var(--bg-tertiary)";
   const iconColor = notifType ? TYPE_COLORS[notifType] || "var(--text-muted)" : "var(--text-muted)";
+  const contentHtml = rewriteLinks(post.content);
   return (
     <Link
       href={post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`}
@@ -48,16 +60,15 @@ export default function MiniPostCard({ post, notifType }: { post: PostData; noti
         textDecoration: "none",
       }}
     >
-      <div
-        style={{
-          width: 28, height: 28, minWidth: 28, borderRadius: 6,
-          background: "var(--bg-secondary)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          color: iconColor, marginTop: 1,
-        }}
-      >
-        <Icon name={TYPE_ICONS[notifType || ""] || "bell"} size={14} />
-      </div>
+      {notifType ? (
+        <div style={{ width: 28, height: 28, minWidth: 28, borderRadius: 6, background: "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center", color: iconColor, marginTop: 1 }}>
+          <Icon name={TYPE_ICONS[notifType] || "bell"} size={14} />
+        </div>
+      ) : (
+        <div style={{ width: 28, height: 28, minWidth: 28, borderRadius: 6, background: `hsl(${post.author.username?.length * 37 % 360}, 35%, 40%)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: "bold", fontSize: "0.85em", marginTop: 1 }}>
+          {(post.author.display_name || post.author.username)[0]}
+        </div>
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, color: "var(--accent)", marginBottom: 2 }}>
           {post.author.display_name}
@@ -70,7 +81,7 @@ export default function MiniPostCard({ post, notifType }: { post: PostData; noti
             CW: {post.summary}
           </div>
         )}
-        <div style={{ wordBreak: "break-word", whiteSpace: "pre-wrap" }}>{post.content}</div>
+        <div style={{ wordBreak: "break-word" }} dangerouslySetInnerHTML={{ __html: contentHtml }} />
       </div>
     </Link>
   );

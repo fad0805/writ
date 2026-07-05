@@ -48,6 +48,9 @@ class User(Base):
     remote_url = Column(String(512), default="")
     shared_inbox_url = Column(String(512), default="")
     profile_image = Column(String(512), default="")
+    default_visibility = Column(String(16), default="public")
+    series_default_visibility = Column(String(16), default="public")
+    episode_default_visibility = Column(String(16), default="public")
 
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
@@ -286,6 +289,18 @@ class Episode(Base):
     announcement_post_id = Column(Integer, ForeignKey("posts.id"), nullable=True)
 
 
+class Bookmark(Base):
+    __tablename__ = "bookmarks"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    post_id = Column(Integer, ForeignKey("posts.id"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+    user = relationship("User", lazy="selectin")
+    post = relationship("Post", lazy="selectin")
+
+
 class Notification(Base):
     __tablename__ = "notifications"
 
@@ -349,6 +364,24 @@ def init_db():
     try:
         with Session(engine) as session:
             session.execute(text("ALTER TABLE novels ADD COLUMN number VARCHAR(16) DEFAULT ''"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE users ADD COLUMN default_visibility VARCHAR(16) DEFAULT 'public'"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE users ADD COLUMN series_default_visibility VARCHAR(16) DEFAULT 'public'"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE users ADD COLUMN episode_default_visibility VARCHAR(16) DEFAULT 'public'"))
             session.commit()
     except Exception:
         pass

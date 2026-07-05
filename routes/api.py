@@ -6,7 +6,7 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from models import User, Post, Follow, Like, Boost, Notification, Novel, Episode, Tag, get_session
+from models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, Tag, get_session
 from routes.auth import require_auth, get_current_user
 from activitypub import broadcast_to_followers, _post_to_inbox
 from config import BASE_URL, MAX_POST_LENGTH
@@ -20,6 +20,7 @@ router = APIRouter(prefix="/api")
 def _post_json(p, session, user):
     liked = session.query(Like).filter_by(user_id=user.id, post_id=p.id).first() is not None if user else False
     boosted = session.query(Boost).filter_by(user_id=user.id, post_id=p.id).first() is not None if user else False
+    bookmarked = session.query(Bookmark).filter_by(user_id=user.id, post_id=p.id).first() is not None if user else False
     latest_boost = session.query(Boost).filter_by(post_id=p.id).order_by(desc(Boost.created_at)).first()
     booster = session.query(User).get(latest_boost.user_id) if latest_boost else None
     return {
@@ -35,7 +36,9 @@ def _post_json(p, session, user):
         "replies_count": p.replies_count,
         "liked": liked,
         "boosted": boosted,
+        "bookmarked": bookmarked,
         "is_mine": p.author_id == user.id if user else False,
+        "ap_id": p.ap_id or "",
         "reply_context": _reply_context(p),
         "boosted_by": _user_json(booster) if booster and booster.id != p.author_id else None,
     }
@@ -49,6 +52,9 @@ def _user_json(u):
         "avatar": u.profile_image or "",
         "summary": u.summary or "",
         "is_admin": u.is_admin,
+        "default_visibility": u.default_visibility or "public",
+        "series_default_visibility": u.series_default_visibility or "public",
+        "episode_default_visibility": u.episode_default_visibility or "public",
     }
 
 
@@ -76,6 +82,10 @@ def _can_view(post, viewer, session):
     if not viewer:
         return False
     if v == "followers":
+        if post.mentioned_user_ids and viewer.id in post.mentioned_user_ids:
+            return True
+        if viewer.username and f"@{viewer.username}" in (post.content or ""):
+            return True
         return session.query(Follow).filter_by(
             follower_id=viewer.id, following_id=post.author_id, accepted=True
         ).first() is not None
@@ -303,6 +313,15 @@ def api_create_post(
     if visibility not in ("public", "home", "followers", "mention"):
         visibility = "public"
 
+    if parent_id:
+        vis_order = {"public": 0, "home": 1, "followers": 2, "mention": 3}
+        with get_session() as _s:
+            parent_post = _s.query(Post).filter_by(id=parent_id).first()
+            if parent_post:
+                parent_vis = parent_post.visibility or "public"
+                if vis_order.get(parent_vis, 0) > vis_order.get(visibility, 0):
+                    visibility = parent_vis
+
     mentioned_ids = _parse_mentions(content)
     if dm_target_id and dm_target_id not in mentioned_ids:
         mentioned_ids.append(dm_target_id)
@@ -387,9 +406,11 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
 def api_delete_post(request: Request, post_id: int):
     user = require_auth(request)
     with get_session() as s:
-        post = s.query(Post).filter_by(id=post_id, author_id=user.id).first()
+        post = s.query(Post).filter_by(id=post_id).first()
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
+        if post.author_id != user.id and not user.is_admin:
+            raise HTTPException(status_code=403, detail="Cannot delete this post")
         post.is_deleted = True
         s.commit()
     return {"ok": True}
@@ -421,6 +442,9 @@ def api_unlike_post(request: Request, post_id: int):
         existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
         if existing:
             s.delete(existing)
+            s.query(Notification).filter_by(
+                from_user_id=user.id, notification_type="like", post_id=post_id
+            ).delete()
             s.commit()
     return {"ok": True}
 
@@ -448,6 +472,39 @@ def api_boost_post(request: Request, post_id: int):
     return {"ok": True}
 
 
+@router.post("/posts/{post_id}/bookmark")
+def api_bookmark_post(request: Request, post_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        existing = s.query(Bookmark).filter_by(user_id=user.id, post_id=post_id).first()
+        if not existing:
+            s.add(Bookmark(user_id=user.id, post_id=post_id))
+            s.commit()
+    return {"ok": True}
+
+
+@router.post("/posts/{post_id}/unbookmark")
+def api_unbookmark_post(request: Request, post_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        existing = s.query(Bookmark).filter_by(user_id=user.id, post_id=post_id).first()
+        if existing:
+            s.delete(existing)
+            s.commit()
+    return {"ok": True}
+
+
+@router.get("/bookmarks")
+def api_bookmarks(request: Request):
+    user = require_auth(request)
+    with get_session() as s:
+        bookmarks = s.query(Bookmark).filter_by(user_id=user.id).order_by(desc(Bookmark.created_at)).limit(50).all()
+        return {"posts": [_post_json(b.post, s, user) for b in bookmarks if b.post and not b.post.is_deleted]}
+
+
 @router.post("/posts/{post_id}/unboost")
 def api_unboost_post(request: Request, post_id: int):
     user = require_auth(request)
@@ -458,6 +515,9 @@ def api_unboost_post(request: Request, post_id: int):
         existing = s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
         if existing:
             s.delete(existing)
+            s.query(Notification).filter_by(
+                from_user_id=user.id, notification_type="boost", post_id=post_id
+            ).delete()
             remaining = s.query(Boost).filter_by(post_id=post_id).count()
             if remaining == 0:
                 post.bumped_at = None
@@ -472,7 +532,7 @@ def api_get_profile(request: Request, username: str):
     user = get_current_user(request)
     with get_session() as s:
         profile = s.query(User).filter_by(username=username).first()
-        if not profile and "@" in username:
+        if "@" in username:
             parts = username.split("@")
             if len(parts) == 2:
                 remote_user, remote_domain = parts
@@ -992,6 +1052,28 @@ def _cleanup_avatars():
             os.remove(fpath)
 
 
+@router.post("/settings/update")
+def api_update_settings(request: Request, default_visibility: str = Form("public"),
+                        series_default_visibility: str = Form("public"),
+                        episode_default_visibility: str = Form("public")):
+    user = require_auth(request)
+    valid_post = ("public", "home", "followers", "mention")
+    valid_series = ("public", "unlisted", "private")
+    if default_visibility not in valid_post:
+        default_visibility = "public"
+    if series_default_visibility not in valid_series:
+        series_default_visibility = "public"
+    if episode_default_visibility not in valid_post:
+        episode_default_visibility = "public"
+    with get_session() as s:
+        db = s.query(User).filter_by(id=user.id).first()
+        db.default_visibility = default_visibility
+        db.series_default_visibility = series_default_visibility
+        db.episode_default_visibility = episode_default_visibility
+        s.commit()
+    return {"ok": True}
+
+
 @router.post("/profile/update")
 def api_update_profile(request: Request, display_name: str = Form(""), summary: str = Form(""),
                        image: UploadFile = File(None)):
@@ -1193,7 +1275,13 @@ def _fetch_and_save_ap_object(obj, user):
 
     with get_session() as s:
         existing = s.query(Post).filter_by(ap_id=ap_id).first()
-        if existing:
+        if existing and not existing.is_deleted:
+            return _post_json(existing, s, user)
+        if existing and existing.is_deleted:
+            existing.is_deleted = False
+            existing.content = content
+            existing.summary = summary
+            s.commit()
             return _post_json(existing, s, user)
 
         import re
@@ -1274,6 +1362,33 @@ def api_unread_count(request: Request):
     with get_session() as s:
         count = s.query(Notification).filter_by(user_id=user.id, is_read=False).count()
     return {"count": count}
+
+
+@router.post("/fetch-actor")
+def api_fetch_actor(request: Request, url: str = Form(...)):
+    user = require_auth(request)
+    if not url.startswith("http"):
+        raise HTTPException(status_code=400, detail="Invalid URL")
+    from activitypub import _resolve_actor
+    _resolve_actor(url)
+    actor_id = None
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    path = parsed.path.rstrip("/")
+    username_from_url = path.split("/@")[-1] if "/@" in path else path.split("/")[-1]
+    if username_from_url:
+        remote_username = f"{username_from_url}@{parsed.netloc}"
+        with get_session() as s:
+            u = s.query(User).filter_by(username=remote_username).first()
+            if u:
+                actor_id = u.id
+    if not actor_id:
+        raise HTTPException(status_code=400, detail="Cannot resolve actor")
+    with get_session() as s:
+        u = s.query(User).get(actor_id)
+        if u:
+            return _user_json(u)
+    raise HTTPException(status_code=400, detail="Cannot resolve actor")
 
 
 @router.post("/fetch-post")

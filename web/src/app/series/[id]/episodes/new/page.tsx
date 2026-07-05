@@ -2,7 +2,8 @@
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import Icon from "@/components/Icon";
+import VisibilitySelector from "@/components/VisibilitySelector";
+import EpisodeEditor from "@/components/EpisodeEditor";
 import Link from "next/link";
 
 export default function NewEpisodePage() {
@@ -25,7 +26,8 @@ export default function NewEpisodePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !content.trim() || submitting) return;
+    const cleanContent = content.replace(/<[^>]*>/g, "").trim();
+    if (!title.trim() || !cleanContent || submitting) return;
     setSubmitting(true);
     try {
       const form = new FormData();
@@ -44,7 +46,7 @@ export default function NewEpisodePage() {
 
   return (
     <>
-      <h2>{novelTitle || "로딩 중..."}</h2>
+      <h2><Link href={`/series/${params.id}`} style={{ color: "inherit", textDecoration: "none" }}>{novelTitle || "로딩 중..."}</Link></h2>
       <form onSubmit={handleSubmit} className="episode-form">
         <div className="form-group">
           <label>에피소드 제목</label>
@@ -56,7 +58,7 @@ export default function NewEpisodePage() {
         </div>
         <div className="form-group">
           <label>내용 *</label>
-          <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={20} required placeholder="시리즈 내용을 입력하세요..." />
+          <EpisodeEditor value={content} onChange={(v) => setContent(v)} />
         </div>
         <div className="form-group announce-group">
           <label>
@@ -64,19 +66,7 @@ export default function NewEpisodePage() {
             {" "}SNS에 홍보글 게시 (ActivityPub으로 연동됨)
           </label>
           {announce && (
-            <div className="visibility-selector announce-vis">
-              {[
-                { value: "public", label: "공개", icon: "globe" },
-                { value: "home", label: "홈", icon: "home" },
-                { value: "followers", label: "팔로워", icon: "lock" },
-                { value: "mention", label: "멘션", icon: "mail" },
-              ].map((v) => (
-                <label key={v.value}>
-                  <input type="radio" name="visibility" value={v.value} checked={visibility === v.value} onChange={() => setVisibility(v.value)} />
-                  <Icon name={v.icon} /> {v.label}
-                </label>
-              ))}
-            </div>
+            <VisibilitySelector value={visibility} onChange={(v) => setVisibility(v)} />
           )}
         </div>
         <div className="form-actions">

@@ -35,11 +35,13 @@ export interface User {
   avatar: string;
   summary: string;
   is_admin: boolean;
+  default_visibility?: string;
 }
 
 export interface PostData {
   id: number;
   number: string;
+  ap_id: string;
   content: string;
   summary: string;
   visibility: string;
@@ -50,6 +52,7 @@ export interface PostData {
   replies_count: number;
   liked: boolean;
   boosted: boolean;
+  bookmarked: boolean;
   is_mine: boolean;
   reply_context: ReplyContext | null;
   replies?: PostData[];
@@ -136,6 +139,9 @@ export const api = {
   unlike: (id: number) => request<{ ok: boolean }>(`/api/posts/${id}/unlike`, { method: "POST" }),
   boost: (id: number) => request<{ ok: boolean }>(`/api/posts/${id}/boost`, { method: "POST" }),
   unboost: (id: number) => request<{ ok: boolean }>(`/api/posts/${id}/unboost`, { method: "POST" }),
+  bookmark: (id: number) => request<{ ok: boolean }>(`/api/posts/${id}/bookmark`, { method: "POST" }),
+  unbookmark: (id: number) => request<{ ok: boolean }>(`/api/posts/${id}/unbookmark`, { method: "POST" }),
+  getBookmarks: () => request<{ posts: PostData[] }>("/api/bookmarks"),
 
   // Users
   getProfile: (username: string) =>

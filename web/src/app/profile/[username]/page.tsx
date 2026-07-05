@@ -1,6 +1,6 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { api, User, PostData, NovelData } from "@/lib/api";
 import PostCard from "@/components/PostCard";
 import Icon from "@/components/Icon";
@@ -26,7 +26,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("posts");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const d = await api.getProfile(username);
@@ -36,9 +36,19 @@ export default function ProfilePage() {
       setIsFollowing(d.is_following); setIsMine(d.is_mine);
     } catch {}
     setLoading(false);
-  };
+  }, [username]);
 
-  useEffect(() => { load(); }, [username]);
+  useEffect(() => {
+    api.getProfile(username)
+      .then((d) => {
+        setProfile(d.profile); setPosts(d.posts); setNovels(d.novels);
+        setFollowers(d.followers); setFollowing(d.following);
+        setFollowersCount(d.followers_count); setFollowingCount(d.following_count);
+        setIsFollowing(d.is_following); setIsMine(d.is_mine);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [username, router]);
 
   if (loading) return <div className="empty-state">로딩 중...</div>;
   if (!profile) return <div className="empty-state">사용자를 찾을 수 없습니다.</div>;
@@ -72,7 +82,7 @@ export default function ProfilePage() {
                   .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
                   .replace(/\n/g, '<br>')
                   .replace(/<a\s+href="https?:\/\/([^/]+)\/@(\w+)"[^>]*>([^<]*)<\/a>/gi,
-                    (_m: string, domain: string, user: string, text: string) =>
+                    (_m: string, domain: string, user: string) =>
                       `<a href="/@${user}@${domain}" class="mention-link">@${user}@${domain}</a>`
                   )
               }} />

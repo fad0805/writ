@@ -1,24 +1,27 @@
 "use client";
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 
-type EventHandler = (data: any) => void;
+type EventHandler = (data: unknown) => void;
 
 export function useStream(handlers: Record<string, EventHandler>) {
   const handlersRef = useRef(handlers);
-  handlersRef.current = handlers;
+
+  useEffect(() => {
+    handlersRef.current = handlers;
+  });
+
+  const eventKeys = Object.keys(handlers).sort().join(",");
 
   useEffect(() => {
     const es = new EventSource("/api/stream");
-    const registered: string[] = [];
 
-    for (const event of Object.keys(handlers)) {
+    for (const event of Object.keys(handlersRef.current)) {
       es.addEventListener(event, (e: MessageEvent) => {
         try {
           const data = JSON.parse(e.data);
           handlersRef.current[event]?.(data);
         } catch {}
       });
-      registered.push(event);
     }
 
     es.onerror = () => {
@@ -28,5 +31,5 @@ export function useStream(handlers: Record<string, EventHandler>) {
     return () => {
       es.close();
     };
-  }, []);
+  }, [eventKeys]);
 }

@@ -1,8 +1,9 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
-import { useState, useEffect, useRef } from "react";
-import { api, PostData, User } from "@/lib/api";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { PostData, User } from "@/lib/api";
 import PostCard from "@/components/PostCard";
+import EmojiPicker from "@/components/EmojiPicker";
 
 export default function DirectConversationPage() {
   const params = useParams();
@@ -15,7 +16,7 @@ export default function DirectConversationPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const loadIdRef = useRef(0);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const id = ++loadIdRef.current;
     try {
       const res = await fetch(`/api/direct/conversation/${params.id}`, { credentials: "include" });
@@ -26,9 +27,9 @@ export default function DirectConversationPage() {
       setLoading(false);
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch { if (id === loadIdRef.current) setLoading(false); }
-  };
+  }, [params.id]);
 
-  useEffect(() => { load(); }, [params.id]);
+  useEffect(() => { load(); }, [load]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,11 +72,14 @@ export default function DirectConversationPage() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={otherUser ? `@${otherUser.username}에게 메시지 보내기` : ""}
+          placeholder={otherUser ? `${otherUser.display_name}에게 메시지 보내기` : ""}
           style={{ flex: 1, padding: "10px 14px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--input-bg)", color: "var(--text-primary)", fontFamily: "inherit", fontSize: "0.95em", outline: "none" }}
           onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { (e.target as HTMLElement).closest('form')?.requestSubmit(); } }}
           autoFocus
         />
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <EmojiPicker onEmoji={(e) => setInput(input + e)} dropUp />
+        </div>
         <button type="submit" disabled={sending || !input.trim()} className="btn btn-primary">전송</button>
       </form>
     </div>

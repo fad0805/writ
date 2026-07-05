@@ -72,7 +72,7 @@ export default function Sidebar() {
     return (
       <aside className="sidebar">
         <div className="sidebar-header">
-          <Link href="/timeline/home" className="sidebar-home-link"><h2><span style={{ display: "inline-block", width: 28, height: 28, backgroundColor: "var(--accent)", mask: "url(/logo.svg) center/contain no-repeat", WebkitMask: "url(/logo.svg) center/contain no-repeat", verticalAlign: "middle" }} />WRIT</h2></Link>
+          <Link href="/" className="sidebar-home-link"><h2><span style={{ display: "inline-block", width: 28, height: 28, backgroundColor: "var(--accent)", mask: "url(/logo.svg) center/contain no-repeat", WebkitMask: "url(/logo.svg) center/contain no-repeat", verticalAlign: "middle", flexShrink: 0 }} /> WRIT</h2></Link>
         </div>
       </aside>
     );
@@ -82,7 +82,7 @@ export default function Sidebar() {
     return (
       <aside className="sidebar">
         <div className="sidebar-header">
-          <Link href="/timeline/home" className="sidebar-home-link"><h2><span style={{ display: "inline-block", width: 28, height: 28, backgroundColor: "var(--accent)", mask: "url(/logo.svg) center/contain no-repeat", WebkitMask: "url(/logo.svg) center/contain no-repeat", verticalAlign: "middle" }} />WRIT</h2></Link>
+          <Link href="/" className="sidebar-home-link"><h2><span style={{ display: "inline-block", width: 28, height: 28, backgroundColor: "var(--accent)", mask: "url(/logo.svg) center/contain no-repeat", WebkitMask: "url(/logo.svg) center/contain no-repeat", verticalAlign: "middle", flexShrink: 0 }} /> WRIT</h2></Link>
         </div>
         <ul className="nav-links">
           <NavItem href="/explore" active={isActive("/explore")}>
@@ -108,22 +108,43 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <Link href="/timeline/home" className="sidebar-home-link">
-          <h2><span style={{ display: "inline-block", width: 28, height: 28, backgroundColor: "var(--accent)", mask: "url(/logo.svg) center/contain no-repeat", WebkitMask: "url(/logo.svg) center/contain no-repeat", verticalAlign: "middle" }} />WRIT</h2>
+        <Link href="/" className="sidebar-home-link">
+          <h2><span style={{ display: "inline-block", width: 28, height: 28, backgroundColor: "var(--accent)", mask: "url(/logo.svg) center/contain no-repeat", WebkitMask: "url(/logo.svg) center/contain no-repeat", verticalAlign: "middle", flexShrink: 0 }} /> WRIT</h2>
         </Link>
       </div>
       <form className="sidebar-search" onSubmit={async (e) => {
         e.preventDefault();
         const q = (e.target as HTMLFormElement).q.value.trim();
         if (!q) return;
-        router.push(q.startsWith("http") ? `/explore?url=${encodeURIComponent(q)}` : `/explore?q=${encodeURIComponent(q)}`);
-      }} style={{ position: "relative" }}>
-        <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", zIndex: 1, color: "var(--text-muted)", display: "flex", alignItems: "center", cursor: "pointer" }} onClick={(ev) => { const f = (ev.target as HTMLElement).closest('form'); if (f) f.requestSubmit(); }}>
+        if (q.startsWith("http")) {
+          const segments = q.replace(/\/$/, "").split("/");
+          const lastSegment = segments[segments.length - 1];
+          const hasPostId = /^\d+$/.test(lastSegment);
+          if (q.includes("/@") && !hasPostId) {
+            try {
+              const form = new FormData(); form.append("url", q);
+              const res = await fetch("/api/fetch-actor", { method: "POST", credentials: "include", body: form });
+              if (res.ok) { const d = await res.json(); router.push(`/@${d.username}`); }
+              else { alert("사용자를 찾을 수 없습니다"); }
+            } catch { alert("사용자를 찾을 수 없습니다"); }
+          } else {
+            try {
+              const form = new FormData(); form.append("url", q);
+              const res = await fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form });
+              if (res.ok) { const d = await res.json(); router.push(d.number ? `/@${d.author.username}/${d.number}` : `/post/${d.id}`); }
+              else { alert("불러오기 실패"); }
+            } catch { alert("불러오기 실패"); }
+          }
+        } else {
+          router.push(q.startsWith("http") ? `/explore?url=${encodeURIComponent(q)}` : `/explore?q=${encodeURIComponent(q)}`);
+        }
+      }}>
+        <span className="sidebar-search-icon" onClick={(ev) => { const f = (ev.target as HTMLElement).closest('form'); if (f) f.requestSubmit(); }}>
           <Icon name="search" size={14} />
         </span>
-        <input type="text" name="q" placeholder="검색..." className="sidebar-search-input" style={{ paddingLeft: 30, paddingRight: 30 }} value={sidebarQ} onChange={e => setSidebarQ(e.target.value)} />
+        <input type="text" name="q" placeholder="검색..." className="sidebar-search-input padded" value={sidebarQ} onChange={e => setSidebarQ(e.target.value)} />
         {sidebarQ && (
-          <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", zIndex: 1, color: "var(--text-muted)", display: "flex", alignItems: "center", cursor: "pointer", opacity: 0.6 }} onClick={() => setSidebarQ("")}>
+          <span className="sidebar-search-clear" onClick={() => setSidebarQ("")}>
             <Icon name="x" size={14} />
           </span>
         )}

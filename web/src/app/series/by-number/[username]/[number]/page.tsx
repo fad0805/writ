@@ -27,14 +27,6 @@ export default function NovelByNumberPage() {
       }).catch(() => setLoading(false));
   }, [params.username, params.number]);
 
-  const handleDelete = async () => {
-    if (!confirm("정말 삭제하시겠습니까?")) return;
-    try {
-      const res = await fetch(`/api/novels/${novel?.id}/delete`, { method: "POST", credentials: "include" });
-      if (res.ok) router.push("/series/my");
-    } catch {}
-  };
-
   if (loading) return <p className="empty-state">로딩 중...</p>;
   if (!novel) return <p className="empty-state">시리즈를 찾을 수 없습니다.</p>;
 

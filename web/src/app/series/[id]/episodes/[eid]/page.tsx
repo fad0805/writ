@@ -43,58 +43,40 @@ export default function EpisodeDetailPage() {
 
   return (
     <>
-      <div className="episode-navigation">
-        {prevEp && (
-          <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${prevEp.id}`)}>
-            ← 제{prevEp.episode_number}화 ({prevEp.title})
-          </button>
-        )}
-        <Link href={`/series/${novel.id}`} className="btn btn-outline">목차</Link>
-        {nextEp && (
-          <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${nextEp.id}`)}>
-            제{nextEp.episode_number}화 ({nextEp.title}) →
-          </button>
-        )}
-      </div>
-
       <article className="episode-content">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div className="episode-header-row">
           <h2>제 {episode.episode_number}화: {episode.title}</h2>
           {isMine && (
-            <div style={{ display: "flex", gap: 6 }}>
+            <div className="episode-header-btns">
+              <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>
               <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/${episode.id}/edit`)}>편집</button>
               <button className="btn btn-small btn-danger" onClick={handleDelete}>삭제</button>
             </div>
           )}
         </div>
-        <div className="episode-meta" style={{ marginBottom: 20 }}>
+        <div className="episode-meta episode-meta-bottom">
           <span><Icon name="eye" /> {episode.views}</span>
           <span>{episode.created_at ? new Date(episode.created_at).toLocaleString("ko-KR") : ""}</span>
           <span><Icon name={episode.is_published ? "check" : "lock"} /> {episode.is_published ? "공개" : "비공개"}</span>
         </div>
         {episode.summary && <blockquote className="episode-summary">{episode.summary}</blockquote>}
-        <div className="episode-body">{episode.content}</div>
-        {isMine && (
-          <div className="author-actions" style={{ marginBottom: 0, marginTop: 20 }}>
-            <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/${episode.id}/edit`)}>편집</button>
-            <button className="btn btn-small btn-danger" onClick={handleDelete}>삭제</button>
-          </div>
-        )}
+        <div className="episode-body" dangerouslySetInnerHTML={{ __html: episode.content }} />
+        <div className="episode-footer">
+        <div className="episode-navigation" style={{ margin: 0 }}>
+          {prevEp && (
+            <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${prevEp.id}`)}>
+              ← 제{prevEp.episode_number}화 ({prevEp.title})
+            </button>
+          )}
+          <Link href={`/series/${novel.id}`} className="btn btn-outline">목차</Link>
+          {nextEp && (
+            <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${nextEp.id}`)}>
+              제{nextEp.episode_number}화 ({nextEp.title}) →
+            </button>
+          )}
+        </div>
+        </div>
       </article>
-
-      <div className="episode-navigation">
-        {prevEp && (
-          <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${prevEp.id}`)}>
-            ← 제{prevEp.episode_number}화 ({prevEp.title})
-          </button>
-        )}
-        <Link href={`/series/${novel.id}`} className="btn btn-outline">목차</Link>
-        {nextEp && (
-          <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${nextEp.id}`)}>
-            제{nextEp.episode_number}화 ({nextEp.title}) →
-          </button>
-        )}
-      </div>
     </>
   );
 }

@@ -15,7 +15,7 @@ export default function RightSidebar() {
   useEffect(() => {
     if (!user) return;
     api.getMyNovels().then((d) => setNovels(d.novels)).catch(() => {});
-    api.getNotifications().then((d) => setNotifs(d.notifications.slice(0, 5))).catch(() => {});
+    api.getNotifications().then((d) => setNotifs(d.notifications.slice(0, 10))).catch(() => {});
   }, [user, refreshKey]);
 
   useEffect(() => {
@@ -30,9 +30,6 @@ export default function RightSidebar() {
 
   const visibleNovels = novels.slice(0, 3);
   const extraCount = novels.length - 3;
-  const hasNovels = novels.length > 0;
-  const showButtonInline = !hasNovels;
-
   return (
     <aside className="right-sidebar">
       <div className="widget">
@@ -60,9 +57,11 @@ export default function RightSidebar() {
       </div>
       <div className="widget">
         <h4><Icon name="bell" /> 알림</h4>
-        {notifs.length > 0 ? notifs.map((n) => (
-          n.post ? <MiniPostCard key={n.id} post={n.post} notifType={n.type} /> : null
-        )) : <p className="empty-small" style={{ padding: 0 }}>알림이 없습니다.</p>}
+        <div className="notif-mini-list">
+          {notifs.length > 0 ? notifs.map((n) => (
+            n.post ? <MiniPostCard key={n.id} post={n.post} notifType={n.type} /> : null
+          )) : <p className="empty-small" style={{ padding: 0 }}>알림이 없습니다.</p>}
+        </div>
       </div>
     </aside>
   );

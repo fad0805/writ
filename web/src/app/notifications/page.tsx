@@ -1,10 +1,15 @@
 "use client";
 import { useEffect, useState } from "react";
-import { api, NotificationData } from "@/lib/api";
+import { api, NotificationData, User } from "@/lib/api";
 import Link from "next/link";
 import PostCard from "@/components/PostCard";
 import Icon from "@/components/Icon";
 import DirectUserCard from "@/components/DirectUserCard";
+
+type DirectUserData = User & {
+  latest_previews?: { text: string; is_me: boolean }[];
+  latest_time?: string;
+};
 
 const FILTERS = [
   { value: "", label: "전체", icon: "bell" },
@@ -26,33 +31,37 @@ const NOTIF_ICONS: Record<string, string> = {
 
 export default function NotificationsPage() {
   const [notifs, setNotifs] = useState<NotificationData[]>([]);
-  const [directGroups, setDirectGroups] = useState<any[]>([]);
-  const getInitialFilter = () => {
-    if (typeof window === "undefined") return "";
-    try { return sessionStorage.getItem("notif_filter") || ""; } catch { return ""; }
-  };
-  const [filter, setFilter] = useState(getInitialFilter());
-  useEffect(() => { try { sessionStorage.removeItem("notif_filter"); } catch {} }, []);
-  const [loading, setLoading] = useState(true);
-
-  const load = async () => {
-    setLoading(true);
+  const [directGroups, setDirectGroups] = useState<DirectUserData[]>([]);
+  const [filter, setFilter] = useState(() => {
     try {
-      if (filter === "direct") {
-        const res = await fetch("/api/notifications/direct-threads", { credentials: "include" });
-        const data = await res.json();
-        setDirectGroups(data.users || []);
-        setNotifs([]);
-      } else {
-        const data = await api.getNotifications(filter || undefined);
-        setNotifs(data.notifications);
-        setDirectGroups([]);
+      const saved = sessionStorage.getItem("notif_filter");
+      if (saved) {
+        sessionStorage.removeItem("notif_filter");
+        return saved;
       }
     } catch {}
-    setLoading(false);
-  };
+    return "";
+  });
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => { load(); }, [filter]);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        if (filter === "direct") {
+          const res = await fetch("/api/notifications/direct-threads", { credentials: "include" });
+          const data = await res.json();
+          setDirectGroups(data.users || []);
+          setNotifs([]);
+        } else {
+          const data = await api.getNotifications(filter || undefined);
+          setNotifs(data.notifications);
+          setDirectGroups([]);
+        }
+      } catch {}
+      setLoading(false);
+    };
+    load();
+  }, [filter]);
   useEffect(() => { window.dispatchEvent(new Event("notificationsread")); }, []);
 
   const typeText = (t: string) => {
@@ -73,7 +82,16 @@ export default function NotificationsPage() {
   const handleMarkAllRead = async () => {
     try {
       await api.getNotifications(filter || undefined);
-      load();
+      if (filter === "direct") {
+        const res = await fetch("/api/notifications/direct-threads", { credentials: "include" });
+        const data = await res.json();
+        setDirectGroups(data.users || []);
+        setNotifs([]);
+      } else {
+        const data = await api.getNotifications(filter || undefined);
+        setNotifs(data.notifications);
+        setDirectGroups([]);
+      }
     } catch {}
   };
 
@@ -103,7 +121,7 @@ export default function NotificationsPage() {
       ) : filter === "direct" ? (
         directGroups.length === 0 ? (
           <p className="empty-state">다이렉트 메시지가 없습니다.</p>
-        ) : directGroups.map((u: any) => (
+        ) : directGroups.map((u) => (
           <DirectUserCard key={u.id} user={u} />
         ))
       ) : notifs.length === 0 ? (

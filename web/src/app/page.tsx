@@ -1,2 +1,38 @@
-import { redirect } from "next/navigation";
-export default function Home() { redirect("/timeline/home"); }
+"use client";
+import { useAuth } from "@/lib/auth";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Icon from "@/components/Icon";
+
+export default function Home() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && user) router.replace("/timeline/home");
+  }, [user, loading, router]);
+
+  if (loading) return <div className="empty-state">로딩 중...</div>;
+  if (user) return null;
+
+  return (
+    <div className="home-container">
+      <div className="home-logo"><img src="/logo.svg" alt="WRIT" /></div>
+      <h1 className="home-title">WRIT</h1>
+      <p className="home-desc">
+        작가를 위한 소셜 네트워크입니다.<br />
+        소설을 연재하고, 독자와 소통하고, 글을 나누세요.
+      </p>
+      <div className="home-buttons">
+        <a href="/login" className="btn btn-primary">로그인</a>
+        <a href="/register" className="btn btn-outline">가입</a>
+      </div>
+      <div className="home-features">
+        <div><Icon name="globe" size={24} /><br />연합 타임라인</div>
+        <div><Icon name="book" size={24} /><br />시리즈 연재</div>
+        <div><Icon name="mention" size={24} /><br />다이렉트 메시지</div>
+        <div><Icon name="star" size={24} /><br />즐겨찾기</div>
+      </div>
+    </div>
+  );
+}

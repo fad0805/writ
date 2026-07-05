@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useCallback, useEffect, useState } from "react";
+import { useRef, useCallback, useEffect } from "react";
 
 export default function TextareaHighlight({
   value, onChange, placeholder, maxLength, cwLength, textareaRef: externalRef, ...props

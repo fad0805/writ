@@ -2,7 +2,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { api, User } from "@/lib/api";
-import Icon from "@/components/Icon";
 import { avatarColor } from "@/lib/avatar";
 import TextareaHighlight from "@/components/TextareaHighlight";
 import ImageCropper from "@/components/ImageCropper";

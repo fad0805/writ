@@ -1,10 +1,9 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { api, PostData, NovelData, User } from "@/lib/api";
 import PostCard from "@/components/PostCard";
 import Icon from "@/components/Icon";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { hashColor } from "@/lib/avatar";
 import Avatar from "@/components/Avatar";
 
@@ -13,19 +12,17 @@ export default function ExplorePage() {
   const [novels, setNovels] = useState<NovelData[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [query, setQuery] = useState("");
   const [inputValue, setInputValue] = useState("");
   const [searched, setSearched] = useState(false);
   const [fetchedUrl, setFetchedUrl] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const router = useRouter();
 
-  const loadExplore = () => {
+  const loadExplore = useCallback(() => {
     setLoading(true); setSearched(false); setFetchedUrl(null);
     api.explore().then((d) => { setPosts(d.posts); setNovels([]); setUsers([]); setLoading(false); }).catch(() => setLoading(false));
-  };
+  }, []);
 
-  const doSearch = async (q: string) => {
+  const doSearch = useCallback(async (q: string) => {
     if (!q.trim()) { loadExplore(); return; }
     setLoading(true); setSearched(true); setFetchedUrl(null);
     try {
@@ -35,9 +32,9 @@ export default function ExplorePage() {
       setUsers(res.users);
     } catch { setPosts([]); setNovels([]); setUsers([]); }
     setLoading(false);
-  };
+  }, [loadExplore]);
 
-  const handleUrlFetch = async (url: string) => {
+  const handleUrlFetch = useCallback(async (url: string) => {
     setLoading(true); setSearched(true); setFetchedUrl(null);
     try {
       const form = new FormData();
@@ -50,9 +47,9 @@ export default function ExplorePage() {
         setUsers([]);
         setFetchedUrl(url);
       } else { const text = await res.text().catch(() => ""); alert("불러오기 실패: " + text.slice(0, 100)); setPosts([]); setNovels([]); setUsers([]); }
-    } catch (e: any) { alert("불러오기 실패: " + (e.message || "")); setPosts([]); setNovels([]); setUsers([]); }
+    } catch (e: unknown) { alert("불러오기 실패: " + ((e instanceof Error ? e.message : "") || "")); setPosts([]); setNovels([]); setUsers([]); }
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -60,21 +57,18 @@ export default function ExplorePage() {
     const qParam = params.get("q");
     if (urlParam) {
       setInputValue(urlParam);
-      setQuery(urlParam);
       handleUrlFetch(urlParam);
     } else if (qParam) {
       setInputValue(qParam);
-      setQuery(qParam);
       doSearch(qParam);
     } else {
       loadExplore();
     }
-  }, []);
+  }, [loadExplore, doSearch, handleUrlFetch]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const q = inputRef.current?.value.trim() || "";
-    setQuery(q);
     if (!q) { loadExplore(); return; }
     if (q.startsWith("http")) {
       handleUrlFetch(q);
@@ -92,7 +86,7 @@ export default function ExplorePage() {
         </span>
         <input ref={inputRef} type="text" name="q" placeholder="검색..." className="explore-search-input" value={inputValue} onChange={e => setInputValue(e.target.value)} />
         {inputValue && (
-          <span className="explore-search-clear" onClick={() => { setInputValue(""); setQuery(""); loadExplore(); }}>
+            <span className="explore-search-clear" onClick={() => { setInputValue(""); loadExplore(); }}>
             <Icon name="x" size={14} />
           </span>
         )}
@@ -129,7 +123,7 @@ export default function ExplorePage() {
                         <div className="novel-card-body" style={{ display: "flex", gap: 14 }}>
                           <div style={{ width: 80, aspectRatio: "3/4", borderRadius: 6, flexShrink: 0, overflow: "hidden" }}>
                             {n.cover_image ? (
-                              <img src={n.cover_image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              <img src={n.cover_image} alt={n.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                             ) : (
                               <div style={{ width: "100%", height: "100%", backgroundColor: hashColor(n.title), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "1.5em", fontWeight: "bold" }}>
                                 <Icon name="book" size={24} />

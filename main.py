@@ -102,8 +102,11 @@ def seed_default_data():
         session.add(p3)
 
         # Set AP IDs
+        user_map = {author1.id: author1, reader1.id: reader1, admin_user.id: admin_user}
         for post in [p1, p2, p3]:
-            post.ap_id = f"{BASE_URL}/@{post.author.username}/{post.number}"
+            u = user_map.get(post.author_id)
+            if u:
+                post.ap_id = f"{BASE_URL}/@{u.username}/{post.number}"
 
         session.commit()
 

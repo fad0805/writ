@@ -2,7 +2,6 @@
 import { useEffect, useState } from "react";
 import { api, NovelData } from "@/lib/api";
 import Icon from "@/components/Icon";
-import Link from "next/link";
 import { hashColor } from "@/lib/avatar";
 
 export default function NovelsPage() {

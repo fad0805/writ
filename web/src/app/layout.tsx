@@ -21,8 +21,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <main className="main-content">{children}</main>
             <RightSidebar />
           </div>
+          <KeyboardShortcuts />
         </AuthProvider>
-        <KeyboardShortcuts />
         <script dangerouslySetInnerHTML={{
           __html: `
             if (localStorage.getItem('theme') === 'dark') {
@@ -32,6 +32,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               document.body.classList.toggle('dark-theme');
               localStorage.setItem('theme', document.body.classList.contains('dark-theme') ? 'dark' : 'light');
             };
+            document.addEventListener('click', function(e) {
+              var a = e.target.closest('a');
+              if (a && a.href && !a.href.startsWith('/') && !a.href.startsWith(window.location.origin)) {
+                e.preventDefault();
+                window.open(a.href, '_blank', 'noopener');
+              }
+            });
           `
         }} />
       </body>
