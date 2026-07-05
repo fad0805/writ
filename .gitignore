@@ -20,7 +20,6 @@ static/uploads/*
 web/node_modules/
 web/.next/
 web/out/
-web/public/*.svg
 web/AGENTS.md
 web/CLAUDE.md
 web/README.md
