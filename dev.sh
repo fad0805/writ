@@ -17,10 +17,8 @@ if [ ! -d "$VENV_DIR" ]; then
     python3 -m venv "$VENV_DIR"
 fi
 
-if ! "$PYTHON" -c "import fastapi" 2>/dev/null; then
-    echo -e "${YELLOW}[setup]${NC} 의존성 설치 중..."
-    "$PYTHON" -m pip install -r "$ROOT_DIR/requirements.txt" --quiet
-fi
+echo -e "${YELLOW}[setup]${NC} Python 의존성 확인 중..."
+"$PYTHON" -m pip install -r "$ROOT_DIR/requirements.txt" --quiet
 
 # Frontend setup
 if [ -d "$ROOT_DIR/web" ]; then

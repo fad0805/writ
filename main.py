@@ -124,6 +124,8 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Mount uploads directory
 import os
 os.makedirs("uploads", exist_ok=True)
+os.makedirs("uploads/avatars/local", exist_ok=True)
+os.makedirs("uploads/avatars/remote", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # AP/WebFinger routes must be registered before routers to take priority

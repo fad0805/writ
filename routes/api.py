@@ -1085,16 +1085,24 @@ def api_update_profile(request: Request, display_name: str = Form(""), summary: 
         db.summary = summary
         if image and image.filename:
             import os
-            os.makedirs(AVATAR_STORAGE_PATH, exist_ok=True)
-            ext = (image.filename.rsplit(".", 1)[-1] if "." in image.filename else "jpg").lower()
-            if ext not in ("jpg", "jpeg", "png", "gif", "webp"):
-                ext = "jpg"
+            from PIL import Image as PILImage
+            import io
+            local_dir = os.path.join(AVATAR_STORAGE_PATH, "local")
+            os.makedirs(local_dir, exist_ok=True)
             from uuid import uuid4
-            filename = f"u{user.id}_{uuid4().hex[:8]}.{ext}"
-            filepath = os.path.join(AVATAR_STORAGE_PATH, filename)
+            filename = f"u{user.id}_{uuid4().hex[:8]}.webp"
+            filepath = os.path.join(local_dir, filename)
+            img = PILImage.open(image.file)
+            img.thumbnail((400, 400), PILImage.Resampling.LANCZOS)
+            if img.mode in ("RGBA", "P"):
+                bg = PILImage.new("RGB", img.size, (255, 255, 255))
+                bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
+                img = bg
+            out = io.BytesIO()
+            img.save(out, format="WEBP", quality=85)
             with open(filepath, "wb") as f:
-                f.write(image.file.read())
-            new_path = f"{AVATAR_URL_PREFIX}/{filename}"
+                f.write(out.getvalue())
+            new_path = f"{AVATAR_URL_PREFIX}/local/{filename}"
             old = db.profile_image
             db.profile_image = new_path
             s.flush()

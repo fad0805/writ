@@ -7,3 +7,4 @@ httpx==0.28.1
 python-multipart==0.0.18
 cryptography==44.0.0
 pycryptodome==3.21.0
+Pillow==11.1.0
