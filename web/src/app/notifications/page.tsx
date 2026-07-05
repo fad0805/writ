@@ -10,7 +10,8 @@ const FILTERS = [
   { value: "mention", label: "멘션", icon: "mention" },
   { value: "like", label: "즐겨찾기", icon: "star_filled" },
   { value: "boost", label: "재게시", icon: "refresh" },
-  { value: "direct", label: "다이렉트", icon: "mail" },
+  { value: "follow", label: "팔로우", icon: "user_solid" },
+  { value: "direct", label: "다이렉트", icon: "direct" },
 ];
 
 const NOTIF_ICONS: Record<string, string> = {

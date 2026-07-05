@@ -14,12 +14,6 @@ from routes.ui_components import _icon, _avatar_html, _save_avatar, ICONS
 router = APIRouter()
 
 AVATAR_DIR = "static/uploads/avatars"
-# Removed local _save_avatar and _avatar_html definitions as they are now in ui_components.py
-# If sns.py needs them, it should use the imported ones.
-# Actually I need to make sure I don't break existing calls.
-
-def _icon(name):
-    return ICONS.get(name, "")
 
 VISIBILITY_LABELS = {
     "public": "공개",
@@ -1160,7 +1154,7 @@ def render_timeline(user, feed, notifications, timeline_type="federated"):
   <p id="edit-modal-original-content"></p>
 </div>
 <form method="post" id="edit-modal-form">
-  <textarea name="content" rows="4" placeholder="내용을 수정하세요..." required maxlength="{{MAX_POST_LENGTH}}"></textarea>
+  <textarea name="content" rows="4" placeholder="내용을 수정하세요..." required maxlength="{MAX_POST_LENGTH}"></textarea>
   <input type="text" name="summary" placeholder="CW (선택사항)" class="cw-input" style="margin-top:10px">
   <div class="reply-form-footer" style="margin-top:15px">
     <div></div>
@@ -1279,12 +1273,12 @@ def render_post_detail(user, post, replies, liked, boosted, parent_post=None, an
       </div>
       {_cw(post.content, post.summary)}
       <div class="post-actions">
-        <button type="button" class="action-btn" onclick="openReplyModal({post.id}, this.dataset.author, this.dataset.content)" data-author="{{reply_author}}" data-content="{{reply_preview}}">{_icon("reply")} {post.replies_count}</button>
-        <form method="post" action="/post/{post.id}/{{"unlike" if liked else "like"}}" class="inline-form">
-          <button type="submit" class="action-btn {{"liked" if liked else ""}}">{_icon("star_filled") if liked else _icon("star")} {post.likes_count}</button>
+        <button type="button" class="action-btn" onclick="openReplyModal({post.id}, this.dataset.author, this.dataset.content)" data-author="{reply_author}" data-content="{reply_preview}">{_icon("reply")} {post.replies_count}</button>
+        <form method="post" action="/post/{post.id}/{('unlike' if liked else 'like')}" class="inline-form">
+          <button type="submit" class="action-btn {'liked' if liked else ''}">{_icon("star_filled") if liked else _icon("star")} {post.likes_count}</button>
         </form>
-        <form method="post" action="/post/{post.id}/{{"unboost" if boosted else "boost"}}" class="inline-form">
-          <button type="submit" class="action-btn {{"boosted" if boosted else ""}}">{_icon("refresh")} {post.boosts_count}</button>
+        <form method="post" action="/post/{post.id}/{('unboost' if boosted else 'boost')}" class="inline-form">
+          <button type="submit" class="action-btn {'boosted' if boosted else ''}">{_icon("refresh")} {post.boosts_count}</button>
         </form>
         {f'<a href="javascript:void(0)" class="action-btn" onclick="openEditModal({post.id}, \'{post.content.replace(chr(10), "\\n")}\', \'{post.summary or ""}\')">{_icon("edit")}</a>' if post.author_id == user.id else ""}
         {f'<form method="post" action="/post/{post.id}/delete" class="inline-form"><button type="submit" class="action-btn" onclick="return confirm(\'삭제하시겠습니까?\')">{_icon("trash")}</button></form>' if post.author_id == user.id else ""}
@@ -1307,13 +1301,13 @@ def render_post_detail(user, post, replies, liked, boosted, parent_post=None, an
       <p id="reply-modal-content"></p>
     </div>
     <form method="post" id="reply-modal-form">
-      <textarea name="content" rows="4" placeholder="답글을 입력하세요..." required maxlength="{{MAX_POST_LENGTH}}" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter')this.form.requestSubmit()"></textarea>
+      <textarea name="content" rows="4" placeholder="답글을 입력하세요..." required maxlength="{MAX_POST_LENGTH}" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter')this.form.requestSubmit()"></textarea>
       <div class="reply-form-footer">
         <div class="visibility-selector">
-          <label><input type="radio" name="visibility" value="public" checked>{{_icon("globe")}} 공개</label>
-          <label><input type="radio" name="visibility" value="home">{{_icon("home")}} 홈</label>
-          <label><input type="radio" name="visibility" value="followers">{{_icon("lock")}} 팔로워</label>
-          <label><input type="radio" name="visibility" value="mention">{{_icon("mail")}} 멘션</label>
+          <label><input type="radio" name="visibility" value="public" checked>{_icon("globe")} 공개</label>
+          <label><input type="radio" name="visibility" value="home">{_icon("home")} 홈</label>
+          <label><input type="radio" name="visibility" value="followers">{_icon("lock")} 팔로워</label>
+          <label><input type="radio" name="visibility" value="mention">{_icon("mail")} 멘션</label>
         </div>
         <button type="submit" class="btn btn-primary">답글</button>
       </div>
@@ -1330,7 +1324,7 @@ def render_post_detail(user, post, replies, liked, boosted, parent_post=None, an
       <p id="edit-modal-original-content"></p>
     </div>
     <form method="post" id="edit-modal-form">
-      <textarea name="content" rows="4" placeholder="내용을 수정하세요..." required maxlength="{{MAX_POST_LENGTH}}"></textarea>
+      <textarea name="content" rows="4" placeholder="내용을 수정하세요..." required maxlength="{MAX_POST_LENGTH}"></textarea>
       <input type="text" name="summary" placeholder="CW (선택사항)" class="cw-input" style="margin-top:10px">
       <div class="reply-form-footer" style="margin-top:15px">
         <div></div>
@@ -1378,7 +1372,6 @@ document.addEventListener('keydown', function(e) {{
 </script>
 <script src="/static/theme.js"></script></body>
 </html>"""
-
 
 def render_profile_edit(user):
     return f"""<!DOCTYPE html>
@@ -1706,6 +1699,7 @@ def render_notifications(user, notifs, filter_type=""):
         ("mention", "멘션", _icon("mention")),
         ("like", "즐겨찾기", _icon("star_filled")),
         ("boost", "재게시", _icon("refresh")),
+        ("follow", "팔로우", _icon("user_solid")),
         ("direct", "다이렉트", _icon("direct")),
     ]
     filter_tabs = "".join(
@@ -1770,7 +1764,7 @@ def render_notifications(user, notifs, filter_type=""):
       <p id="edit-modal-original-content"></p>
     </div>
     <form method="post" id="edit-modal-form">
-      <textarea name="content" rows="4" placeholder="내용을 수정하세요..." required maxlength="{{MAX_POST_LENGTH}}"></textarea>
+      <textarea name="content" rows="4" placeholder="내용을 수정하세요..." required maxlength="{MAX_POST_LENGTH}"></textarea>
       <input type="text" name="summary" placeholder="CW (선택사항)" class="cw-input" style="margin-top:10px">
       <div class="reply-form-footer" style="margin-top:15px">
         <div></div>

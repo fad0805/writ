@@ -842,7 +842,11 @@ input:focus {
 }
 
 /* ── Sidebar widgets (right) ── */
-.novel-mini-list { margin-bottom: 10px; }
+.novel-mini-list {
+  height: 220px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
 .novel-mini-card {
   display: block;
   background: var(--bg-tertiary);

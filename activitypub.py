@@ -476,7 +476,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
             target = session.query(User).filter_by(username=local_username, is_remote=False).first()
             if not target:
                 return (200, "OK")
-            follower = session.query(User).filter_by(remote_url=actor_url).first()
+            follower = _resolve_actor(actor_url)
             if not follower:
                 return (200, "OK")
             session.query(Follow).filter_by(
@@ -492,10 +492,11 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
         if isinstance(actor_url, list):
             actor_url = actor_url[0]
 
+        actor = _resolve_actor(actor_url)
+        if not actor:
+            return (200, "OK")
+
         with get_session() as session:
-            actor = session.query(User).filter_by(remote_url=actor_url).first()
-            if not actor:
-                return (200, "OK")
             post = session.query(Post).filter_by(ap_id=object_url).first()
             if not post:
                 return (200, "OK")
@@ -510,10 +511,11 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
         if isinstance(actor_url, list):
             actor_url = actor_url[0]
 
+        actor = _resolve_actor(actor_url)
+        if not actor:
+            return (200, "OK")
+
         with get_session() as session:
-            actor = session.query(User).filter_by(remote_url=actor_url).first()
-            if not actor:
-                return (200, "OK")
             post = session.query(Post).filter_by(ap_id=object_url).first()
             if not post:
                 return (200, "OK")

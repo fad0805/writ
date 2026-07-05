@@ -148,8 +148,6 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
         )
         s.add(user)
         s.commit()
-        user.ap_id = f"{BASE_URL}/users/{user.username}"
-        s.commit()
         token = create_session(user.id)
         resp = JSONResponse(_user_json(user))
         resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/")
