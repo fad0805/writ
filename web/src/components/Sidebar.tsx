@@ -35,8 +35,10 @@ export default function Sidebar() {
         .catch(() => {});
     };
     check();
+    const handler = () => { setUnreadNotifs(0); };
+    window.addEventListener("notificationsread", handler);
     const interval = setInterval(check, 30000);
-    return () => clearInterval(interval);
+    return () => { clearInterval(interval); window.removeEventListener("notificationsread", handler); };
   }, [user]);
   useEffect(() => {
     setIsDark(document.body.classList.contains("dark-theme"));
@@ -60,8 +62,8 @@ export default function Sidebar() {
   const isActive = (href: string) => {
     if (!pathname) return false;
     if (href === "/timeline/home") return pathname.startsWith("/timeline");
-    if (href === "/novels/my") return pathname === "/novels/my";
-    if (href === "/novels") return pathname === "/novels";
+    if (href === "/series/my") return pathname === "/series/my";
+    if (href === "/series") return pathname === "/series";
     if (user && href === `/@${user.username}`) return pathname === `/@${user.username}`;
     return pathname === href || pathname.startsWith(href + "/") || pathname.startsWith(href + "?");
   };
@@ -87,7 +89,7 @@ export default function Sidebar() {
             <Icon name="search" /> 탐색
           </NavItem>
           <li className="nav-divider" />
-          <NavItem href="/novels" active={isActive("/novels")}>
+          <NavItem href="/series" active={isActive("/series")}>
             <Icon name="books_solid" /> 모든 시리즈
           </NavItem>
         </ul>
@@ -148,10 +150,10 @@ export default function Sidebar() {
           <Icon name="search" /> 탐색
         </NavItem>
         <li className="nav-divider" />
-        <NavItem href="/novels/my" active={isActive("/novels/my")}>
+        <NavItem href="/series/my" active={isActive("/series/my")}>
           <Icon name="book_solid" /> 내 시리즈
         </NavItem>
-        <NavItem href="/novels" active={isActive("/novels")}>
+        <NavItem href="/series" active={isActive("/series")}>
           <Icon name="books_solid" /> 모든 시리즈
         </NavItem>
         <li className="nav-divider" />

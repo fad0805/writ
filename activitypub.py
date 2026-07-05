@@ -422,6 +422,11 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     session.add(n)
 
             session.commit()
+            try:
+                from eventbus import broadcast
+                broadcast("new_post", {"post_id": post.id, "author_id": actor.id})
+            except Exception:
+                pass
 
         return (200, "Created")
     return (200, "OK")

@@ -10,6 +10,7 @@ from models import User, Post, Follow, Like, Boost, Notification, Novel, Episode
 from routes.auth import require_auth, get_current_user
 from activitypub import broadcast_to_followers, _post_to_inbox
 from config import BASE_URL, MAX_POST_LENGTH
+from eventbus import broadcast
 
 router = APIRouter(prefix="/api")
 
@@ -60,6 +61,7 @@ def _reply_context(p):
         "number": parent.number or "",
         "content": parent.content[:200] if parent.content else "",
         "author": _user_json(parent.author),
+        "visibility": parent.visibility or "public",
     }
 
 
@@ -183,6 +185,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 Post.id.in_(boosted_ids),
             ),
             Post.is_deleted == False,
+            Post.visibility != "mention",
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
         posts = [p for p in posts if _can_view(p, user, session)]
     elif tl_type == "social":
@@ -289,6 +292,7 @@ def api_create_post(
     summary: str = Form(""),
     visibility: str = Form("public"),
     parent_id: int = Form(None),
+    dm_target_id: int = Form(None),
 ):
     user = require_auth(request)
     if not content.strip():
@@ -300,6 +304,8 @@ def api_create_post(
         visibility = "public"
 
     mentioned_ids = _parse_mentions(content)
+    if dm_target_id and dm_target_id not in mentioned_ids:
+        mentioned_ids.append(dm_target_id)
     with get_session() as s:
         import secrets
         post_number = secrets.token_hex(4)
@@ -355,6 +361,10 @@ def api_create_post(
         except Exception:
             pass
 
+        try:
+            broadcast("new_post", {"post_id": post.id, "author_id": user.id})
+        except Exception:
+            pass
         return _post_json(post, s, user)
 
 
@@ -425,10 +435,12 @@ def api_boost_post(request: Request, post_id: int):
         existing = s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
         if not existing:
             s.add(Boost(user_id=user.id, post_id=post_id))
+            three_hours_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3)
             twentieth = s.query(Post.created_at).filter(
                 Post.is_deleted == False,
             ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(19).limit(1).scalar()
-            if twentieth and post.created_at and post.created_at < twentieth:
+            if (twentieth and post.created_at and post.created_at < twentieth
+                and post.created_at < three_hours_ago):
                 post.bumped_at = datetime.datetime.now(datetime.timezone.utc)
             if post.author_id != user.id:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id))
@@ -460,9 +472,21 @@ def api_get_profile(request: Request, username: str):
     user = get_current_user(request)
     with get_session() as s:
         profile = s.query(User).filter_by(username=username).first()
+        if not profile and "@" in username:
+            parts = username.split("@")
+            if len(parts) == 2:
+                remote_user, remote_domain = parts
+                actor_url = f"https://{remote_domain}/@{remote_user}"
+                from activitypub import _resolve_actor
+                _resolve_actor(actor_url)
+                profile = s.query(User).filter_by(username=username).first()
         if not profile:
             raise HTTPException(status_code=404, detail="User not found")
         boosted_ids = [b.post_id for b in s.query(Boost).filter_by(user_id=profile.id).all()]
+        from sqlalchemy import select
+        boost_subq = select(Boost.created_at).where(
+            Boost.user_id == profile.id, Boost.post_id == Post.id
+        ).correlate(Post).scalar_subquery()
         posts = s.query(Post).options(
             selectinload(Post.author)
         ).filter(
@@ -471,7 +495,9 @@ def api_get_profile(request: Request, username: str):
                 Post.id.in_(boosted_ids),
             ),
             Post.is_deleted == False,
-        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).limit(50).all()
+        ).order_by(
+            desc(func.coalesce(boost_subq, Post.created_at))
+        ).limit(50).all()
         posts = [p for p in posts if _can_view(p, user, s)]
         followers_count = s.query(Follow).filter_by(following_id=profile.id, accepted=True).count()
         following_count = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).count()
@@ -557,6 +583,80 @@ def api_following(request: Request, username: str):
 
 
 # ── Notifications API ──
+
+@router.get("/direct/conversation/{other_id}")
+def api_direct_conversation(request: Request, other_id: int):
+    user = require_auth(request)
+    if other_id == user.id:
+        raise HTTPException(status_code=400, detail="Cannot chat with yourself")
+    with get_session() as s:
+        other = s.query(User).get(other_id)
+        if not other:
+            raise HTTPException(status_code=404, detail="User not found")
+        uid_str = str(user.id)
+        oid_str = str(other_id)
+        all_posts = s.query(Post).options(selectinload(Post.author)).filter(
+            Post.visibility == "mention",
+            Post.is_deleted == False,
+        ).order_by(Post.created_at).all()
+        conv_posts = []
+        for p in all_posts:
+            mu = str(p.mentioned_user_ids or [])
+            if (p.author_id == user.id and oid_str in mu) or (p.author_id == other_id and uid_str in mu):
+                conv_posts.append(p)
+        result = {
+            "other_user": _user_json(other),
+            "messages": [_post_json(p, s, user) for p in conv_posts],
+        }
+    return result
+
+
+@router.get("/notifications/direct-threads")
+def api_direct_threads(request: Request):
+    user = require_auth(request)
+    three_months_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=90)
+    with get_session() as s:
+        posts = s.query(Post).filter(
+            Post.visibility == "mention",
+            Post.is_deleted == False,
+            Post.created_at >= three_months_ago,
+        ).order_by(desc(Post.created_at)).limit(200).all()
+        uid_str = str(user.id)
+        author_map = {}
+        oid_str = str(user.id)
+        for p in posts:
+            mu = str(p.mentioned_user_ids or [])
+            other_id = None
+            if p.author_id == user.id:
+                for tid in [int(x) for x in re.findall(r'\d+', mu) if x]:
+                    if tid != user.id:
+                        other_id = tid
+                        break
+            elif oid_str in mu:
+                other_id = p.author_id
+            if other_id and other_id not in author_map:
+                author = s.query(User).get(other_id)
+                author_map[other_id] = {"user": author, "all_msgs": []}
+            if other_id:
+                author_map[other_id]["all_msgs"].append(p)
+        result = []
+        import re as _re
+        for aid, data in author_map.items():
+            u = data["user"]
+            if u and u.id != user.id:
+                sorted_msgs = sorted(data["all_msgs"], key=lambda x: x.created_at or datetime.datetime.min, reverse=True)
+                previews = []
+                for msg in sorted_msgs[:3]:
+                    text = _re.sub(r'<[^>]*>', '', msg.content or "")
+                    text = _re.sub(r'@\w+', '', text).strip()
+                    is_me = msg.author_id == user.id
+                    previews.append({"text": text[:60], "is_me": is_me})
+                entry = _user_json(u)
+                entry["latest_previews"] = previews
+                entry["latest_time"] = sorted_msgs[0].created_at.isoformat() if sorted_msgs[0].created_at else None
+                result.append(entry)
+    return {"users": result}
+
 
 @router.get("/notifications")
 def api_notifications(request: Request, filter_type: str = Query("")):

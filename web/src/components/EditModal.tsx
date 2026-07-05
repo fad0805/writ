@@ -39,6 +39,7 @@ export default function EditModal({ post, onClose, onDone }: { post: PostData; o
             rows={4}
             placeholder="내용을 수정하세요..."
             required
+            onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { (e.target as HTMLElement).closest('form')?.requestSubmit(); } }}
           />
           <input
             type="text"

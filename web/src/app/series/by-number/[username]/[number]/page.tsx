@@ -6,7 +6,7 @@ import Icon from "@/components/Icon";
 import Link from "next/link";
 import { hashColor } from "@/lib/avatar";
 
-export default function NovelDetailPage() {
+export default function NovelByNumberPage() {
   const params = useParams();
   const router = useRouter();
   const [novel, setNovel] = useState<NovelData | null>(null);
@@ -16,10 +16,24 @@ export default function NovelDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getNovel(Number(params.id))
-      .then((d) => { setNovel(d.novel); setEpisodes(d.episodes); setAuthor(d.author); setIsMine(d.is_mine); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [params.id]);
+    fetch(`/api/by-series-number/${params.username}/${params.number}`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.id) { setLoading(false); return; }
+        api.getNovel(d.id).then((nd) => {
+          setNovel(nd.novel); setEpisodes(nd.episodes);
+          setAuthor(nd.author); setIsMine(nd.is_mine); setLoading(false);
+        }).catch(() => setLoading(false));
+      }).catch(() => setLoading(false));
+  }, [params.username, params.number]);
+
+  const handleDelete = async () => {
+    if (!confirm("정말 삭제하시겠습니까?")) return;
+    try {
+      const res = await fetch(`/api/novels/${novel?.id}/delete`, { method: "POST", credentials: "include" });
+      if (res.ok) router.push("/series/my");
+    } catch {}
+  };
 
   if (loading) return <p className="empty-state">로딩 중...</p>;
   if (!novel) return <p className="empty-state">시리즈를 찾을 수 없습니다.</p>;
@@ -47,8 +61,8 @@ export default function NovelDetailPage() {
               </div>
               {isMine && (
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button className="btn btn-small" onClick={() => router.push(`/novels/${novel.id}/edit`)}>시리즈 편집</button>
-                  <button className="btn btn-primary btn-small" onClick={() => router.push(`/novels/${novel.id}/episodes/new`)}>새 에피소드</button>
+                  <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/edit`)}>시리즈 편집</button>
+                  <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>
                 </div>
               )}
             </div>
@@ -69,7 +83,7 @@ export default function NovelDetailPage() {
         {episodes.length === 0 ? (
           <p className="empty-state">아직 에피소드가 없습니다.</p>
         ) : episodes.map((e) => (
-          <div key={e.id} className="episode-item" onClick={() => router.push(`/novels/${novel.id}/episodes/${e.id}`)}>
+          <div key={e.id} className="episode-item" onClick={() => router.push(`/series/${novel.id}/episodes/${e.id}`)}>
             <div className="episode-number">제 {e.episode_number}화</div>
             <div className="episode-info">
               <span className="episode-title">{e.title}</span>
@@ -80,7 +94,7 @@ export default function NovelDetailPage() {
             </div>
             {isMine && (
               <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: "auto", flexShrink: 0 }}>
-                <button className="action-btn" onClick={(ev) => { ev.stopPropagation(); router.push(`/novels/${novel.id}/episodes/${e.id}/edit`); }}>
+                <button className="action-btn" onClick={(ev) => { ev.stopPropagation(); router.push(`/series/${novel.id}/episodes/${e.id}/edit`); }}>
                   <Icon name="edit" />
                 </button>
                 <button className="action-btn" style={{ color: "var(--text-muted)" }} onClick={async (ev) => {

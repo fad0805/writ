@@ -125,7 +125,7 @@ export default function ExplorePage() {
                   <h4 className="search-section-title"><Icon name="book" /> 시리즈</h4>
                   <div className="novel-grid">
                     {novels.map((n) => (
-                      <div key={n.id} className="novel-card" onClick={() => window.location.href = `/novels/${n.id}`} style={{ cursor: "pointer" }}>
+                      <div key={n.id} className="novel-card" onClick={() => window.location.href = `/series/${n.id}`} style={{ cursor: "pointer" }}>
                         <div className="novel-card-body" style={{ display: "flex", gap: 14 }}>
                           <div style={{ width: 80, aspectRatio: "3/4", borderRadius: 6, flexShrink: 0, overflow: "hidden" }}>
                             {n.cover_image ? (

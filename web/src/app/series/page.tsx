@@ -24,7 +24,7 @@ export default function NovelsPage() {
         ) : novels.length === 0 ? (
           <p className="empty-state">아직 등록된 시리즈가 없습니다.</p>
         ) : novels.map((n) => (
-          <div key={n.id} className="novel-card" onClick={() => window.location.href = `/@${n.author?.username}/series/${n.number}`} style={{ cursor: "pointer" }}>
+          <div key={n.id} className="novel-card" onClick={() => window.location.href = `/series/@${n.author?.username}/${n.number}`} style={{ cursor: "pointer" }}>
             <div className="novel-card-body" style={{ display: "flex", gap: 14 }}>
               <div style={{ width: 80, aspectRatio: "3/4", borderRadius: 6, flexShrink: 0, overflow: "hidden" }}>
                 {n.cover_image ? (

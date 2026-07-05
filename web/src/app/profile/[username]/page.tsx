@@ -5,12 +5,14 @@ import { api, User, PostData, NovelData } from "@/lib/api";
 import PostCard from "@/components/PostCard";
 import Icon from "@/components/Icon";
 import { hashColor } from "@/lib/avatar";
-import Avatar from "@/components/Avatar";
 import Link from "next/link";
+import Avatar from "@/components/Avatar";
+import MentionModal from "@/components/MentionModal";
 
 export default function ProfilePage() {
   const params = useParams();
   const router = useRouter();
+  const [showMention, setShowMention] = useState(false);
   const username = params.username as string;
   const [profile, setProfile] = useState<User | null>(null);
   const [posts, setPosts] = useState<PostData[]>([]);
@@ -64,15 +66,37 @@ export default function ProfilePage() {
           <div className="profile-info-text" style={{ position: "relative" }}>
             <h2>{profile.display_name}</h2>
             <p className="profile-username">@{profile.username}</p>
-            {profile.summary && <p className="profile-summary">{profile.summary}</p>}
-            {isMine && (
-              <button onClick={() => router.push("/users/profile/edit")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.85em", display: "flex", alignItems: "center", gap: 3, padding: 0 }}>
-                <Icon name="edit" /> 편집
-              </button>
+            {profile.summary && (
+              <p className="profile-summary" dangerouslySetInnerHTML={{
+                __html: profile.summary
+                  .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                  .replace(/\n/g, '<br>')
+                  .replace(/<a\s+href="https?:\/\/([^/]+)\/@(\w+)"[^>]*>([^<]*)<\/a>/gi,
+                    (_m: string, domain: string, user: string, text: string) =>
+                      `<a href="/@${user}@${domain}" class="mention-link">@${user}@${domain}</a>`
+                  )
+              }} />
             )}
+            <div style={{ position: "absolute", bottom: 0, right: 0, display: "flex", gap: 6 }}>
+              {isMine ? (
+                <button onClick={() => router.push("/users/profile/edit")} className="action-btn" style={{ fontSize: "0.85em" }}>
+                  <Icon name="edit" /> 편집
+                </button>
+              ) : (
+                <>
+                  <button className="action-btn" style={{ fontSize: "0.85em" }} onClick={() => setShowMention(true)}>
+                    <Icon name="mention" /> 멘션
+                  </button>
+                  <button className="action-btn" style={{ fontSize: "0.85em" }} onClick={() => router.push(`/direct/${profile.id}`)}>
+                    <Icon name="mail" /> DM
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
+      {showMention && <MentionModal username={profile.username} onClose={() => setShowMention(false)} onDone={() => setShowMention(false)} />}
       <div className="profile-stats">
         <span className={`profile-stat ${tab === "posts" ? "active" : ""}`} onClick={() => setTab("posts")}><strong>{posts.length}</strong> 게시글</span>
         <span className={`profile-stat ${tab === "novels" ? "active" : ""}`} onClick={() => setTab("novels")}><strong>{novels.length}</strong> 시리즈</span>
@@ -86,7 +110,7 @@ export default function ProfilePage() {
 
       <div id="tab-novels" className="profile-novel-list" style={{ display: tab === "novels" ? "flex" : "none" }}>
         {novels.length === 0 ? <p className="empty-state">시리즈가 없습니다.</p> : novels.map((n) => (
-          <Link key={n.id} href={n.number ? `/@${n.author?.username}/series/${n.number}` : `/novels/${n.id}`} className="profile-novel" style={{ display: "flex", gap: 14, textDecoration: "none", color: "inherit" }}>
+          <Link key={n.id} href={n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`} className="profile-novel" style={{ display: "flex", gap: 14, textDecoration: "none", color: "inherit" }}>
             <div style={{ width: 56, aspectRatio: "3/4", borderRadius: 6, flexShrink: 0, overflow: "hidden" }}>
               {n.cover_image ? (
                 <img src={n.cover_image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />

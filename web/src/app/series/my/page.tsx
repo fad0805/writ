@@ -19,7 +19,7 @@ export default function MyNovelsPage() {
     <>
       <div className="page-header">
         <h2><Icon name="book_solid" /> 내 시리즈</h2>
-        <Link href="/novels/new" className="btn btn-primary">새 시리즈</Link>
+        <Link href="/series/new" className="btn btn-primary">새 시리즈</Link>
       </div>
       <div className="novel-grid">
         {loading ? (
@@ -27,7 +27,7 @@ export default function MyNovelsPage() {
         ) : novels.length === 0 ? (
           <p className="empty-state">연재 중인 시리즈가 없습니다.</p>
         ) : novels.map((n) => (
-          <div key={n.id} className="novel-card" onClick={() => router.push(`/@${n.author?.username || ''}/series/${n.number}`)} style={{ cursor: "pointer" }}>
+          <div key={n.id} className="novel-card" onClick={() => router.push(`/series/@${n.author?.username || ''}/${n.number}`)} style={{ cursor: "pointer" }}>
             <div className="novel-card-body" style={{ display: "flex", gap: 14 }}>
               <div style={{ width: 80, aspectRatio: "3/4", borderRadius: 6, flexShrink: 0, overflow: "hidden" }}>
                 {n.cover_image ? (
@@ -52,8 +52,8 @@ export default function MyNovelsPage() {
                   <span><Icon name="eye" /> {n.total_views}</span>
                 </div>
                 <div className="novel-actions" style={{ marginTop: 0 }}>
-                  <button className="btn btn-small" onClick={(e) => { e.stopPropagation(); router.push(`/novels/${n.id}/edit`); }}>편집</button>
-                  <button className="btn btn-small btn-danger" onClick={(e) => { e.stopPropagation(); if (confirm("삭제하시겠습니까?")) { /* delete */ } }}>삭제</button>
+                  <button className="btn btn-small op-70" onClick={(e) => { e.stopPropagation(); router.push(`/series/${n.id}/edit`); }}>편집</button>
+                  <button className="btn btn-small btn-danger op-70" onClick={(e) => { e.stopPropagation(); if (confirm("정말 삭제하시겠습니까?")) { /* delete */ } }}>삭제</button>
                 </div>
               </div>
             </div>

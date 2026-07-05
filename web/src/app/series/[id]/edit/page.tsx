@@ -22,7 +22,7 @@ export default function EditNovelPage() {
   useEffect(() => {
     api.getNovel(Number(params.id))
       .then((d) => {
-        if (!d.is_mine) { router.push(`/novels/${params.id}`); return; }
+        if (!d.is_mine) { router.push(`/series/${params.id}`); return; }
         setTitle(d.novel.title);
         setDescription(d.novel.description);
         setTags(d.novel.tags);
@@ -31,7 +31,7 @@ export default function EditNovelPage() {
         setIsCompleted(d.novel.is_completed);
         setLoading(false);
       })
-      .catch(() => router.push("/novels"));
+      .catch(() => router.push("/series"));
   }, [params.id, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -47,7 +47,7 @@ export default function EditNovelPage() {
       form.append("is_completed", isCompleted ? "true" : "");
       if (coverImage) form.append("cover_image", coverImage);
       const res = await fetch(`/api/novels/${params.id}/edit`, { method: "POST", credentials: "include", body: form });
-      if (res.ok) router.push(`/novels/${params.id}`);
+      if (res.ok) router.push(`/series/${params.id}`);
       else alert("저장 실패");
     } catch { alert("저장 실패"); }
     setSubmitting(false);
@@ -106,7 +106,7 @@ export default function EditNovelPage() {
               if (!confirm("정말 삭제하시겠습니까?")) return;
               try {
                 const res = await fetch(`/api/novels/${params.id}/delete`, { method: "POST", credentials: "include" });
-                if (res.ok) { window.dispatchEvent(new Event("novelchange")); router.push("/novels/my"); }
+                if (res.ok) { window.dispatchEvent(new Event("novelchange")); router.push("/series/my"); }
               } catch {}
             }}
             style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.85em", padding: 0, marginLeft: 4 }}

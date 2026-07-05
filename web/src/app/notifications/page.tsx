@@ -4,6 +4,7 @@ import { api, NotificationData } from "@/lib/api";
 import Link from "next/link";
 import PostCard from "@/components/PostCard";
 import Icon from "@/components/Icon";
+import DirectUserCard from "@/components/DirectUserCard";
 
 const FILTERS = [
   { value: "", label: "전체", icon: "bell" },
@@ -25,19 +26,34 @@ const NOTIF_ICONS: Record<string, string> = {
 
 export default function NotificationsPage() {
   const [notifs, setNotifs] = useState<NotificationData[]>([]);
-  const [filter, setFilter] = useState("");
+  const [directGroups, setDirectGroups] = useState<any[]>([]);
+  const getInitialFilter = () => {
+    if (typeof window === "undefined") return "";
+    try { return sessionStorage.getItem("notif_filter") || ""; } catch { return ""; }
+  };
+  const [filter, setFilter] = useState(getInitialFilter());
+  useEffect(() => { try { sessionStorage.removeItem("notif_filter"); } catch {} }, []);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
     setLoading(true);
     try {
-      const data = await api.getNotifications(filter || undefined);
-      setNotifs(data.notifications);
+      if (filter === "direct") {
+        const res = await fetch("/api/notifications/direct-threads", { credentials: "include" });
+        const data = await res.json();
+        setDirectGroups(data.users || []);
+        setNotifs([]);
+      } else {
+        const data = await api.getNotifications(filter || undefined);
+        setNotifs(data.notifications);
+        setDirectGroups([]);
+      }
     } catch {}
     setLoading(false);
   };
 
   useEffect(() => { load(); }, [filter]);
+  useEffect(() => { window.dispatchEvent(new Event("notificationsread")); }, []);
 
   const typeText = (t: string) => {
     if (t === "follow") return "님이 회원님을 팔로우했습니다";
@@ -76,7 +92,7 @@ export default function NotificationsPage() {
           <button
             key={f.value}
             onClick={() => setFilter(f.value)}
-            className={`notif-tab ${f.value === filter ? "active" : ""}`}
+            className={`notif-tab${f.value === filter ? " active" : ""}`}
           >
             <Icon name={f.icon} /> {f.label}
           </button>
@@ -84,6 +100,12 @@ export default function NotificationsPage() {
       </div>
       {loading ? (
         <p className="empty-state">로딩 중...</p>
+      ) : filter === "direct" ? (
+        directGroups.length === 0 ? (
+          <p className="empty-state">다이렉트 메시지가 없습니다.</p>
+        ) : directGroups.map((u: any) => (
+          <DirectUserCard key={u.id} user={u} />
+        ))
       ) : notifs.length === 0 ? (
         <p className="empty-state">알림이 없습니다.</p>
       ) : (

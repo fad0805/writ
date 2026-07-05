@@ -88,6 +88,17 @@ export default function ProfileEditPage() {
     setAvatarUrl(user?.avatar || "");
   };
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        const form = document.querySelector(".novel-form") as HTMLFormElement;
+        if (form) form.requestSubmit();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;

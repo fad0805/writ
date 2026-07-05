@@ -1,7 +1,11 @@
 import json
+from typing import AsyncGenerator
 
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import StreamingResponse
+from eventbus import add_queue, remove_queue
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -231,22 +235,6 @@ async def user_inbox(request: Request, username: str):
     return JSONResponse({"status": status, "message": message})
 
 
-@app.get("/@{username}/series/{number}")
-def get_series_by_number(request: Request, username: str, number: str):
-    from routes.sns import _sidebar, _right_sidebar
-    user = get_current_user(request)
-    if not user:
-        return RedirectResponse(url="/login")
-    with get_session() as s:
-        author = s.query(User).filter_by(username=username).first()
-        if not author:
-            raise HTTPException(status_code=404, detail="Not found")
-        novel = s.query(Novel).filter_by(author_id=author.id, number=number).first()
-        if not novel:
-            raise HTTPException(status_code=404, detail="Not found")
-    return RedirectResponse(url=f"/novels/{novel.id}")
-
-
 @app.get("/@{username}/{number}")
 def get_post_by_number(request: Request, username: str, number: str):
     accept = request.headers.get("Accept", "")
@@ -326,7 +314,7 @@ def get_series_by_handle(request: Request, username: str, number: str):
         if not novel:
             raise HTTPException(status_code=404, detail="Not found")
 
-        return RedirectResponse(url=f"http://localhost:3000/novels/{novel.id}")
+        return RedirectResponse(url=f"/series/{novel.id}")
 
 
 @app.get("/nodeinfo/2.0")
@@ -354,6 +342,25 @@ def nodeinfo():
             "nodeDescription": "ActivityPub SNS with serial novel publishing blog",
         },
     })
+
+
+@app.get("/api/stream")
+async def sse_stream(request: Request):
+    queue: asyncio.Queue = asyncio.Queue(maxsize=50)
+    add_queue(queue)
+    try:
+        async def event_gen() -> AsyncGenerator[str, None]:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    payload = await asyncio.wait_for(queue.get(), timeout=30)
+                    yield payload
+                except asyncio.TimeoutError:
+                    yield ":keepalive\n\n"
+        return StreamingResponse(event_gen(), media_type="text/event-stream")
+    finally:
+        remove_queue(queue)
 
 
 @app.get("/.well-known/nodeinfo")

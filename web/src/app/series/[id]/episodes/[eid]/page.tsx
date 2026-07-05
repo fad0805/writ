@@ -33,7 +33,7 @@ export default function EpisodeDetailPage() {
     if (!confirm("정말 삭제하시겠습니까?")) return;
     try {
       const res = await fetch(`/api/novels/${params.id}/episodes/${params.eid}/delete`, { method: "POST", credentials: "include" });
-      if (res.ok) router.push(`/novels/${params.id}`);
+      if (res.ok) router.push(`/series/${params.id}`);
     } catch {}
   };
 
@@ -45,13 +45,13 @@ export default function EpisodeDetailPage() {
     <>
       <div className="episode-navigation">
         {prevEp && (
-          <button className="btn btn-outline" onClick={() => router.push(`/novels/${novel.id}/episodes/${prevEp.id}`)}>
+          <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${prevEp.id}`)}>
             ← 제{prevEp.episode_number}화 ({prevEp.title})
           </button>
         )}
-        <Link href={`/novels/${novel.id}`} className="btn btn-outline">목차</Link>
+        <Link href={`/series/${novel.id}`} className="btn btn-outline">목차</Link>
         {nextEp && (
-          <button className="btn btn-outline" onClick={() => router.push(`/novels/${novel.id}/episodes/${nextEp.id}`)}>
+          <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${nextEp.id}`)}>
             제{nextEp.episode_number}화 ({nextEp.title}) →
           </button>
         )}
@@ -62,7 +62,7 @@ export default function EpisodeDetailPage() {
           <h2>제 {episode.episode_number}화: {episode.title}</h2>
           {isMine && (
             <div style={{ display: "flex", gap: 6 }}>
-              <button className="btn btn-small" onClick={() => router.push(`/novels/${novel.id}/episodes/${episode.id}/edit`)}>편집</button>
+              <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/${episode.id}/edit`)}>편집</button>
               <button className="btn btn-small btn-danger" onClick={handleDelete}>삭제</button>
             </div>
           )}
@@ -76,7 +76,7 @@ export default function EpisodeDetailPage() {
         <div className="episode-body">{episode.content}</div>
         {isMine && (
           <div className="author-actions" style={{ marginBottom: 0, marginTop: 20 }}>
-            <button className="btn btn-small" onClick={() => router.push(`/novels/${novel.id}/episodes/${episode.id}/edit`)}>편집</button>
+            <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/${episode.id}/edit`)}>편집</button>
             <button className="btn btn-small btn-danger" onClick={handleDelete}>삭제</button>
           </div>
         )}
@@ -84,13 +84,13 @@ export default function EpisodeDetailPage() {
 
       <div className="episode-navigation">
         {prevEp && (
-          <button className="btn btn-outline" onClick={() => router.push(`/novels/${novel.id}/episodes/${prevEp.id}`)}>
+          <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${prevEp.id}`)}>
             ← 제{prevEp.episode_number}화 ({prevEp.title})
           </button>
         )}
-        <Link href={`/novels/${novel.id}`} className="btn btn-outline">목차</Link>
+        <Link href={`/series/${novel.id}`} className="btn btn-outline">목차</Link>
         {nextEp && (
-          <button className="btn btn-outline" onClick={() => router.push(`/novels/${novel.id}/episodes/${nextEp.id}`)}>
+          <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${nextEp.id}`)}>
             제{nextEp.episode_number}화 ({nextEp.title}) →
           </button>
         )}

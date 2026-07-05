@@ -19,7 +19,14 @@ const nextConfig: NextConfig = {
         source: "/@:username",
         destination: "/profile/:username",
       },
-
+      {
+        source: "/@:username/:number",
+        destination: "/post/by-number/:username/:number",
+      },
+      {
+        source: "/series/@:username/:number",
+        destination: "/series/by-number/:username/:number",
+      },
     ];
   },
 };

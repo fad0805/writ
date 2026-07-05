@@ -2,8 +2,10 @@
 import { useEffect, useMemo } from "react";
 import { PostData } from "@/lib/api";
 import PostForm from "./PostForm";
+import { useAuth } from "@/lib/auth";
 
 export default function ReplyModal({ post, onClose, onDone }: { post: PostData; onClose: () => void; onDone?: () => void }) {
+  const { user } = useAuth();
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
@@ -15,8 +17,9 @@ export default function ReplyModal({ post, onClose, onDone }: { post: PostData; 
     const matches = post.content.match(/@(\w+)/g);
     if (matches) matches.forEach((m) => set.add(m));
     set.add(`@${post.author.username}`);
+    if (user) set.delete(`@${user.username}`);
     return Array.from(set).join(" ") + (set.size > 0 ? " " : "");
-  }, [post]);
+  }, [post, user]);
 
   return (
     <div className="reply-modal-backdrop active" onClick={onClose}>

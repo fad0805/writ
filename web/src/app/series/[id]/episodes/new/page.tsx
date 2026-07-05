@@ -18,9 +18,9 @@ export default function NewEpisodePage() {
 
   useEffect(() => {
     api.getNovel(Number(params.id)).then((d) => {
-      if (!d.is_mine) { router.push(`/novels/${params.id}`); return; }
+      if (!d.is_mine) { router.push(`/series/${params.id}`); return; }
       setNovelTitle(d.novel.title);
-    }).catch(() => router.push("/novels"));
+    }).catch(() => router.push("/series"));
   }, [params.id, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -36,7 +36,7 @@ export default function NewEpisodePage() {
       form.append("visibility", visibility);
       const res = await fetch(`/api/novels/${params.id}/episodes/new`, { method: "POST", credentials: "include", body: form });
       const data = await res.json();
-      if (res.ok) router.push(`/novels/${params.id}/episodes/${data.episode_id}`);
+      if (res.ok) router.push(`/series/${params.id}/episodes/${data.episode_id}`);
       else alert("게시 실패");
     } catch { alert("게시 실패"); }
     setSubmitting(false);

@@ -18,14 +18,14 @@ export default function EditEpisodePage() {
   useEffect(() => {
     api.getNovel(Number(params.id)).then((d) => {
       const ep = d.episodes.find((e) => e.id === Number(params.eid));
-      if (!ep || !d.is_mine) { router.push(`/novels/${params.id}`); return; }
+      if (!ep || !d.is_mine) { router.push(`/series/${params.id}`); return; }
       setTitle(ep.title);
       setSummary(ep.summary);
       setContent(ep.content);
       setIsPublished(ep.is_published);
       setNovelTitle(d.novel.title);
       setLoading(false);
-    }).catch(() => router.push("/novels"));
+    }).catch(() => router.push("/series"));
   }, [params.id, params.eid, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -39,7 +39,7 @@ export default function EditEpisodePage() {
       form.append("summary", summary);
       form.append("is_published", isPublished ? "true" : "");
       const res = await fetch(`/api/novels/${params.id}/episodes/${params.eid}/edit`, { method: "POST", credentials: "include", body: form });
-      if (res.ok) router.push(`/novels/${params.id}/episodes/${params.eid}`);
+      if (res.ok) router.push(`/series/${params.id}/episodes/${params.eid}`);
       else alert("저장 실패");
     } catch { alert("저장 실패"); }
     setSubmitting(false);

@@ -6,6 +6,7 @@ import PostCard from "@/components/PostCard";
 import PostForm from "@/components/PostForm";
 import Icon from "@/components/Icon";
 import Link from "next/link";
+import { useStream } from "@/lib/useStream";
 
 const LIMIT = 10;
 const LOAD_MORE = 5;
@@ -59,6 +60,10 @@ export default function TimelinePage() {
     window.addEventListener("followchange", handler);
     return () => window.removeEventListener("followchange", handler);
   }, [tlType]);
+
+  useStream({
+    new_post: () => { load(); },
+  });
 
   useEffect(() => {
     const interval = setInterval(() => {

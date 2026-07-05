@@ -62,6 +62,7 @@ export interface ReplyContext {
   number: string;
   content: string;
   author: User;
+  visibility: string;
 }
 
 export interface NotificationData {

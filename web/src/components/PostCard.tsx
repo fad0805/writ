@@ -13,7 +13,9 @@ const VIS_ICONS: Record<string, string> = {
 };
 
 function linkifyMentions(text: string): string {
-  return text.replace(/@(\w+)/g, '<a href="/@$1" class="mention-link">@$1</a>');
+  return text.replace(/@(\w+(?:@[\w.-]+)?)/g, (match, handle) => {
+    return `<a href="/@${handle}" class="mention-link">@${handle}</a>`;
+  });
 }
 
 export default function PostCard({ post, onUpdate, current, hideContext }: { post: PostData; onUpdate?: () => void; current?: boolean; hideContext?: boolean }) {
@@ -53,7 +55,7 @@ export default function PostCard({ post, onUpdate, current, hideContext }: { pos
 
   return (
     <>
-      <div className={`post-card${current ? " current" : ""}`} onClick={(e) => { if ((e.target as HTMLElement).closest('a')) return; router.push(post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`); }}>
+      <div className={`post-card${current ? " current" : ""}${post.visibility === "mention" ? " mention-card" : ""}`} onClick={(e) => { if ((e.target as HTMLElement).closest('a')) return; router.push(post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`); }}>
         {post.boosted_by && (
           <div className="boost-badge">
             <Icon name="refresh" size={12} /> {post.boosted_by.display_name || post.boosted_by.username}님이 부스트
@@ -77,7 +79,7 @@ export default function PostCard({ post, onUpdate, current, hideContext }: { pos
           </span>
         </div>
         {!hideContext && post.reply_context && (
-          <Link href={post.reply_context.number ? `/@${post.reply_context.author.username}/${post.reply_context.number}` : `/post/${post.reply_context.id}`} className="reply-context" onClick={(e) => e.stopPropagation()}>
+          <Link href={post.reply_context.number ? `/@${post.reply_context.author.username}/${post.reply_context.number}` : `/post/${post.reply_context.id}`} className={`reply-context${post.reply_context.visibility === "mention" ? " mention-context" : ""}`} onClick={(e) => e.stopPropagation()}>
             <span className="reply-context-label">답글 대상</span>
             <strong>{post.reply_context.author.display_name || post.reply_context.author.username}</strong>
             <span>@{post.reply_context.author.username}</span>
