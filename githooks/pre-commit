@@ -1,0 +1,53 @@
+#!/bin/sh
+set -e
+
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+errors=0
+
+# ── Python syntax check ──
+echo "--- Python syntax check ---"
+staged_py=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
+if [ -n "$staged_py" ]; then
+    python3=$(command -v python3 || command -v python)
+    for f in $staged_py; do
+        if [ ! -f "$f" ]; then continue; fi
+        "$python3" -c "
+import py_compile, sys
+try:
+    py_compile.compile('$f', doraise=True)
+except py_compile.PyCompileError as e:
+    print(f'  SYNTAX ERROR in $f: {e}')
+    sys.exit(1)
+" 2>&1
+        if [ $? -ne 0 ]; then errors=$((errors + 1)); fi
+    done
+else
+    echo "(no Python files staged)"
+fi
+
+# ── TypeScript/JavaScript check ──
+echo "--- TypeScript check ---"
+staged_ts=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.tsx?$|\.jsx?$' || true)
+if [ -n "$staged_ts" ]; then
+    cd "$ROOT_DIR/web"
+    if [ -f "node_modules/.bin/tsc" ]; then
+        npx --no-install tsc --noEmit 2>&1 | head -30
+        if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "✗ TypeScript errors found. Commit aborted."
+            errors=$((errors + 1))
+        else
+            echo "✓ TypeScript check passed."
+        fi
+    else
+        echo "(TypeScript not installed in web/, skipping)"
+    fi
+    cd "$ROOT_DIR"
+else
+    echo "(no TypeScript/JavaScript files staged)"
+fi
+
+if [ $errors -gt 0 ]; then
+    echo "✗ $errors issue(s) found. Commit aborted."
+    exit 1
+fi
+echo "✓ All checks passed."
