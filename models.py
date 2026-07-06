@@ -272,7 +272,7 @@ class CustomEmoji(Base):
     __tablename__ = "custom_emojis"
 
     id = Column(Integer, primary_key=True)
-    keyword = Column(String(128), unique=True, nullable=False, index=True)
+    keyword = Column(String(128), nullable=False, index=True)
     file_name = Column(String(256), nullable=False)
     category = Column(String(64), default="")
     aliases = Column(JSON, default=list)
@@ -470,6 +470,12 @@ def init_db():
     try:
         with Session(engine) as session:
             session.execute(text("ALTER TABLE custom_emojis ADD COLUMN domain VARCHAR(128) DEFAULT ''"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("DROP INDEX IF EXISTS ix_custom_emojis_keyword"))
             session.commit()
     except Exception:
         pass
