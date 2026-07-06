@@ -894,14 +894,19 @@ def _process_emoji_tags(tags: list, session):
                 with open(file_path, "wb") as f:
                     f.write(resp.content)
             else:
+                file_name = f"{uuid.uuid4().hex}.webp"
+                file_path = os.path.join(EMOJI_DIR, file_name)
                 img = Image.open(io.BytesIO(resp.content))
-                img = img.convert("RGBA" if ext == "png" else "RGB")
+                if img.mode == "RGBA" or img.mode == "P":
+                    img = img.convert("RGBA")
+                else:
+                    img = img.convert("RGB")
                 img.thumbnail((33, 33), Image.LANCZOS)
                 if img.width != 33 or img.height != 33:
                     left = (img.width - 33) // 2
                     top = (img.height - 33) // 2
                     img = img.crop((left, top, left + 33, top + 33))
-                img.save(file_path)
+                img.save(file_path, format="WEBP", quality=85)
             emoji = CustomEmoji(
                 keyword=keyword,
                 file_name=file_name,

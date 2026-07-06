@@ -1744,15 +1744,19 @@ def api_create_emoji(
             with open(file_path, "wb") as f:
                 f.write(image.file.read())
         else:
+            file_name = f"{uuid.uuid4().hex}.webp"
+            file_path = os.path.join(EMOJI_DIR, file_name)
             img = Image.open(image.file)
-            img = img.convert("RGBA" if ext == "png" else "RGB")
+            if img.mode == "RGBA" or img.mode == "P":
+                img = img.convert("RGBA")
+            else:
+                img = img.convert("RGB")
             img.thumbnail((33, 33), Image.LANCZOS)
-            # Crop to exact 33x33 if needed (center crop)
             if img.width != 33 or img.height != 33:
                 left = (img.width - 33) // 2
                 top = (img.height - 33) // 2
                 img = img.crop((left, top, left + 33, top + 33))
-            img.save(file_path)
+            img.save(file_path, format="WEBP", quality=85)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to process image: {e}")
 
