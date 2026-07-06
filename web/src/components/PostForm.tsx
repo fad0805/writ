@@ -258,7 +258,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         </div>
       )}
       {emojiResults.length > 0 && (
-        <div className="mention-dropdown" style={{ border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg-secondary)", padding: 4, maxHeight: 200, overflowY: "auto", position: "absolute", zIndex: 1100, width: 260 }}>
+        <div style={{ border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg-secondary)", padding: 4, maxHeight: 200, overflowY: "auto", marginTop: 4, width: 260 }}>
           {emojiResults.map((emo, i) => (
             <div key={emo.id} className={`mention-option ${i === emojiIdx ? "active" : ""}`} onMouseDown={(e) => { e.preventDefault(); insertEmoji(emo); }} onMouseEnter={() => setEmojiIdx(i)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", cursor: "pointer" }}>
               <img src={emo.url} alt={emo.keyword} style={{ width: 24, height: 24, borderRadius: 4, objectFit: "contain" }} />

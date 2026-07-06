@@ -64,13 +64,10 @@ export function renderCustomEmojis(html: string, emojis: CustomEmoji[]): string 
   if (!emojis || emojis.length === 0) return html;
   const sorted = [...emojis].sort((a, b) => b.keyword.length - a.keyword.length);
   for (const emoji of sorted) {
-    const allKeywords = [emoji.keyword, ...(emoji.aliases || [])];
-
-    for (const kw of allKeywords) {
-      const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const re = new RegExp(`:${escaped}:`, "g");
-      html = html.replace(re, `<img src="${emoji.url}" alt=":${kw}:" title=":${kw}:" class="custom-emoji" width="33" height="33" style="width:33px;height:33px;vertical-align:middle;display:inline-block;object-fit:contain">`);
-    }
+    const kw = emoji.keyword;
+    const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`:${escaped}:`, "g");
+    html = html.replace(re, `<img src="${emoji.url}" alt=":${kw}:" title=":${kw}:" class="custom-emoji" width="33" height="33" style="width:33px;height:33px;vertical-align:middle;display:inline-block;object-fit:contain">`);
   }
   return html;
 }

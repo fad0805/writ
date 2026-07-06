@@ -855,10 +855,8 @@ def _process_emoji_tags(tags: list, session):
         emoji_id = tag.get("id", "")
         from urllib.parse import urlparse
         domain = urlparse(emoji_id).netloc if emoji_id else ""
-        # Prefix keyword with domain to avoid conflicts
-        full_keyword = f"{domain}_{keyword}" if domain else keyword
 
-        existing = session.query(CustomEmoji).filter_by(keyword=full_keyword).first()
+        existing = session.query(CustomEmoji).filter_by(keyword=keyword).first()
         if existing:
             continue
 
@@ -913,7 +911,7 @@ def _process_emoji_tags(tags: list, session):
                     img = img.resize((img.width // 2, img.height // 2), Image.LANCZOS)
                 img.save(file_path, format="WEBP", quality=100)
             emoji = CustomEmoji(
-                keyword=full_keyword,
+                keyword=keyword,
                 file_name=file_name,
                 category="remote",
                 aliases=[],
