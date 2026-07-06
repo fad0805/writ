@@ -8,20 +8,20 @@ import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse
-from eventbus import add_queue, remove_queue
+from app.eventbus import add_queue, remove_queue
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from urllib.parse import urlparse
-from crypto_utils import verify_signature
-from config import BASE_URL, DOMAIN, CORS_ORIGINS
-from models import User, Follow, Post, get_session, init_db
-from routes.auth import router as auth_router
-from routes.sns import router as sns_router
-from routes.admin import router as admin_router
-from routes.api import router as api_router
-from activitypub import (
+from app.crypto_utils import verify_signature
+from app.config import BASE_URL, DOMAIN, CORS_ORIGINS
+from app.models import User, Follow, Post, get_session, init_db
+from app.routes.auth import router as auth_router
+from app.routes.sns import router as sns_router
+from app.routes.admin import router as admin_router
+from app.routes.api import router as api_router
+from app.activitypub import (
     get_outbox, get_followers, get_following, handle_inbox
 )
 
@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
     init_db()
     seed_default_data()
     try:
-        from routes.api import _cleanup_avatars
+        from app.routes.api import _cleanup_avatars
         _cleanup_avatars()
     except Exception:
         pass
@@ -54,10 +54,10 @@ async def lifespan(app: FastAPI):
 
 
 def seed_default_data():
-    from routes.auth import hash_password
-    from crypto_utils import generate_keypair as gen_kp, encrypt_key
-    from config import SECRET_KEY
-    from models import Novel, Episode
+    from app.routes.auth import hash_password
+    from app.crypto_utils import generate_keypair as gen_kp, encrypt_key
+    from app.config import SECRET_KEY
+    from app.models import Novel, Episode
 
     with get_session() as session:
         if session.query(User).filter_by(username="author1").first():
@@ -154,7 +154,7 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 # Mount uploads directory (local storage only)
 import os
-from config import STORAGE_BACKEND
+from app.config import STORAGE_BACKEND
 if STORAGE_BACKEND == "local":
     os.makedirs("uploads", exist_ok=True)
     app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
@@ -230,7 +230,7 @@ def user_actor(request: Request, username: str):
 
 def _check_collection_access(username: str, request: Request) -> bool:
     """Check if the requester can view this user's ActivityPub collections."""
-    from models import User, Follow, get_session
+    from app.models import User, Follow, get_session
     with get_session() as s:
         user = s.query(User).filter_by(username=username).first()
         if not user:
@@ -310,7 +310,7 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
         return (False, None)
 
     # Resolve the remote actor who signed
-    from activitypub import _resolve_actor
+    from app.activitypub import _resolve_actor
     actor_url = key_id.split("#")[0] if "#" in key_id else key_id
     remote_actor = _resolve_actor(actor_url)
     if not remote_actor or not remote_actor.public_key:
@@ -362,7 +362,7 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
     ok = verify_signature(signed_string, sig_b64, remote_actor.public_key)
     if not ok:
         # Retry with forced actor re-fetch (key rotation)
-        from activitypub import _resolve_actor
+        from app.activitypub import _resolve_actor
         fresh = _resolve_actor(actor_url, force_refresh=True)
         if fresh and fresh.public_key:
             ok = verify_signature(signed_string, sig_b64, fresh.public_key)
@@ -468,7 +468,7 @@ def get_user_by_handle(request: Request, username: str):
 @app.get("/likes/{like_uuid}")
 def get_like(like_uuid: str):
     """Return a Like activity (dereferenceable URI)."""
-    from models import Like, User, get_session
+    from app.models import Like, User, get_session
     ap_id = f"{BASE_URL}/likes/{like_uuid}"
     with get_session() as s:
         like = s.query(Like).filter_by(ap_id=ap_id).first()
@@ -489,7 +489,7 @@ def get_like(like_uuid: str):
 @app.get("/boosts/{boost_uuid}")
 def get_boost(boost_uuid: str):
     """Return an Announce activity (dereferenceable URI)."""
-    from models import Boost, User, get_session
+    from app.models import Boost, User, get_session
     ap_id = f"{BASE_URL}/boosts/{boost_uuid}"
     with get_session() as s:
         boost = s.query(Boost).filter_by(ap_id=ap_id).first()

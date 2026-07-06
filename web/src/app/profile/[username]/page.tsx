@@ -15,6 +15,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const [showMention, setShowMention] = useState(false);
   const [showRemoveFollower, setShowRemoveFollower] = useState(false);
+  const [showNote, setShowNote] = useState(false);
   const [profileNote, setProfileNote] = useState("");
   const [noteLoaded, setNoteLoaded] = useState(false);
   const username = params.username as string;
@@ -141,15 +142,17 @@ export default function ProfilePage() {
                   <button className="action-btn btn-action-sm" onClick={() => router.push(`/direct/${profile.id}`)}>
                     <Icon name="mail" /> DM
                   </button>
+                  <button className="action-btn btn-action-sm" onClick={() => setShowNote(!showNote)}>
+                    <Icon name="edit" /> 메모
+                  </button>
                 </>
               )}
             </div>
           </div>
         </div>
       </div>
-      {!isMine && noteLoaded && (
+      {!isMine && noteLoaded && showNote && (
         <div style={{ marginTop: 12, marginBottom: 12, padding: "10px 14px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8 }}>
-          <div style={{ fontSize: "0.8em", color: "var(--text-muted)", marginBottom: 4, fontWeight: 600 }}>메모 <Icon name="edit" size={12} /></div>
           <textarea value={profileNote} onChange={e => setProfileNote(e.target.value)} rows={2} className="cw-input" style={{ width: "100%", fontSize: "0.85em", resize: "vertical" }} placeholder="이 사용자에 대한 메모..." />
           <button onClick={async () => {
             const form = new FormData(); form.append("content", profileNote);

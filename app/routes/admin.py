@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 
-from models import User, Post, get_session
-from routes.auth import require_auth
+from app.models import User, Post, get_session
+from app.routes.auth import require_auth
 
 router = APIRouter()
 

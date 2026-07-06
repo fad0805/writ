@@ -128,7 +128,7 @@ class S3Storage(StorageBackend):
 
 
 def get_storage() -> StorageBackend:
-    from config import (
+    from app.config import (
         STORAGE_BACKEND,
         S3_ENDPOINT, S3_REGION, S3_ACCESS_KEY, S3_SECRET_KEY,
         S3_BUCKET, S3_PUBLIC_URL,

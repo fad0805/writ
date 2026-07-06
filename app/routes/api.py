@@ -8,8 +8,8 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, Tag, CustomEmoji, get_session
-from routes.auth import require_auth, get_current_user
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, Tag, CustomEmoji, get_session
+from app.routes.auth import require_auth, get_current_user
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
 
@@ -19,11 +19,11 @@ def _fmt_dt(dt: datetime.datetime | None) -> str | None:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=datetime.timezone.utc)
     return dt.astimezone(KST).isoformat()
-from activitypub import broadcast_to_followers, _post_to_inbox, _process_emoji_tags
-from config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY
-from crypto_utils import encrypt_key, get_private_key
-from eventbus import broadcast
-from utils.storage import LocalStorage
+from app.activitypub import broadcast_to_followers, _post_to_inbox, _process_emoji_tags
+from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY
+from app.crypto_utils import encrypt_key, get_private_key
+from app.eventbus import broadcast
+from app.utils.storage import LocalStorage
 
 logger = logging.getLogger("writ.api")
 
@@ -144,7 +144,7 @@ def api_me(request: Request):
 
 @router.post("/auth/login")
 def api_login(request: Request, username: str = Form(...), password: str = Form(...)):
-    from routes.auth import hash_password, verify_password, create_session
+    from app.routes.auth import hash_password, verify_password, create_session
     with get_session() as s:
         db_user = s.query(User).filter_by(username=username, is_remote=False).first()
         if not db_user:
@@ -174,8 +174,8 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
 @router.post("/auth/register")
 def api_register(request: Request, username: str = Form(...), password: str = Form(...),
                  display_name: str = Form(""), email: str = Form(...)):
-    from routes.auth import hash_password, create_session
-    from crypto_utils import generate_keypair
+    from app.routes.auth import hash_password, create_session
+    from app.crypto_utils import generate_keypair
     import re
     if not username or not password or not email:
         raise HTTPException(status_code=400, detail="Username, password, and email required")
@@ -589,7 +589,7 @@ def api_get_profile(request: Request, username: str):
             if len(parts) == 2:
                 remote_user, remote_domain = parts
                 actor_url = f"https://{remote_domain}/@{remote_user}"
-                from activitypub import _resolve_actor
+                from app.activitypub import _resolve_actor
                 _resolve_actor(actor_url)
                 profile = s.query(User).filter_by(username=username).first()
         if not profile:
@@ -1252,7 +1252,7 @@ def _episode_json(e):
 
 def _cleanup_avatars():
     import time
-    from utils.storage import get_storage
+    from app.utils.storage import get_storage
     storage = get_storage()
     if not isinstance(storage, LocalStorage):
         return
@@ -1298,7 +1298,7 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
 @router.post("/profile/update")
 def api_update_profile(request: Request, display_name: str = Form(""), summary: str = Form(""),
                        image: UploadFile = File(None)):
-    from utils.storage import get_storage
+    from app.utils.storage import get_storage
     user = require_auth(request)
     storage = get_storage()
     with get_session() as s:
@@ -1498,7 +1498,7 @@ def api_users_autocomplete(request: Request, q: str = Query("")):
 
 def _fetch_and_save_ap_object(obj, user):
     """Fetch a remote AP object, resolve its author, save to DB, return post."""
-    from activitypub import _sanitize_html
+    from app.activitypub import _sanitize_html
     content = _sanitize_html(obj.get("content", ""))
     if not content:
         return None
@@ -1509,7 +1509,7 @@ def _fetch_and_save_ap_object(obj, user):
     if not attributed_to:
         return None
 
-    from activitypub import _resolve_actor
+    from app.activitypub import _resolve_actor
     _resolve_actor(attributed_to)
     author_id = None
     with get_session() as qs:
@@ -1620,7 +1620,7 @@ def _fetch_and_save_ap_object(obj, user):
 def _safe_httpx_get(url, headers=None, timeout=15, max_size=5*1024*1024):
     """HTTP GET with redirect validation and size limit."""
     import httpx
-    from activitypub import _validate_url
+    from app.activitypub import _validate_url
     if not _validate_url(url):
         return None
     client = httpx.Client(follow_redirects=True, timeout=timeout)
@@ -1645,7 +1645,7 @@ def _safe_httpx_get(url, headers=None, timeout=15, max_size=5*1024*1024):
 
 def _ap_fetch(url, user):
     """Fetch a remote URL with HTTP Signature, return parsed JSON."""
-    from activitypub import _validate_url
+    from app.activitypub import _validate_url
     if not _validate_url(url):
         return None
     from urllib.parse import urlparse
@@ -1661,7 +1661,7 @@ def _ap_fetch(url, user):
 
     # Fall back to signed request
     import hashlib, time
-    from crypto_utils import sign_string
+    from app.crypto_utils import sign_string
     date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
     parsed = urlparse(url)
     path = parsed.path or "/"
@@ -1700,7 +1700,7 @@ def api_fetch_actor(request: Request, url: str = Form(...)):
     user = require_auth(request)
     if not url.startswith("http"):
         raise HTTPException(status_code=400, detail="Invalid URL")
-    from activitypub import _resolve_actor
+    from app.activitypub import _resolve_actor
     _resolve_actor(url)
     actor_id = None
     from urllib.parse import urlparse
@@ -1770,7 +1770,7 @@ def api_fetch_post(request: Request, url: str = Form(...)):
     return result
 
 
-EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "web", "public", "emojis")
+EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "emojis")
 
 
 @router.get("/emojis")
@@ -2041,7 +2041,7 @@ def api_admin_reset_password(request: Request, user_id: int):
     user = require_auth(request)
     if user.role not in ("admin", "moderator"):
         raise HTTPException(status_code=403, detail="Forbidden")
-    from routes.auth import hash_password
+    from app.routes.auth import hash_password
     import secrets
     new_pass = secrets.token_hex(8)
     salt, hsh = hash_password(new_pass)
@@ -2198,7 +2198,7 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
             try:
                 from email.mime.text import MIMEText
                 import smtplib
-                from config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
+                from app.config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
                 action_names = {"warning": "경고", "freeze": "동결", "sensitive": "민감 처리", "limit": "제한", "suspend": "정지", "unsuspend": "정지 해제"}
                 msg = MIMEText(f"계정에 {action_names.get(action, action)} 조치가 적용되었습니다.\n서버 관리팀")
                 msg["Subject"] = f"[WRIT] 계정 {action_names.get(action, action)} 안내"

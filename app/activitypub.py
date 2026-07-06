@@ -12,10 +12,10 @@ from urllib.parse import urlparse
 
 import httpx
 
-from models import User, Post, Follow, Like, Boost, Notification, CustomEmoji, get_session
+from app.models import User, Post, Follow, Like, Boost, Notification, CustomEmoji, get_session
 from sqlalchemy.exc import IntegrityError
-from config import BASE_URL, PUBLIC_URI, SECRET_KEY
-from crypto_utils import generate_keypair, sign_string, verify_signature, encrypt_key, decrypt_key, get_private_key
+from app.config import BASE_URL, PUBLIC_URI, SECRET_KEY
+from app.crypto_utils import generate_keypair, sign_string, verify_signature, encrypt_key, decrypt_key, get_private_key
 
 
 logger = logging.getLogger("writ.activitypub")
@@ -286,7 +286,7 @@ def _safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
 
 def _save_remote_avatar(avatar_url: str, local_username: str) -> str:
     """Download remote avatar and save, return profile_image URL."""
-    from utils.storage import get_storage
+    from app.utils.storage import get_storage
     from uuid import uuid4
     if not _validate_url(avatar_url):
         return ""
@@ -579,7 +579,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
 
             session.commit()
             try:
-                from eventbus import broadcast
+                from app.eventbus import broadcast
                 broadcast("new_post", {"post_id": post.id, "author_id": actor.id})
             except Exception as e:
                 logger.warning("broadcast failed: %s", e)
@@ -869,7 +869,7 @@ def _process_emoji_tags(tags: list, session):
         if existing:
             continue
 
-        EMOJI_DIR = os.path.join(os.path.dirname(__file__), "web", "public", "emojis")
+        EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "web", "public", "emojis")
         import uuid
         from PIL import Image
         import httpx

@@ -5,8 +5,8 @@ import base64
 import secrets
 from fastapi import APIRouter, Request, HTTPException
 
-from models import User, get_session
-from config import SECRET_KEY, SESSION_EXPIRE_DAYS
+from app.models import User, get_session
+from app.config import SECRET_KEY, SESSION_EXPIRE_DAYS
 
 router = APIRouter()
 

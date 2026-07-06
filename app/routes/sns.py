@@ -1,6 +1,6 @@
 import re
 from fastapi import APIRouter
-from models import User, Post, Follow, get_session
+from app.models import User, Post, Follow, get_session
 
 router = APIRouter()
 

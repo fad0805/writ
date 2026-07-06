@@ -1,5 +1,5 @@
 from uuid import uuid4
-from utils.storage import get_storage
+from app.utils.storage import get_storage
 
 def _save_avatar(image_url, user_id):
     if not image_url:
