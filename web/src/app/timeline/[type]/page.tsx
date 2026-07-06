@@ -166,7 +166,7 @@ export default function TimelinePage() {
     );
     obs.observe(el);
     return () => obs.disconnect();
-  }, []);
+  }, [hasMore, posts.length]);
 
   return (
     <>
