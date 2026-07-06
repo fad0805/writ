@@ -13,7 +13,6 @@ export default function SettingsPage() {
   const [defaultVis, setDefaultVis] = useState("public");
   const [seriesDefaultVis, setSeriesDefaultVis] = useState("public");
   const [episodeDefaultVis, setEpisodeDefaultVis] = useState("public");
-  const [isLocked, setIsLocked] = useState(false);
   const [showBadge, setShowBadge] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -24,7 +23,6 @@ export default function SettingsPage() {
       setDefaultVis(user.default_visibility || "public");
       setSeriesDefaultVis(user.series_default_visibility || "public");
       setEpisodeDefaultVis(user.episode_default_visibility || "public");
-      setIsLocked(user.is_locked || false);
       setShowBadge(user.show_badge || false);
       setLoading(false);
     }).catch(() => router.push("/login"));
@@ -50,7 +48,6 @@ export default function SettingsPage() {
       form.append("default_visibility", defaultVis);
       form.append("series_default_visibility", seriesDefaultVis);
       form.append("episode_default_visibility", episodeDefaultVis);
-      form.append("is_locked", isLocked ? "true" : "");
       form.append("show_badge", showBadge ? "true" : "");
       const res = await fetch("/api/settings/update", {
         method: "POST",
@@ -72,11 +69,6 @@ export default function SettingsPage() {
       </div>
       <form onSubmit={handleSubmit} className="novel-form">
         <div className="form-group">
-          <label>게시글 기본 공개 설정</label>
-          <VisibilitySelector value={defaultVis} onChange={(v) => setDefaultVis(v)} />
-          <p className="form-help">새 게시글 작성 시 기본으로 적용될 공개 범위입니다.</p>
-        </div>
-        <div className="form-group">
           <label>시리즈 기본 공개 설정</label>
           <SeriesVisibilitySelector value={seriesDefaultVis} onChange={(v) => setSeriesDefaultVis(v)} />
           <p className="form-help">새 시리즈 생성 시 기본으로 적용될 공개 범위입니다.</p>
@@ -86,13 +78,7 @@ export default function SettingsPage() {
           <VisibilitySelector value={episodeDefaultVis} onChange={(v) => setEpisodeDefaultVis(v)} />
           <p className="form-help">새 에피소드 홍보글에 기본으로 적용될 공개 범위입니다.</p>
         </div>
-        <div className="form-group">
-          <label>
-            <input type="checkbox" checked={isLocked} onChange={(e) => setIsLocked(e.target.checked)} />
-            {" "}<Icon name="lock" /> 팔로워 수동 승인
-          </label>
-          <p className="form-help">켜면 다른 사용자가 팔로우할 때 수동으로 승인해야 팔로워가 됩니다.</p>
-        </div>
+
         {(user?.role === "admin" || user?.role === "moderator") && (
           <div className="form-group">
             <label>

@@ -166,12 +166,12 @@ export default function AdminUserDetailPage() {
               <td style={{ padding: "10px 16px", color: "var(--text-muted)", fontWeight: 600 }}>최근 활동</td>
               <td colSpan={2} style={{ padding: "10px 16px", color: "var(--text-primary)" }}>{u.last_active ? new Date(u.last_active).toLocaleString("ko-KR") : "-"}</td>
             </tr>
-            {u.recent_ips.slice(0, 5).map((ip, i) => (
-              <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                <td style={{ padding: "10px 16px", color: "var(--text-muted)", fontWeight: 600 }}>최근 IP {i + 1}</td>
-                <td colSpan={2} style={{ padding: "10px 16px", color: "var(--text-primary)", fontFamily: "monospace" }}>{ip}</td>
+            {u.recent_ips.length > 0 && (
+              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                <td style={{ padding: "10px 16px", color: "var(--text-muted)", fontWeight: 600 }}>최근 IP</td>
+                <td colSpan={2} style={{ padding: "10px 16px", color: "var(--text-primary)", fontFamily: "monospace", fontSize: "0.85em" }}>{u.recent_ips.join(", ")}</td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
