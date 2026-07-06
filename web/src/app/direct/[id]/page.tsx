@@ -18,8 +18,10 @@ export default function DirectConversationPage() {
 
   const load = useCallback(async () => {
     const id = ++loadIdRef.current;
+    const otherId = Array.isArray(params.id) ? params.id[0] : params.id;
+    if (!otherId) return;
     try {
-      const res = await fetch(`/api/direct/conversation/${params.id}`, { credentials: "include" });
+      const res = await fetch(`/api/direct/conversation/${otherId}`, { credentials: "include" });
       const d = await res.json();
       if (id !== loadIdRef.current) return;
       setOtherUser(d.other_user);

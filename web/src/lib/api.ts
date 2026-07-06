@@ -111,6 +111,7 @@ export interface EpisodeData {
   title: string;
   content: string;
   summary: string;
+  comment: string;
   views: number;
   is_published: boolean;
   created_at: string | null;
@@ -177,13 +178,14 @@ export const api = {
   getNovels: () => request<{ novels: NovelData[] }>("/api/novels"),
   getMyNovels: () => request<{ novels: NovelData[] }>("/api/novels/my"),
   getNovel: (id: number) => request<{ novel: NovelData; episodes: EpisodeData[]; author: User; is_mine: boolean }>(`/api/novels/${id}`),
+  deleteNovel: (id: number) => request<{ ok: boolean }>(`/api/novels/${id}/delete`, { method: "POST" }),
   getEpisode: (id: number, eid: number) => request<{
     episode: EpisodeData; novel: NovelData; is_mine: boolean;
     prev_episode: EpisodeData | null; next_episode: EpisodeData | null;
   }>(`/api/novels/${id}/episodes/${eid}`),
 
   // Explore
-  explore: () => request<{ posts: PostData[] }>("/api/explore"),
+  explore: () => request<{ posts: PostData[]; novels: NovelData[] }>("/api/explore"),
   search: (q: string) => request<SearchResults>(`/api/search?q=${encodeURIComponent(q)}`),
   autocomplete: (q: string) => request<{ users: User[] }>(`/api/users/autocomplete?q=${encodeURIComponent(q)}`),
 

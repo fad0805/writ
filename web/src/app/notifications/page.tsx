@@ -162,7 +162,7 @@ export default function NotificationsPage() {
                   <button onClick={() => handleReject(n.from_user!.username)} className="btn btn-small" style={{ fontSize: "0.8em", color: "var(--text-muted)" }}>거절</button>
                 </div>
               )}
-              {n.post && <PostCard post={n.post} />}
+              {n.post && <PostCard post={n.post} readonly />}
             </div>
           </div>
         ))

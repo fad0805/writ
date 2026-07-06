@@ -8,6 +8,15 @@ from sqlalchemy.orm import selectinload
 
 from models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, Tag, get_session
 from routes.auth import require_auth, get_current_user
+
+KST = datetime.timezone(datetime.timedelta(hours=9))
+
+def _fmt_dt(dt: datetime.datetime | None) -> str | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.astimezone(KST).isoformat()
 from activitypub import broadcast_to_followers, _post_to_inbox
 from config import BASE_URL, MAX_POST_LENGTH
 from eventbus import broadcast
@@ -29,7 +38,7 @@ def _post_json(p, session, user):
         "content": p.content,
         "summary": p.summary or "",
         "visibility": p.visibility or "public",
-        "created_at": p.created_at.isoformat() if p.created_at else None,
+        "created_at": _fmt_dt(p.created_at),
         "author": _user_json(p.author),
         "likes_count": p.likes_count,
         "boosts_count": p.boosts_count,
@@ -726,17 +735,21 @@ def api_direct_conversation(request: Request, other_id: int):
         other = s.query(User).get(other_id)
         if not other:
             raise HTTPException(status_code=404, detail="User not found")
-        uid_str = str(user.id)
-        oid_str = str(other_id)
-        all_posts = s.query(Post).options(selectinload(Post.author)).filter(
+        # Use JSON array containment for efficient querying
+        conv_posts = s.query(Post).options(selectinload(Post.author)).filter(
             Post.visibility == "mention",
             Post.is_deleted == False,
+            or_(
+                and_(
+                    Post.author_id == user.id,
+                    Post.mentioned_user_ids.any(other_id),
+                ),
+                and_(
+                    Post.author_id == other_id,
+                    Post.mentioned_user_ids.any(user.id),
+                ),
+            ),
         ).order_by(Post.created_at).all()
-        conv_posts = []
-        for p in all_posts:
-            mu = str(p.mentioned_user_ids or [])
-            if (p.author_id == user.id and oid_str in mu) or (p.author_id == other_id and uid_str in mu):
-                conv_posts.append(p)
         result = {
             "other_user": _user_json(other),
             "messages": [_post_json(p, s, user) for p in conv_posts],
@@ -786,7 +799,7 @@ def api_direct_threads(request: Request):
                     previews.append({"text": text[:60], "is_me": is_me})
                 entry = _user_json(u)
                 entry["latest_previews"] = previews
-                entry["latest_time"] = sorted_msgs[0].created_at.isoformat() if sorted_msgs[0].created_at else None
+                entry["latest_time"] = _fmt_dt(sorted_msgs[0].created_at)
                 result.append(entry)
     return {"users": result}
 
@@ -809,7 +822,7 @@ def api_notifications(request: Request, filter_type: str = Query("")):
             item = {
                 "id": n.id,
                 "type": n.notification_type,
-                "created_at": n.created_at.isoformat() if n.created_at else None,
+                "created_at": _fmt_dt(n.created_at),
                 "is_read": n.is_read,
                 "from_user": _user_json(from_user) if from_user else None,
                 "post": _post_json(post, s, user) if post and not post.is_deleted and _can_view(post, user, s) else None,
@@ -875,8 +888,8 @@ def _novel_json(n, s=None):
         "episode_count": n.episode_count or 0,
         "total_views": n.total_views or 0,
         "visibility": n.visibility or "public",
-        "created_at": n.created_at.isoformat() if n.created_at else None,
-        "updated_at": n.updated_at.isoformat() if n.updated_at else None,
+        "created_at": _fmt_dt(n.created_at),
+        "updated_at": _fmt_dt(n.updated_at),
         "author": author,
         "author_id": n.author_id,
     }
@@ -954,7 +967,9 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
 
 @router.post("/novels/{novel_id}/episodes/new")
 def api_create_episode(request: Request, novel_id: int, title: str = Form(...), content: str = Form(...),
-                       summary: str = Form(""), announce: bool = Form(False), visibility: str = Form("public")):
+                       summary: str = Form(""), comment: str = Form(""),
+                       announce: bool = Form(False), visibility: str = Form("public"),
+                       announce_comment: str = Form("")):
     user = require_auth(request)
     if not title.strip() or not content.strip():
         raise HTTPException(status_code=400, detail="Title and content are required")
@@ -966,17 +981,23 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
             raise HTTPException(status_code=404, detail="Novel not found")
         max_ep = s.query(Episode).filter_by(novel_id=novel.id).order_by(desc(Episode.episode_number)).first()
         next_num = (max_ep.episode_number + 1) if max_ep else 1
-        episode = Episode(novel_id=novel.id, episode_number=next_num, title=title, content=content, summary=summary)
+        episode = Episode(novel_id=novel.id, episode_number=next_num, title=title, content=content, summary=summary, comment=comment)
         s.add(episode)
         s.flush()
         if announce:
             import secrets
-            import secrets
+            parts = []
+            if announce_comment:
+                parts.append(announce_comment)
+            link = f'📖 <a href="/series/{novel.id}/episodes/{episode.id}">[{novel.title}] {next_num}화: {title}</a>'
+            parts.append(link)
+            if summary:
+                parts.append(summary)
+            post_content = "\n\n".join(parts)
             ep_post_number = secrets.token_hex(4)
             post = Post(
                 author_id=user.id,
-                content=f'📖 <a href="{BASE_URL}/novels/{novel.id}/episodes/{episode.id}">[{novel.title}] {next_num}화: {title}</a>\n\n{summary or ""}',
-                summary=f"[소설] {novel.title} - {next_num}화",
+                content=post_content,
                 visibility=visibility,
                 number=ep_post_number,
                 novel_id=novel.id,
@@ -986,7 +1007,6 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
             s.add(post)
             s.flush()
             post.ap_id = f"{BASE_URL}/@{user.username}/{ep_post_number}"
-            episode.announcement_post_id = post.id
             s.flush()
             try:
                 s.refresh(post)
@@ -1051,7 +1071,9 @@ def api_get_episode(request: Request, novel_id: int, episode_id: int):
 @router.post("/novels/{novel_id}/episodes/{episode_id}/edit")
 def api_edit_episode(request: Request, novel_id: int, episode_id: int,
                      title: str = Form(...), content: str = Form(...),
-                     summary: str = Form(""), is_published: bool = Form(True)):
+                     summary: str = Form(""), comment: str = Form(""),
+                     is_published: bool = Form(True), announce: bool = Form(False),
+                     visibility: str = Form("public"), announce_comment: str = Form("")):
     user = require_auth(request)
     with get_session() as s:
         episode = s.query(Episode).filter_by(id=episode_id, novel_id=novel_id).first()
@@ -1060,7 +1082,47 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
         episode.title = title
         episode.content = content
         episode.summary = summary
+        episode.comment = comment
         episode.is_published = is_published
+
+        if announce:
+            import secrets
+            parts = []
+            if announce_comment:
+                parts.append(announce_comment)
+            link = f'📖 <a href="/series/{novel_id}/episodes/{episode_id}">[{episode.novel.title}] {episode.episode_number}화: {title}</a>'
+            parts.append(link)
+            if summary:
+                parts.append(summary)
+            post_content = "\n\n".join(parts)
+            ep_post_number = secrets.token_hex(4)
+            post = Post(
+                author_id=user.id,
+                content=post_content,
+                visibility=visibility,
+                number=ep_post_number,
+                novel_id=novel_id,
+                episode_id=episode_id,
+                ap_id="",
+            )
+            s.add(post)
+            s.flush()
+            post.ap_id = f"{BASE_URL}/@{user.username}/{ep_post_number}"
+            s.flush()
+            try:
+                s.refresh(post)
+                create_activity = {
+                    "@context": "https://www.w3.org/ns/activitystreams",
+                    "id": f"{BASE_URL}/activities/create/{post.id}",
+                    "type": "Create",
+                    "actor": user.actor_uri(),
+                    "object": post.to_ap_note(),
+                }
+                s.commit()
+                broadcast_to_followers(user, create_activity)
+            except Exception:
+                s.commit()
+
         s.commit()
     return {"ok": True}
 
@@ -1097,10 +1159,11 @@ def _episode_json(e):
         "title": e.title,
         "content": e.content,
         "summary": e.summary or "",
+        "comment": e.comment or "",
         "views": e.views or 0,
         "is_published": e.is_published,
-        "created_at": e.created_at.isoformat() if e.created_at else None,
-        "updated_at": e.updated_at.isoformat() if e.updated_at else None,
+        "created_at": _fmt_dt(e.created_at),
+        "updated_at": _fmt_dt(e.updated_at),
     }
 
 
@@ -1117,14 +1180,13 @@ def _cleanup_avatars():
             if abspath:
                 used.add(abspath)
     now = time.time()
-    for fname in os.listdir(AVATAR_STORAGE_PATH):
-        fpath = os.path.join(AVATAR_STORAGE_PATH, fname)
-        if not os.path.isfile(fpath):
-            continue
-        if os.path.abspath(fpath) in used:
-            continue
-        if now - os.path.getmtime(fpath) > 86400:
-            os.remove(fpath)
+    for root, dirs, files in os.walk(AVATAR_STORAGE_PATH):
+        for fname in files:
+            fpath = os.path.join(root, fname)
+            if os.path.abspath(fpath) in used:
+                continue
+            if now - os.path.getmtime(fpath) > 86400:
+                os.remove(fpath)
 
 
 @router.post("/settings/update")
@@ -1235,7 +1297,28 @@ def api_explore(request: Request):
             Post.is_deleted == False,
             Post.in_reply_to_id == None,
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).limit(30).all()
-        return {"posts": [_post_json(p, s, user) for p in posts]}
+
+        latest_ep = s.query(
+            Episode.novel_id,
+            func.max(Episode.created_at).label("max_created")
+        ).group_by(Episode.novel_id).subquery()
+
+        novels = s.query(Novel).options(
+            selectinload(Novel.author),
+            selectinload(Novel.tag_list),
+        ).outerjoin(
+            latest_ep, Novel.id == latest_ep.c.novel_id
+        ).filter(
+            Novel.visibility == "public",
+            Novel.is_published == True,
+        ).order_by(
+            desc(func.coalesce(latest_ep.c.max_created, Novel.created_at))
+        ).limit(20).all()
+
+        return {
+            "posts": [_post_json(p, s, user) for p in posts],
+            "novels": [_novel_json(n, s) for n in novels],
+        }
 
 
 @router.get("/search")
@@ -1405,9 +1488,11 @@ def _fetch_and_save_ap_object(obj, user):
             s.commit()
         except IntegrityError:
             s.rollback()
-            existing = s.query(Post).filter_by(ap_id=ap_id).first()
-            if existing:
-                return _post_json(existing, s, user)
+            s.close()
+            with get_session() as s2:
+                existing = s2.query(Post).filter_by(ap_id=ap_id).first()
+                if existing:
+                    return _post_json(existing, s2, user)
             return None
         return _post_json(post, s, user)
 

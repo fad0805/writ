@@ -279,6 +279,7 @@ class Episode(Base):
     title = Column(String(256), nullable=False)
     content = Column(Text, nullable=False)
     summary = Column(Text, default="")
+    comment = Column(Text, default="")
     views = Column(Integer, default=0)
     is_published = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), default=now)
@@ -287,7 +288,6 @@ class Episode(Base):
     novel = relationship("Novel", back_populates="episodes", lazy="selectin")
 
     # ActivityPub post ID (when announced)
-    announcement_post_id = Column(Integer, ForeignKey("posts.id"), nullable=True)
 
 
 class Bookmark(Base):
@@ -389,6 +389,12 @@ def init_db():
     try:
         with Session(engine) as session:
             session.execute(text("ALTER TABLE users ADD COLUMN is_locked BOOLEAN DEFAULT FALSE"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE episodes ADD COLUMN comment TEXT DEFAULT ''"))
             session.commit()
     except Exception:
         pass

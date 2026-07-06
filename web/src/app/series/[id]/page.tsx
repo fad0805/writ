@@ -16,7 +16,9 @@ export default function NovelDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getNovel(Number(params.id))
+    const id = Number(Array.isArray(params.id) ? params.id[0] : params.id);
+    if (isNaN(id)) return;
+    api.getNovel(id)
       .then((d) => { setNovel(d.novel); setEpisodes(d.episodes); setAuthor(d.author); setIsMine(d.is_mine); setLoading(false); })
       .catch(() => setLoading(false));
   }, [params.id]);

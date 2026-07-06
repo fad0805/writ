@@ -138,7 +138,7 @@ export default function Sidebar() {
             } catch { alert("불러오기 실패"); }
           }
         } else {
-          router.push(q.startsWith("http") ? `/explore?url=${encodeURIComponent(q)}` : `/explore?q=${encodeURIComponent(q)}`);
+          router.push(`/explore?q=${encodeURIComponent(q)}`);
         }
       }}>
         <span className="sidebar-search-icon" onClick={(ev) => { const f = (ev.target as HTMLElement).closest('form'); if (f) f.requestSubmit(); }}>

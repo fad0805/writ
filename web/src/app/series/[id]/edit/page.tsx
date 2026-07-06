@@ -19,9 +19,11 @@ export default function EditNovelPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    api.getNovel(Number(params.id))
+    const id = Number(Array.isArray(params.id) ? params.id[0] : params.id);
+    if (isNaN(id)) return;
+    api.getNovel(id)
       .then((d) => {
-        if (!d.is_mine) { router.push(`/series/${params.id}`); return; }
+        if (!d.is_mine) { router.push(`/series/${id}`); return; }
         setTitle(d.novel.title);
         setDescription(d.novel.description);
         setTags(d.novel.tags);

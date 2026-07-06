@@ -42,7 +42,9 @@ export default function PostDetailPage() {
     setLoading(true);
     offsetRef.current = 0;
     try {
-      const data = await api.getPost(Number(params.id), 0, 5);
+      const id = Number(params.id);
+      if (isNaN(id)) return;
+      const data = await api.getPost(id, 0, 5);
       setPost(data);
       setReplies(data.replies || []);
       setTotalReplies(data.total_replies);
@@ -51,25 +53,16 @@ export default function PostDetailPage() {
     setLoading(false);
   }, [params.id]);
 
-  useEffect(() => {
-    offsetRef.current = 0;
-    api.getPost(Number(params.id), 0, 5)
-      .then((data) => {
-        setPost(data);
-        setReplies(data.replies || []);
-        setTotalReplies(data.total_replies);
-        setHasMore(data.has_more_replies);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [params.id]);
+  useEffect(() => { load(); }, [load]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     offsetRef.current += 5;
     try {
-      const data = await api.getPost(Number(params.id), offsetRef.current, 5);
+      const id = Number(params.id);
+      if (isNaN(id)) return;
+      const data = await api.getPost(id, offsetRef.current, 5);
       setReplies((prev) => [...prev, ...(data.replies || [])]);
       setHasMore(data.has_more_replies);
     } catch {}

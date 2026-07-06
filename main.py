@@ -10,6 +10,8 @@ from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
+from urllib.parse import urlparse
+from crypto_utils import verify_signature
 from config import BASE_URL, DOMAIN
 from models import User, Follow, Post, get_session, init_db
 from routes.auth import router as auth_router
@@ -221,6 +223,50 @@ def user_following(request: Request, username: str, page: int = None):
     return JSONResponse(content=result, media_type="application/activity+json")
 
 
+def _verify_http_signature(request: Request, body: bytes, local_user: User) -> bool:
+    signature_header = request.headers.get("Signature", "")
+    if not signature_header:
+        return False
+    params = {}
+    for part in signature_header.split(","):
+        if "=" in part:
+            key, _, val = part.partition("=")
+            params[key.strip()] = val.strip().strip('"')
+    key_id = params.get("keyId", "")
+    headers_str = params.get("headers", "")
+    sig_b64 = params.get("signature", "")
+    if not key_id or not sig_b64:
+        return False
+    # Resolve the remote actor who signed
+    from activitypub import _resolve_actor
+    remote_actor = _resolve_actor(key_id.split("#")[0] if "#" in key_id else key_id)
+    if not remote_actor or not remote_actor.public_key:
+        return False
+    # Build signed string
+    parsed = urlparse(key_id.split("#")[0] if "#" in key_id else key_id)
+    path = request.url.path
+    date = request.headers.get("Date", "")
+    digest = request.headers.get("Digest", "")
+    signed_parts = {
+        "(request-target)": f"post {path}",
+        "host": parsed.netloc or request.headers.get("Host", ""),
+        "date": date,
+        "digest": digest,
+    }
+    signed_lines = []
+    for h in headers_str.split():
+        h = h.strip()
+        if h == "(request-target)":
+            signed_lines.append(f"(request-target): post {path}")
+        elif h in signed_parts:
+            signed_lines.append(f"{h}: {signed_parts[h]}")
+        else:
+            val = request.headers.get(h, "")
+            signed_lines.append(f"{h}: {val}")
+    signed_string = "\n".join(signed_lines)
+    return verify_signature(signed_string, sig_b64, remote_actor.public_key)
+
+
 @app.post("/users/{username}/inbox")
 async def user_inbox(request: Request, username: str):
     with get_session() as session:
@@ -228,32 +274,18 @@ async def user_inbox(request: Request, username: str):
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-    # Verify HTTP signature
     body = await request.body()
     try:
         activity = json.loads(body)
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
-    # For now, accept all activities from known/verified sources
-    status, message = handle_inbox(activity)
-    return JSONResponse({"status": status, "message": message})
+    skip_verify = activity.get("type") in ("Delete",)
+    if not skip_verify and not _verify_http_signature(request, body, user):
+        return JSONResponse({"status": "error", "message": "Invalid signature"}, status_code=401)
 
-
-@app.get("/@{username}/{number}")
-def get_post_by_number(request: Request, username: str, number: str):
-    accept = request.headers.get("Accept", "")
-    with get_session() as s:
-        user = s.query(User).filter_by(username=username).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="Not found")
-        post = s.query(Post).filter_by(author_id=user.id, number=number, is_deleted=False).first()
-        if not post:
-            raise HTTPException(status_code=404, detail="Not found")
-        if "application/activity+json" in accept or "application/ld+json" in accept:
-            return JSONResponse(content=post.to_ap_note(),
-                                media_type="application/activity+json")
-        return RedirectResponse(url=f"/@{username}/{number}")
+    status_code, message = handle_inbox(activity)
+    return JSONResponse({"status": status_code, "message": message}, status_code=200)
 
 
 @app.get("/posts/{post_id}")

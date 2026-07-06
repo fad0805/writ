@@ -42,7 +42,10 @@ export default function PostByNumberPage() {
     setLoading(true);
     offsetRef.current = 0;
     try {
-      const data = await fetch(`/api/by-number/${params.username}/${params.number}`, { credentials: "include" });
+      const username = Array.isArray(params.username) ? params.username[0] : params.username;
+      const number = Array.isArray(params.number) ? params.number[0] : params.number;
+      if (!username || !number) return;
+      const data = await fetch(`/api/by-number/${username}/${number}`, { credentials: "include" });
       const p = await data.json();
       const full = await api.getPost(p.id, 0, 5);
       setPost(full);
@@ -88,7 +91,7 @@ export default function PostByNumberPage() {
       {ancestors.map((a) => (
         <div key={a.id} style={{ marginLeft: 20 }}><PostCard post={a} hideContext /></div>
       ))}
-      <PostCard post={post} current hideContext />
+      <PostCard post={post} current hideContext onUpdate={() => loadPost()} />
       <div className="thread-list">
         <h4>답글 {totalReplies}개</h4>
         <ThreadList posts={replies} parentId={post.id} depth={0} />

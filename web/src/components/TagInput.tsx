@@ -30,7 +30,7 @@ export default function TagInput({ value, onChange }: { value: string; onChange:
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      addTag(e.key === "Enter" ? input : input.slice(0, -1));
+      addTag(input);
     }
     if (e.key === "Backspace" && !input && tags.length > 0) {
       removeTag(tags.length - 1);

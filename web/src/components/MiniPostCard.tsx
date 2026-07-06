@@ -42,7 +42,13 @@ export default function MiniPostCard({ post, notifType }: { post: PostData; noti
     ? (isDark ? DARK_BG[notifType] : LIGHT_BG[notifType]) || "var(--bg-tertiary)"
     : "var(--bg-tertiary)";
   const iconColor = notifType ? TYPE_COLORS[notifType] || "var(--text-muted)" : "var(--text-muted)";
-  const contentHtml = rewriteLinks(post.content);
+  const contentHtml = (() => {
+    let html = post.content;
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    html = html.replace(/\n/g, '<br>');
+    return rewriteLinks(html);
+  })();
   return (
     <Link
       href={post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`}

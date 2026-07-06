@@ -7,8 +7,6 @@ export default function EditModal({ post, onClose, onDone }: { post: PostData; o
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
-    const ta = document.querySelector<HTMLTextAreaElement>(".reply-modal textarea, .reply-modal .textarea-ta");
-    setTimeout(() => ta?.focus(), 100);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
   const [content, setContent] = useState(post.content);

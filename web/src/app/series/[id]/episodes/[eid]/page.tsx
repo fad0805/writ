@@ -61,6 +61,7 @@ export default function EpisodeDetailPage() {
         </div>
         {episode.summary && <blockquote className="episode-summary">{episode.summary}</blockquote>}
         <div className="episode-body" dangerouslySetInnerHTML={{ __html: episode.content }} />
+        {episode.comment && <div className="episode-comment" dangerouslySetInnerHTML={{ __html: episode.comment }} />}
         <div className="episode-footer">
         <div className="episode-navigation" style={{ margin: 0 }}>
           {prevEp && (

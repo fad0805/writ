@@ -23,6 +23,21 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const router = useRouter();
 
+  const wrapMarkdown = (wrapper: string) => {
+    const ta = taRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const selected = content.slice(start, end);
+    const wrapped = `${wrapper}${selected}${wrapper}`;
+    const newVal = content.slice(0, start) + wrapped + content.slice(end);
+    setContent(newVal);
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(start + wrapper.length, start + wrapper.length + selected.length);
+    });
+  };
+
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionUsers, setMentionUsers] = useState<User[]>([]);
   const [mentionIdx, setMentionIdx] = useState(0);
@@ -67,8 +82,11 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
 
   const insertMention = useCallback((u: User) => {
     if (mentionStart === -1) return;
+    const afterMention = content.slice(mentionStart + 1);
+    const wordEndMatch = afterMention.search(/[\s@]|$/);
+    const wordEnd = mentionStart + 1 + (wordEndMatch >= 0 ? wordEndMatch : afterMention.length);
     const before = content.slice(0, mentionStart);
-    const after = content.slice(mentionStart + mentionQuery.length + 1);
+    const after = content.slice(wordEnd);
     const inserted = `${before}@${u.username} ${after}`;
     setContent(inserted);
     setMentionStart(-1);
@@ -194,6 +212,8 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       <div className="reply-form-footer">
         <VisibilitySelector value={visibility} onChange={(v) => setVisibilityOverride(v)} includeMention />
         <div className="form-footer-right">
+          <button type="button" className="markdown-btn" onClick={() => wrapMarkdown("**")} title="굵게"><strong>B</strong></button>
+          <button type="button" className="markdown-btn" onClick={() => wrapMarkdown("*")} title="기울임"><em>I</em></button>
           <EmojiPicker onEmoji={(e) => setContent(content + e)} />
           <span className="char-count char-count-inline">{totalLen}/{MAX_LENGTH}</span>
           <button type="submit" disabled={submitting || !content.trim()} className="btn btn-primary">

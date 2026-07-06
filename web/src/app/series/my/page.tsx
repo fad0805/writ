@@ -53,7 +53,7 @@ export default function MyNovelsPage() {
                 </div>
                 <div className="novel-actions" style={{ marginTop: 0 }}>
                   <button className="btn btn-small op-70" onClick={(e) => { e.stopPropagation(); router.push(`/series/${n.id}/edit`); }}>편집</button>
-                  <button className="btn btn-small btn-danger op-70" onClick={(e) => { e.stopPropagation(); if (confirm("정말 삭제하시겠습니까?")) { /* delete */ } }}>삭제</button>
+                  <button className="btn btn-small btn-danger op-70" onClick={async (e) => { e.stopPropagation(); if (confirm("정말 삭제하시겠습니까?")) { try { await api.deleteNovel(n.id); setNovels((prev) => prev.filter((x) => x.id !== n.id)); } catch { alert("삭제 실패"); } } }}>삭제</button>
                 </div>
               </div>
             </div>

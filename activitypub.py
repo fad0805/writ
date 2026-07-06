@@ -1,6 +1,7 @@
 import datetime
 import json
 import hashlib
+import re
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -10,6 +11,16 @@ from models import User, Post, Follow, Like, Boost, Notification, get_session
 from sqlalchemy.exc import IntegrityError
 from config import BASE_URL, PUBLIC_URI
 from crypto_utils import generate_keypair, sign_string, verify_signature
+
+
+def _parse_username_from_url(url: str) -> str:
+    url = url.rstrip("/")
+    # Handle /users/{username} or /@{username}
+    match = re.search(r'/(?:users/)?@?(\w+)$', url)
+    if match:
+        return match.group(1)
+    # Fallback: last segment
+    return url.split("/")[-1]
 
 
 def get_actor(username: str):
@@ -271,7 +282,7 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
     object_url = activity["object"]
     activity_id = activity.get("id", "")
 
-    local_username = object_url.rstrip("/").split("/")[-1]
+    local_username = _parse_username_from_url(object_url)
 
     with get_session() as session:
         target = session.query(User).filter_by(username=local_username, is_remote=False).first()
@@ -328,12 +339,17 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
     if not actor_url:
         return (200, "OK")
 
+    local_username = actor_url.rstrip("/").split("/")[-1]
+    follower_actor_url = activity.get("actor", "")
+    if isinstance(follower_actor_url, list):
+        follower_actor_url = follower_actor_url[0]
+
     with get_session() as session:
-        local_user = session.query(User).filter_by(is_remote=False).first()
+        local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
         if not local_user:
             return (200, "OK")
 
-        following_remote = _resolve_actor(actor_url)
+        following_remote = _resolve_actor(follower_actor_url)
         if not following_remote:
             return (200, "OK")
 
@@ -365,8 +381,12 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         to = obj.get("to", [])
         if isinstance(to, str):
             to = [to]
+        cc = obj.get("cc", [])
+        if isinstance(cc, str):
+            cc = [cc]
+        all_audiences = to + cc
         visibility = "public"
-        if "https://www.w3.org/ns/activitystreams#Public" not in to:
+        if "https://www.w3.org/ns/activitystreams#Public" not in all_audiences:
             visibility = "home"
 
         with get_session() as session:
@@ -457,10 +477,15 @@ def _handle_like(activity: dict) -> tuple[int, str]:
         if existing:
             return (200, "Already liked")
 
+        like_ap_id = activity_id
+        if not like_ap_id:
+            import uuid
+            like_ap_id = f"{BASE_URL}/likes/{uuid.uuid4()}"
+
         like = Like(
             user_id=actor.id,
             post_id=post.id,
-            ap_id=activity_id or f"{BASE_URL}/likes/{activity_id.split('/')[-1]}",
+            ap_id=like_ap_id,
         )
         session.add(like)
 
@@ -497,10 +522,15 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
         if existing:
             return (200, "Already boosted")
 
+        boost_ap_id = activity_id
+        if not boost_ap_id:
+            import uuid
+            boost_ap_id = f"{BASE_URL}/boosts/{uuid.uuid4()}"
+
         boost = Boost(
             user_id=actor.id,
             post_id=post.id,
-            ap_id=activity_id or f"{BASE_URL}/boosts/{activity_id.split('/')[-1]}",
+            ap_id=boost_ap_id,
         )
         session.add(boost)
 
@@ -526,7 +556,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
         if isinstance(actor_url, list):
             actor_url = actor_url[0]
 
-        local_username = object_url.rstrip("/").split("/")[-1]
+        local_username = _parse_username_from_url(object_url)
         with get_session() as session:
             target = session.query(User).filter_by(username=local_username, is_remote=False).first()
             if not target:

@@ -8,6 +8,30 @@ import { useSearchParams } from "next/navigation";
 import { hashColor } from "@/lib/avatar";
 import Avatar from "@/components/Avatar";
 
+function ScrollFade({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [hasOverflow, setHasOverflow] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setHasOverflow(el.scrollWidth > el.clientWidth);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    el.addEventListener("scroll", check);
+    return () => { observer.disconnect(); el.removeEventListener("scroll", check); };
+  }, [children]);
+
+  return (
+    <div className="novel-scroll-wrap" data-overflow={hasOverflow}>
+      <div ref={ref} className="novel-scroll">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function ExplorePage() {
   const [posts, setPosts] = useState<PostData[]>([]);
   const [novels, setNovels] = useState<NovelData[]>([]);
@@ -21,7 +45,7 @@ export default function ExplorePage() {
 
   const loadExplore = useCallback(() => {
     setLoading(true); setSearched(false); setFetchedUrl(null);
-    api.explore().then((d) => { setPosts(d.posts); setNovels([]); setUsers([]); setLoading(false); }).catch(() => setLoading(false));
+    api.explore().then((d) => { setPosts(d.posts); setNovels(d.novels); setUsers([]); setLoading(false); }).catch(() => setLoading(false));
   }, []);
 
   const doSearch = useCallback(async (q: string) => {
@@ -79,7 +103,7 @@ export default function ExplorePage() {
   };
 
   return (
-    <>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <h3 className="section-header"><Icon name="buildings" /> 지금 우리 서버는...</h3>
       <form className="explore-search" onSubmit={handleSubmit}>
         <span className="explore-search-icon" onClick={(ev) => { const f = (ev.target as HTMLElement).closest('form'); if (f) f.requestSubmit(); }}>
@@ -167,11 +191,49 @@ export default function ExplorePage() {
             </>
           )}
         </>
-      ) : posts.length === 0 ? (
+      ) : novels.length === 0 && posts.length === 0 ? (
         <div className="empty-state">게시글이 없습니다.</div>
       ) : (
-        posts.map((p) => <PostCard key={p.id} post={p} />)
+        <div className="explore-feed">
+          {novels.length > 0 && (
+            <>
+              <h4 className="search-section-title"><Icon name="book" /> 최신 시리즈</h4>
+              <ScrollFade>
+                {novels.slice(0, 4).map((n) => (
+                  <div key={n.id} className="novel-card" onClick={() => window.location.href = `/series/${n.id}`} style={{ cursor: "pointer" }}>
+                    <div className="novel-card-body" style={{ display: "flex", gap: 14 }}>
+                      <div style={{ width: 80, aspectRatio: "3/4", borderRadius: 6, flexShrink: 0, overflow: "hidden" }}>
+                        {n.cover_image ? (
+                          <img src={n.cover_image} alt={n.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        ) : (
+                          <div style={{ width: "100%", height: "100%", backgroundColor: hashColor(n.title), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "1.5em", fontWeight: "bold" }}>
+                            <Icon name="book" size={24} />
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <h3 style={{ fontSize: "1em", marginBottom: 4 }}>{n.title}</h3>
+                        <p className="novel-author" style={{ marginBottom: 6 }}>
+                          by <a href={`/@${n.author?.username}`} onClick={(e) => e.stopPropagation()} style={{ color: "var(--accent)" }}>{n.author?.display_name || n.author?.username}</a>
+                        </p>
+                        <p className="novel-desc" style={{ marginBottom: 6 }}>{(n.description || "").slice(0, 120)}{n.description && n.description.length > 120 ? "..." : ""}</p>
+                        <div className="novel-meta">
+                          <span><Icon name="book" /> {n.episode_count}화</span>
+                          <span><Icon name={n.is_completed ? "check" : "edit"} /> {n.is_completed ? "완결" : "연재중"}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </ScrollFade>
+            </>
+          )}
+          {posts.length > 0 && <h4 className="search-section-title" style={{ marginTop: 8 }}><Icon name="globe" /> 로컬 타임라인</h4>}
+          <div className="explore-timeline">
+            {posts.map((p) => <PostCard key={p.id} post={p} />)}
+          </div>
+        </div>
       )}
-    </>
+    </div>
   );
 }

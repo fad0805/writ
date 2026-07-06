@@ -106,6 +106,11 @@ export default function ProfilePage() {
               <p className="profile-summary" dangerouslySetInnerHTML={{
                 __html: profile.summary
                   .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                  .replace(/<[^>]+\s+on\w+\s*=\s*[^>]*>/gi, '')
+                  .replace(/<img[^>]*>/gi, '')
+                  .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '')
+                  .replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '')
+                  .replace(/<embed[^>]*>/gi, '')
                   .replace(/\n/g, '<br>')
                   .replace(/<a\s+href="https?:\/\/([^/]+)\/@(\w+)"[^>]*>([^<]*)<\/a>/gi,
                     (_m: string, domain: string, user: string) =>

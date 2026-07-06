@@ -27,7 +27,7 @@ function rewriteLinks(text: string): string {
   });
 }
 
-export default function PostCard({ post, onUpdate, onDelete, current, hideContext, selected }: { post: PostData; onUpdate?: () => void; onDelete?: () => void; current?: boolean; hideContext?: boolean; selected?: boolean }) {
+export default function PostCard({ post, onUpdate, onDelete, current, hideContext, selected, readonly }: { post: PostData; onUpdate?: () => void; onDelete?: () => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean }) {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const [showReply, setShowReply] = useState(false);
@@ -72,7 +72,11 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
 
   const [quoteUrl, setQuoteUrl] = useState("");
   const contentHtml = (() => {
-    let html = rewriteLinks(post.content);
+    let html = post.content;
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    html = html.replace(/\n/g, '<br>');
+    html = rewriteLinks(html);
     if (quoteUrl) {
       html = html.replace(new RegExp(`<a[^>]*>${quoteUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</a>`, 'gi'), '');
       html = html.replace(/<span class="quote-inline">\s*RE:\s*<\/span>/gi, '');
@@ -121,6 +125,17 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
     }
   }, [post.content]);
 
+  const handleContentClick = (e: React.MouseEvent) => {
+    const anchor = (e.target as HTMLElement).closest('a');
+    if (!anchor) return;
+    const href = anchor.getAttribute('href');
+    if (href && href.startsWith('/')) {
+      e.preventDefault();
+      e.stopPropagation();
+      router.push(href);
+    }
+  };
+
   return (
     <>
       <div className={`post-card${current ? " current" : ""}${selected ? " selected" : ""}${post.visibility === "mention" ? " mention-card" : ""}`} onClick={(e) => { if ((e.target as HTMLElement).closest('a')) return; router.push(post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`); }}>
@@ -145,7 +160,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
               <Icon name={VIS_ICONS[post.visibility] || "globe"} />
             </span>
             {post.ap_id && post.ap_id.startsWith("http") && post.author?.username?.includes("@") ? (
-              <a href={post.ap_id} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()} style={{ color: "inherit", textDecoration: "none" }}>{timeStr}</a>
+              <a href={post.ap_id} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "inherit", textDecoration: "none" }}>{timeStr}</a>
             ) : (
               timeStr
             )}
@@ -156,20 +171,28 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
             <span className="reply-context-label">답글 대상</span>
             <strong>{post.reply_context.author.display_name || post.reply_context.author.username}</strong>
             <span>@{post.reply_context.author.username}</span>
-            <p>{(post.reply_context.content || "").replace(/\n/g, " ").slice(0, 90)}{(post.reply_context.content || "").length > 90 ? "..." : ""}</p>
+            <p dangerouslySetInnerHTML={{ __html: (() => {
+              const text = (post.reply_context.content || "").slice(0, 90);
+              let html = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+              html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+              html = html.replace(/\n/g, '<br>');
+              html = rewriteLinks(html);
+              if ((post.reply_context.content || "").length > 90) html += "...";
+              return html;
+            })() }} />
           </Link>
         )}
         {post.summary ? (
           <details className="cw-box" onClick={(e) => e.stopPropagation()}>
             <summary onClick={(e) => e.stopPropagation()}>⚠️ {post.summary}</summary>
-            <div className="post-content" dangerouslySetInnerHTML={{ __html: contentHtml }} />
+            <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
           </details>
         ) : (
-          <div className="post-content" dangerouslySetInnerHTML={{ __html: contentHtml }} />
+          <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
         )}
         {loadingQuote && <div className="empty-small" style={{ padding: "8px 0" }}>인용 불러오는 중...</div>}
         {quotedPost && <div style={{ margin: "8px 0" }}><MiniPostCard post={quotedPost} /></div>}
-        <div className="post-actions" onClick={(e) => e.stopPropagation()}>
+        {!readonly && <div className="post-actions" onClick={(e) => e.stopPropagation()}>
           <button onClick={() => { setShowReply(!showReply); }} className="action-btn">
             <Icon name="reply" /> {post.replies_count}
           </button>
@@ -197,10 +220,10 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
               </button>
             </>
           )}
-        </div>
+        </div>}
       </div>
-      {showReply && <ReplyModal post={post} onClose={() => setShowReply(false)} onDone={() => { setShowReply(false); if (onUpdate) onUpdate(); }} />}
-      {showEdit && <EditModal post={post} onClose={() => setShowEdit(false)} onDone={() => { setShowEdit(false); if (onUpdate) onUpdate(); }} />}
+      {!readonly && showReply && <ReplyModal post={post} onClose={() => setShowReply(false)} onDone={() => { setShowReply(false); if (onUpdate) onUpdate(); }} />}
+      {!readonly && showEdit && <EditModal post={post} onClose={() => setShowEdit(false)} onDone={() => { setShowEdit(false); if (onUpdate) onUpdate(); }} />}
     </>
   );
 }

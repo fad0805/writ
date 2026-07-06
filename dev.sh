@@ -22,10 +22,8 @@ echo -e "${YELLOW}[setup]${NC} Python 의존성 확인 중..."
 
 # Frontend setup
 if [ -d "$ROOT_DIR/web" ]; then
-    if [ ! -d "$ROOT_DIR/web/node_modules" ]; then
-        echo -e "${YELLOW}[setup]${NC} npm 설치 중..."
-        (cd "$ROOT_DIR/web" && npm install --silent)
-    fi
+    echo -e "${YELLOW}[setup]${NC} npm 확인 중..."
+    (cd "$ROOT_DIR/web" && npm install --silent)
 fi
 
 # ── 포트 충돌 감지 및 대체 포트 할당 ──
