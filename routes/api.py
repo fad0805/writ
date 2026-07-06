@@ -163,20 +163,25 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
 
 @router.post("/auth/register")
 def api_register(request: Request, username: str = Form(...), password: str = Form(...),
-                 display_name: str = Form("")):
+                 display_name: str = Form(""), email: str = Form(...)):
     from routes.auth import hash_password, create_session
     from crypto_utils import generate_keypair
     import re
-    if not username or not password:
-        raise HTTPException(status_code=400, detail="Username and password required")
+    if not username or not password or not email:
+        raise HTTPException(status_code=400, detail="Username, password, and email required")
     if len(username) < 3 or len(password) < 6:
         raise HTTPException(status_code=400, detail="Username (3+) and password (6+) required")
     if not re.match(r'^[a-zA-Z0-9_]+$', username):
         raise HTTPException(status_code=400, detail="Username can only contain letters, numbers, and underscores")
+    if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
+        raise HTTPException(status_code=400, detail="Invalid email address")
     with get_session() as s:
         existing = s.query(User).filter_by(username=username).first()
         if existing:
             raise HTTPException(status_code=400, detail="Username already taken")
+        existing_email = s.query(User).filter_by(email=email).first()
+        if existing_email:
+            raise HTTPException(status_code=400, detail="Email already registered")
         user_count = s.query(User).count()
         is_first = user_count == 0
         salt, pwd_hash = hash_password(password)
@@ -189,6 +194,8 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
             is_remote=False,
             role="admin" if is_first else "user",
             is_admin=is_first,
+            email=email,
+            email_verified=False,
         )
         s.add(user)
         s.commit()

@@ -34,6 +34,7 @@ class User(Base):
     display_name = Column(String(128), default="")
     summary = Column(Text, default="")
     email = Column(String(255), default="")
+    email_verified = Column(Boolean, default=False)
     password_hash = Column(String(255), nullable=False)
 
     # ActivityPub
@@ -469,7 +470,13 @@ def init_db():
         pass
     try:
         with Session(engine) as session:
-            session.execute(text("ALTER TABLE custom_emojis ADD COLUMN domain VARCHAR(128) DEFAULT ''"))
+            session.execute(text("ALTER TABLE users ADD COLUMN show_badge BOOLEAN DEFAULT 0"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT 0"))
             session.commit()
     except Exception:
         pass

@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import { api } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
@@ -8,6 +7,7 @@ import Link from "next/link";
 export default function RegisterPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,10 +18,20 @@ export default function RegisterPage() {
     e.preventDefault();
     setLoading(true); setError("");
     try {
-      await api.register(username, password, displayName || undefined);
-      await refresh();
-      router.push("/timeline/home");
-    } catch (err: unknown) { setError(err instanceof Error ? err.message : String(err)); }
+      const form = new FormData();
+      form.append("username", username);
+      form.append("password", password);
+      form.append("email", email);
+      if (displayName) form.append("display_name", displayName);
+      const res = await fetch("/api/auth/register", { method: "POST", credentials: "include", body: form });
+      if (res.ok) {
+        await refresh();
+        router.push("/timeline/home");
+      } else {
+        const d = await res.json();
+        setError(d.detail || "가입 실패");
+      }
+    } catch { setError("가입 실패"); }
     setLoading(false);
   };
 
@@ -32,6 +42,10 @@ export default function RegisterPage() {
         <div className="form-group">
           <label>표시 이름 (선택)</label>
           <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="작가명" />
+        </div>
+        <div className="form-group">
+          <label>이메일</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@example.com" required />
         </div>
         <div className="form-group">
           <label>사용자 이름</label>

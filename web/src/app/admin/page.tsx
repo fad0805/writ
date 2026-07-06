@@ -32,8 +32,8 @@ export default function AdminDashboard() {
 
       <div className="admin-tabs" style={{ display: "flex", gap: 8, marginBottom: 24 }}>
         <Link href="/admin" className="btn btn-primary btn-small">대시보드</Link>
-        <Link href="/admin/emojis" className="btn btn-outline btn-small">커스텀 이모지</Link>
         <Link href="/admin/users" className="btn btn-outline btn-small">유저 관리</Link>
+        <Link href="/admin/emojis" className="btn btn-outline btn-small">커스텀 이모지</Link>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
