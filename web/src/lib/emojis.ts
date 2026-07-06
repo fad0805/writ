@@ -9,20 +9,21 @@ export interface CustomEmoji {
   url: string;
 }
 
-let cache: CustomEmoji[] = [];
+let cache: CustomEmoji[] | null = null;
 let fetchPromise: Promise<CustomEmoji[]> | null = null;
 
 export async function getCustomEmojis(): Promise<CustomEmoji[]> {
-  if (cache) return cache;
+  if (cache !== null) return cache;
   if (fetchPromise) return fetchPromise;
   fetchPromise = (async () => {
     try {
       const res = await fetch("/api/emojis", { credentials: "include" });
       if (res.ok) {
         cache = await res.json();
-        return cache;
+        return cache || [];
       }
     } catch {}
+    cache = [];
     return [];
   })();
   return fetchPromise;
