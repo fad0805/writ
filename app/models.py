@@ -208,9 +208,11 @@ class Post(Base):
 
         content = re.sub(r'href="/', f'href="{BASE_URL}/', content)
 
+        html_url = f"{BASE_URL}/@{self.author.username}/{self.number}" if self.number else self.ap_id
         obj = {
             "@context": "https://www.w3.org/ns/activitystreams",
             "id": self.ap_id,
+            "url": html_url,
             "type": "Note",
             "published": self.created_at.isoformat() if self.created_at else "",
             "attributedTo": self.author.actor_uri(),
