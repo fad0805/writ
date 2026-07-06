@@ -69,15 +69,12 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
         }}>
           <input ref={searchRef} type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="이모지 검색..." className="cw-input" style={{ width: "100%", marginBottom: 6, fontSize: "0.85em" }} />
           {search && searchResults.length > 0 && (
-            <div className="emoji-custom-row">
-              <div className="emoji-row-label">검색 결과</div>
-              <div className="emoji-row-grid">
-                {searchResults.map((emo) => (
-                  <button key={emo.id} type="button" onClick={() => { onEmoji(`:${emo.keyword}:`); setOpen(false); }} className="emoji-cell emoji-cell-large">
-                    <img src={emo.url} alt={emo.keyword} width={33} height={33} className="emoji-img" />
-                  </button>
-                ))}
-              </div>
+            <div className="emoji-row-grid" style={{ marginBottom: 6 }}>
+              {searchResults.map((emo) => (
+                <button key={emo.id} type="button" onClick={() => { onEmoji(`:${emo.keyword}:`); setOpen(false); }} className="emoji-cell emoji-cell-large">
+                  <img src={emo.url} alt={emo.keyword} width={33} height={33} className="emoji-img" />
+                </button>
+              ))}
             </div>
           )}
           {customEmojis.length > 0 && Object.entries(groupedCustom).map(([catName, emos]) => (
