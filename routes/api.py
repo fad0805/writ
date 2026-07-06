@@ -67,6 +67,7 @@ def _user_json(u):
         "summary": u.summary or "",
         "is_admin": u.is_admin,
         "is_locked": u.is_locked or False,
+        "is_remote": u.is_remote,
         "default_visibility": u.default_visibility or "public",
         "series_default_visibility": u.series_default_visibility or "public",
         "episode_default_visibility": u.episode_default_visibility or "public",
@@ -213,9 +214,9 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 Post.id.in_(boosted_ids),
             ),
             Post.is_deleted == False,
-            Post.visibility != "mention",
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
         posts = [p for p in posts if _can_view(p, user, session)]
+        posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm)]
     elif tl_type == "social":
         following_ids = [f.following_id for f in session.query(Follow).filter_by(
             follower_id=user.id, accepted=True
@@ -232,6 +233,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             Post.is_deleted == False,
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
         posts = [p for p in posts if _can_view(p, user, session)]
+        posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm)]
     elif tl_type == "local":
         local_ids = [u.id for u in session.query(User).filter_by(is_remote=False).all()]
         posts = session.query(Post).options(
@@ -358,6 +360,7 @@ def api_create_post(
             mentioned_user_ids=mentioned_ids,
             number=post_number,
             ap_id="",
+            is_dm=bool(dm_target_id),
         )
         s.add(post)
         s.flush()
@@ -749,18 +752,17 @@ def api_direct_conversation(request: Request, other_id: int):
         other = s.query(User).get(other_id)
         if not other:
             raise HTTPException(status_code=404, detail="User not found")
-        # Use JSON array containment for efficient querying
         conv_posts = s.query(Post).options(selectinload(Post.author)).filter(
             Post.visibility == "mention",
             Post.is_deleted == False,
             or_(
                 and_(
                     Post.author_id == user.id,
-                    Post.mentioned_user_ids.any(other_id),
+                    Post.mentioned_user_ids.contains(other_id),
                 ),
                 and_(
                     Post.author_id == other_id,
-                    Post.mentioned_user_ids.any(user.id),
+                    Post.mentioned_user_ids.contains(user.id),
                 ),
             ),
         ).order_by(Post.created_at).all()

@@ -145,6 +145,7 @@ class Post(Base):
 
     is_deleted = Column(Boolean, default=False)
     is_pinned = Column(Boolean, default=False)
+    is_dm = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now)
     bumped_at = Column(DateTime(timezone=True), nullable=True)
 

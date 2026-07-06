@@ -39,9 +39,16 @@ export default function DirectConversationPage() {
     setSending(true);
     try {
       const form = new FormData();
-      form.append("content", input);
-      form.append("visibility", "mention");
-      form.append("dm_target_id", String(otherUser.id));
+      if (otherUser.is_remote && messages.length > 0) {
+        const mention = `@${otherUser.username} `;
+        form.append("content", input.startsWith("@") ? input : mention + input);
+        form.append("parent_id", String(messages[messages.length - 1].id));
+        form.append("visibility", "mention");
+      } else {
+        form.append("content", input);
+        form.append("visibility", "mention");
+        form.append("dm_target_id", String(otherUser.id));
+      }
 
       const res = await fetch("/api/posts", { method: "POST", credentials: "include", body: form });
       if (res.ok) { setInput(""); await load(); }

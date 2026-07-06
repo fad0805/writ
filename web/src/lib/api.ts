@@ -35,6 +35,7 @@ export interface User {
   avatar: string;
   summary: string;
   is_admin: boolean;
+  is_remote: boolean;
   is_locked?: boolean;
   default_visibility?: string;
   series_default_visibility?: string;
