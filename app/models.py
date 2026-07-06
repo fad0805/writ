@@ -531,6 +531,21 @@ def init_db():
         pass
     try:
         with Session(engine) as session:
+            session.execute(text("""
+                CREATE TABLE IF NOT EXISTS profile_notes (
+                    id INTEGER PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    target_user_id INTEGER NOT NULL REFERENCES users(id),
+                    content TEXT DEFAULT '',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
             session.execute(text("DROP INDEX IF EXISTS ix_custom_emojis_keyword"))
             session.commit()
     except Exception:

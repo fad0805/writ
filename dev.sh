@@ -18,7 +18,7 @@ if [ ! -d "$VENV_DIR" ]; then
 fi
 
 echo -e "${YELLOW}[setup]${NC} Python 의존성 확인 중..."
-"$PYTHON" -m pip install -r "$ROOT_DIR/requirements.txt" --quiet
+"$PYTHON" -m pip install -r "$ROOT_DIR/app/requirements.txt" --quiet
 
 # Frontend setup
 if [ -d "$ROOT_DIR/web" ]; then
