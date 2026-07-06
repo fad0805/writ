@@ -16,6 +16,7 @@ export default function AdminPage() {
   const [emojiSubmitting, setEmojiSubmitting] = useState(false);
   const [emojiFilter, setEmojiFilter] = useState("all");
   const [emojiSearch, setEmojiSearch] = useState("");
+  const [showUpload, setShowUpload] = useState(false);
 
   useEffect(() => {
     if (!authLoading && user?.role !== "admin" && user?.role !== "moderator") {
@@ -38,9 +39,11 @@ export default function AdminPage() {
       </div>
 
       <div className="hm-bottom-28">
-        <h3 className="hm-bottom-16"><Icon name="smile" /> 커스텀 이모지</h3>
+        <h3 className="hm-bottom-16" style={{ cursor: "pointer", userSelect: "none" }} onClick={() => setShowUpload(!showUpload)}>
+          <Icon name="smile" /> 커스텀 이모지 <span style={{ fontSize: "0.7em", color: "var(--text-muted)" }}>{showUpload ? "▲" : "▼"}</span>
+        </h3>
 
-        <form onSubmit={async (e) => {
+        {showUpload && <form onSubmit={async (e) => {
           e.preventDefault();
           if (emojiSubmitting || !emojiFile) return;
           setEmojiSubmitting(true);
@@ -82,7 +85,7 @@ export default function AdminPage() {
           <div className="form-actions">
             <button type="submit" disabled={emojiSubmitting || !emojiFile || !emojiKeyword.trim()} className="btn btn-primary">업로드</button>
           </div>
-        </form>
+        </form>}
 
         <div className="hm-top-24">
           <input type="text" value={emojiSearch} onChange={(e) => setEmojiSearch(e.target.value)} placeholder="이모지 검색..." className="cw-input w-full hm-bottom-8" />
