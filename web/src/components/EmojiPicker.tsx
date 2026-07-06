@@ -30,11 +30,13 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
+    const clickHandler = (e: MouseEvent) => {
       if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setOpen(false);
     };
-    setTimeout(() => document.addEventListener("click", handler), 0);
-    return () => document.removeEventListener("click", handler);
+    const keyHandler = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    setTimeout(() => document.addEventListener("click", clickHandler), 0);
+    document.addEventListener("keydown", keyHandler);
+    return () => { document.removeEventListener("click", clickHandler); document.removeEventListener("keydown", keyHandler); };
   }, [open]);
 
   return (
