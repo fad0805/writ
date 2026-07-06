@@ -1,7 +1,10 @@
 import datetime
+import ipaddress
 import json
 import hashlib
+import logging
 import re
+import socket
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -9,8 +12,74 @@ import httpx
 
 from models import User, Post, Follow, Like, Boost, Notification, get_session
 from sqlalchemy.exc import IntegrityError
-from config import BASE_URL, PUBLIC_URI
-from crypto_utils import generate_keypair, sign_string, verify_signature
+from config import BASE_URL, PUBLIC_URI, SECRET_KEY
+from crypto_utils import generate_keypair, sign_string, verify_signature, encrypt_key, decrypt_key, get_private_key
+
+
+logger = logging.getLogger("writ.activitypub")
+
+
+_SAFE_TAGS = {"p", "br", "a", "strong", "em", "b", "i", "u", "s", "ul", "ol", "li", "blockquote", "code", "pre", "span"}
+
+
+def _sanitize_html(html: str) -> str:
+    """Strip dangerous HTML tags/attributes, keep only safe ones."""
+    # Remove script/style tags and their content
+    html = re.sub(r'<(script|style)[^>]*>.*?</\1>', '', html, flags=re.DOTALL | re.IGNORECASE)
+    # Remove event handlers and javascript: links
+    html = re.sub(r'\bon\w+\s*=\s*["\'][^"\']*["\']', '', html, flags=re.IGNORECASE)
+    html = re.sub(r'href\s*=\s*["\']\s*javascript\s*:', '', html, flags=re.IGNORECASE)
+    # Strip dangerous tags
+    def _tag_filter(m):
+        tag = m.group(0)
+        name = re.match(r'</?(\w+)', tag)
+        if name and name.group(1).lower() not in _SAFE_TAGS:
+            return ''
+        # For safe tags, keep only safe attributes (href on a)
+        if tag.startswith('<a ') and not re.search(r'href\s*=', tag):
+            return ''
+        return tag
+    html = re.sub(r'<[^>]+>', _tag_filter, html)
+    return html
+
+
+_PRIVATE_SUBNETS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("::1/128"),
+]
+
+
+def _validate_url(url: str) -> bool:
+    """Reject URLs pointing to private/internal IPs (SSRF protection)."""
+    parsed = urlparse(url)
+    host = parsed.hostname or ""
+    # Block obviously private hostnames without DNS resolution
+    if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+        return False
+    if host.endswith(".local") or host.endswith(".localhost"):
+        return False
+    # Try to resolve and check against private subnets
+    try:
+        addrs = socket.getaddrinfo(host, 80, family=socket.AF_INET)
+        for addr in addrs:
+            ip = ipaddress.ip_address(addr[4][0])
+            for net in _PRIVATE_SUBNETS:
+                if ip in net:
+                    return False
+    except (socket.gaierror, OSError, ValueError):
+        pass
+    # Also check if the raw string is an IP literal
+    try:
+        ip = ipaddress.ip_address(host)
+        for net in _PRIVATE_SUBNETS:
+            if ip in net:
+                return False
+    except ValueError:
+        pass
+    return True
 
 
 def _parse_username_from_url(url: str) -> str:
@@ -181,6 +250,8 @@ def _save_remote_avatar(avatar_url: str, local_username: str) -> str:
     timestamp = int(time.time())
     filename = f"{local_username}_{uuid4().hex[:8]}.{ext}"
     filepath = os.path.join(remote_dir, filename)
+    if not _validate_url(avatar_url):
+        return ""
     try:
         resp = httpx.get(avatar_url, timeout=10)
         if resp.status_code == 200:
@@ -188,7 +259,8 @@ def _save_remote_avatar(avatar_url: str, local_username: str) -> str:
                 f.write(resp.content)
             os.utime(filepath, (timestamp, timestamp))
             return f"{AVATAR_URL_PREFIX}/remote/{filename}"
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to save remote avatar %s: %s", avatar_url, e)
         pass
     return ""
 
@@ -200,12 +272,15 @@ def _resolve_actor(actor_url: str) -> Optional[User]:
             return user
 
     # Fetch remote actor
+    if not _validate_url(actor_url):
+        return None
     try:
         resp = httpx.get(actor_url, headers={"Accept": "application/activity+json"}, timeout=10)
         if resp.status_code != 200:
             return None
         data = resp.json()
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to fetch remote actor %s: %s", actor_url, e)
         return None
 
     preferred_username = data.get("preferredUsername", "")
@@ -234,7 +309,7 @@ def _resolve_actor(actor_url: str) -> Optional[User]:
             existing.public_key = public_key_pem
             existing.display_name = data.get("name", existing.display_name)
             existing.summary = data.get("summary", existing.summary)
-            if avatar_url and not existing.profile_image:
+            if avatar_url:
                 existing.profile_image = _save_remote_avatar(avatar_url, local_username.replace("@", "_"))
             session.commit()
             return existing
@@ -265,7 +340,7 @@ def _resolve_actor(actor_url: str) -> Optional[User]:
             display_name=data.get("name", preferred_username),
             summary=data.get("summary", ""),
             password_hash="remote_user",
-            private_key=priv,
+            private_key=encrypt_key(priv, SECRET_KEY),
             public_key=public_key_pem or pub,
             is_remote=True,
             remote_url=actor_url,
@@ -288,6 +363,8 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
         target = session.query(User).filter_by(username=local_username, is_remote=False).first()
         if not target:
             return (404, "Target user not found")
+        if target.is_locked:
+            return (403, "Account is locked")
 
         follower = _resolve_actor(actor_url)
         if not follower:
@@ -373,7 +450,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             return (404, "Actor not found")
 
         post_id = obj.get("id", "")
-        content = obj.get("content", "")
+        content = _sanitize_html(obj.get("content", ""))
         summary = obj.get("summary", "")
         in_reply_to = obj.get("inReplyTo", "")
 
@@ -449,8 +526,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             try:
                 from eventbus import broadcast
                 broadcast("new_post", {"post_id": post.id, "author_id": actor.id})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("broadcast failed: %s", e)
 
         return (200, "Created")
     return (200, "OK")
@@ -630,6 +707,8 @@ def _handle_delete(activity: dict) -> tuple[int, str]:
 
 
 def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
+    if not _validate_url(inbox_url):
+        return
     body = json.dumps(activity, ensure_ascii=False).encode("utf-8")
     digest = hashlib.sha256(body).hexdigest()
     date = datetime.datetime.now(datetime.timezone.utc).strftime(
@@ -640,7 +719,7 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     path = parsed.path or "/"
     signed_string = f"(request-target): post {path}\nhost: {parsed.netloc}\ndate: {date}\ndigest: SHA-256={digest}"
 
-    signature = sign_string(signed_string, sender.private_key)
+    signature = sign_string(signed_string, get_private_key(sender, SECRET_KEY))
     signature_header = (
         f'keyId="{sender.actor_uri()}#main-key",'
         f'algorithm="rsa-sha256",'
@@ -658,8 +737,8 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
 
     try:
         httpx.post(inbox_url, content=body, headers=headers, timeout=10)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Failed to deliver to %s: %s", inbox_url, e)
 
 
 def send_to_shared_inbox(user: User, activity: dict):

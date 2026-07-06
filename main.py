@@ -1,4 +1,7 @@
+import hashlib
 import json
+import time
+from collections import defaultdict
 from typing import AsyncGenerator
 
 import asyncio
@@ -12,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from urllib.parse import urlparse
 from crypto_utils import verify_signature
-from config import BASE_URL, DOMAIN
+from config import BASE_URL, DOMAIN, CORS_ORIGINS
 from models import User, Follow, Post, get_session, init_db
 from routes.auth import router as auth_router
 from routes.sns import router as sns_router
@@ -21,6 +24,22 @@ from routes.api import router as api_router
 from activitypub import (
     get_outbox, get_followers, get_following, handle_inbox
 )
+
+_RATE_LIMIT_WINDOW = 60
+_RATE_LIMIT_MAX = 30
+_rate_limit_store: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_rate_limit(key: str) -> bool:
+    now = time.time()
+    window_start = now - _RATE_LIMIT_WINDOW
+    timestamps = _rate_limit_store[key]
+    # Prune old entries
+    _rate_limit_store[key] = [t for t in timestamps if t > window_start]
+    if len(_rate_limit_store[key]) >= _RATE_LIMIT_MAX:
+        return False
+    _rate_limit_store[key].append(now)
+    return True
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,7 +55,8 @@ async def lifespan(app: FastAPI):
 
 def seed_default_data():
     from routes.auth import hash_password
-    from crypto_utils import generate_keypair as gen_kp
+    from crypto_utils import generate_keypair as gen_kp, encrypt_key
+    from config import SECRET_KEY
     from models import Novel, Episode
 
     with get_session() as session:
@@ -48,7 +68,7 @@ def seed_default_data():
         author1 = User(
             username="author1", display_name="소설가 author1",
             password_hash=salt + ":" + hsh,
-            private_key=priv, public_key=pub,
+            private_key=encrypt_key(priv, SECRET_KEY), public_key=pub,
             summary="소설을 쓰는 사람입니다 ✍️",
         )
         session.add(author1)
@@ -59,7 +79,7 @@ def seed_default_data():
         reader1 = User(
             username="reader1", display_name="독자 reader1",
             password_hash=salt2 + ":" + hsh2,
-            private_key=priv2, public_key=pub2,
+            private_key=encrypt_key(priv2, SECRET_KEY), public_key=pub2,
             summary="소설 읽는 걸 좋아합니다 📖",
         )
         session.add(reader1)
@@ -71,7 +91,7 @@ def seed_default_data():
         admin_user = User(
             username="admin", display_name="관리자",
             password_hash=salt3 + ":" + hsh3,
-            private_key=priv3, public_key=pub3,
+            private_key=encrypt_key(priv3, SECRET_KEY), public_key=pub3,
             summary="서버 관리자입니다",
             is_admin=True,
         )
@@ -116,7 +136,7 @@ app = FastAPI(title="WRIT, the sns for writers", version="1.0.0", lifespan=lifes
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -223,10 +243,13 @@ def user_following(request: Request, username: str, page: int = None):
     return JSONResponse(content=result, media_type="application/activity+json")
 
 
-def _verify_http_signature(request: Request, body: bytes, local_user: User) -> bool:
+def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tuple[bool, object]:
+    """Verify HTTP signature.
+    Returns (ok, remote_actor_or_None).
+    """
     signature_header = request.headers.get("Signature", "")
     if not signature_header:
-        return False
+        return (False, None)
     params = {}
     for part in signature_header.split(","):
         if "=" in part:
@@ -236,22 +259,40 @@ def _verify_http_signature(request: Request, body: bytes, local_user: User) -> b
     headers_str = params.get("headers", "")
     sig_b64 = params.get("signature", "")
     if not key_id or not sig_b64:
-        return False
+        return (False, None)
+
+    # Digest validation (Fix 3)
+    digest_header = request.headers.get("Digest", "")
+    if digest_header:
+        expected = "SHA-256=" + hashlib.sha256(body).hexdigest()
+        if digest_header != expected:
+            return (False, None)
+
     # Resolve the remote actor who signed
     from activitypub import _resolve_actor
-    remote_actor = _resolve_actor(key_id.split("#")[0] if "#" in key_id else key_id)
+    actor_url = key_id.split("#")[0] if "#" in key_id else key_id
+    remote_actor = _resolve_actor(actor_url)
     if not remote_actor or not remote_actor.public_key:
-        return False
-    # Build signed string
-    parsed = urlparse(key_id.split("#")[0] if "#" in key_id else key_id)
+        return (False, None)
+
+    # Actor binding check (Fix 1) — verify the signer matches activity.actor
+    activity_actor = activity.get("actor")
+    if isinstance(activity_actor, list):
+        activity_actor = activity_actor[0]
+    signer_uri = remote_actor.actor_uri() if not remote_actor.is_remote else remote_actor.remote_url
+    if not activity_actor or signer_uri != activity_actor:
+        return (False, None)
+
+    # Build signed string (Fix 7 — use request Host header, not keyId host)
     path = request.url.path
     date = request.headers.get("Date", "")
-    digest = request.headers.get("Digest", "")
+    host_header = request.headers.get("Host", "")
+    digest_val = request.headers.get("Digest", "")
     signed_parts = {
         "(request-target)": f"post {path}",
-        "host": parsed.netloc or request.headers.get("Host", ""),
+        "host": host_header,
         "date": date,
-        "digest": digest,
+        "digest": digest_val,
     }
     signed_lines = []
     for h in headers_str.split():
@@ -264,7 +305,8 @@ def _verify_http_signature(request: Request, body: bytes, local_user: User) -> b
             val = request.headers.get(h, "")
             signed_lines.append(f"{h}: {val}")
     signed_string = "\n".join(signed_lines)
-    return verify_signature(signed_string, sig_b64, remote_actor.public_key)
+    ok = verify_signature(signed_string, sig_b64, remote_actor.public_key)
+    return (ok, remote_actor if ok else None)
 
 
 @app.post("/users/{username}/inbox")
@@ -280,9 +322,49 @@ async def user_inbox(request: Request, username: str):
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
-    skip_verify = activity.get("type") in ("Delete",)
-    if not skip_verify and not _verify_http_signature(request, body, user):
+    # Rate limiting (Fix 6) — per actor + per IP
+    actor_url = activity.get("actor", "")
+    if isinstance(actor_url, list):
+        actor_url = actor_url[0]
+    client_ip = request.client.host if request.client else ""
+    rate_key = f"inbox:{actor_url or client_ip}"
+    if not _check_rate_limit(rate_key):
+        return JSONResponse({"status": "error", "message": "Too many requests"}, status_code=429)
+
+    # Validate inbox destination (Fix 11) — check to/cc includes this user
+    to_list = activity.get("to", [])
+    if isinstance(to_list, str):
+        to_list = [to_list]
+    cc_list = activity.get("cc", [])
+    if isinstance(cc_list, str):
+        cc_list = [cc_list]
+    all_audiences = to_list + cc_list
+    user_uri = user.actor_uri()
+    if activity.get("type") in ("Follow", "Delete"):
+        # Follow/Delete target the user directly, not via to/cc
+        pass
+    elif user_uri not in all_audiences and f"{user_uri}/followers" not in all_audiences:
+        return JSONResponse({"status": "error", "message": "Not addressed to this user"}, status_code=403)
+
+    ok, remote_actor = _verify_http_signature(request, body, activity)
+    if not ok:
         return JSONResponse({"status": "error", "message": "Invalid signature"}, status_code=401)
+
+    # Additional check for Delete (Fix 2) — verify actor owns the deleted post
+    if activity.get("type") == "Delete":
+        object_url = activity.get("object", "")
+        if isinstance(object_url, dict):
+            object_url = object_url.get("id", "")
+        if object_url:
+            with get_session() as session:
+                post = session.query(Post).filter_by(ap_id=object_url).first()
+                if post:
+                    author_uri = post.author.actor_uri() if not post.author.is_remote else post.author.remote_url
+                    actor_url = activity.get("actor")
+                    if isinstance(actor_url, list):
+                        actor_url = actor_url[0]
+                    if author_uri != actor_url:
+                        return JSONResponse({"status": "error", "message": "Forbidden"}, status_code=403)
 
     status_code, message = handle_inbox(activity)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)

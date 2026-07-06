@@ -1,4 +1,5 @@
 import datetime
+import re
 import uuid
 from sqlalchemy import (
     create_engine, Column, Integer, String, Text, DateTime, Boolean,
@@ -171,16 +172,38 @@ class Post(Base):
             return 0
 
     def to_ap_note(self):
+        content = self.content
+
+        content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', content)
+        content = re.sub(r'\*(.+?)\*', r'<em>\1</em>', content)
+        content = content.replace('\n', '<br>')
+
+        tags = []
+        if self.mentioned_user_ids:
+            with get_session() as s:
+                users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
+                for u in users:
+                    name = f"@{u.username}"
+                    href = u.actor_uri()
+                    content = re.sub(
+                        re.escape(name) + r'(?![^\s<]*(?:</a>|">))',
+                        f'<a href="{href}" class="mention">{name}</a>',
+                        content,
+                    )
+                    tags.append({"type": "Mention", "href": href, "name": name})
+
+        content = re.sub(r'href="/', f'href="{BASE_URL}/', content)
+
         obj = {
             "@context": "https://www.w3.org/ns/activitystreams",
             "id": self.ap_id,
             "type": "Note",
-            "published": self.created_at.isoformat(),
+            "published": self.created_at.isoformat() if self.created_at else "",
             "attributedTo": self.author.actor_uri(),
-            "content": self.content,
+            "content": content,
             "to": [],
             "cc": [],
-            "tag": [],
+            "tag": tags,
         }
         if self.visibility == "public":
             obj["to"] = [f"{self.author.followers_uri()}", "https://www.w3.org/ns/activitystreams#Public"]

@@ -1,7 +1,9 @@
 import base64
+import hashlib
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.backends import default_backend
+from cryptography.fernet import Fernet
 
 
 def generate_keypair():
@@ -20,6 +22,26 @@ def generate_keypair():
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     ).decode("utf-8")
     return priv_pem, pub_pem
+
+
+def _fernet(secret: str) -> Fernet:
+    key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
+    return Fernet(key)
+
+
+def encrypt_key(plaintext: str, secret: str) -> str:
+    return _fernet(secret).encrypt(plaintext.encode()).decode()
+
+
+def decrypt_key(ciphertext: str, secret: str) -> str:
+    try:
+        return _fernet(secret).decrypt(ciphertext.encode()).decode()
+    except Exception:
+        return ciphertext
+
+
+def get_private_key(user, secret: str) -> str:
+    return decrypt_key(user.private_key, secret)
 
 
 def sign_string(text: str, private_key_pem: str) -> str:

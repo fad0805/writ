@@ -1,5 +1,6 @@
 import re
 import datetime
+import logging
 from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File
 from fastapi.responses import JSONResponse
 from sqlalchemy import desc, or_, and_, func
@@ -18,8 +19,11 @@ def _fmt_dt(dt: datetime.datetime | None) -> str | None:
         dt = dt.replace(tzinfo=datetime.timezone.utc)
     return dt.astimezone(KST).isoformat()
 from activitypub import broadcast_to_followers, _post_to_inbox
-from config import BASE_URL, MAX_POST_LENGTH
+from config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY
+from crypto_utils import encrypt_key, get_private_key
 from eventbus import broadcast
+
+logger = logging.getLogger("writ.api")
 
 router = APIRouter(prefix="/api")
 
@@ -170,7 +174,7 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
             username=username,
             display_name=display_name or username,
             password_hash=salt + ":" + pwd_hash,
-            private_key=priv_key, public_key=pub_key,
+            private_key=encrypt_key(priv_key, SECRET_KEY), public_key=pub_key,
             is_remote=False,
         )
         s.add(user)
@@ -387,13 +391,13 @@ def api_create_post(
                             _post_to_inbox(mu.inbox_uri(), create_activity, user)
             else:
                 broadcast_to_followers(user, create_activity)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to broadcast federation activity: %s", e)
 
         try:
             broadcast("new_post", {"post_id": post.id, "author_id": user.id})
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to broadcast new_post: %s", e)
         return _post_json(post, s, user)
 
 
@@ -1025,7 +1029,8 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
                             _post_to_inbox(mu.inbox_uri(), create_activity, user)
                 else:
                     broadcast_to_followers(user, create_activity)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to broadcast episode federation: %s", e)
                 s.commit()
         else:
             s.commit()
@@ -1120,7 +1125,8 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
                 }
                 s.commit()
                 broadcast_to_followers(user, create_activity)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to broadcast episode edit federation: %s", e)
                 s.commit()
 
         s.commit()
@@ -1402,7 +1408,8 @@ def api_users_autocomplete(request: Request, q: str = Query("")):
 
 def _fetch_and_save_ap_object(obj, user):
     """Fetch a remote AP object, resolve its author, save to DB, return post."""
-    content = obj.get("content", "")
+    from activitypub import _sanitize_html
+    content = _sanitize_html(obj.get("content", ""))
     if not content:
         return None
 
@@ -1481,8 +1488,8 @@ def _fetch_and_save_ap_object(obj, user):
         if published:
             try:
                 post.created_at = datetime.datetime.fromisoformat(published.replace("Z", "+00:00"))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to parse published date: %s", e)
         s.add(post)
         try:
             s.commit()
@@ -1499,6 +1506,9 @@ def _fetch_and_save_ap_object(obj, user):
 
 def _ap_fetch(url, user):
     """Fetch a remote URL with HTTP Signature, return parsed JSON."""
+    from activitypub import _validate_url
+    if not _validate_url(url):
+        return None
     import httpx, hashlib
     from urllib.parse import urlparse
     from crypto_utils import sign_string
@@ -1506,7 +1516,7 @@ def _ap_fetch(url, user):
     parsed = urlparse(url)
     path = parsed.path or "/"
     signed_string = f"(request-target): get {path}\nhost: {parsed.netloc}\ndate: {date}"
-    signature = sign_string(signed_string, user.private_key)
+    signature = sign_string(signed_string, get_private_key(user, SECRET_KEY))
     signature_header = (
         f'keyId="{user.actor_uri()}#main-key",'
         f'algorithm="rsa-sha256",'
@@ -1592,8 +1602,8 @@ def api_fetch_post(request: Request, url: str = Form(...)):
                 fetch_thread(parent_obj, depth + 1)
                 try:
                     _fetch_and_save_ap_object(parent_obj, user)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("Failed to save parent post: %s", e)
 
     fetch_thread(obj)
 
