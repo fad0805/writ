@@ -1830,3 +1830,15 @@ def api_delete_emoji(request: Request, emoji_id: int):
         s.delete(emoji)
         s.commit()
         return {"ok": True}
+
+
+@router.get("/admin/stats")
+def api_admin_stats(request: Request):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        users = s.query(User).filter_by(is_remote=False).count()
+        posts = s.query(Post).filter_by(is_deleted=False).count()
+        series = s.query(Novel).count()
+        return {"users": users, "posts": posts, "series": series}
