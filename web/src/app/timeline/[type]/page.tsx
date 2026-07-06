@@ -53,16 +53,16 @@ export default function TimelinePage() {
     setLoading(false);
   };
 
-  const loadMore = useCallback(async () => {
+  const loadMoreRef = useRef<() => void>(() => {});
+  loadMoreRef.current = () => {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
-    try {
-      const data = await api.timeline(tlType, LOAD_MORE, posts.length);
+    const currentLen = posts.length;
+    api.timeline(tlType, LOAD_MORE, currentLen).then((data) => {
       setPosts((prev) => [...prev, ...data.posts]);
       setHasMore(data.has_more);
-    } catch {}
-    setLoadingMore(false);
-  }, [tlType, posts.length, loadingMore, hasMore]);
+    }).catch(() => {}).finally(() => setLoadingMore(false));
+  };
 
   useEffect(() => { if (!authLoading && !user) router.replace("/"); }, [authLoading, user, router]);
 
@@ -157,13 +157,13 @@ export default function TimelinePage() {
     if (!el) return;
     const obs = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) loadMore();
+        if (entries[0].isIntersecting) loadMoreRef.current();
       },
       { rootMargin: "200px" }
     );
     obs.observe(el);
     return () => obs.disconnect();
-  }, [loadMore]);
+  }, []);
 
   return (
     <>
