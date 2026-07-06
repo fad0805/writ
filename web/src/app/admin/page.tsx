@@ -35,8 +35,8 @@ export default function AdminPage() {
         <h2><Icon name="settings" /> 서버 관리</h2>
       </div>
 
-      <div style={{ marginBottom: 28 }}>
-        <h3 style={{ marginBottom: 16 }}><Icon name="smile" /> 커스텀 이모지</h3>
+      <div className="hm-bottom-28">
+        <h3 className="hm-bottom-16"><Icon name="smile" /> 커스텀 이모지</h3>
 
         <form onSubmit={async (e) => {
           e.preventDefault();
@@ -63,36 +63,36 @@ export default function AdminPage() {
         }} className="novel-form">
           <div className="form-group">
             <label>키워드 <small>(:keyword:)</small></label>
-            <input type="text" value={emojiKeyword} onChange={(e) => setEmojiKeyword(e.target.value.replace(/[^a-z0-9_]/gi, "_").toLowerCase())} placeholder="blobcat" required className="cw-input" style={{ width: "100%" }} />
+            <input type="text" value={emojiKeyword} onChange={(e) => setEmojiKeyword(e.target.value.replace(/[^a-z0-9_]/gi, "_").toLowerCase())} placeholder="blobcat" required className="cw-input w-full" />
           </div>
           <div className="form-group">
             <label>카테고리</label>
-            <input type="text" value={emojiCategory} onChange={(e) => setEmojiCategory(e.target.value)} placeholder="기본" className="cw-input" style={{ width: "100%" }} />
+            <input type="text" value={emojiCategory} onChange={(e) => setEmojiCategory(e.target.value)} placeholder="기본" className="cw-input w-full" />
           </div>
           <div className="form-group">
             <label>별칭 <small>(쉼표로 구분)</small></label>
-            <input type="text" value={emojiAliases} onChange={(e) => setEmojiAliases(e.target.value)} placeholder="blob, blob_cat" className="cw-input" style={{ width: "100%" }} />
+            <input type="text" value={emojiAliases} onChange={(e) => setEmojiAliases(e.target.value)} placeholder="blob, blob_cat" className="cw-input w-full" />
           </div>
           <div className="form-group">
             <label>이미지</label>
-            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(e) => setEmojiFile(e.target.files?.[0] || null)} required style={{ display: "block", marginTop: 4 }} />
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(e) => setEmojiFile(e.target.files?.[0] || null)} required className="mt-4" />
           </div>
           <div className="form-actions">
             <button type="submit" disabled={emojiSubmitting || !emojiFile || !emojiKeyword.trim()} className="btn btn-primary">업로드</button>
           </div>
         </form>
 
-        <div style={{ marginTop: 24 }}>
+        <div className="hm-top-24">
           {emojis.length === 0 ? (
             <p className="empty-state">등록된 커스텀 이모지가 없습니다.</p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div className="flex-col gap-8">
               {emojis.map((emo) => (
-                <div key={emo.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 10 }}>
-                  <img src={emo.url} alt={emo.keyword} width={33} height={33} style={{ width: 33, height: 33, borderRadius: 4, objectFit: "contain", flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>:<span style={{ color: "var(--accent)" }}>{emo.keyword}</span>:</div>
-                    <div style={{ fontSize: "0.85em", color: "var(--text-muted)" }}>
+                <div key={emo.id} className="emoji-list-item">
+                  <img src={emo.url} alt={emo.keyword} width={33} height={33} className="emoji-img-admin" />
+                  <div className="emoji-info">
+                    <div className="emoji-keyword">:<span className="emoji-accent">{emo.keyword}</span>:</div>
+                    <div className="emoji-meta">
                       {emo.category && <span>#{emo.category}</span>}
                       {emo.aliases && emo.aliases.length > 0 && <span> {emo.aliases.map((a: string) => `:${a}:`).join(" ")}</span>}
                     </div>
@@ -103,7 +103,7 @@ export default function AdminPage() {
                       const res = await fetch(`/api/emojis/${emo.id}`, { method: "DELETE", credentials: "include" });
                       if (res.ok) { setEmojis(emojis.filter(e => e.id !== emo.id)); invalidateEmojiCache(); }
                     } catch {}
-                  }} className="btn" style={{ color: "var(--danger)", border: "1px solid var(--border)", padding: "4px 12px", fontSize: "0.85em" }}>삭제</button>
+                  }} className="btn emoji-delete-btn">삭제</button>
                 </div>
               ))}
             </div>

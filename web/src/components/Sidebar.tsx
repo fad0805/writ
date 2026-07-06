@@ -74,7 +74,7 @@ export default function Sidebar() {
     return (
       <aside className="sidebar">
         <div className="sidebar-header">
-          <Link href="/" className="sidebar-home-link"><h2><span style={{ display: "inline-block", width: 28, height: 28, backgroundColor: "var(--accent)", mask: "url(/logo.svg) center/contain no-repeat", WebkitMask: "url(/logo.svg) center/contain no-repeat", verticalAlign: "middle", flexShrink: 0 }} /> WRIT</h2></Link>
+          <Link href="/" className="sidebar-home-link"><h2><span className="sidebar-logo-icon" /> WRIT</h2></Link>
         </div>
       </aside>
     );
@@ -84,7 +84,7 @@ export default function Sidebar() {
     return (
       <aside className="sidebar">
         <div className="sidebar-header">
-          <Link href="/" className="sidebar-home-link"><h2><span style={{ display: "inline-block", width: 28, height: 28, backgroundColor: "var(--accent)", mask: "url(/logo.svg) center/contain no-repeat", WebkitMask: "url(/logo.svg) center/contain no-repeat", verticalAlign: "middle", flexShrink: 0 }} /> WRIT</h2></Link>
+          <Link href="/" className="sidebar-home-link"><h2><span className="sidebar-logo-icon" /> WRIT</h2></Link>
         </div>
         <ul className="nav-links">
           <NavItem href="/explore" active={isActive("/explore")}>
@@ -111,7 +111,7 @@ export default function Sidebar() {
     <aside className="sidebar">
       <div className="sidebar-header">
         <Link href="/" className="sidebar-home-link">
-          <h2><span style={{ display: "inline-block", width: 28, height: 28, backgroundColor: "var(--accent)", mask: "url(/logo.svg) center/contain no-repeat", WebkitMask: "url(/logo.svg) center/contain no-repeat", verticalAlign: "middle", flexShrink: 0 }} /> WRIT</h2>
+          <h2><span className="sidebar-logo-icon" /> WRIT</h2>
         </Link>
       </div>
       <form className="sidebar-search" onSubmit={async (e) => {
@@ -155,7 +155,7 @@ export default function Sidebar() {
         <div className="user-info">
            <Avatar user={user} className="sidebar-avatar rounded-[8px] flex items-center justify-center text-white font-bold text-lg" />
           <div className="user-info-text-mini">
-            <strong>{user.display_name} {user.is_locked && <Icon name="lock_filled" style={{ fontSize: "0.65em", verticalAlign: "middle", color: "var(--text-muted)", marginLeft: 2 }} />} {(user.role === "admin" || user.role === "moderator") && <Icon name="shield_filled" style={{ color: "#27ae60", fontSize: "0.7em", verticalAlign: "middle", marginLeft: 3 }} title={user.role === "admin" ? "관리자" : "조율자"} />}</strong>
+            <strong>{user.display_name} {user.is_locked && <Icon name="lock_filled" style={{ fontSize: "0.65em", verticalAlign: "middle", color: "var(--text-muted)", marginLeft: 2 }} />} {(user.role === "admin" || user.role === "moderator") && <Icon name="shield_filled" style={{ color: user.role === "admin" ? "#27ae60" : "#cc8800", fontSize: "0.7em", verticalAlign: "middle", marginLeft: 3 }} title={user.role === "admin" ? "관리자" : "조율자"} />}</strong>
             <span>@{user.username}</span>
           </div>
         </div>

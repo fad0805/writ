@@ -102,9 +102,9 @@ export default function EditEpisodePage() {
                 maxLength={100}
                 rows={2}
                 placeholder="홍보글에 추가할 코멘트 (선택, 100자 이내)"
-                style={{ marginTop: 8, width: "100%" }}
+                className="announce-textarea"
               />
-              <div style={{ marginTop: 8 }}>
+              <div className="announce-vis-wrap">
                 <VisibilitySelector value={visibility} onChange={(v) => setVisibility(v)} />
               </div>
             </>

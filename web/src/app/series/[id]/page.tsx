@@ -34,25 +34,25 @@ export default function NovelDetailPage() {
   return (
     <>
       <div className="novel-header">
-        <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-          <div style={{ width: 120, aspectRatio: "3/4", borderRadius: 8, flexShrink: 0, overflow: "hidden" }}>
+        <div className="series-header-row">
+          <div className="cover-wrap-120">
             {novel.cover_image ? (
-              <img src={novel.cover_image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              <img src={novel.cover_image} alt="" className="cover-img" />
             ) : (
-              <div style={{ width: "100%", height: "100%", backgroundColor: hashColor(novel.title), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "2em", fontWeight: "bold" }}>
+              <div className="cover-fallback" style={{ backgroundColor: hashColor(novel.title), fontSize: "2em" }}>
                 <Icon name="book" size={36} />
               </div>
             )}
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div className="series-header-info">
+            <div className="series-header-top">
               <div>
                 <h2>{novel.title}</h2>
                 <p className="novel-author">
                   by <Link href={`/@${author?.username}`}>{author?.display_name || author?.username}</Link>
                 </p>
               </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <div className="series-header-btns">
                 {novel.visibility !== "private" && <ShareButton url={`/series/${novel.id}`} />}
                 {user && <button className="action-btn" onClick={() => setShowSharePost(true)} title="포스트로 공유"><Icon name="edit" /></button>}
                 {isMine && (
@@ -72,7 +72,7 @@ export default function NovelDetailPage() {
           <span><Icon name="eye" /> {novel.visibility === "public" ? "전체공개" : novel.visibility === "unlisted" ? "공개" : "비공개"}</span>
         </div>
         {novel.description && <p className="novel-description">{novel.description}</p>}
-        {novel.tags && <p className="novel-tags"><Icon name="tag" /> {novel.tags.split(/[ ,]+/).filter(Boolean).map((t, i) => <span key={i} style={{ marginRight: 6 }}>{t}</span>)}</p>}
+        {novel.tags && <p className="novel-tags"><Icon name="tag" /> {novel.tags.split(/[ ,]+/).filter(Boolean).map((t, i) => <span key={i} className="tag-spacing">{t}</span>)}</p>}
       </div>
 
       <div className="episode-list">
@@ -90,11 +90,11 @@ export default function NovelDetailPage() {
               </div>
             </div>
             {isMine && (
-              <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: "auto", flexShrink: 0 }}>
+              <div className="episode-actions-row">
                 <button className="action-btn" onClick={(ev) => { ev.stopPropagation(); router.push(`/series/${novel.id}/episodes/${e.id}/edit`); }}>
                   <Icon name="edit" />
                 </button>
-                <button className="action-btn" style={{ color: "var(--text-muted)" }} onClick={async (ev) => {
+                <button className="action-btn text-muted" onClick={async (ev) => {
                   ev.stopPropagation();
                   if (!confirm("정말 삭제하시겠습니까?")) return;
                   try { await fetch(`/api/novels/${novel.id}/episodes/${e.id}/delete`, { method: "POST", credentials: "include" }); window.location.reload(); } catch {}

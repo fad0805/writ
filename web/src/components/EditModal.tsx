@@ -49,9 +49,9 @@ export default function EditModal({ post, onClose, onDone }: { post: PostData; o
             placeholder="CW (선택사항)"
             className="cw-input"
           />
-          <div className="edit-modal-footer" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="edit-modal-footer edit-modal-footer-flex">
             <EmojiPicker onEmoji={(e) => setContent(content + e)} />
-            <div style={{ flex: 1 }} />
+            <div className="flex-spacer" />
             <button type="submit" disabled={submitting || !content.trim()} className="btn btn-primary">
               {submitting ? "..." : "수정"}
             </button>

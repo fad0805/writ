@@ -76,22 +76,23 @@ export default function EditNovelPage() {
         <div className="form-group">
           <label>표지 이미지 URL</label>
           <input type="text" value={coverImage} onChange={(e) => setCoverImage(e.target.value)} placeholder="https://..." />
-          {coverImage && <img src={coverImage} alt="" style={{ width: "100%", maxHeight: 200, objectFit: "cover", borderRadius: 8, marginTop: 6 }} />}
+          {coverImage && <img src={coverImage} alt="" className="cover-preview" />}
         </div>
         <div className="form-group">
           <label>공개 설정</label>
           <SeriesVisibilitySelector value={visibility} onChange={(v) => setVisibility(v)} />
           <p className="form-help">전체공개는 모든 시리즈 목록에 노출되고, 공개는 작가 프로필과 URL로만 접근할 수 있습니다.</p>
         </div>
-        <div className="form-group" style={{ marginLeft: 4 }}>
+        <div className="form-group ml-4">
           <label>
             <input type="checkbox" checked={isCompleted} onChange={(e) => setIsCompleted(e.target.checked)} />
             {" "}완결
           </label>
         </div>
-        <div className="form-actions" style={{ justifyContent: "space-between" }}>
+        <div className="form-actions form-actions-between">
           <button
             type="button"
+            className="form-delete-btn"
             onClick={async () => {
               if (!confirm("정말 삭제하시겠습니까?")) return;
               try {
@@ -99,11 +100,10 @@ export default function EditNovelPage() {
                 if (res.ok) { window.dispatchEvent(new Event("novelchange")); router.push("/series/my"); }
               } catch {}
             }}
-            style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.85em", padding: 0, marginLeft: 4 }}
           >
             삭제
           </button>
-          <div style={{ display: "flex", gap: 10 }}>
+          <div className="form-btn-row">
             <button type="submit" disabled={submitting || !title.trim()} className="btn btn-primary">저장</button>
             <button type="button" onClick={() => router.back()} className="btn btn-outline">취소</button>
           </div>

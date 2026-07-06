@@ -38,7 +38,7 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
 
   return (
     <div ref={pickerRef} style={{ position: "relative" }}>
-      <button type="button" onClick={() => setOpen(!open)} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px 6px", borderRadius: 4, color: "var(--accent)", display: "flex", alignItems: "center" }}>
+      <button type="button" onClick={() => setOpen(!open)} className="emoji-trigger">
         <Icon name="smile" size={18} />
       </button>
       {open && (
@@ -58,11 +58,11 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
           padding: 8,
         }}>
           {CATEGORIES.map((cat, ci) => (
-            <div key={ci} style={{ background: ci % 2 === 0 ? "transparent" : "rgba(128,128,128,0.08)", borderRadius: 8, padding: "0 4px" }}>
-              <div style={{ fontSize: "0.82em", color: "var(--text-primary)", padding: "10px 4px 4px", fontWeight: 700 }}>{cat.name}</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 2, paddingBottom: 4 }}>
+            <div key={ci} className="emoji-custom-row" style={{ background: ci % 2 === 0 ? "transparent" : "rgba(128,128,128,0.08)" }}>
+              <div className="emoji-row-label">{cat.name}</div>
+              <div className="emoji-row-grid">
                 {cat.emojis.map((e, i) => (
-                  <button key={i} type="button" onClick={() => { onEmoji(e); setOpen(false); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.3em", padding: 2, borderRadius: 4, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.15s" }}>
+                  <button key={i} type="button" onClick={() => { onEmoji(e); setOpen(false); }} className="emoji-cell" style={{ fontSize: "1.3em" }}>
                     {e}
                   </button>
                 ))}
@@ -70,12 +70,12 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
             </div>
           ))}
           {customEmojis.length > 0 && Object.entries(groupedCustom).map(([catName, emos]) => (
-            <div key={`c-${catName}`} style={{ background: "rgba(128,128,128,0.08)", borderRadius: 8, padding: "0 4px", marginTop: 4 }}>
-              <div style={{ fontSize: "0.82em", color: "var(--text-primary)", padding: "10px 4px 4px", fontWeight: 700 }}>{catName}</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 2, paddingBottom: 4 }}>
+            <div key={`c-${catName}`} className="emoji-custom-row">
+              <div className="emoji-row-label">{catName}</div>
+              <div className="emoji-row-grid">
                 {emos.map((emo) => (
-                  <button key={emo.id} type="button" onClick={() => { onEmoji(`:${emo.keyword}:`); setOpen(false); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, borderRadius: 4, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.15s" }}>
-                    <img src={emo.url} alt={emo.keyword} width={33} height={33} style={{ width: 33, height: 33, objectFit: "contain" }} />
+                  <button key={emo.id} type="button" onClick={() => { onEmoji(`:${emo.keyword}:`); setOpen(false); }} className="emoji-cell emoji-cell-large">
+                    <img src={emo.url} alt={emo.keyword} width={33} height={33} className="emoji-img" />
                   </button>
                 ))}
               </div>

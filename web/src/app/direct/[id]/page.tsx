@@ -57,36 +57,36 @@ export default function DirectConversationPage() {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-        <button onClick={() => { sessionStorage.setItem("notif_filter", "direct"); router.push("/notifications"); }} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "1.2em", padding: "4px 8px", borderRadius: 6, display: "flex", alignItems: "center" }}>←</button>
-        <span style={{ fontWeight: 600, fontSize: "1.05em" }}>💬 {otherUser?.display_name || "..."}</span>
+    <div className="dm-container">
+      <div className="dm-header">
+        <button onClick={() => { sessionStorage.setItem("notif_filter", "direct"); router.push("/notifications"); }} className="dm-header-back">←</button>
+        <span className="dm-header-name">💬 {otherUser?.display_name || "..."}</span>
       </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: "12px 0" }}>
+      <div className="dm-messages">
         {loading ? (
           <div className="empty-state">로딩 중...</div>
         ) : messages.length === 0 ? (
           <div className="empty-state">대화 내역이 없습니다.</div>
         ) : messages.map((m) => (
-          <div key={m.id} style={{ margin: "4px 16px", display: "flex", flexDirection: "column", alignItems: m.is_mine ? "flex-end" : "flex-start" }}>
-            <div style={{ maxWidth: "75%" }}>
+          <div key={m.id} className="dm-message-wrap" style={{ alignItems: m.is_mine ? "flex-end" : "flex-start" }}>
+            <div className="dm-message-bubble">
               <PostCard post={m} hideContext onUpdate={load} />
             </div>
           </div>
         ))}
         <div ref={bottomRef} />
       </div>
-      <form onSubmit={handleSend} style={{ padding: "12px 16px", borderTop: "1px solid var(--border)", display: "flex", gap: 8, flexShrink: 0 }}>
+      <form onSubmit={handleSend} className="dm-form">
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={otherUser ? `${otherUser.display_name}에게 메시지 보내기` : ""}
-          style={{ flex: 1, padding: "10px 14px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--input-bg)", color: "var(--text-primary)", fontFamily: "inherit", fontSize: "0.95em", outline: "none" }}
+          className="dm-input"
           onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { (e.target as HTMLElement).closest('form')?.requestSubmit(); } }}
           autoFocus
         />
-        <div style={{ display: "flex", alignItems: "center" }}>
+        <div className="dm-emoji-wrap">
           <EmojiPicker onEmoji={(e) => setInput(input + e)} dropUp />
         </div>
         <button type="submit" disabled={sending || !input.trim()} className="btn btn-primary">전송</button>

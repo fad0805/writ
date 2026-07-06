@@ -88,7 +88,7 @@ function ExploreContent() {
   return (
     <div className="explore-page-layout">
       <div className="explore-page-top">
-        <h3 className="section-header" style={{ marginBottom: 8 }}><Icon name="buildings" /> 지금 우리 서버는...</h3>
+        <h3 className="section-header hm-bottom-8"><Icon name="buildings" /> 지금 우리 서버는...</h3>
         <form className="explore-search" onSubmit={handleSubmit}>
           <span className="explore-search-icon" onClick={(ev) => { const f = (ev.target as HTMLElement).closest('form'); if (f) f.requestSubmit(); }}>
             <Icon name="search" size={14} />
@@ -102,16 +102,16 @@ function ExploreContent() {
         </form>
         {!loading && !searched && novels.length > 0 && (
           <div className="explore-series-section">
-            <h4 className="section-header" style={{ fontSize: "0.9em", marginBottom: 8 }}><Icon name="book" /> 최신 시리즈</h4>
+            <h4 className="section-header explore-section-title-sm"><Icon name="book" /> 최신 시리즈</h4>
             <div className="explore-series-wrap">
             <div className="explore-series-scroll">
               {novels.slice(0, 6).map((n) => (
                 <div key={n.id} className="explore-series-card" onClick={() => router.push(`/series/${n.id}`)}>
                   <div className="explore-series-cover">
                     {n.cover_image ? (
-                      <img src={n.cover_image} alt={n.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      <img src={n.cover_image} alt={n.title} className="cover-img" />
                     ) : (
-                      <div style={{ width: "100%", height: "100%", backgroundColor: hashColor(n.title), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "1.2em", fontWeight: "bold" }}>
+                      <div className="cover-fallback" style={{ backgroundColor: hashColor(n.title), fontSize: "1.2em" }}>
                         {n.title[0]}
                       </div>
                     )}
@@ -154,23 +154,23 @@ function ExploreContent() {
                   <h4 className="search-section-title"><Icon name="book" /> 시리즈</h4>
                   <div className="novel-grid">
                     {novels.map((n) => (
-                      <div key={n.id} className="novel-card" onClick={() => window.location.href = `/series/${n.id}`} style={{ cursor: "pointer" }}>
-                        <div className="novel-card-body" style={{ display: "flex", gap: 14 }}>
-                          <div style={{ width: 80, aspectRatio: "3/4", borderRadius: 6, flexShrink: 0, overflow: "hidden" }}>
+                      <div key={n.id} className="novel-card novel-card-clickable" onClick={() => window.location.href = `/series/${n.id}`}>
+                        <div className="novel-card-body novel-card-body-flex">
+                          <div className="cover-wrap-80">
                             {n.cover_image ? (
-                              <img src={n.cover_image} alt={n.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              <img src={n.cover_image} alt={n.title} className="cover-img" />
                             ) : (
-                              <div style={{ width: "100%", height: "100%", backgroundColor: hashColor(n.title), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "1.5em", fontWeight: "bold" }}>
+                              <div className="cover-fallback" style={{ backgroundColor: hashColor(n.title), fontSize: "1.5em" }}>
                                 <Icon name="book" size={24} />
                               </div>
                             )}
                           </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <h3 style={{ fontSize: "1em", marginBottom: 4 }}>{n.title}</h3>
-                            <p className="novel-author" style={{ marginBottom: 6 }}>
-                              by <a href={`/@${n.author?.username}`} onClick={(e) => e.stopPropagation()} style={{ color: "var(--accent)" }}>{n.author?.display_name || n.author?.username}</a>
+                          <div className="novel-card-body-content">
+                            <h3 className="novel-card-title">{n.title}</h3>
+                            <p className="novel-author novel-card-author-wrap">
+                              by <a href={`/@${n.author?.username}`} onClick={(e) => e.stopPropagation()} className="novel-card-author">{n.author?.display_name || n.author?.username}</a>
                             </p>
-                            <p className="novel-desc" style={{ marginBottom: 6 }}>{(n.description || "").slice(0, 120)}{n.description && n.description.length > 120 ? "..." : ""}</p>
+                            <p className="novel-desc novel-card-desc">{(n.description || "").slice(0, 120)}{n.description && n.description.length > 120 ? "..." : ""}</p>
                             <div className="novel-meta">
                               <span><Icon name="book" /> {n.episode_count}화</span>
                               <span><Icon name={n.is_completed ? "check" : "edit"} /> {n.is_completed ? "완결" : "연재중"}</span>
@@ -188,7 +188,7 @@ function ExploreContent() {
                   <div className="user-search-list">
                     {users.map((u) => (
                       <Link key={u.id} href={`/@${u.username}`} className="user-search-card">
-                        <Avatar user={u} className="sidebar-avatar rounded-[8px]" style={{ width: 36, height: 36, minWidth: 36, borderRadius: 8, fontSize: 16 }} />
+                        <Avatar user={u} className="sidebar-avatar rounded-[8px]" style={{ width: 36, height: 36, minWidth: 36, fontSize: 16 }} />
                         <div>
                           <strong>{u.display_name}</strong>
                           <span>@{u.username}</span>

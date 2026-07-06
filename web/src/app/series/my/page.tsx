@@ -27,31 +27,31 @@ export default function MyNovelsPage() {
         ) : novels.length === 0 ? (
           <p className="empty-state">연재 중인 시리즈가 없습니다.</p>
         ) : novels.map((n) => (
-          <div key={n.id} className="novel-card" onClick={() => router.push(`/series/@${n.author?.username || ''}/${n.number}`)} style={{ cursor: "pointer" }}>
-            <div className="novel-card-body" style={{ display: "flex", gap: 14 }}>
-              <div style={{ width: 80, aspectRatio: "3/4", borderRadius: 6, flexShrink: 0, overflow: "hidden" }}>
+          <div key={n.id} className="novel-card novel-card-clickable" onClick={() => router.push(`/series/@${n.author?.username || ''}/${n.number}`)}>
+            <div className="novel-card-body novel-card-body-flex">
+              <div className="cover-wrap-80">
                 {n.cover_image ? (
-                  <img src={n.cover_image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <img src={n.cover_image} alt="" className="cover-img" />
                 ) : (
-                  <div style={{ width: "100%", height: "100%", backgroundColor: hashColor(n.title), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "1.5em", fontWeight: "bold" }}>
+                  <div className="cover-fallback" style={{ backgroundColor: hashColor(n.title), fontSize: "1.5em" }}>
                     <Icon name="book" size={24} />
                   </div>
                 )}
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <h3 style={{ display: "flex", alignItems: "center", fontSize: "1em", marginBottom: 4 }}>
+              <div className="novel-card-body-content">
+                <h3 className="my-series-title-row">
                   {n.title}
-                  <span style={{ fontSize: "0.7em", color: "var(--text-muted)", fontWeight: 400, marginLeft: "auto" }}>
+                  <span className="my-series-vis-badge">
                     {n.visibility === "public" ? "전체공개" : n.visibility === "unlisted" ? "공개" : "비공개"}
                   </span>
                 </h3>
-                <p className="novel-desc" style={{ marginBottom: 6 }}>{(n.description || "").slice(0, 120)}{n.description && n.description.length > 120 ? "..." : ""}</p>
-                <div className="novel-meta" style={{ marginBottom: 8 }}>
+                <p className="novel-desc novel-card-desc">{(n.description || "").slice(0, 120)}{n.description && n.description.length > 120 ? "..." : ""}</p>
+                <div className="novel-meta my-series-meta">
                   <span><Icon name="book" /> {n.episode_count}화</span>
                   <span><Icon name={n.is_completed ? "check" : "edit"} /> {n.is_completed ? "완결" : "연재중"}</span>
                   <span><Icon name="eye" /> {n.total_views}</span>
                 </div>
-                <div className="novel-actions" style={{ marginTop: 0 }}>
+                <div className="novel-actions my-series-actions">
                   <button className="btn btn-small op-70" onClick={(e) => { e.stopPropagation(); router.push(`/series/${n.id}/edit`); }}>편집</button>
                   <button className="btn btn-small btn-danger op-70" onClick={async (e) => { e.stopPropagation(); if (confirm("정말 삭제하시겠습니까?")) { try { await api.deleteNovel(n.id); setNovels((prev) => prev.filter((x) => x.id !== n.id)); } catch { alert("삭제 실패"); } } }}>삭제</button>
                 </div>

@@ -10,7 +10,7 @@ export default function DirectUserCard({ user }: { user: { id: number; username:
       >
         {(user.display_name || user.username)[0]}
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="novel-card-body-content">
         <div className="direct-user-name">{user.display_name}</div>
         <div className="direct-user-handle">@{user.username}</div>
       </div>

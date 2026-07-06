@@ -148,7 +148,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   };
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className={overLimit ? "over-limit" : nearLimit ? "near-limit" : ""} style={{ position: "relative" }}>
+    <form ref={formRef} onSubmit={handleSubmit} className={`relative ${overLimit ? "over-limit" : nearLimit ? "near-limit" : ""}`}>
       <div ref={wrapRef}>
         <TextareaHighlight
           value={content}
@@ -172,7 +172,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
               onMouseEnter={() => setMentionIdx(i)}
             >
               {u.avatar ? (
-                <img src={u.avatar} alt="" className="mention-option-avatar" style={{ objectFit: "cover" }} />
+                <img src={u.avatar} alt="" className="mention-option-avatar object-cover" />
               ) : (
                 <div className="mention-option-avatar" style={{ backgroundColor: `hsl(${hashCode(u.username) % 360}, 55%, 50%)` }}>
                   {(u.display_name || u.username)[0]}

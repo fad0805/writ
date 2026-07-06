@@ -113,11 +113,11 @@ export default function NotificationsPage() {
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h2 style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+      <div className="notif-header-row">
+        <h2 className="notif-header-title">
           <Icon name="bell" /> 알림
         </h2>
-        <button onClick={handleMarkAllRead} className="btn btn-small" style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
+        <button onClick={handleMarkAllRead} className="btn btn-small notif-mark-read">
           모두 읽음
         </button>
       </div>
@@ -145,21 +145,21 @@ export default function NotificationsPage() {
       ) : (
         notifs.map((n) => (
           <div key={n.id} className="notif-card" data-type={n.type}>
-            <div className="notif-icon" style={{ color: n.type === "like" ? "#f1c40f" : n.type === "boost" ? "var(--accent)" : n.type === "follow" ? "#4fc3f7" : "var(--text-muted)" }}>
+            <div className="notif-icon notif-icon-dynamic" style={{ color: n.type === "like" ? "#f1c40f" : n.type === "boost" ? "var(--accent)" : n.type === "follow" ? "#4fc3f7" : "var(--text-muted)" }}>
               <Icon name={NOTIF_ICONS[n.type] || "bell"} size={20} />
             </div>
             <div className="notif-body">
               {n.from_user && (
-                <Link href={`/@${n.from_user.username}`} style={{ fontWeight: 600 }}>
+                <Link href={`/@${n.from_user.username}`} className="notif-from-link">
                   {n.from_user.display_name}
                 </Link>
               )}{" "}
               {typeText(n.type)}
               <span className="notif-time">{fmtTime(n.created_at)}</span>
               {n.type === "follow_request" && n.from_user && (
-                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                  <button onClick={() => handleApprove(n.from_user!.username)} className="btn btn-primary btn-small" style={{ fontSize: "0.8em" }}>수락</button>
-                  <button onClick={() => handleReject(n.from_user!.username)} className="btn btn-small" style={{ fontSize: "0.8em", color: "var(--text-muted)" }}>거절</button>
+                <div className="notif-follow-btns">
+                  <button onClick={() => handleApprove(n.from_user!.username)} className="btn btn-primary btn-small btn-follow">수락</button>
+                  <button onClick={() => handleReject(n.from_user!.username)} className="btn btn-small btn-follow text-muted">거절</button>
                 </div>
               )}
               {n.post && <PostCard post={n.post} readonly />}

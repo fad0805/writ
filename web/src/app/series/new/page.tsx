@@ -53,7 +53,7 @@ export default function NewNovelPage() {
         <div className="form-group">
           <label>표지 이미지 URL</label>
           <input type="text" value={coverImage} onChange={(e) => setCoverImage(e.target.value)} placeholder="https://..." />
-          {coverImage && <img src={coverImage} alt="" style={{ width: "100%", maxHeight: 200, objectFit: "cover", borderRadius: 8, marginTop: 6 }} />}
+          {coverImage && <img src={coverImage} alt="" className="cover-preview" />}
         </div>
         <div className="form-group">
           <label>공개 설정</label>

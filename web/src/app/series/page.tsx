@@ -25,23 +25,23 @@ export default function NovelsPage() {
         ) : novels.length === 0 ? (
           <p className="empty-state">아직 등록된 시리즈가 없습니다.</p>
         ) : novels.map((n) => (
-          <div key={n.id} className="novel-card" onClick={() => router.push(`/series/@${n.author?.username}/${n.number}`)} style={{ cursor: "pointer" }}>
-            <div className="novel-card-body" style={{ display: "flex", gap: 14 }}>
-              <div style={{ width: 80, aspectRatio: "3/4", borderRadius: 6, flexShrink: 0, overflow: "hidden" }}>
+          <div key={n.id} className="novel-card novel-card-clickable" onClick={() => router.push(`/series/@${n.author?.username}/${n.number}`)}>
+            <div className="novel-card-body novel-card-body-flex">
+              <div className="cover-wrap-80">
                 {n.cover_image ? (
-                  <img src={n.cover_image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <img src={n.cover_image} alt="" className="cover-img" />
                 ) : (
-                  <div style={{ width: "100%", height: "100%", backgroundColor: hashColor(n.title), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "1.5em", fontWeight: "bold" }}>
+                  <div className="cover-fallback" style={{ backgroundColor: hashColor(n.title), fontSize: "1.5em" }}>
                     <Icon name="book" size={24} />
                   </div>
                 )}
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <h3 style={{ fontSize: "1em", marginBottom: 4 }}>{n.title}</h3>
-                <p className="novel-author" style={{ marginBottom: 6 }}>
-                  by <span onClick={(e) => { e.stopPropagation(); router.push(`/@${n.author?.username}`); }} style={{ color: "var(--accent)", cursor: "pointer" }}>{n.author?.display_name || n.author?.username}</span>
+              <div className="novel-card-body-content">
+                <h3 className="novel-card-title">{n.title}</h3>
+                <p className="novel-author novel-card-author-wrap">
+                  by <span onClick={(e) => { e.stopPropagation(); router.push(`/@${n.author?.username}`); }} className="novel-card-author cursor-pointer">{n.author?.display_name || n.author?.username}</span>
                 </p>
-                <p className="novel-desc" style={{ marginBottom: 6 }}>{(n.description || "").slice(0, 120)}{n.description && n.description.length > 120 ? "..." : ""}</p>
+                <p className="novel-desc novel-card-desc">{(n.description || "").slice(0, 120)}{n.description && n.description.length > 120 ? "..." : ""}</p>
                 <div className="novel-meta">
                   <span><Icon name="book" /> {n.episode_count}화</span>
                   <span><Icon name={n.is_completed ? "check" : "edit"} /> {n.is_completed ? "완결" : "연재중"}</span>

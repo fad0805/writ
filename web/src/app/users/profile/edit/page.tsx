@@ -134,7 +134,7 @@ export default function ProfileEditPage() {
             <div className="profile-edit-file-row">
               <label className="btn btn-outline btn-small profile-edit-file-label">
                 파일 선택
-                <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: "none" }} />
+                <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
               </label>
               {imageFile && <span className="profile-edit-file-name">{imageFile.name}</span>}
             </div>

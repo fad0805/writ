@@ -60,7 +60,7 @@ export default function RightSidebar() {
         <div className="notif-mini-list">
           {notifs.length > 0 ? notifs.map((n) => (
             n.post ? <MiniPostCard key={n.id} post={n.post} notifType={n.type} /> : null
-          )) : <p className="empty-small" style={{ padding: 0 }}>알림이 없습니다.</p>}
+          )) : <p className="empty-small p-0">알림이 없습니다.</p>}
         </div>
       </div>
     </aside>

@@ -172,11 +172,11 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
           </div>
         )}
         <div className="post-header">
-          <Link href={`/@${post.author.username}`} className="post-author-avatar-link" onClick={(e) => e.stopPropagation()} style={{ textDecoration: "none" }}>
+          <Link href={`/@${post.author.username}`} className="post-author-avatar-link no-underline" onClick={(e) => e.stopPropagation()}>
             <Avatar user={post.author} className="post-author-avatar flex items-center justify-center text-white font-bold text-sm" />
           </Link>
           <Link href={`/@${post.author.username}`} className="post-author" onClick={(e) => e.stopPropagation()}>
-            {post.author.display_name} {(post.author.role === "admin" || post.author.role === "moderator") && (post.author as any).show_badge && <Icon name="shield_filled" style={{ color: "#27ae60", fontSize: "0.65em", verticalAlign: "middle", marginLeft: 2 }} title={post.author.role === "admin" ? "관리자" : "조율자"} />}{post.author.role === "moderator" && <span className="role-badge role-mod">조율자</span>}
+            {post.author.display_name} {(post.author.role === "admin" || post.author.role === "moderator") && (post.author as any).show_badge && <Icon name="shield_filled" style={{ color: post.author.role === "admin" ? "#27ae60" : "#cc8800", fontSize: "0.65em", verticalAlign: "middle", marginLeft: 2 }} title={post.author.role === "admin" ? "관리자" : "조율자"} />}
           </Link>
           <Link href={`/@${post.author.username}`} className="post-username" onClick={(e) => e.stopPropagation()}>
             @{post.author.username}
@@ -187,7 +187,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
               <Icon name={VIS_ICONS[post.visibility] || "globe"} />
             </span>
             {post.ap_id && post.ap_id.startsWith("http") && post.author?.username?.includes("@") ? (
-              <a href={post.ap_id} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "inherit", textDecoration: "none" }}>{timeStr}</a>
+              <a href={post.ap_id} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="no-underline" style={{ color: "inherit" }}>{timeStr}</a>
             ) : (
               timeStr
             )}
@@ -219,23 +219,23 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
           <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
         )}
         {loadingQuote && <div className="empty-small" style={{ padding: "8px 0" }}>인용 불러오는 중...</div>}
-        {quotedPost && <div style={{ margin: "8px 0" }}><MiniPostCard post={quotedPost} /></div>}
+        {quotedPost && <div className="my-8"><MiniPostCard post={quotedPost} /></div>}
         {quotedSeries && (
-          <div style={{ margin: "8px 0", padding: 12, border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg-tertiary)", cursor: "pointer", display: "flex", gap: 12 }} onClick={(e) => { e.stopPropagation(); router.push(`/series/${quotedSeries.novel.id}`); }}>
-            <div style={{ width: 64, flexShrink: 0, aspectRatio: "3/4", borderRadius: 6, overflow: "hidden", background: "var(--bg-tertiary)" }}>
+          <div className="quoted-series" onClick={(e) => { e.stopPropagation(); router.push(`/series/${quotedSeries.novel.id}`); }}>
+              <div className="cover-wrap-64 bg-tertiary">
               {quotedSeries.novel.cover_image ? (
-                <img src={quotedSeries.novel.cover_image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                <img src={quotedSeries.novel.cover_image} alt="" className="cover-img" />
               ) : (
-                <div style={{ width: "100%", height: "100%", backgroundColor: hashColor(quotedSeries.novel.title), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "1em", fontWeight: "bold" }}>
+                <div className="cover-fallback" style={{ backgroundColor: hashColor(quotedSeries.novel.title), fontSize: "1em" }}>
                   {quotedSeries.novel.title[0]}
                 </div>
               )}
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: "0.8em", color: "var(--text-muted)", marginBottom: 4 }}><Icon name="book" /> 시리즈</div>
-              <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{quotedSeries.novel.title}</div>
-              {quotedSeries.author && <div style={{ fontSize: "0.85em", color: "var(--text-muted)" }}>by {quotedSeries.author.display_name || quotedSeries.author.username}</div>}
-              {quotedSeries.novel.description && <div style={{ fontSize: "0.85em", color: "var(--text-secondary)", marginTop: 4 }}>{quotedSeries.novel.description.slice(0, 100)}</div>}
+            <div className="mini-post-content">
+              <div className="mini-post-cw"><Icon name="book" /> 시리즈</div>
+              <div className="emoji-keyword">{quotedSeries.novel.title}</div>
+              {quotedSeries.author && <div className="text-sm text-muted">by {quotedSeries.author.display_name || quotedSeries.author.username}</div>}
+              {quotedSeries.novel.description && <div className="text-sm" style={{ color: "var(--text-secondary)", marginTop: 4 }}>{quotedSeries.novel.description.slice(0, 100)}</div>}
             </div>
           </div>
         )}

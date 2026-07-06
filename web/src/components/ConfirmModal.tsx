@@ -10,9 +10,9 @@ export default function ConfirmModal({ message, onConfirm, onCancel }: { message
 
   return (
     <div className="reply-modal-backdrop active" onClick={onCancel}>
-      <div className="reply-modal" onClick={(e) => e.stopPropagation()} style={{ width: "min(380px, 100%)", textAlign: "center" }}>
-        <p style={{ margin: "20px 0", color: "var(--text-primary)" }}>{message}</p>
-        <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+      <div className="reply-modal confirm-modal">
+        <p className="confirm-message">{message}</p>
+        <div className="confirm-buttons">
           <button className="btn btn-primary" onClick={onConfirm}>확인</button>
           <button className="btn btn-outline" onClick={onCancel}>취소</button>
         </div>

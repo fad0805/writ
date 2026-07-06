@@ -54,7 +54,7 @@ export default function NewEpisodePage() {
 
   return (
     <>
-      <h2><Link href={`/series/${params.id}`} style={{ color: "inherit", textDecoration: "none" }}>{novelTitle || "로딩 중..."}</Link></h2>
+      <h2><Link href={`/series/${params.id}`} className="no-underline" style={{ color: "inherit" }}>{novelTitle || "로딩 중..."}</Link></h2>
       <form onSubmit={handleSubmit} className="episode-form">
         <div className="form-group">
           <label>에피소드 제목</label>
@@ -85,9 +85,9 @@ export default function NewEpisodePage() {
                 maxLength={100}
                 rows={2}
                 placeholder="홍보글에 추가할 코멘트 (선택, 100자 이내)"
-                style={{ marginTop: 8, width: "100%" }}
+                className="announce-textarea"
               />
-              <div style={{ marginTop: 8 }}>
+              <div className="announce-vis-wrap">
                 <VisibilitySelector value={visibility} onChange={(v) => setVisibility(v)} />
               </div>
             </>

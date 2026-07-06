@@ -56,42 +56,31 @@ export default function MiniPostCard({ post, notifType }: { post: PostData; noti
   return (
     <Link
       href={post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`}
-      style={{
-        display: "flex",
-        gap: 8,
-        marginTop: 6,
-        padding: "8px 10px",
-        background: bg,
-        border: "1px solid var(--border)",
-        borderRadius: 8,
-        color: "var(--text-primary)",
-        fontSize: "0.85em",
-        lineHeight: 1.5,
-        textDecoration: "none",
-      }}
+      className="mini-post-link"
+      style={{ background: bg }}
     >
       {notifType ? (
-        <div style={{ width: 28, height: 28, minWidth: 28, borderRadius: 6, background: "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center", color: iconColor, marginTop: 1 }}>
+        <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: iconColor }}>
           <Icon name={TYPE_ICONS[notifType] || "bell"} size={14} />
         </div>
       ) : (
-        <div style={{ width: 28, height: 28, minWidth: 28, borderRadius: 6, background: `hsl(${post.author.username?.length * 37 % 360}, 35%, 40%)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: "bold", fontSize: "0.85em", marginTop: 1 }}>
+        <div className="mini-post-avatar-box mini-post-avatar-box-initials" style={{ background: `hsl(${post.author.username?.length * 37 % 360}, 35%, 40%)` }}>
           {(post.author.display_name || post.author.username)[0]}
         </div>
       )}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600, color: "var(--accent)", marginBottom: 2 }}>
+      <div className="mini-post-content">
+        <div className="mini-post-author">
           {post.author.display_name}
-          <span style={{ fontWeight: 400, color: "var(--text-dim)", marginLeft: 4 }}>
+          <span className="mini-post-handle">
             @{post.author.username}
           </span>
         </div>
         {post.summary && (
-          <div style={{ color: "var(--text-muted)", marginBottom: 4, fontSize: "0.85em" }}>
+          <div className="mini-post-cw">
             CW: {post.summary}
           </div>
         )}
-        <div style={{ wordBreak: "break-word" }} dangerouslySetInnerHTML={{ __html: contentHtml }} />
+        <div className="mini-post-body" dangerouslySetInnerHTML={{ __html: contentHtml }} />
       </div>
     </Link>
   );

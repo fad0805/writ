@@ -101,8 +101,8 @@ export default function ImageCropper({ src, onCrop, onClose }: Props) {
 
   return (
     <div className="reply-modal-backdrop active" onClick={onClose}>
-      <div className="reply-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500, textAlign: "center" }}>
-        <h3 style={{ marginBottom: 12 }}>프로필 사진 자르기</h3>
+      <div className="reply-modal cropper-modal">
+        <h3 className="mb-12">프로필 사진 자르기</h3>
         <div style={{ position: "relative", display: "inline-block", borderRadius: 8, overflow: "hidden", lineHeight: 0, touchAction: "none", userSelect: "none" }}>
           {imgLoaded && (
             <img ref={imgRef} src={src} style={{ width: display.w, height: display.h, display: "block" }} />
@@ -128,10 +128,10 @@ export default function ImageCropper({ src, onCrop, onClose }: Props) {
             </div>
           )}
         </div>
-        <p style={{ fontSize: "0.8em", color: "var(--text-secondary)", margin: "8px 0 0" }}>
+        <p className="text-sm text-muted" style={{ margin: "8px 0 0" }}>
           영역을 드래그하여 위치/크기를 조정하세요
         </p>
-        <div className="form-actions" style={{ marginTop: 12, justifyContent: "center" }}>
+        <div className="form-actions" style={{ justifyContent: "center" }}>
           <button className="btn btn-primary" onClick={handleConfirm}>적용</button>
           <button className="btn btn-outline" onClick={onClose}>취소</button>
         </div>

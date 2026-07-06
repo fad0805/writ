@@ -72,7 +72,7 @@ export default function EpisodeDetailPage() {
         <div className="episode-body" dangerouslySetInnerHTML={{ __html: episode.content }} />
         {episode.comment && <div className="episode-comment" dangerouslySetInnerHTML={{ __html: episode.comment }} />}
         <div className="episode-footer">
-        <div className="episode-navigation" style={{ margin: 0 }}>
+        <div className="episode-navigation m-0">
           {prevEp && (
             <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${prevEp.id}`)}>
               ← 제{prevEp.episode_number}화 ({prevEp.title})

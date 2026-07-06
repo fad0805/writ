@@ -19,10 +19,10 @@ export default function NewPostModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="reply-modal-backdrop active" onClick={onClose}>
-      <div className="reply-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+      <div className="reply-modal modal-form">
         <button className="reply-modal-close" onClick={onClose}>×</button>
         <h3>새 글 작성</h3>
-        {loading ? <p className="empty-small" style={{ textAlign: "center" }}>로딩 중...</p> : <PostForm onDone={onClose} initialVisibility={user?.default_visibility} />}
+        {loading ? <p className="empty-small text-center">로딩 중...</p> : <PostForm onDone={onClose} initialVisibility={user?.default_visibility} />}
       </div>
     </div>
   );
