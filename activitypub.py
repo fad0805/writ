@@ -855,7 +855,7 @@ def _process_emoji_tags(tags: list, session):
         if not img_url.startswith("http"):
             continue
 
-        EMOJI_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web", "public", "emojis")
+        EMOJI_DIR = os.path.join(os.path.dirname(__file__), "web", "public", "emojis")
         import uuid
         from PIL import Image
         import httpx

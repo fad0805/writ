@@ -1682,7 +1682,7 @@ def api_fetch_post(request: Request, url: str = Form(...)):
     return result
 
 
-EMOJI_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web", "public", "emojis")
+EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "web", "public", "emojis")
 
 
 @router.get("/emojis")
