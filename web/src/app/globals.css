@@ -2460,6 +2460,8 @@ input[type="checkbox"] {
   align-self: flex-end;
   display: flex;
   gap: 6px;
+  width: 100%;
+  box-sizing: border-box;
 }
 .profile-corner-actions {
   position: absolute;
