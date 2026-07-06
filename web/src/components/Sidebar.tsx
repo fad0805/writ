@@ -58,7 +58,7 @@ export default function Sidebar() {
     const { api } = await import("@/lib/api");
     await api.logout();
     await refresh();
-    router.push("/login");
+    router.push("/");
   };
 
   const isActive = (href: string) => {

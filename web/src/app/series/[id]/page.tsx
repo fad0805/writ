@@ -53,8 +53,8 @@ export default function NovelDetailPage() {
                 </p>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <ShareButton url={`/series/${novel.id}`} />
-                <button className="action-btn" onClick={() => { if (!user) return router.push("/login"); setShowSharePost(true); }} title="포스트로 공유"><Icon name="edit" /></button>
+                {novel.visibility !== "private" && <ShareButton url={`/series/${novel.id}`} />}
+                {user && <button className="action-btn" onClick={() => setShowSharePost(true)} title="포스트로 공유"><Icon name="edit" /></button>}
                 {isMine && (
                   <>
                     <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/edit`)}>시리즈 편집</button>
@@ -106,7 +106,7 @@ export default function NovelDetailPage() {
           </div>
         ))}
       </div>
-      {showSharePost && <SharePostModal url={`/series/${novel.id}`} title={novel.title} onClose={() => setShowSharePost(false)} />}
+      {showSharePost && <SharePostModal url={`/series/${novel.id}`} title={novel.title} authorName={author?.display_name || author?.username} description={novel.description} tags={novel.tags} onClose={() => setShowSharePost(false)} />}
     </>
   );
 }

@@ -1,5 +1,5 @@
 "use client";
-import { PostData, api } from "@/lib/api";
+import { PostData, NovelData, User, api } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
@@ -79,28 +79,39 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
     html = html.replace(/\n/g, '<br>');
     html = rewriteLinks(html);
     if (quoteUrl) {
-      html = html.replace(new RegExp(`<a[^>]*>${quoteUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</a>`, 'gi'), '');
+      const escUrl = quoteUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      html = html.replace(new RegExp(`<a[^>]*>${escUrl}</a>`, 'gi'), '');
+      html = html.replace(new RegExp(`series:\\s*${escUrl}`, 'gi'), '');
+      html = html.replace(new RegExp(escUrl, 'gi'), '');
       html = html.replace(/<span class="quote-inline">\s*RE:\s*<\/span>/gi, '');
     }
     return html;
   })();
 
   // Extract quoted post URL from content
+  type QuotedSeries = { type: "series"; novel: NovelData; author: User };
   const [quotedPost, setQuotedPost] = useState<PostData | null>(null);
+  const [quotedSeries, setQuotedSeries] = useState<QuotedSeries | null>(null);
   const [loadingQuote, setLoadingQuote] = useState(false);
   useEffect(() => {
     const newFormat = post.content.match(/https?:\/\/([^/]+)\/@(\w+(?:@[\w.-]+)?)\/([a-f0-9]+)/);
     const oldFormat = post.content.match(/https?:\/\/[^/]+\/post\/(\d+)/);
+    const seriesFormat = post.content.match(/https?:\/\/[^/]+\/series\/(\d+)/);
+    const seriesByNumber = post.content.match(/https?:\/\/[^/]+\/series\/by-number\/(\w+)\/([a-f0-9]+)/);
     const anyUrl = post.content.match(/https?:\/\/[^\s<>"']+/);
-    const url = newFormat?.[0] || oldFormat?.[0] || anyUrl?.[0];
+    const url = seriesFormat?.[0] || seriesByNumber?.[0] || newFormat?.[0] || oldFormat?.[0] || anyUrl?.[0];
     if (!url) return;
     setQuoteUrl(url);
     setLoadingQuote(true);
-    if (newFormat) {
+    const isLocal = (url.match(/https?:\/\/([^/]+)/)?.[1]) === window.location.host;
+    if (isLocal && (seriesFormat || seriesByNumber)) {
+      fetch("/api/fetch-series", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ url }) })
+        .then(r => r.json()).then(d => { setQuotedSeries(d); setLoadingQuote(false); })
+        .catch(() => setLoadingQuote(false));
+    } else if (newFormat) {
       const domain = newFormat[1];
       const username = newFormat[2];
       const number = newFormat[3];
-      const isLocal = domain === window.location.host;
       if (isLocal) {
         fetch(`/api/by-number/${username}/${number}`, { credentials: "include" })
           .then(r => r.json()).then(d => { setQuotedPost(d); setLoadingQuote(false); })
@@ -193,6 +204,23 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
         )}
         {loadingQuote && <div className="empty-small" style={{ padding: "8px 0" }}>인용 불러오는 중...</div>}
         {quotedPost && <div style={{ margin: "8px 0" }}><MiniPostCard post={quotedPost} /></div>}
+        {quotedSeries && (
+          <div style={{ margin: "8px 0", padding: 12, border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg-tertiary)", cursor: "pointer", display: "flex", gap: 12 }} onClick={(e) => { e.stopPropagation(); router.push(`/series/${quotedSeries.novel.id}`); }}>
+            <div style={{ width: 64, flexShrink: 0, aspectRatio: "3/4", borderRadius: 6, overflow: "hidden", background: "var(--bg-tertiary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {quotedSeries.novel.cover_image ? (
+                <img src={quotedSeries.novel.cover_image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <Icon name="book" size={24} />
+              )}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: "0.8em", color: "var(--text-muted)", marginBottom: 4 }}><Icon name="book" /> 시리즈</div>
+              <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{quotedSeries.novel.title}</div>
+              {quotedSeries.author && <div style={{ fontSize: "0.85em", color: "var(--text-muted)" }}>by {quotedSeries.author.display_name || quotedSeries.author.username}</div>}
+              {quotedSeries.novel.description && <div style={{ fontSize: "0.85em", color: "var(--text-secondary)", marginTop: 4 }}>{quotedSeries.novel.description.slice(0, 100)}</div>}
+            </div>
+          </div>
+        )}
         {!readonly && <div className="post-actions" onClick={(e) => e.stopPropagation()}>
           <button onClick={() => { setShowReply(!showReply); }} className="action-btn">
             <Icon name="reply" /> {post.replies_count}

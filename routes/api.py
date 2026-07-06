@@ -318,8 +318,11 @@ def api_create_post(
     visibility: str = Form("public"),
     parent_id: int = Form(None),
     dm_target_id: int = Form(None),
+    share_url: str = Form(""),
 ):
     user = require_auth(request)
+    if share_url:
+        content = content + "\n\nseries: " + share_url
     if not content.strip():
         raise HTTPException(status_code=400, detail="Content cannot be empty")
     total_len = len(content) + len(summary)
@@ -588,7 +591,10 @@ def api_get_profile(request: Request, username: str):
         is_follower = s.query(Follow).filter_by(
             follower_id=profile.id, following_id=user.id, accepted=True
         ).first() is not None if user else False
-        novels = s.query(Novel).filter_by(author_id=profile.id).order_by(desc(Novel.updated_at)).all()
+        novels_q = s.query(Novel).filter_by(author_id=profile.id)
+        if not user or profile.id != user.id:
+            novels_q = novels_q.filter(Novel.visibility != "private")
+        novels = novels_q.order_by(desc(Novel.updated_at)).all()
         followers = s.query(Follow).filter_by(following_id=profile.id, accepted=True).all()
         following = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).all()
         return {
@@ -926,19 +932,21 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
 @router.get("/novels/{novel_id}")
 def api_get_novel(request: Request, novel_id: int):
     user = get_current_user(request)
-    if not user:
-        return JSONResponse({"error": "Not authenticated"}, status_code=401)
     with get_session() as s:
         novel = s.query(Novel).filter_by(id=novel_id).first()
         if not novel:
             raise HTTPException(status_code=404, detail="Novel not found")
+        if novel.visibility == "private" and (not user or novel.author_id != user.id):
+            raise HTTPException(status_code=404, detail="Novel not found")
+        if not user and novel.visibility in ("public", "unlisted"):
+            pass
         episodes = s.query(Episode).filter_by(novel_id=novel_id).order_by(Episode.episode_number).all()
         author = s.query(User).get(novel.author_id)
         result = {
             "novel": _novel_json(novel, s),
             "episodes": [_episode_json(e) for e in episodes],
             "author": _user_json(author) if author else None,
-            "is_mine": user.id == novel.author_id,
+            "is_mine": user.id == novel.author_id if user else False,
         }
     return result
 
@@ -1042,14 +1050,16 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
 @router.get("/novels/{novel_id}/episodes/{episode_id}")
 def api_get_episode(request: Request, novel_id: int, episode_id: int):
     user = get_current_user(request)
-    if not user:
-        return JSONResponse({"error": "Not authenticated"}, status_code=401)
     with get_session() as s:
         episode = s.query(Episode).filter_by(id=episode_id, novel_id=novel_id).first()
         if not episode:
             raise HTTPException(status_code=404, detail="Episode not found")
         novel = episode.novel
-        is_mine = novel.author_id == user.id
+        if novel.visibility == "private" and (not user or novel.author_id != user.id):
+            raise HTTPException(status_code=404, detail="Episode not found")
+        if not user and novel.visibility in ("public", "unlisted"):
+            pass
+        is_mine = novel.author_id == user.id if user else False
         prev_ep = s.query(Episode).filter(
             Episode.novel_id == novel_id,
             Episode.episode_number < episode.episode_number,
@@ -1253,8 +1263,6 @@ def api_update_profile(request: Request, display_name: str = Form(""), summary: 
 @router.get("/by-series-number/{username}/{number}")
 def api_by_series_number(request: Request, username: str, number: str):
     user = get_current_user(request)
-    if not user:
-        return JSONResponse({"error": "Not authenticated"}, status_code=401)
     with get_session() as s:
         author = s.query(User).filter_by(username=username).first()
         if not author:
@@ -1262,8 +1270,30 @@ def api_by_series_number(request: Request, username: str, number: str):
         novel = s.query(Novel).filter_by(author_id=author.id, number=number).first()
         if not novel:
             raise HTTPException(status_code=404, detail="Novel not found")
+        if novel.visibility == "private" and (not user or novel.author_id != user.id):
+            raise HTTPException(status_code=404, detail="Novel not found")
         return {"id": novel.id}
 
+
+@router.post("/fetch-series")
+def api_fetch_series(request: Request, url: str = Form(...)):
+    user = get_current_user(request)
+    with get_session() as s:
+        import re
+        m = re.match(r"https?://[^/]+/series/(\d+)", url)
+        if m:
+            novel = s.query(Novel).filter_by(id=int(m.group(1))).first()
+            if novel and novel.visibility != "private":
+                author = s.query(User).get(novel.author_id)
+                return {"type": "series", "novel": _novel_json(novel, s), "author": _user_json(author) if author else None}
+        m = re.match(r"https?://[^/]+/series/by-number/(\w+)/([a-f0-9]+)", url)
+        if m:
+            author = s.query(User).filter_by(username=m.group(1)).first()
+            if author:
+                novel = s.query(Novel).filter_by(author_id=author.id, number=m.group(2)).first()
+                if novel and novel.visibility != "private":
+                    return {"type": "series", "novel": _novel_json(novel, s), "author": _user_json(author)}
+        raise HTTPException(status_code=404, detail="Series not found")
 
 @router.get("/by-number/{username}/{number}")
 def api_by_number(request: Request, username: str, number: str):

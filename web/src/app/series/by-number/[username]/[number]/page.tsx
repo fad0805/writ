@@ -3,17 +3,22 @@ import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api, NovelData, EpisodeData, User } from "@/lib/api";
 import Icon from "@/components/Icon";
+import ShareButton from "@/components/ShareButton";
+import SharePostModal from "@/components/SharePostModal";
 import Link from "next/link";
 import { hashColor } from "@/lib/avatar";
+import { useAuth } from "@/lib/auth";
 
 export default function NovelByNumberPage() {
   const params = useParams();
   const router = useRouter();
+  const { user } = useAuth();
   const [novel, setNovel] = useState<NovelData | null>(null);
   const [episodes, setEpisodes] = useState<EpisodeData[]>([]);
   const [author, setAuthor] = useState<User | null>(null);
   const [isMine, setIsMine] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showSharePost, setShowSharePost] = useState(false);
 
   useEffect(() => {
     fetch(`/api/by-series-number/${params.username}/${params.number}`, { credentials: "include" })
@@ -51,12 +56,16 @@ export default function NovelByNumberPage() {
                   by <Link href={`/@${author?.username}`}>{author?.display_name || author?.username}</Link>
                 </p>
               </div>
-              {isMine && (
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/edit`)}>시리즈 편집</button>
-                  <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>
-                </div>
-              )}
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {novel.visibility !== "private" && <ShareButton url={`/series/by-number/${params.username}/${params.number}`} />}
+                {user && <button className="action-btn" onClick={() => setShowSharePost(true)} title="포스트로 공유"><Icon name="edit" /></button>}
+                {isMine && (
+                  <>
+                    <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/edit`)}>시리즈 편집</button>
+                    <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -101,6 +110,7 @@ export default function NovelByNumberPage() {
           </div>
         ))}
       </div>
+      {showSharePost && <SharePostModal url={`/series/by-number/${params.username}/${params.number}`} title={novel.title} authorName={author?.display_name || author?.username} description={novel.description} tags={novel.tags} onClose={() => setShowSharePost(false)} />}
     </>
   );
 }
