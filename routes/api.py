@@ -1797,7 +1797,6 @@ def api_create_emoji(
         }
 
 
-@router.delete("/emojis/{emoji_id}")
 @router.patch("/emojis/{emoji_id}")
 def api_update_emoji(request: Request, emoji_id: int, category: str = Form(""), keyword: str = Form(""), aliases: str = Form("")):
     user = require_auth(request)
