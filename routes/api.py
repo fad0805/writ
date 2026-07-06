@@ -22,6 +22,7 @@ from activitypub import broadcast_to_followers, _post_to_inbox
 from config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY
 from crypto_utils import encrypt_key, get_private_key
 from eventbus import broadcast
+from utils.storage import LocalStorage
 
 logger = logging.getLogger("writ.api")
 
@@ -1174,25 +1175,21 @@ def _episode_json(e):
 
 
 def _cleanup_avatars():
-    import os, time
-    from config import AVATAR_STORAGE_PATH
-    if not os.path.isdir(AVATAR_STORAGE_PATH):
+    import time
+    from utils.storage import get_storage
+    storage = get_storage()
+    if not isinstance(storage, LocalStorage):
         return
     with get_session() as s:
-        used = set()
-        for u in s.query(User).filter(User.profile_image != "").all():
-            path = u.profile_image.lstrip("/")
-            abspath = os.path.abspath(path) if os.path.isfile(path) else None
-            if abspath:
-                used.add(abspath)
+        used_urls = {u.profile_image for u in s.query(User).filter(User.profile_image != "").all()}
     now = time.time()
-    for root, dirs, files in os.walk(AVATAR_STORAGE_PATH):
-        for fname in files:
-            fpath = os.path.join(root, fname)
-            if os.path.abspath(fpath) in used:
-                continue
-            if now - os.path.getmtime(fpath) > 86400:
-                os.remove(fpath)
+    for key in storage.list_keys("avatars"):
+        url = storage.url(key)
+        if url in used_urls:
+            continue
+        mtime = storage.mtime(key)
+        if mtime is not None and now - mtime > 86400:
+            storage.delete(key)
 
 
 @router.post("/settings/update")
@@ -1222,21 +1219,18 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
 @router.post("/profile/update")
 def api_update_profile(request: Request, display_name: str = Form(""), summary: str = Form(""),
                        image: UploadFile = File(None)):
-    from config import AVATAR_STORAGE_PATH, AVATAR_URL_PREFIX
+    from utils.storage import get_storage
     user = require_auth(request)
+    storage = get_storage()
     with get_session() as s:
         db = s.query(User).filter_by(id=user.id).first()
         db.display_name = display_name
         db.summary = summary
         if image and image.filename:
-            import os
             from PIL import Image as PILImage
             import io
-            local_dir = os.path.join(AVATAR_STORAGE_PATH, "local")
-            os.makedirs(local_dir, exist_ok=True)
             from uuid import uuid4
-            filename = f"u{user.id}_{uuid4().hex[:8]}.webp"
-            filepath = os.path.join(local_dir, filename)
+            key = f"avatars/local/u{user.id}_{uuid4().hex[:8]}.webp"
             img = PILImage.open(image.file)
             img.thumbnail((400, 400), PILImage.Resampling.LANCZOS)
             if img.mode in ("RGBA", "P"):
@@ -1245,16 +1239,12 @@ def api_update_profile(request: Request, display_name: str = Form(""), summary: 
                 img = bg
             out = io.BytesIO()
             img.save(out, format="WEBP", quality=85)
-            with open(filepath, "wb") as f:
-                f.write(out.getvalue())
-            new_path = f"{AVATAR_URL_PREFIX}/local/{filename}"
+            new_url = storage.save(key, out.getvalue(), "image/webp")
             old = db.profile_image
-            db.profile_image = new_path
+            db.profile_image = new_url
             s.flush()
             if old:
-                old_path = old.lstrip("/")
-                if os.path.isfile(old_path) and os.path.abspath(old_path) != os.path.abspath(filepath):
-                    os.remove(old_path)
+                storage.delete(old)
         s.commit()
     _cleanup_avatars()
     return {"ok": True}

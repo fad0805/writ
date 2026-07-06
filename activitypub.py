@@ -237,31 +237,24 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
 
 
 def _save_remote_avatar(avatar_url: str, local_username: str) -> str:
-    """Download remote avatar and save locally, return profile_image path."""
-    from config import AVATAR_STORAGE_PATH, AVATAR_URL_PREFIX
-    import os
-    remote_dir = os.path.join(AVATAR_STORAGE_PATH, "remote")
-    os.makedirs(remote_dir, exist_ok=True)
+    """Download remote avatar and save, return profile_image URL."""
+    from utils.storage import get_storage
+    from uuid import uuid4
+    if not _validate_url(avatar_url):
+        return ""
     ext = avatar_url.rsplit(".", 1)[-1].lower() if "." in avatar_url else "jpg"
     if ext not in ("jpg", "jpeg", "png", "gif", "webp"):
         ext = "jpg"
-    from uuid import uuid4
-    import time
-    timestamp = int(time.time())
     filename = f"{local_username}_{uuid4().hex[:8]}.{ext}"
-    filepath = os.path.join(remote_dir, filename)
-    if not _validate_url(avatar_url):
-        return ""
+    key = f"avatars/remote/{filename}"
     try:
         resp = httpx.get(avatar_url, timeout=10)
         if resp.status_code == 200:
-            with open(filepath, "wb") as f:
-                f.write(resp.content)
-            os.utime(filepath, (timestamp, timestamp))
-            return f"{AVATAR_URL_PREFIX}/remote/{filename}"
+            storage = get_storage()
+            ct = f"image/{ext}"
+            return storage.save(key, resp.content, ct)
     except Exception as e:
         logger.warning("Failed to save remote avatar %s: %s", avatar_url, e)
-        pass
     return ""
 
 
