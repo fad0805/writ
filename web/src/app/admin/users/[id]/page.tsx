@@ -186,27 +186,25 @@ export default function AdminUserDetailPage() {
       <div style={{ marginBottom: 20 }}>
         <label style={{ display: "block", marginBottom: 4, color: "var(--text-muted)", fontSize: "0.85em", fontWeight: 600 }}>참고사항</label>
         <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={3} className="cw-input" style={{ width: "100%", resize: "vertical" }} placeholder="관리자 참고용 메모..." />
-        <button onClick={async () => {
-          const form = new FormData(); form.append("note", noteText);
-          const res = await fetch(`/api/admin/users/${u.id}/note`, { method: "POST", credentials: "include", body: form });
-          if (res.ok) alert("저장됨");
-        }} className="btn btn-primary btn-small" style={{ marginTop: 4 }}>메모 저장</button>
-      </div>
-
-      {/* 단일 중재 버튼 */}
-      <div style={{ marginBottom: 20 }}>
-        <button onClick={() => setShowModerate(true)} className="btn btn-small" style={{ background: "var(--danger)", color: "#fff", border: "none" }}>중재</button>
-        {u.is_suspended && (
+        <div style={{ display: "flex", gap: 8, marginTop: 4, alignItems: "center" }}>
           <button onClick={async () => {
-            const form = new FormData(); form.append("action", "unsuspend");
-            await fetch(`/api/admin/users/${u.id}/moderate`, { method: "POST", credentials: "include", body: form });
-            load();
-          }} className="btn btn-small btn-outline" style={{ marginLeft: 8 }}>정지 해제</button>
-        )}
+            const form = new FormData(); form.append("note", noteText);
+            const res = await fetch(`/api/admin/users/${u.id}/note`, { method: "POST", credentials: "include", body: form });
+            if (res.ok) alert("저장됨");
+          }} className="btn btn-primary btn-small">메모 저장</button>
+          <div style={{ flex: 1 }} />
+          <button onClick={() => setShowModerate(true)} className="btn btn-small" style={{ background: "var(--danger)", color: "#fff", border: "none" }}>중재</button>
+          {u.is_suspended && (
+            <button onClick={async () => {
+              const form = new FormData(); form.append("action", "unsuspend");
+              await fetch(`/api/admin/users/${u.id}/moderate`, { method: "POST", credentials: "include", body: form });
+              load();
+            }} className="btn btn-small btn-outline">정지 해제</button>
+          )}
+          <button onClick={() => act(`/api/admin/users/${u.id}/reset-password`)} className="btn btn-small" style={{ border: "1px solid var(--border)" }}>암호 초기화</button>
+          <button onClick={() => router.push(`/@${u.username}`)} className="btn btn-small btn-outline">프로필 보기</button>
+        </div>
       </div>
-
-      <button onClick={() => act(`/api/admin/users/${u.id}/reset-password`)} className="btn btn-small" style={{ border: "1px solid var(--border)" }}>암호 초기화</button>
-      <button onClick={() => router.push(`/@${u.username}`)} className="btn btn-small btn-outline" style={{ marginLeft: 8 }}>프로필 보기</button>
 
       {showModerate && (
         <div className="reply-modal-backdrop active" onClick={() => setShowModerate(false)}>
