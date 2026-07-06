@@ -1970,6 +1970,90 @@ def api_admin_user_detail(request: Request, user_id: int):
         }
 
 
+@router.post("/admin/users/{user_id}/reset-password")
+def api_admin_reset_password(request: Request, user_id: int):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    from routes.auth import hash_password
+    import secrets
+    new_pass = secrets.token_hex(8)
+    salt, hsh = hash_password(new_pass)
+    with get_session() as s:
+        u = s.query(User).get(user_id)
+        if not u:
+            raise HTTPException(status_code=404, detail="User not found")
+        u.password_hash = salt + ":" + hsh
+        u.session_token = ""
+        s.commit()
+    return {"ok": True, "new_password": new_pass}
+
+
+@router.post("/admin/users/{user_id}/change-email")
+def api_admin_change_email(request: Request, user_id: int, email: str = Form(...)):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        u = s.query(User).get(user_id)
+        if not u:
+            raise HTTPException(status_code=404, detail="User not found")
+        u.email = email
+        u.email_verified = False
+        s.commit()
+    return {"ok": True}
+
+
+@router.post("/admin/users/{user_id}/change-role")
+def api_admin_change_role(request: Request, user_id: int, role: str = Form("user")):
+    user = require_auth(request)
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can change roles")
+    if role not in ("user", "moderator", "admin"):
+        raise HTTPException(status_code=400, detail="Invalid role")
+    with get_session() as s:
+        u = s.query(User).get(user_id)
+        if not u:
+            raise HTTPException(status_code=404, detail="User not found")
+        u.role = role
+        u.is_admin = role == "admin"
+        s.commit()
+    return {"ok": True}
+
+
+@router.post("/admin/users/{user_id}/verify-email")
+def api_admin_verify_email(request: Request, user_id: int):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        u = s.query(User).get(user_id)
+        if not u:
+            raise HTTPException(status_code=404, detail="User not found")
+        u.email_verified = True
+        s.commit()
+    return {"ok": True}
+
+
+@router.post("/admin/users/{user_id}/remove-avatar")
+def api_admin_remove_avatar(request: Request, user_id: int):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        u = s.query(User).get(user_id)
+        if not u:
+            raise HTTPException(status_code=404, detail="User not found")
+        old = u.profile_image
+        u.profile_image = ""
+        s.commit()
+        if old:
+            old_path = old.lstrip("/")
+            if os.path.isfile(old_path):
+                os.remove(old_path)
+    return {"ok": True}
+
+
 @router.post("/admin/users/suspend")
 def api_admin_suspend_users(request: Request, user_ids: str = Form(...)):
     user = require_auth(request)

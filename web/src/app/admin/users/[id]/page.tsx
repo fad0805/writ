@@ -21,6 +21,11 @@ export default function AdminUserDetailPage() {
   const { user: me, loading: authLoading } = useAuth();
   const [u, setU] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showChangeEmail, setShowChangeEmail] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [showChangeRole, setShowChangeRole] = useState(false);
+  const [newRole, setNewRole] = useState("user");
+  const [msg, setMsg] = useState("");
 
   const load = () => {
     fetch(`/api/admin/users/${params.id}`, { credentials: "include" })
@@ -35,24 +40,33 @@ export default function AdminUserDetailPage() {
 
   useEffect(() => { if (!authLoading) load(); }, [authLoading, params.id]);
 
+  const act = async (path: string, body?: Record<string, string>) => {
+    const form = new FormData();
+    if (body) for (const [k, v] of Object.entries(body)) form.append(k, v);
+    const res = await fetch(path, { method: "POST", credentials: "include", body: form });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(d.detail || "실패"); return; }
+    if (d.new_password) setMsg(`임시 비밀번호: ${d.new_password}`);
+    load();
+  };
+
   if (authLoading || loading) return <div className="empty-state">로딩 중...</div>;
   if (!u) return <div className="empty-state">사용자를 찾을 수 없습니다.</div>;
 
   return (
     <>
-      <div className="page-header">
-        <h2><Icon name="settings" /> 서버 관리</h2>
-      </div>
-
+      <div className="page-header"><h2><Icon name="settings" /> 서버 관리</h2></div>
       <div className="admin-tabs" style={{ display: "flex", gap: 8, marginBottom: 24 }}>
         <Link href="/admin" className="btn btn-outline btn-small">대시보드</Link>
         <Link href="/admin/users" className="btn btn-outline btn-small">유저 관리</Link>
         <Link href="/admin/emojis" className="btn btn-outline btn-small">커스텀 이모지</Link>
       </div>
 
+      {msg && <div className="empty-state" style={{ background: "var(--accent)", color: "#fff", padding: "10px 16px", borderRadius: 8, marginBottom: 12 }}>{msg}</div>}
+
       {/* Profile card */}
       <div style={{ display: "flex", gap: 20, padding: 20, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 12, marginBottom: 20 }}>
-        <div style={{ width: 72, height: 72, borderRadius: 12, background: `hsl(${hashStr(u.username)}, 35%, 45%)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "2em", fontWeight: "bold", flexShrink: 0 }}>
+        <div style={{ width: 72, height: 72, borderRadius: 12, background: `hsl(${hashStr(u.username)}, 35%, 45%)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "2em", fontWeight: "bold", flexShrink: 0, position: "relative" }}>
           {(u.display_name || u.username)[0]}
         </div>
         <div style={{ flex: 1 }}>
@@ -63,6 +77,9 @@ export default function AdminUserDetailPage() {
           </div>
           <div style={{ color: "var(--text-muted)" }}>@{u.username}</div>
           {u.summary && <div style={{ marginTop: 6, fontSize: "0.9em", color: "var(--text-secondary)" }}>{u.summary}</div>}
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            {u.avatar && <button onClick={() => act(`/api/admin/users/${u.id}/remove-avatar`)} className="btn btn-small btn-outline">프로필 사진 삭제</button>}
+          </div>
         </div>
       </div>
 
@@ -78,28 +95,81 @@ export default function AdminUserDetailPage() {
         ].map((c, i) => (
           <div key={i} style={{ padding: 14, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8, textAlign: "center" }}>
             <Icon name={c.icon} size={20} />
-            <div style={{ fontSize: "1.4em", fontWeight: 700, marginTop: 4 }}>{c.value}</div>
+            <div style={{ fontSize: "1.4em", fontWeight: 700, marginTop: 4, color: c.label === "정지" ? "var(--danger)" : "var(--text-primary)" }}>{c.value}</div>
             <div style={{ fontSize: "0.8em", color: "var(--text-muted)" }}>{c.label}</div>
           </div>
         ))}
       </div>
 
       {/* Detail table */}
-      <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" }}>
+      <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", marginBottom: 20 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9em" }}>
           <tbody>
-            {[
-              ["이메일", u.username.includes("@") ? "-" : (u.email_domain ? `${u.username}@${u.email_domain}` : "-")],
-              ["이메일 인증", u.email_verified ? "완료" : "미인증"],
-              ["공개 설정", { public: "공개", home: "홈", followers: "팔로워", mention: "멘션" }[u.default_visibility] || u.default_visibility],
-              ["팔로우 수동 승인", u.is_locked ? "켜짐" : "꺼짐"],
-              ["가입일", u.created_at ? new Date(u.created_at).toLocaleString("ko-KR") : "-"],
-              ["최근 활동", u.last_active ? new Date(u.last_active).toLocaleString("ko-KR") : "-"],
-              ...u.recent_ips.slice(0, 5).map((ip, i) => [`최근 IP ${i + 1}`, ip]),
-            ].filter(Boolean).map(([label, value], i) => (
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <td style={{ padding: "10px 16px", color: "var(--text-muted)", width: 160, fontWeight: 600 }}>이메일</td>
+              <td style={{ padding: "10px 16px", color: "var(--text-primary)" }}>{u.email_domain ? `${u.username}@${u.email_domain}` : "-"}</td>
+              <td style={{ padding: "10px 16px", width: 120 }}>
+                <button onClick={() => setShowChangeEmail(!showChangeEmail)} className="btn btn-small btn-outline" style={{ fontSize: "0.8em" }}>변경</button>
+              </td>
+            </tr>
+            {showChangeEmail && (
+              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                <td colSpan={3} style={{ padding: "10px 16px" }}>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="new@example.com" className="cw-input" style={{ flex: 1 }} />
+                    <button onClick={() => { act(`/api/admin/users/${u.id}/change-email`, { email: newEmail }); setShowChangeEmail(false); }} className="btn btn-primary btn-small">저장</button>
+                  </div>
+                </td>
+              </tr>
+            )}
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <td style={{ padding: "10px 16px", color: "var(--text-muted)", fontWeight: 600 }}>이메일 인증</td>
+              <td style={{ padding: "10px 16px", color: "var(--text-primary)" }}>{u.email_verified ? "완료" : "미인증"}</td>
+              <td style={{ padding: "10px 16px" }}>
+                {!u.email_verified && <button onClick={() => act(`/api/admin/users/${u.id}/verify-email`)} className="btn btn-small btn-outline" style={{ fontSize: "0.8em" }}>인증 처리</button>}
+              </td>
+            </tr>
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <td style={{ padding: "10px 16px", color: "var(--text-muted)", fontWeight: 600 }}>역할</td>
+              <td style={{ padding: "10px 16px", color: "var(--text-primary)" }}>{u.role === "admin" ? "관리자" : u.role === "moderator" ? "조율자" : "유저"}</td>
+              <td style={{ padding: "10px 16px" }}>
+                {me?.role === "admin" && <button onClick={() => setShowChangeRole(!showChangeRole)} className="btn btn-small btn-outline" style={{ fontSize: "0.8em" }}>변경</button>}
+              </td>
+            </tr>
+            {showChangeRole && (
+              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                <td colSpan={3} style={{ padding: "10px 16px" }}>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <select value={newRole} onChange={e => setNewRole(e.target.value)} className="cw-input">
+                      <option value="user">유저</option><option value="moderator">조율자</option><option value="admin">관리자</option>
+                    </select>
+                    <button onClick={() => { act(`/api/admin/users/${u.id}/change-role`, { role: newRole }); setShowChangeRole(false); }} className="btn btn-primary btn-small">저장</button>
+                  </div>
+                </td>
+              </tr>
+            )}
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <td style={{ padding: "10px 16px", color: "var(--text-muted)", fontWeight: 600 }}>공개 설정</td>
+              <td colSpan={2} style={{ padding: "10px 16px", color: "var(--text-primary)" }}>
+                {{ public: "공개", home: "홈", followers: "팔로워", mention: "멘션" }[u.default_visibility] || u.default_visibility}
+              </td>
+            </tr>
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <td style={{ padding: "10px 16px", color: "var(--text-muted)", fontWeight: 600 }}>팔로우 수동 승인</td>
+              <td colSpan={2} style={{ padding: "10px 16px", color: "var(--text-primary)" }}>{u.is_locked ? "켜짐" : "꺼짐"}</td>
+            </tr>
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <td style={{ padding: "10px 16px", color: "var(--text-muted)", fontWeight: 600 }}>가입일</td>
+              <td colSpan={2} style={{ padding: "10px 16px", color: "var(--text-primary)" }}>{u.created_at ? new Date(u.created_at).toLocaleString("ko-KR") : "-"}</td>
+            </tr>
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <td style={{ padding: "10px 16px", color: "var(--text-muted)", fontWeight: 600 }}>최근 활동</td>
+              <td colSpan={2} style={{ padding: "10px 16px", color: "var(--text-primary)" }}>{u.last_active ? new Date(u.last_active).toLocaleString("ko-KR") : "-"}</td>
+            </tr>
+            {u.recent_ips.slice(0, 5).map((ip, i) => (
               <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                <td style={{ padding: "10px 16px", color: "var(--text-muted)", width: 160, fontWeight: 600 }}>{label}</td>
-                <td style={{ padding: "10px 16px", color: "var(--text-primary)", fontFamily: typeof value === "string" && value.includes(".") ? "monospace" : "inherit" }}>{value}</td>
+                <td style={{ padding: "10px 16px", color: "var(--text-muted)", fontWeight: 600 }}>최근 IP {i + 1}</td>
+                <td colSpan={2} style={{ padding: "10px 16px", color: "var(--text-primary)", fontFamily: "monospace" }}>{ip}</td>
               </tr>
             ))}
           </tbody>
@@ -107,10 +177,13 @@ export default function AdminUserDetailPage() {
       </div>
 
       {/* Actions */}
-      <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <button onClick={() => act(`/api/admin/users/${u.id}/reset-password`)} className="btn btn-small" style={{ border: "1px solid var(--border)" }}>암호 초기화</button>
         <button onClick={async () => {
-          await fetch(`/api/admin/users/suspend`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ user_ids: String(u.id) }) });
-          load();
+          const form = new FormData(); form.append("user_ids", String(u.id));
+          const path = u.is_suspended ? "/api/admin/users/unsuspend" : "/api/admin/users/suspend";
+          const res = await fetch(path, { method: "POST", credentials: "include", body: form });
+          if (res.ok) load(); else alert("실패");
         }} className="btn btn-small" style={{ background: u.is_suspended ? "var(--accent)" : "var(--danger)", color: "#fff", border: "none" }}>
           {u.is_suspended ? "정지 해제" : "정지"}
         </button>
