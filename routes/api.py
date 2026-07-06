@@ -242,9 +242,8 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 Post.id.in_(boosted_ids),
             ),
             Post.is_deleted == False,
+            Post.visibility != "mention",
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
-        posts = [p for p in posts if _can_view(p, user, session)]
-        posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm)]
     elif tl_type == "social":
         following_ids = [f.following_id for f in session.query(Follow).filter_by(
             follower_id=user.id, accepted=True
@@ -259,9 +258,8 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 and_(Post.author_id.in_(local_ids), Post.visibility == "public"),
             ),
             Post.is_deleted == False,
+            Post.visibility != "mention",
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
-        posts = [p for p in posts if _can_view(p, user, session)]
-        posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm)]
     elif tl_type == "local":
         local_ids = [u.id for u in session.query(User).filter_by(is_remote=False).all()]
         posts = session.query(Post).options(
@@ -278,6 +276,8 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             Post.visibility == "public",
             Post.is_deleted == False,
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
+    # Remove leftover mention+DMs (post-filter to avoid SQL complexity)
+    posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm)]
     has_more = len(posts) > limit
     return [_post_json(p, session, user) for p in posts[:limit]], has_more
 
