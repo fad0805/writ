@@ -114,11 +114,11 @@ def get_outbox(username: str, page: Optional[int] = None):
         ).order_by(Post.created_at.desc())
 
         total = query.count()
+        outbox_url = user.outbox_uri()
         if page is not None:
             offset = (page - 1) * 20
             posts = query.offset(offset).limit(20).all()
             items = [p.to_ap_note() for p in posts]
-            outbox_url = user.outbox_uri()
             return {
                 "@context": "https://www.w3.org/ns/activitystreams",
                 "id": f"{outbox_url}?page={page}",
