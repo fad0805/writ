@@ -129,26 +129,30 @@ export default function ProfilePage() {
                   )
               }} />
             )}
-            <div className="profile-bottom-actions">
-              {isMine ? (
-                <button onClick={() => router.push("/users/profile/edit")} className="action-btn btn-action-sm">
-                  <Icon name="edit" /> 편집
-                </button>
-              ) : (
-                <>
-                  <button className="action-btn btn-action-sm" onClick={() => setShowMention(true)}>
-                    <Icon name="mention" /> 멘션
-                  </button>
-                  <button className="action-btn btn-action-sm" onClick={() => router.push(`/direct/${profile.id}`)}>
-                    <Icon name="mail" /> DM
-                  </button>
-                  <button className="action-btn btn-action-sm" onClick={() => setShowNote(!showNote)}>
-                    <Icon name="edit" /> 메모
-                  </button>
-                </>
+            <div className="profile-bottom-actions" style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
+              {!isMine && profileNote && !showNote && (
+                <span style={{ fontSize: "0.78em", color: "var(--text-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>{profileNote}</span>
               )}
+              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                {isMine ? (
+                  <button onClick={() => router.push("/users/profile/edit")} className="action-btn btn-action-sm">
+                    <Icon name="edit" /> 편집
+                  </button>
+                ) : (
+                  <>
+                    <button className="action-btn btn-action-sm" onClick={() => setShowMention(true)}>
+                      <Icon name="mention" /> 멘션
+                    </button>
+                    <button className="action-btn btn-action-sm" onClick={() => router.push(`/direct/${profile.id}`)}>
+                      <Icon name="mail" /> DM
+                    </button>
+                    <button className="action-btn btn-action-sm" onClick={() => setShowNote(!showNote)}>
+                      <Icon name="edit" /> 메모
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
-            {!isMine && profileNote && !showNote && <div style={{ fontSize: "0.78em", color: "var(--text-dim)", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profileNote}</div>}
           </div>
         </div>
       </div>
