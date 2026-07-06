@@ -38,8 +38,7 @@ Full list in `config.py`.
 
 ## Deployment
 
-1. Copy `.env.production` → fill in real values
-2. `APP_ENV=production ./dev.sh`
+Copy `.env.production` → fill in real values, then run the backend with uvicorn directly or via your process manager.
 
 ## Project Layout
 
