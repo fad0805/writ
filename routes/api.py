@@ -1578,7 +1578,7 @@ def _ap_fetch(url, user):
             return None
 
     # Fall back to signed request
-    import hashlib
+    import hashlib, time
     from crypto_utils import sign_string
     date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
     parsed = urlparse(url)
