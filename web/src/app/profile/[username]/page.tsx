@@ -15,6 +15,8 @@ export default function ProfilePage() {
   const router = useRouter();
   const [showMention, setShowMention] = useState(false);
   const [showRemoveFollower, setShowRemoveFollower] = useState(false);
+  const [profileNote, setProfileNote] = useState("");
+  const [noteLoaded, setNoteLoaded] = useState(false);
   const username = params.username as string;
   const [profile, setProfile] = useState<User | null>(null);
   const [posts, setPosts] = useState<PostData[]>([]);
@@ -55,6 +57,14 @@ export default function ProfilePage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [username, router]);
+
+  useEffect(() => {
+    if (!loading && profile && !isMine) {
+      fetch(`/api/profile-notes/${profile.username}`, { credentials: "include" })
+        .then(r => r.json()).then(d => { setProfileNote(d.content || ""); setNoteLoaded(true); })
+        .catch(() => setNoteLoaded(true));
+    }
+  }, [loading, profile, isMine]);
 
   if (loading) return <div className="empty-state">로딩 중...</div>;
   if (!profile) return <div className="empty-state">사용자를 찾을 수 없습니다.</div>;
@@ -137,6 +147,16 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+      {!isMine && noteLoaded && (
+        <div style={{ marginTop: 12, marginBottom: 12, padding: "10px 14px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8 }}>
+          <div style={{ fontSize: "0.8em", color: "var(--text-muted)", marginBottom: 4, fontWeight: 600 }}>메모 <Icon name="edit" size={12} /></div>
+          <textarea value={profileNote} onChange={e => setProfileNote(e.target.value)} rows={2} className="cw-input" style={{ width: "100%", fontSize: "0.85em", resize: "vertical" }} placeholder="이 사용자에 대한 메모..." />
+          <button onClick={async () => {
+            const form = new FormData(); form.append("content", profileNote);
+            await fetch(`/api/profile-notes/${profile.username}`, { method: "POST", credentials: "include", body: form });
+          }} className="btn btn-primary btn-small" style={{ marginTop: 4, fontSize: "0.8em" }}>메모 저장</button>
+        </div>
+      )}
       {showMention && <MentionModal username={profile.username} onClose={() => setShowMention(false)} onDone={() => setShowMention(false)} />}
       {showRemoveFollower && (
         <ConfirmModal

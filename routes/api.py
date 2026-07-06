@@ -888,6 +888,33 @@ def api_notifications(request: Request, filter_type: str = Query("")):
 
 # ── Novels / Episodes API ──
 
+@router.get("/profile-notes/{target_username}")
+def api_get_profile_note(request: Request, target_username: str):
+    user = require_auth(request)
+    with get_session() as s:
+        target = s.query(User).filter_by(username=target_username).first()
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found")
+        note = s.query(ProfileNote).filter_by(user_id=user.id, target_user_id=target.id).first()
+        return {"content": note.content if note else ""}
+
+
+@router.post("/profile-notes/{target_username}")
+def api_save_profile_note(request: Request, target_username: str, content: str = Form("")):
+    user = require_auth(request)
+    with get_session() as s:
+        target = s.query(User).filter_by(username=target_username).first()
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found")
+        note = s.query(ProfileNote).filter_by(user_id=user.id, target_user_id=target.id).first()
+        if note:
+            note.content = content
+        else:
+            s.add(ProfileNote(user_id=user.id, target_user_id=target.id, content=content))
+        s.commit()
+    return {"ok": True}
+
+
 @router.get("/novels")
 def api_novels(request: Request):
     with get_session() as s:

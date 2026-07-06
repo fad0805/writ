@@ -369,6 +369,20 @@ class Notification(Base):
     post = relationship("Post", lazy="selectin")
 
 
+class ProfileNote(Base):
+    __tablename__ = "profile_notes"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    target_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    content = Column(Text, default="")
+    created_at = Column(DateTime(timezone=True), default=now)
+    updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
+
+    user = relationship("User", foreign_keys=[user_id], lazy="selectin")
+    target = relationship("User", foreign_keys=[target_user_id], lazy="selectin")
+
+
 def init_db():
     Base.metadata.create_all(engine)
     try:
