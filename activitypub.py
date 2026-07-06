@@ -842,6 +842,8 @@ def _process_emoji_tags(tags: list, session):
         icon = tag.get("icon", {})
         if isinstance(icon, dict):
             img_url = icon.get("url", "")
+        elif isinstance(icon, str):
+            img_url = icon
         else:
             img_url = ""
         if not img_url:
