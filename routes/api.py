@@ -1536,11 +1536,29 @@ def _fetch_and_save_ap_object(obj, user):
             if parent:
                 in_reply_to_id = parent.id
 
+        # Determine visibility from to/cc like _handle_create
+        to = obj.get("to", [])
+        if isinstance(to, str): to = [to]
+        cc = obj.get("cc", [])
+        if isinstance(cc, str): cc = [cc]
+        all_auds = to + cc
+        pub = "https://www.w3.org/ns/activitystreams#Public"
+        if pub in to:
+            vis = "public"
+        elif pub in cc:
+            vis = "home"
+        elif any(a.endswith("/followers") for a in all_auds):
+            vis = "followers"
+        elif all(a.startswith("http") for a in all_auds if a):
+            vis = "mention"
+        else:
+            vis = "home"
+
         post = Post(
             author_id=author_id,
             content=content,
             summary=summary,
-            visibility="public",
+            visibility=vis,
             ap_id=ap_id,
             in_reply_to_ap_id=in_reply_to_ap_id,
             in_reply_to_id=in_reply_to_id,
