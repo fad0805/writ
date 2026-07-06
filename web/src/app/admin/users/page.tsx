@@ -95,11 +95,12 @@ export default function AdminUsersPage() {
 
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+          <button onClick={suspendSelected} disabled={selected.size === 0} className="btn btn-small" style={{ background: "var(--danger)", color: "#fff", border: "none" }}>정지</button>
+          <button onClick={unsuspendSelected} disabled={selected.size === 0} className="btn btn-small btn-outline">정지 해제</button>
+          <div style={{ flex: 1 }} />
           <button onClick={() => setShowSearch(!showSearch)} className="btn btn-outline btn-small">
             검색/필터 {showSearch ? "▲" : "▼"}
           </button>
-          <button onClick={suspendSelected} disabled={selected.size === 0} className="btn btn-small" style={{ background: "var(--danger)", color: "#fff", border: "none" }}>정지</button>
-          <button onClick={unsuspendSelected} disabled={selected.size === 0} className="btn btn-small btn-outline">정지 해제</button>
         </div>
 
         {showSearch && (
