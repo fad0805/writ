@@ -10,6 +10,7 @@ import Avatar from "./Avatar";
 import MiniPostCard from "./MiniPostCard";
 import { useAuth } from "@/lib/auth";
 import ShareButton from "@/components/ShareButton";
+import { hashColor } from "@/lib/avatar";
 
 const VIS_ICONS: Record<string, string> = {
   public: "globe", home: "home", followers: "lock", mention: "mail",
@@ -206,11 +207,13 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
         {quotedPost && <div style={{ margin: "8px 0" }}><MiniPostCard post={quotedPost} /></div>}
         {quotedSeries && (
           <div style={{ margin: "8px 0", padding: 12, border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg-tertiary)", cursor: "pointer", display: "flex", gap: 12 }} onClick={(e) => { e.stopPropagation(); router.push(`/series/${quotedSeries.novel.id}`); }}>
-            <div style={{ width: 64, flexShrink: 0, aspectRatio: "3/4", borderRadius: 6, overflow: "hidden", background: "var(--bg-tertiary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: 64, flexShrink: 0, aspectRatio: "3/4", borderRadius: 6, overflow: "hidden", background: "var(--bg-tertiary)" }}>
               {quotedSeries.novel.cover_image ? (
                 <img src={quotedSeries.novel.cover_image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               ) : (
-                <Icon name="book" size={24} />
+                <div style={{ width: "100%", height: "100%", backgroundColor: hashColor(quotedSeries.novel.title), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "1em", fontWeight: "bold" }}>
+                  {quotedSeries.novel.title[0]}
+                </div>
               )}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
