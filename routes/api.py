@@ -1927,6 +1927,38 @@ def api_admin_users(request: Request, location: str = Query("local"), status: st
         return {"users": result}
 
 
+@router.get("/admin/users/{user_id}")
+def api_admin_user_detail(request: Request, user_id: int):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        u = s.query(User).get(user_id)
+        if not u:
+            raise HTTPException(status_code=404, detail="User not found")
+        post_count = s.query(Post).filter_by(author_id=u.id, is_deleted=False).count()
+        follower_count = s.query(Follow).filter_by(following_id=u.id, accepted=True).count()
+        following_count = s.query(Follow).filter_by(follower_id=u.id, accepted=True).count()
+        recent_post = s.query(Post).filter_by(author_id=u.id).order_by(Post.created_at.desc()).first()
+        last_active = str(recent_post.created_at) if recent_post and recent_post.created_at else str(u.created_at) if u.created_at else ""
+        novels = s.query(Novel).filter_by(author_id=u.id).count()
+        email_domain = u.email.split("@")[-1] if "@" in (u.email or "") else ""
+        return {
+            **_user_json(u),
+            "created_at": str(u.created_at) if u.created_at else "",
+            "post_count": post_count,
+            "follower_count": follower_count,
+            "following_count": following_count,
+            "novels_count": novels,
+            "last_active": last_active,
+            "email_domain": email_domain,
+            "recent_ips": (u.recent_ips or [])[:10],
+            "is_suspended": getattr(u, 'is_suspended', False),
+            "email_verified": getattr(u, 'email_verified', False),
+            "summary": u.summary or "",
+        }
+
+
 @router.post("/admin/users/suspend")
 def api_admin_suspend_users(request: Request, user_ids: str = Form(...)):
     user = require_auth(request)
