@@ -1867,7 +1867,8 @@ def api_admin_stats(request: Request):
 @router.get("/admin/users")
 def api_admin_users(request: Request, location: str = Query("local"), status: str = Query("all"),
                      role: str = Query("all"), sort: str = Query("newest"),
-                     q: str = Query("")):
+                     q: str = Query(""), username_q: str = Query(""), email_q: str = Query(""),
+                     ip_q: str = Query("")):
     user = require_auth(request)
     if user.role not in ("admin", "moderator"):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -1902,6 +1903,12 @@ def api_admin_users(request: Request, location: str = Query("local"), status: st
                 User.email.ilike(pattern) |
                 User.recent_ips.cast(String).ilike(pattern)
             )
+        if username_q:
+            qb = qb.filter(User.username.ilike(f"%{username_q}%") | User.display_name.ilike(f"%{username_q}%"))
+        if email_q:
+            qb = qb.filter(User.email.ilike(f"%{email_q}%"))
+        if ip_q:
+            qb = qb.filter(User.recent_ips.cast(String).ilike(f"%{ip_q}%"))
         if sort == "active":
             qb = qb.order_by(User.updated_at.desc())
         else:

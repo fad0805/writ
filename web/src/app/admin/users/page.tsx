@@ -29,9 +29,12 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [showFilters, setShowFilters] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
 
   const [searchQ, setSearchQ] = useState("");
+  const [usernameQ, setUsernameQ] = useState("");
+  const [emailQ, setEmailQ] = useState("");
+  const [ipQ, setIpQ] = useState("");
   const [loc, setLoc] = useState("local");
   const [status, setStatus] = useState("all");
   const [role, setRole] = useState("all");
@@ -41,6 +44,9 @@ export default function AdminUsersPage() {
     setLoading(true);
     const params = new URLSearchParams({ location: loc, status, role, sort });
     if (searchQ) params.set("q", searchQ);
+    if (usernameQ) params.set("username_q", usernameQ);
+    if (emailQ) params.set("email_q", emailQ);
+    if (ipQ) params.set("ip_q", ipQ);
     fetch(`/api/admin/users?${params}`, { credentials: "include" })
       .then(r => r.json()).then(d => { setUsers(d.users); setLoading(false); })
       .catch(() => setLoading(false));
@@ -86,27 +92,31 @@ export default function AdminUsersPage() {
       </div>
 
       <div style={{ marginBottom: 12 }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-          <input type="text" value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="아이디, 이름, 이메일, IP 검색..." className="cw-input" style={{ flex: 1, fontSize: "0.85em" }}
-            onKeyDown={e => { if (e.key === "Enter") loadUsers(); }} />
-          <button onClick={loadUsers} className="btn btn-primary btn-small">검색</button>
-          <button onClick={() => setShowFilters(!showFilters)} className="btn btn-outline btn-small">
-            필터 {showFilters ? "▲" : "▼"}
-          </button>
-        </div>
+        <button onClick={() => setShowSearch(!showSearch)} className="btn btn-outline btn-small" style={{ marginBottom: 8 }}>
+          검색/필터 {showSearch ? "▲" : "▼"}
+        </button>
 
-        {showFilters && (
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", padding: "10px 14px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 8, fontSize: "0.85em", alignItems: "center" }}>
-            <label>위치 <select value={loc} onChange={e => setLoc(e.target.value)} className="cw-input" style={{ width: 90 }}><option value="all">모두</option><option value="local">로컬</option><option value="remote">리모트</option></select></label>
-            <label>상태 <select value={status} onChange={e => setStatus(e.target.value)} className="cw-input" style={{ width: 100 }}>
-              <option value="all">모두</option><option value="active">활성</option><option value="suspended">정지</option><option value="pending">인증대기</option><option value="inactive">비활성</option>
-            </select></label>
-            <label>역할 <select value={role} onChange={e => setRole(e.target.value)} className="cw-input" style={{ width: 90 }}>
-              <option value="all">모두</option><option value="user">유저</option><option value="moderator">조율자</option><option value="admin">관리자</option>
-            </select></label>
-            <label>정렬 <select value={sort} onChange={e => setSort(e.target.value)} className="cw-input" style={{ width: 110 }}>
-              <option value="newest">최신순</option><option value="active">최근활동순</option>
-            </select></label>
+        {showSearch && (
+          <div style={{ padding: "12px 14px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 8, fontSize: "0.85em" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+              <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>아이디/이름</label><input type="text" value={usernameQ} onChange={e => setUsernameQ(e.target.value)} placeholder="username 또는 이름" className="cw-input" style={{ width: "100%" }} /></div>
+              <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>이메일</label><input type="text" value={emailQ} onChange={e => setEmailQ(e.target.value)} placeholder="email@example.com" className="cw-input" style={{ width: "100%" }} /></div>
+              <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>IP</label><input type="text" value={ipQ} onChange={e => setIpQ(e.target.value)} placeholder="192.168.x.x" className="cw-input" style={{ width: "100%" }} /></div>
+              <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>통합 검색</label><input type="text" value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="전체 검색" className="cw-input" style={{ width: "100%" }} /></div>
+            </div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+              <label>위치 <select value={loc} onChange={e => setLoc(e.target.value)} className="cw-input" style={{ width: 90 }}><option value="all">모두</option><option value="local">로컬</option><option value="remote">리모트</option></select></label>
+              <label>상태 <select value={status} onChange={e => setStatus(e.target.value)} className="cw-input" style={{ width: 100 }}>
+                <option value="all">모두</option><option value="active">활성</option><option value="suspended">정지</option><option value="pending">인증대기</option><option value="inactive">비활성</option>
+              </select></label>
+              <label>역할 <select value={role} onChange={e => setRole(e.target.value)} className="cw-input" style={{ width: 90 }}>
+                <option value="all">모두</option><option value="user">유저</option><option value="moderator">조율자</option><option value="admin">관리자</option>
+              </select></label>
+              <label>정렬 <select value={sort} onChange={e => setSort(e.target.value)} className="cw-input" style={{ width: 110 }}>
+                <option value="newest">최신순</option><option value="active">최근활동순</option>
+              </select></label>
+              <button onClick={loadUsers} className="btn btn-primary btn-small">검색</button>
+            </div>
           </div>
         )}
       </div>
