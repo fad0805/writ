@@ -1867,8 +1867,8 @@ def api_admin_stats(request: Request):
 @router.get("/admin/users")
 def api_admin_users(request: Request, location: str = Query("local"), status: str = Query("all"),
                      role: str = Query("all"), sort: str = Query("newest"),
-                     q: str = Query(""), username_q: str = Query(""), email_q: str = Query(""),
-                     ip_q: str = Query("")):
+                     q: str = Query(""), username_q: str = Query(""), name_q: str = Query(""),
+                     email_q: str = Query(""), ip_q: str = Query(""), domain_q: str = Query("")):
     user = require_auth(request)
     if user.role not in ("admin", "moderator"):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -1904,11 +1904,15 @@ def api_admin_users(request: Request, location: str = Query("local"), status: st
                 User.recent_ips.cast(String).ilike(pattern)
             )
         if username_q:
-            qb = qb.filter(User.username.ilike(f"%{username_q}%") | User.display_name.ilike(f"%{username_q}%"))
+            qb = qb.filter(User.username.ilike(f"%{username_q}%"))
+        if name_q:
+            qb = qb.filter(User.display_name.ilike(f"%{name_q}%"))
         if email_q:
             qb = qb.filter(User.email.ilike(f"%{email_q}%"))
         if ip_q:
             qb = qb.filter(User.recent_ips.cast(String).ilike(f"%{ip_q}%"))
+        if domain_q:
+            qb = qb.filter(User.username.ilike(f"%@{domain_q}%") | User.email.ilike(f"%@{domain_q}%"))
         if sort == "active":
             qb = qb.order_by(User.updated_at.desc())
         else:

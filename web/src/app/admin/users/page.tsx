@@ -33,8 +33,10 @@ export default function AdminUsersPage() {
 
   const [searchQ, setSearchQ] = useState("");
   const [usernameQ, setUsernameQ] = useState("");
+  const [nameQ, setNameQ] = useState("");
   const [emailQ, setEmailQ] = useState("");
   const [ipQ, setIpQ] = useState("");
+  const [domainQ, setDomainQ] = useState("");
   const [loc, setLoc] = useState("local");
   const [status, setStatus] = useState("all");
   const [role, setRole] = useState("all");
@@ -45,8 +47,10 @@ export default function AdminUsersPage() {
     const params = new URLSearchParams({ location: loc, status, role, sort });
     if (searchQ) params.set("q", searchQ);
     if (usernameQ) params.set("username_q", usernameQ);
+    if (nameQ) params.set("name_q", nameQ);
     if (emailQ) params.set("email_q", emailQ);
     if (ipQ) params.set("ip_q", ipQ);
+    if (domainQ) params.set("domain_q", domainQ);
     fetch(`/api/admin/users?${params}`, { credentials: "include" })
       .then(r => r.json()).then(d => { setUsers(d.users); setLoading(false); })
       .catch(() => setLoading(false));
@@ -99,9 +103,11 @@ export default function AdminUsersPage() {
         {showSearch && (
           <div style={{ padding: "12px 14px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 8, fontSize: "0.85em" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
-              <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>아이디/이름</label><input type="text" value={usernameQ} onChange={e => setUsernameQ(e.target.value)} placeholder="username 또는 이름" className="cw-input" style={{ width: "100%" }} /></div>
+              <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>아이디</label><input type="text" value={nameQ} onChange={e => setNameQ(e.target.value)} placeholder="표시 이름" className="cw-input" style={{ width: "100%" }} /></div>
+              <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>유저명</label><input type="text" value={usernameQ} onChange={e => setUsernameQ(e.target.value)} placeholder="@username" className="cw-input" style={{ width: "100%" }} /></div>
               <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>이메일</label><input type="text" value={emailQ} onChange={e => setEmailQ(e.target.value)} placeholder="email@example.com" className="cw-input" style={{ width: "100%" }} /></div>
               <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>IP</label><input type="text" value={ipQ} onChange={e => setIpQ(e.target.value)} placeholder="192.168.x.x" className="cw-input" style={{ width: "100%" }} /></div>
+              {loc === "remote" && <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>도메인</label><input type="text" value={domainQ} onChange={e => setDomainQ(e.target.value)} placeholder="example.com" className="cw-input" style={{ width: "100%" }} /></div>}
               <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>통합 검색</label><input type="text" value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="전체 검색" className="cw-input" style={{ width: "100%" }} /></div>
             </div>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
