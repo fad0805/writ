@@ -1965,6 +1965,8 @@ def api_admin_user_detail(request: Request, user_id: int):
             "email_domain": email_domain,
             "recent_ips": (u.recent_ips or [])[:10],
             "is_suspended": getattr(u, 'is_suspended', False),
+            "is_sensitive": getattr(u, 'is_sensitive', False),
+            "moderation_note": getattr(u, 'moderation_note', '') or '',
             "email_verified": getattr(u, 'email_verified', False),
             "summary": u.summary or "",
         }
@@ -2076,3 +2078,29 @@ def api_admin_unsuspend_users(request: Request, user_ids: str = Form(...)):
         s.query(User).filter(User.id.in_(ids)).update({"is_suspended": False}, synchronize_session=False)
         s.commit()
     return {"ok": True}
+
+
+@router.post("/admin/users/{user_id}/note")
+def api_admin_user_note(request: Request, user_id: int, note: str = Form("")):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        u = s.query(User).get(user_id)
+        if not u: raise HTTPException(status_code=404, detail="User not found")
+        u.moderation_note = note
+        s.commit()
+    return {"ok": True}
+
+
+@router.post("/admin/users/{user_id}/toggle-sensitive")
+def api_admin_toggle_sensitive(request: Request, user_id: int):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        u = s.query(User).get(user_id)
+        if not u: raise HTTPException(status_code=404, detail="User not found")
+        u.is_sensitive = not u.is_sensitive
+        s.commit()
+        return {"ok": True, "is_sensitive": u.is_sensitive}

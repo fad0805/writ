@@ -13,6 +13,7 @@ interface UserDetail {
   email_verified?: boolean; summary: string;
   default_visibility: string; is_remote: boolean;
   created_at: string;
+  is_sensitive?: boolean; moderation_note?: string;
 }
 
 export default function AdminUserDetailPage() {
@@ -26,10 +27,11 @@ export default function AdminUserDetailPage() {
   const [showChangeRole, setShowChangeRole] = useState(false);
   const [newRole, setNewRole] = useState("user");
   const [msg, setMsg] = useState("");
+  const [noteText, setNoteText] = useState("");
 
   const load = () => {
     fetch(`/api/admin/users/${params.id}`, { credentials: "include" })
-      .then(r => r.json()).then(d => { setU(d); setLoading(false); })
+      .then(r => r.json()).then(d => { setU(d); setNoteText(d.moderation_note || ""); setLoading(false); })
       .catch(() => setLoading(false));
   };
 
@@ -176,8 +178,25 @@ export default function AdminUserDetailPage() {
         </table>
       </div>
 
+      {/* Moderation note */}
+      <div style={{ marginBottom: 20 }}>
+        <label style={{ display: "block", marginBottom: 4, color: "var(--text-muted)", fontSize: "0.85em", fontWeight: 600 }}>참고사항</label>
+        <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={3} className="cw-input" style={{ width: "100%", resize: "vertical" }} placeholder="관리자 참고용 메모..." />
+        <button onClick={async () => {
+          const form = new FormData(); form.append("note", noteText);
+          const res = await fetch(`/api/admin/users/${u.id}/note`, { method: "POST", credentials: "include", body: form });
+          if (res.ok) alert("저장됨");
+        }} className="btn btn-primary btn-small" style={{ marginTop: 4 }}>메모 저장</button>
+      </div>
+
       {/* Actions */}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <button onClick={async () => {
+          const res = await fetch(`/api/admin/users/${u.id}/toggle-sensitive`, { method: "POST", credentials: "include" });
+          if (res.ok) { const d = await res.json(); setU(prev => prev ? { ...prev, is_sensitive: d.is_sensitive } : prev); }
+        }} className="btn btn-small" style={{ border: "1px solid var(--border)", color: u.is_sensitive ? "var(--accent)" : "var(--text-muted)" }}>
+          {u.is_sensitive ? "미디어 민감 해제" : "미디어 민감 강제"}
+        </button>
         <button onClick={() => act(`/api/admin/users/${u.id}/reset-password`)} className="btn btn-small" style={{ border: "1px solid var(--border)" }}>암호 초기화</button>
         <button onClick={async () => {
           const form = new FormData(); form.append("user_ids", String(u.id));

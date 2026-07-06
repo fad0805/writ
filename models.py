@@ -37,6 +37,8 @@ class User(Base):
     email_verified = Column(Boolean, default=False)
     recent_ips = Column(JSON, default=list)
     is_suspended = Column(Boolean, default=False)
+    is_sensitive = Column(Boolean, default=False)
+    moderation_note = Column(Text, default="")
     password_hash = Column(String(255), nullable=False)
 
     # ActivityPub
@@ -491,6 +493,18 @@ def init_db():
     try:
         with Session(engine) as session:
             session.execute(text("ALTER TABLE users ADD COLUMN is_suspended BOOLEAN DEFAULT 0"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE users ADD COLUMN is_sensitive BOOLEAN DEFAULT 0"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE users ADD COLUMN moderation_note TEXT DEFAULT ''"))
             session.commit()
     except Exception:
         pass
