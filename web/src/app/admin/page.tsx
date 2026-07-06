@@ -14,6 +14,7 @@ export default function AdminPage() {
   const [emojiAliases, setEmojiAliases] = useState("");
   const [emojiFile, setEmojiFile] = useState<File | null>(null);
   const [emojiSubmitting, setEmojiSubmitting] = useState(false);
+  const [emojiFilter, setEmojiFilter] = useState("all");
 
   useEffect(() => {
     if (!authLoading && user?.role !== "admin" && user?.role !== "moderator") {
@@ -83,11 +84,16 @@ export default function AdminPage() {
         </form>
 
         <div className="hm-top-24">
+          <div className="flex-row gap-8 mb-12">
+            {["all", "local", "remote"].map((f) => (
+              <button key={f} onClick={() => setEmojiFilter(f)} className={`btn btn-small ${emojiFilter === f ? "btn-primary" : "btn-outline"}`}>{f === "all" ? "전체" : f === "local" ? "로컬" : "리모트"}</button>
+            ))}
+          </div>
           {emojis.length === 0 ? (
             <p className="empty-state">등록된 커스텀 이모지가 없습니다.</p>
           ) : (
             <div className="flex-col gap-8">
-              {emojis.map((emo) => (
+              {emojis.filter(e => emojiFilter === "all" || (emojiFilter === "local" ? e.category !== "remote" : e.category === "remote")).map((emo) => (
                 <div key={emo.id} className="emoji-list-item">
                   <img src={emo.url} alt={emo.keyword} width={33} height={33} className="emoji-img-admin" />
                   <div className="emoji-info">

@@ -20,7 +20,8 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
     if (open) getCustomEmojis().then(setCustomEmojis);
   }, [open]);
 
-  const groupedCustom = customEmojis.reduce<Record<string, CustomEmoji[]>>((acc, e) => {
+  const localEmojis = customEmojis.filter(e => e.category !== "remote");
+  const groupedCustom = localEmojis.reduce<Record<string, CustomEmoji[]>>((acc, e) => {
     const cat = e.category || "기타";
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(e);
