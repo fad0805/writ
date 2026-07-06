@@ -154,10 +154,12 @@ export default function ProfilePage() {
       {!isMine && noteLoaded && showNote && (
         <div style={{ marginTop: 12, marginBottom: 12, padding: "10px 14px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8 }}>
           <textarea value={profileNote} onChange={e => setProfileNote(e.target.value)} rows={2} className="cw-input" style={{ width: "100%", fontSize: "0.85em", resize: "vertical" }} placeholder="이 사용자에 대한 메모..." />
-          <button onClick={async () => {
-            const form = new FormData(); form.append("content", profileNote);
-            await fetch(`/api/profile-notes/${profile.username}`, { method: "POST", credentials: "include", body: form });
-          }} className="btn btn-primary btn-small" style={{ marginTop: 4, fontSize: "0.8em" }}>메모 저장</button>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
+            <button onClick={async () => {
+              const form = new FormData(); form.append("content", profileNote);
+              await fetch(`/api/profile-notes/${profile.username}`, { method: "POST", credentials: "include", body: form });
+            }} className="btn btn-primary btn-small" style={{ fontSize: "0.8em" }}>메모 저장</button>
+          </div>
         </div>
       )}
       {showMention && <MentionModal username={profile.username} onClose={() => setShowMention(false)} onDone={() => setShowMention(false)} />}

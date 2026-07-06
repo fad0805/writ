@@ -22,7 +22,10 @@ elif "postgres" in os.environ.get("DATABASE_URL", ""):
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from config import DATABASE_URL
+import sys
+import os
+sys.path.insert(0, os.path.dirname(__file__))
+from app.config import DATABASE_URL
 
 engine = create_engine(DATABASE_URL)
 
