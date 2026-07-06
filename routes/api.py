@@ -1795,13 +1795,22 @@ def api_create_emoji(
 
 @router.delete("/emojis/{emoji_id}")
 @router.patch("/emojis/{emoji_id}")
-def api_update_emoji(request: Request, emoji_id: int, category: str = Form("")):
+def api_update_emoji(request: Request, emoji_id: int, category: str = Form(""), keyword: str = Form(""), aliases: str = Form("")):
     user = require_auth(request)
     with get_session() as s:
         emoji = s.query(CustomEmoji).get(emoji_id)
         if not emoji:
             raise HTTPException(status_code=404, detail="Emoji not found")
-        emoji.category = category
+        if keyword:
+            keyword_clean = keyword.strip().lower().replace(" ", "_").replace(":", "")
+            existing = s.query(CustomEmoji).filter(CustomEmoji.keyword == keyword_clean, CustomEmoji.id != emoji_id).first()
+            if existing:
+                raise HTTPException(status_code=400, detail="Keyword already taken")
+            emoji.keyword = keyword_clean
+        if category:
+            emoji.category = category
+        if aliases:
+            emoji.aliases = [a.strip().lower().replace(" ", "_") for a in aliases.split(",") if a.strip()]
         s.commit()
         return {"ok": True, "emoji": {"id": emoji.id, "keyword": emoji.keyword, "file_name": emoji.file_name, "category": emoji.category, "aliases": emoji.aliases or [], "url": f"/emojis/{emoji.file_name}"}}
 

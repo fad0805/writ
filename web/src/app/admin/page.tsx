@@ -17,6 +17,10 @@ export default function AdminPage() {
   const [emojiFilter, setEmojiFilter] = useState("all");
   const [emojiSearch, setEmojiSearch] = useState("");
   const [showUpload, setShowUpload] = useState(false);
+  const [editEmoji, setEditEmoji] = useState<CustomEmoji | null>(null);
+  const [editKeyword, setEditKeyword] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [editAliases, setEditAliases] = useState("");
 
   useEffect(() => {
     if (!authLoading && user?.role !== "admin" && user?.role !== "moderator") {
@@ -99,7 +103,7 @@ export default function AdminPage() {
           ) : (
             <div className="flex-col gap-8">
               {emojis.filter(e => (emojiFilter === "all" || (emojiFilter === "local" ? e.category !== "remote" : e.category === "remote")) && (!emojiSearch || e.keyword.includes(emojiSearch.toLowerCase()))).map((emo) => (
-                <div key={emo.id} className="emoji-list-item">
+                <div key={emo.id} className="emoji-list-item" onClick={() => { if (emo.category !== "remote") { setEditEmoji(emo); setEditKeyword(emo.keyword); setEditCategory(emo.category || ""); setEditAliases((emo.aliases || []).join(", ")); } }} style={{ cursor: emo.category !== "remote" ? "pointer" : "default" }}>
                   <img src={emo.url} alt={emo.keyword} width={33} height={33} className="emoji-img-admin" />
                   <div className="emoji-info">
                     <div className="emoji-keyword">:<span className="emoji-accent">{emo.keyword}</span>:</div>
@@ -132,6 +136,51 @@ export default function AdminPage() {
           )}
         </div>
       </div>
+
+      {editEmoji && (
+        <div className="reply-modal-backdrop active" onClick={() => setEditEmoji(null)}>
+          <div className="reply-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+            <button className="reply-modal-close" onClick={() => setEditEmoji(null)}>×</button>
+            <h3>이모지 편집</h3>
+            <div style={{ display: "flex", gap: 14, alignItems: "flex-start", marginBottom: 16 }}>
+              <img src={editEmoji.url} alt={editEmoji.keyword} style={{ width: 48, height: 48, borderRadius: 6, objectFit: "contain", flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div className="form-group">
+                  <label>키워드</label>
+                  <input type="text" value={editKeyword} onChange={(e) => setEditKeyword(e.target.value.replace(/[^a-z0-9_]/gi, "_").toLowerCase())} className="cw-input w-full" />
+                </div>
+                <div className="form-group">
+                  <label>카테고리</label>
+                  <input type="text" value={editCategory} onChange={(e) => setEditCategory(e.target.value)} className="cw-input w-full" />
+                </div>
+                <div className="form-group">
+                  <label>별칭 <small>(쉼표로 구분)</small></label>
+                  <input type="text" value={editAliases} onChange={(e) => setEditAliases(e.target.value)} placeholder="blob, blob_cat" className="cw-input w-full" />
+                </div>
+              </div>
+            </div>
+            <div className="form-actions">
+              <button type="button" className="btn btn-primary" onClick={async () => {
+                const form = new FormData();
+                form.append("keyword", editKeyword);
+                form.append("category", editCategory);
+                form.append("aliases", editAliases);
+                const res = await fetch(`/api/emojis/${editEmoji.id}`, { method: "PATCH", credentials: "include", body: form });
+                if (res.ok) {
+                  const d = await res.json();
+                  setEmojis(emojis.map(e => e.id === editEmoji.id ? d.emoji : e));
+                  invalidateEmojiCache();
+                  setEditEmoji(null);
+                } else {
+                  const d = await res.json();
+                  alert(d.detail || "저장 실패");
+                }
+              }}>저장</button>
+              <button type="button" className="btn btn-outline" onClick={() => setEditEmoji(null)}>취소</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
