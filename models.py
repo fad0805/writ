@@ -46,6 +46,7 @@ class User(Base):
 
     is_remote = Column(Boolean, default=False)
     is_admin = Column(Boolean, default=False)
+    role = Column(String(16), default="user")
     remote_url = Column(String(512), default="")
     shared_inbox_url = Column(String(512), default="")
     profile_image = Column(String(512), default="")
@@ -436,6 +437,12 @@ def init_db():
     try:
         with Session(engine) as session:
             session.execute(text("ALTER TABLE users ADD COLUMN is_locked BOOLEAN DEFAULT FALSE"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(16) DEFAULT 'user'"))
             session.commit()
     except Exception:
         pass

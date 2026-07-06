@@ -2177,3 +2177,22 @@ input[type="checkbox"] {
   font-size: 0.78em;
   color: var(--text-muted);
 }
+
+/* ── Role badges ── */
+.role-badge {
+  display: inline-block;
+  font-size: 0.55em;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+.role-admin {
+  background: #e74c3c;
+  color: #fff;
+}
+.role-mod {
+  background: #f39c12;
+  color: #fff;
+}

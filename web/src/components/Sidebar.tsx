@@ -155,7 +155,7 @@ export default function Sidebar() {
         <div className="user-info">
            <Avatar user={user} className="sidebar-avatar rounded-[8px] flex items-center justify-center text-white font-bold text-lg" />
           <div className="user-info-text-mini">
-            <strong>{user.display_name} {user.is_locked && <Icon name="lock_filled" style={{ fontSize: "0.65em", verticalAlign: "middle", color: "var(--text-muted)", marginLeft: 2 }} />}</strong>
+            <strong>{user.display_name} {user.is_locked && <Icon name="lock_filled" style={{ fontSize: "0.65em", verticalAlign: "middle", color: "var(--text-muted)", marginLeft: 2 }} />} {user.role === "admin" && <span className="role-badge role-admin">관리자</span>}{user.role === "moderator" && <span className="role-badge role-mod">조율자</span>}</strong>
             <span>@{user.username}</span>
           </div>
         </div>

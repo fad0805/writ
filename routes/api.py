@@ -60,6 +60,7 @@ def _post_json(p, session, user):
 
 
 def _user_json(u):
+    role = getattr(u, 'role', 'user') or 'user'
     return {
         "id": u.id,
         "username": u.username,
@@ -69,6 +70,7 @@ def _user_json(u):
         "is_admin": u.is_admin,
         "is_locked": u.is_locked or False,
         "is_remote": u.is_remote,
+        "role": role,
         "default_visibility": u.default_visibility or "public",
         "series_default_visibility": u.series_default_visibility or "public",
         "episode_default_visibility": u.episode_default_visibility or "public",

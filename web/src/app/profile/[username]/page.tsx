@@ -100,7 +100,7 @@ export default function ProfilePage() {
                 )}
               </div>
             )}
-            <h2>{profile.display_name} {profile.is_locked && <Icon name="lock_filled" style={{ fontSize: "0.7em", verticalAlign: "middle", color: "var(--text-muted)" }} />}</h2>
+            <h2>{profile.display_name} {profile.is_locked && <Icon name="lock_filled" style={{ fontSize: "0.7em", verticalAlign: "middle", color: "var(--text-muted)" }} />} {profile.role === "admin" && <span className="role-badge role-admin">관리자</span>}{profile.role === "moderator" && <span className="role-badge role-mod">조율자</span>}</h2>
             <p className="profile-username">@{profile.username}</p>
             {profile.summary && (
               <p className="profile-summary" dangerouslySetInnerHTML={{
