@@ -40,7 +40,7 @@ export default function AdminPage() {
 
       <div className="hm-bottom-28">
         <h3 className="hm-bottom-16" style={{ cursor: "pointer", userSelect: "none" }} onClick={() => setShowUpload(!showUpload)}>
-          <Icon name="smile" /> 커스텀 이모지 <span style={{ fontSize: "0.7em", color: "var(--text-muted)" }}>{showUpload ? "▲" : "▼"}</span>
+          <Icon name="smile" /> 커스텀 이모지 등록 <span style={{ fontSize: "0.7em", color: "var(--text-muted)" }}>{showUpload ? "▲" : "▼"}</span>
         </h3>
 
         {showUpload && <form onSubmit={async (e) => {
