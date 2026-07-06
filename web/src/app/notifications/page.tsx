@@ -28,7 +28,7 @@ const NOTIF_ICONS: Record<string, string> = {
   reply: "mention",
   mention: "mention",
   post: "bell_solid",
-  moderation: "shield",
+  moderation: "shield_filled",
 };
 
 export default function NotificationsPage() {
