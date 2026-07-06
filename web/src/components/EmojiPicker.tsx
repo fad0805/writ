@@ -27,20 +27,13 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
   }, [open]);
 
   const localEmojis = customEmojis.filter(e => e.category !== "remote");
-  const filteredCustom = search ? localEmojis.filter(e => {
-    const q = search.toLowerCase();
-    return e.keyword.includes(q) || (e.aliases || []).some((a: string) => a.includes(q));
-  }) : localEmojis;
-  const groupedCustom = filteredCustom.reduce<Record<string, CustomEmoji[]>>((acc, e) => {
+  const groupedCustom = localEmojis.reduce<Record<string, CustomEmoji[]>>((acc, e) => {
     const cat = e.category || "기타";
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(e);
     return acc;
   }, {});
-  const filteredCategories = search ? CATEGORIES.map(c => ({
-    ...c,
-    emojis: c.emojis.filter(e => e.includes(search)),
-  })).filter(c => c.emojis.length > 0) : CATEGORIES;
+  const searchResults = search ? customEmojis.filter(e => e.category !== "remote" && (e.keyword.includes(search.toLowerCase()) || (e.aliases || []).some((a: string) => a.includes(search.toLowerCase())))) : [];
 
   useEffect(() => {
     if (!open) return;
@@ -75,6 +68,18 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
           padding: 8,
         }}>
           <input ref={searchRef} type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="이모지 검색..." className="cw-input" style={{ width: "100%", marginBottom: 6, fontSize: "0.85em" }} />
+          {search && searchResults.length > 0 && (
+            <div className="emoji-custom-row">
+              <div className="emoji-row-label">검색 결과</div>
+              <div className="emoji-row-grid">
+                {searchResults.map((emo) => (
+                  <button key={emo.id} type="button" onClick={() => { onEmoji(`:${emo.keyword}:`); setOpen(false); }} className="emoji-cell emoji-cell-large">
+                    <img src={emo.url} alt={emo.keyword} width={33} height={33} className="emoji-img" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {customEmojis.length > 0 && Object.entries(groupedCustom).map(([catName, emos]) => (
             <div key={`c-${catName}`} className="emoji-custom-row">
               <div className="emoji-row-label">{catName}</div>
@@ -87,7 +92,7 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
               </div>
             </div>
           ))}
-          {filteredCategories.map((cat, ci) => (
+          {CATEGORIES.map((cat, ci) => (
             <div key={ci} className="emoji-custom-row" style={{ background: ci % 2 === 0 ? "transparent" : "rgba(128,128,128,0.08)" }}>
               <div className="emoji-row-label">{cat.name}</div>
               <div className="emoji-row-grid">
