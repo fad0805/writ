@@ -272,10 +272,12 @@ class CustomEmoji(Base):
     __tablename__ = "custom_emojis"
 
     id = Column(Integer, primary_key=True)
-    keyword = Column(String(64), unique=True, nullable=False, index=True)
+    keyword = Column(String(128), unique=True, nullable=False, index=True)
     file_name = Column(String(256), nullable=False)
     category = Column(String(64), default="")
     aliases = Column(JSON, default=list)
+    source_url = Column(String(512), default="")
+    domain = Column(String(128), default="")
     created_at = Column(DateTime(timezone=True), default=now)
 
 
@@ -456,6 +458,18 @@ def init_db():
     try:
         with Session(engine) as session:
             session.execute(text("ALTER TABLE episodes ADD COLUMN comment TEXT DEFAULT ''"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE custom_emojis ADD COLUMN source_url VARCHAR(512) DEFAULT ''"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE custom_emojis ADD COLUMN domain VARCHAR(128) DEFAULT ''"))
             session.commit()
     except Exception:
         pass

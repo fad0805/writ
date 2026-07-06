@@ -1714,6 +1714,8 @@ def api_list_emojis():
                 "category": e.category or "",
                 "aliases": e.aliases or [],
                 "url": f"/emojis/{e.file_name}",
+                "source_url": e.source_url or "",
+                "domain": e.domain or "",
             }
             for e in emojis
         ]
@@ -1790,6 +1792,8 @@ def api_create_emoji(
             "category": emoji.category or "",
             "aliases": emoji.aliases or [],
             "url": f"/emojis/{emoji.file_name}",
+            "source_url": "",
+            "domain": "",
         }
 
 
@@ -1812,7 +1816,7 @@ def api_update_emoji(request: Request, emoji_id: int, category: str = Form(""), 
         if aliases:
             emoji.aliases = [a.strip().lower().replace(" ", "_") for a in aliases.split(",") if a.strip()]
         s.commit()
-        return {"ok": True, "emoji": {"id": emoji.id, "keyword": emoji.keyword, "file_name": emoji.file_name, "category": emoji.category, "aliases": emoji.aliases or [], "url": f"/emojis/{emoji.file_name}"}}
+        return {"ok": True, "emoji": {"id": emoji.id, "keyword": emoji.keyword, "file_name": emoji.file_name, "category": emoji.category, "aliases": emoji.aliases or [], "url": f"/emojis/{emoji.file_name}", "source_url": emoji.source_url or "", "domain": emoji.domain or ""}}
 
 def api_delete_emoji(request: Request, emoji_id: int):
     user = require_auth(request)

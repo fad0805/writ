@@ -848,11 +848,18 @@ def _process_emoji_tags(tags: list, session):
             img_url = ""
         if not img_url:
             continue
-
-        existing = session.query(CustomEmoji).filter_by(keyword=keyword).first()
-        if existing:
-            continue
         if not img_url.startswith("http"):
+            continue
+
+        # Extract domain from the emoji ActivityPub ID
+        emoji_id = tag.get("id", "")
+        from urllib.parse import urlparse
+        domain = urlparse(emoji_id).netloc if emoji_id else ""
+        # Prefix keyword with domain to avoid conflicts
+        full_keyword = f"{domain}_{keyword}" if domain else keyword
+
+        existing = session.query(CustomEmoji).filter_by(keyword=full_keyword).first()
+        if existing:
             continue
 
         EMOJI_DIR = os.path.join(os.path.dirname(__file__), "web", "public", "emojis")
@@ -883,7 +890,7 @@ def _process_emoji_tags(tags: list, session):
             file_name = f"{uuid.uuid4().hex}.{ext}"
             file_path = os.path.join(EMOJI_DIR, file_name)
 
-            # Check aspect ratio — skip if too wide (>1.5x height)
+            # Check aspect ratio — skip if too wide (>2x height)
             tmp = Image.open(io.BytesIO(resp.content))
             w, h = tmp.size
             tmp.close()
@@ -906,10 +913,12 @@ def _process_emoji_tags(tags: list, session):
                     img = img.resize((img.width // 2, img.height // 2), Image.LANCZOS)
                 img.save(file_path, format="WEBP", quality=100)
             emoji = CustomEmoji(
-                keyword=keyword,
+                keyword=full_keyword,
                 file_name=file_name,
                 category="remote",
                 aliases=[],
+                source_url=img_url,
+                domain=domain,
             )
             session.add(emoji)
         except Exception as e:

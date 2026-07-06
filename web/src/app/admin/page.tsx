@@ -109,6 +109,7 @@ export default function AdminPage() {
                     <div className="emoji-keyword">:<span className="emoji-accent">{emo.keyword}</span>:</div>
                     <div className="emoji-meta">
                       {emo.category && <span>#{emo.category}</span>}
+                      {(emo as any).domain && <span style={{ color: "var(--text-dim)", fontSize: "0.85em" }}>@{(emo as any).domain}</span>}
                       {emo.aliases && emo.aliases.length > 0 && <span> {emo.aliases.map((a: string) => `:${a}:`).join(" ")}</span>}
                     </div>
                   </div>
