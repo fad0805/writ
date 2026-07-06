@@ -113,13 +113,22 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     return () => clearTimeout(t);
   }, [emojiQuery]);
 
-  // Close emoji picker on scroll/resize
+  // Close emoji picker on scroll/resize/click-outside
   useEffect(() => {
     if (!emojiQuery) return;
     const handler = () => setEmojiResults([]);
     window.addEventListener("scroll", handler, true);
     window.addEventListener("resize", handler);
-    return () => { window.removeEventListener("scroll", handler, true); window.removeEventListener("resize", handler); };
+    const clickHandler = (e: MouseEvent) => {
+      const el = document.querySelector('[style*="z-index: 1100"]');
+      if (el && !el.contains(e.target as Node)) setEmojiResults([]);
+    };
+    setTimeout(() => document.addEventListener("click", clickHandler), 0);
+    return () => { 
+      window.removeEventListener("scroll", handler, true); 
+      window.removeEventListener("resize", handler);
+      document.removeEventListener("click", clickHandler);
+    };
   }, [emojiQuery]);
 
   const insertEmoji = useCallback((emo: CustomEmoji) => {
