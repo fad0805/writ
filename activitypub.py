@@ -20,25 +20,48 @@ logger = logging.getLogger("writ.activitypub")
 
 
 _SAFE_TAGS = {"p", "br", "a", "strong", "em", "b", "i", "u", "s", "ul", "ol", "li", "blockquote", "code", "pre", "span"}
+_SAFE_SCHEMES = {"http", "https", "mailto"}
+_SAFE_ATTRS = {"a": {"href", "rel", "class"}, "span": {"class"}, "code": {"class"}, "pre": {"class"}}
 
 
 def _sanitize_html(html: str) -> str:
     """Strip dangerous HTML tags/attributes, keep only safe ones."""
-    # Remove script/style tags and their content
+    # Remove script/style blocks and their content
     html = re.sub(r'<(script|style)[^>]*>.*?</\1>', '', html, flags=re.DOTALL | re.IGNORECASE)
-    # Remove event handlers and javascript: links
-    html = re.sub(r'\bon\w+\s*=\s*["\'][^"\']*["\']', '', html, flags=re.IGNORECASE)
-    html = re.sub(r'href\s*=\s*["\']\s*javascript\s*:', '', html, flags=re.IGNORECASE)
-    # Strip dangerous tags
+    # Remove remaining script/style self-closing tags
+    html = re.sub(r'<(script|style)[^>]*/?>', '', html, flags=re.IGNORECASE)
+
     def _tag_filter(m):
         tag = m.group(0)
-        name = re.match(r'</?(\w+)', tag)
-        if name and name.group(1).lower() not in _SAFE_TAGS:
+        # Parse tag name
+        name_match = re.match(r'</?(\w+)', tag)
+        if not name_match:
             return ''
-        # For safe tags, keep only safe attributes (href on a)
-        if tag.startswith('<a ') and not re.search(r'href\s*=', tag):
+        name = name_match.group(1).lower()
+        if name not in _SAFE_TAGS:
             return ''
-        return tag
+        # For closing tags, return as-is
+        if tag.startswith('</'):
+            return tag
+        # For opening tags, filter attributes
+        allowed = _SAFE_ATTRS.get(name, set())
+        attrs = re.findall(r'''([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')''', tag)
+        safe_attrs = []
+        for attr_name, v1, v2 in attrs:
+            val = v1 or v2 or ''
+            attr_lower = attr_name.lower()
+            if attr_lower.startswith('on'):
+                continue
+            if attr_lower == 'href' and name == 'a':
+                scheme = val.split(':', 1)[0].lower() if ':' in val else ''
+                if scheme not in _SAFE_SCHEMES:
+                    continue
+            if attr_lower in allowed:
+                safe_attrs.append(f'{attr_name}="{val}"')
+        if not safe_attrs:
+            return f'<{name}>'
+        return f'<{name} {" ".join(safe_attrs)}>'
+
     html = re.sub(r'<[^>]+>', _tag_filter, html)
     return html
 
@@ -61,9 +84,9 @@ def _validate_url(url: str) -> bool:
         return False
     if host.endswith(".local") or host.endswith(".localhost"):
         return False
-    # Try to resolve and check against private subnets
+    # Try to resolve and check against private subnets (IPv4 + IPv6)
     try:
-        addrs = socket.getaddrinfo(host, 80, family=socket.AF_INET)
+        addrs = socket.getaddrinfo(host, 80, family=socket.AF_UNSPEC)
         for addr in addrs:
             ip = ipaddress.ip_address(addr[4][0])
             for net in _PRIVATE_SUBNETS:
@@ -230,11 +253,34 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
         return _handle_announce(activity)
     elif atype == "Undo":
         return _handle_undo(activity)
+    elif atype == "Update":
+        return _handle_update(activity)
     elif atype == "Delete":
         return _handle_delete(activity)
     else:
         return (202, f"Accepted {atype}")
 
+
+def _safe_fetch(url, timeout=10, max_size=5*1024*1024):
+    """HTTP GET with redirect validation and size limit."""
+    if not _validate_url(url):
+        return None
+    client = httpx.Client(follow_redirects=True, timeout=timeout)
+    original_send = client.send
+    def _validated_send(request, **kwargs):
+        if _validate_url(str(request.url)):
+            return original_send(request, **kwargs)
+        raise httpx.InvalidURL(f"Blocked redirect to {request.url}")
+    client.send = _validated_send
+    try:
+        resp = client.get(url)
+        client.close()
+        if resp.status_code != 200 or len(resp.content) > max_size:
+            return None
+        return resp
+    except Exception:
+        client.close()
+        return None
 
 def _save_remote_avatar(avatar_url: str, local_username: str) -> str:
     """Download remote avatar and save, return profile_image URL."""
@@ -248,8 +294,8 @@ def _save_remote_avatar(avatar_url: str, local_username: str) -> str:
     filename = f"{local_username}_{uuid4().hex[:8]}.{ext}"
     key = f"avatars/remote/{filename}"
     try:
-        resp = httpx.get(avatar_url, timeout=10)
-        if resp.status_code == 200:
+        resp = _safe_fetch(avatar_url)
+        if resp:
             storage = get_storage()
             ct = f"image/{ext}"
             return storage.save(key, resp.content, ct)
@@ -258,18 +304,16 @@ def _save_remote_avatar(avatar_url: str, local_username: str) -> str:
     return ""
 
 
-def _resolve_actor(actor_url: str) -> Optional[User]:
+def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User]:
     with get_session() as session:
         user = session.query(User).filter_by(remote_url=actor_url).first()
-        if user:
+        if user and not force_refresh:
             return user
 
     # Fetch remote actor
-    if not _validate_url(actor_url):
-        return None
     try:
-        resp = httpx.get(actor_url, headers={"Accept": "application/activity+json"}, timeout=10)
-        if resp.status_code != 200:
+        resp = _safe_fetch(actor_url, timeout=10)
+        if not resp:
             return None
         data = resp.json()
     except Exception as e:
@@ -402,30 +446,33 @@ def _send_accept(actor_url: str, activity_id: str, target: User):
 def _handle_accept(activity: dict) -> tuple[int, str]:
     obj = activity.get("object", {})
     if isinstance(obj, dict):
-        actor_url = obj.get("actor", "")
+        follower_url = obj.get("actor", "")
     else:
-        actor_url = ""
+        follower_url = ""
 
-    if not actor_url:
+    if not follower_url:
         return (200, "OK")
 
-    local_username = actor_url.rstrip("/").split("/")[-1]
-    follower_actor_url = activity.get("actor", "")
-    if isinstance(follower_actor_url, list):
-        follower_actor_url = follower_actor_url[0]
+    accepter_url = activity.get("actor", "")
+    if isinstance(accepter_url, list):
+        accepter_url = accepter_url[0]
+
+    local_username = _parse_username_from_url(accepter_url)
+    if not local_username:
+        return (200, "OK")
 
     with get_session() as session:
         local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
         if not local_user:
             return (200, "OK")
 
-        following_remote = _resolve_actor(follower_actor_url)
-        if not following_remote:
+        remote_follower = _resolve_actor(follower_url)
+        if not remote_follower:
             return (200, "OK")
 
         follow_rel = session.query(Follow).filter_by(
-            follower_id=local_user.id,
-            following_id=following_remote.id,
+            following_id=local_user.id,
+            follower_id=remote_follower.id,
         ).first()
         if follow_rel:
             follow_rel.accepted = True
@@ -682,6 +729,15 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
     return (200, "OK")
 
 
+def _handle_update(activity: dict) -> tuple[int, str]:
+    object_data = activity.get("object", {})
+    if isinstance(object_data, dict):
+        obj_type = object_data.get("type", "")
+        obj_id = object_data.get("id", "")
+        if obj_type in ("Person", "Service"):
+            _resolve_actor(obj_id, force_refresh=True)
+    return (200, "Updated")
+
 def _handle_delete(activity: dict) -> tuple[int, str]:
     object_url = activity.get("object", "")
     if isinstance(object_url, dict):
@@ -715,7 +771,8 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     signature = sign_string(signed_string, get_private_key(sender, SECRET_KEY))
     signature_header = (
         f'keyId="{sender.actor_uri()}#main-key",'
-        f'algorithm="rsa-sha256",'
+        f'algorithm="hs2019",'
+        f'created="{int(time.time())}",'
         f'headers="(request-target) host date digest",'
         f'signature="{signature}"'
     )
@@ -728,10 +785,16 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
         "Host": parsed.netloc,
     }
 
-    try:
-        httpx.post(inbox_url, content=body, headers=headers, timeout=10)
-    except Exception as e:
-        logger.warning("Failed to deliver to %s: %s", inbox_url, e)
+    # Retry up to 3 times with exponential backoff
+    import time as _time
+    for attempt in range(3):
+        try:
+            httpx.post(inbox_url, content=body, headers=headers, timeout=10)
+            return
+        except Exception as e:
+            if attempt < 2:
+                _time.sleep(2 ** attempt)
+            logger.warning("Failed to deliver to %s (attempt %d/3): %s", inbox_url, attempt + 1, e)
 
 
 def send_to_shared_inbox(user: User, activity: dict):

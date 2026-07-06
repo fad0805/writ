@@ -219,8 +219,35 @@ def user_actor(request: Request, username: str):
         session.close()
 
 
+def _check_collection_access(username: str, request: Request) -> bool:
+    """Check if the requester can view this user's ActivityPub collections."""
+    from models import User, Follow, get_session
+    with get_session() as s:
+        user = s.query(User).filter_by(username=username).first()
+        if not user:
+            return False
+        if not user.is_locked:
+            return True
+        # For locked users, verify HTTP signature from a follower
+        body = b""
+        try:
+            import json
+            ok, actor = _verify_http_signature(request, body, {})
+            if ok and actor:
+                follow = s.query(Follow).filter_by(
+                    follower_id=actor.id, following_id=user.id, accepted=True
+                ).first()
+                if follow:
+                    return True
+        except Exception:
+            pass
+        return False
+
+
 @app.get("/users/{username}/outbox")
 def user_outbox(request: Request, username: str, page: int = None):
+    if not _check_collection_access(username, request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
     result = get_outbox(username, page)
     if result is None:
         raise HTTPException(status_code=404, detail="Not found")
@@ -229,6 +256,8 @@ def user_outbox(request: Request, username: str, page: int = None):
 
 @app.get("/users/{username}/followers")
 def user_followers(request: Request, username: str, page: int = None):
+    if not _check_collection_access(username, request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
     result = get_followers(username, page)
     if result is None:
         raise HTTPException(status_code=404, detail="Not found")
@@ -237,6 +266,8 @@ def user_followers(request: Request, username: str, page: int = None):
 
 @app.get("/users/{username}/following")
 def user_following(request: Request, username: str, page: int = None):
+    if not _check_collection_access(username, request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
     result = get_following(username, page)
     if result is None:
         raise HTTPException(status_code=404, detail="Not found")
@@ -261,12 +292,13 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
     if not key_id or not sig_b64:
         return (False, None)
 
-    # Digest validation (Fix 3)
+    # Digest validation — mandatory for POST (has body)
     digest_header = request.headers.get("Digest", "")
-    if digest_header:
-        expected = "SHA-256=" + hashlib.sha256(body).hexdigest()
-        if digest_header != expected:
-            return (False, None)
+    if not digest_header:
+        return (False, None)
+    expected = "SHA-256=" + hashlib.sha256(body).hexdigest()
+    if digest_header != expected:
+        return (False, None)
 
     # Resolve the remote actor who signed
     from activitypub import _resolve_actor
@@ -282,6 +314,19 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
     signer_uri = remote_actor.actor_uri() if not remote_actor.is_remote else remote_actor.remote_url
     if not activity_actor or signer_uri != activity_actor:
         return (False, None)
+
+    # Date freshness check — ±30s window to prevent replay
+    from datetime import datetime, timezone
+    date_header = request.headers.get("Date", "")
+    if date_header:
+        try:
+            date_dt = datetime.strptime(date_header, "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=timezone.utc)
+            now = datetime.now(timezone.utc)
+            diff = abs((now - date_dt).total_seconds())
+            if diff > 30:
+                return (False, None)
+        except (ValueError, TypeError):
+            return (False, None)
 
     # Build signed string (Fix 7 — use request Host header, not keyId host)
     path = request.url.path
@@ -306,6 +351,13 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
             signed_lines.append(f"{h}: {val}")
     signed_string = "\n".join(signed_lines)
     ok = verify_signature(signed_string, sig_b64, remote_actor.public_key)
+    if not ok:
+        # Retry with forced actor re-fetch (key rotation)
+        from activitypub import _resolve_actor
+        fresh = _resolve_actor(actor_url, force_refresh=True)
+        if fresh and fresh.public_key:
+            ok = verify_signature(signed_string, sig_b64, fresh.public_key)
+            return (ok, fresh if ok else None)
     return (ok, remote_actor if ok else None)
 
 
@@ -317,6 +369,8 @@ async def user_inbox(request: Request, username: str):
             raise HTTPException(status_code=404, detail="User not found")
 
     body = await request.body()
+    if len(body) > 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Request body too large")
     try:
         activity = json.loads(body)
     except json.JSONDecodeError:
@@ -401,6 +455,48 @@ def get_user_by_handle(request: Request, username: str):
 
         return RedirectResponse(url=f"http://localhost:3000/profile/{username}")
 
+
+@app.get("/likes/{like_uuid}")
+def get_like(like_uuid: str):
+    """Return a Like activity (dereferenceable URI)."""
+    from models import Like, User, get_session
+    ap_id = f"{BASE_URL}/likes/{like_uuid}"
+    with get_session() as s:
+        like = s.query(Like).filter_by(ap_id=ap_id).first()
+        if not like:
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        post = like.post
+        actor = s.query(User).get(like.user_id)
+        if not post or not actor:
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        return {
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": ap_id,
+            "type": "Like",
+            "actor": actor.actor_uri(),
+            "object": post.ap_id,
+        }
+
+@app.get("/boosts/{boost_uuid}")
+def get_boost(boost_uuid: str):
+    """Return an Announce activity (dereferenceable URI)."""
+    from models import Boost, User, get_session
+    ap_id = f"{BASE_URL}/boosts/{boost_uuid}"
+    with get_session() as s:
+        boost = s.query(Boost).filter_by(ap_id=ap_id).first()
+        if not boost:
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        post = boost.post
+        actor = s.query(User).get(boost.user_id)
+        if not post or not actor:
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        return {
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": ap_id,
+            "type": "Announce",
+            "actor": actor.actor_uri(),
+            "object": post.ap_id,
+        }
 
 @app.get("/@{username}/{number}")
 def get_post_by_handle(request: Request, username: str, number: str):

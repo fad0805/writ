@@ -78,7 +78,7 @@ class User(Base):
         return f"{BASE_URL}/users/{self.username}/outbox"
 
     def to_ap_actor(self):
-        return {
+        result = {
             "@context": [
                 "https://www.w3.org/ns/activitystreams",
                 "https://w3id.org/security/v1",
@@ -98,7 +98,13 @@ class User(Base):
                 "owner": self.actor_uri(),
                 "publicKeyPem": self.public_key,
             },
+            "manuallyApprovesFollowers": self.is_locked if hasattr(self, 'is_locked') and self.is_locked else False,
         }
+        if self.profile_image:
+            result["icon"] = {"type": "Image", "url": self.profile_image}
+        if hasattr(self, 'shared_inbox_url') and self.shared_inbox_url:
+            result["endpoints"] = {"sharedInbox": self.shared_inbox_url}
+        return result
 
 
 class Follow(Base):

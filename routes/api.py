@@ -161,10 +161,13 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
                  display_name: str = Form("")):
     from routes.auth import hash_password, create_session
     from crypto_utils import generate_keypair
+    import re
     if not username or not password:
         raise HTTPException(status_code=400, detail="Username and password required")
     if len(username) < 3 or len(password) < 6:
         raise HTTPException(status_code=400, detail="Username (3+) and password (6+) required")
+    if not re.match(r'^[a-zA-Z0-9_]+$', username):
+        raise HTTPException(status_code=400, detail="Username can only contain letters, numbers, and underscores")
     with get_session() as s:
         existing = s.query(User).filter_by(username=username).first()
         if existing:
@@ -1524,12 +1527,38 @@ def _fetch_and_save_ap_object(obj, user):
         return _post_json(post, s, user)
 
 
+def _safe_httpx_get(url, headers=None, timeout=15, max_size=5*1024*1024):
+    """HTTP GET with redirect validation and size limit."""
+    import httpx
+    from activitypub import _validate_url
+    if not _validate_url(url):
+        return None
+    client = httpx.Client(follow_redirects=True, timeout=timeout)
+    # Intercept redirects to validate each target
+    original_send = client.send
+    def _validated_send(request, **kwargs):
+        if _validate_url(str(request.url)):
+            return original_send(request, **kwargs)
+        raise httpx.InvalidURL(f"Blocked redirect to {request.url}")
+    client.send = _validated_send
+    try:
+        resp = client.get(url, headers=headers)
+        client.close()
+        if resp.status_code != 200:
+            return None
+        if len(resp.content) > max_size:
+            return None
+        return resp
+    except Exception:
+        client.close()
+        return None
+
 def _ap_fetch(url, user):
     """Fetch a remote URL with HTTP Signature, return parsed JSON."""
     from activitypub import _validate_url
     if not _validate_url(url):
         return None
-    import httpx, hashlib
+    import hashlib
     from urllib.parse import urlparse
     from crypto_utils import sign_string
     date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
@@ -1545,8 +1574,8 @@ def _ap_fetch(url, user):
     )
     headers = {"Accept": "application/activity+json", "Signature": signature_header,
                "Date": date, "Host": parsed.netloc}
-    resp = httpx.get(url, headers=headers, timeout=15, follow_redirects=True)
-    if resp.status_code != 200:
+    resp = _safe_httpx_get(url, headers=headers)
+    if not resp:
         return None
     try:
         return resp.json()
