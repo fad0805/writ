@@ -258,13 +258,17 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         </div>
       )}
       {emojiResults.length > 0 && (
-        <div style={{ border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg-secondary)", padding: 4, maxHeight: 200, overflowY: "auto", marginTop: 4, width: 260 }}>
-          {emojiResults.map((emo, i) => (
-            <div key={emo.id} className={`mention-option ${i === emojiIdx ? "active" : ""}`} onMouseDown={(e) => { e.preventDefault(); insertEmoji(emo); }} onMouseEnter={() => setEmojiIdx(i)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", cursor: "pointer" }}>
-              <img src={emo.url} alt={emo.keyword} style={{ width: 24, height: 24, borderRadius: 4, objectFit: "contain" }} />
-              <span style={{ fontSize: "0.85em" }}>:<strong>{emo.keyword}</strong>:</span>
+        <div className="reply-modal-backdrop active" onClick={() => setEmojiResults([])}>
+          <div className="reply-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360, maxHeight: 300, overflowY: "auto", padding: 8 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {emojiResults.map((emo, i) => (
+                <div key={emo.id} className={`mention-option ${i === emojiIdx ? "active" : ""}`} onMouseDown={(e) => { e.preventDefault(); insertEmoji(emo); }} onMouseEnter={() => setEmojiIdx(i)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", cursor: "pointer", borderRadius: 6 }}>
+                  <img src={emo.url} alt={emo.keyword} style={{ width: 28, height: 28, borderRadius: 4, objectFit: "contain" }} />
+                  <span style={{ fontSize: "0.85em", whiteSpace: "nowrap" }}>:<strong>{emo.keyword}</strong>:</span>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
         </div>
       )}
       <input
