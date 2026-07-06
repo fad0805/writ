@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import TextareaHighlight from "./TextareaHighlight";
 import EmojiPicker from "./EmojiPicker";
 import VisibilitySelector from "./VisibilitySelector";
+import { getCustomEmojis, CustomEmoji } from "@/lib/emojis";
 import { useAuth } from "@/lib/auth";
 
 const MAX_LENGTH = 500;
@@ -28,10 +29,30 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [mentionIdx, setMentionIdx] = useState(0);
   const [mentionStart, setMentionStart] = useState(-1);
   const mentionRef = useRef<HTMLDivElement>(null);
+  const [emojiQuery, setEmojiQuery] = useState("");
+  const [emojiResults, setEmojiResults] = useState<CustomEmoji[]>([]);
+  const [emojiStart, setEmojiStart] = useState(-1);
+  const [emojiIdx, setEmojiIdx] = useState(0);
 
   const totalLen = content.length + summary.length;
   const nearLimit = totalLen > MAX_LENGTH - 50 && totalLen <= MAX_LENGTH;
   const overLimit = totalLen > MAX_LENGTH;
+
+  const detectEmoji = useCallback((val: string, cursor: number) => {
+    const before = val.slice(0, cursor);
+    const colonIdx = before.lastIndexOf(":");
+    if (colonIdx === -1 || (colonIdx > 0 && !/[\s:]/.test(val[colonIdx - 1]))) {
+      setEmojiStart(-1); setEmojiQuery(""); setEmojiResults([]);
+      return;
+    }
+    const partial = before.slice(colonIdx + 1);
+    if (partial.length === 0 || /[\s:]/.test(partial)) {
+      setEmojiStart(-1); setEmojiQuery(""); setEmojiResults([]);
+      return;
+    }
+    setEmojiStart(colonIdx);
+    setEmojiQuery(partial);
+  }, []);
 
   const detectMention = useCallback((val: string, cursor: number) => {
     const before = val.slice(0, cursor);
@@ -65,6 +86,40 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     return () => clearTimeout(t);
   }, [mentionQuery]);
 
+  useEffect(() => {
+    if (!emojiQuery) { setEmojiResults([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const all = await getCustomEmojis();
+        const q = emojiQuery.toLowerCase();
+        const matched = all.filter(e => e.keyword.startsWith(q) || (e.aliases || []).some(a => a.startsWith(q)));
+        setEmojiResults(matched);
+        setEmojiIdx(0);
+      } catch { setEmojiResults([]); }
+    }, 100);
+    return () => clearTimeout(t);
+  }, [emojiQuery]);
+
+  const insertEmoji = useCallback((emo: CustomEmoji) => {
+    if (emojiStart === -1) return;
+    const afterEmoji = content.slice(emojiStart + 1);
+    const wordEndMatch = afterEmoji.search(/[\s:]|$/);
+    const wordEnd = emojiStart + 1 + (wordEndMatch >= 0 ? wordEndMatch : afterEmoji.length);
+    const before = content.slice(0, emojiStart);
+    const after = content.slice(wordEnd);
+    const inserted = `${before}:${emo.keyword}: ${after}`;
+    setContent(inserted);
+    setEmojiStart(-1); setEmojiQuery(""); setEmojiResults([]);
+    requestAnimationFrame(() => {
+      const ta = taRef.current;
+      if (ta) {
+        const pos = before.length + emo.keyword.length + 3;
+        ta.setSelectionRange(pos, pos);
+        ta.focus();
+      }
+    });
+  }, [content, emojiStart]);
+
   const insertMention = useCallback((u: User) => {
     if (mentionStart === -1) return;
     const afterMention = content.slice(mentionStart + 1);
@@ -90,6 +145,21 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       formRef.current?.requestSubmit();
+      return;
+    }
+    if (emojiResults.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setEmojiIdx((i) => Math.min(i + 1, emojiResults.length - 1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setEmojiIdx((i) => Math.max(i - 1, 0));
+      } else if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        if (emojiResults[emojiIdx]) insertEmoji(emojiResults[emojiIdx]);
+      } else if (e.key === "Escape") {
+        setEmojiResults([]);
+      }
       return;
     }
     if (mentionUsers.length > 0) {
@@ -118,6 +188,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       const handler = () => {
         if (ta === document.activeElement) {
           detectMention(ta.value, ta.selectionStart);
+          detectEmoji(ta.value, ta.selectionStart);
         }
       };
       ta.addEventListener("input", handler);
@@ -182,6 +253,16 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
                 <strong>{u.display_name}</strong>
                 <span>@{u.username}</span>
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {emojiResults.length > 0 && (
+        <div className="mention-dropdown" style={{ border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg-secondary)", padding: 4, maxHeight: 200, overflowY: "auto", position: "absolute", zIndex: 1100, width: 260 }}>
+          {emojiResults.map((emo, i) => (
+            <div key={emo.id} className={`mention-option ${i === emojiIdx ? "active" : ""}`} onMouseDown={(e) => { e.preventDefault(); insertEmoji(emo); }} onMouseEnter={() => setEmojiIdx(i)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", cursor: "pointer" }}>
+              <img src={emo.url} alt={emo.keyword} style={{ width: 24, height: 24, borderRadius: 4, objectFit: "contain" }} />
+              <span style={{ fontSize: "0.85em" }}>:<strong>{emo.keyword}</strong>:</span>
             </div>
           ))}
         </div>
