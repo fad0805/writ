@@ -258,16 +258,27 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         </div>
       )}
       {emojiResults.length > 0 && (
-        <div className="reply-modal-backdrop active" onClick={() => setEmojiResults([])}>
-          <div className="reply-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360, maxHeight: 300, overflowY: "auto", padding: 8 }}>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-              {emojiResults.map((emo, i) => (
-                <div key={emo.id} className={`mention-option ${i === emojiIdx ? "active" : ""}`} onMouseDown={(e) => { e.preventDefault(); insertEmoji(emo); }} onMouseEnter={() => setEmojiIdx(i)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", cursor: "pointer", borderRadius: 6 }}>
-                  <img src={emo.url} alt={emo.keyword} style={{ width: 28, height: 28, borderRadius: 4, objectFit: "contain" }} />
-                  <span style={{ fontSize: "0.85em", whiteSpace: "nowrap" }}>:<strong>{emo.keyword}</strong>:</span>
-                </div>
-              ))}
-            </div>
+        <div style={{
+          position: "fixed",
+          bottom: 80,
+          right: "calc(50% - 180px)",
+          maxWidth: 360,
+          maxHeight: 240,
+          overflowY: "auto",
+          background: "var(--bg-secondary)",
+          border: "1px solid var(--border)",
+          borderRadius: 12,
+          zIndex: 1100,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+          padding: 8,
+        }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+            {emojiResults.map((emo, i) => (
+              <div key={emo.id} className={`mention-option ${i === emojiIdx ? "active" : ""}`} onMouseDown={(e) => { e.preventDefault(); insertEmoji(emo); }} onMouseEnter={() => setEmojiIdx(i)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", cursor: "pointer", borderRadius: 6 }}>
+                <img src={emo.url} alt={emo.keyword} style={{ width: 28, height: 28, borderRadius: 4, objectFit: "contain" }} />
+                <span style={{ fontSize: "0.85em", whiteSpace: "nowrap" }}>:<strong>{emo.keyword}</strong>:</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
