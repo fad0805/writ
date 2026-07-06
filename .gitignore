@@ -25,3 +25,5 @@ web/out/
 web/AGENTS.md
 web/CLAUDE.md
 web/README.md
+web/public/emojis/*
+!web/public/emojis/.gitkeep
