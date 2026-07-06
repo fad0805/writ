@@ -1751,12 +1751,9 @@ def api_create_emoji(
                 img = img.convert("RGBA")
             else:
                 img = img.convert("RGB")
-            img.thumbnail((33, 33), Image.LANCZOS)
-            if img.width != 33 or img.height != 33:
-                left = (img.width - 33) // 2
-                top = (img.height - 33) // 2
-                img = img.crop((left, top, left + 33, top + 33))
-            img.save(file_path, format="WEBP", quality=85)
+            if img.width > 33 or img.height > 33:
+                img.thumbnail((33, 33), Image.LANCZOS)
+            img.save(file_path, format="WEBP", quality=92)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to process image: {e}")
 
