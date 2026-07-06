@@ -1733,11 +1733,17 @@ def api_create_emoji(
     file_path = os.path.join(EMOJI_DIR, file_name)
 
     try:
+        from PIL import Image
+        tmp = Image.open(image.file)
+        w, h = tmp.size
+        tmp.close()
+        image.file.seek(0)
+        if h > 0 and w / h > 1.5:
+            raise HTTPException(status_code=400, detail="Emoji is too wide (max 1.5x height)")
         if ext == "gif":
             with open(file_path, "wb") as f:
                 f.write(image.file.read())
         else:
-            from PIL import Image
             img = Image.open(image.file)
             img = img.convert("RGBA" if ext == "png" else "RGB")
             img.thumbnail((33, 33), Image.LANCZOS)

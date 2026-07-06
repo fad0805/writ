@@ -882,8 +882,15 @@ def _process_emoji_tags(tags: list, session):
                 ext = "jpg"
             file_name = f"{uuid.uuid4().hex}.{ext}"
             file_path = os.path.join(EMOJI_DIR, file_name)
+
+            # Check aspect ratio — skip if too wide (>1.5x height)
+            tmp = Image.open(io.BytesIO(resp.content))
+            w, h = tmp.size
+            tmp.close()
+            if h > 0 and w / h > 1.5:
+                continue
+
             if ext == "gif":
-                # Preserve GIF animation: save original bytes directly
                 with open(file_path, "wb") as f:
                     f.write(resp.content)
             else:
