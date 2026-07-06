@@ -113,20 +113,23 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     return () => clearTimeout(t);
   }, [emojiQuery]);
 
-  // Close emoji picker on scroll/resize/click-outside
+  // Close emoji picker on scroll/resize/click-outside/Escape
   useEffect(() => {
     if (!emojiQuery) return;
-    const handler = () => setEmojiResults([]);
-    window.addEventListener("scroll", handler, true);
-    window.addEventListener("resize", handler);
+    const close = () => setEmojiResults([]);
+    const keyHandler = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    document.addEventListener("keydown", keyHandler);
     const clickHandler = (e: MouseEvent) => {
       const el = document.querySelector('[style*="z-index: 1100"]');
-      if (el && !el.contains(e.target as Node)) setEmojiResults([]);
+      if (el && !el.contains(e.target as Node)) close();
     };
     setTimeout(() => document.addEventListener("click", clickHandler), 0);
     return () => { 
-      window.removeEventListener("scroll", handler, true); 
-      window.removeEventListener("resize", handler);
+      window.removeEventListener("scroll", close, true); 
+      window.removeEventListener("resize", close);
+      document.removeEventListener("keydown", keyHandler);
       document.removeEventListener("click", clickHandler);
     };
   }, [emojiQuery]);
