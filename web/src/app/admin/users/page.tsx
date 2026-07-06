@@ -4,16 +4,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
-import { User } from "@/lib/api";
 
-type AdminUser = User & {
-  created_at: string;
-  post_count: number;
-  follower_count: number;
-  last_active: string;
-  email_domain: string;
-  recent_ips: string[];
-  is_suspended?: boolean;
+type AdminUser = {
+  id: number; username: string; display_name: string; avatar: string;
+  role: string; is_remote: boolean; is_suspended?: boolean;
+  post_count: number; follower_count: number;
+  last_active: string; email_domain: string; recent_ips: string[];
 };
 
 function timeAgo(t: string): string {
@@ -33,43 +29,47 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
 
-  useEffect(() => {
-    if (!authLoading && user?.role !== "admin" && user?.role !== "moderator") {
-      router.push("/timeline/home");
-    }
-  }, [user, authLoading, router]);
+  const [searchQ, setSearchQ] = useState("");
+  const [loc, setLoc] = useState("local");
+  const [status, setStatus] = useState("all");
+  const [role, setRole] = useState("all");
+  const [sort, setSort] = useState("newest");
 
   const loadUsers = () => {
-    fetch("/api/admin/users", { credentials: "include" })
+    setLoading(true);
+    const params = new URLSearchParams({ location: loc, status, role, sort });
+    if (searchQ) params.set("q", searchQ);
+    fetch(`/api/admin/users?${params}`, { credentials: "include" })
       .then(r => r.json()).then(d => { setUsers(d.users); setLoading(false); })
       .catch(() => setLoading(false));
   };
 
-  useEffect(() => { loadUsers(); }, []);
+  useEffect(() => {
+    if (!authLoading && user?.role !== "admin" && user?.role !== "moderator")
+      router.push("/timeline/home");
+  }, [user, authLoading, router]);
+
+  useEffect(() => { if (!authLoading) loadUsers(); }, [authLoading, loc, status, role, sort]);
 
   const toggleAll = () => {
     if (selected.size === users.length) setSelected(new Set());
     else setSelected(new Set(users.map(u => u.id)));
   };
-
   const toggle = (id: number) => {
     const next = new Set(selected);
     if (next.has(id)) next.delete(id); else next.add(id);
     setSelected(next);
   };
-
   const suspendSelected = async () => {
     if (selected.size === 0) return;
-    const ids = Array.from(selected).join(",");
-    await fetch("/api/admin/users/suspend", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ user_ids: ids }) });
+    await fetch("/api/admin/users/suspend", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ user_ids: Array.from(selected).join(",") }) });
     loadUsers(); setSelected(new Set());
   };
-
   const unsuspendSelected = async () => {
     if (selected.size === 0) return;
-    const ids = Array.from(selected).join(",");
-    await fetch("/api/admin/users/unsuspend", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ user_ids: ids }) });
+    await fetch("/api/admin/users/unsuspend", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ user_ids: Array.from(selected).join(",") }) });
     loadUsers(); setSelected(new Set());
   };
 
@@ -78,14 +78,37 @@ export default function AdminUsersPage() {
 
   return (
     <>
-      <div className="page-header">
-        <h2><Icon name="settings" /> 서버 관리</h2>
-      </div>
-
+      <div className="page-header"><h2><Icon name="settings" /> 서버 관리</h2></div>
       <div className="admin-tabs" style={{ display: "flex", gap: 8, marginBottom: 24 }}>
         <Link href="/admin" className="btn btn-outline btn-small">대시보드</Link>
         <Link href="/admin/users" className="btn btn-primary btn-small">유저 관리</Link>
         <Link href="/admin/emojis" className="btn btn-outline btn-small">커스텀 이모지</Link>
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+          <input type="text" value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="아이디, 이름, 이메일, IP 검색..." className="cw-input" style={{ flex: 1, fontSize: "0.85em" }}
+            onKeyDown={e => { if (e.key === "Enter") loadUsers(); }} />
+          <button onClick={loadUsers} className="btn btn-primary btn-small">검색</button>
+          <button onClick={() => setShowFilters(!showFilters)} className="btn btn-outline btn-small">
+            필터 {showFilters ? "▲" : "▼"}
+          </button>
+        </div>
+
+        {showFilters && (
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", padding: "10px 14px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 8, fontSize: "0.85em", alignItems: "center" }}>
+            <label>위치 <select value={loc} onChange={e => setLoc(e.target.value)} className="cw-input" style={{ width: 90 }}><option value="all">모두</option><option value="local">로컬</option><option value="remote">리모트</option></select></label>
+            <label>상태 <select value={status} onChange={e => setStatus(e.target.value)} className="cw-input" style={{ width: 100 }}>
+              <option value="all">모두</option><option value="active">활성</option><option value="suspended">정지</option><option value="pending">인증대기</option><option value="inactive">비활성</option>
+            </select></label>
+            <label>역할 <select value={role} onChange={e => setRole(e.target.value)} className="cw-input" style={{ width: 90 }}>
+              <option value="all">모두</option><option value="user">유저</option><option value="moderator">조율자</option><option value="admin">관리자</option>
+            </select></label>
+            <label>정렬 <select value={sort} onChange={e => setSort(e.target.value)} className="cw-input" style={{ width: 110 }}>
+              <option value="newest">최신순</option><option value="active">최근활동순</option>
+            </select></label>
+          </div>
+        )}
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
@@ -93,18 +116,13 @@ export default function AdminUsersPage() {
         <button onClick={unsuspendSelected} disabled={selected.size === 0} className="btn btn-small btn-outline">정지 해제</button>
       </div>
 
-      {loading ? (
-        <div className="empty-state">로딩 중...</div>
-      ) : users.length === 0 ? (
-        <div className="empty-state">사용자가 없습니다.</div>
-      ) : (
-        <div style={{ overflowX: "auto" }}>
+      {loading ? <div className="empty-state">로딩 중...</div>
+      : users.length === 0 ? <div className="empty-state">사용자가 없습니다.</div>
+      : <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85em" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)", color: "var(--text-muted)" }}>
-                <th style={{ padding: "8px 10px", textAlign: "left", width: 36 }}>
-                  <input type="checkbox" checked={selected.size === users.length && users.length > 0} onChange={toggleAll} />
-                </th>
+                <th style={{ padding: "8px 10px", textAlign: "left", width: 36 }}><input type="checkbox" checked={selected.size === users.length && users.length > 0} onChange={toggleAll} /></th>
                 <th style={{ padding: "8px 10px", textAlign: "left" }}>사용자</th>
                 <th style={{ padding: "8px 10px", textAlign: "center" }}>게시물</th>
                 <th style={{ padding: "8px 10px", textAlign: "center" }}>팔로워</th>
@@ -116,9 +134,7 @@ export default function AdminUsersPage() {
             <tbody>
               {users.map((u) => (
                 <tr key={u.id} style={{ borderBottom: "1px solid var(--border)", background: selected.has(u.id) ? "var(--card-hover)" : "transparent", opacity: u.is_suspended ? 0.5 : 1 }}>
-                  <td style={{ padding: "10px" }}>
-                    <input type="checkbox" checked={selected.has(u.id)} onChange={() => toggle(u.id)} />
-                  </td>
+                  <td style={{ padding: "10px" }}><input type="checkbox" checked={selected.has(u.id)} onChange={() => toggle(u.id)} /></td>
                   <td style={{ padding: "10px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <div style={{ width: 32, height: 32, borderRadius: 6, background: `hsl(${hashStr(u.username)}, 35%, 45%)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: "bold", fontSize: "0.85em", flexShrink: 0 }}>
@@ -129,6 +145,7 @@ export default function AdminUsersPage() {
                           {u.display_name}
                           {u.role === "admin" && <Icon name="shield_filled" style={{ color: "#27ae60", fontSize: "0.6em", verticalAlign: "middle", marginLeft: 3 }} title="관리자" />}
                           {u.role === "moderator" && <Icon name="shield_filled" style={{ color: "#cc8800", fontSize: "0.6em", verticalAlign: "middle", marginLeft: 3 }} title="조율자" />}
+                          {u.is_remote && <span style={{ fontSize: "0.75em", color: "var(--text-dim)", marginLeft: 3 }}>@ {u.username?.split("@")[1] || ""}</span>}
                         </div>
                         <div style={{ fontSize: "0.85em", color: "var(--text-dim)" }}>@{u.username}</div>
                       </div>
@@ -142,14 +159,16 @@ export default function AdminUsersPage() {
                     {u.recent_ips && u.recent_ips.length > 0 && <span style={{ fontFamily: "monospace", marginLeft: 4 }}>/ {u.recent_ips[0]}</span>}
                   </td>
                   <td style={{ padding: "10px", textAlign: "center" }}>
-                    {u.is_suspended ? <span style={{ color: "var(--danger)", fontSize: "0.85em" }}>정지</span> : <span style={{ color: "var(--accent)", fontSize: "0.85em" }}>활성</span>}
+                    {u.is_suspended ? <span style={{ color: "var(--danger)", fontSize: "0.85em" }}>정지</span>
+                    : u.is_remote ? <span style={{ color: "var(--text-dim)", fontSize: "0.85em" }}>리모트</span>
+                    : <span style={{ color: "var(--accent)", fontSize: "0.85em" }}>활성</span>}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      )}
+      }
     </>
   );
 }

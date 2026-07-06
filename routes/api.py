@@ -1865,12 +1865,48 @@ def api_admin_stats(request: Request):
 
 
 @router.get("/admin/users")
-def api_admin_users(request: Request):
+def api_admin_users(request: Request, location: str = Query("local"), status: str = Query("all"),
+                     role: str = Query("all"), sort: str = Query("newest"),
+                     q: str = Query("")):
     user = require_auth(request)
     if user.role not in ("admin", "moderator"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
-        users = s.query(User).filter_by(is_remote=False).order_by(User.created_at.desc()).limit(50).all()
+        qb = s.query(User)
+        if location == "local":
+            qb = qb.filter_by(is_remote=False)
+        elif location == "remote":
+            qb = qb.filter_by(is_remote=True)
+        if status == "active":
+            qb = qb.filter(User.is_suspended == False, User.is_remote == False)
+        elif status == "suspended":
+            qb = qb.filter(User.is_suspended == True)
+        elif status == "pending":
+            qb = qb.filter(User.email_verified == False, User.is_remote == False)
+        elif status == "inactive":
+            # no recent activity > 30 days (local only)
+            from datetime import datetime, timedelta
+            cutoff = datetime.utcnow() - timedelta(days=30)
+            qb = qb.filter(User.is_remote == False, User.created_at < cutoff)
+        if role == "admin":
+            qb = qb.filter(User.role == "admin")
+        elif role == "moderator":
+            qb = qb.filter(User.role == "moderator")
+        elif role == "user":
+            qb = qb.filter(User.role == "user")
+        if q:
+            pattern = f"%{q}%"
+            qb = qb.filter(
+                User.username.ilike(pattern) |
+                User.display_name.ilike(pattern) |
+                User.email.ilike(pattern) |
+                User.recent_ips.cast(String).ilike(pattern)
+            )
+        if sort == "active":
+            qb = qb.order_by(User.updated_at.desc())
+        else:
+            qb = qb.order_by(User.created_at.desc())
+        users = qb.limit(50).all()
         result = []
         for u in users:
             post_count = s.query(Post).filter_by(author_id=u.id, is_deleted=False).count()
