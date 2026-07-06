@@ -452,6 +452,13 @@ def init_db():
             session.commit()
     except Exception:
         pass
+    # Sync existing is_admin users to admin role
+    try:
+        with Session(engine) as session:
+            session.query(User).filter(User.is_admin == True, User.role == "user").update({"role": "admin"})
+            session.commit()
+    except Exception:
+        pass
     # Fill missing post numbers
     try:
         with Session(engine) as session:
