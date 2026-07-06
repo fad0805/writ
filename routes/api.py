@@ -1842,3 +1842,13 @@ def api_admin_stats(request: Request):
         posts = s.query(Post).filter_by(is_deleted=False).count()
         series = s.query(Novel).count()
         return {"users": users, "posts": posts, "series": series}
+
+
+@router.get("/admin/users")
+def api_admin_users(request: Request):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        users = s.query(User).filter_by(is_remote=False).order_by(User.created_at.desc()).all()
+        return {"users": [{**_user_json(u), "created_at": str(u.created_at) if u.created_at else ""} for u in users]}
