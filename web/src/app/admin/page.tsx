@@ -30,27 +30,27 @@ export default function AdminDashboard() {
         <h2><Icon name="settings" /> 서버 관리</h2>
       </div>
 
-      <div className="admin-tabs" style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+      <div className="admin-tabs">
         <Link href="/admin" className="btn btn-primary btn-small">대시보드</Link>
         <Link href="/admin/users" className="btn btn-outline btn-small">유저 관리</Link>
         <Link href="/admin/emojis" className="btn btn-outline btn-small">커스텀 이모지</Link>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
-        <div className="stat-card" style={{ padding: 20, borderRadius: 10, background: "var(--bg-secondary)", border: "1px solid var(--border)", textAlign: "center" }}>
+      <div className="grid-3">
+        <div className="stat-card">
           <Icon name="user" size={28} />
-          <div style={{ fontSize: "1.8em", fontWeight: 700, marginTop: 8 }}>{stats.users}</div>
-          <div style={{ fontSize: "0.85em", color: "var(--text-muted)" }}>사용자</div>
+          <div className="stat-number">{stats.users}</div>
+          <div className="stat-label">사용자</div>
         </div>
-        <div className="stat-card" style={{ padding: 20, borderRadius: 10, background: "var(--bg-secondary)", border: "1px solid var(--border)", textAlign: "center" }}>
+        <div className="stat-card">
           <Icon name="globe" size={28} />
-          <div style={{ fontSize: "1.8em", fontWeight: 700, marginTop: 8 }}>{stats.posts}</div>
-          <div style={{ fontSize: "0.85em", color: "var(--text-muted)" }}>게시글</div>
+          <div className="stat-number">{stats.posts}</div>
+          <div className="stat-label">게시글</div>
         </div>
-        <div className="stat-card" style={{ padding: 20, borderRadius: 10, background: "var(--bg-secondary)", border: "1px solid var(--border)", textAlign: "center" }}>
+        <div className="stat-card">
           <Icon name="book" size={28} />
-          <div style={{ fontSize: "1.8em", fontWeight: 700, marginTop: 8 }}>{stats.series}</div>
-          <div style={{ fontSize: "0.85em", color: "var(--text-muted)" }}>시리즈</div>
+          <div className="stat-number">{stats.series}</div>
+          <div className="stat-label">시리즈</div>
         </div>
       </div>
     </>

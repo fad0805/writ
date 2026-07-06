@@ -39,7 +39,7 @@ export default function NovelDetailPage() {
             {novel.cover_image ? (
               <img src={novel.cover_image} alt="" className="cover-img" />
             ) : (
-              <div className="cover-fallback" style={{ backgroundColor: hashColor(novel.title), fontSize: "2em" }}>
+              <div className="cover-fallback cover-fallback-xl" style={{ backgroundColor: hashColor(novel.title) }}>
                 <Icon name="book" size={36} />
               </div>
             )}

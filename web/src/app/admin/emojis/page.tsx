@@ -43,15 +43,15 @@ export default function AdminEmojiPage() {
         <h2><Icon name="settings" /> 서버 관리</h2>
       </div>
 
-      <div className="admin-tabs" style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+      <div className="admin-tabs">
         <Link href="/admin" className="btn btn-outline btn-small">대시보드</Link>
         <Link href="/admin/users" className="btn btn-outline btn-small">유저 관리</Link>
         <Link href="/admin/emojis" className="btn btn-primary btn-small">커스텀 이모지</Link>
       </div>
 
       <div className="hm-bottom-28">
-        <h3 className="hm-bottom-16" style={{ cursor: "pointer", userSelect: "none" }} onClick={() => setShowUpload(!showUpload)}>
-          <Icon name="smile" /> 커스텀 이모지 등록 <span style={{ fontSize: "0.7em", color: "var(--text-muted)" }}>{showUpload ? "▲" : "▼"}</span>
+        <h3 className="hm-bottom-16 section-toggle" onClick={() => setShowUpload(!showUpload)}>
+          <Icon name="smile" /> 커스텀 이모지 등록 <span className="section-toggle-arrow">{showUpload ? "▲" : "▼"}</span>
         </h3>
 
         {showUpload && <form onSubmit={async (e) => {
@@ -116,12 +116,12 @@ export default function AdminEmojiPage() {
                     <div className="emoji-keyword">:<span className="emoji-accent">{emo.keyword}</span>:</div>
                     <div className="emoji-meta">
                       {emo.category && <span>#{emo.category}</span>}
-                      {(emo as any).domain && <span style={{ color: "var(--text-dim)", fontSize: "0.85em" }}>@{(emo as any).domain}</span>}
+                      {(emo as any).domain && <span className="text-dim text-sm">@{(emo as any).domain}</span>}
                       {emo.aliases && emo.aliases.length > 0 && <span> {emo.aliases.map((a: string) => `:${a}:`).join(" ")}</span>}
                     </div>
                   </div>
                   {emo.category === "remote" && (
-                    <button type="button" onClick={async (e) => { e.stopPropagation(); const form = new FormData(); form.append("category", "기본"); const res = await fetch(`/api/emojis/${emo.id}`, { method: "PATCH", credentials: "include", body: form }); if (res.ok) { const d = await res.json(); setEmojis(emojis.map(e => e.id === emo.id ? d.emoji : e)); invalidateEmojiCache(); } }} className="btn" style={{ fontSize: "0.85em", color: "var(--accent)", border: "1px solid var(--border)", padding: "4px 12px" }}>복사</button>
+                    <button type="button" onClick={async (e) => { e.stopPropagation(); const form = new FormData(); form.append("category", "기본"); const res = await fetch(`/api/emojis/${emo.id}`, { method: "PATCH", credentials: "include", body: form }); if (res.ok) { const d = await res.json(); setEmojis(emojis.map(e => e.id === emo.id ? d.emoji : e)); invalidateEmojiCache(); } }} className="btn btn-emoji-copy">복사</button>
                   )}
                   <button type="button" onClick={async (e) => { e.stopPropagation(); if (!confirm(`:${emo.keyword}:를 삭제하시겠습니까?`)) return; try { const res = await fetch(`/api/emojis/${emo.id}`, { method: "DELETE", credentials: "include" }); if (res.ok) { setEmojis(emojis.filter(e => e.id !== emo.id)); invalidateEmojiCache(); } } catch {} }} className="btn emoji-delete-btn">삭제</button>
                 </div>
@@ -136,9 +136,9 @@ export default function AdminEmojiPage() {
           <div className="reply-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
             <button className="reply-modal-close" onClick={() => setEditEmoji(null)}>×</button>
             <h3>이모지 편집</h3>
-            <div style={{ display: "flex", gap: 14, alignItems: "flex-start", marginBottom: 16 }}>
-              <img src={editEmoji.url} alt={editEmoji.keyword} style={{ width: 48, height: 48, borderRadius: 6, objectFit: "contain", flexShrink: 0 }} />
-              <div style={{ flex: 1 }}>
+            <div className="emoji-edit-body">
+              <img src={editEmoji.url} alt={editEmoji.keyword} className="emoji-edit-preview" />
+              <div className="emoji-edit-fields">
                 <div className="form-group">
                   <label>키워드</label>
                   <input type="text" value={editKeyword} onChange={(e) => setEditKeyword(e.target.value.replace(/[^a-z0-9_]/gi, "_").toLowerCase())} className="cw-input w-full" />

@@ -86,7 +86,7 @@ export default function ProfilePage() {
           <div className="profile-avatar-col">
             <Avatar user={profile} className="profile-avatar" />
             {!isMine && (
-              <button onClick={toggleFollow} className={`btn btn-small btn-follow ${isFollowing ? "btn-outline" : isFollowPending ? "btn-outline" : "btn-primary"}`} style={{ width: 80, justifyContent: "center", marginBottom: 12 }}>
+              <button onClick={toggleFollow} className={`btn btn-small btn-follow ${isFollowing ? "btn-outline" : isFollowPending ? "btn-outline" : "btn-primary"} btn-follow-fixed`}>
                 {isFollowing ? "언팔로우" : isFollowPending ? "요청됨" : "팔로우"}
               </button>
             )}
@@ -129,11 +129,11 @@ export default function ProfilePage() {
                   )
               }} />
             )}
-            <div className="profile-bottom-actions" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", boxSizing: "border-box" }}>
+            <div className="profile-bottom-actions">
               {!isMine && profileNote && !showNote && (
-                <span style={{ fontSize: "0.82em", color: "var(--text-dim)", flex: 1, minWidth: 0, marginRight: 8 }}>{profileNote}</span>
+                <span className="profile-note-text">{profileNote}</span>
               )}
-              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              <div className="profile-action-btns">
                 {isMine ? (
                   <button onClick={() => router.push("/users/profile/edit")} className="action-btn btn-action-sm">
                     <Icon name="edit" /> 편집
@@ -157,13 +157,13 @@ export default function ProfilePage() {
         </div>
       </div>
       {!isMine && noteLoaded && showNote && (
-        <div style={{ marginTop: 12, marginBottom: 12, padding: "10px 14px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8 }}>
-          <textarea value={profileNote} onChange={e => setProfileNote(e.target.value)} rows={2} className="cw-input" style={{ width: "100%", fontSize: "0.85em", resize: "vertical" }} placeholder="이 사용자에 대한 메모..." />
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
+        <div className="profile-note-card">
+          <textarea value={profileNote} onChange={e => setProfileNote(e.target.value)} rows={2} className="cw-input profile-note-textarea" placeholder="이 사용자에 대한 메모..." />
+          <div className="profile-note-actions">
             <button onClick={async () => {
               const form = new FormData(); form.append("content", profileNote);
               await fetch(`/api/profile-notes/${profile.username}`, { method: "POST", credentials: "include", body: form });
-            }} className="btn btn-primary btn-small" style={{ fontSize: "0.8em" }}>메모 저장</button>
+            }} className="btn btn-primary btn-small text-xs">메모 저장</button>
           </div>
         </div>
       )}
@@ -196,7 +196,7 @@ export default function ProfilePage() {
               {n.cover_image ? (
                 <img src={n.cover_image} alt="" className="cover-img" />
               ) : (
-                <div className="cover-fallback" style={{ backgroundColor: hashColor(n.title), fontSize: "1em" }}>
+                <div className="cover-fallback cover-fallback-sm">
                   <Icon name="book" size={16} />
                 </div>
               )}

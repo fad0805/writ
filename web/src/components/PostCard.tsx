@@ -218,7 +218,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
         ) : (
           <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
         )}
-        {loadingQuote && <div className="empty-small" style={{ padding: "8px 0" }}>인용 불러오는 중...</div>}
+        {loadingQuote && <div className="empty-small loading-small">인용 불러오는 중...</div>}
         {quotedPost && <div className="my-8"><MiniPostCard post={quotedPost} /></div>}
         {quotedSeries && (
           <div className="quoted-series" onClick={(e) => { e.stopPropagation(); router.push(`/series/${quotedSeries.novel.id}`); }}>
@@ -226,7 +226,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
               {quotedSeries.novel.cover_image ? (
                 <img src={quotedSeries.novel.cover_image} alt="" className="cover-img" />
               ) : (
-                <div className="cover-fallback" style={{ backgroundColor: hashColor(quotedSeries.novel.title), fontSize: "1em" }}>
+                <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(quotedSeries.novel.title) }}>
                   {quotedSeries.novel.title[0]}
                 </div>
               )}

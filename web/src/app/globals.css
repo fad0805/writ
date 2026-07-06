@@ -2565,6 +2565,10 @@ input[type="checkbox"] {
   display: inline-block;
   margin-bottom: 1.5rem;
 }
+.not-found-title {
+  font-size: 3rem;
+  margin: 0 0 0.5rem;
+}
 
 /* ── Shortcut help modal ── */
 .shortcut-help-backdrop {
@@ -2763,3 +2767,631 @@ input[type="checkbox"] {
   background: #f39c12;
   color: #fff;
 }
+
+/* ── Admin tabs (replaces inline display:flex;gap:8;mb:24) ── */
+.admin-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+/* ── Utility additions ── */
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.text-secondary { color: var(--text-secondary); }
+.text-primary { color: var(--text-primary); }
+.text-dim { color: var(--text-dim); }
+.font-bold { font-weight: 700; }
+.font-semibold { font-weight: 600; }
+.font-normal { font-weight: 400; }
+.inline-block { display: inline-block; }
+.block { display: block; }
+.overflow-auto { overflow: auto; }
+.overflow-x-auto { overflow-x: auto; }
+.object-contain { object-fit: contain; }
+.rounded-full { border-radius: 50%; }
+.resize-vertical { resize: vertical; }
+.nowrap { white-space: nowrap; }
+.text-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-select-none { user-select: none; }
+.touch-action-none { touch-action: none; }
+.line-height-0 { line-height: 0; }
+.flex-shrink-0 { flex-shrink: 0; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.text-xs { font-size: 0.8em; }
+.text-lg { font-size: 1.1em; }
+.text-xl { font-size: 1.4em; }
+.text-2xl { font-size: 1.8em; }
+.op-50 { opacity: 0.5; }
+.inline-flex { display: inline-flex; }
+
+/* ── Admin stat card internals ── */
+.stat-number {
+  font-size: 1.8em;
+  font-weight: 700;
+  margin-top: 8px;
+}
+.stat-label {
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+/* ── Admin users table ── */
+.admin-table-wrap { overflow-x: auto; }
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85em;
+}
+.admin-table th,
+.admin-table td {
+  padding: 8px 10px;
+}
+.admin-table th {
+  text-align: left;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+.admin-table th.text-center {
+  text-align: center;
+}
+.admin-table td {
+  padding: 10px;
+}
+.admin-table td.text-center {
+  text-align: center;
+}
+
+/* ── Admin detail table ── */
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+.detail-table tr {
+  border-bottom: 1px solid var(--border);
+}
+.detail-table td {
+  padding: 10px 16px;
+}
+.detail-table td.label {
+  color: var(--text-muted);
+  width: 160px;
+  font-weight: 600;
+}
+.detail-table td.value {
+  color: var(--text-primary);
+}
+.detail-table td.action {
+  width: 120px;
+}
+
+/* ── Admin search panel ── */
+.admin-search-panel {
+  padding: 12px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 0.85em;
+}
+.admin-search-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.admin-search-fields label {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text-muted);
+}
+.admin-search-fields .cw-input {
+  width: 100%;
+}
+.admin-filter-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ── Admin counter cards grid ── */
+.admin-counter-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.admin-counter-card {
+  padding: 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-align: center;
+}
+.admin-counter-value {
+  font-size: 1.4em;
+  font-weight: 700;
+  margin-top: 4px;
+}
+.admin-counter-label {
+  font-size: 0.8em;
+  color: var(--text-muted);
+}
+
+/* ── Admin profile card ── */
+.admin-profile-card {
+  display: flex;
+  gap: 20px;
+  padding: 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+.admin-profile-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 2em;
+  font-weight: bold;
+  flex-shrink: 0;
+  position: relative;
+}
+.admin-profile-info { flex: 1; }
+.admin-profile-name {
+  font-weight: 700;
+  font-size: 1.1em;
+  color: var(--text-primary);
+}
+.admin-profile-username { color: var(--text-muted); }
+.admin-profile-summary {
+  margin-top: 6px;
+  font-size: 0.9em;
+  color: var(--text-secondary);
+}
+.admin-profile-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* ── Admin detail section ── */
+.admin-detail-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+/* ── Admin section ── */
+.admin-section {
+  margin-bottom: 20px;
+}
+.admin-section-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+/* ── Admin moderation modal ── */
+.mod-modal { max-width: 480px; }
+.mod-form { display: flex; flex-direction: column; gap: 12px; }
+.mod-select { width: 100%; }
+.mod-textarea { width: 100%; resize: vertical; }
+
+/* ── Admin moderate button ── */
+.btn-moderate {
+  background: var(--danger);
+  color: #fff;
+  border: none;
+}
+
+/* ── Profile bottom actions bar ── */
+.profile-bottom-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  box-sizing: border-box;
+}
+.profile-note-text {
+  font-size: 0.82em;
+  color: var(--text-dim);
+  flex: 1;
+  min-width: 0;
+  margin-right: 8px;
+}
+.profile-action-btns {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* ── Profile note card ── */
+.profile-note-card {
+  margin-top: 12px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.profile-note-textarea {
+  width: 100%;
+  font-size: 0.85em;
+  resize: vertical;
+}
+.profile-note-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+/* ── Admin danger button ── */
+.btn-danger-solid {
+  background: var(--danger);
+  color: #fff;
+  border: none;
+}
+
+/* ── Moderation notification card ── */
+.notif-mod-message {
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  font-size: 0.9em;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
+/* ── Emoji picker ── */
+.emoji-picker-dropdown {
+  position: absolute;
+  right: 0;
+  width: 300px;
+  height: 280px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  z-index: 1100;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+  overflow-y: auto;
+  padding: 8px;
+}
+.emoji-picker-search {
+  width: 100%;
+  margin-bottom: 6px;
+  font-size: 0.85em;
+}
+.emoji-row-gap {
+  margin-bottom: 6px;
+}
+.emoji-cell-lg {
+  font-size: 1.3em;
+}
+.emoji-custom-row-striped {
+  background: transparent;
+}
+
+/* ── Emoji autocomplete ── */
+.emoji-autocomplete {
+  position: fixed;
+  max-width: 360px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  z-index: 1100;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  padding: 8px;
+}
+.emoji-autocomplete-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.emoji-autocomplete-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.emoji-autocomplete-img {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  object-fit: contain;
+}
+.emoji-autocomplete-label {
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+/* ── Emoji edit modal ── */
+.emoji-edit-body {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+.emoji-edit-preview {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.emoji-edit-fields { flex: 1; }
+
+/* ── Profile edit avatar ── */
+.profile-edit-avatar-thumb {
+  background-color: var(--bg-tertiary);
+}
+
+/* ── Direct message preview list ── */
+.dm-preview-right {
+  text-align: right;
+  flex-shrink: 0;
+  max-width: 40%;
+}
+.dm-preview-item {
+  font-size: 0.8em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+
+/* ── Image cropper container ── */
+.cropper-stage {
+  position: relative;
+  display: inline-block;
+  border-radius: 8px;
+  overflow: hidden;
+  line-height: 0;
+  touch-action: none;
+  user-select: none;
+}
+.cropper-img {
+  display: block;
+}
+.cropper-overlay {
+  position: absolute;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
+  border: 2px solid #fff;
+  cursor: move;
+}
+.cropper-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  border-radius: 50%;
+  border: 2px solid #333;
+}
+.cropper-handle-tl { top: -7px; left: -7px; cursor: nwse-resize; }
+.cropper-handle-tr { top: -7px; right: -7px; cursor: nesw-resize; }
+.cropper-handle-bl { bottom: -7px; left: -7px; cursor: nesw-resize; }
+.cropper-handle-br { bottom: -7px; right: -7px; cursor: nwse-resize; }
+.cropper-hint {
+  margin: 8px 0 0;
+}
+.cropper-actions {
+  justify-content: center;
+}
+
+/* ── Relatively positioned wrapper ── */
+.relative-wrap { position: relative; }
+
+/* ── Loading indicator ── */
+.loading-small {
+  padding: 8px 0;
+}
+
+/* ── Notification icon dynamic color ── */
+.notif-icon-dynamic {
+  /* color is set dynamically via inline style */
+}
+
+/* ── Role badge icon sizes ── */
+.icon-badge-sm { font-size: 0.6em; }
+.icon-badge-md { font-size: 0.7em; }
+.icon-badge-lg { font-size: 0.75em; }
+
+/* ── Inline time link ── */
+.time-link {
+  color: inherit;
+}
+
+/* ── Post detail thread indentation ── */
+.thread-child {
+  margin-left: 20px;
+}
+
+/* ── Sentinel ref (intersection observer) ── */
+.sentinel {
+  height: 1px;
+}
+
+/* ── Follow button fixed width ── */
+.btn-follow-fixed {
+  width: 80px;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+/* ── Bookmarks button dynamic color ── */
+/* color is set via inline conditional */
+
+/* ── Admin emoji copy button ── */
+.btn-emoji-copy {
+  font-size: 0.85em;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  padding: 4px 12px;
+}
+
+/* ── Section header toggle ── */
+.section-toggle {
+  cursor: pointer;
+  user-select: none;
+}
+.section-toggle-arrow {
+  font-size: 0.7em;
+  color: var(--text-muted);
+}
+
+/* ── Emoji list item clickable ── */
+.emoji-list-item-clickable {
+  cursor: pointer;
+}
+
+/* ── Feed sentinel ── */
+.feed-sentinel {
+  height: 1px;
+}
+
+/* ── Thread indent ── */
+.thread-indent {
+  margin-left: 20px;
+}
+
+/* ── Tab conditional display ── */
+.tab-content {
+  display: none;
+}
+.tab-content.active {
+  display: block;
+}
+.tab-content-flex.active {
+  display: flex;
+}
+
+/* ── Stat card style (admin dashboard) ── */
+.stat-card {
+  padding: 20px;
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  text-align: center;
+}
+
+/* ── Badge icon colors ── */
+.icon-admin { color: #27ae60; }
+.icon-mod { color: #cc8800; }
+.icon-danger { color: var(--danger); }
+.icon-accent { color: var(--accent); }
+.icon-muted { color: var(--text-muted); }
+
+/* ── Flex row with gap 8 ── */
+.flex-row-gap8 {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── Mini post card default background ── */
+.mini-post-bg {
+  background: var(--bg-tertiary);
+}
+
+/* ── Cover fallback font sizes ── */
+.cover-fallback-sm { font-size: 1em; }
+.cover-fallback-md { font-size: 1.2em; }
+.cover-fallback-lg { font-size: 1.5em; }
+.cover-fallback-xl { font-size: 2em; }
+
+/* ── Admin user avatar thumb ── */
+.admin-user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: bold;
+  font-size: 0.85em;
+  flex-shrink: 0;
+}
+
+/* ── Admin user name row ── */
+.admin-user-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-user-handle {
+  font-size: 0.85em;
+  color: var(--text-dim);
+}
+
+/* ── Admin table data cell standard ── */
+.admin-td-center {
+  text-align: center;
+  color: var(--text-secondary);
+}
+.admin-td-ip {
+  padding: 10px;
+  color: var(--text-dim);
+  font-size: 0.85em;
+}
+.admin-td-status {
+  padding: 10px;
+  text-align: center;
+}
+.admin-status-suspended { color: var(--danger); font-size: 0.85em; }
+.admin-status-remote { color: var(--text-dim); font-size: 0.85em; }
+.admin-status-active { color: var(--accent); font-size: 0.85em; }
+.admin-ip-mono { font-family: monospace; margin-left: 4px; }
+
+/* ── Admin table header checkbox ── */
+.admin-th-checkbox {
+  padding: 8px 10px;
+  text-align: left;
+  width: 36px;
+}
+
+/* ── Admin action bar ── */
+.admin-action-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+/* ── Admin spacer ── */
+.admin-spacer { flex: 1; }
+
+/* ── Search filter select widths ── */
+.select-w-90 { width: 90px; }
+.select-w-100 { width: 100px; }
+.select-w-110 { width: 110px; }
+
+/* ── Admin users table row ── */
+.admin-tr {
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Admin users layout container ── */
+.admin-users-container {
+  margin-bottom: 12px;
+}
+
+/* ── Setting page icon color (shield) ── */
+.icon-shield-green { color: #27ae60; }

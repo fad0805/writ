@@ -292,25 +292,15 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         </div>
       )}
       {emojiResults.length > 0 && (
-        <div style={{
-          position: "fixed",
+        <div className="emoji-autocomplete" style={{
           top: emojiPos.top,
           left: emojiPos.left,
-          maxWidth: 360,
-          maxHeight: 240,
-          overflowY: "auto",
-          background: "var(--bg-secondary)",
-          border: "1px solid var(--border)",
-          borderRadius: 12,
-          zIndex: 1100,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
-          padding: 8,
         }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+          <div className="emoji-autocomplete-grid">
             {emojiResults.map((emo, i) => (
-              <div key={emo.id} className={`mention-option ${i === emojiIdx ? "active" : ""}`} onMouseDown={(e) => { e.preventDefault(); insertEmoji(emo); }} onMouseEnter={() => setEmojiIdx(i)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", cursor: "pointer", borderRadius: 6 }}>
-                <img src={emo.url} alt={emo.keyword} style={{ width: 28, height: 28, borderRadius: 4, objectFit: "contain" }} />
-                <span style={{ fontSize: "0.85em", whiteSpace: "nowrap" }}>:<strong>{emo.keyword}</strong>:</span>
+              <div key={emo.id} className={`mention-option ${i === emojiIdx ? "active" : ""} emoji-autocomplete-item`} onMouseDown={(e) => { e.preventDefault(); insertEmoji(emo); }} onMouseEnter={() => setEmojiIdx(i)}>
+                <img src={emo.url} alt={emo.keyword} className="emoji-autocomplete-img" />
+                <span className="emoji-autocomplete-label">:<strong>{emo.keyword}</strong>:</span>
               </div>
             ))}
           </div>

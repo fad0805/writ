@@ -47,29 +47,18 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
   }, [open]);
 
   return (
-    <div ref={pickerRef} style={{ position: "relative" }}>
+    <div ref={pickerRef} className="relative-wrap">
       <button type="button" onClick={() => setOpen(!open)} className="emoji-trigger">
         <Icon name="smile" size={18} />
       </button>
       {open && (
-        <div style={{
-          position: "absolute",
+        <div className="emoji-picker-dropdown" style={{
           [dropUp ? "bottom" : "top"]: "100%",
           [dropUp ? "marginBottom" : "marginTop"]: 4,
-          right: 0,
-          width: 300,
-          height: 280,
-          background: "var(--bg-secondary)",
-          border: "1px solid var(--border)",
-          borderRadius: 12,
-          zIndex: 1100,
-          boxShadow: "0 8px 30px rgba(0,0,0,0.2)",
-          overflowY: "auto",
-          padding: 8,
         }}>
-          <input ref={searchRef} type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="이모지 검색..." className="cw-input" style={{ width: "100%", marginBottom: 6, fontSize: "0.85em" }} />
+          <input ref={searchRef} type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="이모지 검색..." className="cw-input emoji-picker-search" />
           {search && searchResults.length > 0 && (
-            <div className="emoji-row-grid" style={{ marginBottom: 6 }}>
+            <div className="emoji-row-grid emoji-row-gap">
               {searchResults.map((emo) => (
                 <button key={emo.id} type="button" onClick={() => { onEmoji(`:${emo.keyword}:`); setOpen(false); }} className="emoji-cell emoji-cell-large">
                   <img src={emo.url} alt={emo.keyword} width={33} height={33} className="emoji-img" />
@@ -94,7 +83,7 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
               <div className="emoji-row-label">{cat.name}</div>
               <div className="emoji-row-grid">
                 {cat.emojis.map((e, i) => (
-                  <button key={i} type="button" onClick={() => { onEmoji(e); setOpen(false); }} className="emoji-cell" style={{ fontSize: "1.3em" }}>
+                  <button key={i} type="button" onClick={() => { onEmoji(e); setOpen(false); }} className="emoji-cell emoji-cell-lg">
                     {e}
                   </button>
                 ))}

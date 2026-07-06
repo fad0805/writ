@@ -63,7 +63,7 @@ export default function AdminUserDetailPage() {
   return (
     <>
       <div className="page-header"><h2><Icon name="settings" /> 서버 관리</h2></div>
-      <div className="admin-tabs" style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+      <div className="admin-tabs">
         <Link href="/admin" className="btn btn-outline btn-small">대시보드</Link>
         <Link href="/admin/users" className="btn btn-outline btn-small">유저 관리</Link>
         <Link href="/admin/emojis" className="btn btn-outline btn-small">커스텀 이모지</Link>
@@ -72,26 +72,26 @@ export default function AdminUserDetailPage() {
       {msg && <div className="empty-state" style={{ background: "var(--accent)", color: "#fff", padding: "10px 16px", borderRadius: 8, marginBottom: 12 }}>{msg}</div>}
 
       {/* Profile card */}
-      <div style={{ display: "flex", gap: 20, padding: 20, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 12, marginBottom: 20 }}>
-        <div style={{ width: 72, height: 72, borderRadius: 12, background: `hsl(${hashStr(u.username)}, 35%, 45%)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "2em", fontWeight: "bold", flexShrink: 0, position: "relative" }}>
+      <div className="admin-profile-card">
+        <div className="admin-profile-avatar" style={{ background: `hsl(${hashStr(u.username)}, 35%, 45%)` }}>
           {(u.display_name || u.username)[0]}
         </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: "1.1em", color: "var(--text-primary)" }}>
+        <div className="admin-profile-info">
+          <div className="admin-profile-name">
             {u.display_name}
             {u.role === "admin" && <Icon name="shield_filled" style={{ color: "#27ae60", fontSize: "0.7em", verticalAlign: "middle", marginLeft: 4 }} title="관리자" />}
             {u.role === "moderator" && <Icon name="shield_filled" style={{ color: "#cc8800", fontSize: "0.7em", verticalAlign: "middle", marginLeft: 4 }} title="조율자" />}
           </div>
-          <div style={{ color: "var(--text-muted)" }}>@{u.username}</div>
-          {u.summary && <div style={{ marginTop: 6, fontSize: "0.9em", color: "var(--text-secondary)" }}>{u.summary}</div>}
-          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          <div className="admin-profile-username">@{u.username}</div>
+          {u.summary && <div className="admin-profile-summary">{u.summary}</div>}
+          <div className="admin-profile-actions">
             {u.avatar && <button onClick={() => act(`/api/admin/users/${u.id}/remove-avatar`)} className="btn btn-small btn-outline">프로필 사진 삭제</button>}
           </div>
         </div>
       </div>
 
       {/* Counters */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 10, marginBottom: 20 }}>
+      <div className="admin-counter-grid">
         {[
           { label: "게시물", value: u.post_count, icon: "globe" },
           { label: "팔로워", value: u.follower_count, icon: "user" },
@@ -100,53 +100,53 @@ export default function AdminUserDetailPage() {
           { label: "상태", value: u.is_suspended ? "정지" : "활성", icon: u.is_suspended ? "block" : "check" },
           { label: "역할", value: u.role === "admin" ? "관리자" : u.role === "moderator" ? "조율자" : "유저", icon: "shield" },
         ].map((c, i) => (
-          <div key={i} style={{ padding: 14, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8, textAlign: "center" }}>
+          <div key={i} className="admin-counter-card">
             <Icon name={c.icon} size={20} />
-            <div style={{ fontSize: "1.4em", fontWeight: 700, marginTop: 4, color: c.label === "정지" ? "var(--danger)" : "var(--text-primary)" }}>{c.value}</div>
-            <div style={{ fontSize: "0.8em", color: "var(--text-muted)" }}>{c.label}</div>
+            <div className="admin-counter-value" style={{ color: c.label === "정지" ? "var(--danger)" : "var(--text-primary)" }}>{c.value}</div>
+            <div className="admin-counter-label">{c.label}</div>
           </div>
         ))}
       </div>
 
       {/* Detail table */}
-      <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", marginBottom: 20 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9em" }}>
+      <div className="admin-detail-card">
+        <table className="detail-table">
           <tbody>
-            <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              <td style={{ padding: "10px 16px", color: "var(--text-muted)", width: 160, fontWeight: 600 }}>이메일</td>
-              <td style={{ padding: "10px 16px", color: "var(--text-primary)" }}>{u.email_domain ? `${u.username}@${u.email_domain}` : "-"}</td>
-              <td style={{ padding: "10px 16px", width: 120 }}>
-                <button onClick={() => setShowChangeEmail(!showChangeEmail)} className="btn btn-small btn-outline" style={{ fontSize: "0.8em" }}>변경</button>
+            <tr>
+              <td className="label">이메일</td>
+              <td className="value">{u.email_domain ? `${u.username}@${u.email_domain}` : "-"}</td>
+              <td className="action">
+                <button onClick={() => setShowChangeEmail(!showChangeEmail)} className="btn btn-small btn-outline text-xs">변경</button>
               </td>
             </tr>
             {showChangeEmail && (
-              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <tr>
                 <td colSpan={3} style={{ padding: "10px 16px" }}>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="new@example.com" className="cw-input" style={{ flex: 1 }} />
+                  <div className="flex-row gap-8">
+                    <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="new@example.com" className="cw-input flex-1" />
                     <button onClick={() => { act(`/api/admin/users/${u.id}/change-email`, { email: newEmail }); setShowChangeEmail(false); }} className="btn btn-primary btn-small">저장</button>
                   </div>
                 </td>
               </tr>
             )}
-            <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              <td style={{ padding: "10px 16px", color: "var(--text-muted)", fontWeight: 600 }}>이메일 인증</td>
-              <td style={{ padding: "10px 16px", color: "var(--text-primary)" }}>{u.email_verified ? "완료" : "미인증"}</td>
-              <td style={{ padding: "10px 16px" }}>
-                {!u.email_verified && <button onClick={() => act(`/api/admin/users/${u.id}/verify-email`)} className="btn btn-small btn-outline" style={{ fontSize: "0.8em" }}>인증 처리</button>}
+            <tr>
+              <td className="label">이메일 인증</td>
+              <td className="value">{u.email_verified ? "완료" : "미인증"}</td>
+              <td className="action">
+                {!u.email_verified && <button onClick={() => act(`/api/admin/users/${u.id}/verify-email`)} className="btn btn-small btn-outline text-xs">인증 처리</button>}
               </td>
             </tr>
-            <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              <td style={{ padding: "10px 16px", color: "var(--text-muted)", fontWeight: 600 }}>역할</td>
-              <td style={{ padding: "10px 16px", color: "var(--text-primary)" }}>{u.role === "admin" ? "관리자" : u.role === "moderator" ? "조율자" : "유저"}</td>
-              <td style={{ padding: "10px 16px" }}>
-                {me?.role === "admin" && <button onClick={() => setShowChangeRole(!showChangeRole)} className="btn btn-small btn-outline" style={{ fontSize: "0.8em" }}>변경</button>}
+            <tr>
+              <td className="label">역할</td>
+              <td className="value">{u.role === "admin" ? "관리자" : u.role === "moderator" ? "조율자" : "유저"}</td>
+              <td className="action">
+                {me?.role === "admin" && <button onClick={() => setShowChangeRole(!showChangeRole)} className="btn btn-small btn-outline text-xs">변경</button>}
               </td>
             </tr>
             {showChangeRole && (
-              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <tr>
                 <td colSpan={3} style={{ padding: "10px 16px" }}>
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <div className="flex-row gap-8">
                     <select value={newRole} onChange={e => setNewRole(e.target.value)} className="cw-input">
                       <option value="user">유저</option><option value="moderator">조율자</option><option value="admin">관리자</option>
                     </select>
@@ -155,28 +155,28 @@ export default function AdminUserDetailPage() {
                 </td>
               </tr>
             )}
-            <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              <td style={{ padding: "10px 16px", color: "var(--text-muted)", fontWeight: 600 }}>공개 설정</td>
-              <td colSpan={2} style={{ padding: "10px 16px", color: "var(--text-primary)" }}>
+            <tr>
+              <td className="label">공개 설정</td>
+              <td colSpan={2} className="value">
                 {{ public: "공개", home: "홈", followers: "팔로워", mention: "멘션" }[u.default_visibility] || u.default_visibility}
               </td>
             </tr>
-            <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              <td style={{ padding: "10px 16px", color: "var(--text-muted)", fontWeight: 600 }}>팔로우 수동 승인</td>
-              <td colSpan={2} style={{ padding: "10px 16px", color: "var(--text-primary)" }}>{u.is_locked ? "켜짐" : "꺼짐"}</td>
+            <tr>
+              <td className="label">팔로우 수동 승인</td>
+              <td colSpan={2} className="value">{u.is_locked ? "켜짐" : "꺼짐"}</td>
             </tr>
-            <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              <td style={{ padding: "10px 16px", color: "var(--text-muted)", fontWeight: 600 }}>가입일</td>
-              <td colSpan={2} style={{ padding: "10px 16px", color: "var(--text-primary)" }}>{u.created_at ? new Date(u.created_at).toLocaleString("ko-KR") : "-"}</td>
+            <tr>
+              <td className="label">가입일</td>
+              <td colSpan={2} className="value">{u.created_at ? new Date(u.created_at).toLocaleString("ko-KR") : "-"}</td>
             </tr>
-            <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              <td style={{ padding: "10px 16px", color: "var(--text-muted)", fontWeight: 600 }}>최근 활동</td>
-              <td colSpan={2} style={{ padding: "10px 16px", color: "var(--text-primary)" }}>{u.last_active ? new Date(u.last_active).toLocaleString("ko-KR") : "-"}</td>
+            <tr>
+              <td className="label">최근 활동</td>
+              <td colSpan={2} className="value">{u.last_active ? new Date(u.last_active).toLocaleString("ko-KR") : "-"}</td>
             </tr>
             {u.recent_ips.length > 0 && (
-              <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                <td style={{ padding: "10px 16px", color: "var(--text-muted)", fontWeight: 600 }}>최근 IP</td>
-                <td colSpan={2} style={{ padding: "10px 16px", color: "var(--text-primary)", fontFamily: "monospace", fontSize: "0.85em" }}>{u.recent_ips.join(", ")}</td>
+              <tr>
+                <td className="label">최근 IP</td>
+                <td colSpan={2} className="value" style={{ fontFamily: "monospace", fontSize: "0.85em" }}>{u.recent_ips.join(", ")}</td>
               </tr>
             )}
           </tbody>
@@ -185,23 +185,23 @@ export default function AdminUserDetailPage() {
 
       {/* Moderation history */}
       {u.moderation_history && u.moderation_history.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <label style={{ display: "block", marginBottom: 8, color: "var(--text-muted)", fontSize: "0.85em", fontWeight: 600 }}>중재 기록</label>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div className="admin-section">
+          <label className="admin-section-label" style={{ marginBottom: 8 }}>중재 기록</label>
+          <div className="flex-col gap-6">
             {u.moderation_history.map((h) => {
               const actNames: Record<string, string> = { warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지", unsuspend: "정지 해제" };
               const actName = actNames[h.meta?.action || ""] || h.meta?.action || "중재";
               return (
-                <div key={h.id} style={{ fontSize: "0.85em", padding: "10px 14px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: h.meta?.message ? 6 : 0 }}>
+                <div key={h.id} className="text-sm" style={{ padding: "10px 14px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6 }}>
+                  <div className="flex-between" style={{ alignItems: "center", marginBottom: h.meta?.message ? 6 : 0 }}>
                     <span>
-                      <span style={{ fontWeight: 600, color: "var(--danger)" }}>{actName}</span>
-                      <span style={{ color: "var(--text-muted)" }}> by </span>
-                      <span style={{ color: "var(--text-primary)" }}>{h.by?.display_name || h.by?.username || "알 수 없음"}</span>
+                      <span className="font-semibold text-secondary" style={{ color: "var(--danger)" }}>{actName}</span>
+                      <span className="text-muted"> by </span>
+                      <span className="text-primary">{h.by?.display_name || h.by?.username || "알 수 없음"}</span>
                     </span>
-                    <span style={{ color: "var(--text-dim)", fontSize: "0.85em" }}>{h.created_at ? new Date(h.created_at).toLocaleString("ko-KR") : ""}</span>
+                    <span className="text-dim text-sm">{h.created_at ? new Date(h.created_at).toLocaleString("ko-KR") : ""}</span>
                   </div>
-                  {h.meta?.message && <div style={{ padding: "6px 10px", background: "var(--bg-tertiary)", borderRadius: 4, fontSize: "0.9em", color: "var(--text-secondary)", whiteSpace: "pre-wrap" }}>{h.meta.message}</div>}
+                  {h.meta?.message && <div className="pre-wrap" style={{ padding: "6px 10px", background: "var(--bg-tertiary)", borderRadius: 4, fontSize: "0.9em", color: "var(--text-secondary)" }}>{h.meta.message}</div>}
                 </div>
               );
             })}
@@ -210,17 +210,17 @@ export default function AdminUserDetailPage() {
       )}
 
       {/* Moderation note */}
-      <div style={{ marginBottom: 20 }}>
-        <label style={{ display: "block", marginBottom: 4, color: "var(--text-muted)", fontSize: "0.85em", fontWeight: 600 }}>참고사항</label>
-        <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={3} className="cw-input" style={{ width: "100%", resize: "vertical" }} placeholder="관리자 참고용 메모..." />
-        <div style={{ display: "flex", gap: 8, marginTop: 4, alignItems: "center" }}>
+      <div className="admin-section">
+        <label className="admin-section-label">참고사항</label>
+        <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={3} className="cw-input w-full resize-vertical" placeholder="관리자 참고용 메모..." />
+        <div className="flex-center" style={{ gap: 8, marginTop: 4 }}>
           <button onClick={async () => {
             const form = new FormData(); form.append("note", noteText);
             const res = await fetch(`/api/admin/users/${u.id}/note`, { method: "POST", credentials: "include", body: form });
             if (res.ok) alert("저장됨");
           }} className="btn btn-primary btn-small">메모 저장</button>
-          <div style={{ flex: 1 }} />
-          <button onClick={() => setShowModerate(true)} className="btn btn-small" style={{ background: "var(--danger)", color: "#fff", border: "none" }}>중재</button>
+          <div className="admin-spacer" />
+          <button onClick={() => setShowModerate(true)} className="btn btn-small btn-moderate">중재</button>
           {u.is_suspended && (
             <button onClick={async () => {
               const form = new FormData(); form.append("action", "unsuspend");
@@ -228,20 +228,20 @@ export default function AdminUserDetailPage() {
               load();
             }} className="btn btn-small btn-outline">정지 해제</button>
           )}
-          <button onClick={() => act(`/api/admin/users/${u.id}/reset-password`)} className="btn btn-small" style={{ border: "1px solid var(--border)" }}>암호 초기화</button>
+          <button onClick={() => act(`/api/admin/users/${u.id}/reset-password`)} className="btn btn-small border-default">암호 초기화</button>
           <button onClick={() => router.push(`/@${u.username}`)} className="btn btn-small btn-outline">프로필 보기</button>
         </div>
       </div>
 
       {showModerate && (
         <div className="reply-modal-backdrop active" onClick={() => setShowModerate(false)}>
-          <div className="reply-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+          <div className="reply-modal mod-modal" onClick={(e) => e.stopPropagation()}>
             <button className="reply-modal-close" onClick={() => setShowModerate(false)}>×</button>
             <h3>중재</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div className="mod-form">
               <div>
-                <label style={{ display: "block", marginBottom: 4, color: "var(--text-muted)", fontSize: "0.85em", fontWeight: 600 }}>조치</label>
-                <select value={modAction} onChange={e => setModAction(e.target.value)} className="cw-input" style={{ width: "100%" }}>
+                <label className="admin-section-label">조치</label>
+                <select value={modAction} onChange={e => setModAction(e.target.value)} className="cw-input mod-select">
                   <option value="warning">경고 — 어떤 동작도 하지 않고 사용자에게 경고를 보냅니다</option>
                   <option value="freeze">동결 — 계정 사용을 막지만 게시물은 유지됩니다</option>
                   <option value="sensitive">민감함 — 모든 미디어를 민감함으로 강제 설정합니다</option>
@@ -250,11 +250,11 @@ export default function AdminUserDetailPage() {
                 </select>
               </div>
               <div>
-                <label style={{ display: "block", marginBottom: 4, color: "var(--text-muted)", fontSize: "0.85em", fontWeight: 600 }}>경고 메세지</label>
-                <textarea value={modMessage} onChange={e => setModMessage(e.target.value)} rows={4} className="cw-input" style={{ width: "100%", resize: "vertical" }} placeholder="사용자에게 보낼 경고 메세지를 입력하세요..." />
+                <label className="admin-section-label">경고 메세지</label>
+                <textarea value={modMessage} onChange={e => setModMessage(e.target.value)} rows={4} className="cw-input mod-textarea" placeholder="사용자에게 보낼 경고 메세지를 입력하세요..." />
               </div>
               <div>
-                <label style={{ fontSize: "0.85em", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                <label className="text-sm text-muted flex-center" style={{ gap: 6, cursor: "pointer" }}>
                   <input type="checkbox" checked={modEmail} onChange={e => setModEmail(e.target.checked)} />
                   이메일로 알림 보내기
                 </label>

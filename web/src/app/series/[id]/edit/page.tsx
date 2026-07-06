@@ -70,7 +70,7 @@ export default function EditNovelPage() {
           <div className="char-count">{description.length}/{500}</div>
         </div>
         <div className="form-group">
-          <label>태그 <span style={{ fontWeight: 400, color: "var(--text-dim)", fontSize: "0.85em", marginLeft: 6 }}>최대 10개</span></label>
+          <label>태그 <span className="font-normal text-dim text-sm" style={{ marginLeft: 6 }}>최대 10개</span></label>
           <TagInput value={tags} onChange={(v) => setTags(v)} />
         </div>
         <div className="form-group">

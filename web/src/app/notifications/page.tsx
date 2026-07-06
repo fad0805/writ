@@ -159,7 +159,7 @@ export default function NotificationsPage() {
             </div>
             <div className="notif-body">
               {n.type === "moderation" ? (
-                <><span style={{ fontWeight: 700, color: "var(--danger)" }}>{actionNames[(n as any).metadata?.action] || (n as any).metadata?.action || "중재"}</span> 조치가 적용되었습니다.</>
+                <><span className="font-bold" style={{ color: "var(--danger)" }}>{actionNames[(n as any).metadata?.action] || (n as any).metadata?.action || "중재"}</span> 조치가 적용되었습니다.</>
               ) : (
                 <>{n.from_user && (
                   <Link href={`/@${n.from_user.username}`} className="notif-from-link">
@@ -170,7 +170,7 @@ export default function NotificationsPage() {
               )}
               <span className="notif-time">{fmtTime(n.created_at)}</span>
               {n.type === "moderation" && (n as any).metadata?.message && (
-                <div style={{ marginTop: 6, padding: "8px 12px", background: "var(--bg-tertiary)", borderRadius: 6, fontSize: "0.9em", color: "var(--text-secondary)", whiteSpace: "pre-wrap" }}>{(n as any).metadata.message}</div>
+                <div className="notif-mod-message">{(n as any).metadata.message}</div>
               )}
               {n.type === "follow_request" && n.from_user && (
                 <div className="notif-follow-btns">

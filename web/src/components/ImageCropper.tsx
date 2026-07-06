@@ -103,35 +103,33 @@ export default function ImageCropper({ src, onCrop, onClose }: Props) {
     <div className="reply-modal-backdrop active" onClick={onClose}>
       <div className="reply-modal cropper-modal">
         <h3 className="mb-12">프로필 사진 자르기</h3>
-        <div style={{ position: "relative", display: "inline-block", borderRadius: 8, overflow: "hidden", lineHeight: 0, touchAction: "none", userSelect: "none" }}>
+        <div className="cropper-stage">
           {imgLoaded && (
-            <img ref={imgRef} src={src} style={{ width: display.w, height: display.h, display: "block" }} />
+            <img ref={imgRef} src={src} className="cropper-img" style={{ width: display.w, height: display.h }} />
           )}
           {imgLoaded && (
             <div
+              className="cropper-overlay"
               style={{
-                position: "absolute", left: crop.x, top: crop.y,
+                left: crop.x, top: crop.y,
                 width: s, height: s,
-                boxShadow: "0 0 0 9999px rgba(0,0,0,0.5)",
-                border: "2px solid #fff",
-                cursor: "move",
               }}
               onPointerDown={(e) => handleDown(e, "move")}
               onPointerMove={handleMove}
               onPointerUp={handleUp}
               onPointerCancel={handleUp}
             >
-              <div style={{ position: "absolute", top: -HS/2, left: -HS/2, width: HS, height: HS, cursor: "nwse-resize", background: "#fff", borderRadius: "50%", border: "2px solid #333" }} onPointerDown={(e) => { e.stopPropagation(); handleDown(e, "tl"); }} />
-              <div style={{ position: "absolute", top: -HS/2, right: -HS/2, width: HS, height: HS, cursor: "nesw-resize", background: "#fff", borderRadius: "50%", border: "2px solid #333" }} onPointerDown={(e) => { e.stopPropagation(); handleDown(e, "tr"); }} />
-              <div style={{ position: "absolute", bottom: -HS/2, left: -HS/2, width: HS, height: HS, cursor: "nesw-resize", background: "#fff", borderRadius: "50%", border: "2px solid #333" }} onPointerDown={(e) => { e.stopPropagation(); handleDown(e, "bl"); }} />
-              <div style={{ position: "absolute", bottom: -HS/2, right: -HS/2, width: HS, height: HS, cursor: "nwse-resize", background: "#fff", borderRadius: "50%", border: "2px solid #333" }} onPointerDown={(e) => { e.stopPropagation(); handleDown(e, "br"); }} />
+              <div className="cropper-handle cropper-handle-tl" onPointerDown={(e) => { e.stopPropagation(); handleDown(e, "tl"); }} />
+              <div className="cropper-handle cropper-handle-tr" onPointerDown={(e) => { e.stopPropagation(); handleDown(e, "tr"); }} />
+              <div className="cropper-handle cropper-handle-bl" onPointerDown={(e) => { e.stopPropagation(); handleDown(e, "bl"); }} />
+              <div className="cropper-handle cropper-handle-br" onPointerDown={(e) => { e.stopPropagation(); handleDown(e, "br"); }} />
             </div>
           )}
         </div>
-        <p className="text-sm text-muted" style={{ margin: "8px 0 0" }}>
+        <p className="text-sm text-muted cropper-hint">
           영역을 드래그하여 위치/크기를 조정하세요
         </p>
-        <div className="form-actions" style={{ justifyContent: "center" }}>
+        <div className="form-actions cropper-actions">
           <button className="btn btn-primary" onClick={handleConfirm}>적용</button>
           <button className="btn btn-outline" onClick={onClose}>취소</button>
         </div>

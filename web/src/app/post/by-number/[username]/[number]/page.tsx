@@ -89,13 +89,13 @@ export default function PostByNumberPage() {
   return (
     <>
       {ancestors.map((a) => (
-        <div key={a.id} style={{ marginLeft: 20 }}><PostCard post={a} hideContext /></div>
+        <div key={a.id} className="thread-child"><PostCard post={a} hideContext /></div>
       ))}
       <PostCard post={post} current hideContext onUpdate={() => loadPost()} />
       <div className="thread-list">
         <h4>답글 {totalReplies}개</h4>
         <ThreadList posts={replies} parentId={post.id} depth={0} />
-        <div ref={sentinelRef} style={{ height: 1 }} />
+        <div ref={sentinelRef} className="sentinel" />
         {loadingMore && <p className="empty-state">불러오는 중...</p>}
       </div>
     </>

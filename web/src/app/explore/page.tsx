@@ -111,7 +111,7 @@ function ExploreContent() {
                     {n.cover_image ? (
                       <img src={n.cover_image} alt={n.title} className="cover-img" />
                     ) : (
-                      <div className="cover-fallback" style={{ backgroundColor: hashColor(n.title), fontSize: "1.2em" }}>
+                      <div className="cover-fallback cover-fallback-md" style={{ backgroundColor: hashColor(n.title) }}>
                         {n.title[0]}
                       </div>
                     )}
@@ -160,7 +160,7 @@ function ExploreContent() {
                             {n.cover_image ? (
                               <img src={n.cover_image} alt={n.title} className="cover-img" />
                             ) : (
-                              <div className="cover-fallback" style={{ backgroundColor: hashColor(n.title), fontSize: "1.5em" }}>
+                              <div className="cover-fallback cover-fallback-lg" style={{ backgroundColor: hashColor(n.title) }}>
                                 <Icon name="book" size={24} />
                               </div>
                             )}
@@ -188,7 +188,7 @@ function ExploreContent() {
                   <div className="user-search-list">
                     {users.map((u) => (
                       <Link key={u.id} href={`/@${u.username}`} className="user-search-card">
-                        <Avatar user={u} className="sidebar-avatar rounded-[8px]" style={{ width: 36, height: 36, minWidth: 36, fontSize: 16 }} />
+                        <Avatar user={u} className="sidebar-avatar rounded-[8px]" style={{ width: 36, height: 36, minWidth: 36 }} />
                         <div>
                           <strong>{u.display_name}</strong>
                           <span>@{u.username}</span>

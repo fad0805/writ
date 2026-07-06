@@ -83,7 +83,7 @@ export default function SettingsPage() {
           <div className="form-group">
             <label>
               <input type="checkbox" checked={showBadge} onChange={(e) => setShowBadge(e.target.checked)} />
-              {" "}<Icon name="shield" style={{ color: "#27ae60" }} /> 관리자 뱃지 공개
+              {" "}<Icon name="shield" className="icon-shield-green" /> 관리자 뱃지 공개
             </label>
             <p className="form-help">다른 사용자에게 관리자/조율자 뱃지를 보여줍니다.</p>
           </div>

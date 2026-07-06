@@ -87,40 +87,40 @@ export default function AdminUsersPage() {
   return (
     <>
       <div className="page-header"><h2><Icon name="settings" /> 서버 관리</h2></div>
-      <div className="admin-tabs" style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+      <div className="admin-tabs">
         <Link href="/admin" className="btn btn-outline btn-small">대시보드</Link>
         <Link href="/admin/users" className="btn btn-primary btn-small">유저 관리</Link>
         <Link href="/admin/emojis" className="btn btn-outline btn-small">커스텀 이모지</Link>
       </div>
 
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-          <button onClick={suspendSelected} disabled={selected.size === 0} className="btn btn-small" style={{ background: "var(--danger)", color: "#fff", border: "none" }}>정지</button>
+      <div className="admin-users-container">
+        <div className="admin-action-bar">
+          <button onClick={suspendSelected} disabled={selected.size === 0} className="btn btn-small btn-moderate">정지</button>
           <button onClick={unsuspendSelected} disabled={selected.size === 0} className="btn btn-small btn-outline">정지 해제</button>
-          <div style={{ flex: 1 }} />
+          <div className="admin-spacer" />
           <button onClick={() => setShowSearch(!showSearch)} className="btn btn-outline btn-small">
             검색/필터 {showSearch ? "▲" : "▼"}
           </button>
         </div>
 
         {showSearch && (
-          <div style={{ padding: "12px 14px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 8, fontSize: "0.85em" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
-              <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>아이디</label><input type="text" value={nameQ} onChange={e => setNameQ(e.target.value)} placeholder="표시 이름" className="cw-input" style={{ width: "100%" }} /></div>
-              <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>유저명</label><input type="text" value={usernameQ} onChange={e => setUsernameQ(e.target.value)} placeholder="@username" className="cw-input" style={{ width: "100%" }} /></div>
-              <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>이메일</label><input type="text" value={emailQ} onChange={e => setEmailQ(e.target.value)} placeholder="email@example.com" className="cw-input" style={{ width: "100%" }} /></div>
-              <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>IP</label><input type="text" value={ipQ} onChange={e => setIpQ(e.target.value)} placeholder="192.168.x.x" className="cw-input" style={{ width: "100%" }} /></div>
-              {loc === "remote" && <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>도메인</label><input type="text" value={domainQ} onChange={e => setDomainQ(e.target.value)} placeholder="example.com" className="cw-input" style={{ width: "100%" }} /></div>}
+          <div className="admin-search-panel">
+            <div className="admin-search-fields">
+              <div><label>아이디</label><input type="text" value={nameQ} onChange={e => setNameQ(e.target.value)} placeholder="표시 이름" className="cw-input" /></div>
+              <div><label>유저명</label><input type="text" value={usernameQ} onChange={e => setUsernameQ(e.target.value)} placeholder="@username" className="cw-input" /></div>
+              <div><label>이메일</label><input type="text" value={emailQ} onChange={e => setEmailQ(e.target.value)} placeholder="email@example.com" className="cw-input" /></div>
+              <div><label>IP</label><input type="text" value={ipQ} onChange={e => setIpQ(e.target.value)} placeholder="192.168.x.x" className="cw-input" /></div>
+              {loc === "remote" && <div><label>도메인</label><input type="text" value={domainQ} onChange={e => setDomainQ(e.target.value)} placeholder="example.com" className="cw-input" /></div>}
             </div>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-              <label>위치 <select value={loc} onChange={e => setLoc(e.target.value)} className="cw-input" style={{ width: 90 }}><option value="all">모두</option><option value="local">로컬</option><option value="remote">리모트</option></select></label>
-              <label>상태 <select value={status} onChange={e => setStatus(e.target.value)} className="cw-input" style={{ width: 100 }}>
+            <div className="admin-filter-row">
+              <label>위치 <select value={loc} onChange={e => setLoc(e.target.value)} className="cw-input select-w-90"><option value="all">모두</option><option value="local">로컬</option><option value="remote">리모트</option></select></label>
+              <label>상태 <select value={status} onChange={e => setStatus(e.target.value)} className="cw-input select-w-100">
                 <option value="all">모두</option><option value="active">활성</option><option value="suspended">정지</option><option value="pending">인증대기</option><option value="inactive">비활성</option>
               </select></label>
-              <label>역할 <select value={role} onChange={e => setRole(e.target.value)} className="cw-input" style={{ width: 90 }}>
+              <label>역할 <select value={role} onChange={e => setRole(e.target.value)} className="cw-input select-w-90">
                 <option value="all">모두</option><option value="user">유저</option><option value="moderator">조율자</option><option value="admin">관리자</option>
               </select></label>
-              <label>정렬 <select value={sort} onChange={e => setSort(e.target.value)} className="cw-input" style={{ width: 110 }}>
+              <label>정렬 <select value={sort} onChange={e => setSort(e.target.value)} className="cw-input select-w-110">
                 <option value="newest">최신순</option><option value="active">최근활동순</option>
               </select></label>
               <button onClick={loadUsers} className="btn btn-primary btn-small">검색</button>
@@ -131,17 +131,17 @@ export default function AdminUsersPage() {
 
       {loading ? <div className="empty-state">로딩 중...</div>
       : users.length === 0 ? <div className="empty-state">사용자가 없습니다.</div>
-      : <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85em" }}>
+      : <div className="admin-table-wrap">
+          <table className="admin-table">
             <thead>
-              <tr style={{ borderBottom: "1px solid var(--border)", color: "var(--text-muted)" }}>
-                <th style={{ padding: "8px 10px", textAlign: "left", width: 36 }}><input type="checkbox" checked={selected.size === users.length && users.length > 0} onChange={toggleAll} /></th>
-                <th style={{ padding: "8px 10px", textAlign: "left" }}>사용자</th>
-                <th style={{ padding: "8px 10px", textAlign: "center" }}>게시물</th>
-                <th style={{ padding: "8px 10px", textAlign: "center" }}>팔로워</th>
-                <th style={{ padding: "8px 10px", textAlign: "center" }}>최근 활동</th>
-                <th style={{ padding: "8px 10px", textAlign: "left" }}>이메일/IP</th>
-                <th style={{ padding: "8px 10px", textAlign: "center" }}>상태</th>
+              <tr className="admin-tr text-muted">
+                <th className="admin-th-checkbox"><input type="checkbox" checked={selected.size === users.length && users.length > 0} onChange={toggleAll} /></th>
+                <th>사용자</th>
+                <th className="text-center">게시물</th>
+                <th className="text-center">팔로워</th>
+                <th className="text-center">최근 활동</th>
+                <th>이메일/IP</th>
+                <th className="text-center">상태</th>
               </tr>
             </thead>
             <tbody>
@@ -149,33 +149,33 @@ export default function AdminUsersPage() {
                 <tr key={u.id} style={{ borderBottom: "1px solid var(--border)", background: selected.has(u.id) ? "var(--card-hover)" : "transparent", opacity: u.is_suspended ? 0.5 : 1 }}>
                   <td style={{ padding: "10px" }}><input type="checkbox" checked={selected.has(u.id)} onChange={() => toggle(u.id)} /></td>
                   <td style={{ padding: "10px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: 6, background: `hsl(${hashStr(u.username)}, 35%, 45%)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: "bold", fontSize: "0.85em", flexShrink: 0 }}>
+                    <div className="flex-center gap-10">
+                      <div className="admin-user-avatar" style={{ background: `hsl(${hashStr(u.username)}, 35%, 45%)` }}>
                         {(u.display_name || u.username)[0]}
                       </div>
                       <div>
                         <Link href={`/admin/users/${u.id}`} style={{ textDecoration: "none" }}>
-                          <div style={{ fontWeight: 600, color: "var(--text-primary)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <div className="admin-user-name">
                             {u.display_name}
-                            {u.role === "admin" && <Icon name="shield_filled" style={{ color: "#27ae60", fontSize: "0.6em", verticalAlign: "middle", marginLeft: 3 }} title="관리자" />}
-                            {u.role === "moderator" && <Icon name="shield_filled" style={{ color: "#cc8800", fontSize: "0.6em", verticalAlign: "middle", marginLeft: 3 }} title="조율자" />}
+                            {u.role === "admin" && <Icon name="shield_filled" className="icon-badge-sm icon-admin" style={{ marginLeft: 3 }} title="관리자" />}
+                            {u.role === "moderator" && <Icon name="shield_filled" className="icon-badge-sm icon-mod" style={{ marginLeft: 3 }} title="조율자" />}
                           </div>
                         </Link>
-                        <div style={{ fontSize: "0.85em", color: "var(--text-dim)" }}>@{u.username}</div>
+                        <div className="admin-user-handle">@{u.username}</div>
                       </div>
                     </div>
                   </td>
-                  <td style={{ padding: "10px", textAlign: "center", color: "var(--text-secondary)" }}>{u.post_count}</td>
-                  <td style={{ padding: "10px", textAlign: "center", color: "var(--text-secondary)" }}>{u.follower_count}</td>
-                  <td style={{ padding: "10px", textAlign: "center", color: "var(--text-secondary)" }}>{timeAgo(u.last_active) || "-"}</td>
-                  <td style={{ padding: "10px", color: "var(--text-dim)", fontSize: "0.85em" }}>
+                  <td className="admin-td-center">{u.post_count}</td>
+                  <td className="admin-td-center">{u.follower_count}</td>
+                  <td className="admin-td-center">{timeAgo(u.last_active) || "-"}</td>
+                  <td className="admin-td-ip">
                     {u.email_domain || "-"}
-                    {u.recent_ips && u.recent_ips.length > 0 && <span style={{ fontFamily: "monospace", marginLeft: 4 }}>/ {u.recent_ips[0]}</span>}
+                    {u.recent_ips && u.recent_ips.length > 0 && <span className="admin-ip-mono">/ {u.recent_ips[0]}</span>}
                   </td>
-                  <td style={{ padding: "10px", textAlign: "center" }}>
-                    {u.is_suspended ? <span style={{ color: "var(--danger)", fontSize: "0.85em" }}>정지</span>
-                    : u.is_remote ? <span style={{ color: "var(--text-dim)", fontSize: "0.85em" }}>리모트</span>
-                    : <span style={{ color: "var(--accent)", fontSize: "0.85em" }}>활성</span>}
+                  <td className="admin-td-status">
+                    {u.is_suspended ? <span className="admin-status-suspended">정지</span>
+                    : u.is_remote ? <span className="admin-status-remote">리모트</span>
+                    : <span className="admin-status-active">활성</span>}
                   </td>
                 </tr>
               ))}

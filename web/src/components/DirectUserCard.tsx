@@ -15,9 +15,9 @@ export default function DirectUserCard({ user }: { user: { id: number; username:
         <div className="direct-user-handle">@{user.username}</div>
       </div>
       {user.latest_previews && user.latest_previews.length > 0 && (
-        <div style={{ textAlign: "right", flexShrink: 0, maxWidth: "40%" }}>
+        <div className="dm-preview-right">
           {user.latest_previews.slice(0, 3).map((item, i) => (
-            <div key={i} style={{ fontSize: "0.8em", color: item.is_me ? "var(--accent)" : "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.5 }}>
+            <div key={i} className="dm-preview-item" style={{ color: item.is_me ? "var(--accent)" : "var(--text-muted)" }}>
               {item.text || "(내용 없음)"}
             </div>
           ))}
