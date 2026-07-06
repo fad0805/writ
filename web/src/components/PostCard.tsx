@@ -176,7 +176,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
             <Avatar user={post.author} className="post-author-avatar flex items-center justify-center text-white font-bold text-sm" />
           </Link>
           <Link href={`/@${post.author.username}`} className="post-author" onClick={(e) => e.stopPropagation()}>
-            {post.author.display_name} {post.author.role === "admin" && <span className="role-badge role-admin">관리자</span>}{post.author.role === "moderator" && <span className="role-badge role-mod">조율자</span>}
+            {post.author.display_name} {post.author.role === "admin" && <Icon name="shield_filled" style={{ color: "#27ae60", fontSize: "0.65em", verticalAlign: "middle", marginLeft: 2 }} title="관리자" />}{post.author.role === "moderator" && <span className="role-badge role-mod">조율자</span>}
           </Link>
           <Link href={`/@${post.author.username}`} className="post-username" onClick={(e) => e.stopPropagation()}>
             @{post.author.username}
