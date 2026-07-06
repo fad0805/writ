@@ -66,14 +66,21 @@ export default function NotificationsPage() {
   }, [filter]);
   useEffect(() => { window.dispatchEvent(new Event("notificationsread")); }, []);
 
-  const typeText = (t: string) => {
+  const actionNames: Record<string, string> = {
+    warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지", unsuspend: "정지 해제",
+  };
+
+  const typeText = (t: string, meta?: any) => {
     if (t === "follow") return "님이 회원님을 팔로우했습니다";
     if (t === "follow_request") return "님이 회원님을 팔로우 요청했습니다";
     if (t === "like") return "님이 회원님의 글을 즐겨찾기했습니다";
     if (t === "boost") return "님이 회원님의 글을 부스트했습니다";
     if (t === "reply" || t === "mention") return "님이 회원님을 언급했습니다";
     if (t === "post") return "님이 새 글을 작성했습니다";
-    if (t === "moderation") return "님이 회원님의 계정을 중재했습니다";
+    if (t === "moderation") {
+      const act = actionNames[meta?.action] || meta?.action || "중재";
+      return `계정에 ${act} 조치가 적용되었습니다.`;
+    }
     return "";
   };
 
@@ -151,13 +158,20 @@ export default function NotificationsPage() {
               <Icon name={NOTIF_ICONS[n.type] || "bell"} size={20} />
             </div>
             <div className="notif-body">
-              {n.from_user && (
-                <Link href={`/@${n.from_user.username}`} className="notif-from-link">
-                  {n.from_user.display_name}
-                </Link>
-              )}{" "}
-              {typeText(n.type)}
+              {n.type === "moderation" ? (
+                <>{typeText(n.type, (n as any).metadata)}</>
+              ) : (
+                <>{n.from_user && (
+                  <Link href={`/@${n.from_user.username}`} className="notif-from-link">
+                    {n.from_user.display_name}
+                  </Link>
+                )}{" "}
+                {typeText(n.type)}</>
+              )}
               <span className="notif-time">{fmtTime(n.created_at)}</span>
+              {n.type === "moderation" && (n as any).metadata?.message && (
+                <div style={{ marginTop: 6, padding: "8px 12px", background: "var(--bg-tertiary)", borderRadius: 6, fontSize: "0.9em", color: "var(--text-secondary)", whiteSpace: "pre-wrap" }}>{(n as any).metadata.message}</div>
+              )}
               {n.type === "follow_request" && n.from_user && (
                 <div className="notif-follow-btns">
                   <button onClick={() => handleApprove(n.from_user!.username)} className="btn btn-primary btn-small btn-follow">수락</button>

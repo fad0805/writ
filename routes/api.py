@@ -863,6 +863,11 @@ def api_notifications(request: Request, filter_type: str = Query("")):
         for n in notifs:
             from_user = s.query(User).get(n.from_user_id) if n.from_user_id else None
             post = s.query(Post).get(n.post_id) if n.post_id else None
+            import json as _json
+            meta = {}
+            if n.metadata_json:
+                try: meta = _json.loads(n.metadata_json)
+                except: pass
             item = {
                 "id": n.id,
                 "type": n.notification_type,
@@ -870,6 +875,7 @@ def api_notifications(request: Request, filter_type: str = Query("")):
                 "is_read": n.is_read,
                 "from_user": _user_json(from_user) if from_user else None,
                 "post": _post_json(post, s, user) if post and not post.is_deleted and _can_view(post, user, s) else None,
+                "metadata": meta,
             }
             result.append(item)
 
@@ -2149,10 +2155,12 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
             u.is_suspended = False
 
         # Create notification for the moderated user
+        import json
         notif = Notification(
             user_id=u.id,
             from_user_id=user.id,
             notification_type="moderation",
+            metadata_json=json.dumps({"action": action, "message": message}, ensure_ascii=False),
         )
         s.add(notif)
         s.commit()

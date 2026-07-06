@@ -358,8 +358,9 @@ class Notification(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     from_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    notification_type = Column(String(32), nullable=False)  # follow, like, boost, reply, mention
+    notification_type = Column(String(32), nullable=False)  # follow, like, boost, reply, mention, moderation
     post_id = Column(Integer, ForeignKey("posts.id"), nullable=True)
+    metadata_json = Column(Text, default="")
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now)
 
@@ -505,6 +506,12 @@ def init_db():
     try:
         with Session(engine) as session:
             session.execute(text("ALTER TABLE users ADD COLUMN moderation_note TEXT DEFAULT ''"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE notifications ADD COLUMN metadata_json TEXT DEFAULT ''"))
             session.commit()
     except Exception:
         pass
