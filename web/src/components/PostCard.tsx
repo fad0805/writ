@@ -126,7 +126,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
         const fullUrl = `https://${domain}/@${username}/${number}`;
         const form = new FormData(); form.append("url", fullUrl);
         fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form })
-          .then(r => r.json()).then(d => { if (d._emojis) injectEmojis(d._emojis); setQuotedPost(d); setLoadingQuote(false); })
+          .then(r => r.json()).then(d => { if (d._emojis) { injectEmojis(d._emojis); getCustomEmojis().then(setEmojiMap); } setQuotedPost(d); setLoadingQuote(false); })
           .catch(() => setLoadingQuote(false));
       }
     } else if (oldFormat) {
@@ -139,7 +139,11 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
       fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form })
         .then(r => { if (r.ok) return r.json(); throw new Error(); })
         .then(d => {
-          if (d._emojis) injectEmojis(d._emojis);
+          if (d._emojis) {
+            injectEmojis(d._emojis);
+            // Immediately update emoji map so render picks it up
+            getCustomEmojis().then(setEmojiMap);
+          }
           setQuotedPost(d);
           setLoadingQuote(false);
         })

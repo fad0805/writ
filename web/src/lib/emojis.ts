@@ -35,7 +35,17 @@ export async function getCustomEmojis(): Promise<CustomEmoji[]> {
     try {
       const res = await fetch("/api/emojis", { credentials: "include" });
       if (res.ok) {
-        cache = await res.json();
+        const fresh: CustomEmoji[] = await res.json();
+        if (cache === null) {
+          cache = fresh;
+        } else {
+          const cur = cache as CustomEmoji[];
+          for (const e of fresh) {
+            if (!cur.some((c) => c.keyword === e.keyword)) {
+              cur.push(e);
+            }
+          }
+        }
         return cache || [];
       }
     } catch {}
