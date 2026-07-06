@@ -858,7 +858,10 @@ def _process_emoji_tags(tags: list, session):
 
         existing = session.query(CustomEmoji).filter_by(keyword=keyword).first()
         if existing:
-            continue
+            if not domain or existing.domain == domain or existing.category != "remote":
+                continue
+            # Same keyword from a different domain — prefix to keep both
+            keyword = f"{domain}_{keyword}"
 
         EMOJI_DIR = os.path.join(os.path.dirname(__file__), "web", "public", "emojis")
         import uuid
