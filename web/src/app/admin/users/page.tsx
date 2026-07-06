@@ -142,11 +142,10 @@ export default function AdminUsersPage() {
                       </div>
                       <div>
                         <Link href={`/admin/users/${u.id}`} style={{ textDecoration: "none" }}>
-                          <div style={{ fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap" }}>
+                          <div style={{ fontWeight: 600, color: "var(--text-primary)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {u.display_name}
                             {u.role === "admin" && <Icon name="shield_filled" style={{ color: "#27ae60", fontSize: "0.6em", verticalAlign: "middle", marginLeft: 3 }} title="관리자" />}
                             {u.role === "moderator" && <Icon name="shield_filled" style={{ color: "#cc8800", fontSize: "0.6em", verticalAlign: "middle", marginLeft: 3 }} title="조율자" />}
-                            {u.is_remote && <span style={{ fontSize: "0.75em", color: "var(--text-dim)", marginLeft: 3 }}>@ {u.username?.split("@")[1] || ""}</span>}
                           </div>
                         </Link>
                         <div style={{ fontSize: "0.85em", color: "var(--text-dim)" }}>@{u.username}</div>
