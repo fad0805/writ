@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { api, User } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import TextareaHighlight from "./TextareaHighlight";
@@ -33,6 +33,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [emojiResults, setEmojiResults] = useState<CustomEmoji[]>([]);
   const [emojiStart, setEmojiStart] = useState(-1);
   const [emojiIdx, setEmojiIdx] = useState(0);
+  const [emojiPos, setEmojiPos] = useState({ top: 0, left: 0 });
 
   const totalLen = content.length + summary.length;
   const nearLimit = totalLen > MAX_LENGTH - 50 && totalLen <= MAX_LENGTH;
@@ -52,6 +53,18 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     }
     setEmojiStart(colonIdx);
     setEmojiQuery(partial);
+    // Position near cursor in textarea
+    const ta = taRef.current;
+    if (ta) {
+      const rect = ta.getBoundingClientRect();
+      const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
+      const textBefore = val.slice(0, cursor);
+      const lines = textBefore.split('\n');
+      const top = rect.top + lines.length * lineHeight + 4;
+      const lastLine = lines[lines.length - 1] || '';
+      const left = rect.left + lastLine.length * 8 + 10;
+      setEmojiPos({ top, left });
+    }
   }, []);
 
   const detectMention = useCallback((val: string, cursor: number) => {
@@ -98,6 +111,15 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       } catch { setEmojiResults([]); }
     }, 100);
     return () => clearTimeout(t);
+  }, [emojiQuery]);
+
+  // Close emoji picker on scroll/resize
+  useEffect(() => {
+    if (!emojiQuery) return;
+    const handler = () => setEmojiResults([]);
+    window.addEventListener("scroll", handler, true);
+    window.addEventListener("resize", handler);
+    return () => { window.removeEventListener("scroll", handler, true); window.removeEventListener("resize", handler); };
   }, [emojiQuery]);
 
   const insertEmoji = useCallback((emo: CustomEmoji) => {
@@ -260,8 +282,8 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       {emojiResults.length > 0 && (
         <div style={{
           position: "fixed",
-          bottom: 80,
-          right: "calc(50% - 180px)",
+          top: emojiPos.top,
+          left: emojiPos.left,
           maxWidth: 360,
           maxHeight: 240,
           overflowY: "auto",
