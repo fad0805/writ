@@ -15,6 +15,7 @@ export default function AdminPage() {
   const [emojiFile, setEmojiFile] = useState<File | null>(null);
   const [emojiSubmitting, setEmojiSubmitting] = useState(false);
   const [emojiFilter, setEmojiFilter] = useState("all");
+  const [emojiSearch, setEmojiSearch] = useState("");
 
   useEffect(() => {
     if (!authLoading && user?.role !== "admin" && user?.role !== "moderator") {
@@ -84,6 +85,7 @@ export default function AdminPage() {
         </form>
 
         <div className="hm-top-24">
+          <input type="text" value={emojiSearch} onChange={(e) => setEmojiSearch(e.target.value)} placeholder="이모지 검색..." className="cw-input w-full hm-bottom-8" />
           <div className="flex-row gap-8 mb-12">
             {["all", "local", "remote"].map((f) => (
               <button key={f} onClick={() => setEmojiFilter(f)} className={`btn btn-small ${emojiFilter === f ? "btn-primary" : "btn-outline"}`}>{f === "all" ? "전체" : f === "local" ? "로컬" : "리모트"}</button>
@@ -93,7 +95,7 @@ export default function AdminPage() {
             <p className="empty-state">등록된 커스텀 이모지가 없습니다.</p>
           ) : (
             <div className="flex-col gap-8">
-              {emojis.filter(e => emojiFilter === "all" || (emojiFilter === "local" ? e.category !== "remote" : e.category === "remote")).map((emo) => (
+              {emojis.filter(e => (emojiFilter === "all" || (emojiFilter === "local" ? e.category !== "remote" : e.category === "remote")) && (!emojiSearch || e.keyword.includes(emojiSearch.toLowerCase()))).map((emo) => (
                 <div key={emo.id} className="emoji-list-item">
                   <img src={emo.url} alt={emo.keyword} width={33} height={33} className="emoji-img-admin" />
                   <div className="emoji-info">
@@ -103,6 +105,17 @@ export default function AdminPage() {
                       {emo.aliases && emo.aliases.length > 0 && <span> {emo.aliases.map((a: string) => `:${a}:`).join(" ")}</span>}
                     </div>
                   </div>
+                  {emo.category === "remote" && (
+                    <button type="button" onClick={async () => {
+                      const form = new FormData(); form.append("category", "기본");
+                      const res = await fetch(`/api/emojis/${emo.id}`, { method: "PATCH", credentials: "include", body: form });
+                      if (res.ok) {
+                        const d = await res.json();
+                        setEmojis(emojis.map(e => e.id === emo.id ? d.emoji : e));
+                        invalidateEmojiCache();
+                      }
+                    }} className="btn" style={{ fontSize: "0.85em", color: "var(--accent)", border: "1px solid var(--border)", padding: "4px 12px" }}>복사</button>
+                  )}
                   <button type="button" onClick={async () => {
                     if (!confirm(`:${emo.keyword}:를 삭제하시겠습니까?`)) return;
                     try {
