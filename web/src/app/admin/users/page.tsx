@@ -13,6 +13,7 @@ type AdminUser = User & {
   last_active: string;
   email_domain: string;
   recent_ips: string[];
+  is_suspended?: boolean;
 };
 
 function timeAgo(t: string): string {
@@ -39,11 +40,13 @@ export default function AdminUsersPage() {
     }
   }, [user, authLoading, router]);
 
-  useEffect(() => {
+  const loadUsers = () => {
     fetch("/api/admin/users", { credentials: "include" })
       .then(r => r.json()).then(d => { setUsers(d.users); setLoading(false); })
       .catch(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { loadUsers(); }, []);
 
   const toggleAll = () => {
     if (selected.size === users.length) setSelected(new Set());
@@ -54,6 +57,20 @@ export default function AdminUsersPage() {
     const next = new Set(selected);
     if (next.has(id)) next.delete(id); else next.add(id);
     setSelected(next);
+  };
+
+  const suspendSelected = async () => {
+    if (selected.size === 0) return;
+    const ids = Array.from(selected).join(",");
+    await fetch("/api/admin/users/suspend", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ user_ids: ids }) });
+    loadUsers(); setSelected(new Set());
+  };
+
+  const unsuspendSelected = async () => {
+    if (selected.size === 0) return;
+    const ids = Array.from(selected).join(",");
+    await fetch("/api/admin/users/unsuspend", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ user_ids: ids }) });
+    loadUsers(); setSelected(new Set());
   };
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
@@ -69,6 +86,11 @@ export default function AdminUsersPage() {
         <Link href="/admin" className="btn btn-outline btn-small">대시보드</Link>
         <Link href="/admin/users" className="btn btn-primary btn-small">유저 관리</Link>
         <Link href="/admin/emojis" className="btn btn-outline btn-small">커스텀 이모지</Link>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <button onClick={suspendSelected} disabled={selected.size === 0} className="btn btn-small" style={{ background: "var(--danger)", color: "#fff", border: "none" }}>정지</button>
+        <button onClick={unsuspendSelected} disabled={selected.size === 0} className="btn btn-small btn-outline">정지 해제</button>
       </div>
 
       {loading ? (
@@ -87,13 +109,13 @@ export default function AdminUsersPage() {
                 <th style={{ padding: "8px 10px", textAlign: "center" }}>게시물</th>
                 <th style={{ padding: "8px 10px", textAlign: "center" }}>팔로워</th>
                 <th style={{ padding: "8px 10px", textAlign: "center" }}>최근 활동</th>
-                <th style={{ padding: "8px 10px", textAlign: "left" }}>이메일 도메인</th>
-                <th style={{ padding: "8px 10px", textAlign: "left" }}>최근 IP</th>
+                <th style={{ padding: "8px 10px", textAlign: "left" }}>이메일/IP</th>
+                <th style={{ padding: "8px 10px", textAlign: "center" }}>상태</th>
               </tr>
             </thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.id} style={{ borderBottom: "1px solid var(--border)", background: selected.has(u.id) ? "var(--card-hover)" : "transparent" }}>
+                <tr key={u.id} style={{ borderBottom: "1px solid var(--border)", background: selected.has(u.id) ? "var(--card-hover)" : "transparent", opacity: u.is_suspended ? 0.5 : 1 }}>
                   <td style={{ padding: "10px" }}>
                     <input type="checkbox" checked={selected.has(u.id)} onChange={() => toggle(u.id)} />
                   </td>
@@ -115,8 +137,13 @@ export default function AdminUsersPage() {
                   <td style={{ padding: "10px", textAlign: "center", color: "var(--text-secondary)" }}>{u.post_count}</td>
                   <td style={{ padding: "10px", textAlign: "center", color: "var(--text-secondary)" }}>{u.follower_count}</td>
                   <td style={{ padding: "10px", textAlign: "center", color: "var(--text-secondary)" }}>{timeAgo(u.last_active) || "-"}</td>
-                  <td style={{ padding: "10px", color: "var(--text-dim)", fontSize: "0.9em" }}>{u.email_domain || "-"}</td>
-                  <td style={{ padding: "10px", color: "var(--text-dim)", fontSize: "0.8em", fontFamily: "monospace" }}>{(u.recent_ips || []).join(", ") || "-"}</td>
+                  <td style={{ padding: "10px", color: "var(--text-dim)", fontSize: "0.85em" }}>
+                    {u.email_domain || "-"}
+                    {u.recent_ips && u.recent_ips.length > 0 && <span style={{ fontFamily: "monospace", marginLeft: 4 }}>/ {u.recent_ips[0]}</span>}
+                  </td>
+                  <td style={{ padding: "10px", textAlign: "center" }}>
+                    {u.is_suspended ? <span style={{ color: "var(--danger)", fontSize: "0.85em" }}>정지</span> : <span style={{ color: "var(--accent)", fontSize: "0.85em" }}>활성</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>

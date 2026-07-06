@@ -155,6 +155,8 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
         salt, hval = stored.split(":", 1)
         if not verify_password(password, salt, hval):
             raise HTTPException(status_code=401, detail="Invalid credentials")
+        if getattr(db_user, 'is_suspended', False):
+            raise HTTPException(status_code=403, detail="Account suspended")
         token = create_session(db_user.id)
         # Store IP
         client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
@@ -1868,7 +1870,7 @@ def api_admin_users(request: Request):
     if user.role not in ("admin", "moderator"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
-        users = s.query(User).filter_by(is_remote=False).order_by(User.created_at.desc()).all()
+        users = s.query(User).filter_by(is_remote=False).order_by(User.created_at.desc()).limit(50).all()
         result = []
         for u in users:
             post_count = s.query(Post).filter_by(author_id=u.id, is_deleted=False).count()
@@ -1884,5 +1886,30 @@ def api_admin_users(request: Request):
                 "last_active": last_active,
                 "email_domain": email_domain,
                 "recent_ips": (u.recent_ips or [])[:3],
+                "is_suspended": getattr(u, 'is_suspended', False),
             })
         return {"users": result}
+
+
+@router.post("/admin/users/suspend")
+def api_admin_suspend_users(request: Request, user_ids: str = Form(...)):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    ids = [int(i) for i in user_ids.split(",") if i.strip()]
+    with get_session() as s:
+        s.query(User).filter(User.id.in_(ids)).update({"is_suspended": True}, synchronize_session=False)
+        s.commit()
+    return {"ok": True}
+
+
+@router.post("/admin/users/unsuspend")
+def api_admin_unsuspend_users(request: Request, user_ids: str = Form(...)):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    ids = [int(i) for i in user_ids.split(",") if i.strip()]
+    with get_session() as s:
+        s.query(User).filter(User.id.in_(ids)).update({"is_suspended": False}, synchronize_session=False)
+        s.commit()
+    return {"ok": True}
