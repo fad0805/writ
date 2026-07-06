@@ -155,7 +155,7 @@ export default function Sidebar() {
         <div className="user-info">
            <Avatar user={user} className="sidebar-avatar rounded-[8px] flex items-center justify-center text-white font-bold text-lg" />
           <div className="user-info-text-mini">
-            <strong>{user.display_name} {user.is_locked && <Icon name="lock_filled" style={{ fontSize: "0.65em", verticalAlign: "middle", color: "var(--text-muted)", marginLeft: 2 }} />} {user.role === "admin" && <Icon name="shield_filled" style={{ color: "#27ae60", fontSize: "0.7em", verticalAlign: "middle", marginLeft: 3 }} title="관리자" />}{user.role === "moderator" && <span className="role-badge role-mod">조율자</span>}</strong>
+            <strong>{user.display_name} {user.is_locked && <Icon name="lock_filled" style={{ fontSize: "0.65em", verticalAlign: "middle", color: "var(--text-muted)", marginLeft: 2 }} />} {(user.role === "admin" || user.role === "moderator") && <Icon name="shield_filled" style={{ color: "#27ae60", fontSize: "0.7em", verticalAlign: "middle", marginLeft: 3 }} title={user.role === "admin" ? "관리자" : "조율자"} />}</strong>
             <span>@{user.username}</span>
           </div>
         </div>
@@ -189,7 +189,7 @@ export default function Sidebar() {
         </NavItem>
         {(user.role === "admin" || user.role === "moderator") && (
           <NavItem href="/admin" active={isActive("/admin")}>
-            <Icon name="settings" /> 서버관리
+            <Icon name="settings" /> 서버 관리
           </NavItem>
         )}
       </ul>

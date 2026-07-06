@@ -71,6 +71,7 @@ def _user_json(u):
         "is_locked": u.is_locked or False,
         "is_remote": u.is_remote,
         "role": role,
+        "show_badge": getattr(u, 'show_badge', False) or False,
         "default_visibility": u.default_visibility or "public",
         "series_default_visibility": u.series_default_visibility or "public",
         "episode_default_visibility": u.episode_default_visibility or "public",
@@ -1218,7 +1219,8 @@ def _cleanup_avatars():
 def api_update_settings(request: Request, default_visibility: str = Form("public"),
                         series_default_visibility: str = Form("public"),
                         episode_default_visibility: str = Form("public"),
-                        is_locked: bool = Form(False)):
+                        is_locked: bool = Form(False),
+                        show_badge: bool = Form(False)):
     user = require_auth(request)
     valid_post = ("public", "home", "followers", "mention")
     valid_series = ("public", "unlisted", "private")
@@ -1234,6 +1236,8 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
         db.series_default_visibility = series_default_visibility
         db.episode_default_visibility = episode_default_visibility
         db.is_locked = is_locked
+        if user.role in ("admin", "moderator"):
+            db.show_badge = show_badge
         s.commit()
     return {"ok": True}
 
