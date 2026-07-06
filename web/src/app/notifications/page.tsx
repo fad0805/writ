@@ -154,7 +154,7 @@ export default function NotificationsPage() {
       ) : (
         notifs.map((n) => (
           <div key={n.id} className="notif-card" data-type={n.type}>
-            <div className="notif-icon notif-icon-dynamic" style={{ color: n.type === "like" ? "#f1c40f" : n.type === "boost" ? "var(--accent)" : n.type === "follow" ? "#4fc3f7" : "var(--text-muted)" }}>
+            <div className="notif-icon notif-icon-dynamic" style={{ color: n.type === "like" ? "#f1c40f" : n.type === "boost" ? "var(--accent)" : n.type === "follow" ? "#4fc3f7" : n.type === "moderation" ? "var(--danger)" : "var(--text-muted)" }}>
               <Icon name={NOTIF_ICONS[n.type] || "bell"} size={20} />
             </div>
             <div className="notif-body">
