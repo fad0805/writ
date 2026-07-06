@@ -1254,7 +1254,7 @@ def api_update_profile(request: Request, display_name: str = Form(""), summary: 
                 bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
                 img = bg
             out = io.BytesIO()
-            img.save(out, format="WEBP", quality=85)
+            img.save(out, format="WEBP", quality=100)
             new_url = storage.save(key, out.getvalue(), "image/webp")
             old = db.profile_image
             db.profile_image = new_url
@@ -1753,7 +1753,7 @@ def api_create_emoji(
                 img = img.convert("RGB")
             if img.width > 33 or img.height > 33:
                 img.thumbnail((33, 33), Image.LANCZOS)
-            img.save(file_path, format="WEBP", quality=92)
+            img.save(file_path, format="WEBP", quality=100)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to process image: {e}")
 

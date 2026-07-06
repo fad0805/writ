@@ -904,7 +904,7 @@ def _process_emoji_tags(tags: list, session):
                 # Only downscale, never upscale; skip crop for small images
                 if img.width > 33 or img.height > 33:
                     img.thumbnail((33, 33), Image.LANCZOS)
-                img.save(file_path, format="WEBP", quality=92)
+                img.save(file_path, format="WEBP", quality=100)
             emoji = CustomEmoji(
                 keyword=keyword,
                 file_name=file_name,
