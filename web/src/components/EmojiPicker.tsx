@@ -58,18 +58,6 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
           overflowY: "auto",
           padding: 8,
         }}>
-          {CATEGORIES.map((cat, ci) => (
-            <div key={ci} className="emoji-custom-row" style={{ background: ci % 2 === 0 ? "transparent" : "rgba(128,128,128,0.08)" }}>
-              <div className="emoji-row-label">{cat.name}</div>
-              <div className="emoji-row-grid">
-                {cat.emojis.map((e, i) => (
-                  <button key={i} type="button" onClick={() => { onEmoji(e); setOpen(false); }} className="emoji-cell" style={{ fontSize: "1.3em" }}>
-                    {e}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
           {customEmojis.length > 0 && Object.entries(groupedCustom).map(([catName, emos]) => (
             <div key={`c-${catName}`} className="emoji-custom-row">
               <div className="emoji-row-label">{catName}</div>
@@ -77,6 +65,18 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
                 {emos.map((emo) => (
                   <button key={emo.id} type="button" onClick={() => { onEmoji(`:${emo.keyword}:`); setOpen(false); }} className="emoji-cell emoji-cell-large">
                     <img src={emo.url} alt={emo.keyword} width={33} height={33} className="emoji-img" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {CATEGORIES.map((cat, ci) => (
+            <div key={ci} className="emoji-custom-row" style={{ background: ci % 2 === 0 ? "transparent" : "rgba(128,128,128,0.08)" }}>
+              <div className="emoji-row-label">{cat.name}</div>
+              <div className="emoji-row-grid">
+                {cat.emojis.map((e, i) => (
+                  <button key={i} type="button" onClick={() => { onEmoji(e); setOpen(false); }} className="emoji-cell" style={{ fontSize: "1.3em" }}>
+                    {e}
                   </button>
                 ))}
               </div>
