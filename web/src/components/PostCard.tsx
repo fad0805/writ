@@ -11,7 +11,7 @@ import MiniPostCard from "./MiniPostCard";
 import { useAuth } from "@/lib/auth";
 import ShareButton from "@/components/ShareButton";
 import { hashColor } from "@/lib/avatar";
-import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
+import { getCustomEmojis, renderCustomEmojis, injectEmojis, CustomEmoji } from "@/lib/emojis";
 
 const VIS_ICONS: Record<string, string> = {
   public: "globe", home: "home", followers: "lock", mention: "mail",
@@ -126,7 +126,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
         const fullUrl = `https://${domain}/@${username}/${number}`;
         const form = new FormData(); form.append("url", fullUrl);
         fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form })
-          .then(r => r.json()).then(d => { setQuotedPost(d); setLoadingQuote(false); })
+          .then(r => r.json()).then(d => { if (d._emojis) injectEmojis(d._emojis); setQuotedPost(d); setLoadingQuote(false); })
           .catch(() => setLoadingQuote(false));
       }
     } else if (oldFormat) {
@@ -138,7 +138,11 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
       const form = new FormData(); form.append("url", anyUrl![0]);
       fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form })
         .then(r => { if (r.ok) return r.json(); throw new Error(); })
-        .then(d => { setQuotedPost(d); setLoadingQuote(false); })
+        .then(d => {
+          if (d._emojis) injectEmojis(d._emojis);
+          setQuotedPost(d);
+          setLoadingQuote(false);
+        })
         .catch(() => setLoadingQuote(false));
     }
   }, [post.content]);

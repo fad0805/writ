@@ -172,7 +172,7 @@ export default function SettingsPage() {
                   <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>:<span style={{ color: "var(--accent)" }}>{emo.keyword}</span>:</div>
                   <div style={{ fontSize: "0.85em", color: "var(--text-muted)" }}>
                     {emo.category && <span>#{emo.category}</span>}
-                    {emo.aliases?.length > 0 && <span> {emo.aliases.map(a => `:${a}:`).join(" ")}</span>}
+                    {emo.aliases && emo.aliases.length > 0 && <span> {emo.aliases.map(a => `:${a}:`).join(" ")}</span>}
                   </div>
                 </div>
                 <button type="button" onClick={async () => {

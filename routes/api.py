@@ -1679,6 +1679,12 @@ def api_fetch_post(request: Request, url: str = Form(...)):
     result = _fetch_and_save_ap_object(obj, user)
     if not result:
         raise HTTPException(status_code=400, detail="Failed to save post")
+    # Include emoji data so frontend can render immediately
+    emojis = []
+    with get_session() as es:
+        for e in es.query(CustomEmoji).order_by(CustomEmoji.keyword).all():
+            emojis.append({"keyword": e.keyword, "file_name": e.file_name, "url": f"/emojis/{e.file_name}", "aliases": e.aliases or []})
+    result["_emojis"] = emojis
     return result
 
 

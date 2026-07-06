@@ -1,12 +1,28 @@
 "use client";
 
-export interface CustomEmoji {
-  id: number;
+export interface CustomEmojiRaw {
   keyword: string;
   file_name: string;
-  category: string;
-  aliases: string[];
   url: string;
+  aliases: string[];
+}
+
+export interface CustomEmoji {
+  id?: number;
+  keyword: string;
+  file_name: string;
+  category?: string;
+  aliases?: string[];
+  url: string;
+}
+
+export function injectEmojis(list: CustomEmojiRaw[]) {
+  if (!cache) cache = [];
+  for (const e of list) {
+    if (!cache.some((c) => c.keyword === e.keyword)) {
+      cache.push({ ...e, category: "remote" });
+    }
+  }
 }
 
 let cache: CustomEmoji[] | null = null;
@@ -39,6 +55,7 @@ export function renderCustomEmojis(html: string, emojis: CustomEmoji[]): string 
   const sorted = [...emojis].sort((a, b) => b.keyword.length - a.keyword.length);
   for (const emoji of sorted) {
     const allKeywords = [emoji.keyword, ...(emoji.aliases || [])];
+
     for (const kw of allKeywords) {
       const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const re = new RegExp(`:${escaped}:`, "g");
