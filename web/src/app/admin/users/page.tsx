@@ -6,10 +6,30 @@ import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
 import { User } from "@/lib/api";
 
+type AdminUser = User & {
+  created_at: string;
+  post_count: number;
+  follower_count: number;
+  last_active: string;
+  email_domain: string;
+};
+
+function timeAgo(t: string): string {
+  if (!t) return "";
+  const diff = Date.now() - new Date(t).getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days < 0) return "";
+  if (days === 0) return "오늘";
+  if (days === 1) return "1일 전";
+  if (days < 7) return `${days}일 전`;
+  return "";
+}
+
 export default function AdminUsersPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,6 +43,17 @@ export default function AdminUsersPage() {
       .then(r => r.json()).then(d => { setUsers(d.users); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
+
+  const toggleAll = () => {
+    if (selected.size === users.length) setSelected(new Set());
+    else setSelected(new Set(users.map(u => u.id)));
+  };
+
+  const toggle = (id: number) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelected(next);
+  };
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
   if (!user || (user.role !== "admin" && user.role !== "moderator")) return null;
@@ -44,22 +75,49 @@ export default function AdminUsersPage() {
       ) : users.length === 0 ? (
         <div className="empty-state">사용자가 없습니다.</div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {users.map((u) => (
-            <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 10 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 8, background: `hsl(${hashStr(u.username)}, 35%, 45%)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: "bold", fontSize: "0.9em", flexShrink: 0 }}>
-                {(u.display_name || u.username)[0]}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>
-                  {u.display_name}
-                  {u.role === "admin" && <Icon name="shield_filled" style={{ color: "#27ae60", fontSize: "0.65em", verticalAlign: "middle", marginLeft: 4 }} title="관리자" />}
-                  {u.role === "moderator" && <Icon name="shield_filled" style={{ color: "#cc8800", fontSize: "0.65em", verticalAlign: "middle", marginLeft: 4 }} title="조율자" />}
-                </div>
-                <div style={{ fontSize: "0.85em", color: "var(--text-muted)" }}>@{u.username} · 가입일 {new Date((u as any).created_at || Date.now()).toLocaleDateString("ko-KR")}</div>
-              </div>
-            </div>
-          ))}
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85em" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--border)", color: "var(--text-muted)" }}>
+                <th style={{ padding: "8px 10px", textAlign: "left", width: 36 }}>
+                  <input type="checkbox" checked={selected.size === users.length && users.length > 0} onChange={toggleAll} />
+                </th>
+                <th style={{ padding: "8px 10px", textAlign: "left" }}>사용자</th>
+                <th style={{ padding: "8px 10px", textAlign: "center" }}>게시물</th>
+                <th style={{ padding: "8px 10px", textAlign: "center" }}>팔로워</th>
+                <th style={{ padding: "8px 10px", textAlign: "center" }}>최근 활동</th>
+                <th style={{ padding: "8px 10px", textAlign: "left" }}>이메일 도메인</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id} style={{ borderBottom: "1px solid var(--border)", background: selected.has(u.id) ? "var(--card-hover)" : "transparent" }}>
+                  <td style={{ padding: "10px" }}>
+                    <input type="checkbox" checked={selected.has(u.id)} onChange={() => toggle(u.id)} />
+                  </td>
+                  <td style={{ padding: "10px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 6, background: `hsl(${hashStr(u.username)}, 35%, 45%)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: "bold", fontSize: "0.85em", flexShrink: 0 }}>
+                        {(u.display_name || u.username)[0]}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap" }}>
+                          {u.display_name}
+                          {u.role === "admin" && <Icon name="shield_filled" style={{ color: "#27ae60", fontSize: "0.6em", verticalAlign: "middle", marginLeft: 3 }} title="관리자" />}
+                          {u.role === "moderator" && <Icon name="shield_filled" style={{ color: "#cc8800", fontSize: "0.6em", verticalAlign: "middle", marginLeft: 3 }} title="조율자" />}
+                        </div>
+                        <div style={{ fontSize: "0.85em", color: "var(--text-dim)" }}>@{u.username}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td style={{ padding: "10px", textAlign: "center", color: "var(--text-secondary)" }}>{u.post_count}</td>
+                  <td style={{ padding: "10px", textAlign: "center", color: "var(--text-secondary)" }}>{u.follower_count}</td>
+                  <td style={{ padding: "10px", textAlign: "center", color: "var(--text-secondary)" }}>{timeAgo(u.last_active) || "-"}</td>
+                  <td style={{ padding: "10px", color: "var(--text-dim)", fontSize: "0.9em" }}>{u.email_domain || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </>

@@ -1858,4 +1858,19 @@ def api_admin_users(request: Request):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         users = s.query(User).filter_by(is_remote=False).order_by(User.created_at.desc()).all()
-        return {"users": [{**_user_json(u), "created_at": str(u.created_at) if u.created_at else ""} for u in users]}
+        result = []
+        for u in users:
+            post_count = s.query(Post).filter_by(author_id=u.id, is_deleted=False).count()
+            follower_count = s.query(Follow).filter_by(following_id=u.id, accepted=True).count()
+            recent_post = s.query(Post).filter_by(author_id=u.id).order_by(Post.created_at.desc()).first()
+            last_active = str(recent_post.created_at) if recent_post and recent_post.created_at else str(u.created_at) if u.created_at else ""
+            email_domain = u.email.split("@")[-1] if "@" in (u.email or "") else ""
+            result.append({
+                **_user_json(u),
+                "created_at": str(u.created_at) if u.created_at else "",
+                "post_count": post_count,
+                "follower_count": follower_count,
+                "last_active": last_active,
+                "email_domain": email_domain,
+            })
+        return {"users": result}
