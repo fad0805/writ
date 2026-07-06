@@ -98,7 +98,7 @@ export default function AdminUsersPage() {
 
         {showSearch && (
           <div style={{ padding: "12px 14px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 8, fontSize: "0.85em" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
               <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>아이디/이름</label><input type="text" value={usernameQ} onChange={e => setUsernameQ(e.target.value)} placeholder="username 또는 이름" className="cw-input" style={{ width: "100%" }} /></div>
               <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>이메일</label><input type="text" value={emailQ} onChange={e => setEmailQ(e.target.value)} placeholder="email@example.com" className="cw-input" style={{ width: "100%" }} /></div>
               <div><label style={{ display: "block", marginBottom: 3, color: "var(--text-muted)" }}>IP</label><input type="text" value={ipQ} onChange={e => setIpQ(e.target.value)} placeholder="192.168.x.x" className="cw-input" style={{ width: "100%" }} /></div>
