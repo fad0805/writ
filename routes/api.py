@@ -1566,8 +1566,19 @@ def _ap_fetch(url, user):
     from activitypub import _validate_url
     if not _validate_url(url):
         return None
-    import hashlib
     from urllib.parse import urlparse
+
+    # Try unsigned first (many servers serve public posts without auth)
+    headers = {"Accept": "application/activity+json"}
+    resp = _safe_httpx_get(url, headers=headers)
+    if resp:
+        try:
+            return resp.json()
+        except Exception:
+            return None
+
+    # Fall back to signed request
+    import hashlib
     from crypto_utils import sign_string
     date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
     parsed = urlparse(url)
@@ -1576,7 +1587,8 @@ def _ap_fetch(url, user):
     signature = sign_string(signed_string, get_private_key(user, SECRET_KEY))
     signature_header = (
         f'keyId="{user.actor_uri()}#main-key",'
-        f'algorithm="rsa-sha256",'
+        f'algorithm="hs2019",'
+        f'created="{int(time.time())}",'
         f'headers="(request-target) host date",'
         f'signature="{signature}"'
     )
