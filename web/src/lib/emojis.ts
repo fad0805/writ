@@ -64,6 +64,7 @@ export function renderCustomEmojis(html: string, emojis: CustomEmoji[]): string 
   if (!emojis || emojis.length === 0) return html;
   const sorted = [...emojis].sort((a, b) => b.keyword.length - a.keyword.length);
   for (const emoji of sorted) {
+    if (!emoji.url) continue;
     const kw = emoji.keyword;
     const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp(`:${escaped}:`, "g");
