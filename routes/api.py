@@ -864,7 +864,7 @@ def api_notifications(request: Request, filter_type: str = Query("")):
 @router.get("/novels")
 def api_novels(request: Request):
     with get_session() as s:
-        novels = s.query(Novel).filter_by(is_published=True).order_by(desc(Novel.updated_at)).all()
+        novels = s.query(Novel).filter_by(is_published=True, visibility="public").order_by(desc(Novel.updated_at)).all()
         result = {"novels": [_novel_json(n, s) for n in novels]}
     return result
 
@@ -1376,6 +1376,7 @@ def api_search(request: Request, q: str = Query("")):
         novels = s.query(Novel).options(selectinload(Novel.author)).filter(
             or_(Novel.title.ilike(pattern), Novel.description.ilike(pattern)),
             Novel.is_published == True,
+            Novel.visibility == "public",
         ).order_by(desc(Novel.updated_at)).limit(20).all()
         users = s.query(User).filter(
             User.is_remote == False,
