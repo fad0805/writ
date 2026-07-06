@@ -266,6 +266,17 @@ class Tag(Base):
     created_at = Column(DateTime(timezone=True), default=now)
 
 
+class CustomEmoji(Base):
+    __tablename__ = "custom_emojis"
+
+    id = Column(Integer, primary_key=True)
+    keyword = Column(String(64), unique=True, nullable=False, index=True)
+    file_name = Column(String(256), nullable=False)
+    category = Column(String(64), default="")
+    aliases = Column(JSON, default=list)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+
 class Novel(Base):
     __tablename__ = "novels"
 

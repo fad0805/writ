@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { PostData } from "@/lib/api";
 import Link from "next/link";
 import Icon from "./Icon";
+import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
 
 function rewriteLinks(text: string): string {
   text = text.replace(
@@ -37,7 +38,9 @@ const TYPE_COLORS: Record<string, string> = {
 
 export default function MiniPostCard({ post, notifType }: { post: PostData; notifType?: string }) {
   const [isDark, setIsDark] = useState(false);
+  const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
   useEffect(() => { setIsDark(document.body.classList.contains("dark-theme")); }, []);
+  useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
   const bg = notifType
     ? (isDark ? DARK_BG[notifType] : LIGHT_BG[notifType]) || "var(--bg-tertiary)"
     : "var(--bg-tertiary)";
@@ -47,6 +50,7 @@ export default function MiniPostCard({ post, notifType }: { post: PostData; noti
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     html = html.replace(/\n/g, '<br>');
+    html = renderCustomEmojis(html, emojiMap);
     return rewriteLinks(html);
   })();
   return (

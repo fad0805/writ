@@ -1,3 +1,4 @@
+import os
 import re
 import datetime
 import logging
@@ -7,7 +8,7 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, Tag, get_session
+from models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, Tag, CustomEmoji, get_session
 from routes.auth import require_auth, get_current_user
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
@@ -1662,3 +1663,101 @@ def api_fetch_post(request: Request, url: str = Form(...)):
     if not result:
         raise HTTPException(status_code=400, detail="Failed to save post")
     return result
+
+
+EMOJI_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web", "public", "emojis")
+
+
+@router.get("/emojis")
+def api_list_emojis():
+    with get_session() as s:
+        emojis = s.query(CustomEmoji).order_by(CustomEmoji.keyword).all()
+        return [
+            {
+                "id": e.id,
+                "keyword": e.keyword,
+                "file_name": e.file_name,
+                "category": e.category or "",
+                "aliases": e.aliases or [],
+                "url": f"/emojis/{e.file_name}",
+            }
+            for e in emojis
+        ]
+
+
+@router.post("/emojis")
+def api_create_emoji(
+    request: Request,
+    keyword: str = Form(...),
+    category: str = Form(""),
+    aliases: str = Form(""),
+    image: UploadFile = File(...),
+):
+    user = require_auth(request)
+    if not keyword.strip():
+        raise HTTPException(status_code=400, detail="Keyword is required")
+    keyword = keyword.strip().lower().replace(" ", "_")
+    if not re.match(r'^[a-z0-9_]+$', keyword):
+        raise HTTPException(status_code=400, detail="Keyword must be lowercase alphanumeric with underscores")
+
+    allowed_types = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+    if image.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail=f"Unsupported image type: {image.content_type}")
+
+    import uuid
+    ext = image.filename.rsplit(".", 1)[-1].lower() if image.filename else "png"
+    file_name = f"{uuid.uuid4().hex}.{ext}"
+    file_path = os.path.join(EMOJI_DIR, file_name)
+
+    try:
+        from PIL import Image
+        img = Image.open(image.file)
+        img = img.convert("RGBA" if ext == "png" else "RGB")
+        img.thumbnail((33, 33), Image.LANCZOS)
+        # Crop to exact 33x33 if needed (center crop)
+        if img.width != 33 or img.height != 33:
+            left = (img.width - 33) // 2
+            top = (img.height - 33) // 2
+            img = img.crop((left, top, left + 33, top + 33))
+        img.save(file_path)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to process image: {e}")
+
+    alias_list = [a.strip().lower().replace(" ", "_") for a in aliases.split(",") if a.strip()]
+
+    with get_session() as s:
+        existing = s.query(CustomEmoji).filter_by(keyword=keyword).first()
+        if existing:
+            os.remove(file_path)
+            raise HTTPException(status_code=400, detail=f"Emoji ':${keyword}:' already exists")
+        emoji = CustomEmoji(
+            keyword=keyword,
+            file_name=file_name,
+            category=category or "",
+            aliases=alias_list,
+        )
+        s.add(emoji)
+        s.commit()
+        return {
+            "id": emoji.id,
+            "keyword": emoji.keyword,
+            "file_name": emoji.file_name,
+            "category": emoji.category or "",
+            "aliases": emoji.aliases or [],
+            "url": f"/emojis/{emoji.file_name}",
+        }
+
+
+@router.delete("/emojis/{emoji_id}")
+def api_delete_emoji(request: Request, emoji_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        emoji = s.query(CustomEmoji).get(emoji_id)
+        if not emoji:
+            raise HTTPException(status_code=404, detail="Emoji not found")
+        file_path = os.path.join(EMOJI_DIR, emoji.file_name)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        s.delete(emoji)
+        s.commit()
+        return {"ok": True}

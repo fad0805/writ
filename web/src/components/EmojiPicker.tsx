@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import Icon from "./Icon";
+import { getCustomEmojis, CustomEmoji } from "@/lib/emojis";
 
 const CATEGORIES: { name: string; emojis: string[] }[] = [
   { name: "표정", emojis: ["😀","😃","😄","😁","😅","😂","🤣","😊","😇","🙂","😉","😌","😍","🥰","😘","😗","😋","😛","😜","🤪","😝","🤑","🤗","🤭","🤫","🤔","🤐","🤨","😐","😑","😶","😏","😒","🙄","😬","🤥","😌","😔","😪","🤤","😴","😷","🤒","🤕","🤢","🤮","🥴","😵","🤯","🤠","🥳","🥸","😎","🤓","🧐","😕","😟","🙁","😮","😯","😲","😳","🥺","😦","😧","😨","😰","😥","😢","😭","😱","😖","😣","😞","😓","😩","😫","🥱","😤","😡","😠","🤬"] },
@@ -12,7 +13,19 @@ const CATEGORIES: { name: string; emojis: string[] }[] = [
 
 export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: string) => void; dropUp?: boolean }) {
   const [open, setOpen] = useState(false);
+  const [customEmojis, setCustomEmojis] = useState<CustomEmoji[]>([]);
   const pickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (open) getCustomEmojis().then(setCustomEmojis);
+  }, [open]);
+
+  const groupedCustom = customEmojis.reduce<Record<string, CustomEmoji[]>>((acc, e) => {
+    const cat = e.category || "기타";
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(e);
+    return acc;
+  }, {});
 
   useEffect(() => {
     if (!open) return;
@@ -51,6 +64,18 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
                 {cat.emojis.map((e, i) => (
                   <button key={i} type="button" onClick={() => { onEmoji(e); setOpen(false); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.3em", padding: 2, borderRadius: 4, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.15s" }}>
                     {e}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {customEmojis.length > 0 && Object.entries(groupedCustom).map(([catName, emos]) => (
+            <div key={`c-${catName}`} style={{ background: "rgba(128,128,128,0.08)", borderRadius: 8, padding: "0 4px", marginTop: 4 }}>
+              <div style={{ fontSize: "0.82em", color: "var(--text-primary)", padding: "10px 4px 4px", fontWeight: 700 }}>{catName}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 2, paddingBottom: 4 }}>
+                {emos.map((emo) => (
+                  <button key={emo.id} type="button" onClick={() => { onEmoji(`:${emo.keyword}:`); setOpen(false); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, borderRadius: 4, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.15s" }}>
+                    <img src={emo.url} alt={emo.keyword} width={33} height={33} style={{ width: 33, height: 33, objectFit: "contain" }} />
                   </button>
                 ))}
               </div>

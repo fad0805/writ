@@ -11,6 +11,7 @@ import MiniPostCard from "./MiniPostCard";
 import { useAuth } from "@/lib/auth";
 import ShareButton from "@/components/ShareButton";
 import { hashColor } from "@/lib/avatar";
+import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
 
 const VIS_ICONS: Record<string, string> = {
   public: "globe", home: "home", followers: "lock", mention: "mail",
@@ -67,6 +68,9 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
     try { await api.deletePost(post.id); if (onDelete) onDelete(); else if (onUpdate) onUpdate(); } catch {}
   };
 
+  const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
+  useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
+
   const timeStr = post.created_at ? new Date(post.created_at).toLocaleString("ko-KR", {
     year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", hour12: false,
@@ -78,6 +82,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     html = html.replace(/\n/g, '<br>');
+    html = renderCustomEmojis(html, emojiMap);
     html = rewriteLinks(html);
     if (quoteUrl) {
       const escUrl = quoteUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -189,6 +194,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
               let html = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
               html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
               html = html.replace(/\n/g, '<br>');
+              html = renderCustomEmojis(html, emojiMap);
               html = rewriteLinks(html);
               if ((post.reply_context.content || "").length > 90) html += "...";
               return html;
