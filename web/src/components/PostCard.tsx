@@ -112,7 +112,8 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
     const isLocal = (url.match(/https?:\/\/([^/]+)/)?.[1]) === window.location.host;
     if (isLocal && (seriesFormat || seriesByNumber)) {
       fetch("/api/fetch-series", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ url }) })
-        .then(r => r.json()).then(d => { setQuotedSeries(d); setLoadingQuote(false); })
+        .then(r => { if (r.ok) return r.json(); throw new Error(); })
+        .then(d => { setQuotedSeries(d); setLoadingQuote(false); })
         .catch(() => setLoadingQuote(false));
     } else if (newFormat) {
       const domain = newFormat[1];
