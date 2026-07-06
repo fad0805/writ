@@ -176,6 +176,8 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
         existing = s.query(User).filter_by(username=username).first()
         if existing:
             raise HTTPException(status_code=400, detail="Username already taken")
+        user_count = s.query(User).count()
+        is_first = user_count == 0
         salt, pwd_hash = hash_password(password)
         priv_key, pub_key = generate_keypair()
         user = User(
@@ -184,6 +186,8 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
             password_hash=salt + ":" + pwd_hash,
             private_key=encrypt_key(priv_key, SECRET_KEY), public_key=pub_key,
             is_remote=False,
+            role="admin" if is_first else "user",
+            is_admin=is_first,
         )
         s.add(user)
         s.commit()
