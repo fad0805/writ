@@ -1987,6 +1987,17 @@ def api_admin_user_detail(request: Request, user_id: int):
             "moderation_note": getattr(u, 'moderation_note', '') or '',
             "email_verified": getattr(u, 'email_verified', False),
             "summary": u.summary or "",
+            "moderation_history": [
+                {
+                    "id": n.id,
+                    "action": n.notification_type,
+                    "created_at": str(n.created_at) if n.created_at else "",
+                    "by": _user_json(s.query(User).get(n.from_user_id)) if n.from_user_id else None,
+                }
+                for n in s.query(Notification).filter_by(
+                    user_id=u.id, notification_type="moderation"
+                ).order_by(desc(Notification.created_at)).limit(20).all()
+            ],
         }
 
 

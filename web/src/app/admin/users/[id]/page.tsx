@@ -14,6 +14,7 @@ interface UserDetail {
   default_visibility: string; is_remote: boolean;
   created_at: string;
   is_sensitive?: boolean; moderation_note?: string;
+  moderation_history?: { id: number; action: string; created_at: string; by: { display_name: string; username: string } | null }[];
 }
 
 export default function AdminUserDetailPage() {
@@ -181,6 +182,25 @@ export default function AdminUserDetailPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Moderation history */}
+      {u.moderation_history && u.moderation_history.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ display: "block", marginBottom: 8, color: "var(--text-muted)", fontSize: "0.85em", fontWeight: 600 }}>중재 기록</label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {u.moderation_history.map((h) => (
+              <div key={h.id} style={{ fontSize: "0.85em", padding: "8px 12px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>
+                  <span style={{ fontWeight: 600, color: "var(--danger)" }}>중재</span>
+                  <span style={{ color: "var(--text-muted)" }}> by </span>
+                  <span style={{ color: "var(--text-primary)" }}>{h.by?.display_name || h.by?.username || "알 수 없음"}</span>
+                </span>
+                <span style={{ color: "var(--text-dim)", fontSize: "0.85em" }}>{h.created_at ? new Date(h.created_at).toLocaleString("ko-KR") : ""}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Moderation note */}
       <div style={{ marginBottom: 20 }}>
