@@ -387,6 +387,12 @@ def init_db():
         pass
     try:
         with Session(engine) as session:
+            session.execute(text("ALTER TABLE posts ADD COLUMN is_dm BOOLEAN DEFAULT 0"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
             session.execute(text("ALTER TABLE posts ADD COLUMN number VARCHAR(16) DEFAULT ''"))
             session.commit()
     except Exception:
