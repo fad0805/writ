@@ -54,7 +54,7 @@ export default function NovelDetailPage() {
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <ShareButton url={`/series/${novel.id}`} />
-                {user && <button className="action-btn" onClick={() => setShowSharePost(true)} title="포스트로 공유"><Icon name="edit" /></button>}
+                <button className="action-btn" onClick={() => { if (!user) return router.push("/login"); setShowSharePost(true); }} title="포스트로 공유"><Icon name="edit" /></button>
                 {isMine && (
                   <>
                     <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/edit`)}>시리즈 편집</button>

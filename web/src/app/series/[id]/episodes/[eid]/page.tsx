@@ -53,7 +53,7 @@ export default function EpisodeDetailPage() {
           <h2>제 {episode.episode_number}화: {episode.title}</h2>
           <div className="episode-header-btns">
             <ShareButton url={`/series/${novel.id}/episodes/${episode.id}`} />
-            {user && <button className="action-btn" onClick={() => setShowSharePost(true)} title="포스트로 공유"><Icon name="edit" /></button>}
+            <button className="action-btn" onClick={() => { if (!user) return router.push("/login"); setShowSharePost(true); }} title="포스트로 공유"><Icon name="edit" /></button>
             {isMine && (
               <>
                 <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>
