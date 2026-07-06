@@ -68,6 +68,11 @@ a:hover { color: var(--accent-light); text-decoration: none; }
   overflow: hidden;
 }
 
+.main-content {
+  overflow: hidden;
+  min-height: 0;
+}
+
 /* ── Sidebar ── */
 
 .sidebar {
