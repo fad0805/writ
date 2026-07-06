@@ -2449,7 +2449,17 @@ input[type="checkbox"] {
   gap: 8px;
 }
 .profile-info-relative {
+  display: flex;
+  flex-direction: column;
+  min-height: 100px;
+  flex: 1;
   position: relative;
+}
+.profile-info-relative .profile-bottom-actions {
+  margin-top: auto;
+  align-self: flex-end;
+  display: flex;
+  gap: 6px;
 }
 .profile-corner-actions {
   position: absolute;
@@ -2469,9 +2479,6 @@ input[type="checkbox"] {
   cursor: pointer;
 }
 .profile-bottom-actions {
-  position: absolute;
-  bottom: 0;
-  right: 0;
   display: flex;
   gap: 6px;
 }
