@@ -1,10 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { api, NovelData } from "@/lib/api";
 import Icon from "@/components/Icon";
 import { hashColor } from "@/lib/avatar";
 
 export default function NovelsPage() {
+  const router = useRouter();
   const [novels, setNovels] = useState<NovelData[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -23,7 +25,7 @@ export default function NovelsPage() {
         ) : novels.length === 0 ? (
           <p className="empty-state">아직 등록된 시리즈가 없습니다.</p>
         ) : novels.map((n) => (
-          <div key={n.id} className="novel-card" onClick={() => window.location.href = `/series/@${n.author?.username}/${n.number}`} style={{ cursor: "pointer" }}>
+          <div key={n.id} className="novel-card" onClick={() => router.push(`/series/@${n.author?.username}/${n.number}`)} style={{ cursor: "pointer" }}>
             <div className="novel-card-body" style={{ display: "flex", gap: 14 }}>
               <div style={{ width: 80, aspectRatio: "3/4", borderRadius: 6, flexShrink: 0, overflow: "hidden" }}>
                 {n.cover_image ? (
@@ -37,7 +39,7 @@ export default function NovelsPage() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <h3 style={{ fontSize: "1em", marginBottom: 4 }}>{n.title}</h3>
                 <p className="novel-author" style={{ marginBottom: 6 }}>
-                  by <a href={`/@${n.author?.username}`} onClick={(e) => e.stopPropagation()} style={{ color: "var(--accent)" }}>{n.author?.display_name || n.author?.username}</a>
+                  by <span onClick={(e) => { e.stopPropagation(); router.push(`/@${n.author?.username}`); }} style={{ color: "var(--accent)", cursor: "pointer" }}>{n.author?.display_name || n.author?.username}</span>
                 </p>
                 <p className="novel-desc" style={{ marginBottom: 6 }}>{(n.description || "").slice(0, 120)}{n.description && n.description.length > 120 ? "..." : ""}</p>
                 <div className="novel-meta">
