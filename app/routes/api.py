@@ -8,7 +8,7 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, Tag, CustomEmoji, get_session
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, Tag, CustomEmoji, ProfileNote, get_session
 from app.routes.auth import require_auth, get_current_user
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
