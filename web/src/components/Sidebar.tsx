@@ -187,9 +187,9 @@ export default function Sidebar() {
         <NavItem href="/users/settings" active={isActive("/users/settings")}>
           <Icon name="settings" /> 설정 관리
         </NavItem>
-        {user.is_admin && (
+        {user.role === "admin" && (
           <NavItem href="/admin" active={isActive("/admin")}>
-            <Icon name="settings" /> 관리
+            <Icon name="settings" /> 서버관리
           </NavItem>
         )}
       </ul>
