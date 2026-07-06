@@ -56,7 +56,7 @@ export async function getCustomEmojis(): Promise<CustomEmoji[]> {
 }
 
 export function invalidateEmojiCache() {
-  cache = [];
+  cache = null;
   fetchPromise = null;
 }
 
