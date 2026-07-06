@@ -882,14 +882,19 @@ def _process_emoji_tags(tags: list, session):
                 ext = "jpg"
             file_name = f"{uuid.uuid4().hex}.{ext}"
             file_path = os.path.join(EMOJI_DIR, file_name)
-            img = Image.open(io.BytesIO(resp.content))
-            img = img.convert("RGBA" if ext == "png" else "RGB")
-            img.thumbnail((33, 33), Image.LANCZOS)
-            if img.width != 33 or img.height != 33:
-                left = (img.width - 33) // 2
-                top = (img.height - 33) // 2
-                img = img.crop((left, top, left + 33, top + 33))
-            img.save(file_path)
+            if ext == "gif":
+                # Preserve GIF animation: save original bytes directly
+                with open(file_path, "wb") as f:
+                    f.write(resp.content)
+            else:
+                img = Image.open(io.BytesIO(resp.content))
+                img = img.convert("RGBA" if ext == "png" else "RGB")
+                img.thumbnail((33, 33), Image.LANCZOS)
+                if img.width != 33 or img.height != 33:
+                    left = (img.width - 33) // 2
+                    top = (img.height - 33) // 2
+                    img = img.crop((left, top, left + 33, top + 33))
+                img.save(file_path)
             emoji = CustomEmoji(
                 keyword=keyword,
                 file_name=file_name,

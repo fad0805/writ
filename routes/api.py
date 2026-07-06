@@ -1727,16 +1727,20 @@ def api_create_emoji(
     file_path = os.path.join(EMOJI_DIR, file_name)
 
     try:
-        from PIL import Image
-        img = Image.open(image.file)
-        img = img.convert("RGBA" if ext == "png" else "RGB")
-        img.thumbnail((33, 33), Image.LANCZOS)
-        # Crop to exact 33x33 if needed (center crop)
-        if img.width != 33 or img.height != 33:
-            left = (img.width - 33) // 2
-            top = (img.height - 33) // 2
-            img = img.crop((left, top, left + 33, top + 33))
-        img.save(file_path)
+        if ext == "gif":
+            with open(file_path, "wb") as f:
+                f.write(image.file.read())
+        else:
+            from PIL import Image
+            img = Image.open(image.file)
+            img = img.convert("RGBA" if ext == "png" else "RGB")
+            img.thumbnail((33, 33), Image.LANCZOS)
+            # Crop to exact 33x33 if needed (center crop)
+            if img.width != 33 or img.height != 33:
+                left = (img.width - 33) // 2
+                top = (img.height - 33) // 2
+                img = img.crop((left, top, left + 33, top + 33))
+            img.save(file_path)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to process image: {e}")
 
