@@ -70,6 +70,7 @@ def seed_default_data():
             password_hash=salt + ":" + hsh,
             private_key=encrypt_key(priv, SECRET_KEY), public_key=pub,
             summary="소설을 쓰는 사람입니다 ✍️",
+            role="user",
         )
         session.add(author1)
         session.flush()
@@ -81,6 +82,7 @@ def seed_default_data():
             password_hash=salt2 + ":" + hsh2,
             private_key=encrypt_key(priv2, SECRET_KEY), public_key=pub2,
             summary="소설 읽는 걸 좋아합니다 📖",
+            role="user",
         )
         session.add(reader1)
         session.flush()
@@ -93,6 +95,7 @@ def seed_default_data():
             password_hash=salt3 + ":" + hsh3,
             private_key=encrypt_key(priv3, SECRET_KEY), public_key=pub3,
             summary="서버 관리자입니다",
+            role="admin",
             is_admin=True,
         )
         session.add(admin_user)
