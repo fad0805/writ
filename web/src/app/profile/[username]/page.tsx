@@ -129,9 +129,9 @@ export default function ProfilePage() {
                   )
               }} />
             )}
-            <div className="profile-bottom-actions" style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
+            <div className="profile-bottom-actions" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               {!isMine && profileNote && !showNote && (
-                <span style={{ fontSize: "0.78em", color: "var(--text-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>{profileNote}</span>
+                <span style={{ fontSize: "0.82em", color: "var(--text-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0, marginRight: 8 }}>{profileNote}</span>
               )}
               <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                 {isMine ? (
