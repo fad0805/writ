@@ -159,7 +159,7 @@ export default function NotificationsPage() {
             </div>
             <div className="notif-body">
               {n.type === "moderation" ? (
-                <>{typeText(n.type, (n as any).metadata)}</>
+                <><span style={{ fontWeight: 700, color: "var(--danger)" }}>{actionNames[(n as any).metadata?.action] || (n as any).metadata?.action || "중재"}</span> 조치가 적용되었습니다.</>
               ) : (
                 <>{n.from_user && (
                   <Link href={`/@${n.from_user.username}`} className="notif-from-link">
