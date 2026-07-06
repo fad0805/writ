@@ -26,6 +26,13 @@ PAGE_SIZE = 20
 # SNS
 MAX_POST_LENGTH = int(os.environ.get("MAX_POST_LENGTH", "500"))
 
+# SMTP
+SMTP_SERVER = os.environ.get("SMTP_SERVER", "")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "25"))
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SMTP_FROM = os.environ.get("SMTP_FROM", "")
+
 # CORS
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",")
 

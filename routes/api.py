@@ -2093,6 +2093,53 @@ def api_admin_user_note(request: Request, user_id: int, note: str = Form("")):
     return {"ok": True}
 
 
+@router.post("/admin/users/{user_id}/moderate")
+def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), send_email: bool = Form(False)):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    valid_actions = ("warning", "freeze", "sensitive", "limit", "suspend", "unsuspend")
+    if action not in valid_actions:
+        raise HTTPException(status_code=400, detail=f"Invalid action: {action}")
+    with get_session() as s:
+        u = s.query(User).get(user_id)
+        if not u: raise HTTPException(status_code=404, detail="User not found")
+
+        if action == "warning":
+            pass  # Just a warning, no automatic action
+        elif action == "freeze":
+            u.is_suspended = True
+        elif action == "sensitive":
+            u.is_sensitive = True
+        elif action == "limit":
+            u.is_sensitive = True
+            u.is_suspended = False
+        elif action == "suspend":
+            u.is_suspended = True
+        elif action == "unsuspend":
+            u.is_suspended = False
+
+        s.commit()
+
+        if send_email and u.email:
+            try:
+                from email.mime.text import MIMEText
+                import smtplib
+                from config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
+                action_names = {"warning": "경고", "freeze": "동결", "sensitive": "민감 처리", "limit": "제한", "suspend": "정지", "unsuspend": "정지 해제"}
+                msg = MIMEText(f"계정에 {action_names.get(action, action)} 조치가 적용되었습니다.\n서버 관리팀")
+                msg["Subject"] = f"[WRIT] 계정 {action_names.get(action, action)} 안내"
+                msg["From"] = SMTP_FROM or "noreply@writ.local"
+                msg["To"] = u.email
+                with smtplib.SMTP(SMTP_SERVER or "localhost", SMTP_PORT or 25, timeout=10) as smtp:
+                    if SMTP_USER:
+                        smtp.login(SMTP_USER, SMTP_PASSWORD or "")
+                    smtp.send_message(msg)
+            except Exception as e:
+                logger.warning("Failed to send moderation email to %s: %s", u.email, e)
+    return {"ok": True, "action": action}
+
+
 @router.post("/admin/users/{user_id}/toggle-sensitive")
 def api_admin_toggle_sensitive(request: Request, user_id: int):
     user = require_auth(request)

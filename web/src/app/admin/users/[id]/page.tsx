@@ -28,6 +28,7 @@ export default function AdminUserDetailPage() {
   const [newRole, setNewRole] = useState("user");
   const [msg, setMsg] = useState("");
   const [noteText, setNoteText] = useState("");
+  const [sendEmail, setSendEmail] = useState<Record<string, boolean>>({});
 
   const load = () => {
     fetch(`/api/admin/users/${params.id}`, { credentials: "include" })
@@ -189,25 +190,49 @@ export default function AdminUserDetailPage() {
         }} className="btn btn-primary btn-small" style={{ marginTop: 4 }}>메모 저장</button>
       </div>
 
-      {/* Actions */}
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <button onClick={async () => {
-          const res = await fetch(`/api/admin/users/${u.id}/toggle-sensitive`, { method: "POST", credentials: "include" });
-          if (res.ok) { const d = await res.json(); setU(prev => prev ? { ...prev, is_sensitive: d.is_sensitive } : prev); }
-        }} className="btn btn-small" style={{ border: "1px solid var(--border)", color: u.is_sensitive ? "var(--accent)" : "var(--text-muted)" }}>
-          {u.is_sensitive ? "미디어 민감 해제" : "미디어 민감 강제"}
-        </button>
-        <button onClick={() => act(`/api/admin/users/${u.id}/reset-password`)} className="btn btn-small" style={{ border: "1px solid var(--border)" }}>암호 초기화</button>
-        <button onClick={async () => {
-          const form = new FormData(); form.append("user_ids", String(u.id));
-          const path = u.is_suspended ? "/api/admin/users/unsuspend" : "/api/admin/users/suspend";
-          const res = await fetch(path, { method: "POST", credentials: "include", body: form });
-          if (res.ok) load(); else alert("실패");
-        }} className="btn btn-small" style={{ background: u.is_suspended ? "var(--accent)" : "var(--danger)", color: "#fff", border: "none" }}>
-          {u.is_suspended ? "정지 해제" : "정지"}
-        </button>
-        <button onClick={() => router.push(`/@${u.username}`)} className="btn btn-small btn-outline">프로필 보기</button>
+      {/* Moderation actions */}
+      <div style={{ marginBottom: 20 }}>
+        <label style={{ display: "block", marginBottom: 8, color: "var(--text-muted)", fontSize: "0.85em", fontWeight: 600 }}>중재</label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {[
+            { key: "warning", label: "경고", desc: "어떤 동작도 하지 않고, 사용자에게 경고를 보냅니다.", color: "var(--text-muted)" },
+            { key: "freeze", label: "동결", desc: "사용자가 계정을 사용하는 것을 막지만, 게시물을 삭제하거나 숨기지는 않습니다.", color: "#e67e22" },
+            { key: "sensitive", label: "민감함", desc: "사용자의 모든 미디어 첨부를 민감함으로 강제 설정합니다.", color: "#f39c12" },
+            { key: "limit", label: "제한", desc: "사용자가 공개 설정으로 게시물을 작성할 수 없도록 하고, 팔로우하지 않는 사람에게는 게시물과 알림을 숨깁니다.", color: "#e74c3c" },
+            { key: "suspend", label: "정지", desc: "이 계정과의 모든 상호작용을 막고 모든 내용을 삭제합니다. 30일 이내에 되돌리기가 가능합니다.", color: "var(--danger)" },
+          ].map((act) => (
+            <div key={act.key} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 14px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, color: act.color, marginBottom: 2 }}>{act.label}</div>
+                <div style={{ fontSize: "0.82em", color: "var(--text-muted)" }}>{act.desc}</div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end", flexShrink: 0 }}>
+                <label style={{ fontSize: "0.8em", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                  <input type="checkbox" checked={sendEmail[act.key] || false} onChange={(e) => setSendEmail({ ...sendEmail, [act.key]: e.target.checked })} />
+                  이메일 알림
+                </label>
+                <button onClick={async () => {
+                  const form = new FormData();
+                  form.append("action", act.key);
+                  if (sendEmail[act.key]) form.append("send_email", "true");
+                  const res = await fetch(`/api/admin/users/${u.id}/moderate`, { method: "POST", credentials: "include", body: form });
+                  if (res.ok) { load(); setMsg(`${act.label} 조치가 적용되었습니다.`); } else alert("실패");
+                }} className="btn btn-small" style={{ color: "#fff", background: act.color, border: "none", fontSize: "0.82em" }}>적용</button>
+              </div>
+            </div>
+          ))}
+          {u.is_suspended && (
+            <button onClick={async () => {
+              const form = new FormData(); form.append("action", "unsuspend");
+              const res = await fetch(`/api/admin/users/${u.id}/moderate`, { method: "POST", credentials: "include", body: form });
+              if (res.ok) load();
+            }} className="btn btn-small btn-outline" style={{ alignSelf: "flex-start" }}>정지 해제</button>
+          )}
+        </div>
       </div>
+
+      <button onClick={() => act(`/api/admin/users/${u.id}/reset-password`)} className="btn btn-small" style={{ border: "1px solid var(--border)" }}>암호 초기화</button>
+      <button onClick={() => router.push(`/@${u.username}`)} className="btn btn-small btn-outline" style={{ marginLeft: 8 }}>프로필 보기</button>
     </>
   );
 }
