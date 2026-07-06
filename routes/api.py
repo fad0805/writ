@@ -156,6 +156,14 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
         if not verify_password(password, salt, hval):
             raise HTTPException(status_code=401, detail="Invalid credentials")
         token = create_session(db_user.id)
+        # Store IP
+        client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
+        if client_ip:
+            ips = db_user.recent_ips or []
+            ips = [ip for ip in ips if ip != client_ip]  # remove duplicate
+            ips.insert(0, client_ip)
+            db_user.recent_ips = ips[:10]
+            s.commit()
         resp = JSONResponse(_user_json(db_user))
         resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/")
         return resp
@@ -198,6 +206,9 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
             email_verified=False,
         )
         s.add(user)
+        client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
+        if client_ip:
+            user.recent_ips = [client_ip]
         s.commit()
         token = create_session(user.id)
         resp = JSONResponse(_user_json(user))
@@ -1872,5 +1883,6 @@ def api_admin_users(request: Request):
                 "follower_count": follower_count,
                 "last_active": last_active,
                 "email_domain": email_domain,
+                "recent_ips": (u.recent_ips or [])[:3],
             })
         return {"users": result}

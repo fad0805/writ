@@ -35,6 +35,7 @@ class User(Base):
     summary = Column(Text, default="")
     email = Column(String(255), default="")
     email_verified = Column(Boolean, default=False)
+    recent_ips = Column(JSON, default=list)
     password_hash = Column(String(255), nullable=False)
 
     # ActivityPub

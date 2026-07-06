@@ -12,6 +12,7 @@ type AdminUser = User & {
   follower_count: number;
   last_active: string;
   email_domain: string;
+  recent_ips: string[];
 };
 
 function timeAgo(t: string): string {
@@ -87,6 +88,7 @@ export default function AdminUsersPage() {
                 <th style={{ padding: "8px 10px", textAlign: "center" }}>팔로워</th>
                 <th style={{ padding: "8px 10px", textAlign: "center" }}>최근 활동</th>
                 <th style={{ padding: "8px 10px", textAlign: "left" }}>이메일 도메인</th>
+                <th style={{ padding: "8px 10px", textAlign: "left" }}>최근 IP</th>
               </tr>
             </thead>
             <tbody>
@@ -114,6 +116,7 @@ export default function AdminUsersPage() {
                   <td style={{ padding: "10px", textAlign: "center", color: "var(--text-secondary)" }}>{u.follower_count}</td>
                   <td style={{ padding: "10px", textAlign: "center", color: "var(--text-secondary)" }}>{timeAgo(u.last_active) || "-"}</td>
                   <td style={{ padding: "10px", color: "var(--text-dim)", fontSize: "0.9em" }}>{u.email_domain || "-"}</td>
+                  <td style={{ padding: "10px", color: "var(--text-dim)", fontSize: "0.8em", fontFamily: "monospace" }}>{(u.recent_ips || []).join(", ") || "-"}</td>
                 </tr>
               ))}
             </tbody>
