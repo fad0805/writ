@@ -3,6 +3,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api, NovelData, EpisodeData, User } from "@/lib/api";
 import Icon from "@/components/Icon";
+import ShareButton from "@/components/ShareButton";
 import Link from "next/link";
 import { hashColor } from "@/lib/avatar";
 
@@ -47,12 +48,15 @@ export default function NovelDetailPage() {
                   by <Link href={`/@${author?.username}`}>{author?.display_name || author?.username}</Link>
                 </p>
               </div>
-              {isMine && (
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/edit`)}>시리즈 편집</button>
-                  <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>
-                </div>
-              )}
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <ShareButton url={`/series/${novel.id}`} />
+                {isMine && (
+                  <>
+                    <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/edit`)}>시리즈 편집</button>
+                    <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>

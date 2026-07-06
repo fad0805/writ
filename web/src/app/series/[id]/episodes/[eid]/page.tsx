@@ -3,6 +3,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api, NovelData, EpisodeData } from "@/lib/api";
 import Icon from "@/components/Icon";
+import ShareButton from "@/components/ShareButton";
 import Link from "next/link";
 
 export default function EpisodeDetailPage() {
@@ -46,13 +47,16 @@ export default function EpisodeDetailPage() {
       <article className="episode-content">
         <div className="episode-header-row">
           <h2>제 {episode.episode_number}화: {episode.title}</h2>
-          {isMine && (
-            <div className="episode-header-btns">
-              <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>
-              <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/${episode.id}/edit`)}>편집</button>
-              <button className="btn btn-small btn-danger" onClick={handleDelete}>삭제</button>
-            </div>
-          )}
+          <div className="episode-header-btns">
+            <ShareButton url={`/series/${novel.id}/episodes/${episode.id}`} />
+            {isMine && (
+              <>
+                <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>
+                <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/${episode.id}/edit`)}>편집</button>
+                <button className="btn btn-small btn-danger" onClick={handleDelete}>삭제</button>
+              </>
+            )}
+          </div>
         </div>
         <div className="episode-meta episode-meta-bottom">
           <span><Icon name="eye" /> {episode.views}</span>
