@@ -19,7 +19,7 @@ def _fmt_dt(dt: datetime.datetime | None) -> str | None:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=datetime.timezone.utc)
     return dt.astimezone(KST).isoformat()
-from activitypub import broadcast_to_followers, _post_to_inbox
+from activitypub import broadcast_to_followers, _post_to_inbox, _process_emoji_tags
 from config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY
 from crypto_utils import encrypt_key, get_private_key
 from eventbus import broadcast
@@ -1473,6 +1473,11 @@ def _fetch_and_save_ap_object(obj, user):
 
     ap_id = obj.get("id", "")
     summary = obj.get("summary", "")
+
+    # Process custom emoji tags before saving
+    with get_session() as emoji_session:
+        _process_emoji_tags(obj.get("tag", []), emoji_session)
+        emoji_session.commit()
 
     with get_session() as s:
         existing = s.query(Post).filter_by(ap_id=ap_id).first()

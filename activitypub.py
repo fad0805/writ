@@ -1,8 +1,10 @@
 import datetime
+import io
 import ipaddress
 import json
 import hashlib
 import logging
+import os
 import re
 import socket
 from typing import Optional
@@ -10,7 +12,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from models import User, Post, Follow, Like, Boost, Notification, get_session
+from models import User, Post, Follow, Like, Boost, Notification, CustomEmoji, get_session
 from sqlalchemy.exc import IntegrityError
 from config import BASE_URL, PUBLIC_URI, SECRET_KEY
 from crypto_utils import generate_keypair, sign_string, verify_signature, encrypt_key, decrypt_key, get_private_key
@@ -525,6 +527,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 ).all()
                 mentioned_ids = [u.id for u in mentioned]
 
+            # Process custom emoji tags
+            _process_emoji_tags(obj.get("tag", []), session)
+            session.flush()
+
             post = Post(
                 author_id=actor.id,
                 content=content,
@@ -818,6 +824,79 @@ def send_to_shared_inbox(user: User, activity: dict):
             continue
         sent.add(inbox)
         _post_to_inbox(inbox, activity, user)
+
+
+def _process_emoji_tags(tags: list, session):
+    """Parse Emoji tags from an ActivityPub object, download and save custom emojis."""
+    if not tags or not isinstance(tags, list):
+        return
+    for tag in tags:
+        if not isinstance(tag, dict) or tag.get("type") != "Emoji":
+            continue
+        name = tag.get("name", "")
+        if not name.startswith(":") or not name.endswith(":"):
+            continue
+        keyword = name[1:-1].strip().lower().replace(" ", "_")
+        if not keyword or not re.match(r'^[a-z0-9_]+$', keyword):
+            continue
+        icon = tag.get("icon", {})
+        if isinstance(icon, dict):
+            img_url = icon.get("url", "")
+        else:
+            img_url = ""
+        if not img_url:
+            continue
+
+        existing = session.query(CustomEmoji).filter_by(keyword=keyword).first()
+        if existing:
+            continue
+        if not img_url.startswith("http"):
+            continue
+
+        EMOJI_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web", "public", "emojis")
+        import uuid
+        from PIL import Image
+        import httpx
+        try:
+            resp = httpx.get(img_url, follow_redirects=True, timeout=15)
+            if resp.status_code != 200:
+                continue
+            ext = "png"
+                # Try to guess ext from content type
+            ct = resp.headers.get("content-type", "")
+            if "jpeg" in ct or "jpg" in ct:
+                ext = "jpg"
+            elif "webp" in ct:
+                ext = "webp"
+            elif "gif" in ct:
+                ext = "gif"
+            elif "png" in ct:
+                ext = "png"
+            else:
+                ext = resp.url.path.rsplit(".", 1)[-1].lower() if "." in resp.url.path else "png"
+                if ext not in ("png", "jpg", "jpeg", "webp", "gif"):
+                    ext = "png"
+            if ext == "jpeg":
+                ext = "jpg"
+            file_name = f"{uuid.uuid4().hex}.{ext}"
+            file_path = os.path.join(EMOJI_DIR, file_name)
+            img = Image.open(io.BytesIO(resp.content))
+            img = img.convert("RGBA" if ext == "png" else "RGB")
+            img.thumbnail((33, 33), Image.LANCZOS)
+            if img.width != 33 or img.height != 33:
+                left = (img.width - 33) // 2
+                top = (img.height - 33) // 2
+                img = img.crop((left, top, left + 33, top + 33))
+            img.save(file_path)
+            emoji = CustomEmoji(
+                keyword=keyword,
+                file_name=file_name,
+                category="remote",
+                aliases=[],
+            )
+            session.add(emoji)
+        except Exception as e:
+            logger.warning("Failed to process remote emoji %s: %s", keyword, e)
 
 
 def broadcast_to_followers(user: User, activity: dict):
