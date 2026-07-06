@@ -2094,7 +2094,7 @@ def api_admin_user_note(request: Request, user_id: int, note: str = Form("")):
 
 
 @router.post("/admin/users/{user_id}/moderate")
-def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), send_email: bool = Form(False)):
+def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), send_email: bool = Form(False), message: str = Form("")):
     user = require_auth(request)
     if user.role not in ("admin", "moderator"):
         raise HTTPException(status_code=403, detail="Forbidden")

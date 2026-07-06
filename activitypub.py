@@ -505,12 +505,14 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             cc = [cc]
         all_audiences = to + cc
         public_uri = "https://www.w3.org/ns/activitystreams#Public"
-        if public_uri in all_audiences:
+
+        if public_uri in to:
             visibility = "public"
+        elif public_uri in cc:
+            visibility = "home"
         elif any(aud.endswith("/followers") for aud in all_audiences):
             visibility = "followers"
         elif all(aud.startswith("http") for aud in all_audiences if aud):
-            # All audiences are specific user URIs → direct message / mention
             visibility = "mention"
         else:
             visibility = "home"

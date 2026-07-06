@@ -53,15 +53,18 @@ export default function TimelinePage() {
     setLoading(false);
   };
 
+  const loadingRef = useRef(false);
   const loadMoreRef = useRef<() => void>(() => {});
   loadMoreRef.current = () => {
-    if (loadingMore || !hasMore) return;
+    if (loadingRef.current || !hasMore) return;
+    loadingRef.current = true;
     setLoadingMore(true);
     const currentLen = posts.length;
-    api.timeline(tlType, LOAD_MORE, currentLen).then((data) => {
+    const currentType = tlType;
+    api.timeline(currentType, LOAD_MORE, currentLen).then((data) => {
       setPosts((prev) => [...prev, ...data.posts]);
       setHasMore(data.has_more);
-    }).catch(() => {}).finally(() => setLoadingMore(false));
+    }).catch(() => {}).finally(() => { loadingRef.current = false; setLoadingMore(false); });
   };
 
   useEffect(() => { if (!authLoading && !user) router.replace("/"); }, [authLoading, user, router]);
