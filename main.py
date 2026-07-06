@@ -71,6 +71,8 @@ def seed_default_data():
             private_key=encrypt_key(priv, SECRET_KEY), public_key=pub,
             summary="소설을 쓰는 사람입니다 ✍️",
             role="user",
+            email="author1@example.com",
+            email_verified=True,
         )
         session.add(author1)
         session.flush()
@@ -83,6 +85,8 @@ def seed_default_data():
             private_key=encrypt_key(priv2, SECRET_KEY), public_key=pub2,
             summary="소설 읽는 걸 좋아합니다 📖",
             role="user",
+            email="reader1@example.com",
+            email_verified=True,
         )
         session.add(reader1)
         session.flush()
@@ -97,6 +101,8 @@ def seed_default_data():
             summary="서버 관리자입니다",
             role="admin",
             is_admin=True,
+            email="admin@example.com",
+            email_verified=True,
         )
         session.add(admin_user)
         session.flush()

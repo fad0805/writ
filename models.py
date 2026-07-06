@@ -483,6 +483,12 @@ def init_db():
         pass
     try:
         with Session(engine) as session:
+            session.execute(text("ALTER TABLE users ADD COLUMN recent_ips JSON DEFAULT '[]'"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
             session.execute(text("DROP INDEX IF EXISTS ix_custom_emojis_keyword"))
             session.commit()
     except Exception:
