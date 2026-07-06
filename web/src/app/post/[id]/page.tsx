@@ -1,5 +1,5 @@
 "use client";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { api, PostData } from "@/lib/api";
 import PostCard from "@/components/PostCard";
@@ -29,6 +29,7 @@ function ThreadList({ posts, parentId, depth = 0 }: { posts: PostData[]; parentI
 
 export default function PostDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const [post, setPost] = useState<PostData | null>(null);
   const [replies, setReplies] = useState<PostData[]>([]);
   const [totalReplies, setTotalReplies] = useState(0);
@@ -90,7 +91,7 @@ export default function PostDetailPage() {
       {ancestors.map((a) => (
         <div key={a.id} style={{ marginLeft: 20 }}><PostCard post={a} hideContext /></div>
       ))}
-      <PostCard post={post} onUpdate={load} onDelete={() => window.history.back()} current hideContext />
+      <PostCard post={post} onUpdate={load} onDelete={() => router.push("/timeline/home")} current hideContext />
       <div className="thread-list">
         <h4>답글 {totalReplies}개</h4>
         <ThreadList posts={replies} parentId={post.id} depth={0} />
