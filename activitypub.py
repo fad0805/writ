@@ -901,9 +901,9 @@ def _process_emoji_tags(tags: list, session):
                     img = img.convert("RGBA")
                 else:
                     img = img.convert("RGB")
-                # Only downscale, never upscale; skip crop for small images
-                if img.width > 33 or img.height > 33:
-                    img.thumbnail((33, 33), Image.LANCZOS)
+                # Halve dimensions if original is > 66px (so halved size >= 33)
+                if img.width > 66 or img.height > 66:
+                    img = img.resize((img.width // 2, img.height // 2), Image.LANCZOS)
                 img.save(file_path, format="WEBP", quality=100)
             emoji = CustomEmoji(
                 keyword=keyword,
