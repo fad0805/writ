@@ -145,10 +145,10 @@ export default function ProfilePage() {
                   <button className="action-btn btn-action-sm" onClick={() => setShowNote(!showNote)}>
                     <Icon name="edit" /> 메모
                   </button>
-                  {profileNote && !showNote && <span style={{ fontSize: "0.78em", color: "var(--text-dim)", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginLeft: 4 }}>{profileNote}</span>}
                 </>
               )}
             </div>
+            {!isMine && profileNote && !showNote && <div style={{ fontSize: "0.78em", color: "var(--text-dim)", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profileNote}</div>}
           </div>
         </div>
       </div>
