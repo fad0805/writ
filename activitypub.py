@@ -887,7 +887,7 @@ def _process_emoji_tags(tags: list, session):
             tmp = Image.open(io.BytesIO(resp.content))
             w, h = tmp.size
             tmp.close()
-            if h > 0 and w / h > 1.5:
+            if h > 0 and w / h > 2.0:
                 continue
 
             if ext == "gif":

@@ -1739,7 +1739,7 @@ def api_create_emoji(
         tmp.close()
         image.file.seek(0)
         if h > 0 and w / h > 1.5:
-            raise HTTPException(status_code=400, detail="Emoji is too wide (max 1.5x height)")
+            raise HTTPException(status_code=400, detail="Emoji is too wide (max 2x height)")
         if ext == "gif":
             with open(file_path, "wb") as f:
                 f.write(image.file.read())
