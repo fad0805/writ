@@ -4,11 +4,14 @@ import { useState, useEffect } from "react";
 import { api, NovelData, EpisodeData } from "@/lib/api";
 import Icon from "@/components/Icon";
 import ShareButton from "@/components/ShareButton";
+import SharePostModal from "@/components/SharePostModal";
 import Link from "next/link";
+import { useAuth } from "@/lib/auth";
 
 export default function EpisodeDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { user } = useAuth();
   const [novel, setNovel] = useState<NovelData | null>(null);
   const [episode, setEpisode] = useState<EpisodeData | null>(null);
   const [prevEp, setPrevEp] = useState<EpisodeData | null>(null);
@@ -16,6 +19,7 @@ export default function EpisodeDetailPage() {
   const [isMine, setIsMine] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showSharePost, setShowSharePost] = useState(false);
 
   useEffect(() => {
     api.getEpisode(Number(params.id), Number(params.eid))
@@ -49,6 +53,7 @@ export default function EpisodeDetailPage() {
           <h2>제 {episode.episode_number}화: {episode.title}</h2>
           <div className="episode-header-btns">
             <ShareButton url={`/series/${novel.id}/episodes/${episode.id}`} />
+            {user && <button className="action-btn" onClick={() => setShowSharePost(true)} title="포스트로 공유"><Icon name="edit" /></button>}
             {isMine && (
               <>
                 <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>
@@ -82,6 +87,7 @@ export default function EpisodeDetailPage() {
         </div>
         </div>
       </article>
+      {showSharePost && <SharePostModal url={`/series/${novel.id}/episodes/${episode.id}`} title={`제${episode.episode_number}화: ${episode.title}`} onClose={() => setShowSharePost(false)} />}
     </>
   );
 }

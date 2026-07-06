@@ -4,17 +4,21 @@ import { useState, useEffect } from "react";
 import { api, NovelData, EpisodeData, User } from "@/lib/api";
 import Icon from "@/components/Icon";
 import ShareButton from "@/components/ShareButton";
+import SharePostModal from "@/components/SharePostModal";
 import Link from "next/link";
 import { hashColor } from "@/lib/avatar";
+import { useAuth } from "@/lib/auth";
 
 export default function NovelDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { user } = useAuth();
   const [novel, setNovel] = useState<NovelData | null>(null);
   const [episodes, setEpisodes] = useState<EpisodeData[]>([]);
   const [author, setAuthor] = useState<User | null>(null);
   const [isMine, setIsMine] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showSharePost, setShowSharePost] = useState(false);
 
   useEffect(() => {
     const id = Number(Array.isArray(params.id) ? params.id[0] : params.id);
@@ -50,6 +54,7 @@ export default function NovelDetailPage() {
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <ShareButton url={`/series/${novel.id}`} />
+                {user && <button className="action-btn" onClick={() => setShowSharePost(true)} title="포스트로 공유"><Icon name="edit" /></button>}
                 {isMine && (
                   <>
                     <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/edit`)}>시리즈 편집</button>
@@ -101,6 +106,7 @@ export default function NovelDetailPage() {
           </div>
         ))}
       </div>
+      {showSharePost && <SharePostModal url={`/series/${novel.id}`} title={novel.title} onClose={() => setShowSharePost(false)} />}
     </>
   );
 }
