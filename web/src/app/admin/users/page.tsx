@@ -94,9 +94,13 @@ export default function AdminUsersPage() {
       </div>
 
       <div style={{ marginBottom: 12 }}>
-        <button onClick={() => setShowSearch(!showSearch)} className="btn btn-outline btn-small" style={{ marginBottom: 8 }}>
-          검색/필터 {showSearch ? "▲" : "▼"}
-        </button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+          <button onClick={() => setShowSearch(!showSearch)} className="btn btn-outline btn-small">
+            검색/필터 {showSearch ? "▲" : "▼"}
+          </button>
+          <button onClick={suspendSelected} disabled={selected.size === 0} className="btn btn-small" style={{ background: "var(--danger)", color: "#fff", border: "none" }}>정지</button>
+          <button onClick={unsuspendSelected} disabled={selected.size === 0} className="btn btn-small btn-outline">정지 해제</button>
+        </div>
 
         {showSearch && (
           <div style={{ padding: "12px 14px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 8, fontSize: "0.85em" }}>
@@ -122,11 +126,6 @@ export default function AdminUsersPage() {
             </div>
           </div>
         )}
-      </div>
-
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        <button onClick={suspendSelected} disabled={selected.size === 0} className="btn btn-small" style={{ background: "var(--danger)", color: "#fff", border: "none" }}>정지</button>
-        <button onClick={unsuspendSelected} disabled={selected.size === 0} className="btn btn-small btn-outline">정지 해제</button>
       </div>
 
       {loading ? <div className="empty-state">로딩 중...</div>
