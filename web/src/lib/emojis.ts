@@ -62,7 +62,10 @@ export function invalidateEmojiCache() {
 
 export function renderCustomEmojis(html: string, emojis: CustomEmoji[]): string {
   if (!emojis || emojis.length === 0) return html;
-  const sorted = [...emojis].sort((a, b) => b.keyword.length - a.keyword.length);
+  // Deduplicate by keyword — first seen wins
+  const seen = new Set<string>();
+  const uniq = emojis.filter(e => { if (seen.has(e.keyword)) return false; seen.add(e.keyword); return true; });
+  const sorted = [...uniq].sort((a, b) => b.keyword.length - a.keyword.length);
   for (const emoji of sorted) {
     if (!emoji.url) continue;
     const kw = emoji.keyword;
