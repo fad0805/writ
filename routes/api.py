@@ -1964,6 +1964,7 @@ def api_admin_users(request: Request, location: str = Query("local"), status: st
 
 @router.get("/admin/users/{user_id}")
 def api_admin_user_detail(request: Request, user_id: int):
+    import json
     user = require_auth(request)
     if user.role not in ("admin", "moderator"):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -1999,6 +2000,7 @@ def api_admin_user_detail(request: Request, user_id: int):
                     "action": n.notification_type,
                     "created_at": str(n.created_at) if n.created_at else "",
                     "by": _user_json(s.query(User).get(n.from_user_id)) if n.from_user_id else None,
+                    "meta": json.loads(n.metadata_json) if n.metadata_json else {},
                 }
                 for n in s.query(Notification).filter_by(
                     user_id=u.id, notification_type="moderation"

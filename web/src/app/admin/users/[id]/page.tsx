@@ -14,7 +14,7 @@ interface UserDetail {
   default_visibility: string; is_remote: boolean;
   created_at: string;
   is_sensitive?: boolean; moderation_note?: string;
-  moderation_history?: { id: number; action: string; created_at: string; by: { display_name: string; username: string } | null }[];
+  moderation_history?: { id: number; action: string; created_at: string; by: { display_name: string; username: string } | null; meta: { action?: string; message?: string } }[];
 }
 
 export default function AdminUserDetailPage() {
@@ -188,16 +188,23 @@ export default function AdminUserDetailPage() {
         <div style={{ marginBottom: 20 }}>
           <label style={{ display: "block", marginBottom: 8, color: "var(--text-muted)", fontSize: "0.85em", fontWeight: 600 }}>중재 기록</label>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {u.moderation_history.map((h) => (
-              <div key={h.id} style={{ fontSize: "0.85em", padding: "8px 12px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span>
-                  <span style={{ fontWeight: 600, color: "var(--danger)" }}>중재</span>
-                  <span style={{ color: "var(--text-muted)" }}> by </span>
-                  <span style={{ color: "var(--text-primary)" }}>{h.by?.display_name || h.by?.username || "알 수 없음"}</span>
-                </span>
-                <span style={{ color: "var(--text-dim)", fontSize: "0.85em" }}>{h.created_at ? new Date(h.created_at).toLocaleString("ko-KR") : ""}</span>
-              </div>
-            ))}
+            {u.moderation_history.map((h) => {
+              const actNames: Record<string, string> = { warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지", unsuspend: "정지 해제" };
+              const actName = actNames[h.meta?.action || ""] || h.meta?.action || "중재";
+              return (
+                <div key={h.id} style={{ fontSize: "0.85em", padding: "10px 14px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: h.meta?.message ? 6 : 0 }}>
+                    <span>
+                      <span style={{ fontWeight: 600, color: "var(--danger)" }}>{actName}</span>
+                      <span style={{ color: "var(--text-muted)" }}> by </span>
+                      <span style={{ color: "var(--text-primary)" }}>{h.by?.display_name || h.by?.username || "알 수 없음"}</span>
+                    </span>
+                    <span style={{ color: "var(--text-dim)", fontSize: "0.85em" }}>{h.created_at ? new Date(h.created_at).toLocaleString("ko-KR") : ""}</span>
+                  </div>
+                  {h.meta?.message && <div style={{ padding: "6px 10px", background: "var(--bg-tertiary)", borderRadius: 4, fontSize: "0.9em", color: "var(--text-secondary)", whiteSpace: "pre-wrap" }}>{h.meta.message}</div>}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
