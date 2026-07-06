@@ -40,7 +40,7 @@ export default function AdminEmojiPage() {
   return (
     <>
       <div className="page-header">
-        <h2><Icon name="smile" /> 커스텀 이모지</h2>
+        <h2><Icon name="settings" /> 서버 관리</h2>
       </div>
 
       <div className="admin-tabs" style={{ display: "flex", gap: 8, marginBottom: 24 }}>
