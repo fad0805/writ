@@ -28,6 +28,7 @@ const NOTIF_ICONS: Record<string, string> = {
   reply: "mention",
   mention: "mention",
   post: "bell_solid",
+  moderation: "shield",
 };
 
 export default function NotificationsPage() {
@@ -72,6 +73,7 @@ export default function NotificationsPage() {
     if (t === "boost") return "님이 회원님의 글을 부스트했습니다";
     if (t === "reply" || t === "mention") return "님이 회원님을 언급했습니다";
     if (t === "post") return "님이 새 글을 작성했습니다";
+    if (t === "moderation") return "님이 회원님의 계정을 중재했습니다";
     return "";
   };
 

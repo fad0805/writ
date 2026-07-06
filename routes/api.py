@@ -2137,6 +2137,13 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
         elif action == "unsuspend":
             u.is_suspended = False
 
+        # Create notification for the moderated user
+        notif = Notification(
+            user_id=u.id,
+            from_user_id=user.id,
+            notification_type="moderation",
+        )
+        s.add(notif)
         s.commit()
 
         if send_email and u.email:
