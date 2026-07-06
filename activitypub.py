@@ -263,7 +263,7 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
         return (202, f"Accepted {atype}")
 
 
-def _safe_fetch(url, timeout=10, max_size=5*1024*1024):
+def _safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
     """HTTP GET with redirect validation and size limit."""
     if not _validate_url(url):
         return None
@@ -275,7 +275,7 @@ def _safe_fetch(url, timeout=10, max_size=5*1024*1024):
         raise httpx.InvalidURL(f"Blocked redirect to {request.url}")
     client.send = _validated_send
     try:
-        resp = client.get(url)
+        resp = client.get(url, headers=headers or {})
         client.close()
         if resp.status_code != 200 or len(resp.content) > max_size:
             return None
@@ -314,7 +314,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User
 
     # Fetch remote actor
     try:
-        resp = _safe_fetch(actor_url, timeout=10)
+        resp = _safe_fetch(actor_url, timeout=10, headers={"Accept": "application/activity+json"})
         if not resp:
             return None
         data = resp.json()
