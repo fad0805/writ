@@ -2,7 +2,7 @@
 import Link from "next/link";
 import Icon from "./Icon";
 
-export default function AdminNav({ current }: { current: "dashboard" | "reports" | "users" | "emojis" | "settings" }) {
+export default function AdminNav({ current }: { current: "dashboard" | "reports" | "users" | "emojis" | "settings" | "federation" }) {
   return (
     <>
       <div className="admin-tabs">
@@ -14,6 +14,7 @@ export default function AdminNav({ current }: { current: "dashboard" | "reports"
           <div style={{ display: "flex", gap: 6 }}>
             <Link href="/admin/users" className={`btn btn-small ${current === "users" ? "btn-primary" : "btn-outline"}`}>유저 관리</Link>
             <Link href="/admin/reports" className={`btn btn-small ${current === "reports" ? "btn-primary" : "btn-outline"}`}>신고 관리</Link>
+            <Link href="/admin/federation" className={`btn btn-small ${current === "federation" ? "btn-primary" : "btn-outline"}`}>연합</Link>
           </div>
         </div>
         <div>

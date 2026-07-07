@@ -2885,7 +2885,7 @@ def api_admin_remove_allowed_server(request: Request, domain: str):
 @router.post("/admin/federation-mode")
 def api_admin_set_federation_mode(request: Request, mode: str = Form(...)):
     user = require_auth(request)
-    if user.role not in ("admin",):
+    if user.role not in ("admin", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     if mode not in ("whitelist", "blacklist"):
         raise HTTPException(status_code=400, detail="Invalid mode")
@@ -2901,7 +2901,7 @@ def api_admin_set_federation_mode(request: Request, mode: str = Form(...)):
 @router.get("/admin/federation-mode")
 def api_admin_get_federation_mode(request: Request):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         settings = ServerSetting.get(s)
