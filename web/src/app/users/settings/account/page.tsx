@@ -5,82 +5,75 @@ import SettingsNav from "@/components/SettingsNav";
 
 export default function AccountSettingsPage() {
   const [email, setEmail] = useState("");
-  const [emailMsg, setEmailMsg] = useState("");
-  const [emailErr, setEmailErr] = useState("");
-  const [emailLoading, setEmailLoading] = useState(false);
-
   const [curPw, setCurPw] = useState("");
   const [newPw, setNewPw] = useState("");
-  const [pwMsg, setPwMsg] = useState("");
-  const [pwErr, setPwErr] = useState("");
-  const [pwLoading, setPwLoading] = useState(false);
+  const [showCurPw, setShowCurPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleChangeEmail = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setEmailLoading(true); setEmailMsg(""); setEmailErr("");
+    setLoading(true); setMsg(""); setErr("");
     try {
-      const form = new FormData();
-      form.append("email", email);
-      const res = await fetch("/api/settings/change-email", { method: "POST", credentials: "include", body: form });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok) { setEmailErr(d.detail || "실패"); }
-      else { setEmailMsg("변경된 이메일로 인증 메일을 보냈습니다."); setEmail(""); }
-    } catch { setEmailErr("실패"); }
-    setEmailLoading(false);
-  };
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPwLoading(true); setPwMsg(""); setPwErr("");
-    try {
-      const form = new FormData();
-      form.append("current_password", curPw);
-      form.append("new_password", newPw);
-      const res = await fetch("/api/settings/change-password", { method: "POST", credentials: "include", body: form });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok) { setPwErr(d.detail || "실패"); }
-      else { setPwMsg("비밀번호가 변경되었습니다."); setCurPw(""); setNewPw(""); }
-    } catch { setPwErr("실패"); }
-    setPwLoading(false);
+      if (email) {
+        const form = new FormData();
+        form.append("email", email);
+        form.append("password", curPw || "");
+        const res = await fetch("/api/settings/change-email", { method: "POST", credentials: "include", body: form });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) { setErr(d.detail || "이메일 변경 실패"); setLoading(false); return; }
+        setEmail("");
+      }
+      if (curPw && newPw) {
+        const form = new FormData();
+        form.append("current_password", curPw);
+        form.append("new_password", newPw);
+        const res = await fetch("/api/settings/change-password", { method: "POST", credentials: "include", body: form });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) { setErr(d.detail || "비밀번호 변경 실패"); setLoading(false); return; }
+        setCurPw(""); setNewPw("");
+      }
+      setMsg("저장되었습니다.");
+    } catch { setErr("오류 발생"); }
+    setLoading(false);
   };
 
   return (
     <>
+      <div className="page-header">
+        <h2><Icon name="settings" /> 설정 관리</h2>
+      </div>
       <SettingsNav current="account" />
 
       <div className="admin-detail-card" style={{ padding: 20 }}>
-        <form onSubmit={handleChangeEmail}>
-          <div className="form-group">
+        <form onSubmit={handleSubmit}>
+          <div className="form-group" style={{ marginBottom: 24 }}>
             <label>새 이메일 주소</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="new@example.com" className="cw-input" required />
-            <p className="form-help">변경 후 새 이메일로 인증 메일이 발송됩니다. 인증을 완료해야 계정을 사용할 수 있습니다.</p>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="new@example.com" className="cw-input" />
+            <p className="form-help">변경할 이메일 주소를 입력하세요. 비워두면 변경되지 않습니다.</p>
           </div>
-          {emailMsg && <p className="auth-success">{emailMsg}</p>}
-          {emailErr && <p className="auth-error">{emailErr}</p>}
-          <div className="form-actions">
-            <button type="submit" disabled={emailLoading} className="btn btn-primary">
-              {emailLoading ? "..." : "이메일 변경"}
-            </button>
-          </div>
-        </form>
-
-        <hr style={{ margin: "20px 0", border: "none", borderTop: "1px solid var(--border)" }} />
-
-        <form onSubmit={handleChangePassword}>
-          <div className="form-group">
+          <div className="form-group" style={{ marginBottom: 8 }}>
             <label>현재 비밀번호</label>
-            <input type="password" value={curPw} onChange={(e) => setCurPw(e.target.value)} placeholder="현재 비밀번호" className="cw-input" required />
+            <div className="pw-input-wrap">
+              <input type={showCurPw ? "text" : "password"} value={curPw} onChange={(e) => setCurPw(e.target.value)} placeholder="현재 비밀번호" className="cw-input" />
+              <span className="pw-toggle" onClick={() => setShowCurPw(!showCurPw)}><Icon name={showCurPw ? "eye_off" : "eye"} size={16} /></span>
+            </div>
           </div>
           <div className="form-group">
             <label>새 비밀번호</label>
-            <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="6자 이상" className="cw-input" required />
-            <p className="form-help">최소 6자 이상 입력해 주세요.</p>
+            <div className="pw-input-wrap">
+              <input type={showNewPw ? "text" : "password"} value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="6자 이상" className="cw-input" />
+              <span className="pw-toggle" onClick={() => setShowNewPw(!showNewPw)}><Icon name={showNewPw ? "eye_off" : "eye"} size={16} /></span>
+            </div>
+            <p className="form-help">비워두면 비밀번호가 변경되지 않습니다. 변경 시 현재 비밀번호와 새 비밀번호를 모두 입력하세요.</p>
           </div>
-          {pwMsg && <p className="auth-success">{pwMsg}</p>}
-          {pwErr && <p className="auth-error">{pwErr}</p>}
+          {msg && <p className="auth-success">{msg}</p>}
+          {err && <p className="auth-error">{err}</p>}
           <div className="form-actions">
-            <button type="submit" disabled={pwLoading} className="btn btn-primary">
-              {pwLoading ? "..." : "비밀번호 변경"}
+            <button type="submit" disabled={loading} className="btn btn-primary">
+              {loading ? "저장 중..." : "저장"}
             </button>
           </div>
         </form>

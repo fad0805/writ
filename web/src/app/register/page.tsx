@@ -3,10 +3,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
+import Icon from "@/components/Icon";
 
 export default function RegisterPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
@@ -85,7 +87,10 @@ export default function RegisterPage() {
         </div>
         <div className="form-group">
           <label>비밀번호</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="6자 이상" required />
+          <div className="pw-input-wrap">
+            <input type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="6자 이상" required />
+            <span className="pw-toggle" onClick={() => setShowPw(!showPw)}><Icon name={showPw ? "eye_off" : "eye"} size={16} /></span>
+          </div>
         </div>
         {error && <p className="auth-error">{error}</p>}
         <button type="submit" disabled={loading} className="btn btn-primary">{loading ? "..." : "가입"}</button>

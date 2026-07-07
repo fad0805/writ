@@ -152,7 +152,11 @@ def api_me(request: Request):
 def api_login(request: Request, username: str = Form(...), password: str = Form(...)):
     from app.routes.auth import hash_password, verify_password, create_session
     with get_session() as s:
-        db_user = s.query(User).filter_by(username=username, is_remote=False).first()
+        q = s.query(User).filter(User.is_remote == False)
+        if "@" in username and "." in username:
+            db_user = q.filter(User.email == username).first()
+        else:
+            db_user = q.filter(User.username == username).first()
         if not db_user:
             raise HTTPException(status_code=401, detail="Invalid credentials")
         if getattr(db_user, 'is_frozen', False):

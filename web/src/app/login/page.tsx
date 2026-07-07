@@ -4,10 +4,12 @@ import { api } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
+import Icon from "@/components/Icon";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -36,12 +38,15 @@ export default function LoginPage() {
       <h1>WRIT</h1>
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label>사용자 이름</label>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username" required />
+          <label>사용자 이름 또는 이메일</label>
+          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username 또는 email@example.com" required />
         </div>
         <div className="form-group">
           <label>비밀번호</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="password" required />
+          <div className="pw-input-wrap">
+            <input type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="password" required />
+            <span className="pw-toggle" onClick={() => setShowPw(!showPw)}><Icon name={showPw ? "eye_off" : "eye"} size={16} /></span>
+          </div>
         </div>
         {error && (
           <p className="auth-error">

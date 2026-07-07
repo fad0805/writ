@@ -2589,6 +2589,14 @@ input[type="checkbox"] {
 }
 
 /* ── Shortcut help modal ── */
+.pw-input-wrap { position: relative; }
+.pw-input-wrap input { padding-right: 36px; }
+.pw-toggle {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  cursor: pointer; color: var(--text-muted); display: flex; align-items: center;
+  line-height: 1;
+}
+
 .shortcut-help-backdrop {
   position: fixed; inset: 0;
   display: none; align-items: center; justify-content: center;
