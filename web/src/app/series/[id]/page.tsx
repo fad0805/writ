@@ -17,6 +17,7 @@ export default function NovelDetailPage() {
   const [episodes, setEpisodes] = useState<EpisodeData[]>([]);
   const [author, setAuthor] = useState<User | null>(null);
   const [isMine, setIsMine] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showSharePost, setShowSharePost] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -28,9 +29,22 @@ export default function NovelDetailPage() {
     const id = Number(Array.isArray(params.id) ? params.id[0] : params.id);
     if (isNaN(id)) return;
     api.getNovel(id)
-      .then((d) => { setNovel(d.novel); setEpisodes(d.episodes); setAuthor(d.author); setIsMine(d.is_mine); setLoading(false); })
+      .then((d) => { setNovel(d.novel); setEpisodes(d.episodes); setAuthor(d.author); setIsMine(d.is_mine); setIsFollowing(d.is_following); setLoading(false); })
       .catch(() => setLoading(false));
   }, [params.id]);
+
+  const toggleFollow = async () => {
+    if (!novel || !user) return;
+    try {
+      if (isFollowing) {
+        await fetch(`/api/novels/${novel.id}/unfollow`, { method: "POST", credentials: "include" });
+        setIsFollowing(false);
+      } else {
+        await fetch(`/api/novels/${novel.id}/follow`, { method: "POST", credentials: "include" });
+        setIsFollowing(true);
+      }
+    } catch {}
+  };
 
   if (loading) return <p className="empty-state">로딩 중...</p>;
   if (!novel) return <p className="empty-state">시리즈를 찾을 수 없습니다.</p>;
@@ -62,6 +76,11 @@ export default function NovelDetailPage() {
                 {user && !isMine && (
                   <button className="action-btn" onClick={() => { setShowReport(true); setReportReason(""); setReportError(""); setReportDone(false); }} title="신고">
                     <Icon name="flag" />
+                  </button>
+                )}
+                {user && !isMine && (
+                  <button onClick={toggleFollow} className={`btn btn-small ${isFollowing ? "btn-outline" : "btn-primary"}`}>
+                    {isFollowing ? "팔로잉" : "팔로우"}
                   </button>
                 )}
                 {isMine && (

@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
-import Link from "next/link";
+import AdminNav from "@/components/AdminNav";
 import { CustomEmoji, invalidateEmojiCache } from "@/lib/emojis";
 
 export default function AdminEmojiPage() {
@@ -42,24 +42,7 @@ export default function AdminEmojiPage() {
       <div className="page-header">
         <h2><Icon name="settings" /> 서버 관리</h2>
       </div>
-
-      <div className="admin-tabs">
-        <Link href="/admin" className="btn btn-outline btn-small">대시보드</Link>
-      </div>
-      <div style={{ display: "flex", gap: 16, marginBottom: 20, fontSize: "0.85em", color: "var(--text-muted)" }}>
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>중재</div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <Link href="/admin/users" className="btn btn-outline btn-small">유저 관리</Link>
-          </div>
-        </div>
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>관리</div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <Link href="/admin/emojis" className="btn btn-primary btn-small">커스텀 이모지</Link>
-          </div>
-        </div>
-      </div>
+      <AdminNav current="emojis" />
 
       <div className="hm-bottom-28">
         <h3 className="hm-bottom-16 section-toggle" onClick={() => setShowUpload(!showUpload)}>

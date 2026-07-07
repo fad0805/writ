@@ -36,6 +36,7 @@ export default function PostDetailPage() {
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [showRestrictedWarning, setShowRestrictedWarning] = useState(false);
   const offsetRef = useRef(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -50,6 +51,9 @@ export default function PostDetailPage() {
       setReplies(data.replies || []);
       setTotalReplies(data.total_replies);
       setHasMore(data.has_more_replies);
+      if (data.author?.is_limited && !data.is_mine && !data.is_following_author) {
+        setShowRestrictedWarning(true);
+      }
     } catch {}
     setLoading(false);
   }, [params.id]);
@@ -85,6 +89,23 @@ export default function PostDetailPage() {
 
   if (loading) return <div className="empty-state">로딩 중...</div>;
   if (!post) return <div className="empty-state">게시글을 찾을 수 없습니다.</div>;
+
+  if (showRestrictedWarning && post.author?.is_limited) {
+    return (
+      <div className="card" style={{ padding: 32, maxWidth: 480, margin: "40px auto", textAlign: "center" }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+        <h3 style={{ marginBottom: 8 }}>제한된 사용자의 게시글</h3>
+        <p style={{ color: "var(--text-secondary)", marginBottom: 24, fontSize: 14, lineHeight: 1.6 }}>
+          이 게시글의 작성자 <strong>{post.author.display_name || post.author.username}</strong> 님은
+          관리자에 의해 제한된 계정입니다. 게시글에 부적절한 내용이 포함되어 있을 수 있습니다.
+        </p>
+        <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+          <button className="btn btn-outline" onClick={() => router.back()}>돌아가기</button>
+          <button className="btn btn-primary" onClick={() => setShowRestrictedWarning(false)}>계속 보기</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

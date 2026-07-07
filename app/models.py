@@ -37,7 +37,10 @@ class User(Base):
     email_verified = Column(Boolean, default=False)
     recent_ips = Column(JSON, default=list)
     is_suspended = Column(Boolean, default=False)
+    is_frozen = Column(Boolean, default=False)
     is_sensitive = Column(Boolean, default=False)
+    is_limited = Column(Boolean, default=False)
+    is_deceased = Column(Boolean, default=False)
     moderation_note = Column(Text, default="")
     password_hash = Column(String(255), nullable=False)
 
@@ -127,6 +130,18 @@ class Follow(Base):
     following = relationship("User", foreign_keys=[following_id], lazy="selectin")
 
 
+class SeriesFollow(Base):
+    __tablename__ = "series_follows"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    novel_id = Column(Integer, ForeignKey("novels.id"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+    user = relationship("User", lazy="selectin")
+    novel = relationship("Novel", lazy="selectin")
+
+
 class Post(Base):
     __tablename__ = "posts"
 
@@ -153,6 +168,7 @@ class Post(Base):
     is_deleted = Column(Boolean, default=False)
     is_pinned = Column(Boolean, default=False)
     is_dm = Column(Boolean, default=False)
+    original_visibility = Column(String(16), default="")
     created_at = Column(DateTime(timezone=True), default=now)
     bumped_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -562,6 +578,37 @@ def init_db():
         pass
     try:
         with Session(engine) as session:
+            session.execute(text("ALTER TABLE users ADD COLUMN is_limited BOOLEAN DEFAULT 0"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE users ADD COLUMN is_deceased BOOLEAN DEFAULT 0"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE users ADD COLUMN is_frozen BOOLEAN DEFAULT 0"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("""
+                CREATE TABLE IF NOT EXISTS series_follows (
+                    id INTEGER PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    novel_id INTEGER NOT NULL REFERENCES novels(id),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
             session.execute(text("ALTER TABLE notifications ADD COLUMN metadata_json TEXT DEFAULT ''"))
             session.commit()
     except Exception:
@@ -609,6 +656,12 @@ def init_db():
             import secrets
             for novel in session.query(Novel).filter(Novel.number == "").all():
                 novel.number = secrets.token_hex(4)
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE posts ADD COLUMN original_visibility VARCHAR(16) DEFAULT ''"))
             session.commit()
     except Exception:
         pass

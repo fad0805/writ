@@ -1286,7 +1286,7 @@ input[type="checkbox"] {
   min-height: 280px;
   color: var(--text-primary);
   font-size: 0.95em;
-  line-height: 1.8;
+  line-height: 1.4;
 }
 .episode-editor-content .ProseMirror p { margin: 0 0 8px; }
 .episode-editor-content .ProseMirror h2 { font-size: 1.3em; margin: 16px 0 8px; }
@@ -3427,6 +3427,7 @@ input[type="checkbox"] {
   text-align: center;
 }
 .admin-status-suspended { color: var(--danger); font-size: 0.85em; }
+.deceased-badge { display: inline-block; margin-left: 4px; padding: 1px 4px; border-radius: 3px; background: var(--bg-tertiary); color: var(--text-muted); font-size: 0.48em; font-weight: 400; vertical-align: middle; white-space: nowrap; }
 .admin-status-remote { color: var(--text-dim); font-size: 0.85em; }
 .admin-status-active { color: var(--accent); font-size: 0.85em; }
 .admin-ip-mono { font-family: monospace; margin-left: 4px; }

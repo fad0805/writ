@@ -4,10 +4,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
+import AdminNav from "@/components/AdminNav";
 
 type AdminUser = {
   id: number; username: string; display_name: string; avatar: string;
-  role: string; is_remote: boolean; is_suspended?: boolean;
+  role: string; is_remote: boolean; is_suspended?: boolean; is_frozen?: boolean; is_limited?: boolean; is_deceased?: boolean;
   post_count: number; follower_count: number;
   last_active: string; email_domain: string; recent_ips: string[];
 };
@@ -87,23 +88,7 @@ export default function AdminUsersPage() {
   return (
     <>
       <div className="page-header"><h2><Icon name="settings" /> 서버 관리</h2></div>
-      <div className="admin-tabs">
-        <Link href="/admin" className="btn btn-outline btn-small">대시보드</Link>
-      </div>
-      <div style={{ display: "flex", gap: 16, marginBottom: 20, fontSize: "0.85em", color: "var(--text-muted)" }}>
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>중재</div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <Link href="/admin/users" className="btn btn-primary btn-small">유저 관리</Link>
-          </div>
-        </div>
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>관리</div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <Link href="/admin/emojis" className="btn btn-outline btn-small">커스텀 이모지</Link>
-          </div>
-        </div>
-      </div>
+      <AdminNav current="users" />
 
       <div className="admin-users-container">
         <div className="admin-action-bar">
@@ -158,7 +143,7 @@ export default function AdminUsersPage() {
             </thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.id} style={{ borderBottom: "1px solid var(--border)", background: selected.has(u.id) ? "var(--card-hover)" : "transparent", opacity: u.is_suspended ? 0.5 : 1 }}>
+                <tr key={u.id} style={{ borderBottom: "1px solid var(--border)", background: selected.has(u.id) ? "var(--card-hover)" : "transparent", opacity: u.is_suspended ? 0.5 : (u.is_frozen ? 0.5 : (u.is_limited ? 0.7 : (u.is_deceased ? 0.7 : 1))) }}>
                   <td style={{ padding: "10px" }}><input type="checkbox" checked={selected.has(u.id)} onChange={() => toggle(u.id)} /></td>
                   <td style={{ padding: "10px" }}>
                     <div className="flex-center gap-10">
@@ -185,7 +170,10 @@ export default function AdminUsersPage() {
                     {u.recent_ips && u.recent_ips.length > 0 && <span className="admin-ip-mono">/ {u.recent_ips[0]}</span>}
                   </td>
                   <td className="admin-td-status">
-                    {u.is_suspended ? <span className="admin-status-suspended">정지</span>
+                    {u.is_deceased ? <span className="admin-status-suspended">고인</span>
+                    : u.is_suspended ? <span className="admin-status-suspended">정지</span>
+                    : u.is_frozen ? <span className="admin-status-suspended">동결</span>
+                    : u.is_limited ? <span className="admin-status-suspended">제한</span>
                     : u.is_remote ? <span className="admin-status-remote">리모트</span>
                     : <span className="admin-status-active">활성</span>}
                   </td>

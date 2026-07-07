@@ -18,6 +18,7 @@ const FILTERS = [
   { value: "like", label: "즐겨찾기", icon: "star_filled" },
   { value: "boost", label: "재게시", icon: "refresh" },
   { value: "follow", label: "팔로우", icon: "user_solid" },
+  { value: "new_episode", label: "시리즈", icon: "book" },
   { value: "direct", label: "다이렉트", icon: "direct" },
 ];
 
@@ -30,6 +31,7 @@ const NOTIF_ICONS: Record<string, string> = {
   mention: "mention",
   post: "bell_solid",
   moderation: "shield_filled",
+  new_episode: "book",
 };
 
 export default function NotificationsPage() {
@@ -82,6 +84,10 @@ export default function NotificationsPage() {
     if (t === "boost") return "님이 회원님의 글을 부스트했습니다";
     if (t === "reply" || t === "mention") return "님이 회원님을 언급했습니다";
     if (t === "post") return "님이 새 글을 작성했습니다";
+    if (t === "new_episode") {
+      if (meta) return `님이 시리즈 "${meta.novel_title}"에 새 에피소드를 작성했습니다`;
+      return "님이 새 에피소드를 작성했습니다";
+    }
     if (t === "moderation") {
       if (meta?.type === "report") return `님이 ${targetTypeNames[meta.target_type] || meta.target_type}을(를) 신고했습니다`;
       if (meta?.type === "new_user") return `님이 가입했습니다`;
@@ -164,9 +170,11 @@ export default function NotificationsPage() {
             onClick={() => {
               if (n.type === "moderation" && n.metadata?.type === "report") router.push(`/admin/reports/${n.metadata.report_id}`);
               else if (n.type === "moderation" && n.metadata?.type === "new_user") router.push(`/@${n.from_user?.username}`);
+              else if (n.type === "mention" && n.post?.is_dm && n.from_user) router.push(`/direct/${n.from_user.id}`);
+              else if (n.type === "new_episode" && n.metadata?.novel_id && n.metadata?.episode_id) router.push(`/series/${n.metadata.novel_id}/episodes/${n.metadata.episode_id}`);
             }}
-            style={{ cursor: (n.type === "moderation" && (n.metadata?.type === "report" || n.metadata?.type === "new_user")) ? "pointer" : undefined }}>
-            <div className="notif-icon notif-icon-dynamic" style={{ color: n.type === "like" ? "#f1c40f" : n.type === "boost" ? "var(--accent)" : n.type === "follow" ? "#4fc3f7" : n.type === "moderation" ? "var(--danger)" : "var(--text-muted)" }}>
+            style={{ cursor: ((n.type === "moderation" && (n.metadata?.type === "report" || n.metadata?.type === "new_user")) || (n.type === "mention" && n.post?.is_dm) || (n.type === "new_episode")) ? "pointer" : undefined }}>
+            <div className="notif-icon notif-icon-dynamic" style={{ color: n.type === "like" ? "#f1c40f" : n.type === "boost" ? "var(--accent)" : n.type === "follow" ? "#4fc3f7" : n.type === "new_episode" ? "#9b59b6" : n.type === "moderation" ? "var(--danger)" : "var(--text-muted)" }}>
               <Icon name={NOTIF_ICONS[n.type] || "bell"} size={20} />
             </div>
             <div className="notif-body">

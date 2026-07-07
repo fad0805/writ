@@ -11,12 +11,17 @@ export default function RightSidebar() {
   const [novels, setNovels] = useState<NovelData[]>([]);
   const [notifs, setNotifs] = useState<NotificationData[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [serverInfo, setServerInfo] = useState<{ name: string; admins: { username: string; email: string }[] } | null>(null);
 
   useEffect(() => {
     if (!user) return;
     api.getMyNovels().then((d) => setNovels(d.novels)).catch(() => {});
     api.getNotifications().then((d) => setNotifs(d.notifications.slice(0, 10))).catch(() => {});
   }, [user, refreshKey]);
+
+  useEffect(() => {
+    fetch("/api/server-info").then((r) => r.json()).then(setServerInfo).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const handler = () => setRefreshKey((k) => k + 1);
@@ -62,6 +67,30 @@ export default function RightSidebar() {
             n.post ? <MiniPostCard key={n.id} post={n.post} notifType={n.type} /> : null
           )) : <p className="empty-small p-0">알림이 없습니다.</p>}
         </div>
+      </div>
+      <div className="widget" style={{ marginTop: "auto", borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+        <h4><Icon name="globe" /> 서버 정보</h4>
+        {serverInfo ? (
+          <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>{serverInfo.name}</div>
+            {serverInfo.admins.length > 0 && (
+              <div style={{ marginBottom: 8 }}>
+                {serverInfo.admins.map((a) => (
+                  <div key={a.username}>
+                    @{a.username}{a.email ? ` · ${a.email}` : ""}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
+              <a href="https://github.com/fad0805/writ" target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>
+                소스코드 (GitHub)
+              </a>
+            </div>
+          </div>
+        ) : (
+          <p className="empty-small">로딩 중...</p>
+        )}
       </div>
     </aside>
   );

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
+import AdminNav from "@/components/AdminNav";
 import Link from "next/link";
 
 interface TargetInfo {
@@ -119,6 +120,7 @@ export default function ReportDetailPage() {
         <h2><Icon name="flag" /> 신고 상세</h2>
         <Link href="/admin/reports" className="btn btn-small btn-outline">목록</Link>
       </div>
+      <AdminNav current="reports" />
 
       {msg && <p style={{ color: "var(--text-secondary)", marginBottom: 12, fontSize: 14 }}>{msg}</p>}
 
@@ -163,7 +165,7 @@ export default function ReportDetailPage() {
                 <div style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 4 }}>{target.description}</div>
               )}
               <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>
-                작성자: <Link href={`/@${target.author.username}`} className="mention-link">{target.author.display_name || target.author.username}</Link>
+                작성자: <Link href={`/admin/users/${target.author_id}`} className="mention-link">{target.author.display_name || target.author.username}</Link>
                 {target.novel_title && <span> · {target.novel_title}</span>}
                 {target.is_deleted && <span> · <span style={{ color: "var(--danger)" }}>삭제됨</span></span>}
               </div>
@@ -223,7 +225,7 @@ export default function ReportDetailPage() {
               <div>
                 <label className="admin-section-label">대상</label>
                 <div style={{ fontSize: 14, marginBottom: 8 }}>
-                  <Link href={`/@${target.author.username}`} className="mention-link">{target.author.display_name || target.author.username}</Link>
+                  <Link href={`/admin/users/${target.author_id}`} className="mention-link">{target.author.display_name || target.author.username}</Link>
                   <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>@{target.author.username}</span>
                 </div>
               </div>

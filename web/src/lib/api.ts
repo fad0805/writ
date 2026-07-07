@@ -6,7 +6,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
+    throw new Error(body.detail || body.error || `HTTP ${res.status}`);
   }
   return res.json();
 }
@@ -23,7 +23,7 @@ async function formRequest<T>(path: string, data: Record<string, any>): Promise<
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
+    throw new Error(body.detail || body.error || `HTTP ${res.status}`);
   }
   return res.json();
 }
@@ -37,6 +37,9 @@ export interface User {
   is_admin: boolean;
   is_remote: boolean;
   is_locked?: boolean;
+  is_limited?: boolean;
+  is_frozen?: boolean;
+  is_deceased?: boolean;
   role?: string;
   default_visibility?: string;
   series_default_visibility?: string;
@@ -59,6 +62,8 @@ export interface PostData {
   boosted: boolean;
   bookmarked: boolean;
   is_mine: boolean;
+  is_dm?: boolean;
+  is_following_author?: boolean;
   reply_context: ReplyContext | null;
   replies?: PostData[];
   ancestors?: PostData[];
@@ -180,7 +185,7 @@ export const api = {
   // Novels
   getNovels: () => request<{ novels: NovelData[] }>("/api/novels"),
   getMyNovels: () => request<{ novels: NovelData[] }>("/api/novels/my"),
-  getNovel: (id: number) => request<{ novel: NovelData; episodes: EpisodeData[]; author: User; is_mine: boolean }>(`/api/novels/${id}`),
+  getNovel: (id: number) => request<{ novel: NovelData; episodes: EpisodeData[]; author: User; is_mine: boolean; is_following: boolean }>(`/api/novels/${id}`),
   deleteNovel: (id: number) => request<{ ok: boolean }>(`/api/novels/${id}/delete`, { method: "POST" }),
   getEpisode: (id: number, eid: number) => request<{
     episode: EpisodeData; novel: NovelData; is_mine: boolean;
@@ -208,7 +213,7 @@ export const api = {
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body.error || "Login failed");
+      throw new Error(body.detail || body.error || "Login failed");
     }
     return { ok: true };
   },

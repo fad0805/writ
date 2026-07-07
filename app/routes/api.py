@@ -9,7 +9,7 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, Tag, CustomEmoji, ProfileNote, Report, get_session
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, SeriesFollow, Tag, CustomEmoji, ProfileNote, Report, get_session
 from app.routes.auth import require_auth, get_current_user
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
@@ -54,6 +54,7 @@ def _post_json(p, session, user):
         "boosted": boosted,
         "bookmarked": bookmarked,
         "is_mine": p.author_id == user.id if user else False,
+        "is_dm": p.is_dm or False,
         "ap_id": p.ap_id or "",
         "reply_context": _reply_context(p),
         "boosted_by": _user_json(booster) if booster and booster.id != p.author_id else None,
@@ -70,6 +71,9 @@ def _user_json(u):
         "summary": u.summary or "",
         "is_admin": u.is_admin,
         "is_locked": u.is_locked or False,
+        "is_limited": u.is_limited or False,
+        "is_frozen": getattr(u, 'is_frozen', False) or False,
+        "is_deceased": getattr(u, 'is_deceased', False) or False,
         "is_remote": u.is_remote,
         "role": role,
         "show_badge": getattr(u, 'show_badge', False) or False,
@@ -150,14 +154,16 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
         db_user = s.query(User).filter_by(username=username, is_remote=False).first()
         if not db_user:
             raise HTTPException(status_code=401, detail="Invalid credentials")
+        if getattr(db_user, 'is_frozen', False):
+            raise HTTPException(status_code=403, detail="계정이 동결되었습니다.")
+        if getattr(db_user, 'is_suspended', False):
+            raise HTTPException(status_code=403, detail="계정이 정지되었습니다.")
         stored = db_user.password_hash
         if ":" not in stored:
             raise HTTPException(status_code=401, detail="Invalid credentials")
         salt, hval = stored.split(":", 1)
         if not verify_password(password, salt, hval):
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-        if getattr(db_user, 'is_suspended', False):
-            raise HTTPException(status_code=403, detail="Account suspended")
+            raise HTTPException(status_code=401, detail="비밀번호가 틀렸습니다.")
         token = create_session(db_user.id)
         # Store IP
         client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
@@ -329,6 +335,12 @@ def api_get_post(request: Request, post_id: int):
         if not _can_view(post, user, s):
             raise HTTPException(status_code=403, detail="Cannot view this post")
         result = _post_json(post, s, user)
+        if user and post.author_id != user.id:
+            result["is_following_author"] = s.query(Follow).filter_by(
+                follower_id=user.id, following_id=post.author_id, accepted=True
+            ).first() is not None
+        else:
+            result["is_following_author"] = False
         descendant_ids = set()
         def collect_descendants(pid):
             children = s.query(Post).options(selectinload(Post.author)).filter_by(
@@ -381,6 +393,9 @@ def api_create_post(
         raise HTTPException(status_code=400, detail=f"Total length exceeds {MAX_POST_LENGTH}")
     if visibility not in ("public", "home", "followers", "mention"):
         visibility = "public"
+
+    if user.is_limited and visibility == "public":
+        visibility = "home"
 
     if parent_id:
         vis_order = {"public": 0, "home": 1, "followers": 2, "mention": 3}
@@ -1054,6 +1069,8 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
                      tags: str = Form(""), visibility: str = Form("public"),
                      cover_image: str = Form("")):
     user = require_auth(request)
+    if getattr(user, 'is_deceased', False):
+        raise HTTPException(status_code=403, detail="고인 계정은 시리즈를 생성할 수 없습니다.")
     if not title.strip():
         raise HTTPException(status_code=400, detail="Title cannot be empty")
     if visibility not in ("public", "unlisted", "private"):
@@ -1090,8 +1107,33 @@ def api_get_novel(request: Request, novel_id: int):
             "episodes": [_episode_json(e) for e in episodes],
             "author": _user_json(author) if author else None,
             "is_mine": user.id == novel.author_id if user else False,
+            "is_following": s.query(SeriesFollow).filter_by(user_id=user.id, novel_id=novel.id).count() > 0 if user else False,
         }
     return result
+
+
+@router.post("/novels/{novel_id}/follow")
+def api_follow_novel(request: Request, novel_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        novel = s.query(Novel).filter_by(id=novel_id).first()
+        if not novel:
+            raise HTTPException(status_code=404, detail="Novel not found")
+        existing = s.query(SeriesFollow).filter_by(user_id=user.id, novel_id=novel.id).first()
+        if not existing:
+            sf = SeriesFollow(user_id=user.id, novel_id=novel.id)
+            s.add(sf)
+            s.commit()
+    return {"ok": True}
+
+
+@router.post("/novels/{novel_id}/unfollow")
+def api_unfollow_novel(request: Request, novel_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        s.query(SeriesFollow).filter_by(user_id=user.id, novel_id=novel_id).delete()
+        s.commit()
+    return {"ok": True}
 
 
 @router.post("/novels/{novel_id}/edit")
@@ -1127,6 +1169,8 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
                        announce: bool = Form(False), visibility: str = Form("public"),
                        announce_comment: str = Form("")):
     user = require_auth(request)
+    if getattr(user, 'is_deceased', False):
+        raise HTTPException(status_code=403, detail="고인 계정은 에피소드를 생성할 수 없습니다.")
     if not title.strip() or not content.strip():
         raise HTTPException(status_code=400, detail="Title and content are required")
     if visibility not in ("public", "home", "followers", "mention"):
@@ -1186,6 +1230,28 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
                 s.commit()
         else:
             s.commit()
+
+        # Notify series followers
+        import json
+        followers = s.query(SeriesFollow).filter_by(novel_id=novel.id).all()
+        for sf in followers:
+            if sf.user_id != user.id:
+                n = Notification(
+                    user_id=sf.user_id,
+                    from_user_id=user.id,
+                    notification_type="new_episode",
+                    metadata_json=json.dumps({
+                        "novel_id": novel.id,
+                        "novel_title": novel.title,
+                        "episode_id": episode.id,
+                        "episode_number": next_num,
+                        "episode_title": title,
+                    }, ensure_ascii=False),
+                )
+                s.add(n)
+        if followers:
+            s.commit()
+
         eid = episode.id
     return {"ok": True, "episode_id": eid}
 
@@ -2062,6 +2128,9 @@ def api_admin_users(request: Request, location: str = Query("local"), status: st
                 "email_domain": email_domain,
                 "recent_ips": (u.recent_ips or [])[:3],
                 "is_suspended": getattr(u, 'is_suspended', False),
+                "is_frozen": getattr(u, 'is_frozen', False),
+                "is_limited": getattr(u, 'is_limited', False),
+                "is_deceased": getattr(u, 'is_deceased', False),
             })
         return {"users": result}
 
@@ -2093,6 +2162,9 @@ def api_admin_user_detail(request: Request, user_id: int):
             "last_active": last_active,
             "email_domain": email_domain,
             "recent_ips": (u.recent_ips or [])[:10],
+            "is_limited": getattr(u, 'is_limited', False),
+            "is_frozen": getattr(u, 'is_frozen', False),
+            "is_deceased": getattr(u, 'is_deceased', False),
             "is_suspended": getattr(u, 'is_suspended', False),
             "is_sensitive": getattr(u, 'is_sensitive', False),
             "moderation_note": getattr(u, 'moderation_note', '') or '',
@@ -2239,7 +2311,7 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
     user = require_auth(request)
     if user.role not in ("admin", "moderator"):
         raise HTTPException(status_code=403, detail="Forbidden")
-    valid_actions = ("warning", "freeze", "sensitive", "limit", "suspend", "unsuspend")
+    valid_actions = ("warning", "freeze", "unfreeze", "sensitive", "unsensitive", "limit", "unlimit", "suspend", "unsuspend", "deceased", "undeceased")
     if action not in valid_actions:
         raise HTTPException(status_code=400, detail=f"Invalid action: {action}")
     with get_session() as s:
@@ -2249,16 +2321,42 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
         if action == "warning":
             pass  # Just a warning, no automatic action
         elif action == "freeze":
-            u.is_suspended = True
+            u.is_frozen = True
+            u.is_suspended = False
+        elif action == "unfreeze":
+            u.is_frozen = False
         elif action == "sensitive":
             u.is_sensitive = True
+        elif action == "unsensitive":
+            u.is_sensitive = False
         elif action == "limit":
+            u.is_limited = True
             u.is_sensitive = True
             u.is_suspended = False
+            for p in s.query(Post).filter(Post.author_id == u.id, Post.visibility == "public").all():
+                p.original_visibility = p.visibility
+                p.visibility = "home"
         elif action == "suspend":
             u.is_suspended = True
+            for p in s.query(Post).filter(Post.author_id == u.id).all():
+                s.query(Post).filter(Post.in_reply_to_id == p.id).update({"in_reply_to_id": None})
+                s.delete(p)
+        elif action == "unlimit":
+            u.is_limited = False
+            u.is_sensitive = False
+            for p in s.query(Post).filter(Post.author_id == u.id, Post.original_visibility != "").all():
+                p.visibility = p.original_visibility
+                p.original_visibility = ""
         elif action == "unsuspend":
             u.is_suspended = False
+            u.is_limited = False
+            for p in s.query(Post).filter(Post.author_id == u.id, Post.original_visibility != "").all():
+                p.visibility = p.original_visibility
+                p.original_visibility = ""
+        elif action == "deceased":
+            u.is_deceased = True
+        elif action == "undeceased":
+            u.is_deceased = False
 
         # Create notification for the moderated user
         import json
@@ -2466,6 +2564,19 @@ def api_admin_set_post_cw(request: Request, post_id: int, summary: str = Form(""
         post.summary = summary
         s.commit()
         return {"ok": True, "summary": summary}
+
+
+@router.get("/server-info")
+def api_server_info():
+    with get_session() as s:
+        admins = s.query(User).filter(User.role == "admin", User.is_remote == False).all()
+        return {
+            "name": "WRIT",
+            "admins": [
+                {"username": a.username, "email": a.email or ""}
+                for a in admins
+            ],
+        }
 
 
 

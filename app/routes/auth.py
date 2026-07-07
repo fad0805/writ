@@ -54,4 +54,8 @@ def require_auth(request: Request):
     user = get_current_user(request)
     if not user:
         raise HTTPException(status_code=401)
+    if getattr(user, 'is_frozen', False):
+        raise HTTPException(status_code=403, detail="계정이 동결되었습니다.")
+    if getattr(user, 'is_suspended', False):
+        raise HTTPException(status_code=403, detail="계정이 정지되었습니다.")
     return user

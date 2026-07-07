@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
-import Link from "next/link";
+import AdminNav from "@/components/AdminNav";
 
 interface UserDetail {
   id: number; username: string; display_name: string; avatar: string;
@@ -13,7 +13,7 @@ interface UserDetail {
   email_verified?: boolean; summary: string;
   default_visibility: string; is_remote: boolean;
   created_at: string;
-  is_sensitive?: boolean; moderation_note?: string;
+  is_limited?: boolean; is_frozen?: boolean; is_deceased?: boolean; is_sensitive?: boolean; moderation_note?: string;
   moderation_history?: { id: number; action: string; created_at: string; by: { display_name: string; username: string } | null; meta: { action?: string; message?: string } }[];
 }
 
@@ -63,23 +63,7 @@ export default function AdminUserDetailPage() {
   return (
     <>
       <div className="page-header"><h2><Icon name="settings" /> 서버 관리</h2></div>
-      <div className="admin-tabs">
-        <Link href="/admin" className="btn btn-outline btn-small">대시보드</Link>
-      </div>
-      <div style={{ display: "flex", gap: 16, marginBottom: 20, fontSize: "0.85em", color: "var(--text-muted)" }}>
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>중재</div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <Link href="/admin/users" className="btn btn-outline btn-small">유저 관리</Link>
-          </div>
-        </div>
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>관리</div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <Link href="/admin/emojis" className="btn btn-outline btn-small">커스텀 이모지</Link>
-          </div>
-        </div>
-      </div>
+      <AdminNav current="users" />
 
       {msg && <div className="empty-state" style={{ background: "var(--accent)", color: "#fff", padding: "10px 16px", borderRadius: 8, marginBottom: 12 }}>{msg}</div>}
 
@@ -109,7 +93,7 @@ export default function AdminUserDetailPage() {
           { label: "팔로워", value: u.follower_count, icon: "user" },
           { label: "팔로잉", value: u.following_count, icon: "user" },
           { label: "시리즈", value: u.novels_count, icon: "book" },
-          { label: "상태", value: u.is_suspended ? "정지" : "활성", icon: u.is_suspended ? "block" : "check" },
+          { label: "상태", value: u.is_deceased ? "고인" : u.is_suspended ? "정지" : u.is_frozen ? "동결" : u.is_limited ? "제한" : "활성", icon: u.is_deceased ? "block" : u.is_suspended ? "block" : u.is_frozen ? "block" : u.is_limited ? "block" : "check" },
           { label: "역할", value: u.role === "admin" ? "관리자" : u.role === "moderator" ? "조율자" : "유저", icon: "shield" },
         ].map((c, i) => (
           <div key={i} className="admin-counter-card">
@@ -201,7 +185,7 @@ export default function AdminUserDetailPage() {
           <label className="admin-section-label" style={{ marginBottom: 8 }}>중재 기록</label>
           <div className="flex-col gap-6">
             {u.moderation_history.map((h) => {
-              const actNames: Record<string, string> = { warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지", unsuspend: "정지 해제" };
+              const actNames: Record<string, string> = { warning: "경고", freeze: "동결", unfreeze: "동결 해제", sensitive: "민감 처리", unsensitive: "민감 해제", limit: "제한", unlimit: "제한 해제", suspend: "정지", unsuspend: "정지 해제", deceased: "고인 설정", undeceased: "고인 해제" };
               const actName = actNames[h.meta?.action || ""] || h.meta?.action || "중재";
               return (
                 <div key={h.id} className="text-sm" style={{ padding: "10px 14px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6 }}>
@@ -233,6 +217,40 @@ export default function AdminUserDetailPage() {
           }} className="btn btn-primary btn-small">메모 저장</button>
           <div className="admin-spacer" />
           <button onClick={() => setShowModerate(true)} className="btn btn-small btn-moderate">중재</button>
+          {u.is_deceased ? (
+            <button onClick={async () => {
+              const form = new FormData(); form.append("action", "undeceased");
+              await fetch(`/api/admin/users/${u.id}/moderate`, { method: "POST", credentials: "include", body: form });
+              load();
+            }} className="btn btn-small btn-outline">고인 해제</button>
+          ) : (
+            <button onClick={async () => {
+              const form = new FormData(); form.append("action", "deceased");
+              await fetch(`/api/admin/users/${u.id}/moderate`, { method: "POST", credentials: "include", body: form });
+              load();
+            }} className="btn btn-small btn-outline">고인 설정</button>
+          )}
+          {u.is_frozen && (
+            <button onClick={async () => {
+              const form = new FormData(); form.append("action", "unfreeze");
+              await fetch(`/api/admin/users/${u.id}/moderate`, { method: "POST", credentials: "include", body: form });
+              load();
+            }} className="btn btn-small btn-outline">동결 해제</button>
+          )}
+          {u.is_limited && !u.is_suspended && (
+            <button onClick={async () => {
+              const form = new FormData(); form.append("action", "unlimit");
+              await fetch(`/api/admin/users/${u.id}/moderate`, { method: "POST", credentials: "include", body: form });
+              load();
+            }} className="btn btn-small btn-outline">제한 해제</button>
+          )}
+          {u.is_sensitive && !u.is_limited && (
+            <button onClick={async () => {
+              const form = new FormData(); form.append("action", "unsensitive");
+              await fetch(`/api/admin/users/${u.id}/moderate`, { method: "POST", credentials: "include", body: form });
+              load();
+            }} className="btn btn-small btn-outline">민감 해제</button>
+          )}
           {u.is_suspended && (
             <button onClick={async () => {
               const form = new FormData(); form.append("action", "unsuspend");

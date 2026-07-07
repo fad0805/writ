@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
-import Link from "next/link";
+import AdminNav from "@/components/AdminNav";
 
 interface Report {
   id: number;
@@ -69,9 +69,7 @@ export default function AdminReportsPage() {
       <div className="page-header">
         <h2><Icon name="flag" /> 신고 관리</h2>
       </div>
-      <div className="admin-tabs">
-        <Link href="/admin" className="btn btn-primary btn-small">대시보드</Link>
-      </div>
+      <AdminNav current="reports" />
       <div style={{ marginBottom: 16, display: "flex", gap: 8 }}>
         {["pending", "resolved", "dismissed"].map((s) => (
           <button key={s} className={`btn btn-small ${filterStatus === s ? "btn-primary" : "btn-outline"}`} onClick={() => setFilterStatus(s)}>
