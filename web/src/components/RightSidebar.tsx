@@ -1,12 +1,18 @@
 "use client";
 import { useAuth } from "@/lib/auth";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { api, NovelData, NotificationData } from "@/lib/api";
 import Icon from "./Icon";
 import Link from "next/link";
 import MiniPostCard from "./MiniPostCard";
+import { useRouter } from "next/navigation";
+
+const MODAL_ACTION_NAMES: Record<string, string> = {
+  warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지",
+};
 
 export default function RightSidebar() {
+  const router = useRouter();
   const { user } = useAuth();
   const [novels, setNovels] = useState<NovelData[]>([]);
   const [notifs, setNotifs] = useState<NotificationData[]>([]);
@@ -26,7 +32,27 @@ export default function RightSidebar() {
   useEffect(() => {
     const handler = () => setRefreshKey((k) => k + 1);
     window.addEventListener("novelchange", handler);
-    return () => window.removeEventListener("novelchange", handler);
+    window.addEventListener("notificationsread", handler);
+    window.addEventListener("followchange", handler);
+    return () => {
+      window.removeEventListener("novelchange", handler);
+      window.removeEventListener("notificationsread", handler);
+      window.removeEventListener("followchange", handler);
+    };
+  }, []);
+
+  const handleApprove = useCallback(async (username: string) => {
+    try {
+      await fetch(`/api/users/${username}/approve-follow`, { method: "POST", credentials: "include" });
+      setNotifs((prev) => prev.filter((n) => !(n.type === "follow_request" && n.from_user?.username === username)));
+    } catch {}
+  }, []);
+
+  const handleReject = useCallback(async (username: string) => {
+    try {
+      await fetch(`/api/users/${username}/reject-follow`, { method: "POST", credentials: "include" });
+      setNotifs((prev) => prev.filter((n) => !(n.type === "follow_request" && n.from_user?.username === username)));
+    } catch {}
   }, []);
 
   if (!user) {
@@ -63,9 +89,75 @@ export default function RightSidebar() {
       <div className="widget">
         <h4><Icon name="bell" /> 알림</h4>
         <div className="notif-mini-list">
-          {notifs.length > 0 ? notifs.map((n) => (
-            n.post ? <MiniPostCard key={n.id} post={n.post} notifType={n.type} /> : null
-          )) : <p className="empty-small p-0">알림이 없습니다.</p>}
+          {notifs.length > 0 ? notifs.map((n) => {
+            if (n.post) return <MiniPostCard key={n.id} post={n.post} notifType={n.type} />;
+
+            if (n.type === "follow" || n.type === "follow_request") {
+              return (
+                <Link key={n.id} href={`/@${n.from_user?.username || ""}`} className="mini-post-link" style={{ background: "var(--bg-tertiary)", cursor: "pointer" }}>
+                  <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#4fc3f7" }}>
+                    <Icon name="user_solid" size={14} />
+                  </div>
+                  <div className="mini-post-content">
+                    <div className="mini-post-author">
+                      {n.from_user?.display_name || "알 수 없음"}
+                      <span className="mini-post-handle">@{n.from_user?.username}</span>
+                    </div>
+                    <div className="text-sm" style={{ color: "var(--text-muted)" }}>
+                      {n.type === "follow" ? "회원님을 팔로우했습니다" : "회원님을 팔로우 요청했습니다"}
+                    </div>
+                    {n.type === "follow_request" && n.from_user && (
+                      <div className="mini-notif-btns" onClick={(e) => e.preventDefault()} style={{ display: "flex", gap: 4, marginTop: 4 }}>
+                        <button onClick={() => handleApprove(n.from_user!.username)} className="btn btn-primary btn-small btn-follow">수락</button>
+                        <button onClick={() => handleReject(n.from_user!.username)} className="btn btn-small btn-follow text-muted">거절</button>
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              );
+            }
+
+            if (n.type === "moderation") {
+              const actionName = MODAL_ACTION_NAMES[n.metadata?.action] || n.metadata?.action || "중재";
+              return (
+                <div key={n.id} className="mini-post-link" style={{ background: "var(--bg-tertiary)" }}>
+                  <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "var(--danger)" }}>
+                    <Icon name="shield_filled" size={14} />
+                  </div>
+                  <div className="mini-post-content">
+                    <div className="text-sm">
+                      <span style={{ color: "var(--danger)", fontWeight: 600 }}>{actionName}</span>{" "}
+                      <span style={{ color: "var(--text-muted)" }}>조치가 적용되었습니다</span>
+                    </div>
+                    {n.metadata?.message && (
+                      <div className="text-sm" style={{ color: "var(--text-muted)", marginTop: 2 }}>{n.metadata.message}</div>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
+            if (n.type === "new_episode") {
+              return (
+                <Link key={n.id} href={n.metadata?.novel_id && n.metadata?.episode_id ? `/series/${n.metadata.novel_id}/episodes/${n.metadata.episode_id}` : "#"} className="mini-post-link" style={{ background: "var(--bg-tertiary)" }}>
+                  <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#9b59b6" }}>
+                    <Icon name="book" size={14} />
+                  </div>
+                  <div className="mini-post-content">
+                    <div className="mini-post-author">
+                      {n.from_user?.display_name || "알 수 없음"}
+                      <span className="mini-post-handle">@{n.from_user?.username}</span>
+                    </div>
+                    <div className="text-sm" style={{ color: "var(--text-muted)" }}>
+                      {n.metadata?.novel_title ? `"${n.metadata.novel_title}" 새 에피소드` : "새 에피소드"}
+                    </div>
+                  </div>
+                </Link>
+              );
+            }
+
+            return null;
+          }) : <p className="empty-small p-0">알림이 없습니다.</p>}
         </div>
       </div>
       <div className="widget" style={{ marginTop: "auto", borderTop: "1px solid var(--border)", paddingTop: 12 }}>

@@ -1145,7 +1145,12 @@ input[type="checkbox"] {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
+}
+.page-header h2 {
+  font-size: 1.25em;
+  margin: 0;
+  line-height: 1.4;
 }
 
 /* ── Novel detail header ── */
@@ -3000,7 +3005,6 @@ input[type="checkbox"] {
 .profile-bottom-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   width: 100%;
   box-sizing: border-box;
 }
@@ -3015,6 +3019,7 @@ input[type="checkbox"] {
   display: flex;
   gap: 6px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 /* ── Profile note card ── */
