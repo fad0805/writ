@@ -13,6 +13,7 @@ export default function AdminSettingsPage() {
   const [favicon, setFavicon] = useState("");
   const [appIcon, setAppIcon] = useState("");
   const [adminIds, setAdminIds] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
@@ -33,6 +34,7 @@ export default function AdminSettingsPage() {
         setFavicon(d.favicon || "");
         setAppIcon(d.app_icon || "");
         setAdminIds(d.admin_ids || "");
+        setAdminEmail(d.admin_email || "");
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -49,8 +51,9 @@ export default function AdminSettingsPage() {
       form.append("favicon", favicon);
       form.append("app_icon", appIcon);
       form.append("admin_ids", adminIds);
+      form.append("admin_email", adminEmail);
       const res = await fetch("/api/admin/settings", { method: "POST", credentials: "include", body: form });
-      if (res.ok) setMsg("저장되었습니다.");
+      if (res.ok) { setMsg("저장되었습니다."); window.dispatchEvent(new Event("serverchange")); }
       else setMsg("저장 실패");
     } catch { setMsg("오류 발생"); }
     setSaving(false);
@@ -67,7 +70,8 @@ export default function AdminSettingsPage() {
       <form onSubmit={handleSubmit} className="novel-form">
         <div className="form-group">
           <label>서버 이름</label>
-          <input type="text" value={serverName} onChange={(e) => setServerName(e.target.value)} className="cw-input" placeholder="WRIT" />
+          <input type="text" value={serverName} onChange={(e) => setServerName(e.target.value.slice(0, 20))} className="cw-input" placeholder="WRIT" maxLength={20} />
+          <p className="form-help">최대 20자까지 입력 가능합니다.</p>
         </div>
         <div className="form-group">
           <label>대표 아이콘 (URL)</label>
@@ -83,9 +87,14 @@ export default function AdminSettingsPage() {
           <input type="text" value={appIcon} onChange={(e) => setAppIcon(e.target.value)} className="cw-input" placeholder="https://example.com/app-icon.png" />
         </div>
         <div className="form-group">
-          <label>관리자 역할 계정</label>
-          <input type="text" value={adminIds} onChange={(e) => setAdminIds(e.target.value)} className="cw-input" placeholder="@user1, @user2, ..." />
-          <p className="form-help">관리자로 표시할 계정 핸들을 쉼표로 구분해 입력하세요. 관리자/오너 권한이 없어도 됩니다.</p>
+          <label>관리자 계정</label>
+          <input type="text" value={adminIds} onChange={(e) => setAdminIds(e.target.value)} className="cw-input" placeholder="owner" />
+          <p className="form-help">서버 정보에 표시할 관리자 계정 핸들을 입력하세요. 기본값은 owner입니다.</p>
+        </div>
+        <div className="form-group">
+          <label>관리 이메일</label>
+          <input type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} className="cw-input" placeholder="admin@example.com" />
+          <p className="form-help">서버 정보에 표시할 관리 이메일 주소입니다. 비워두면 설정된 관리자 계정의 이메일이 표시됩니다.</p>
         </div>
         <div className="form-actions">
           <button type="submit" disabled={saving} className="btn btn-primary">{saving ? "저장 중..." : "저장"}</button>

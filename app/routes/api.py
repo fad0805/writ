@@ -1668,7 +1668,7 @@ def api_explore(request: Request):
 @router.get("/search")
 def api_search(request: Request, q: str = Query("")):
     user = get_current_user(request)
-    query = q.strip()
+    query = q.strip().lstrip("@")
     if not query:
         return {"posts": [], "novels": [], "users": []}
     with get_session() as s:
@@ -2723,7 +2723,7 @@ def api_admin_unblock_domain(request: Request, domain: str):
 
 def _resolve_admin_users(s, admin_ids_str: str):
     if not admin_ids_str:
-        return []
+        admin_ids_str = "owner"
     handles = [h.strip().lstrip("@") for h in admin_ids_str.split(",") if h.strip()]
     if not handles:
         return []
@@ -2736,10 +2736,11 @@ def api_server_info():
         from app.models import ServerSetting
         settings = ServerSetting.get(s)
         admins = _resolve_admin_users(s, settings.admin_ids or "")
+        admin_email = settings.admin_email or (admins[0].email if admins else "")
         return {
             "name": settings.server_name,
             "admins": [
-                {"username": a.username, "email": a.email or ""}
+                {"username": a.username, "email": admin_email or ""}
                 for a in admins
             ],
             "logo": settings.logo,
@@ -2762,6 +2763,7 @@ def api_admin_get_settings(request: Request):
             "favicon": settings.favicon,
             "app_icon": settings.app_icon,
             "admin_ids": settings.admin_ids or "",
+            "admin_email": settings.admin_email or "",
         }
 
 
@@ -2771,18 +2773,22 @@ def api_admin_update_settings(request: Request,
                                logo: str = Form(""),
                                favicon: str = Form(""),
                                app_icon: str = Form(""),
-                               admin_ids: str = Form("")):
+                               admin_ids: str = Form(""),
+                               admin_email: str = Form("")):
     user = require_auth(request)
     if user.role not in ("admin", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
+    if len(server_name) > 20:
+        raise HTTPException(status_code=400, detail="서버명은 20자 이하여야 합니다.")
     with get_session() as s:
         from app.models import ServerSetting
         settings = ServerSetting.get(s)
-        settings.server_name = server_name
+        settings.server_name = server_name[:20]
         settings.logo = logo
         settings.favicon = favicon
         settings.app_icon = app_icon
         settings.admin_ids = admin_ids
+        settings.admin_email = admin_email
         s.commit()
     return {"ok": True}
 

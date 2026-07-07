@@ -128,11 +128,14 @@ function ExploreContent() {
           </div>
         )}
       </div>
-      {loading ? (
+      {loading && !searched ? (
+        <div className="empty-state">로딩 중...</div>
+      ) : posts.length === 0 && novels.length === 0 && users.length === 0 ? (
+        <div className="empty-state">검색 결과가 없습니다.</div>
+      ) : (
         <>
-          {posts.length === 0 && novels.length === 0 && users.length === 0 ? (
-            <div className="empty-state">검색 결과가 없습니다.</div>
-          ) : (
+          {!loading && !searched && posts.length > 0 && posts.map((p) => <PostCard key={p.id} post={p} />)}
+          {searched && (
             <>
               {fetchedUrl && posts.length > 0 && (
                 <>
@@ -201,10 +204,6 @@ function ExploreContent() {
             </>
           )}
         </>
-      ) : posts.length === 0 ? (
-        <div className="empty-state">게시글이 없습니다.</div>
-      ) : (
-        posts.map((p) => <PostCard key={p.id} post={p} />)
       )}
     </div>
   );

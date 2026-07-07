@@ -1,12 +1,17 @@
 "use client";
 import { useAuth } from "@/lib/auth";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Icon from "@/components/Icon";
 
 export default function Home() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const [serverInfo, setServerInfo] = useState<{ name: string; logo: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/server-info").then((r) => r.json()).then(setServerInfo).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!loading && user) router.replace("/timeline/home");
@@ -17,8 +22,8 @@ export default function Home() {
 
   return (
     <div className="home-container">
-      <div className="home-logo"><img src="/logo.svg" alt="WRIT" /></div>
-      <h1 className="home-title">WRIT</h1>
+      <div className="home-logo"><img src={serverInfo?.logo || "/logo.svg"} alt={serverInfo?.name || "WRIT"} /></div>
+      <h1 className="home-title">{serverInfo?.name || "WRIT"}</h1>
       <p className="home-desc">
         작가를 위한 소셜 네트워크입니다.<br />
         소설을 연재하고, 독자와 소통하고, 글을 나누세요.

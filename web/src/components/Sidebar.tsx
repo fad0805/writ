@@ -24,6 +24,16 @@ export default function Sidebar() {
   const [mounted, setMounted] = useState(false);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [sidebarQ, setSidebarQ] = useState("");
+  const [sidebarServerName, setSidebarServerName] = useState("WRIT");
+  const [sidebarLogo, setSidebarLogo] = useState("");
+  const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
+
+  useEffect(() => {
+    fetch("/api/server-info")
+      .then((r) => r.json())
+      .then((d) => { setSidebarServerName((d.name || "WRIT").slice(0, 20)); setSidebarLogo(d.logo || ""); })
+      .catch(() => {});
+  }, [sidebarRefreshKey]);
 
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => {
@@ -39,8 +49,10 @@ export default function Sidebar() {
     const profileHandler = () => refresh();
     window.addEventListener("notificationsread", handler);
     window.addEventListener("profilechange", profileHandler);
+    const serverHandler = () => setSidebarRefreshKey((k) => k + 1);
+    window.addEventListener("serverchange", serverHandler);
     const interval = setInterval(check, 30000);
-    return () => { clearInterval(interval); window.removeEventListener("notificationsread", handler); window.removeEventListener("profilechange", profileHandler); };
+    return () => { clearInterval(interval); window.removeEventListener("notificationsread", handler); window.removeEventListener("profilechange", profileHandler); window.removeEventListener("serverchange", serverHandler); };
   }, [user, refresh]);
   useEffect(() => {
     setIsDark(document.body.classList.contains("dark-theme"));
@@ -74,7 +86,7 @@ export default function Sidebar() {
     return (
       <aside className="sidebar">
         <div className="sidebar-header">
-          <Link href="/" className="sidebar-home-link"><h2><span className="sidebar-logo-icon" /> WRIT</h2></Link>
+          <Link href="/" className="sidebar-home-link"><h2><span className="sidebar-logo-icon" /> {sidebarServerName}</h2></Link>
         </div>
       </aside>
     );
@@ -84,7 +96,7 @@ export default function Sidebar() {
     return (
       <aside className="sidebar">
         <div className="sidebar-header">
-          <Link href="/" className="sidebar-home-link"><h2><span className="sidebar-logo-icon" /> WRIT</h2></Link>
+          <Link href="/" className="sidebar-home-link"><h2><span className="sidebar-logo-icon" /> {sidebarServerName}</h2></Link>
         </div>
         <ul className="nav-links">
           <NavItem href="/explore" active={isActive("/explore")}>
@@ -111,7 +123,7 @@ export default function Sidebar() {
     <aside className="sidebar">
       <div className="sidebar-header">
         <Link href="/" className="sidebar-home-link">
-          <h2><span className="sidebar-logo-icon" /> WRIT</h2>
+          <h2 style={{ "--title-size": `${Math.max(0.75, 1.4 - sidebarServerName.length * 0.035)}em` } as React.CSSProperties}>{sidebarLogo ? <img src={sidebarLogo} alt="" className="sidebar-logo-img" /> : <span className="sidebar-logo-icon" />}{sidebarServerName}</h2>
         </Link>
       </div>
       <form className="sidebar-search" onSubmit={async (e) => {

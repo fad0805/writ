@@ -25,19 +25,21 @@ export default function RightSidebar() {
     api.getNotifications().then((d) => setNotifs(d.notifications.slice(0, 10))).catch(() => {});
   }, [user, refreshKey]);
 
-  useEffect(() => {
-    fetch("/api/server-info").then((r) => r.json()).then(setServerInfo).catch(() => {});
-  }, []);
+  const [serverRefreshKey, setServerRefreshKey] = useState(0);
+  useEffect(() => { fetch("/api/server-info").then((r) => r.json()).then(setServerInfo).catch(() => {}); }, [serverRefreshKey]);
 
   useEffect(() => {
     const handler = () => setRefreshKey((k) => k + 1);
+    const serverHandler = () => setServerRefreshKey((k) => k + 1);
     window.addEventListener("novelchange", handler);
     window.addEventListener("notificationsread", handler);
     window.addEventListener("followchange", handler);
+    window.addEventListener("serverchange", serverHandler);
     return () => {
       window.removeEventListener("novelchange", handler);
       window.removeEventListener("notificationsread", handler);
       window.removeEventListener("followchange", handler);
+      window.removeEventListener("serverchange", serverHandler);
     };
   }, []);
 
@@ -55,14 +57,11 @@ export default function RightSidebar() {
     } catch {}
   }, []);
 
-  if (!user) {
-    return <aside className="right-sidebar" />;
-  }
-
   const visibleNovels = novels.slice(0, 3);
   const extraCount = novels.length - 3;
   return (
     <aside className="right-sidebar">
+      {user && (<>
       <div className="widget">
         <h4><Icon name="book" /> 내 시리즈</h4>
         <div className="novel-mini-list">
@@ -160,7 +159,8 @@ export default function RightSidebar() {
           }) : <p className="empty-small p-0">알림이 없습니다.</p>}
         </div>
       </div>
-      <div className="widget" style={{ marginTop: "auto", borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+      </>)}
+      <div className="widget" style={{ marginTop: "auto", borderTop: "1px solid var(--border)", paddingTop: 12, marginBottom: 0 }}>
         <h4><Icon name="globe" /> 서버 정보</h4>
         {serverInfo ? (
           <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>
@@ -168,21 +168,22 @@ export default function RightSidebar() {
             {serverInfo.admins.length > 0 && (
               <div style={{ marginBottom: 8 }}>
                 {serverInfo.admins.map((a) => (
-                  <div key={a.username}>
-                    @{a.username}{a.email ? ` · ${a.email}` : ""}
+                  <div key={a.username} style={{ marginBottom: 2 }}>
+                    <Link href={`/@${a.username}`} style={{ color: "var(--accent)" }}>@{a.username}</Link>
+                    {a.email ? <span style={{ color: "var(--text-dim)", marginLeft: 4 }}>· {a.email}</span> : ""}
                   </div>
                 ))}
               </div>
             )}
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
-              <a href="https://github.com/fad0805/writ" target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>
-                소스코드 (GitHub)
-              </a>
-            </div>
           </div>
         ) : (
           <p className="empty-small">로딩 중...</p>
         )}
+      </div>
+      <div style={{ borderTop: "1px solid var(--border)", padding: "10px 0 4px", fontSize: 12, color: "var(--text-dim)" }}>
+        <a href="https://github.com/fad0805/writ" target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>
+          소스코드 (GitHub)
+        </a>
       </div>
     </aside>
   );

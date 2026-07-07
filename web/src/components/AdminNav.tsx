@@ -19,8 +19,8 @@ export default function AdminNav({ current }: { current: "dashboard" | "reports"
         <div>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>관리</div>
           <div style={{ display: "flex", gap: 6 }}>
-            <Link href="/admin/emojis" className={`btn btn-small ${current === "emojis" ? "btn-primary" : "btn-outline"}`}>커스텀 이모지</Link>
             <Link href="/admin/settings" className={`btn btn-small ${current === "settings" ? "btn-primary" : "btn-outline"}`}>서버 정보</Link>
+            <Link href="/admin/emojis" className={`btn btn-small ${current === "emojis" ? "btn-primary" : "btn-outline"}`}>커스텀 이모지</Link>
           </div>
         </div>
       </div>

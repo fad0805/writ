@@ -457,6 +457,7 @@ class ServerSetting(Base):
     favicon = Column(String(512), default="")
     app_icon = Column(String(512), default="")
     admin_ids = Column(String(512), default="")
+    admin_email = Column(String(255), default="")
 
     @classmethod
     def get(cls, session):
@@ -492,6 +493,13 @@ def init_db():
             import secrets
             for novel in session.query(Novel).filter(Novel.number == "").all():
                 novel.number = secrets.token_hex(4)
+            session.commit()
+    except Exception:
+        pass
+    # Add admin_email column to server_settings
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE server_settings ADD COLUMN admin_email VARCHAR(255) DEFAULT ''"))
             session.commit()
     except Exception:
         pass
