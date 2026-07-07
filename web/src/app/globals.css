@@ -2954,6 +2954,7 @@ input[type="checkbox"] {
   margin-top: 6px;
   font-size: 0.9em;
   color: var(--text-secondary);
+  white-space: pre-wrap;
 }
 .admin-profile-actions {
   display: flex;

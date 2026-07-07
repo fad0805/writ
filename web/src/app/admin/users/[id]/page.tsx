@@ -119,7 +119,7 @@ export default function AdminUserDetailPage() {
               <tr>
                 <td colSpan={3} style={{ padding: "10px 16px" }}>
                   <div className="flex-row gap-8">
-                    <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="new@example.com" className="cw-input flex-1" />
+                    <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="new@example.com" className="cw-input flex-1" onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { act(`/api/admin/users/${u.id}/change-email`, { email: newEmail }); setShowChangeEmail(false); } }} />
                     <button onClick={() => { act(`/api/admin/users/${u.id}/change-email`, { email: newEmail }); setShowChangeEmail(false); }} className="btn btn-primary btn-small">저장</button>
                   </div>
                 </td>
@@ -208,7 +208,7 @@ export default function AdminUserDetailPage() {
       {/* Moderation note */}
       <div className="admin-section">
         <label className="admin-section-label">참고사항</label>
-        <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={3} className="cw-input w-full resize-vertical" placeholder="관리자 참고용 메모..." />
+        <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={3} className="cw-input w-full resize-vertical" placeholder="관리자 참고용 메모..." onKeyDown={async (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { const form = new FormData(); form.append("note", noteText); const res = await fetch(`/api/admin/users/${u.id}/note`, { method: "POST", credentials: "include", body: form }); if (res.ok) alert("저장됨"); } }} />
         <div className="flex-center" style={{ gap: 8, marginTop: 4 }}>
           <button onClick={async () => {
             const form = new FormData(); form.append("note", noteText);
@@ -281,7 +281,7 @@ export default function AdminUserDetailPage() {
               </div>
               <div>
                 <label className="admin-section-label">경고 메세지</label>
-                <textarea value={modMessage} onChange={e => setModMessage(e.target.value)} rows={4} className="cw-input mod-textarea" placeholder="사용자에게 보낼 경고 메세지를 입력하세요..." />
+                <textarea value={modMessage} onChange={e => setModMessage(e.target.value)} rows={4} className="cw-input mod-textarea" placeholder="사용자에게 보낼 경고 메세지를 입력하세요..." onKeyDown={async (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { const form = new FormData(); form.append("action", modAction); form.append("message", modMessage); if (modEmail) form.append("send_email", "true"); const res = await fetch(`/api/admin/users/${u.id}/moderate`, { method: "POST", credentials: "include", body: form }); if (res.ok) { load(); setShowModerate(false); setMsg("조치가 적용되었습니다."); } else alert("실패"); } }} />
               </div>
               <div>
                 <label className="text-sm text-muted flex-center" style={{ gap: 6, cursor: "pointer" }}>
