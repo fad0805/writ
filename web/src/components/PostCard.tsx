@@ -1,5 +1,5 @@
 "use client";
-import { PostData, NovelData, User, api } from "@/lib/api";
+import { PostData, NovelData, User, EpisodeData, api } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
@@ -103,6 +103,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
       const escUrl = quoteUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       html = html.replace(new RegExp(`<a[^>]*>${escUrl}</a>`, 'gi'), '');
       html = html.replace(new RegExp(`series:\\s*${escUrl}`, 'gi'), '');
+      html = html.replace(new RegExp(`episode:\\s*${escUrl}`, 'gi'), '');
       html = html.replace(new RegExp(escUrl, 'gi'), '');
       html = html.replace(/<span class="quote-inline">\s*RE:\s*<\/span>/gi, '');
     }
@@ -111,21 +112,29 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
 
   // Extract quoted post URL from content
   type QuotedSeries = { type: "series"; novel: NovelData; author: User };
+  type QuotedEpisode = { type: "episode"; episode: EpisodeData; novel: NovelData; author: User };
   const [quotedPost, setQuotedPost] = useState<PostData | null>(null);
   const [quotedSeries, setQuotedSeries] = useState<QuotedSeries | null>(null);
+  const [quotedEpisode, setQuotedEpisode] = useState<QuotedEpisode | null>(null);
   const [loadingQuote, setLoadingQuote] = useState(false);
   useEffect(() => {
     const newFormat = post.content.match(/https?:\/\/([^/]+)\/@(\w+(?:@[\w.-]+)?)\/([a-f0-9]+)/);
     const oldFormat = post.content.match(/https?:\/\/[^/]+\/post\/(\d+)/);
     const seriesFormat = post.content.match(/https?:\/\/[^/]+\/series\/(\d+)/);
     const seriesByNumber = post.content.match(/https?:\/\/[^/]+\/series\/by-number\/(\w+)\/([a-f0-9]+)/);
+    const episodeFormat = post.content.match(/https?:\/\/[^/]+\/series\/(\d+)\/episodes\/(\d+)/);
     const anyUrl = post.content.match(/https?:\/\/[^\s<>"']+/);
-    const url = seriesFormat?.[0] || seriesByNumber?.[0] || newFormat?.[0] || oldFormat?.[0] || anyUrl?.[0];
+    const url = episodeFormat?.[0] || seriesFormat?.[0] || seriesByNumber?.[0] || newFormat?.[0] || oldFormat?.[0] || anyUrl?.[0];
     if (!url) return;
     setQuoteUrl(url);
     setLoadingQuote(true);
     const isLocal = (url.match(/https?:\/\/([^/]+)/)?.[1]) === window.location.host;
-    if (isLocal && (seriesFormat || seriesByNumber)) {
+    if (isLocal && episodeFormat) {
+      fetch("/api/fetch-episode", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ url }) })
+        .then(r => { if (r.ok) return r.json(); throw new Error(); })
+        .then(d => { setQuotedEpisode(d); setLoadingQuote(false); })
+        .catch(() => setLoadingQuote(false));
+    } else if (isLocal && (seriesFormat || seriesByNumber)) {
       fetch("/api/fetch-series", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ url }) })
         .then(r => { if (r.ok) return r.json(); throw new Error(); })
         .then(d => { setQuotedSeries(d); setLoadingQuote(false); })
@@ -251,6 +260,29 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
               <div className="emoji-keyword">{quotedSeries.novel.title}</div>
               {quotedSeries.author && <div className="text-sm text-muted">by {quotedSeries.author.display_name || quotedSeries.author.username}</div>}
               {quotedSeries.novel.description && <div className="text-sm" style={{ color: "var(--text-secondary)", marginTop: 4 }}>{quotedSeries.novel.description.slice(0, 100)}</div>}
+            </div>
+          </div>
+        )}
+        {quotedEpisode && (
+          <div className="quoted-series" onClick={(e) => { e.stopPropagation(); router.push(`/series/${quotedEpisode.novel.id}/episodes/${quotedEpisode.episode.id}`); }}>
+            <div className="cover-wrap-64 bg-tertiary">
+              {quotedEpisode.novel.cover_image ? (
+                <img src={quotedEpisode.novel.cover_image} alt="" className="cover-img" />
+              ) : (
+                <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(quotedEpisode.novel.title) }}>
+                  {quotedEpisode.novel.title[0]}
+                </div>
+              )}
+            </div>
+            <div className="mini-post-content">
+              <div className="mini-post-cw"><Icon name="book" /> 에피소드</div>
+              <div className="emoji-keyword">{quotedEpisode.novel.title} — {quotedEpisode.episode.title}</div>
+              {quotedEpisode.author && <div className="text-sm text-muted">by {quotedEpisode.author.display_name || quotedEpisode.author.username}</div>}
+              {quotedEpisode.episode.summary ? (
+                <div className="text-sm" style={{ color: "var(--text-secondary)", marginTop: 4 }}>{quotedEpisode.episode.summary}</div>
+              ) : (
+                <div className="text-sm" style={{ color: "var(--text-secondary)", marginTop: 4 }}>{quotedEpisode.episode.content.replace(/\n/g, " ").replace(/<[^>]*>/g, "").slice(0, 50)}{quotedEpisode.episode.content.replace(/\n/g, " ").replace(/<[^>]*>/g, "").length > 50 ? "..." : ""}</div>
+              )}
             </div>
           </div>
         )}

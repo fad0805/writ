@@ -81,18 +81,26 @@ export default function EpisodeDetailPage() {
         <div className="episode-body" dangerouslySetInnerHTML={{ __html: episode.content }} />
         {episode.comment && <div className="episode-comment" dangerouslySetInnerHTML={{ __html: episode.comment }} />}
         <div className="episode-footer">
-        <div className="episode-navigation m-0">
-          {prevEp && (
-            <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${prevEp.id}`)}>
-              ← 제{prevEp.episode_number}화 ({prevEp.title})
-            </button>
-          )}
+        <div className="episode-nav">
+          <div className="episode-nav-side">
+            {prevEp ? (
+              <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${prevEp.id}`)}>
+                ← 제 {prevEp.episode_number} 화 ({prevEp.title})
+              </button>
+            ) : (
+              <span className="episode-nav-none">이전 화가 없습니다</span>
+            )}
+          </div>
           <Link href={`/series/${novel.id}`} className="btn btn-outline">목차</Link>
-          {nextEp && (
-            <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${nextEp.id}`)}>
-              제{nextEp.episode_number}화 ({nextEp.title}) →
-            </button>
-          )}
+          <div className="episode-nav-side">
+            {nextEp ? (
+              <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${nextEp.id}`)}>
+                제 {nextEp.episode_number} 화 ({nextEp.title}) →
+              </button>
+            ) : (
+              <span className="episode-nav-none">다음 화가 없습니다</span>
+            )}
+          </div>
         </div>
         </div>
       </article>

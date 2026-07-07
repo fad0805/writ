@@ -1226,12 +1226,22 @@ input[type="checkbox"] {
   line-height: 1.6;
   color: var(--text-secondary);
 }
-.episode-navigation {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
+.episode-nav {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 4px;
+  align-items: center;
   margin: 20px 0;
-  flex-wrap: wrap;
+}
+.episode-nav-side {
+  display: flex;
+}
+.episode-nav-side:first-child { justify-content: flex-end; }
+.episode-nav-side:last-child { justify-content: flex-start; }
+.episode-nav-none {
+  font-size: 0.85em;
+  color: var(--text-dim);
+  padding: 6px 14px;
 }
 .episode-header-row {
   display: flex;
