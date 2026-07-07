@@ -2869,6 +2869,7 @@ input[type="checkbox"] {
 }
 .detail-table td.action {
   width: 120px;
+  text-align: right;
 }
 
 /* ── Admin search panel ── */
@@ -2979,6 +2980,11 @@ input[type="checkbox"] {
 /* ── Admin section ── */
 .admin-section {
   margin-bottom: 20px;
+}
+.admin-action-btn-eq {
+  min-width: 100px;
+  text-align: center;
+  justify-content: center;
 }
 .admin-section-label {
   display: block;

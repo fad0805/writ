@@ -191,7 +191,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
             <Avatar user={post.author} className="post-author-avatar flex items-center justify-center text-white font-bold text-sm" />
           </Link>
           <Link href={`/@${post.author.username}`} className="post-author" onClick={(e) => e.stopPropagation()}>
-            {post.author.display_name} {(post.author.role === "admin" || post.author.role === "moderator") && (post.author as any).show_badge && <Icon name="shield_filled" style={{ color: post.author.role === "admin" ? "#27ae60" : "#cc8800", fontSize: "0.65em", verticalAlign: "middle", marginLeft: 2 }} title={post.author.role === "admin" ? "관리자" : "조율자"} />}
+            {post.author.display_name} {(post.author.role === "admin" || post.author.role === "moderator" || post.author.role === "owner") && (post.author as any).show_badge && <Icon name={post.author.role === "owner" ? "books_solid" : "shield_filled"} style={{ color: post.author.role === "owner" ? "var(--accent)" : post.author.role === "admin" ? "#27ae60" : "#cc8800", fontSize: "0.65em", verticalAlign: "middle", marginLeft: 2 }} title={post.author.role === "owner" ? "오너" : post.author.role === "admin" ? "관리자" : "조율자"} />}
           </Link>
           <Link href={`/@${post.author.username}`} className="post-username" onClick={(e) => e.stopPropagation()}>
             @{post.author.username}

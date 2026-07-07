@@ -41,7 +41,7 @@ export default function AdminUserDetailPage() {
   };
 
   useEffect(() => {
-    if (!authLoading && me?.role !== "admin" && me?.role !== "moderator")
+    if (!authLoading && me?.role !== "admin" && me?.role !== "moderator" && me?.role !== "owner")
       router.push("/timeline/home");
   }, [me, authLoading, router]);
 
@@ -75,6 +75,7 @@ export default function AdminUserDetailPage() {
         <div className="admin-profile-info">
           <div className="admin-profile-name">
             {u.display_name}
+            {u.role === "owner" && <Icon name="books_solid" style={{ color: "var(--accent)", fontSize: "0.7em", verticalAlign: "middle", marginLeft: 4 }} title="오너" />}
             {u.role === "admin" && <Icon name="shield_filled" style={{ color: "#27ae60", fontSize: "0.7em", verticalAlign: "middle", marginLeft: 4 }} title="관리자" />}
             {u.role === "moderator" && <Icon name="shield_filled" style={{ color: "#cc8800", fontSize: "0.7em", verticalAlign: "middle", marginLeft: 4 }} title="조율자" />}
           </div>
@@ -94,7 +95,7 @@ export default function AdminUserDetailPage() {
           { label: "팔로잉", value: u.following_count, icon: "user" },
           { label: "시리즈", value: u.novels_count, icon: "book" },
           { label: "상태", value: u.is_deceased ? "고인" : u.is_suspended ? "정지" : u.is_frozen ? "동결" : u.is_limited ? "제한" : "활성", icon: u.is_deceased ? "block" : u.is_suspended ? "block" : u.is_frozen ? "block" : u.is_limited ? "block" : "check" },
-          { label: "역할", value: u.role === "admin" ? "관리자" : u.role === "moderator" ? "조율자" : "유저", icon: "shield" },
+          { label: "역할", value: u.role === "owner" ? "오너" : u.role === "admin" ? "관리자" : u.role === "moderator" ? "조율자" : "유저", icon: "shield" },
         ].map((c, i) => (
           <div key={i} className="admin-counter-card">
             <Icon name={c.icon} size={20} />
@@ -111,16 +112,18 @@ export default function AdminUserDetailPage() {
             <tr>
               <td className="label">이메일</td>
               <td className="value">{u.email_domain ? `${u.username}@${u.email_domain}` : "-"}</td>
-              <td className="action" style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
-                <button onClick={() => setShowChangeEmail(!showChangeEmail)} className="btn btn-small btn-outline text-xs">변경</button>
-                {u.email_domain && (
-                  <button onClick={async () => {
-                    const form = new FormData(); form.append("domain", u.email_domain!);
-                    const res = await fetch("/api/admin/block-domain", { method: "POST", credentials: "include", body: form });
-                    const d = await res.json().catch(() => ({}));
-                    alert(res.ok ? `도메인 ${u.email_domain} 차단됨` : (d.detail || "실패"));
-                  }} className="btn btn-small btn-outline text-xs" style={{ color: "var(--danger)" }}>도메인 차단</button>
-                )}
+              <td className="action">
+                <div style={{ display: "inline-flex", flexDirection: "column", gap: 4 }}>
+                  <button onClick={() => setShowChangeEmail(!showChangeEmail)} className="btn btn-small btn-outline text-xs admin-action-btn-eq">변경</button>
+                  {u.email_domain && (
+                    <button onClick={async () => {
+                      const form = new FormData(); form.append("domain", u.email_domain!);
+                      const res = await fetch("/api/admin/block-domain", { method: "POST", credentials: "include", body: form });
+                      const d = await res.json().catch(() => ({}));
+                      alert(res.ok ? `도메인 ${u.email_domain} 차단됨` : (d.detail || "실패"));
+                    }} className="btn btn-small btn-outline text-xs admin-action-btn-eq" style={{ color: "var(--danger)" }}>도메인 차단</button>
+                  )}
+                </div>
               </td>
             </tr>
             {showChangeEmail && (
@@ -137,14 +140,14 @@ export default function AdminUserDetailPage() {
               <td className="label">이메일 인증</td>
               <td className="value">{u.email_verified ? "완료" : "미인증"}</td>
               <td className="action">
-                {!u.email_verified && <button onClick={() => act(`/api/admin/users/${u.id}/verify-email`)} className="btn btn-small btn-outline text-xs">인증 처리</button>}
+                {!u.email_verified && <button onClick={() => act(`/api/admin/users/${u.id}/verify-email`)} className="btn btn-small btn-outline text-xs admin-action-btn-eq">인증 처리</button>}
               </td>
             </tr>
             <tr>
               <td className="label">역할</td>
-              <td className="value">{u.role === "admin" ? "관리자" : u.role === "moderator" ? "조율자" : "유저"}</td>
+              <td className="value">{u.role === "owner" ? "오너" : u.role === "admin" ? "관리자" : u.role === "moderator" ? "조율자" : "유저"}</td>
               <td className="action">
-                {me?.role === "admin" && <button onClick={() => setShowChangeRole(!showChangeRole)} className="btn btn-small btn-outline text-xs">변경</button>}
+                {(me?.role === "admin" || me?.role === "owner") && <button onClick={() => setShowChangeRole(!showChangeRole)} className="btn btn-small btn-outline text-xs admin-action-btn-eq">변경</button>}
               </td>
             </tr>
             {showChangeRole && (
@@ -152,23 +155,13 @@ export default function AdminUserDetailPage() {
                 <td colSpan={3} style={{ padding: "10px 16px" }}>
                   <div className="flex-row gap-8">
                     <select value={newRole} onChange={e => setNewRole(e.target.value)} className="cw-input">
-                      <option value="user">유저</option><option value="moderator">조율자</option><option value="admin">관리자</option>
+                      <option value="user">유저</option><option value="moderator">조율자</option><option value="admin">관리자</option><option value="owner">오너</option>
                     </select>
                     <button onClick={() => { act(`/api/admin/users/${u.id}/change-role`, { role: newRole }); setShowChangeRole(false); }} className="btn btn-primary btn-small">저장</button>
                   </div>
                 </td>
               </tr>
             )}
-            <tr>
-              <td className="label">공개 설정</td>
-              <td colSpan={2} className="value">
-                {{ public: "공개", home: "홈", followers: "팔로워", mention: "멘션" }[u.default_visibility] || u.default_visibility}
-              </td>
-            </tr>
-            <tr>
-              <td className="label">팔로우 수동 승인</td>
-              <td colSpan={2} className="value">{u.is_locked ? "켜짐" : "꺼짐"}</td>
-            </tr>
             <tr>
               <td className="label">가입일</td>
               <td colSpan={2} className="value">{u.created_at ? new Date(u.created_at).toLocaleString("ko-KR") : "-"}</td>

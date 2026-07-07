@@ -11,7 +11,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState({ users: 0, posts: 0, series: 0 });
 
   useEffect(() => {
-    if (!authLoading && user?.role !== "admin" && user?.role !== "moderator") {
+    if (!authLoading && user?.role !== "admin" && user?.role !== "moderator" && user?.role !== "owner") {
       router.push("/timeline/home");
     }
   }, [user, authLoading, router]);
@@ -22,7 +22,7 @@ export default function AdminDashboard() {
   }, []);
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
-  if (!user || (user.role !== "admin" && user.role !== "moderator")) return null;
+  if (!user || (user.role !== "admin" && user.role !== "moderator" && user.role !== "owner")) return null;
 
   return (
     <>

@@ -245,7 +245,7 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
             password_hash=salt + ":" + pwd_hash,
             private_key=encrypt_key(priv_key, SECRET_KEY), public_key=pub_key,
             is_remote=False,
-            role="admin" if is_first else "user",
+            role="owner" if is_first else "user",
             is_admin=is_first,
             email=email,
             email_verified=email_verified,
@@ -259,7 +259,7 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
 
         # Notify admins/moderators about new registration
         if not is_first:
-            admins = s.query(User).filter(User.role.in_(["admin", "moderator"])).all()
+            admins = s.query(User).filter(User.role.in_(["admin", "moderator", "owner"])).all()
             for admin in admins:
                 if admin.id == user_id:
                     continue
@@ -2155,7 +2155,7 @@ def api_delete_emoji(request: Request, emoji_id: int):
 @router.get("/admin/stats")
 def api_admin_stats(request: Request):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         users = s.query(User).filter_by(is_remote=False).count()
@@ -2170,7 +2170,7 @@ def api_admin_users(request: Request, location: str = Query("local"), status: st
                      q: str = Query(""), username_q: str = Query(""), name_q: str = Query(""),
                      email_q: str = Query(""), ip_q: str = Query(""), domain_q: str = Query("")):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         qb = s.query(User)
@@ -2190,9 +2190,11 @@ def api_admin_users(request: Request, location: str = Query("local"), status: st
             cutoff = datetime.utcnow() - timedelta(days=30)
             qb = qb.filter(User.is_remote == False, User.created_at < cutoff)
         if role == "admin":
-            qb = qb.filter(User.role == "admin")
+            qb = qb.filter(User.role.in_(["admin", "owner"]))
         elif role == "moderator":
             qb = qb.filter(User.role == "moderator")
+        elif role == "owner":
+            qb = qb.filter(User.role == "owner")
         elif role == "user":
             qb = qb.filter(User.role == "user")
         if q:
@@ -2245,7 +2247,7 @@ def api_admin_users(request: Request, location: str = Query("local"), status: st
 def api_admin_user_detail(request: Request, user_id: int):
     import json
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         u = s.query(User).get(user_id)
@@ -2294,7 +2296,7 @@ def api_admin_user_detail(request: Request, user_id: int):
 @router.post("/admin/users/{user_id}/reset-password")
 def api_admin_reset_password(request: Request, user_id: int):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     from app.routes.auth import hash_password
     import secrets
@@ -2313,7 +2315,7 @@ def api_admin_reset_password(request: Request, user_id: int):
 @router.post("/admin/users/{user_id}/change-email")
 def api_admin_change_email(request: Request, user_id: int, email: str = Form(...)):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         u = s.query(User).get(user_id)
@@ -2328,16 +2330,16 @@ def api_admin_change_email(request: Request, user_id: int, email: str = Form(...
 @router.post("/admin/users/{user_id}/change-role")
 def api_admin_change_role(request: Request, user_id: int, role: str = Form("user")):
     user = require_auth(request)
-    if user.role != "admin":
+    if user.role not in ("admin", "owner"):
         raise HTTPException(status_code=403, detail="Only admins can change roles")
-    if role not in ("user", "moderator", "admin"):
+    if role not in ("user", "moderator", "admin", "owner"):
         raise HTTPException(status_code=400, detail="Invalid role")
     with get_session() as s:
         u = s.query(User).get(user_id)
         if not u:
             raise HTTPException(status_code=404, detail="User not found")
         u.role = role
-        u.is_admin = role == "admin"
+        u.is_admin = role in ("admin", "owner")
         s.commit()
     return {"ok": True}
 
@@ -2345,7 +2347,7 @@ def api_admin_change_role(request: Request, user_id: int, role: str = Form("user
 @router.post("/admin/users/{user_id}/verify-email")
 def api_admin_verify_email(request: Request, user_id: int):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         u = s.query(User).get(user_id)
@@ -2359,7 +2361,7 @@ def api_admin_verify_email(request: Request, user_id: int):
 @router.post("/admin/users/{user_id}/remove-avatar")
 def api_admin_remove_avatar(request: Request, user_id: int):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         u = s.query(User).get(user_id)
@@ -2378,7 +2380,7 @@ def api_admin_remove_avatar(request: Request, user_id: int):
 @router.post("/admin/users/suspend")
 def api_admin_suspend_users(request: Request, user_ids: str = Form(...)):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     ids = [int(i) for i in user_ids.split(",") if i.strip()]
     with get_session() as s:
@@ -2390,7 +2392,7 @@ def api_admin_suspend_users(request: Request, user_ids: str = Form(...)):
 @router.post("/admin/users/unsuspend")
 def api_admin_unsuspend_users(request: Request, user_ids: str = Form(...)):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     ids = [int(i) for i in user_ids.split(",") if i.strip()]
     with get_session() as s:
@@ -2402,7 +2404,7 @@ def api_admin_unsuspend_users(request: Request, user_ids: str = Form(...)):
 @router.post("/admin/users/{user_id}/note")
 def api_admin_user_note(request: Request, user_id: int, note: str = Form("")):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         u = s.query(User).get(user_id)
@@ -2415,7 +2417,7 @@ def api_admin_user_note(request: Request, user_id: int, note: str = Form("")):
 @router.post("/admin/users/{user_id}/moderate")
 def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), send_email: bool = Form(False), message: str = Form("")):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     valid_actions = ("warning", "freeze", "unfreeze", "sensitive", "unsensitive", "limit", "unlimit", "suspend", "unsuspend", "deceased", "undeceased")
     if action not in valid_actions:
@@ -2497,7 +2499,7 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
 @router.post("/admin/users/{user_id}/toggle-sensitive")
 def api_admin_toggle_sensitive(request: Request, user_id: int):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         u = s.query(User).get(user_id)
@@ -2510,7 +2512,7 @@ def api_admin_toggle_sensitive(request: Request, user_id: int):
 @router.get("/admin/reports")
 def api_admin_list_reports(request: Request, status: str = "pending", target_type: str = "", offset: int = 0, limit: int = 50):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         q = s.query(Report)
@@ -2569,7 +2571,7 @@ def api_admin_list_reports(request: Request, status: str = "pending", target_typ
 @router.get("/admin/reports/{report_id}")
 def api_admin_get_report(request: Request, report_id: int):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         r = s.query(Report).get(report_id)
@@ -2626,7 +2628,7 @@ def api_admin_get_report(request: Request, report_id: int):
 @router.post("/admin/reports/{report_id}/resolve")
 def api_admin_resolve_report(request: Request, report_id: int):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         report = s.query(Report).get(report_id)
@@ -2641,7 +2643,7 @@ def api_admin_resolve_report(request: Request, report_id: int):
 @router.post("/admin/reports/{report_id}/dismiss")
 def api_admin_dismiss_report(request: Request, report_id: int):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         report = s.query(Report).get(report_id)
@@ -2656,7 +2658,7 @@ def api_admin_dismiss_report(request: Request, report_id: int):
 @router.post("/admin/posts/{post_id}/set-cw")
 def api_admin_set_post_cw(request: Request, post_id: int, summary: str = Form("")):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id).first()
@@ -2675,7 +2677,7 @@ def api_admin_set_post_cw(request: Request, post_id: int, summary: str = Form(""
 @router.get("/admin/blocked-domains")
 def api_admin_list_blocked_domains(request: Request):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         domains = s.query(BlockedDomain).order_by(BlockedDomain.created_at.desc()).all()
@@ -2690,7 +2692,7 @@ def api_admin_list_blocked_domains(request: Request):
 @router.post("/admin/block-domain")
 def api_admin_block_domain(request: Request, domain: str = Form(...)):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     domain = domain.strip().lower()
     if not domain or "." not in domain:
@@ -2707,7 +2709,7 @@ def api_admin_block_domain(request: Request, domain: str = Form(...)):
 @router.delete("/admin/block-domain/{domain}")
 def api_admin_unblock_domain(request: Request, domain: str):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     domain = domain.strip().lower()
     with get_session() as s:
@@ -2719,17 +2721,70 @@ def api_admin_unblock_domain(request: Request, domain: str):
         return {"ok": True}
 
 
+def _resolve_admin_users(s, admin_ids_str: str):
+    if not admin_ids_str:
+        return []
+    handles = [h.strip().lstrip("@") for h in admin_ids_str.split(",") if h.strip()]
+    if not handles:
+        return []
+    return s.query(User).filter(User.username.in_(handles)).all()
+
+
 @router.get("/server-info")
 def api_server_info():
     with get_session() as s:
-        admins = s.query(User).filter(User.role == "admin", User.is_remote == False).all()
+        from app.models import ServerSetting
+        settings = ServerSetting.get(s)
+        admins = _resolve_admin_users(s, settings.admin_ids or "")
         return {
-            "name": "WRIT",
+            "name": settings.server_name,
             "admins": [
                 {"username": a.username, "email": a.email or ""}
                 for a in admins
             ],
+            "logo": settings.logo,
+            "favicon": settings.favicon,
+            "app_icon": settings.app_icon,
         }
+
+
+@router.get("/admin/settings")
+def api_admin_get_settings(request: Request):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        from app.models import ServerSetting
+        settings = ServerSetting.get(s)
+        return {
+            "server_name": settings.server_name,
+            "logo": settings.logo,
+            "favicon": settings.favicon,
+            "app_icon": settings.app_icon,
+            "admin_ids": settings.admin_ids or "",
+        }
+
+
+@router.post("/admin/settings")
+def api_admin_update_settings(request: Request,
+                               server_name: str = Form("WRIT"),
+                               logo: str = Form(""),
+                               favicon: str = Form(""),
+                               app_icon: str = Form(""),
+                               admin_ids: str = Form("")):
+    user = require_auth(request)
+    if user.role not in ("admin", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        from app.models import ServerSetting
+        settings = ServerSetting.get(s)
+        settings.server_name = server_name
+        settings.logo = logo
+        settings.favicon = favicon
+        settings.app_icon = app_icon
+        settings.admin_ids = admin_ids
+        s.commit()
+    return {"ok": True}
 
 
 

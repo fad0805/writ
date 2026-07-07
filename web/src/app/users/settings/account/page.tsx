@@ -46,46 +46,45 @@ export default function AccountSettingsPage() {
 
   return (
     <>
-      <div className="page-header">
-        <h2><Icon name="settings" /> 설정 관리</h2>
-      </div>
       <SettingsNav current="account" />
 
-      <form onSubmit={handleChangeEmail} className="novel-form" style={{ marginBottom: 20 }}>
-        <h3 style={{ fontSize: "1.1em", marginBottom: 16 }}><Icon name="mail" /> 이메일 변경</h3>
-        <div className="form-group">
-          <label>새 이메일 주소</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="new@example.com" className="cw-input" required />
-          <p className="form-help">변경 후 새 이메일로 인증 메일이 발송됩니다. 인증을 완료해야 계정을 사용할 수 있습니다.</p>
-        </div>
-        {emailMsg && <p className="auth-success">{emailMsg}</p>}
-        {emailErr && <p className="auth-error">{emailErr}</p>}
-        <div className="form-actions">
-          <button type="submit" disabled={emailLoading} className="btn btn-primary">
-            {emailLoading ? "..." : "이메일 변경"}
-          </button>
-        </div>
-      </form>
+      <div className="admin-detail-card" style={{ padding: 20 }}>
+        <form onSubmit={handleChangeEmail}>
+          <div className="form-group">
+            <label>새 이메일 주소</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="new@example.com" className="cw-input" required />
+            <p className="form-help">변경 후 새 이메일로 인증 메일이 발송됩니다. 인증을 완료해야 계정을 사용할 수 있습니다.</p>
+          </div>
+          {emailMsg && <p className="auth-success">{emailMsg}</p>}
+          {emailErr && <p className="auth-error">{emailErr}</p>}
+          <div className="form-actions">
+            <button type="submit" disabled={emailLoading} className="btn btn-primary">
+              {emailLoading ? "..." : "이메일 변경"}
+            </button>
+          </div>
+        </form>
 
-      <form onSubmit={handleChangePassword} className="novel-form">
-        <h3 style={{ fontSize: "1.1em", marginBottom: 16 }}><Icon name="lock" /> 비밀번호 변경</h3>
-        <div className="form-group">
-          <label>현재 비밀번호</label>
-          <input type="password" value={curPw} onChange={(e) => setCurPw(e.target.value)} placeholder="현재 비밀번호" className="cw-input" required />
-        </div>
-        <div className="form-group">
-          <label>새 비밀번호</label>
-          <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="6자 이상" className="cw-input" required />
-          <p className="form-help">최소 6자 이상 입력해 주세요.</p>
-        </div>
-        {pwMsg && <p className="auth-success">{pwMsg}</p>}
-        {pwErr && <p className="auth-error">{pwErr}</p>}
-        <div className="form-actions">
-          <button type="submit" disabled={pwLoading} className="btn btn-primary">
-            {pwLoading ? "..." : "비밀번호 변경"}
-          </button>
-        </div>
-      </form>
+        <hr style={{ margin: "20px 0", border: "none", borderTop: "1px solid var(--border)" }} />
+
+        <form onSubmit={handleChangePassword}>
+          <div className="form-group">
+            <label>현재 비밀번호</label>
+            <input type="password" value={curPw} onChange={(e) => setCurPw(e.target.value)} placeholder="현재 비밀번호" className="cw-input" required />
+          </div>
+          <div className="form-group">
+            <label>새 비밀번호</label>
+            <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="6자 이상" className="cw-input" required />
+            <p className="form-help">최소 6자 이상 입력해 주세요.</p>
+          </div>
+          {pwMsg && <p className="auth-success">{pwMsg}</p>}
+          {pwErr && <p className="auth-error">{pwErr}</p>}
+          <div className="form-actions">
+            <button type="submit" disabled={pwLoading} className="btn btn-primary">
+              {pwLoading ? "..." : "비밀번호 변경"}
+            </button>
+          </div>
+        </form>
+      </div>
     </>
   );
 }

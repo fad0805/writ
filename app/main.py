@@ -114,6 +114,40 @@ def seed_default_data():
 
         print(f"✅ Admin account created: admin / {admin_password}")
 
+        priv4, pub4 = gen_kp()
+        owner_password = "owner1234"
+        salt4, hsh4 = hash_password(owner_password)
+        owner_user = User(
+            username="owner", display_name="오너",
+            password_hash=salt4 + ":" + hsh4,
+            private_key=encrypt_key(priv4, SECRET_KEY), public_key=pub4,
+            summary="소유주 계정입니다",
+            role="owner",
+            is_admin=True,
+            email="owner@example.com",
+            email_verified=True,
+        )
+        session.add(owner_user)
+        session.flush()
+
+        priv5, pub5 = gen_kp()
+        mod_password = "mod1234"
+        salt5, hsh5 = hash_password(mod_password)
+        mod_user = User(
+            username="moderator", display_name="조율자",
+            password_hash=salt5 + ":" + hsh5,
+            private_key=encrypt_key(priv5, SECRET_KEY), public_key=pub5,
+            summary="조율자 계정입니다",
+            role="moderator",
+            email="moderator@example.com",
+            email_verified=True,
+        )
+        session.add(mod_user)
+        session.flush()
+
+        print(f"✅ Owner account created: owner / {owner_password}")
+        print(f"✅ Moderator account created: moderator / {mod_password}")
+
         # author1's posts
         p1 = Post(author_id=author1.id, content="안녕하세요, 소설을 시작합니다!", visibility="public", number="a1b2c3d4")
         p2 = Post(author_id=author1.id, content="오늘은 첫 번째 에피소드를 썼어요.", visibility="home", number="e5f6g7h8")

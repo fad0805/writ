@@ -82,7 +82,7 @@ export default function SettingsPage() {
           <p className="form-help">새 에피소드 홍보글에 기본으로 적용될 공개 범위입니다.</p>
         </div>
 
-        {(user?.role === "admin" || user?.role === "moderator") && (
+        {(user?.role === "admin" || user?.role === "moderator" || user?.role === "owner") && (
           <div className="form-group">
             <label>
               <input type="checkbox" checked={showBadge} onChange={(e) => setShowBadge(e.target.checked)} />

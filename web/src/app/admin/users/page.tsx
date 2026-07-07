@@ -57,7 +57,7 @@ export default function AdminUsersPage() {
   };
 
   useEffect(() => {
-    if (!authLoading && user?.role !== "admin" && user?.role !== "moderator")
+    if (!authLoading && user?.role !== "admin" && user?.role !== "moderator" && user?.role !== "owner")
       router.push("/timeline/home");
   }, [user, authLoading, router]);
 
@@ -84,7 +84,7 @@ export default function AdminUsersPage() {
   };
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
-  if (!user || (user.role !== "admin" && user.role !== "moderator")) return null;
+  if (!user || (user.role !== "admin" && user.role !== "moderator" && user.role !== "owner")) return null;
 
   return (
     <>
@@ -115,8 +115,8 @@ export default function AdminUsersPage() {
               <label>상태 <select value={status} onChange={e => setStatus(e.target.value)} className="cw-input select-w-100">
                 <option value="all">모두</option><option value="active">활성</option><option value="suspended">정지</option><option value="pending">인증대기</option><option value="inactive">비활성</option>
               </select></label>
-              <label>역할 <select value={role} onChange={e => setRole(e.target.value)} className="cw-input select-w-90">
-                <option value="all">모두</option><option value="user">유저</option><option value="moderator">조율자</option><option value="admin">관리자</option>
+              <label>역할 <select value={role} onChange={e => setRole(e.target.value)} className="cw-input select-w-110">
+                <option value="all">모두</option><option value="user">유저</option><option value="moderator">조율자</option><option value="admin">관리자</option><option value="owner">오너</option>
               </select></label>
               <label>정렬 <select value={sort} onChange={e => setSort(e.target.value)} className="cw-input select-w-110">
                 <option value="newest">최신순</option><option value="active">최근활동순</option>
@@ -155,6 +155,7 @@ export default function AdminUsersPage() {
                         <Link href={`/admin/users/${u.id}`} style={{ textDecoration: "none" }}>
                           <div className="admin-user-name">
                             {u.display_name}
+                            {u.role === "owner" && <Icon name="books_solid" className="icon-badge-sm" style={{ marginLeft: 3, color: "var(--accent)" }} title="오너" />}
                             {u.role === "admin" && <Icon name="shield_filled" className="icon-badge-sm icon-admin" style={{ marginLeft: 3 }} title="관리자" />}
                             {u.role === "moderator" && <Icon name="shield_filled" className="icon-badge-sm icon-mod" style={{ marginLeft: 3 }} title="조율자" />}
                           </div>

@@ -448,210 +448,28 @@ class BlockedDomain(Base):
     created_by = relationship("User", lazy="selectin")
 
 
+class ServerSetting(Base):
+    __tablename__ = "server_settings"
+
+    id = Column(Integer, primary_key=True)
+    server_name = Column(String(255), default="WRIT")
+    logo = Column(String(512), default="")
+    favicon = Column(String(512), default="")
+    app_icon = Column(String(512), default="")
+    admin_ids = Column(String(512), default="")
+
+    @classmethod
+    def get(cls, session):
+        s = session.query(cls).first()
+        if not s:
+            s = cls(server_name="WRIT")
+            session.add(s)
+            session.commit()
+        return s
+
+
 def init_db():
     Base.metadata.create_all(engine)
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE users ADD COLUMN profile_image VARCHAR(512) DEFAULT ''"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE posts ADD COLUMN is_pinned BOOLEAN DEFAULT 0"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE novels ADD COLUMN visibility VARCHAR(16) DEFAULT 'public' NOT NULL"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE posts ADD COLUMN bumped_at DATETIME"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE posts ADD COLUMN is_dm BOOLEAN DEFAULT 0"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE posts ADD COLUMN number VARCHAR(16) DEFAULT ''"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("UPDATE novels SET visibility = 'private' WHERE is_published = 0"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE novels ADD COLUMN cover_image VARCHAR(512) DEFAULT ''"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE novels ADD COLUMN number VARCHAR(16) DEFAULT ''"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE users ADD COLUMN default_visibility VARCHAR(16) DEFAULT 'public'"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE users ADD COLUMN series_default_visibility VARCHAR(16) DEFAULT 'public'"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE users ADD COLUMN episode_default_visibility VARCHAR(16) DEFAULT 'public'"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE users ADD COLUMN is_locked BOOLEAN DEFAULT FALSE"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(16) DEFAULT 'user'"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE users ADD COLUMN show_badge BOOLEAN DEFAULT 0"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE episodes ADD COLUMN comment TEXT DEFAULT ''"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE custom_emojis ADD COLUMN source_url VARCHAR(512) DEFAULT ''"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE users ADD COLUMN show_badge BOOLEAN DEFAULT 0"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT 0"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE users ADD COLUMN recent_ips JSON DEFAULT '[]'"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE users ADD COLUMN is_suspended BOOLEAN DEFAULT 0"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE users ADD COLUMN is_sensitive BOOLEAN DEFAULT 0"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE users ADD COLUMN moderation_note TEXT DEFAULT ''"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE users ADD COLUMN is_limited BOOLEAN DEFAULT 0"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE users ADD COLUMN is_deceased BOOLEAN DEFAULT 0"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE users ADD COLUMN is_frozen BOOLEAN DEFAULT 0"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE users ADD COLUMN verification_token VARCHAR(128) DEFAULT ''"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("""
-                CREATE TABLE IF NOT EXISTS series_follows (
-                    id INTEGER PRIMARY KEY,
-                    user_id INTEGER NOT NULL REFERENCES users(id),
-                    novel_id INTEGER NOT NULL REFERENCES novels(id),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE notifications ADD COLUMN metadata_json TEXT DEFAULT ''"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("""
-                CREATE TABLE IF NOT EXISTS profile_notes (
-                    id INTEGER PRIMARY KEY,
-                    user_id INTEGER NOT NULL REFERENCES users(id),
-                    target_user_id INTEGER NOT NULL REFERENCES users(id),
-                    content TEXT DEFAULT '',
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            """))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("DROP INDEX IF EXISTS ix_custom_emojis_keyword"))
-            session.commit()
-    except Exception:
-        pass
     # Sync existing is_admin users to admin role
     try:
         with Session(engine) as session:
@@ -674,12 +492,6 @@ def init_db():
             import secrets
             for novel in session.query(Novel).filter(Novel.number == "").all():
                 novel.number = secrets.token_hex(4)
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE posts ADD COLUMN original_visibility VARCHAR(16) DEFAULT ''"))
             session.commit()
     except Exception:
         pass
