@@ -60,7 +60,12 @@ def seed_default_data():
     from app.models import Novel, Episode
 
     with get_session() as session:
-        if session.query(User).filter_by(username="author1").first():
+        existing = session.query(User).filter_by(username="author1").first()
+        if existing:
+            for u in [existing, session.query(User).filter_by(username="reader1").first(), session.query(User).filter_by(username="admin").first()]:
+                if u and not u.email_verified:
+                    u.email_verified = True
+            session.commit()
             return  # already seeded
 
         priv, pub = gen_kp()

@@ -77,6 +77,7 @@ def _user_json(u):
         "is_remote": u.is_remote,
         "role": role,
         "show_badge": getattr(u, 'show_badge', False) or False,
+        "email_verified": u.email_verified or False,
         "default_visibility": u.default_visibility or "public",
         "series_default_visibility": u.series_default_visibility or "public",
         "episode_default_visibility": u.episode_default_visibility or "public",
@@ -164,6 +165,8 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
         salt, hval = stored.split(":", 1)
         if not verify_password(password, salt, hval):
             raise HTTPException(status_code=401, detail="비밀번호가 틀렸습니다.")
+        if not db_user.email_verified:
+            raise HTTPException(status_code=403, detail="이메일 인증이 필요합니다. 가입 시 등록한 이메일에서 인증을 완료해 주세요.")
         token = create_session(db_user.id)
         # Store IP
         client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
@@ -178,12 +181,39 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
         return resp
 
 
+def _send_verification_email(u: User):
+    import secrets
+    from app.config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
+    token = secrets.token_urlsafe(32)
+    u.verification_token = token
+    verify_url = f"{BASE_URL}/verify-email?token={token}"
+    try:
+        from email.mime.text import MIMEText
+        import smtplib
+        msg = MIMEText(
+            f"안녕하세요, {u.display_name}님.\n\n"
+            f"WRIT 계정 생성을 환영합니다. 아래 링크를 클릭하여 이메일 인증을 완료해 주세요.\n\n"
+            f"{verify_url}\n\n"
+            f"이 링크는 24시간 동안 유효합니다.\n감사합니다.\nWRIT 팀"
+        )
+        msg["Subject"] = "[WRIT] 이메일 인증을 완료해 주세요"
+        msg["From"] = SMTP_FROM or "noreply@writ.local"
+        msg["To"] = u.email
+        with smtplib.SMTP(SMTP_SERVER or "localhost", SMTP_PORT or 25, timeout=10) as smtp:
+            if SMTP_USER:
+                smtp.login(SMTP_USER, SMTP_PASSWORD or "")
+            smtp.send_message(msg)
+    except Exception as e:
+        logger.warning("Failed to send verification email to %s: %s", u.email, e)
+
+
 @router.post("/auth/register")
 def api_register(request: Request, username: str = Form(...), password: str = Form(...),
                  display_name: str = Form(""), email: str = Form(...)):
-    from app.routes.auth import hash_password, create_session
+    from app.routes.auth import hash_password
     from app.crypto_utils import generate_keypair
     import re
+    import secrets
     if not username or not password or not email:
         raise HTTPException(status_code=400, detail="Username, password, and email required")
     if len(username) < 3 or len(password) < 6:
@@ -203,6 +233,7 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
         is_first = user_count == 0
         salt, pwd_hash = hash_password(password)
         priv_key, pub_key = generate_keypair()
+        email_verified = is_first
         user = User(
             username=username,
             display_name=display_name or username,
@@ -212,7 +243,7 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
             role="admin" if is_first else "user",
             is_admin=is_first,
             email=email,
-            email_verified=False,
+            email_verified=email_verified,
         )
         s.add(user)
         client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
@@ -220,8 +251,6 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
             user.recent_ips = [client_ip]
         s.flush()
         user_id = user.id
-        username = user.username
-        display_name = user.display_name
 
         # Notify admins/moderators about new registration
         if not is_first:
@@ -234,12 +263,39 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
                     notification_type="moderation",
                     metadata_json=json.dumps({"type": "new_user", "user_id": user_id, "username": username, "display_name": display_name}),
                 ))
+
+        if not is_first:
+            _send_verification_email(user)
         s.commit()
 
-        token = create_session(user_id)
-        resp = JSONResponse(_user_json(user))
-        resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/")
+        return {"ok": True, "email_sent": not is_first}
+
+
+@router.post("/auth/verify-email")
+def api_verify_email(request: Request, token: str = Form(...)):
+    from app.routes.auth import create_session
+    with get_session() as s:
+        u = s.query(User).filter_by(verification_token=token).first()
+        if not u:
+            raise HTTPException(status_code=400, detail="유효하지 않은 인증 토큰입니다.")
+        u.email_verified = True
+        u.verification_token = ""
+        s.commit()
+        sess = create_session(u.id)
+        resp = JSONResponse({"ok": True, "email_verified": True})
+        resp.set_cookie(key="session", value=sess, max_age=30*86400, httponly=True, samesite="lax", path="/")
         return resp
+
+
+@router.post("/auth/resend-verification")
+def api_resend_verification(request: Request, email: str = Form(...)):
+    with get_session() as s:
+        u = s.query(User).filter_by(email=email, email_verified=False).first()
+        if not u:
+            raise HTTPException(status_code=400, detail="해당 이메일로 등록된 인증 대기 계정이 없습니다.")
+        _send_verification_email(u)
+        s.commit()
+        return {"ok": True, "email_sent": True}
 
 
 @router.post("/auth/logout")

@@ -43,7 +43,16 @@ export default function LoginPage() {
           <label>비밀번호</label>
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="password" required />
         </div>
-        {error && <p className="auth-error">{error}</p>}
+        {error && (
+          <p className="auth-error">
+            {error}
+            {error.includes("이메일 인증") && (
+              <span style={{ display: "block", marginTop: 8 }}>
+                <Link href="/verify-email">인증 메일 다시 보내기</Link>
+              </span>
+            )}
+          </p>
+        )}
         <button type="submit" disabled={loading} className="btn btn-primary">{loading ? "..." : "로그인"}</button>
       </form>
       <p className="auth-link">계정이 없으신가요? <Link href="/register">가입하기</Link></p>

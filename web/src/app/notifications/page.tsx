@@ -174,8 +174,8 @@ export default function NotificationsPage() {
               else if (n.type === "new_episode" && n.metadata?.novel_id && n.metadata?.episode_id) router.push(`/series/${n.metadata.novel_id}/episodes/${n.metadata.episode_id}`);
             }}
             style={{ cursor: ((n.type === "moderation" && (n.metadata?.type === "report" || n.metadata?.type === "new_user")) || (n.type === "mention" && n.post?.is_dm) || (n.type === "new_episode")) ? "pointer" : undefined }}>
-            <div className="notif-icon notif-icon-dynamic" style={{ color: n.type === "like" ? "#f1c40f" : n.type === "boost" ? "var(--accent)" : n.type === "follow" ? "#4fc3f7" : n.type === "new_episode" ? "#9b59b6" : n.type === "moderation" ? "var(--danger)" : "var(--text-muted)" }}>
-              <Icon name={NOTIF_ICONS[n.type] || "bell"} size={20} />
+            <div className="notif-icon notif-icon-dynamic" style={{ color: n.type === "like" ? "#f1c40f" : n.type === "boost" ? "var(--accent)" : n.type === "follow" ? "#4fc3f7" : n.type === "new_episode" ? "#9b59b6" : (n.type === "moderation" && n.metadata?.type === "new_user") ? "#4fc3f7" : n.type === "moderation" ? "var(--danger)" : "var(--text-muted)" }}>
+              <Icon name={(n.type === "moderation" && n.metadata?.type === "new_user") ? "user_solid" : NOTIF_ICONS[n.type] || "bell"} size={20} />
             </div>
             <div className="notif-body">
               {n.type === "moderation" && n.metadata?.type === "report" ? (
@@ -192,13 +192,7 @@ export default function NotificationsPage() {
                   </div>
                 </>
               ) : n.type === "moderation" && n.metadata?.type === "new_user" ? (
-                <>
-                  <Link href={`/@${n.from_user?.username}`} className="notif-from-link">{n.from_user?.display_name}</Link>{" "}
-                  님이 가입했습니다
-                  <div className="notif-mod-message" style={{ fontSize: 13 }}>
-                    @{n.from_user?.username}
-                  </div>
-                </>
+                <><Link href={`/@${n.from_user?.username}`} className="notif-from-link">{n.from_user?.display_name}</Link> 님이 가입했습니다</>
               ) : n.type === "moderation" ? (
                 <><span className="font-bold" style={{ color: "var(--danger)" }}>{actionNames[n.metadata?.action] || n.metadata?.action || "중재"}</span> 조치가 적용되었습니다.</>
               ) : (

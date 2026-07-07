@@ -9,6 +9,7 @@ import AdminNav from "@/components/AdminNav";
 type AdminUser = {
   id: number; username: string; display_name: string; avatar: string;
   role: string; is_remote: boolean; is_suspended?: boolean; is_frozen?: boolean; is_limited?: boolean; is_deceased?: boolean;
+  email_verified?: boolean;
   post_count: number; follower_count: number;
   last_active: string; email_domain: string; recent_ips: string[];
 };
@@ -143,7 +144,7 @@ export default function AdminUsersPage() {
             </thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.id} style={{ borderBottom: "1px solid var(--border)", background: selected.has(u.id) ? "var(--card-hover)" : "transparent", opacity: u.is_suspended ? 0.5 : (u.is_frozen ? 0.5 : (u.is_limited ? 0.7 : (u.is_deceased ? 0.7 : 1))) }}>
+                <tr key={u.id} style={{ borderBottom: "1px solid var(--border)", background: selected.has(u.id) ? "var(--card-hover)" : "transparent", opacity: u.is_suspended ? 0.5 : (u.is_frozen ? 0.5 : (!u.email_verified && !u.is_remote ? 0.5 : (u.is_limited ? 0.7 : (u.is_deceased ? 0.7 : 1)))) }}>
                   <td style={{ padding: "10px" }}><input type="checkbox" checked={selected.has(u.id)} onChange={() => toggle(u.id)} /></td>
                   <td style={{ padding: "10px" }}>
                     <div className="flex-center gap-10">
@@ -174,6 +175,7 @@ export default function AdminUsersPage() {
                     : u.is_suspended ? <span className="admin-status-suspended">정지</span>
                     : u.is_frozen ? <span className="admin-status-suspended">동결</span>
                     : u.is_limited ? <span className="admin-status-suspended">제한</span>
+                    : !u.email_verified && !u.is_remote ? <span className="admin-status-pending">미인증</span>
                     : u.is_remote ? <span className="admin-status-remote">리모트</span>
                     : <span className="admin-status-active">활성</span>}
                   </td>

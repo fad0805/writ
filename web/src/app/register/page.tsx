@@ -11,6 +11,8 @@ export default function RegisterPage() {
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+  const [isFirst, setIsFirst] = useState(false);
   const router = useRouter();
   const { refresh } = useAuth();
 
@@ -25,8 +27,12 @@ export default function RegisterPage() {
       if (displayName) form.append("display_name", displayName);
       const res = await fetch("/api/auth/register", { method: "POST", credentials: "include", body: form });
       if (res.ok) {
-        await refresh();
-        router.push("/timeline/home");
+        const data = await res.json();
+        if (data.email_sent === false) {
+          setIsFirst(true);
+          await refresh();
+        }
+        setDone(true);
       } else {
         const d = await res.json();
         setError(d.detail || "가입 실패");
@@ -34,6 +40,32 @@ export default function RegisterPage() {
     } catch { setError("가입 실패"); }
     setLoading(false);
   };
+
+  if (done) {
+    if (isFirst) {
+      return (
+        <div className="auth-container">
+          <h1>WRIT</h1>
+          <div className="auth-success">
+            <p>첫 번째 계정이 생성되었습니다. 관리자로 자동 설정되었습니다.</p>
+          </div>
+          <Link href="/timeline/home" className="btn btn-primary">시작하기</Link>
+        </div>
+      );
+    }
+    return (
+      <div className="auth-container">
+        <h1>WRIT</h1>
+        <div className="auth-success">
+          <p>가입해 주셔서 감사합니다!</p>
+          <p>등록하신 이메일로 인증 링크를 보냈습니다.</p>
+          <p>이메일을 확인하여 인증을 완료해 주세요.</p>
+        </div>
+        <p className="auth-link"><Link href="/verify-email">인증 메일 다시 받기</Link></p>
+        <p className="auth-link"><Link href="/login">로그인</Link></p>
+      </div>
+    );
+  }
 
   return (
     <div className="auth-container">

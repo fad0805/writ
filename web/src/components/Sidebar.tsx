@@ -185,7 +185,7 @@ export default function Sidebar() {
         </NavItem>
         <li className="nav-divider" />
         <NavItem href="/users/settings" active={isActive("/users/settings")}>
-          <Icon name="settings" /> 설정 관리
+          <Icon name="settings_solid" /> 설정 관리
         </NavItem>
         {(user.role === "admin" || user.role === "moderator") && (
           <NavItem href="/admin" active={isActive("/admin")}>

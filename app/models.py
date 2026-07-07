@@ -35,6 +35,7 @@ class User(Base):
     summary = Column(Text, default="")
     email = Column(String(255), default="")
     email_verified = Column(Boolean, default=False)
+    verification_token = Column(String(128), default="")
     recent_ips = Column(JSON, default=list)
     is_suspended = Column(Boolean, default=False)
     is_frozen = Column(Boolean, default=False)
@@ -591,6 +592,12 @@ def init_db():
     try:
         with Session(engine) as session:
             session.execute(text("ALTER TABLE users ADD COLUMN is_frozen BOOLEAN DEFAULT 0"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE users ADD COLUMN verification_token VARCHAR(128) DEFAULT ''"))
             session.commit()
     except Exception:
         pass

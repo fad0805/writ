@@ -40,6 +40,7 @@ export interface User {
   is_limited?: boolean;
   is_frozen?: boolean;
   is_deceased?: boolean;
+  email_verified?: boolean;
   role?: string;
   default_visibility?: string;
   series_default_visibility?: string;
@@ -217,10 +218,11 @@ export const api = {
     }
     return { ok: true };
   },
-  register: async (username: string, password: string, display_name?: string) => {
+  register: async (username: string, password: string, email: string, display_name?: string) => {
     const form = new FormData();
     form.append("username", username);
     form.append("password", password);
+    form.append("email", email);
     if (display_name) form.append("display_name", display_name);
     const res = await fetch("/api/auth/register", {
       method: "POST",
@@ -229,8 +231,36 @@ export const api = {
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body.error || "Registration failed");
+      throw new Error(body.detail || body.error || "Registration failed");
     }
-    return { ok: true };
+    return res.json();
+  },
+  verifyEmail: async (token: string) => {
+    const form = new FormData();
+    form.append("token", token);
+    const res = await fetch("/api/auth/verify-email", {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || body.error || "Email verification failed");
+    }
+    return res.json();
+  },
+  resendVerification: async (email: string) => {
+    const form = new FormData();
+    form.append("email", email);
+    const res = await fetch("/api/auth/resend-verification", {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || body.error || "Failed to resend verification email");
+    }
+    return res.json();
   },
 };
