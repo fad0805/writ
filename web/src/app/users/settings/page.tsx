@@ -5,17 +5,19 @@ import { api } from "@/lib/api";
 import Icon from "@/components/Icon";
 import VisibilitySelector from "@/components/VisibilitySelector";
 import SeriesVisibilitySelector from "@/components/SeriesVisibilitySelector";
+import SettingsNav from "@/components/SettingsNav";
 import { useAuth } from "@/lib/auth";
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { user, refresh: refreshAuth } = useAuth();
+  const { refresh: refreshAuth } = useAuth();
   const [defaultVis, setDefaultVis] = useState("public");
   const [seriesDefaultVis, setSeriesDefaultVis] = useState("public");
   const [episodeDefaultVis, setEpisodeDefaultVis] = useState("public");
   const [showBadge, setShowBadge] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     api.me().then((u) => {
@@ -67,6 +69,7 @@ export default function SettingsPage() {
       <div className="page-header">
         <h2><Icon name="settings" /> 설정 관리</h2>
       </div>
+      <SettingsNav current="visibility" />
       <form onSubmit={handleSubmit} className="novel-form">
         <div className="form-group">
           <label>시리즈 기본 공개 설정</label>

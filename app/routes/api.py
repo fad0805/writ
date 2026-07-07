@@ -9,7 +9,7 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, SeriesFollow, Tag, CustomEmoji, ProfileNote, Report, get_session
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, SeriesFollow, Tag, CustomEmoji, ProfileNote, Report, BlockedDomain, get_session
 from app.routes.auth import require_auth, get_current_user
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
@@ -229,6 +229,11 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
         existing_email = s.query(User).filter_by(email=email).first()
         if existing_email:
             raise HTTPException(status_code=400, detail="Email already registered")
+        domain = email.split("@")[-1] if "@" in email else ""
+        if domain:
+            blocked = s.query(BlockedDomain).filter_by(domain=domain).first()
+            if blocked:
+                raise HTTPException(status_code=400, detail="해당 이메일 도메인은 가입이 차단되었습니다.")
         user_count = s.query(User).count()
         is_first = user_count == 0
         salt, pwd_hash = hash_password(password)
@@ -1494,6 +1499,51 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
     return {"ok": True}
 
 
+@router.post("/settings/change-email")
+def api_settings_change_email(request: Request, email: str = Form(...)):
+    user = require_auth(request)
+    import re
+    if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    domain = email.split("@")[-1] if "@" in email else ""
+    with get_session() as s:
+        if domain:
+            blocked = s.query(BlockedDomain).filter_by(domain=domain).first()
+            if blocked:
+                raise HTTPException(status_code=400, detail="해당 이메일 도메인은 가입이 차단되었습니다.")
+        existing = s.query(User).filter(User.email == email, User.id != user.id).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        db = s.query(User).filter_by(id=user.id).first()
+        old_email = db.email
+        db.email = email
+        db.email_verified = False
+        db.verification_token = ""
+        _send_verification_email(db)
+        s.commit()
+    return {"ok": True, "email_changed": True}
+
+
+@router.post("/settings/change-password")
+def api_settings_change_password(request: Request, current_password: str = Form(...), new_password: str = Form(...)):
+    from app.routes.auth import hash_password, verify_password
+    user = require_auth(request)
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+    with get_session() as s:
+        db = s.query(User).filter_by(id=user.id).first()
+        stored = db.password_hash
+        if ":" not in stored:
+            raise HTTPException(status_code=400, detail="Invalid credentials")
+        salt, hval = stored.split(":", 1)
+        if not verify_password(current_password, salt, hval):
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+        new_salt, new_hsh = hash_password(new_password)
+        db.password_hash = new_salt + ":" + new_hsh
+        s.commit()
+    return {"ok": True}
+
+
 @router.post("/profile/update")
 def api_update_profile(request: Request, display_name: str = Form(""), summary: str = Form(""),
                        image: UploadFile = File(None)):
@@ -2620,6 +2670,53 @@ def api_admin_set_post_cw(request: Request, post_id: int, summary: str = Form(""
         post.summary = summary
         s.commit()
         return {"ok": True, "summary": summary}
+
+
+@router.get("/admin/blocked-domains")
+def api_admin_list_blocked_domains(request: Request):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        domains = s.query(BlockedDomain).order_by(BlockedDomain.created_at.desc()).all()
+        return {"domains": [{
+            "id": d.id,
+            "domain": d.domain,
+            "created_by": d.created_by.username if d.created_by else "",
+            "created_at": str(d.created_at) if d.created_at else "",
+        } for d in domains]}
+
+
+@router.post("/admin/block-domain")
+def api_admin_block_domain(request: Request, domain: str = Form(...)):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    domain = domain.strip().lower()
+    if not domain or "." not in domain:
+        raise HTTPException(status_code=400, detail="Invalid domain")
+    with get_session() as s:
+        existing = s.query(BlockedDomain).filter_by(domain=domain).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Already blocked")
+        s.add(BlockedDomain(domain=domain, created_by_id=user.id))
+        s.commit()
+        return {"ok": True, "domain": domain}
+
+
+@router.delete("/admin/block-domain/{domain}")
+def api_admin_unblock_domain(request: Request, domain: str):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    domain = domain.strip().lower()
+    with get_session() as s:
+        bd = s.query(BlockedDomain).filter_by(domain=domain).first()
+        if not bd:
+            raise HTTPException(status_code=404, detail="Domain not blocked")
+        s.delete(bd)
+        s.commit()
+        return {"ok": True}
 
 
 @router.get("/server-info")

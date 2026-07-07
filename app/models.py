@@ -437,6 +437,17 @@ class Report(Base):
     resolver = relationship("User", foreign_keys=[resolved_by_id], lazy="selectin")
 
 
+class BlockedDomain(Base):
+    __tablename__ = "blocked_domains"
+
+    id = Column(Integer, primary_key=True)
+    domain = Column(String(255), unique=True, nullable=False, index=True)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+    created_by = relationship("User", lazy="selectin")
+
+
 def init_db():
     Base.metadata.create_all(engine)
     try:

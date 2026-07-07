@@ -111,8 +111,16 @@ export default function AdminUserDetailPage() {
             <tr>
               <td className="label">이메일</td>
               <td className="value">{u.email_domain ? `${u.username}@${u.email_domain}` : "-"}</td>
-              <td className="action">
+              <td className="action" style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
                 <button onClick={() => setShowChangeEmail(!showChangeEmail)} className="btn btn-small btn-outline text-xs">변경</button>
+                {u.email_domain && (
+                  <button onClick={async () => {
+                    const form = new FormData(); form.append("domain", u.email_domain!);
+                    const res = await fetch("/api/admin/block-domain", { method: "POST", credentials: "include", body: form });
+                    const d = await res.json().catch(() => ({}));
+                    alert(res.ok ? `도메인 ${u.email_domain} 차단됨` : (d.detail || "실패"));
+                  }} className="btn btn-small btn-outline text-xs" style={{ color: "var(--danger)" }}>도메인 차단</button>
+                )}
               </td>
             </tr>
             {showChangeEmail && (
