@@ -86,7 +86,7 @@ export default function Sidebar() {
     return (
       <aside className="sidebar">
         <div className="sidebar-header">
-          <Link href="/" className="sidebar-home-link"><h2><span className="sidebar-logo-icon" /> {sidebarServerName}</h2></Link>
+          <Link href="/" className="sidebar-home-link"><h2><span className="sidebar-logo-icon" /> <span>{sidebarServerName}</span></h2></Link>
         </div>
       </aside>
     );
@@ -96,7 +96,7 @@ export default function Sidebar() {
     return (
       <aside className="sidebar">
         <div className="sidebar-header">
-          <Link href="/" className="sidebar-home-link"><h2><span className="sidebar-logo-icon" /> {sidebarServerName}</h2></Link>
+          <Link href="/" className="sidebar-home-link"><h2><span className="sidebar-logo-icon" /> <span>{sidebarServerName}</span></h2></Link>
         </div>
         <ul className="nav-links">
           <NavItem href="/explore" active={isActive("/explore")}>
@@ -123,7 +123,7 @@ export default function Sidebar() {
     <aside className="sidebar">
       <div className="sidebar-header">
         <Link href="/" className="sidebar-home-link">
-          <h2 style={{ "--title-size": `${Math.max(0.75, 1.4 - sidebarServerName.length * 0.035)}em` } as React.CSSProperties}>{sidebarLogo ? <img src={sidebarLogo} alt="" className="sidebar-logo-img" /> : <span className="sidebar-logo-icon" />}{sidebarServerName}</h2>
+          <h2 style={{ "--title-size": `${Math.max(0.75, 1.4 - sidebarServerName.length * 0.035)}em` } as React.CSSProperties}>{sidebarLogo ? <img src={sidebarLogo} alt="" className="sidebar-logo-img" /> : <span className="sidebar-logo-icon" />} <span>{sidebarServerName}</span></h2>
         </Link>
       </div>
       <form className="sidebar-search" onSubmit={async (e) => {

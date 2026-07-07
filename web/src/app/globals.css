@@ -97,6 +97,10 @@ a:hover { color: var(--accent-light); text-decoration: none; }
   display: flex;
   align-items: center;
   gap: 6px;
+
+  span {
+    min-width: 0;
+  }
 }
 
 
