@@ -3431,6 +3431,15 @@ input[type="checkbox"] {
 .cover-fallback-lg { font-size: 1.5em; }
 .cover-fallback-xl { font-size: 2em; }
 
+/* ── Admin user detail action cell ── */
+.admin-action-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+.admin-action-btn-eq {
+  min-width: 80px;
+}
+
 /* ── Admin user avatar thumb ── */
 .admin-user-avatar {
   width: 32px;

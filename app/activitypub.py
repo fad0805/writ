@@ -14,12 +14,32 @@ from urllib.parse import urlparse
 
 import httpx
 
-from app.models import User, Post, Follow, Like, Boost, Notification, CustomEmoji, get_session
+from app.models import User, Post, Follow, Like, Boost, Notification, CustomEmoji, FederationBlock, AllowedServer, ServerSetting, get_session
 from app.config import BASE_URL, SECRET_KEY
 from app.crypto_utils import generate_keypair, sign_string, encrypt_key, get_private_key
 
 
 logger = logging.getLogger("writ.activitypub")
+
+
+def _federation_allowed(domain: str) -> bool:
+    if not domain:
+        return False
+    with get_session() as s:
+        try:
+            settings = s.query(ServerSetting).first()
+            if not settings:
+                return True
+            mode = settings.federation_mode or "blacklist"
+            domain = domain.lower().strip()
+            if mode == "whitelist":
+                allowed = s.query(AllowedServer).filter_by(domain=domain).first()
+                return allowed is not None
+            else:
+                blocked = s.query(FederationBlock).filter_by(domain=domain).first()
+                return blocked is None
+        except Exception:
+            return True
 
 
 _SAFE_TAGS = {"p", "br", "a", "strong", "em", "b", "i", "u", "s", "ul", "ol", "li", "blockquote", "code", "pre", "span"}
@@ -244,6 +264,13 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
     if isinstance(actor, list):
         actor = actor[0]
 
+    # Check federation rules for the actor's domain
+    if actor and isinstance(actor, str):
+        actor_domain = urlparse(actor).hostname or ""
+        if not _federation_allowed(actor_domain):
+            logger.info("Rejected inbox activity from blocked domain: %s", actor_domain)
+            return (403, "Domain not allowed")
+
     if atype == "Follow":
         return _handle_follow(activity)
     elif atype == "Accept":
@@ -267,6 +294,10 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
 def _safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
     """HTTP GET with redirect validation and size limit."""
     if not _validate_url(url):
+        return None
+    domain = urlparse(url).hostname or ""
+    if not _federation_allowed(domain):
+        logger.info("Federation blocked for domain: %s", domain)
         return None
     client = httpx.Client(follow_redirects=True, timeout=timeout)
     original_send = client.send
@@ -957,6 +988,10 @@ def broadcast_to_followers(user: User, activity: dict):
         follower = f.follower
         inbox = follower.shared_inbox_url or follower.inbox_uri()
         if inbox in sent:
+            continue
+        domain = urlparse(inbox).hostname or ""
+        if not _federation_allowed(domain):
+            logger.info("Skipping broadcast to blocked domain: %s", domain)
             continue
         sent.add(inbox)
         _post_to_inbox(inbox, activity, user)

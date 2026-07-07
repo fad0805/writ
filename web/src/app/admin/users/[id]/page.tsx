@@ -112,18 +112,16 @@ export default function AdminUserDetailPage() {
             <tr>
               <td className="label">이메일</td>
               <td className="value">{u.email_domain ? `${u.username}@${u.email_domain}` : "-"}</td>
-              <td className="action">
-                <div style={{ display: "inline-flex", flexDirection: "column", gap: 4 }}>
-                  <button onClick={() => setShowChangeEmail(!showChangeEmail)} className="btn btn-small btn-outline text-xs admin-action-btn-eq">변경</button>
-                  {u.email_domain && (
-                    <button onClick={async () => {
-                      const form = new FormData(); form.append("domain", u.email_domain!);
-                      const res = await fetch("/api/admin/block-domain", { method: "POST", credentials: "include", body: form });
-                      const d = await res.json().catch(() => ({}));
-                      alert(res.ok ? `도메인 ${u.email_domain} 차단됨` : (d.detail || "실패"));
-                    }} className="btn btn-small btn-outline text-xs admin-action-btn-eq" style={{ color: "var(--danger)" }}>도메인 차단</button>
-                  )}
-                </div>
+              <td className="action admin-action-cell">
+                <button onClick={() => setShowChangeEmail(!showChangeEmail)} className="btn btn-small btn-outline text-xs admin-action-btn-eq">변경</button>
+                {u.email_domain && (
+                  <button onClick={async () => {
+                    const form = new FormData(); form.append("domain", u.email_domain!);
+                    const res = await fetch("/api/admin/block-domain", { method: "POST", credentials: "include", body: form });
+                    const d = await res.json().catch(() => ({}));
+                    alert(res.ok ? `도메인 ${u.email_domain} 차단됨` : (d.detail || "실패"));
+                  }} className="btn btn-small btn-outline text-xs admin-action-btn-eq" style={{ color: "var(--danger)" }}>도메인 차단</button>
+                )}
               </td>
             </tr>
             {showChangeEmail && (
@@ -139,7 +137,7 @@ export default function AdminUserDetailPage() {
             <tr>
               <td className="label">이메일 인증</td>
               <td className="value">{u.email_verified ? "완료" : "미인증"}</td>
-              <td className="action">
+              <td className="action admin-action-cell">
                 {!u.email_verified && <button onClick={() => act(`/api/admin/users/${u.id}/verify-email`)} className="btn btn-small btn-outline text-xs admin-action-btn-eq">인증 처리</button>}
               </td>
             </tr>
@@ -179,32 +177,6 @@ export default function AdminUserDetailPage() {
           </tbody>
         </table>
       </div>
-
-      {/* Moderation history */}
-      {u.moderation_history && u.moderation_history.length > 0 && (
-        <div className="admin-section">
-          <label className="admin-section-label" style={{ marginBottom: 8 }}>중재 기록</label>
-          <div className="flex-col gap-6">
-            {u.moderation_history.map((h) => {
-              const actNames: Record<string, string> = { warning: "경고", freeze: "동결", unfreeze: "동결 해제", sensitive: "민감 처리", unsensitive: "민감 해제", limit: "제한", unlimit: "제한 해제", suspend: "정지", unsuspend: "정지 해제", deceased: "고인 설정", undeceased: "고인 해제" };
-              const actName = actNames[h.meta?.action || ""] || h.meta?.action || "중재";
-              return (
-                <div key={h.id} className="text-sm" style={{ padding: "10px 14px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6 }}>
-                  <div className="flex-between" style={{ alignItems: "center", marginBottom: h.meta?.message ? 6 : 0 }}>
-                    <span>
-                      <span className="font-semibold text-secondary" style={{ color: "var(--danger)" }}>{actName}</span>
-                      <span className="text-muted"> by </span>
-                      <span className="text-primary">{h.by?.display_name || h.by?.username || "알 수 없음"}</span>
-                    </span>
-                    <span className="text-dim text-sm">{h.created_at ? new Date(h.created_at).toLocaleString("ko-KR") : ""}</span>
-                  </div>
-                  {h.meta?.message && <div className="pre-wrap" style={{ padding: "6px 10px", background: "var(--bg-tertiary)", borderRadius: 4, fontSize: "0.9em", color: "var(--text-secondary)" }}>{h.meta.message}</div>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Moderation note */}
       <div className="admin-section">

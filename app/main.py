@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import time
 from collections import defaultdict
 from typing import AsyncGenerator
@@ -40,6 +41,20 @@ def _check_rate_limit(key: str) -> bool:
         return False
     _rate_limit_store[key].append(now)
     return True
+
+# ── logging configuration ──
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[
+        logging.FileHandler("logs/app.log"),
+        logging.StreamHandler(),
+    ],
+)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

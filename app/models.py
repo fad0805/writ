@@ -448,6 +448,45 @@ class BlockedDomain(Base):
     created_by = relationship("User", lazy="selectin")
 
 
+class FederationBlock(Base):
+    __tablename__ = "federation_blocks"
+
+    id = Column(Integer, primary_key=True)
+    domain = Column(String(255), unique=True, nullable=False, index=True)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+    created_by = relationship("User", lazy="selectin")
+
+
+class AllowedServer(Base):
+    __tablename__ = "allowed_servers"
+
+    id = Column(Integer, primary_key=True)
+    domain = Column(String(255), unique=True, nullable=False, index=True)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+    created_by = relationship("User", lazy="selectin")
+
+
+class AdminLog(Base):
+    __tablename__ = "admin_logs"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    username = Column(String(255), default="")
+    action = Column(String(50), nullable=False, index=True)
+    target_type = Column(String(50), nullable=True)
+    target_id = Column(Integer, nullable=True)
+    target_username = Column(String(255), default="")
+    details = Column(Text, default="")
+    ip_address = Column(String(45), default="")
+    created_at = Column(DateTime(timezone=True), default=now)
+
+    user = relationship("User", foreign_keys=[user_id], lazy="selectin")
+
+
 class ServerSetting(Base):
     __tablename__ = "server_settings"
 
@@ -458,6 +497,7 @@ class ServerSetting(Base):
     app_icon = Column(String(512), default="")
     admin_ids = Column(String(512), default="")
     admin_email = Column(String(255), default="")
+    federation_mode = Column(String(16), default="blacklist")  # whitelist or blacklist
 
     @classmethod
     def get(cls, session):
@@ -500,6 +540,12 @@ def init_db():
     try:
         with Session(engine) as session:
             session.execute(text("ALTER TABLE server_settings ADD COLUMN admin_email VARCHAR(255) DEFAULT ''"))
+            session.commit()
+    except Exception:
+        pass
+    try:
+        with Session(engine) as session:
+            session.execute(text("ALTER TABLE server_settings ADD COLUMN federation_mode VARCHAR(16) DEFAULT 'blacklist'"))
             session.commit()
     except Exception:
         pass

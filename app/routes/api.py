@@ -9,8 +9,9 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, SeriesFollow, Tag, CustomEmoji, ProfileNote, Report, BlockedDomain, get_session
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, SeriesFollow, Tag, CustomEmoji, ProfileNote, Report, BlockedDomain, FederationBlock, AllowedServer, ServerSetting, AdminLog, get_session
 from app.routes.auth import require_auth, get_current_user
+from app.log_utils import log_admin_action
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
 
@@ -151,6 +152,7 @@ def api_me(request: Request):
 @router.post("/auth/login")
 def api_login(request: Request, username: str = Form(...), password: str = Form(...)):
     from app.routes.auth import hash_password, verify_password, create_session
+    client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
     with get_session() as s:
         q = s.query(User).filter(User.is_remote == False)
         if "@" in username and "." in username:
@@ -158,28 +160,33 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
         else:
             db_user = q.filter(User.username == username).first()
         if not db_user:
+            log_admin_action(None, username, "login_failed", details="user_not_found", ip_address=client_ip)
             raise HTTPException(status_code=401, detail="Invalid credentials")
         if getattr(db_user, 'is_frozen', False):
+            log_admin_action(db_user.id, db_user.username, "login_blocked", details="frozen", ip_address=client_ip)
             raise HTTPException(status_code=403, detail="계정이 동결되었습니다.")
         if getattr(db_user, 'is_suspended', False):
+            log_admin_action(db_user.id, db_user.username, "login_blocked", details="suspended", ip_address=client_ip)
             raise HTTPException(status_code=403, detail="계정이 정지되었습니다.")
         stored = db_user.password_hash
         if ":" not in stored:
             raise HTTPException(status_code=401, detail="Invalid credentials")
         salt, hval = stored.split(":", 1)
         if not verify_password(password, salt, hval):
+            log_admin_action(db_user.id, db_user.username, "login_failed", details="wrong_password", ip_address=client_ip)
             raise HTTPException(status_code=401, detail="비밀번호가 틀렸습니다.")
         if not db_user.email_verified:
+            log_admin_action(db_user.id, db_user.username, "login_blocked", details="email_not_verified", ip_address=client_ip)
             raise HTTPException(status_code=403, detail="이메일 인증이 필요합니다. 가입 시 등록한 이메일에서 인증을 완료해 주세요.")
         token = create_session(db_user.id)
         # Store IP
-        client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
         if client_ip:
             ips = db_user.recent_ips or []
             ips = [ip for ip in ips if ip != client_ip]  # remove duplicate
             ips.insert(0, client_ip)
             db_user.recent_ips = ips[:10]
             s.commit()
+        log_admin_action(db_user.id, db_user.username, "login", ip_address=client_ip)
         resp = JSONResponse(_user_json(db_user))
         resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/")
         return resp
@@ -276,6 +283,8 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
         if not is_first:
             _send_verification_email(user)
         s.commit()
+
+        log_admin_action(user_id, user.username, "register", ip_address=client_ip, details="first_user" if is_first else "email_required")
 
         return {"ok": True, "email_sent": not is_first}
 
@@ -1528,6 +1537,7 @@ def api_settings_change_email(request: Request, email: str = Form(...)):
         db.verification_token = ""
         _send_verification_email(db)
         s.commit()
+    log_admin_action(user.id, user.username, "change_email", details=f"{old_email} -> {email}", ip_address=request.client.host if request.client else "")
     return {"ok": True, "email_changed": True}
 
 
@@ -1548,6 +1558,7 @@ def api_settings_change_password(request: Request, current_password: str = Form(
         new_salt, new_hsh = hash_password(new_password)
         db.password_hash = new_salt + ":" + new_hsh
         s.commit()
+    log_admin_action(user.id, user.username, "change_password", ip_address=request.client.host if request.client else "")
     return {"ok": True}
 
 
@@ -2309,18 +2320,6 @@ def api_admin_user_detail(request: Request, user_id: int):
             "moderation_note": getattr(u, 'moderation_note', '') or '',
             "email_verified": getattr(u, 'email_verified', False),
             "summary": u.summary or "",
-            "moderation_history": [
-                {
-                    "id": n.id,
-                    "action": n.notification_type,
-                    "created_at": str(n.created_at) if n.created_at else "",
-                    "by": _user_json(s.query(User).get(n.from_user_id)) if n.from_user_id else None,
-                    "meta": json.loads(n.metadata_json) if n.metadata_json else {},
-                }
-                for n in s.query(Notification).filter_by(
-                    user_id=u.id, notification_type="moderation"
-                ).order_by(desc(Notification.created_at)).limit(20).all()
-            ],
         }
 
 
@@ -2340,6 +2339,7 @@ def api_admin_reset_password(request: Request, user_id: int):
         u.password_hash = salt + ":" + hsh
         u.session_token = ""
         s.commit()
+    log_admin_action(user.id, user.username, "reset_password", target_type="user", target_id=user_id, target_username=u.username, ip_address=request.client.host if request.client else "")
     return {"ok": True, "new_password": new_pass}
 
 
@@ -2352,9 +2352,11 @@ def api_admin_change_email(request: Request, user_id: int, email: str = Form(...
         u = s.query(User).get(user_id)
         if not u:
             raise HTTPException(status_code=404, detail="User not found")
+        old_email = u.email
         u.email = email
         u.email_verified = False
         s.commit()
+    log_admin_action(user.id, user.username, "admin_change_email", target_type="user", target_id=user_id, target_username=u.username, details=f"{old_email} -> {email}", ip_address=request.client.host if request.client else "")
     return {"ok": True}
 
 
@@ -2369,9 +2371,11 @@ def api_admin_change_role(request: Request, user_id: int, role: str = Form("user
         u = s.query(User).get(user_id)
         if not u:
             raise HTTPException(status_code=404, detail="User not found")
+        old_role = u.role
         u.role = role
         u.is_admin = role in ("admin", "owner")
         s.commit()
+    log_admin_action(user.id, user.username, "change_role", target_type="user", target_id=user_id, target_username=u.username, details=f"{old_role} -> {role}", ip_address=request.client.host if request.client else "")
     return {"ok": True}
 
 
@@ -2386,6 +2390,7 @@ def api_admin_verify_email(request: Request, user_id: int):
             raise HTTPException(status_code=404, detail="User not found")
         u.email_verified = True
         s.commit()
+    log_admin_action(user.id, user.username, "verify_email", target_type="user", target_id=user_id, target_username=u.username, ip_address=request.client.host if request.client else "")
     return {"ok": True}
 
 
@@ -2405,6 +2410,7 @@ def api_admin_remove_avatar(request: Request, user_id: int):
             old_path = old.lstrip("/")
             if os.path.isfile(old_path):
                 os.remove(old_path)
+    log_admin_action(user.id, user.username, "remove_avatar", target_type="user", target_id=user_id, target_username=u.username, ip_address=request.client.host if request.client else "")
     return {"ok": True}
 
 
@@ -2414,9 +2420,14 @@ def api_admin_suspend_users(request: Request, user_ids: str = Form(...)):
     if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     ids = [int(i) for i in user_ids.split(",") if i.strip()]
+    ip = request.client.host if request.client else ""
     with get_session() as s:
-        s.query(User).filter(User.id.in_(ids)).update({"is_suspended": True}, synchronize_session=False)
+        targets = s.query(User).filter(User.id.in_(ids)).all()
+        for t in targets:
+            t.is_suspended = True
         s.commit()
+    for t in targets:
+        log_admin_action(user.id, user.username, "suspend", target_type="user", target_id=t.id, target_username=t.username, ip_address=ip)
     return {"ok": True}
 
 
@@ -2426,9 +2437,14 @@ def api_admin_unsuspend_users(request: Request, user_ids: str = Form(...)):
     if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     ids = [int(i) for i in user_ids.split(",") if i.strip()]
+    ip = request.client.host if request.client else ""
     with get_session() as s:
-        s.query(User).filter(User.id.in_(ids)).update({"is_suspended": False}, synchronize_session=False)
+        targets = s.query(User).filter(User.id.in_(ids)).all()
+        for t in targets:
+            t.is_suspended = False
         s.commit()
+    for t in targets:
+        log_admin_action(user.id, user.username, "unsuspend", target_type="user", target_id=t.id, target_username=t.username, ip_address=ip)
     return {"ok": True}
 
 
@@ -2442,6 +2458,7 @@ def api_admin_user_note(request: Request, user_id: int, note: str = Form("")):
         if not u: raise HTTPException(status_code=404, detail="User not found")
         u.moderation_note = note
         s.commit()
+    log_admin_action(user.id, user.username, "set_note", target_type="user", target_id=user_id, target_username=u.username, details=note[:200], ip_address=request.client.host if request.client else "")
     return {"ok": True}
 
 
@@ -2507,6 +2524,7 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
         )
         s.add(notif)
         s.commit()
+        log_admin_action(user.id, user.username, f"moderate:{action}", target_type="user", target_id=user_id, target_username=u.username, details=message or "", ip_address=request.client.host if request.client else "")
 
         if send_email and u.email:
             try:
@@ -2537,7 +2555,8 @@ def api_admin_toggle_sensitive(request: Request, user_id: int):
         if not u: raise HTTPException(status_code=404, detail="User not found")
         u.is_sensitive = not u.is_sensitive
         s.commit()
-        return {"ok": True, "is_sensitive": u.is_sensitive}
+    log_admin_action(user.id, user.username, f"toggle_sensitive:{u.is_sensitive}", target_type="user", target_id=user_id, target_username=u.username, ip_address=request.client.host if request.client else "")
+    return {"ok": True, "is_sensitive": u.is_sensitive}
 
 
 @router.get("/admin/reports")
@@ -2668,6 +2687,7 @@ def api_admin_resolve_report(request: Request, report_id: int):
         report.status = "resolved"
         report.resolved_by_id = user.id
         s.commit()
+    log_admin_action(user.id, user.username, "resolve_report", target_type="report", target_id=report_id, details=f"target:{report.target_type}:{report.target_id}", ip_address=request.client.host if request.client else "")
     return {"ok": True}
 
 
@@ -2683,6 +2703,7 @@ def api_admin_dismiss_report(request: Request, report_id: int):
         report.status = "dismissed"
         report.resolved_by_id = user.id
         s.commit()
+    log_admin_action(user.id, user.username, "dismiss_report", target_type="report", target_id=report_id, details=f"target:{report.target_type}:{report.target_id}", ip_address=request.client.host if request.client else "")
     return {"ok": True}
 
 
@@ -2702,7 +2723,8 @@ def api_admin_set_post_cw(request: Request, post_id: int, summary: str = Form(""
             summary = tag + summary
         post.summary = summary
         s.commit()
-        return {"ok": True, "summary": summary}
+    log_admin_action(user.id, user.username, "set_post_cw", target_type="post", target_id=post_id, target_username=f"@{post.author.username}", details=summary, ip_address=request.client.host if request.client else "")
+    return {"ok": True, "summary": summary}
 
 
 @router.get("/admin/blocked-domains")
@@ -2734,7 +2756,8 @@ def api_admin_block_domain(request: Request, domain: str = Form(...)):
             raise HTTPException(status_code=400, detail="Already blocked")
         s.add(BlockedDomain(domain=domain, created_by_id=user.id))
         s.commit()
-        return {"ok": True, "domain": domain}
+    log_admin_action(user.id, user.username, "block_domain", target_type="domain", target_username=domain, ip_address=request.client.host if request.client else "")
+    return {"ok": True, "domain": domain}
 
 
 @router.delete("/admin/block-domain/{domain}")
@@ -2749,7 +2772,140 @@ def api_admin_unblock_domain(request: Request, domain: str):
             raise HTTPException(status_code=404, detail="Domain not blocked")
         s.delete(bd)
         s.commit()
-        return {"ok": True}
+    log_admin_action(user.id, user.username, "unblock_domain", target_type="domain", target_username=domain, ip_address=request.client.host if request.client else "")
+    return {"ok": True}
+
+
+def _is_federation_allowed(domain: str) -> bool:
+    if not domain:
+        return False
+    from app.models import ServerSetting, FederationBlock, AllowedServer
+    with get_session() as s:
+        mode = ServerSetting.get(s).federation_mode or "blacklist"
+        if mode == "whitelist":
+            allowed = s.query(AllowedServer).filter_by(domain=domain).first()
+            return allowed is not None
+        else:
+            blocked = s.query(FederationBlock).filter_by(domain=domain).first()
+            return blocked is None
+
+
+@router.get("/admin/federation-blocks")
+def api_admin_list_federation_blocks(request: Request):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        blocks = s.query(FederationBlock).order_by(FederationBlock.created_at.desc()).all()
+        return {"blocks": [{"id": b.id, "domain": b.domain, "created_by": b.created_by.username if b.created_by else "", "created_at": str(b.created_at) if b.created_at else ""} for b in blocks]}
+
+
+@router.post("/admin/federation-block")
+def api_admin_add_federation_block(request: Request, domain: str = Form(...)):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    domain = domain.strip().lower()
+    if not domain or "." not in domain:
+        raise HTTPException(status_code=400, detail="Invalid domain")
+    with get_session() as s:
+        existing = s.query(FederationBlock).filter_by(domain=domain).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Already blocked")
+        s.add(FederationBlock(domain=domain, created_by_id=user.id))
+        # Also remove from allowed list if present
+        s.query(AllowedServer).filter_by(domain=domain).delete()
+        s.commit()
+    log_admin_action(user.id, user.username, "federation_block", target_type="domain", target_username=domain, ip_address=request.client.host if request.client else "")
+    return {"ok": True, "domain": domain}
+
+
+@router.delete("/admin/federation-block/{domain}")
+def api_admin_remove_federation_block(request: Request, domain: str):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    domain = domain.strip().lower()
+    with get_session() as s:
+        b = s.query(FederationBlock).filter_by(domain=domain).first()
+        if not b:
+            raise HTTPException(status_code=404, detail="Domain not blocked")
+        s.delete(b)
+        s.commit()
+    log_admin_action(user.id, user.username, "federation_unblock", target_type="domain", target_username=domain, ip_address=request.client.host if request.client else "")
+    return {"ok": True}
+
+
+@router.get("/admin/allowed-servers")
+def api_admin_list_allowed_servers(request: Request):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        servers = s.query(AllowedServer).order_by(AllowedServer.created_at.desc()).all()
+        return {"servers": [{"id": sv.id, "domain": sv.domain, "created_by": sv.created_by.username if sv.created_by else "", "created_at": str(sv.created_at) if sv.created_at else ""} for sv in servers]}
+
+
+@router.post("/admin/allowed-server")
+def api_admin_add_allowed_server(request: Request, domain: str = Form(...)):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    domain = domain.strip().lower()
+    if not domain or "." not in domain:
+        raise HTTPException(status_code=400, detail="Invalid domain")
+    with get_session() as s:
+        existing = s.query(AllowedServer).filter_by(domain=domain).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Already allowed")
+        # Also remove from block list if present
+        s.query(FederationBlock).filter_by(domain=domain).delete()
+        s.add(AllowedServer(domain=domain, created_by_id=user.id))
+        s.commit()
+    log_admin_action(user.id, user.username, "federation_allow", target_type="domain", target_username=domain, ip_address=request.client.host if request.client else "")
+    return {"ok": True, "domain": domain}
+
+
+@router.delete("/admin/allowed-server/{domain}")
+def api_admin_remove_allowed_server(request: Request, domain: str):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    domain = domain.strip().lower()
+    with get_session() as s:
+        sv = s.query(AllowedServer).filter_by(domain=domain).first()
+        if not sv:
+            raise HTTPException(status_code=404, detail="Domain not allowed")
+        s.delete(sv)
+        s.commit()
+    log_admin_action(user.id, user.username, "federation_disallow", target_type="domain", target_username=domain, ip_address=request.client.host if request.client else "")
+    return {"ok": True}
+
+
+@router.post("/admin/federation-mode")
+def api_admin_set_federation_mode(request: Request, mode: str = Form(...)):
+    user = require_auth(request)
+    if user.role not in ("admin",):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if mode not in ("whitelist", "blacklist"):
+        raise HTTPException(status_code=400, detail="Invalid mode")
+    with get_session() as s:
+        settings = ServerSetting.get(s)
+        old_mode = settings.federation_mode
+        settings.federation_mode = mode
+        s.commit()
+    log_admin_action(user.id, user.username, "federation_mode", details=f"{old_mode} -> {mode}", ip_address=request.client.host if request.client else "")
+    return {"ok": True, "mode": mode}
+
+
+@router.get("/admin/federation-mode")
+def api_admin_get_federation_mode(request: Request):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        settings = ServerSetting.get(s)
+        return {"mode": settings.federation_mode or "blacklist"}
 
 
 def _resolve_admin_users(s, admin_ids_str: str):
@@ -2821,6 +2977,7 @@ def api_admin_update_settings(request: Request,
         settings.admin_ids = admin_ids
         settings.admin_email = admin_email
         s.commit()
+    log_admin_action(user.id, user.username, "update_settings", ip_address=request.client.host if request.client else "")
     return {"ok": True}
 
 

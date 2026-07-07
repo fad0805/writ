@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 
 from app.models import User, Post, get_session
 from app.routes.auth import require_auth
+from app.log_utils import log_admin_action
 
 router = APIRouter()
 
@@ -28,12 +29,15 @@ def admin_delete_user(request: Request, user_id: int):
         session.delete(target)
         session.commit()
 
+    ip = request.client.host if request.client else ""
+    log_admin_action(admin.id, admin.username, "delete_user", target_type="user", target_id=user_id, target_username=target.username, ip_address=ip)
+
     return JSONResponse({"ok": True})
 
 
 @router.post("/admin/posts/{post_id}/delete")
 def admin_delete_post(request: Request, post_id: int):
-    require_admin(request)
+    admin = require_admin(request)
 
     with get_session() as session:
         post = session.query(Post).filter_by(id=post_id).first()
@@ -41,5 +45,8 @@ def admin_delete_post(request: Request, post_id: int):
             raise HTTPException(status_code=404, detail="Post not found")
         post.is_deleted = True
         session.commit()
+
+    ip = request.client.host if request.client else ""
+    log_admin_action(admin.id, admin.username, "delete_post", target_type="post", target_id=post_id, target_username=f"@{post.author.username}", ip_address=ip)
 
     return JSONResponse({"ok": True})
