@@ -80,6 +80,7 @@ export interface NotificationData {
   is_read: boolean;
   from_user: User | null;
   post: PostData | null;
+  metadata?: Record<string, any>;
 }
 
 export interface NovelData {
@@ -185,6 +186,10 @@ export const api = {
     episode: EpisodeData; novel: NovelData; is_mine: boolean;
     prev_episode: EpisodeData | null; next_episode: EpisodeData | null;
   }>(`/api/novels/${id}/episodes/${eid}`),
+
+  // Reports
+  report: (target_type: string, target_id: number, reason: string) =>
+    formRequest<{ ok: boolean; report_id: number }>("/api/reports", { target_type, target_id, reason }),
 
   // Explore
   explore: () => request<{ posts: PostData[]; novels: NovelData[] }>("/api/explore"),

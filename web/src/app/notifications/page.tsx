@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { api, NotificationData, User } from "@/lib/api";
 import Link from "next/link";
 import PostCard from "@/components/PostCard";
@@ -32,6 +33,7 @@ const NOTIF_ICONS: Record<string, string> = {
 };
 
 export default function NotificationsPage() {
+  const router = useRouter();
   const [notifs, setNotifs] = useState<NotificationData[]>([]);
   const [directGroups, setDirectGroups] = useState<DirectUserData[]>([]);
   const [filter, setFilter] = useState(() => {
@@ -69,6 +71,9 @@ export default function NotificationsPage() {
   const actionNames: Record<string, string> = {
     warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지", unsuspend: "정지 해제",
   };
+  const targetTypeNames: Record<string, string> = {
+    post: "게시글", novel: "시리즈", episode: "에피소드",
+  };
 
   const typeText = (t: string, meta?: any) => {
     if (t === "follow") return "님이 회원님을 팔로우했습니다";
@@ -78,6 +83,8 @@ export default function NotificationsPage() {
     if (t === "reply" || t === "mention") return "님이 회원님을 언급했습니다";
     if (t === "post") return "님이 새 글을 작성했습니다";
     if (t === "moderation") {
+      if (meta?.type === "report") return `님이 ${targetTypeNames[meta.target_type] || meta.target_type}을(를) 신고했습니다`;
+      if (meta?.type === "new_user") return `님이 가입했습니다`;
       const act = actionNames[meta?.action] || meta?.action || "중재";
       return `계정에 ${act} 조치가 적용되었습니다.`;
     }
@@ -153,24 +160,50 @@ export default function NotificationsPage() {
         <p className="empty-state">알림이 없습니다.</p>
       ) : (
         notifs.map((n) => (
-          <div key={n.id} className="notif-card" data-type={n.type}>
+          <div key={n.id} className="notif-card" data-type={n.type}
+            onClick={() => {
+              if (n.type === "moderation" && n.metadata?.type === "report") router.push(`/admin/reports/${n.metadata.report_id}`);
+              else if (n.type === "moderation" && n.metadata?.type === "new_user") router.push(`/@${n.from_user?.username}`);
+            }}
+            style={{ cursor: (n.type === "moderation" && (n.metadata?.type === "report" || n.metadata?.type === "new_user")) ? "pointer" : undefined }}>
             <div className="notif-icon notif-icon-dynamic" style={{ color: n.type === "like" ? "#f1c40f" : n.type === "boost" ? "var(--accent)" : n.type === "follow" ? "#4fc3f7" : n.type === "moderation" ? "var(--danger)" : "var(--text-muted)" }}>
               <Icon name={NOTIF_ICONS[n.type] || "bell"} size={20} />
             </div>
             <div className="notif-body">
-              {n.type === "moderation" ? (
-                <><span className="font-bold" style={{ color: "var(--danger)" }}>{actionNames[(n as any).metadata?.action] || (n as any).metadata?.action || "중재"}</span> 조치가 적용되었습니다.</>
+              {n.type === "moderation" && n.metadata?.type === "report" ? (
+                <>
+                  <Link href={`/@${n.from_user?.username}`} className="notif-from-link">{n.from_user?.display_name}</Link>{" "}
+                  님이 <strong>{targetTypeNames[n.metadata.target_type] || n.metadata.target_type}</strong>을(를) 신고했습니다
+                  <div className="notif-mod-message">
+                    <div style={{ fontSize: 13, marginBottom: 2 }}>
+                      {n.metadata.target_author && <span>작성자: {n.metadata.target_author} · </span>}
+                      대상 #{n.metadata.target_id}
+                    </div>
+                    {n.metadata.target_label && <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 4 }}>"{n.metadata.target_label}"</div>}
+                    <div style={{ fontSize: 13 }}>사유: {n.metadata.reason}</div>
+                  </div>
+                </>
+              ) : n.type === "moderation" && n.metadata?.type === "new_user" ? (
+                <>
+                  <Link href={`/@${n.from_user?.username}`} className="notif-from-link">{n.from_user?.display_name}</Link>{" "}
+                  님이 가입했습니다
+                  <div className="notif-mod-message" style={{ fontSize: 13 }}>
+                    @{n.from_user?.username}
+                  </div>
+                </>
+              ) : n.type === "moderation" ? (
+                <><span className="font-bold" style={{ color: "var(--danger)" }}>{actionNames[n.metadata?.action] || n.metadata?.action || "중재"}</span> 조치가 적용되었습니다.</>
               ) : (
                 <>{n.from_user && (
                   <Link href={`/@${n.from_user.username}`} className="notif-from-link">
                     {n.from_user.display_name}
                   </Link>
                 )}{" "}
-                {typeText(n.type)}</>
+                {typeText(n.type, n.metadata)}</>
               )}
               <span className="notif-time">{fmtTime(n.created_at)}</span>
-              {n.type === "moderation" && (n as any).metadata?.message && (
-                <div className="notif-mod-message">{(n as any).metadata.message}</div>
+              {n.type === "moderation" && n.metadata?.message && n.metadata?.type !== "report" && n.metadata?.type !== "new_user" && (
+                <div className="notif-mod-message">{n.metadata.message}</div>
               )}
               {n.type === "follow_request" && n.from_user && (
                 <div className="notif-follow-btns">

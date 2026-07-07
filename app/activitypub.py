@@ -7,15 +7,16 @@ import logging
 import os
 import re
 import socket
+import time
+import uuid
 from typing import Optional
 from urllib.parse import urlparse
 
 import httpx
 
 from app.models import User, Post, Follow, Like, Boost, Notification, CustomEmoji, get_session
-from sqlalchemy.exc import IntegrityError
-from app.config import BASE_URL, PUBLIC_URI, SECRET_KEY
-from app.crypto_utils import generate_keypair, sign_string, verify_signature, encrypt_key, decrypt_key, get_private_key
+from app.config import BASE_URL, SECRET_KEY
+from app.crypto_utils import generate_keypair, sign_string, encrypt_key, get_private_key
 
 
 logger = logging.getLogger("writ.activitypub")
@@ -143,7 +144,7 @@ def get_outbox(username: str, page: Optional[int] = None):
         if page is not None:
             offset = (page - 1) * 20
             posts = query.offset(offset).limit(20).all()
-            items = [p.to_ap_note() for p in posts]
+            items = [p.to_ap_create() for p in posts]
             return {
                 "@context": "https://www.w3.org/ns/activitystreams",
                 "id": f"{outbox_url}?page={page}",
@@ -287,13 +288,12 @@ def _safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
 def _save_remote_avatar(avatar_url: str, local_username: str) -> str:
     """Download remote avatar and save, return profile_image URL."""
     from app.utils.storage import get_storage
-    from uuid import uuid4
     if not _validate_url(avatar_url):
         return ""
     ext = avatar_url.rsplit(".", 1)[-1].lower() if "." in avatar_url else "jpg"
     if ext not in ("jpg", "jpeg", "png", "gif", "webp"):
         ext = "jpg"
-    filename = f"{local_username}_{uuid4().hex[:8]}.{ext}"
+    filename = f"{local_username}_{uuid.uuid4().hex[:8]}.{ext}"
     key = f"avatars/remote/{filename}"
     try:
         resp = _safe_fetch(avatar_url)
@@ -392,8 +392,12 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User
 
 
 def _handle_follow(activity: dict) -> tuple[int, str]:
-    actor_url = activity["actor"] if isinstance(activity["actor"], str) else activity["actor"][0]
-    object_url = activity["object"]
+    raw_actor = activity.get("actor")
+    if not raw_actor:
+        return (400, "Missing actor")
+    actor_url = raw_actor if isinstance(raw_actor, str) else raw_actor[0]
+    raw_object = activity.get("object", "")
+    object_url = raw_object if isinstance(raw_object, str) else raw_object.get("id", "")
     activity_id = activity.get("id", "")
 
     local_username = _parse_username_from_url(object_url)
@@ -449,6 +453,15 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
     obj = activity.get("object", {})
     if isinstance(obj, dict):
         follower_url = obj.get("actor", "")
+    elif isinstance(obj, str):
+        # Object is just a URI — try to fetch the Follow activity
+        try:
+            resp = httpx.get(obj, headers={"Accept": "application/activity+json"}, timeout=10)
+            if resp.status_code == 200:
+                follow_activity = resp.json()
+                follower_url = follow_activity.get("actor", "")
+        except Exception:
+            pass
     else:
         follower_url = ""
 
@@ -486,7 +499,10 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
 def _handle_create(activity: dict) -> tuple[int, str]:
     obj = activity.get("object", {})
     if isinstance(obj, dict) and obj.get("type") == "Note":
-        actor_url = activity["actor"] if isinstance(activity["actor"], str) else activity["actor"][0]
+        raw_actor = activity.get("actor")
+        if not raw_actor:
+            return (400, "Missing actor")
+        actor_url = raw_actor if isinstance(raw_actor, str) else raw_actor[0]
         actor = _resolve_actor(actor_url)
         if not actor:
             return (404, "Actor not found")
@@ -512,7 +528,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             visibility = "home"
         elif any(aud.endswith("/followers") for aud in all_audiences):
             visibility = "followers"
-        elif all(aud.startswith("http") for aud in all_audiences if aud):
+        elif all_audiences and all(aud.startswith("http") for aud in all_audiences if aud):
             visibility = "mention"
         else:
             visibility = "home"
@@ -527,7 +543,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 reply_to_post = session.query(Post).filter_by(ap_id=in_reply_to).first()
 
             # Parse mentioned users from content
-            import re
             mentioned_names = set(re.findall(r'@(\w+)', content or ""))
             mentioned_ids = []
             if mentioned_names:
@@ -589,7 +604,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
 
 
 def _handle_like(activity: dict) -> tuple[int, str]:
-    actor_url = activity["actor"] if isinstance(activity["actor"], str) else activity["actor"][0]
+    raw_actor = activity.get("actor")
+    if not raw_actor:
+        return (400, "Missing actor")
+    actor_url = raw_actor if isinstance(raw_actor, str) else raw_actor[0]
     object_url = activity["object"] if isinstance(activity.get("object"), str) else ""
     activity_id = activity.get("id", "")
 
@@ -611,7 +629,6 @@ def _handle_like(activity: dict) -> tuple[int, str]:
 
         like_ap_id = activity_id
         if not like_ap_id:
-            import uuid
             like_ap_id = f"{BASE_URL}/likes/{uuid.uuid4()}"
 
         like = Like(
@@ -634,7 +651,10 @@ def _handle_like(activity: dict) -> tuple[int, str]:
 
 
 def _handle_announce(activity: dict) -> tuple[int, str]:
-    actor_url = activity["actor"] if isinstance(activity["actor"], str) else activity["actor"][0]
+    raw_actor = activity.get("actor")
+    if not raw_actor:
+        return (400, "Missing actor")
+    actor_url = raw_actor if isinstance(raw_actor, str) else raw_actor[0]
     object_url = activity["object"] if isinstance(activity.get("object"), str) else ""
     activity_id = activity.get("id", "")
 
@@ -656,7 +676,6 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
 
         boost_ap_id = activity_id
         if not boost_ap_id:
-            import uuid
             boost_ap_id = f"{BASE_URL}/boosts/{uuid.uuid4()}"
 
         boost = Boost(
@@ -801,24 +820,17 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     }
 
     # Retry up to 3 times with exponential backoff
-    import time as _time
     for attempt in range(3):
         try:
             httpx.post(inbox_url, content=body, headers=headers, timeout=10)
             return
         except Exception as e:
             if attempt < 2:
-                _time.sleep(2 ** attempt)
+                time.sleep(2 ** attempt)
             logger.warning("Failed to deliver to %s (attempt %d/3): %s", inbox_url, attempt + 1, e)
 
 
 def send_to_shared_inbox(user: User, activity: dict):
-    body = json.dumps(activity, ensure_ascii=False).encode("utf-8")
-    digest = hashlib.sha256(body).hexdigest()
-    date = datetime.datetime.now(datetime.timezone.utc).strftime(
-        "%a, %d %b %Y %H:%M:%S GMT"
-    )
-
     with get_session() as session:
         followers = session.query(Follow).filter(
             Follow.follower_id == user.id,
@@ -870,7 +882,8 @@ def _process_emoji_tags(tags: list, session):
             continue
 
         EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "web", "public", "emojis")
-        import uuid
+        if not _validate_url(img_url):
+            continue
         from PIL import Image
         import httpx
         try:

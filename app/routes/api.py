@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import datetime
 import logging
 from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File
@@ -8,7 +9,7 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, Tag, CustomEmoji, ProfileNote, get_session
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, Tag, CustomEmoji, ProfileNote, Report, get_session
 from app.routes.auth import require_auth, get_current_user
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
@@ -211,8 +212,25 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
         client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
         if client_ip:
             user.recent_ips = [client_ip]
+        s.flush()
+        user_id = user.id
+        username = user.username
+        display_name = user.display_name
+
+        # Notify admins/moderators about new registration
+        if not is_first:
+            admins = s.query(User).filter(User.role.in_(["admin", "moderator"])).all()
+            for admin in admins:
+                if admin.id == user_id:
+                    continue
+                s.add(Notification(
+                    user_id=admin.id, from_user_id=user_id,
+                    notification_type="moderation",
+                    metadata_json=json.dumps({"type": "new_user", "user_id": user_id, "username": username, "display_name": display_name}),
+                ))
         s.commit()
-        token = create_session(user.id)
+
+        token = create_session(user_id)
         resp = JSONResponse(_user_json(user))
         resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/")
         return resp
@@ -445,9 +463,11 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
     if not content.strip():
         raise HTTPException(status_code=400, detail="Content cannot be empty")
     with get_session() as s:
-        post = s.query(Post).filter_by(id=post_id, author_id=user.id).first()
+        post = s.query(Post).filter_by(id=post_id).first()
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
+        if post.author_id != user.id:
+            raise HTTPException(status_code=403, detail="Cannot edit this post")
         post.content = content
         post.summary = summary
         s.commit()
@@ -466,6 +486,63 @@ def api_delete_post(request: Request, post_id: int):
         post.is_deleted = True
         s.commit()
     return {"ok": True}
+
+
+@router.post("/reports")
+def api_create_report(request: Request, target_type: str = Form(...), target_id: int = Form(...), reason: str = Form(...)):
+    user = require_auth(request)
+    target_type = target_type.strip().lower()
+    if target_type not in ("post", "novel", "episode"):
+        raise HTTPException(status_code=400, detail="Invalid target_type")
+    if not reason or len(reason.strip()) < 10:
+        raise HTTPException(status_code=400, detail="Reason must be at least 10 characters")
+    with get_session() as s:
+        existing = s.query(Report).filter_by(
+            reporter_id=user.id, target_type=target_type, target_id=target_id, status="pending"
+        ).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="Already reported")
+        report = Report(reporter_id=user.id, target_type=target_type, target_id=target_id, reason=reason.strip())
+        s.add(report)
+        s.flush()
+        report_id = report.id
+        admins = s.query(User).filter(User.role.in_(["admin", "moderator"])).all()
+        target_label = ""
+        target_author_name = ""
+        if target_type == "post":
+            p = s.query(Post).filter_by(id=target_id).first()
+            if p:
+                target_label = (p.content or "")[:120]
+                target_author_name = p.author.username
+        elif target_type == "novel":
+            nv = s.query(Novel).filter_by(id=target_id).first()
+            if nv:
+                target_label = nv.title[:120]
+                target_author_name = nv.author.username
+        elif target_type == "episode":
+            ep = s.query(Episode).filter_by(id=target_id).first()
+            if ep:
+                target_label = ep.title[:120]
+                target_author_name = ep.novel.author.username if ep.novel else ""
+        meta = {
+            "type": "report",
+            "report_id": report_id,
+            "target_type": target_type,
+            "target_id": target_id,
+            "target_label": target_label,
+            "target_author": target_author_name,
+            "reason": reason.strip()[:200],
+        }
+        for admin in admins:
+            if admin.id == user.id:
+                continue
+            s.add(Notification(
+                user_id=admin.id, from_user_id=user.id,
+                notification_type="moderation",
+                metadata_json=json.dumps(meta),
+            ))
+        s.commit()
+    return {"ok": True, "report_id": report_id}
 
 
 @router.post("/posts/{post_id}/like")
@@ -2224,3 +2301,171 @@ def api_admin_toggle_sensitive(request: Request, user_id: int):
         u.is_sensitive = not u.is_sensitive
         s.commit()
         return {"ok": True, "is_sensitive": u.is_sensitive}
+
+
+@router.get("/admin/reports")
+def api_admin_list_reports(request: Request, status: str = "pending", target_type: str = "", offset: int = 0, limit: int = 50):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        q = s.query(Report)
+        if status in ("pending", "resolved", "dismissed"):
+            q = q.filter(Report.status == status)
+        if target_type in ("post", "novel", "episode"):
+            q = q.filter(Report.target_type == target_type)
+        total = q.count()
+        reports = q.order_by(Report.created_at.desc()).offset(offset).limit(limit).all()
+        results = []
+        for r in reports:
+            item = {
+                "id": r.id,
+                "reporter": {"id": r.reporter.id, "username": r.reporter.username, "display_name": r.reporter.display_name},
+                "target_type": r.target_type,
+                "target_id": r.target_id,
+                "reason": r.reason,
+                "status": r.status,
+                "created_at": _fmt_dt(r.created_at),
+            }
+            if r.target_type == "post":
+                post = s.query(Post).filter_by(id=r.target_id).first()
+                if post:
+                    item["target"] = {
+                        "id": post.id,
+                        "content": post.content[:200] if post.content else "",
+                        "author": {"id": post.author.id, "username": post.author.username, "display_name": post.author.display_name},
+                        "is_deleted": post.is_deleted,
+                    }
+            elif r.target_type == "novel":
+                novel = s.query(Novel).filter_by(id=r.target_id).first()
+                if novel:
+                    item["target"] = {
+                        "id": novel.id,
+                        "title": novel.title,
+                        "author": {"id": novel.author.id, "username": novel.author.username, "display_name": novel.author.display_name},
+                    }
+            elif r.target_type == "episode":
+                ep = s.query(Episode).filter_by(id=r.target_id).first()
+                if ep:
+                    item["target"] = {
+                        "id": ep.id,
+                        "title": ep.title,
+                        "novel_id": ep.novel_id,
+                        "novel_title": ep.novel.title if ep.novel else "",
+                        "author": {"id": ep.novel.author.id, "username": ep.novel.author.username, "display_name": ep.novel.author.display_name} if ep.novel else None,
+                    }
+            if r.resolved_by_id:
+                resolver = s.query(User).filter_by(id=r.resolved_by_id).first()
+                if resolver:
+                    item["resolved_by"] = {"id": resolver.id, "username": resolver.username}
+            results.append(item)
+        return {"reports": results, "total": total}
+
+
+@router.get("/admin/reports/{report_id}")
+def api_admin_get_report(request: Request, report_id: int):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        r = s.query(Report).get(report_id)
+        if not r:
+            raise HTTPException(status_code=404, detail="Report not found")
+        item = {
+            "id": r.id,
+            "reporter": {"id": r.reporter.id, "username": r.reporter.username, "display_name": r.reporter.display_name},
+            "target_type": r.target_type,
+            "target_id": r.target_id,
+            "reason": r.reason,
+            "status": r.status,
+            "created_at": _fmt_dt(r.created_at),
+        }
+        if r.target_type == "post":
+            post = s.query(Post).filter_by(id=r.target_id).first()
+            if post:
+                item["target"] = {
+                    "id": post.id,
+                    "content": post.content,
+                    "author": {"id": post.author.id, "username": post.author.username, "display_name": post.author.display_name},
+                    "is_deleted": post.is_deleted,
+                    "author_id": post.author_id,
+                }
+        elif r.target_type == "novel":
+            novel = s.query(Novel).filter_by(id=r.target_id).first()
+            if novel:
+                item["target"] = {
+                    "id": novel.id,
+                    "title": novel.title,
+                    "description": novel.description,
+                    "author": {"id": novel.author.id, "username": novel.author.username, "display_name": novel.author.display_name},
+                    "author_id": novel.author_id,
+                }
+        elif r.target_type == "episode":
+            ep = s.query(Episode).filter_by(id=r.target_id).first()
+            if ep and ep.novel:
+                item["target"] = {
+                    "id": ep.id,
+                    "title": ep.title,
+                    "content": ep.content[:500],
+                    "novel_id": ep.novel_id,
+                    "novel_title": ep.novel.title,
+                    "author": {"id": ep.novel.author.id, "username": ep.novel.author.username, "display_name": ep.novel.author.display_name},
+                    "author_id": ep.novel.author_id,
+                }
+        if r.resolved_by_id:
+            resolver = s.query(User).filter_by(id=r.resolved_by_id).first()
+            if resolver:
+                item["resolved_by"] = {"id": resolver.id, "username": resolver.username}
+        return item
+
+
+@router.post("/admin/reports/{report_id}/resolve")
+def api_admin_resolve_report(request: Request, report_id: int):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        report = s.query(Report).get(report_id)
+        if not report:
+            raise HTTPException(status_code=404, detail="Report not found")
+        report.status = "resolved"
+        report.resolved_by_id = user.id
+        s.commit()
+    return {"ok": True}
+
+
+@router.post("/admin/reports/{report_id}/dismiss")
+def api_admin_dismiss_report(request: Request, report_id: int):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        report = s.query(Report).get(report_id)
+        if not report:
+            raise HTTPException(status_code=404, detail="Report not found")
+        report.status = "dismissed"
+        report.resolved_by_id = user.id
+        s.commit()
+    return {"ok": True}
+
+
+@router.post("/admin/posts/{post_id}/set-cw")
+def api_admin_set_post_cw(request: Request, post_id: int, summary: str = Form("")):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        tag = "[관리자 강제] "
+        if not summary:
+            summary = "규칙 위반 게시글"
+        if not summary.startswith(tag):
+            summary = tag + summary
+        post.summary = summary
+        s.commit()
+        return {"ok": True, "summary": summary}
+
+
+

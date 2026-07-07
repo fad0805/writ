@@ -221,17 +221,35 @@ class Post(Base):
             "cc": [],
             "tag": tags,
         }
+        followers_uri = self.author.followers_uri()
+        public_uri = "https://www.w3.org/ns/activitystreams#Public"
         if self.visibility == "public":
-            obj["to"] = [f"{self.author.followers_uri()}", "https://www.w3.org/ns/activitystreams#Public"]
-        elif self.visibility in ("home", "followers"):
-            obj["to"] = [f"{self.author.followers_uri()}"]
+            obj["to"] = [followers_uri, public_uri]
+        elif self.visibility == "home":
+            obj["to"] = [followers_uri]
+            obj["cc"] = [public_uri]
+        elif self.visibility == "followers":
+            obj["to"] = [followers_uri]
         elif self.visibility == "mention":
-            obj["to"] = [f"{self.author.followers_uri()}"]
+            obj["to"] = []
         if self.summary:
             obj["summary"] = self.summary
         if self.in_reply_to_ap_id:
             obj["inReplyTo"] = self.in_reply_to_ap_id
         return obj
+
+    def to_ap_create(self):
+        note = self.to_ap_note()
+        return {
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": self.ap_id + "/activity",
+            "type": "Create",
+            "actor": self.author.actor_uri(),
+            "published": self.created_at.isoformat() if self.created_at else "",
+            "to": note.get("to", []),
+            "cc": note.get("cc", []),
+            "object": note,
+        }
 
 
 class Like(Base):
@@ -383,6 +401,23 @@ class ProfileNote(Base):
 
     user = relationship("User", foreign_keys=[user_id], lazy="selectin")
     target = relationship("User", foreign_keys=[target_user_id], lazy="selectin")
+
+
+class Report(Base):
+    __tablename__ = "reports"
+
+    id = Column(Integer, primary_key=True)
+    reporter_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    target_type = Column(String(32), nullable=False)  # post, novel, episode
+    target_id = Column(Integer, nullable=False)
+    reason = Column(Text, nullable=False)
+    status = Column(String(16), default="pending", nullable=False)  # pending, resolved, dismissed
+    resolved_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now)
+    updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
+
+    reporter = relationship("User", foreign_keys=[reporter_id], lazy="selectin")
+    resolver = relationship("User", foreign_keys=[resolved_by_id], lazy="selectin")
 
 
 def init_db():

@@ -35,6 +35,10 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   const { user: currentUser } = useAuth();
   const [showReply, setShowReply] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [reportError, setReportError] = useState("");
+  const [reportDone, setReportDone] = useState(false);
   const [liked, setLiked] = useState(post.liked);
   const [boosted, setBoosted] = useState(post.boosted);
   const [bookmarked, setBookmarked] = useState(post.bookmarked);
@@ -66,6 +70,17 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
     const isAdminDeletingOther = currentUser?.is_admin && !post.is_mine;
     if (!confirm(isAdminDeletingOther ? "관리자 권한으로 이 게시글을 삭제하시겠습니까?" : "삭제하시겠습니까?")) return;
     try { await api.deletePost(post.id); if (onDelete) onDelete(); else if (onUpdate) onUpdate(); } catch {}
+  };
+
+  const handleReport = async () => {
+    if (reportReason.trim().length < 10) { setReportError("최소 10자 이상 입력해주세요."); return; }
+    setReportError("");
+    try {
+      await api.report("post", post.id, reportReason.trim());
+      setReportDone(true);
+    } catch (e: any) {
+      setReportError(e.message || "신고 처리 중 오류가 발생했습니다.");
+    }
   };
 
   const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
@@ -257,6 +272,11 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
             <svg width="18" height="18" viewBox="0 0 24 24" fill={bookmarked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
           </button>
           <ShareButton url={post.ap_id?.startsWith("http") ? post.ap_id : (post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`)} />
+          {currentUser && !post.is_mine && (
+            <button onClick={() => { setShowReport(true); setReportReason(""); setReportError(""); setReportDone(false); }} className="action-btn" title="신고">
+              <Icon name="flag" />
+            </button>
+          )}
           <div className="spacer" />
           {(post.is_mine || currentUser?.is_admin) && (
             <>
@@ -272,6 +292,28 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
       </div>
       {!readonly && showReply && <ReplyModal post={post} onClose={() => setShowReply(false)} onDone={() => { setShowReply(false); if (onUpdate) onUpdate(); }} />}
       {!readonly && showEdit && <EditModal post={post} onClose={() => setShowEdit(false)} onDone={() => { setShowEdit(false); if (onUpdate) onUpdate(); }} />}
+      {!readonly && showReport && (
+        <div className="reply-modal-backdrop active" onClick={() => setShowReport(false)}>
+          <div className="reply-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+            <button className="reply-modal-close" onClick={() => setShowReport(false)}>×</button>
+            <h3>게시글 신고</h3>
+            {reportDone ? (
+              <p style={{ color: "var(--text-secondary)", margin: "16px 0" }}>신고가 접수되었습니다. 검토 후 조치하겠습니다.</p>
+            ) : (
+              <>
+                <textarea
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  placeholder="신고 사유를 입력해주세요 (최소 10자)"
+                  style={{ width: "100%", minHeight: 80, resize: "vertical", marginBottom: 8 }}
+                />
+                {reportError && <p style={{ color: "var(--error)", fontSize: 14, marginBottom: 8 }}>{reportError}</p>}
+                <button onClick={handleReport} className="btn" style={{ width: "100%" }}>신고 제출</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }

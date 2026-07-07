@@ -38,6 +38,7 @@ export default function AdminDashboard() {
           <div style={{ fontWeight: 600, marginBottom: 6 }}>중재</div>
           <div style={{ display: "flex", gap: 6 }}>
             <Link href="/admin/users" className="btn btn-outline btn-small">유저 관리</Link>
+            <Link href="/admin/reports" className="btn btn-outline btn-small">신고 관리</Link>
           </div>
         </div>
         <div>

@@ -19,6 +19,10 @@ export default function NovelDetailPage() {
   const [isMine, setIsMine] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showSharePost, setShowSharePost] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [reportError, setReportError] = useState("");
+  const [reportDone, setReportDone] = useState(false);
 
   useEffect(() => {
     const id = Number(Array.isArray(params.id) ? params.id[0] : params.id);
@@ -55,6 +59,11 @@ export default function NovelDetailPage() {
               <div className="series-header-btns">
                 {novel.visibility !== "private" && <ShareButton url={`/series/${novel.id}`} />}
                 {user && <button className="action-btn" onClick={() => setShowSharePost(true)} title="포스트로 공유"><Icon name="edit" /></button>}
+                {user && !isMine && (
+                  <button className="action-btn" onClick={() => { setShowReport(true); setReportReason(""); setReportError(""); setReportDone(false); }} title="신고">
+                    <Icon name="flag" />
+                  </button>
+                )}
                 {isMine && (
                   <>
                     <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/edit`)}>시리즈 편집</button>
@@ -107,6 +116,33 @@ export default function NovelDetailPage() {
         ))}
       </div>
       {showSharePost && <SharePostModal url={`/series/${novel.id}`} title={novel.title} authorName={author?.display_name || author?.username} description={novel.description} tags={novel.tags} onClose={() => setShowSharePost(false)} />}
+      {showReport && (
+        <div className="reply-modal-backdrop active" onClick={() => setShowReport(false)}>
+          <div className="reply-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+            <button className="reply-modal-close" onClick={() => setShowReport(false)}>×</button>
+            <h3>시리즈 신고</h3>
+            {reportDone ? (
+              <p style={{ color: "var(--text-secondary)", margin: "16px 0" }}>신고가 접수되었습니다. 검토 후 조치하겠습니다.</p>
+            ) : (
+              <>
+                <textarea
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  placeholder="신고 사유를 입력해주세요 (최소 10자)"
+                  style={{ width: "100%", minHeight: 80, resize: "vertical", marginBottom: 8 }}
+                />
+                {reportError && <p style={{ color: "var(--error)", fontSize: 14, marginBottom: 8 }}>{reportError}</p>}
+                <button onClick={async () => {
+                  if (reportReason.trim().length < 10) { setReportError("최소 10자 이상 입력해주세요."); return; }
+                  setReportError("");
+                  try { await api.report("novel", novel.id, reportReason.trim()); setReportDone(true); }
+                  catch (e: any) { setReportError(e.message || "신고 처리 중 오류가 발생했습니다."); }
+                }} className="btn" style={{ width: "100%" }}>신고 제출</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }
