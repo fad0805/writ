@@ -3005,7 +3005,8 @@ def api_admin_verify_email(request: Request, user_id: int):
             raise HTTPException(status_code=404, detail="User not found")
         u.email_verified = True
         s.commit()
-    log_admin_action(user.id, user.username, "verify_email", target_type="user", target_id=user_id, target_username=u.username, ip_address=request.client.host if request.client else "")
+        target_username = u.username
+    log_admin_action(user.id, user.username, "verify_email", target_type="user", target_id=user_id, target_username=target_username, ip_address=request.client.host if request.client else "")
     return {"ok": True}
 
 
