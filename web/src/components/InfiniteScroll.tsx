@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useEffect, ReactNode } from "react";
+import Loading from "./Loading";
 
 export default function InfiniteScroll({
   hasMore, loadingMore, loadMore, children,
@@ -27,7 +28,7 @@ export default function InfiniteScroll({
     <>
       {children}
       <div ref={sentinelRef} className="sentinel" />
-      {loadingMore && <p className="empty-state">불러오는 중...</p>}
+      {loadingMore && <Loading text="불러오는 중..." />}
     </>
   );
 }
