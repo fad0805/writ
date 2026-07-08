@@ -891,7 +891,7 @@ def api_recent_tags(request: Request, q: str = Query("")):
             for t in (p.tag_list or []):
                 if query.lower() in t.name.lower():
                     tag_names.add(t.name)
-        ordered = sorted(tag_names, key=lambda n: n.lower().startswith(query.lower()), reverse=True)[:10]
+        ordered = sorted(tag_names, key=lambda n: n.lower().startswith(query.lower()), reverse=True)[:5]
         return {"tags": [{"name": t} for t in ordered]}
 
 
@@ -3398,7 +3398,7 @@ def api_admin_federation_search(request: Request, q: str = ""):
             local = s.query(User).filter(
                 func.lower(User.username).contains(q.lower()),
                 User.is_remote == False,
-            ).limit(20).all()
+        ).limit(5).all()
             for u in local:
                 results.append({
                     "source": "local",
