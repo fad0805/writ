@@ -193,10 +193,10 @@ export default function Sidebar() {
         </NavItem>
         <li className="nav-divider" />
         <NavItem href="/bookmarks" active={isActive("/bookmarks")}>
-          <Icon name="bookmark" /> 북마크
+          <Icon name="bookmark_solid" /> 북마크
         </NavItem>
         <NavItem href="/favorites" active={isActive("/favorites")}>
-          <Icon name="star" /> 즐겨찾기
+          <Icon name="star_filled" /> 즐겨찾기
         </NavItem>
         <li className="nav-divider" />
         <NavItem href="/users/settings" active={isActive("/users/settings")}>
