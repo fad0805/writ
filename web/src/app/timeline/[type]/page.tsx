@@ -58,7 +58,10 @@ export default function TimelinePage() {
     setLoadingMore(true);
     try {
       const data = await api.timeline(tlType, LOAD_MORE, posts.length);
-      setPosts((prev) => [...prev, ...data.posts]);
+      setPosts((prev) => {
+        const ids = new Set(prev.map((p) => p.id));
+        return [...prev, ...data.posts.filter((p: any) => !ids.has(p.id))];
+      });
       setHasMore(data.has_more);
     } catch {}
     setLoadingMore(false);

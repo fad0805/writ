@@ -87,7 +87,7 @@ export default function ProfilePage() {
     try {
       const res = await fetch(`/api/users/${username}?offset=${postOffset}&limit=5`, { credentials: "include" });
       const d = await res.json();
-      setPosts(prev => [...prev, ...(d.posts || [])]);
+      setPosts((prev) => { const ids = new Set(prev.map((p) => p.id)); return [...prev, ...((d.posts || []).filter((p: any) => !ids.has(p.id)))]; });
       setHasMore(d.has_more || false);
       setPostOffset(prev => prev + 5);
     } catch (e) {}
