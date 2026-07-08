@@ -3929,19 +3929,21 @@ def api_admin_get_settings(request: Request):
 
 @router.post("/admin/settings")
 def _save_server_file(file: UploadFile, name: str) -> str:
-    import os, shutil
+    import os, shutil, io
+    from PIL import Image as PILImage
     web_public = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "web", "public")
     os.makedirs(web_public, exist_ok=True)
-    ext = os.path.splitext(file.filename or "file")[1] if file.filename else ".png"
-    filename = f"server_{name}{ext}"
+    filename = f"server_{name}.webp"
     filepath = os.path.join(web_public, filename)
     # Delete old file if exists
     for old in os.listdir(web_public):
         if old.startswith(f"server_{name}."):
             try: os.remove(os.path.join(web_public, old))
             except: pass
-    with open(filepath, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+    img = PILImage.open(io.BytesIO(file.file.read()))
+    if img.mode == "RGBA":
+        img = img.convert("RGB")
+    img.save(filepath, "WEBP", quality=85)
     return f"/{filename}"
 
 
