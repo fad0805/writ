@@ -14,6 +14,7 @@ export default function SettingsPage() {
   const [defaultVis, setDefaultVis] = useState("public");
   const [episodeDefaultVis, setEpisodeDefaultVis] = useState("public");
   const [showBadge, setShowBadge] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
   const [followRequests, setFollowRequests] = useState<{ id: number; user: User }[]>([]);
   const [frLoading, setFrLoading] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -26,6 +27,7 @@ export default function SettingsPage() {
       setDefaultVis(user.default_visibility || "public");
       setEpisodeDefaultVis(user.episode_default_visibility || "public");
       setShowBadge(user.show_badge || false);
+      setIsLocked(user.is_locked || false);
       setLoading(false);
     }).catch(() => router.push("/login"));
   }, [router]);
@@ -56,6 +58,7 @@ export default function SettingsPage() {
       form.append("default_visibility", defaultVis);
       form.append("episode_default_visibility", episodeDefaultVis);
       form.append("show_badge", showBadge ? "true" : "");
+      form.append("is_locked", isLocked ? "true" : "");
       const res = await fetch("/api/settings/update", {
         method: "POST",
         credentials: "include",
@@ -82,6 +85,13 @@ export default function SettingsPage() {
           <p className="form-help">새 에피소드 홍보글에 기본으로 적용될 공개 범위입니다.</p>
         </div>
 
+        <div className="form-group">
+          <label>
+            <input type="checkbox" checked={isLocked} onChange={(e) => setIsLocked(e.target.checked)} />
+            {" "}<Icon name="lock" /> 팔로우 수동 승인
+          </label>
+          <p className="form-help">켜면 다른 사용자가 회원님을 팔로우할 때 수락이 필요합니다. 기본 설정 페이지에서 팔로우 요청을 관리할 수 있습니다.</p>
+        </div>
         {(user?.role === "admin" || user?.role === "moderator" || user?.role === "owner") && (
           <div className="form-group">
             <label>

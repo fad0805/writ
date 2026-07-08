@@ -117,6 +117,22 @@ export default function RightSidebar() {
             }
 
             if (n.type === "moderation") {
+              if (n.metadata?.type === "new_user") {
+                return (
+                  <Link key={n.id} href={`/@${n.from_user?.username || ""}`} className="mini-post-link" style={{ background: "var(--bg-tertiary)", cursor: "pointer" }}>
+                    <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#4fc3f7" }}>
+                      <Icon name="user_solid" size={14} />
+                    </div>
+                    <div className="mini-post-content">
+                      <div className="mini-post-author">
+                        {n.from_user?.display_name || "알 수 없음"}
+                        <span className="mini-post-handle">@{n.from_user?.username}</span>
+                      </div>
+                      <div className="text-sm" style={{ color: "var(--text-muted)" }}>가입했습니다</div>
+                    </div>
+                  </Link>
+                );
+              }
               const actionName = MODAL_ACTION_NAMES[n.metadata?.action] || n.metadata?.action || "중재";
               return (
                 <div key={n.id} className="mini-post-link" style={{ background: "var(--bg-tertiary)" }}>
