@@ -266,6 +266,18 @@ export default function ProfilePage() {
           </div>
         </div>
       )}
+      {(profile as any).am_i_blocked || (profile as any).is_blocked ? (
+        <>
+          <div className="profile-stats">
+            <span className="profile-stat disabled"><strong>—</strong> 게시글</span>
+            <span className="profile-stat disabled"><strong>—</strong> 시리즈</span>
+            <span className="profile-stat disabled"><strong>—</strong> 팔로잉</span>
+            <span className="profile-stat disabled"><strong>—</strong> 팔로워</span>
+          </div>
+          <div className="empty-state">{(profile as any).is_blocked ? "차단한 유저입니다" : "상대방이 당신을 차단했습니다"}</div>
+        </>
+      ) : (
+      <>
       <div className="profile-stats">
         <span className={`profile-stat ${tab === "posts" ? "active" : ""}`} onClick={() => setTab("posts")}><strong>{posts.length}</strong> 게시글</span>
         <span className={`profile-stat ${tab === "novels" ? "active" : ""}`} onClick={() => setTab("novels")}><strong>{novels.length}</strong> 시리즈</span>
@@ -326,6 +338,7 @@ export default function ProfilePage() {
           </Link>
         ))}
       </div>
+      </>)}
     </>
   );
 }

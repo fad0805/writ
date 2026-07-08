@@ -979,6 +979,11 @@ input:focus {
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
+.profile-stat.disabled {
+  color: var(--text-dim);
+  cursor: default;
+  pointer-events: none;
+}
 .profile-stat strong {
   color: var(--text-white);
   margin-right: 4px;
