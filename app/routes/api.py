@@ -825,19 +825,23 @@ def api_unbookmark_post(request: Request, post_id: int):
 
 
 @router.get("/bookmarks")
-def api_bookmarks(request: Request):
+def api_bookmarks(request: Request, limit: int = Query(20), offset: int = Query(0)):
     user = require_auth(request)
     with get_session() as s:
-        bookmarks = s.query(Bookmark).filter_by(user_id=user.id).order_by(desc(Bookmark.created_at)).limit(50).all()
-        return {"posts": [_post_json(b.post, s, user) for b in bookmarks if b.post and not b.post.is_deleted]}
+        raw = s.query(Bookmark).filter_by(user_id=user.id).order_by(desc(Bookmark.created_at)).offset(offset).limit(limit + 1).all()
+        has_more = len(raw) > limit
+        posts = [_post_json(b.post, s, user) for b in raw[:limit] if b.post and not b.post.is_deleted]
+        return {"posts": posts, "has_more": has_more}
 
 
 @router.get("/favorites")
-def api_favorites(request: Request):
+def api_favorites(request: Request, limit: int = Query(10), offset: int = Query(0)):
     user = require_auth(request)
     with get_session() as s:
-        likes = s.query(Like).filter_by(user_id=user.id).order_by(desc(Like.created_at)).limit(50).all()
-        return {"posts": [_post_json(l.post, s, user) for l in likes if l.post and not l.post.is_deleted]}
+        raw = s.query(Like).filter_by(user_id=user.id).order_by(desc(Like.created_at)).offset(offset).limit(limit + 1).all()
+        has_more = len(raw) > limit
+        posts = [_post_json(l.post, s, user) for l in raw[:limit] if l.post and not l.post.is_deleted]
+        return {"posts": posts, "has_more": has_more}
 
 
 @router.post("/posts/{post_id}/unboost")
