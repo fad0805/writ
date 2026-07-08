@@ -1,10 +1,11 @@
 import os
 import re
 import json
+import asyncio
 import datetime
 import logging
 from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
@@ -25,6 +26,7 @@ from app.activitypub import broadcast_to_followers, _post_to_inbox, _process_emo
 from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY
 from app.crypto_utils import encrypt_key, get_private_key
 from app.eventbus import broadcast
+from app.timeline_stream import broadcast_post, add_stream, remove_stream
 from app.utils.storage import LocalStorage
 
 logger = logging.getLogger("writ.api")
@@ -483,6 +485,27 @@ def api_timeline(request: Request, tl_type: str, limit: int = Query(10), offset:
     return {"posts": feed, "timeline_type": tl_type, "has_more": has_more}
 
 
+@router.get("/timeline/stream")
+async def api_timeline_stream(request: Request, tl_type: str = "home"):
+    user = require_auth(request)
+    if tl_type not in TIMELINE_LABELS:
+        tl_type = "home"
+    sid, q = add_stream(user.id, tl_type)
+    try:
+        async def event_gen():
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    payload = await asyncio.wait_for(q.get(), timeout=30)
+                    yield f"data: {payload}\n\n"
+                except asyncio.TimeoutError:
+                    yield ":keepalive\n\n"
+        return StreamingResponse(event_gen(), media_type="text/event-stream")
+    finally:
+        remove_stream(sid)
+
+
 # ── Post CRUD ──
 
 @router.get("/posts/{post_id}")
@@ -644,6 +667,8 @@ def api_create_post(
 
         try:
             broadcast("new_post", {"post_id": post.id, "author_id": user.id})
+            pj = _post_json(post, s, user)
+            broadcast_post(pj, user.id, visibility or "public", bool(dm_target_id))
         except Exception as e:
             logger.warning("Failed to broadcast new_post: %s", e)
         return _post_json(post, s, user)

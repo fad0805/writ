@@ -9,7 +9,6 @@ import ReplyModal from "@/components/ReplyModal";
 import InfiniteScroll from "@/components/InfiniteScroll";
 import Icon from "@/components/Icon";
 import Link from "next/link";
-import { useStream } from "@/lib/useStream";
 
 const LIMIT = 20;
 const LOAD_MORE = 10;
@@ -147,9 +146,20 @@ export default function TimelinePage() {
     return () => window.removeEventListener("followchange", handler);
   }, [tlType]);
 
-  useStream({
-    new_post: () => { load(); },
-  });
+  useEffect(() => {
+    const es = new EventSource(`/api/timeline/stream?type=${tlType}`);
+    es.onmessage = (event) => {
+      try {
+        const newPost = JSON.parse(event.data);
+        setPosts((prev) => {
+          if (prev.some((p) => p.id === newPost.id)) return prev;
+          return [newPost, ...prev];
+        });
+      } catch {}
+    };
+    es.onerror = () => {};
+    return () => es.close();
+  }, [tlType]);
 
   useEffect(() => {
     const interval = setInterval(() => {

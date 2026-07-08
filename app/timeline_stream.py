@@ -1,0 +1,68 @@
+import json
+import asyncio
+import logging
+from app.database import get_session
+from app.models import Post, Follow, User, Boost
+from sqlalchemy import or_
+
+logger = logging.getLogger(__name__)
+
+_streams: dict[int, dict] = {}
+_counter = 0
+
+def add_stream(user_id: int, tl_type: str) -> tuple[int, asyncio.Queue]:
+    global _counter
+    _counter += 1
+    q: asyncio.Queue = asyncio.Queue(maxsize=50)
+    _streams[_counter] = {"queue": q, "user_id": user_id, "tl_type": tl_type}
+    return _counter, q
+
+def remove_stream(sid: int):
+    _streams.pop(sid, None)
+
+def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, post_is_dm: bool):
+    if post_visibility not in ("public", "home", "followers"):
+        return
+    payload = json.dumps(post_json, default=str)
+    with get_session() as s:
+        for sid, info in list(_streams.items()):
+            uid = info["user_id"]
+            tl = info["tl_type"]
+            if _should_deliver(s, uid, tl, post_author_id, post_visibility):
+                try:
+                    info["queue"].put_nowait(payload)
+                except asyncio.QueueFull:
+                    pass
+
+def _should_deliver(session, user_id: int, tl_type: str, author_id: int, visibility: str) -> bool:
+    if tl_type == "home":
+        if user_id == author_id:
+            return True
+        if visibility in ("public", "home", "followers"):
+            following = session.query(Follow).filter_by(
+                follower_id=user_id, following_id=author_id, accepted=True
+            ).first()
+            if following:
+                return True
+            boosted = session.query(Boost).filter_by(user_id=user_id, post_id=None).first()
+            if session.query(Boost).join(Post, Boost.post_id == Post.id).filter(
+                Boost.user_id == user_id, Post.author_id == author_id
+            ).first():
+                return True
+        return False
+    elif tl_type == "social":
+        if user_id == author_id:
+            return True
+        if visibility == "public":
+            return True
+        if visibility in ("home", "followers"):
+            following = session.query(Follow).filter_by(
+                follower_id=user_id, following_id=author_id, accepted=True
+            ).first()
+            return following is not None
+        return False
+    elif tl_type == "local":
+        author = session.query(User).get(author_id)
+        return visibility == "public" and author and not author.is_remote
+    else:
+        return visibility == "public"
