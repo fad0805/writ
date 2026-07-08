@@ -281,6 +281,9 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
                 raise HTTPException(status_code=400, detail="해당 이메일 도메인은 가입이 차단되었습니다.")
         user_count = s.query(User).count()
         is_first = user_count == 0
+        from app.config import INITIAL_OWNER_PASSWORD
+        if is_first and INITIAL_OWNER_PASSWORD and password != INITIAL_OWNER_PASSWORD:
+            raise HTTPException(status_code=400, detail="초기 관리자 암호가 일치하지 않습니다.")
         salt, pwd_hash = hash_password(password)
         priv_key, pub_key = generate_keypair()
         email_verified = is_first
