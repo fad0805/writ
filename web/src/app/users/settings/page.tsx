@@ -58,7 +58,7 @@ export default function SettingsPage() {
     try {
       const form = new FormData();
       form.append("default_visibility", defaultVis);
-      form.append("episode_default_visibility", episodeDefaultVis);
+      form.append("default_visibility", defaultVis);
       form.append("show_badge", showBadge ? "true" : "");
       form.append("is_locked", isLocked ? "true" : "");
       form.append("is_bot", isBot ? "true" : "");
@@ -83,9 +83,9 @@ export default function SettingsPage() {
       <SettingsNav current="visibility" />
       <form onSubmit={handleSubmit} className="novel-form">
         <div className="form-group">
-          <label>에피소드 홍보글 기본 공개 설정</label>
-          <VisibilitySelector value={episodeDefaultVis} onChange={(v) => setEpisodeDefaultVis(v)} />
-          <p className="form-help">새 에피소드 홍보글에 기본으로 적용될 공개 범위입니다.</p>
+          <label>포스트 기본 공개 설정</label>
+          <VisibilitySelector value={defaultVis} onChange={(v) => setDefaultVis(v)} />
+          <p className="form-help">새 포스트에 기본으로 적용될 공개 범위입니다.</p>
         </div>
 
         <div className="form-group">
