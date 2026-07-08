@@ -1163,7 +1163,7 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
         ct = cover_image.content_type or ""
         if "gif" in ct:
             ext = "gif"
-        key = f"series/icons/{uuid4().hex[:16]}.{ext}"
+        key = f"series/covers/{uuid4().hex[:16]}.{ext}"
         img = PILImage.open(cover_image.file)
         target_w, target_h = 120, 160
         img_w, img_h = img.size
@@ -1262,7 +1262,7 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
         ct = cover_image.content_type or ""
         if "gif" in ct:
             ext = "gif"
-        key = f"series/icons/{uuid4().hex[:16]}.{ext}"
+        key = f"series/covers/{uuid4().hex[:16]}.{ext}"
         img = PILImage.open(cover_image.file)
         target_w, target_h = 120, 160
         img_w, img_h = img.size
