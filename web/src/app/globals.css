@@ -1175,6 +1175,9 @@ input[type="checkbox"] {
   margin-top: 6px;
   line-height: 1.4;
 }
+.post-card-pinned { outline: 1px solid var(--accent); border-radius: 8px; margin-bottom: 8px; }
+.series-card-pinned { border: 1px solid var(--accent) !important; }
+
 /* ── Page header ── */
 .page-header {
   display: flex;

@@ -1040,6 +1040,13 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         ).offset(offset).limit(limit + 1).all()
         has_more = len(posts) > limit
         posts = [p for p in posts[:limit] if _can_view(p, user, s)]
+        total_posts = s.query(Post).filter(
+            or_(
+                Post.author_id == profile.id,
+                Post.id.in_(boosted_ids),
+            ),
+            Post.is_deleted == False,
+        ).count()
         followers_count = s.query(Follow).filter_by(following_id=profile.id, accepted=True).count()
         following_count = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).count()
         is_muted = s.query(UserMute).filter_by(user_id=user.id, target_user_id=profile.id).first() is not None if user else False
@@ -1069,6 +1076,7 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             "novels": [_novel_json(n, s) for n in novels],
             "followers": [{"user": _user_json(f.follower)} for f in followers],
             "following": [{"user": _user_json(f.following)} for f in following],
+            "total_posts": total_posts,
             "followers_count": followers_count,
             "following_count": following_count,
             "is_following": is_following,

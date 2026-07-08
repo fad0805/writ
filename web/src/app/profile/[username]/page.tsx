@@ -38,6 +38,7 @@ export default function ProfilePage() {
   const [isMine, setIsMine] = useState(false);
   const [pinnedPosts, setPinnedPosts] = useState<any[]>([]);
   const [pinnedSeries, setPinnedSeries] = useState<any[]>([]);
+  const [totalPosts, setTotalPosts] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [postOffset, setPostOffset] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -73,6 +74,7 @@ export default function ProfilePage() {
       setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setHasPendingFollower(d.has_pending_follower); setIsFollower(d.is_follower); setApprovedFollower(null); setIsMine(d.is_mine);
       setIsBlocked(!!(d as any).is_blocked); setAmBlocked(!!(d as any).am_i_blocked); setIsMutedUser(!!(d as any).is_muted);
       setPinnedPosts((d as any).pinned_posts_data || []); setPinnedSeries((d as any).pinned_series_data || []);
+      setTotalPosts((d as any).total_posts || 0);
       if (!noCache) { setHasMore((d as any).has_more || false); setPostOffset(10); }
     } catch (e) {}
     setLoading(false);
@@ -343,14 +345,14 @@ export default function ProfilePage() {
       ) : (
       <>
       <div className="profile-stats">
-        <span className={`profile-stat ${tab === "posts" ? "active" : ""}`} onClick={() => setTab("posts")}><strong>{posts.length}</strong> 게시글</span>
+        <span className={`profile-stat ${tab === "posts" ? "active" : ""}`} onClick={() => setTab("posts")}><strong>{totalPosts || posts.length}</strong> 게시글</span>
         <span className={`profile-stat ${tab === "novels" ? "active" : ""}`} onClick={() => setTab("novels")}><strong>{novels.length}</strong> 시리즈</span>
         <span className={`profile-stat ${tab === "following" ? "active" : ""}`} onClick={() => setTab("following")}><strong>{followingCount}</strong> 팔로잉</span>
         <span className={`profile-stat ${tab === "followers" ? "active" : ""}`} onClick={() => setTab("followers")}><strong>{followersCount}</strong> 팔로워</span>
       </div>
 
       <div id="tab-posts" className="profile-tab-posts" style={{ display: tab === "posts" ? "block" : "none" }}>
-        {pinnedPosts.map((p: any) => <div key={`pin-${p.id}`} style={{ outline: "1px solid var(--accent)", borderRadius: 8, marginBottom: 8 }}><PostCard post={p} onUpdate={load} /></div>)}
+        {pinnedPosts.map((p: any) => <div key={`pin-${p.id}`} className="post-card-pinned"><PostCard post={p} onUpdate={load} /></div>)}
         {(() => {
           const pinnedIds = new Set(pinnedPosts.map((p: any) => p.id));
           const rest = posts.filter((p) => !pinnedIds.has(p.id));
@@ -360,7 +362,7 @@ export default function ProfilePage() {
 
       <div id="tab-novels" className="profile-novel-list profile-tab-novels" style={{ display: tab === "novels" ? "flex" : "none" }}>
         {pinnedSeries.map((n: any) => (
-          <div key={`pin-${n.id}`} className="profile-novel" style={{ display: "flex", gap: 14, alignItems: "center", cursor: "pointer", border: "1px solid var(--accent)" }} onClick={() => router.push(n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`)}>
+          <div key={`pin-${n.id}`} className="profile-novel series-card-pinned" style={{ display: "flex", gap: 14, alignItems: "center", cursor: "pointer" }} onClick={() => router.push(n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`)}>
             <div className="cover-wrap-56">
               {n.cover_image ? <img src={n.cover_image} alt="" className="cover-img" /> : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(n.title) }}><Icon name="book" size={16} /></div>}
             </div>
