@@ -14,12 +14,13 @@ export default function InfiniteScroll({
     if (!hasMore) return;
     const el = sentinelRef.current;
     if (!el) return;
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && !loadingMore && hasMore) loadMoreRef.current();
-    }, { rootMargin: "200px" });
+    const observer = new IntersectionObserver(
+      () => loadMoreRef.current(),
+      { rootMargin: "200px" }
+    );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [hasMore, loadingMore]);
+  }, [hasMore, loadingMore, loadMore]);
 
   return (
     <>
