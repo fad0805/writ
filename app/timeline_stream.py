@@ -2,7 +2,6 @@ import json
 import asyncio
 import logging
 from app.models import get_session, Post, Follow, User, Boost
-from sqlalchemy import or_
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +28,12 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
             tl = info["tl_type"]
             if _should_deliver(s, uid, tl, post_author_id, post_visibility):
                 try:
-                    info["queue"].put_nowait(payload)
-                except asyncio.QueueFull:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        loop.call_soon_threadsafe(info["queue"].put_nowait, payload)
+                    else:
+                        info["queue"].put_nowait(payload)
+                except Exception:
                     pass
 
 def _should_deliver(session, user_id: int, tl_type: str, author_id: int, visibility: str) -> bool:
@@ -43,7 +46,6 @@ def _should_deliver(session, user_id: int, tl_type: str, author_id: int, visibil
             ).first()
             if following:
                 return True
-            boosted = session.query(Boost).filter_by(user_id=user_id, post_id=None).first()
             if session.query(Boost).join(Post, Boost.post_id == Post.id).filter(
                 Boost.user_id == user_id, Post.author_id == author_id
             ).first():
