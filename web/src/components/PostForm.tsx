@@ -44,7 +44,6 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [mediaItems, setMediaItems] = useState<{ url: string; type: string; file?: File }[]>([]);
   const [mediaUploading, setMediaUploading] = useState(false);
   const mediaInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
   const [seriesResults, setSeriesResults] = useState<{ id: number; title: string; cover_image: string }[]>([]);
   const [seriesIdx, setSeriesIdx] = useState(0);
   const [seriesPos, setSeriesPos] = useState({ top: 0, left: 0 });
@@ -561,29 +560,23 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       />
       <div className="reply-form-footer">
         <div style={{ display: "flex", gap: 4, alignItems: "center", marginRight: "auto" }}>
-          <button type="button" className="action-btn" onClick={() => mediaInputRef.current?.click()} title="이미지 첨부" disabled={mediaUploading || mediaItems.filter(m => m.type === "image").length >= 4}>
+          <button type="button" className="action-btn" onClick={() => mediaInputRef.current?.click()} title="미디어 첨부" disabled={mediaUploading || mediaItems.length >= 4}>
             <Icon name="image" />
           </button>
-          <button type="button" className="action-btn" onClick={() => videoInputRef.current?.click()} title="비디오 첨부" disabled={mediaUploading || mediaItems.some(m => m.type === "video")}>
-            <Icon name="video" />
-          </button>
-          <input ref={mediaInputRef} type="file" accept="image/*" multiple hidden onChange={async (e) => {
+          <input ref={mediaInputRef} type="file" accept="image/*,video/mp4,video/webm,video/ogg" multiple hidden onChange={async (e) => {
             const files = Array.from(e.target.files || []);
-            const remaining = 4 - mediaItems.filter(m => m.type === "image").length;
-            for (const f of files.slice(0, remaining)) {
-              setMediaItems(prev => [...prev, { url: "", type: "image", file: f }]);
+            for (const f of files) {
+              const isVideo = f.type.startsWith("video/");
+              if (isVideo && mediaItems.some(m => m.type === "video")) continue;
+              if (mediaItems.length >= 4) break;
+              setMediaItems(prev => [...prev, { url: "", type: isVideo ? "video" : "image", file: f }]);
             }
             e.target.value = "";
           }} />
-          <input ref={videoInputRef} type="file" accept="video/mp4,video/webm,video/ogg" hidden onChange={async (e) => {
-            const f = e.target.files?.[0];
-            if (f) setMediaItems(prev => [...prev, { url: "", type: "video", file: f }]);
-            e.target.value = "";
-          }} />
+          <EmojiPicker onEmoji={(e) => setContent(content + e)} />
         </div>
         <VisibilitySelector value={visibility} onChange={(v) => setVisibilityOverride(v)} includeMention />
         <div className="form-footer-right">
-          <EmojiPicker onEmoji={(e) => setContent(content + e)} />
           <span className="char-count char-count-inline">{totalLen}/{MAX_LENGTH}</span>
           <button type="submit" disabled={submitting || !content.trim()} className="btn btn-primary">
             {submitting ? "..." : parentId ? "답글" : "게시"}

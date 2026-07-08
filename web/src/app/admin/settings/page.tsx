@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
@@ -12,6 +12,12 @@ export default function AdminSettingsPage() {
   const [logo, setLogo] = useState("");
   const [favicon, setFavicon] = useState("");
   const [appIcon, setAppIcon] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [faviconFile, setFaviconFile] = useState<File | null>(null);
+  const [appIconFile, setAppIconFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState("");
+  const [faviconPreview, setFaviconPreview] = useState("");
+  const [appIconPreview, setAppIconPreview] = useState("");
   const [adminIds, setAdminIds] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [loading, setLoading] = useState(true);
@@ -30,9 +36,9 @@ export default function AdminSettingsPage() {
       .then((r) => r.json())
       .then((d) => {
         setServerName(d.server_name || "");
-        setLogo(d.logo || "");
-        setFavicon(d.favicon || "");
-        setAppIcon(d.app_icon || "");
+        setLogo(d.logo || ""); setLogoPreview(d.logo || "");
+        setFavicon(d.favicon || ""); setFaviconPreview(d.favicon || "");
+        setAppIcon(d.app_icon || ""); setAppIconPreview(d.app_icon || "");
         setAdminIds(d.admin_ids || "");
         setAdminEmail(d.admin_email || "");
         setLoading(false);
@@ -47,9 +53,12 @@ export default function AdminSettingsPage() {
     try {
       const form = new FormData();
       form.append("server_name", serverName);
-      form.append("logo", logo);
-      form.append("favicon", favicon);
-      form.append("app_icon", appIcon);
+      if (logoFile) form.append("logo", logoFile);
+      else form.append("logo_url", logo);
+      if (faviconFile) form.append("favicon", faviconFile);
+      else form.append("favicon_url", favicon);
+      if (appIconFile) form.append("app_icon", appIconFile);
+      else form.append("app_icon_url", appIcon);
       form.append("admin_ids", adminIds);
       form.append("admin_email", adminEmail);
       const res = await fetch("/api/admin/settings", { method: "POST", credentials: "include", body: form });
@@ -75,19 +84,21 @@ export default function AdminSettingsPage() {
           <p className="form-help">최대 20자까지 입력 가능합니다.</p>
         </div>
         <div className="form-group">
-          <label>대표 아이콘 (URL)</label>
-          <input type="text" value={logo} onChange={(e) => setLogo(e.target.value)} className="cw-input" placeholder="https://example.com/logo.png" />
+          <label>대표 아이콘</label>
+          <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setLogoFile(f); setLogoPreview(URL.createObjectURL(f)); } }} className="cw-input" />
+          {logoPreview && <img src={logoPreview} alt="logo" style={{ width: 80, height: 80, marginTop: 8, borderRadius: 12, objectFit: "cover" }} />}
           <p className="form-help">정사각형 이미지를 사용해 주세요.</p>
-          {logo && <img src={logo} alt="logo" style={{ width: 80, height: 80, marginTop: 8, borderRadius: 12, objectFit: "cover" }} />}
         </div>
         <div className="form-group">
-          <label>파비콘 (URL)</label>
-          <input type="text" value={favicon} onChange={(e) => setFavicon(e.target.value)} className="cw-input" placeholder="https://example.com/favicon.ico" />
-          <p className="form-help">정사각형 이미지를 사용해 주세요. .ico 확장자만 지원됩니다.</p>
+          <label>파비콘</label>
+          <input type="file" accept="image/x-icon,image/png,image/svg+xml" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setFaviconFile(f); setFaviconPreview(URL.createObjectURL(f)); } }} className="cw-input" />
+          {faviconPreview && <img src={faviconPreview} alt="favicon" style={{ width: 32, height: 32, marginTop: 8, borderRadius: 4, objectFit: "cover" }} />}
+          <p className="form-help">정사각형 이미지를 사용해 주세요.</p>
         </div>
         <div className="form-group">
-          <label>모바일 앱 아이콘 (URL)</label>
-          <input type="text" value={appIcon} onChange={(e) => setAppIcon(e.target.value)} className="cw-input" placeholder="https://example.com/app-icon.png" />
+          <label>모바일 앱 아이콘</label>
+          <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setAppIconFile(f); setAppIconPreview(URL.createObjectURL(f)); } }} className="cw-input" />
+          {appIconPreview && <img src={appIconPreview} alt="app icon" style={{ width: 80, height: 80, marginTop: 8, borderRadius: 12, objectFit: "cover" }} />}
           <p className="form-help">정사각형 이미지를 사용해 주세요.</p>
         </div>
         <div className="form-group">
