@@ -17,7 +17,7 @@ export default function Home() {
     if (!loading && user) router.replace("/timeline/home");
   }, [user, loading, router]);
 
-  if (loading) return <div className="empty-state">로딩 중...</div>;
+  if (loading) return <div className="empty-state">{serverInfo?.logo ? <img src={serverInfo.logo} alt="" style={{ width: 48, height: 48, marginBottom: 12, objectFit: "contain" }} /> : null}<br />로딩 중...</div>;
   if (user) return null;
 
   return (
