@@ -3960,9 +3960,17 @@ def api_admin_update_settings(request: Request,
         raise HTTPException(status_code=400, detail="서버명은 20자 이하여야 합니다.")
     with get_session() as s:
         from app.models import ServerSetting
+        from app.utils.storage import get_storage
+        storage = get_storage()
         settings = ServerSetting.get(s)
         if server_name.strip():
             settings.server_name = server_name[:20]
+        if not logo and settings.logo:
+            storage.delete(settings.logo)
+        if not favicon and settings.favicon:
+            storage.delete(settings.favicon)
+        if not app_icon and settings.app_icon:
+            storage.delete(settings.app_icon)
         settings.logo = logo
         settings.favicon = favicon
         settings.app_icon = app_icon
