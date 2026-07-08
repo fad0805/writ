@@ -190,42 +190,6 @@ a:hover { color: var(--accent-light); text-decoration: none; }
   margin: 9px 0 !important;
 }
 
-.nav-expand-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 7px 12px;
-  border-radius: 8px;
-  color: var(--text-secondary);
-  font-size: 0.95em;
-  transition: all 0.2s;
-  line-height: 1.2;
-  text-decoration: none;
-  cursor: pointer;
-}
-.nav-expand-toggle:hover {
-  background: var(--border);
-  color: var(--text-white);
-  text-decoration: none;
-}
-.nav-expand-toggle.active {
-  background: var(--border);
-  color: var(--accent);
-  font-weight: 600;
-}
-.nav-sub-links {
-  list-style: none;
-  padding-left: 12px;
-  margin: 2px 0 2px 12px;
-  border-left: 2px solid var(--border);
-}
-.nav-sub-links li {
-  list-style: none;
-}
-.nav-sub-links li a {
-  font-size: 0.9em;
-}
-
 .logout-form { margin-top: auto; }
 
 .sidebar-search { margin-bottom: 15px; position: relative; }

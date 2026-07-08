@@ -61,14 +61,6 @@ export default function Sidebar() {
     return () => window.removeEventListener("themechange", handler);
   }, []);
 
-  const [profileOpen, setProfileOpen] = useState(false);
-
-  const handleProfileClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    router.push(`/@${user?.username}`);
-    setProfileOpen((v) => !v);
-  };
-
   const toggleTheme = () => {
     (window as any).__toggleTheme();
     window.dispatchEvent(new Event("themechange"));
@@ -200,23 +192,12 @@ export default function Sidebar() {
           <Icon name="books_solid" /> 모든 시리즈
         </NavItem>
         <li className="nav-divider" />
-        <li>
-          <a href={`/@${user.username}`} onClick={handleProfileClick}
-            className={`nav-expand-toggle${pathname === `/@${user?.username}` ? " active" : ""}`}>
-            <span className="nav-item-inner"><Icon name="user_solid" /> 내 프로필</span>
-            <Icon name={profileOpen ? "chevron_up" : "chevron_down"} size={12} />
-          </a>
-          {profileOpen && (
-            <ul className="nav-sub-links">
-              <NavItem href="/bookmarks" active={isActive("/bookmarks")}>
-                <Icon name="bookmark" /> 북마크
-              </NavItem>
-              <NavItem href="/favorites" active={isActive("/favorites")}>
-                <Icon name="star" /> 즐겨찾기
-              </NavItem>
-            </ul>
-          )}
-        </li>
+        <NavItem href="/bookmarks" active={isActive("/bookmarks")}>
+          <Icon name="bookmark" /> 북마크
+        </NavItem>
+        <NavItem href="/favorites" active={isActive("/favorites")}>
+          <Icon name="star" /> 즐겨찾기
+        </NavItem>
         <li className="nav-divider" />
         <NavItem href="/users/settings" active={isActive("/users/settings")}>
           <Icon name="settings_solid" /> 설정 관리
