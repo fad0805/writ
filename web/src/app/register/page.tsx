@@ -8,6 +8,7 @@ import Icon from "@/components/Icon";
 export default function RegisterPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -20,6 +21,7 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (password !== passwordConfirm) { setError("비밀번호가 일치하지 않습니다."); return; }
     setLoading(true); setError("");
     try {
       const form = new FormData();
@@ -92,6 +94,13 @@ export default function RegisterPage() {
             <input type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="6자 이상" required />
             <span className="pw-toggle" onClick={() => setShowPw(!showPw)}><Icon name={showPw ? "eye_off" : "eye"} size={16} /></span>
           </div>
+        </div>
+        <div className="form-group">
+          <label>비밀번호 확인</label>
+          <div className="pw-input-wrap">
+            <input type={showPw ? "text" : "password"} value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} placeholder="비밀번호 다시 입력" required />
+          </div>
+          {passwordConfirm && password !== passwordConfirm && <p className="form-help" style={{ color: "var(--danger)" }}>비밀번호가 일치하지 않습니다</p>}
         </div>
         {error && <p className="auth-error">{error}</p>}
         <button type="submit" disabled={loading} className="btn btn-primary">{loading ? "..." : "가입"}</button>
