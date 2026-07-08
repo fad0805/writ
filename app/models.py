@@ -566,8 +566,21 @@ class ServerSetting(Base):
         return s
 
 
+def _run_alter(sql: str):
+    try:
+        with Session(engine) as session:
+            session.execute(text(sql))
+            session.commit()
+    except Exception:
+        pass
+
+
 def init_db():
     Base.metadata.create_all(engine)
+    _run_alter("ALTER TABLE user_mutes ADD COLUMN duration INTEGER DEFAULT 0")
+    _run_alter("ALTER TABLE user_mutes ADD COLUMN hide_notifications BOOLEAN DEFAULT 0")
+    _run_alter("ALTER TABLE keyword_mutes ADD COLUMN mode VARCHAR(8) DEFAULT 'or'")
+    _run_alter("ALTER TABLE keyword_mutes ADD COLUMN is_regex BOOLEAN DEFAULT 0")
 
 
 def get_session():
