@@ -3675,11 +3675,11 @@ def api_list_keyword_mutes(request: Request):
     user = require_auth(request)
     with get_session() as s:
         mutes = s.query(KeywordMute).filter_by(user_id=user.id).order_by(KeywordMute.created_at.desc()).all()
-        return {"mutes": [{"id": m.id, "keyword": m.keyword, "mode": m.mode, "is_regex": m.is_regex, "created_at": _fmt_dt(m.created_at)} for m in mutes]}
+        return {"mutes": [{"id": m.id, "keyword": m.keyword, "name": m.name or "", "mode": m.mode, "is_regex": m.is_regex, "created_at": _fmt_dt(m.created_at)} for m in mutes]}
 
 
 @router.post("/mutes/keywords")
-def api_add_keyword_mute(request: Request, keyword: str = Form(...), mode: str = Form("or"), is_regex: bool = Form(False)):
+def api_add_keyword_mute(request: Request, keyword: str = Form(...), mode: str = Form("or"), is_regex: bool = Form(False), name: str = Form("")):
     user = require_auth(request)
     kw = keyword.strip()
     if not kw:
@@ -3690,7 +3690,7 @@ def api_add_keyword_mute(request: Request, keyword: str = Form(...), mode: str =
         existing = s.query(KeywordMute).filter_by(user_id=user.id, keyword=kw, mode=mode, is_regex=is_regex).first()
         if existing:
             return {"ok": True}
-        s.add(KeywordMute(user_id=user.id, keyword=kw, mode=mode, is_regex=is_regex))
+        s.add(KeywordMute(user_id=user.id, keyword=kw, name=name, mode=mode, is_regex=is_regex))
         s.commit()
     return {"ok": True}
 

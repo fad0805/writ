@@ -10,7 +10,7 @@ type Tab = "user-mutes" | "user-blocks" | "series-mutes" | "keyword-mutes";
 interface MutedUser { id: number; target_user_id: number; username: string; display_name: string; avatar: string; duration: number; hide_notifications: boolean; created_at: string | null; }
 interface BlockedUser { id: number; target_user_id: number; username: string; display_name: string; avatar: string; created_at: string | null; }
 interface MutedSeries { id: number; novel_id: number; title: string; cover_image: string; created_at: string | null; }
-interface KeywordMuteItem { id: number; keyword: string; mode: string; is_regex: boolean; created_at: string | null; }
+interface KeywordMuteItem { id: number; keyword: string; name: string; mode: string; is_regex: boolean; created_at: string | null; }
 
 export default function MutesSettingsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -20,6 +20,7 @@ export default function MutesSettingsPage() {
   const [mutedSeries, setMutedSeries] = useState<MutedSeries[]>([]);
   const [keywordMutes, setKeywordMutes] = useState<KeywordMuteItem[]>([]);
   const [newKeyword, setNewKeyword] = useState("");
+  const [keywordName, setKeywordName] = useState("");
   const [keywordMode, setKeywordMode] = useState<"and" | "or">("or");
   const [keywordIsRegex, setKeywordIsRegex] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -103,25 +104,49 @@ export default function MutesSettingsPage() {
       )}
 
       {tab === "keyword-mutes" && (
-        <div className="novel-form">
-          <form onSubmit={async (e) => { e.preventDefault(); if (!newKeyword.trim()) return; const params = new URLSearchParams({ keyword: newKeyword.trim(), mode: keywordMode }); if (keywordIsRegex) params.set("is_regex", "true"); const res = await fetch("/api/mutes/keywords", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: params }); if (res.ok) { setNewKeyword(""); fetch("/api/mutes/keywords", { credentials: "include" }).then(r => r.json()).then(d => setKeywordMutes(d.mutes || [])); } }} style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
-            <input type="text" value={newKeyword} onChange={e => setNewKeyword(e.target.value)} placeholder="키워드 (쉼표 구분)" className="cw-input" style={{ flex: 1, minWidth: 200 }} required />
-            <select value={keywordMode} onChange={e => setKeywordMode(e.target.value as "and" | "or")} className="cw-input" style={{ width: 100 }}>
-              <option value="or">OR</option>
-              <option value="and">AND</option>
-            </select>
-            <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.85em", color: "var(--text-muted)", cursor: "pointer" }}>
-              <input type="checkbox" checked={keywordIsRegex} onChange={e => setKeywordIsRegex(e.target.checked)} /> 정규식
-            </label>
-            <button type="submit" className="btn btn-primary btn-small">추가</button>
-          </form>
-          {keywordMutes.length === 0 ? <p className="empty-small">차단한 키워드가 없습니다.</p> : keywordMutes.map(k => (
-            <div key={k.id} className="admin-table-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "var(--bg-tertiary)", borderRadius: 6, marginBottom: 4 }}>
-              <span style={{ fontSize: "0.9em" }}><Icon name="tag" size={13} /> {k.keyword} <span style={{ color: "var(--text-dim)", fontSize: "0.85em" }}>({k.mode === "and" ? "AND" : "OR"}{k.is_regex ? ", 정규식" : ""})</span></span>
-              <button onClick={async () => { await fetch(`/api/mutes/keywords/${k.id}`, { method: "DELETE", credentials: "include" }); setKeywordMutes(prev => prev.filter(x => x.id !== k.id)); }} className="btn btn-small btn-outline text-xs">삭제</button>
-            </div>
-          ))}
-        </div>
+        <>
+          <div className="admin-detail-card" style={{ padding: 20, marginBottom: 20 }}>
+            <form onSubmit={async (e) => { e.preventDefault(); if (!newKeyword.trim()) return; const params = new URLSearchParams({ keyword: newKeyword.trim(), mode: keywordMode }); if (keywordIsRegex) params.set("is_regex", "true"); if (keywordName.trim()) params.set("name", keywordName.trim()); const res = await fetch("/api/mutes/keywords", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: params }); if (res.ok) { setNewKeyword(""); setKeywordName(""); fetch("/api/mutes/keywords", { credentials: "include" }).then(r => r.json()).then(d => setKeywordMutes(d.mutes || [])); } }}>
+              <div className="form-group">
+                <label>이름 (분류용)</label>
+                <input type="text" value={keywordName} onChange={e => setKeywordName(e.target.value)} placeholder="예: 정치 관련, 스포일러" className="cw-input" />
+              </div>
+              <div className="form-group">
+                <label>키워드</label>
+                <input type="text" value={newKeyword} onChange={e => setNewKeyword(e.target.value)} placeholder="키워드1, 키워드2, ..." className="cw-input" required />
+                <p className="form-help">여러 키워드는 쉼표로 구분해 입력하세요.</p>
+              </div>
+              <div className="form-group">
+                <label>매칭 조건</label>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <select value={keywordMode} onChange={e => setKeywordMode(e.target.value as "and" | "or")} className="cw-input" style={{ width: 100 }}>
+                    <option value="or">OR</option>
+                    <option value="and">AND</option>
+                  </select>
+                  <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.85em", color: "var(--text-muted)", cursor: "pointer" }}>
+                    <input type="checkbox" checked={keywordIsRegex} onChange={e => setKeywordIsRegex(e.target.checked)} /> 정규식 사용
+                  </label>
+                </div>
+              </div>
+              <div className="form-actions" style={{ marginTop: 0 }}>
+                <button type="submit" className="btn btn-primary">저장</button>
+              </div>
+            </form>
+          </div>
+          <div className="novel-form">
+            {keywordMutes.length === 0 ? <p className="empty-small">차단한 키워드가 없습니다.</p> : keywordMutes.map(k => (
+              <div key={k.id} className="admin-table-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "var(--bg-tertiary)", borderRadius: 6, marginBottom: 4 }}>
+                <span style={{ fontSize: "0.9em" }}>
+                  {k.name && <strong>{k.name}</strong>}
+                  {k.name && <br />}
+                  <span style={{ color: "var(--text-secondary)" }}>{k.keyword}</span>
+                  <span style={{ color: "var(--text-dim)", fontSize: "0.85em", marginLeft: 4 }}>({k.mode === "and" ? "AND" : "OR"}{k.is_regex ? ", 정규식" : ""})</span>
+                </span>
+                <button onClick={async () => { await fetch(`/api/mutes/keywords/${k.id}`, { method: "DELETE", credentials: "include" }); setKeywordMutes(prev => prev.filter(x => x.id !== k.id)); }} className="btn btn-small btn-outline text-xs">삭제</button>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </>
   );

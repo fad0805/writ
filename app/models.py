@@ -539,6 +539,7 @@ class KeywordMute(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     keyword = Column(String(512), nullable=False)
+    name = Column(String(128), default="")
     mode = Column(String(8), default="or")
     is_regex = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now)
@@ -589,6 +590,7 @@ def init_db():
     _run_alter("ALTER TABLE user_mutes ADD COLUMN hide_notifications BOOLEAN DEFAULT 0")
     _run_alter("ALTER TABLE keyword_mutes ADD COLUMN mode VARCHAR(8) DEFAULT 'or'")
     _run_alter("ALTER TABLE keyword_mutes ADD COLUMN is_regex BOOLEAN DEFAULT 0")
+    _run_alter("ALTER TABLE keyword_mutes ADD COLUMN name VARCHAR(128) DEFAULT ''")
 
 
 def get_session():
