@@ -67,6 +67,7 @@ class User(Base):
     show_badge = Column(Boolean, default=False)
     is_bot = Column(Boolean, default=False)
     display_handle = Column(String(64), default="")
+    follow_list_visibility = Column(String(16), default="public")
     custom_fields = Column(JSON, default=list)
     profile_hashtags = Column(JSON, default=list)
     pinned_posts = Column(JSON, default=list)

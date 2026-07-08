@@ -15,6 +15,7 @@ export default function SettingsPage() {
   const [showBadge, setShowBadge] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [isBot, setIsBot] = useState(false);
+  const [followListVis, setFollowListVis] = useState("public");
   const [followRequests, setFollowRequests] = useState<{ id: number; user: User }[]>([]);
   const [frLoading, setFrLoading] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -28,6 +29,7 @@ export default function SettingsPage() {
       setShowBadge(user.show_badge || false);
       setIsLocked(user.is_locked || false);
       setIsBot(user.is_bot || false);
+      setFollowListVis(user.follow_list_visibility || "public");
       setLoading(false);
     }).catch(() => router.push("/login"));
   }, [router]);
@@ -60,6 +62,7 @@ export default function SettingsPage() {
       form.append("show_badge", showBadge ? "true" : "");
       form.append("is_locked", isLocked ? "true" : "");
       form.append("is_bot", isBot ? "true" : "");
+      form.append("follow_list_visibility", followListVis);
       const res = await fetch("/api/settings/update", {
         method: "POST",
         credentials: "include",
@@ -99,6 +102,14 @@ export default function SettingsPage() {
             {" "}<Icon name="mute" /> 자동화된 계정 (봇)
           </label>
           <p className="form-help">봇 계정은 사용자가 거의 개입하지 않고 프로그램으로 자동 운영되는 계정입니다. 켜면 계정에 봇 표시가 추가됩니다.</p>
+        </div>
+        <div className="form-group">
+          <label>팔로워/팔로잉 목록 공개</label>
+          <div className="visibility-selector">
+            <label><input type="radio" name="follow_list_vis" value="public" checked={followListVis === "public"} onChange={() => setFollowListVis("public")} /><Icon name="globe" /> 공개</label>
+            <label><input type="radio" name="follow_list_vis" value="private" checked={followListVis === "private"} onChange={() => setFollowListVis("private")} /><Icon name="lock" /> 비공개</label>
+          </div>
+          <p className="form-help">비공개로 설정하면 다른 사용자가 회원님의 팔로워/팔로잉 목록을 볼 수 없으며 숫자가 0으로 표시됩니다.</p>
         </div>
         {(user?.role === "admin" || user?.role === "moderator" || user?.role === "owner") && (
           <div className="form-group">

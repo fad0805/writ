@@ -88,6 +88,7 @@ def _user_json(u):
         "pinned_series": (u.pinned_series or []) if hasattr(u, 'pinned_series') else [],
         "series_default_visibility": u.series_default_visibility or "public",
         "episode_default_visibility": u.episode_default_visibility or "public",
+        "follow_list_visibility": getattr(u, 'follow_list_visibility', 'public') or 'public',
         "custom_fields": (u.custom_fields or []) if hasattr(u, 'custom_fields') else [],
         "profile_hashtags": (u.profile_hashtags or []) if hasattr(u, 'profile_hashtags') else [],
     }
@@ -1073,17 +1074,18 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         if not user or profile.id != user.id:
             novels_q = novels_q.filter(Novel.visibility != "private")
         novels = novels_q.order_by(desc(Novel.updated_at)).all()
+        show_follows = user and (profile.id == user.id or profile.follow_list_visibility != "private")
         followers = s.query(Follow).filter_by(following_id=profile.id, accepted=True).all()
         following = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).all()
         return {
             "profile": _user_json(profile),
             "posts": [_post_json(p, s, user) for p in posts],
             "novels": [_novel_json(n, s) for n in novels],
-            "followers": [{"user": _user_json(f.follower)} for f in followers],
-            "following": [{"user": _user_json(f.following)} for f in following],
+            "followers": [{"user": _user_json(f.follower)} for f in (followers if show_follows else [])],
+            "following": [{"user": _user_json(f.following)} for f in (following if show_follows else [])],
             "total_posts": total_posts,
-            "followers_count": followers_count,
-            "following_count": following_count,
+            "followers_count": followers_count if show_follows else 0,
+            "following_count": following_count if show_follows else 0,
             "is_following": is_following,
             "is_follow_pending": is_follow_pending,
             "has_pending_follower": has_pending_follower,
@@ -1902,7 +1904,8 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
                         episode_default_visibility: str = Form("public"),
                         is_locked: bool = Form(False),
                         show_badge: bool = Form(False),
-                        is_bot: bool = Form(False)):
+                        is_bot: bool = Form(False),
+                        follow_list_visibility: str = Form("public")):
     user = require_auth(request)
     valid_post = ("public", "home", "followers", "mention")
     valid_series = ("public", "unlisted", "private")
@@ -1912,6 +1915,8 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
         series_default_visibility = "public"
     if episode_default_visibility not in valid_post:
         episode_default_visibility = "public"
+    if follow_list_visibility not in ("public", "private"):
+        follow_list_visibility = "public"
     with get_session() as s:
         db = s.query(User).filter_by(id=user.id).first()
         db.default_visibility = default_visibility
@@ -1919,6 +1924,7 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
         db.episode_default_visibility = episode_default_visibility
         db.is_locked = is_locked
         db.is_bot = is_bot
+        db.follow_list_visibility = follow_list_visibility
         if user.role in ("admin", "moderator", "owner"):
             db.show_badge = show_badge
         s.commit()
