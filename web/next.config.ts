@@ -1,21 +1,21 @@
 import type { NextConfig } from "next";
 
-const API_HOST = process.env.API_HOST || "http://localhost:8000";
+const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 
 const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
         source: "/api/:path*",
-        destination: `${API_HOST}/api/:path*`,
+        destination: `${BACKEND_URL}/api/:path*`,
       },
       {
         source: "/static/:path*",
-        destination: `${API_HOST}/static/:path*`,
+        destination: `${BACKEND_URL}/static/:path*`,
       },
       {
         source: "/uploads/:path*",
-        destination: `${API_HOST}/uploads/:path*`,
+        destination: `${BACKEND_URL}/uploads/:path*`,
       },
       {
         source: "/@:username",
