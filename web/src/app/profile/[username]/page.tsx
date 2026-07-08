@@ -36,6 +36,8 @@ export default function ProfilePage() {
   const [isFollower, setIsFollower] = useState(false);
   const [approvedFollower, setApprovedFollower] = useState<boolean | null>(null);
   const [isMine, setIsMine] = useState(false);
+  const [pinnedPosts, setPinnedPosts] = useState<any[]>([]);
+  const [pinnedSeries, setPinnedSeries] = useState<any[]>([]);
   const [isBlocked, setIsBlocked] = useState(false);
   const [amBlocked, setAmBlocked] = useState(false);
   const [isMutedUser, setIsMutedUser] = useState(false);
@@ -62,6 +64,7 @@ export default function ProfilePage() {
         setFollowersCount(d.followers_count); setFollowingCount(d.following_count);
       setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setHasPendingFollower(d.has_pending_follower); setIsFollower(d.is_follower); setApprovedFollower(null); setIsMine(d.is_mine);
       setIsBlocked(!!(d as any).is_blocked); setAmBlocked(!!(d as any).am_i_blocked); setIsMutedUser(!!(d as any).is_muted);
+      setPinnedPosts((d as any).pinned_posts_data || []); setPinnedSeries((d as any).pinned_series_data || []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -307,11 +310,24 @@ export default function ProfilePage() {
       </div>
 
       <div id="tab-posts" className="profile-tab-posts" style={{ display: tab === "posts" ? "block" : "none" }}>
-        {posts.length === 0 ? <p className="empty-state">게시글이 없습니다.</p> : posts.map((p) => <PostCard key={p.id} post={p} onUpdate={load} />)}
+        {pinnedPosts.map((p: any) => <PostCard key={`pin-${p.id}`} post={p} onUpdate={load} />)}
+        {posts.length === 0 && pinnedPosts.length === 0 ? <p className="empty-state">게시글이 없습니다.</p> : posts.map((p) => <PostCard key={p.id} post={p} onUpdate={load} />)}
       </div>
 
       <div id="tab-novels" className="profile-novel-list profile-tab-novels" style={{ display: tab === "novels" ? "flex" : "none" }}>
-        {novels.length === 0 ? <p className="empty-state">시리즈가 없습니다.</p> : novels.map((n) => (
+        {pinnedSeries.map((n: any) => (
+          <Link key={`pin-${n.id}`} href={n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`} className="profile-novel profile-novel-link" style={{ border: "1px solid var(--accent)", borderRadius: 8, padding: 8 }}>
+            <div className="cover-wrap-56">
+              {n.cover_image ? <img src={n.cover_image} alt="" className="cover-img" /> : <div className="cover-fallback cover-fallback-sm"><Icon name="book" size={16} /></div>}
+            </div>
+            <div className="novel-card-body-content">
+              <strong className="profile-novel-title"><Icon name="pin" size={12} style={{ marginRight: 4 }} /> {n.title}</strong>
+              <span className="profile-novel-meta">{n.episode_count}화 · {n.is_completed ? "완결" : "연재중"}</span>
+              <p className="profile-novel-desc">{n.description || "설명 없음"}</p>
+            </div>
+          </Link>
+        ))}
+        {novels.length === 0 && pinnedSeries.length === 0 ? <p className="empty-state">시리즈가 없습니다.</p> : novels.map((n) => (
           <Link key={n.id} href={n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`} className="profile-novel profile-novel-link">
             <div className="cover-wrap-56">
               {n.cover_image ? (
