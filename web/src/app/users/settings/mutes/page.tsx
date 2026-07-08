@@ -151,7 +151,11 @@ export default function MutesSettingsPage() {
                 <span style={{ fontSize: "0.9em" }}>
                   {k.name && <strong>{k.name}</strong>}
                   {k.name && <br />}
-                  <span style={{ color: "var(--text-secondary)" }}>{k.keyword}</span>
+                  <span style={{ color: "var(--text-secondary)" }}>
+                    {k.keyword.split("\n").map((kw, i) => (
+                      <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "1px 6px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8, fontSize: "0.85em", marginRight: 3, marginBottom: 2 }}>{kw}</span>
+                    ))}
+                  </span>
                   <span style={{ color: "var(--text-dim)", fontSize: "0.85em", marginLeft: 4 }}>({k.mode === "and" ? "AND" : "OR"}{k.is_regex ? ", 정규식" : ""})</span>
                 </span>
                 <button onClick={async () => { await fetch(`/api/mutes/keywords/${k.id}`, { method: "DELETE", credentials: "include" }); setKeywordMutes(prev => prev.filter(x => x.id !== k.id)); }} className="btn btn-small btn-outline text-xs">삭제</button>
