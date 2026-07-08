@@ -1416,7 +1416,7 @@ def _novel_json(n, s=None):
         "description": n.description or "",
         "cover_image": n.cover_image or "",
         "tags": tag_names,
-        "is_completed": n.is_completed,
+        "status": n.status or "ongoing",
         "is_published": n.is_published,
         "episode_count": n.episode_count or 0,
         "total_views": n.total_views or 0,
@@ -1541,7 +1541,7 @@ def api_unfollow_novel(request: Request, novel_id: int):
 
 @router.post("/series/{novel_id}/edit")
 def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), description: str = Form(""),
-                   tags: str = Form(""), visibility: str = Form("public"), is_completed: bool = Form(False),
+                   tags: str = Form(""), visibility: str = Form("public"), status: str = Form("ongoing"),
                    cover_image: UploadFile = File(None), remove_cover: bool = Form(False)):
     user = require_auth(request)
     if not title.strip():
@@ -1585,7 +1585,7 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
         novel.description = description
         novel.tags = tags
         novel.visibility = visibility
-        novel.is_completed = is_completed
+        novel.status = status if status in ("ongoing", "hiatus", "discontinued", "completed") else "ongoing"
         novel.is_published = visibility != "private"
         if remove_cover:
             old = novel.cover_image

@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import TextareaHighlight from "@/components/TextareaHighlight";
 import TagInput from "@/components/TagInput";
 import SeriesVisibilitySelector from "@/components/SeriesVisibilitySelector";
+import SeriesStatusSelector from "@/components/SeriesStatusSelector";
 import ImageCropper from "@/components/ImageCropper";
 
 function makeBlob(file: Blob): string {
@@ -24,7 +25,7 @@ export default function EditNovelPage() {
   const [coverPreview, setCoverPreview] = useState("");
   const [cropSrc, setCropSrc] = useState("");
   const [visibility, setVisibility] = useState("public");
-  const [isCompleted, setIsCompleted] = useState(false);
+  const [seriesStatus, setSeriesStatus] = useState("ongoing");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -43,7 +44,7 @@ export default function EditNovelPage() {
         setTags(d.novel.tags);
         setVisibility(d.novel.visibility || "public");
         setCoverImageUrl(d.novel.cover_image || "");
-        setIsCompleted(d.novel.is_completed);
+        setSeriesStatus(d.novel.status || "ongoing");
         setLoading(false);
       })
       .catch(() => router.push("/series"));
@@ -81,7 +82,7 @@ export default function EditNovelPage() {
       form.append("description", description);
       form.append("tags", tags);
       form.append("visibility", visibility);
-      form.append("is_completed", isCompleted ? "true" : "");
+      form.append("status", seriesStatus);
       if (imageFile) form.append("cover_image", imageFile);
       else if (removeCover) form.append("remove_cover", "true");
       const res = await fetch(`/api/series/${params.id}/edit`, { method: "POST", credentials: "include", body: form });
@@ -133,11 +134,9 @@ export default function EditNovelPage() {
           <SeriesVisibilitySelector value={visibility} onChange={(v) => setVisibility(v)} />
           <p className="form-help">전체공개는 모든 시리즈 목록에 노출되고, 공개는 작가 프로필과 URL로만 접근할 수 있습니다.</p>
         </div>
-        <div className="form-group ml-4">
-          <label>
-            <input type="checkbox" checked={isCompleted} onChange={(e) => setIsCompleted(e.target.checked)} />
-            {" "}완결
-          </label>
+        <div className="form-group">
+          <label>연재 상태</label>
+          <SeriesStatusSelector value={seriesStatus} onChange={(v) => setSeriesStatus(v)} />
         </div>
         <div className="form-actions form-actions-between">
           <button

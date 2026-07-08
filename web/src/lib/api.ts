@@ -100,7 +100,7 @@ export interface NovelData {
   description: string;
   cover_image: string;
   tags: string;
-  is_completed: boolean;
+  status: string;
   is_published: boolean;
   episode_count: number;
   total_views: number;

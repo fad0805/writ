@@ -359,7 +359,7 @@ export default function ProfilePage() {
             </div>
             <div className="novel-card-body-content" style={{ flex: 1 }}>
               <strong className="profile-novel-title">{n.title}</strong>
-              <span className="profile-novel-meta">{n.episode_count}화 · {n.is_completed ? "완결" : "연재중"}</span>
+              <span className="profile-novel-meta">{n.episode_count}화 · {({ ongoing: "연재중", hiatus: "휴재", discontinued: "연재중단", completed: "완결" } as Record<string,string>)[n.status] || "연재중"}</span>
               <p className="profile-novel-desc">{n.description || "설명 없음"}</p>
               {n.tags && <p className="novel-tags"><Icon name="tag" />{n.tags.split(/[ ,]+/).filter(Boolean).map((t: string, i: number) => <span key={i} className="tag-spacing">{t}</span>)}</p>}
             </div>
@@ -386,7 +386,7 @@ export default function ProfilePage() {
             </div>
             <div className="novel-card-body-content" style={{ flex: 1 }}>
               <strong className="profile-novel-title">{n.title}</strong>
-              <span className="profile-novel-meta">{n.episode_count}화 · {n.is_completed ? "완결" : "연재중"}</span>
+              <span className="profile-novel-meta">{n.episode_count}화 · {({ ongoing: "연재중", hiatus: "휴재", discontinued: "연재중단", completed: "완결" } as Record<string,string>)[n.status] || "연재중"}</span>
               <p className="profile-novel-desc">{n.description || "설명 없음"}</p>
               {n.tags && <p className="novel-tags"><Icon name="tag" />{n.tags.split(/[ ,]+/).filter(Boolean).map((t: string, i: number) => <span key={i} className="tag-spacing">{t}</span>)}</p>}
             </div>

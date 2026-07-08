@@ -9,6 +9,9 @@ import Link from "next/link";
 import { hashColor } from "@/lib/avatar";
 import { useAuth } from "@/lib/auth";
 
+const STATUS_LABELS: Record<string, string> = { ongoing: "연재중", hiatus: "휴재", discontinued: "연재중단", completed: "완결" };
+const STATUS_ICONS: Record<string, string> = { ongoing: "edit", hiatus: "moon", discontinued: "x", completed: "check" };
+
 export default function NovelDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -117,7 +120,7 @@ export default function NovelDetailPage() {
           </div>
         </div>
         <div className="novel-status">
-          <span><Icon name={novel.is_completed ? "check" : "edit"} /> {novel.is_completed ? "완결" : "연재중"}</span>
+          <span><Icon name={STATUS_ICONS[novel.status] || "edit"} /> {STATUS_LABELS[novel.status] || "연재중"}</span>
           <span><Icon name="book" /> 총 {novel.episode_count}화</span>
           {isMine && typeof novel.total_views === 'number' && <span><Icon name="eye" /> 총 {novel.total_views}회 조회</span>}
           {isMine && typeof (novel as any).followers_count === 'number' && <span><Icon name="user" /> {(novel as any).followers_count}명 팔로우</span>}

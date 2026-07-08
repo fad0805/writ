@@ -352,7 +352,7 @@ class Novel(Base):
     description = Column(Text, default="")
     cover_image = Column(String(512), default="")
     tags = Column(String(512), default="")
-    is_completed = Column(Boolean, default=False)
+    status = Column(String(16), default="ongoing")
     is_published = Column(Boolean, default=True)
     visibility = Column(String(16), default="public", nullable=False)
     created_at = Column(DateTime(timezone=True), default=now)
