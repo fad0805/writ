@@ -1178,6 +1178,11 @@ input[type="checkbox"] {
 .post-card-pinned { outline: 1px solid var(--accent); border-radius: 8px; margin-bottom: 8px; }
 .series-card-pinned { border: 1px solid var(--accent) !important; }
 
+/* ── Pagination ── */
+.pagination { display: flex; justify-content: center; gap: 6px; margin: 24px 0; flex-wrap: wrap; }
+.pagination-btn { min-width: 36px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-secondary); color: var(--text); cursor: pointer; font-size: 0.9em; }
+.pagination-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
 /* ── Page header ── */
 .page-header {
   display: flex;

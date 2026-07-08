@@ -1372,20 +1372,24 @@ def api_save_profile_note(request: Request, target_username: str, content: str =
 
 
 @router.get("/series")
-def api_novels(request: Request):
+def api_novels(request: Request, limit: int = Query(12), offset: int = Query(0)):
     with get_session() as s:
-        novels = s.query(Novel).filter_by(is_published=True, visibility="public").order_by(desc(Novel.updated_at)).all()
-        result = {"novels": [_novel_json(n, s) for n in novels]}
-    return result
+        q = s.query(Novel).filter_by(is_published=True, visibility="public").order_by(desc(Novel.updated_at))
+        raw = q.offset(offset).limit(limit + 1).all()
+        has_more = len(raw) > limit
+        novels = [_novel_json(n, s) for n in raw[:limit]]
+        return {"novels": novels, "has_more": has_more}
 
 
 @router.get("/series/my")
-def api_my_novels(request: Request):
+def api_my_novels(request: Request, limit: int = Query(12), offset: int = Query(0)):
     user = require_auth(request)
     with get_session() as s:
-        novels = s.query(Novel).filter_by(author_id=user.id).order_by(desc(Novel.updated_at)).all()
-        result = {"novels": [_novel_json(n, s) for n in novels]}
-    return result
+        q = s.query(Novel).filter_by(author_id=user.id).order_by(desc(Novel.updated_at))
+        total = q.count()
+        raw = q.offset(offset).limit(limit).all()
+        novels = [_novel_json(n, s) for n in raw]
+        return {"novels": novels, "total": total, "page": offset // limit + 1, "pages": max(1, (total + limit - 1) // limit)}
 
 
 def _sync_tags(n, s):
