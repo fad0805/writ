@@ -85,20 +85,26 @@ export default function AdminSettingsPage() {
         </div>
         <div className="form-group">
           <label>대표 아이콘</label>
-          <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setLogoFile(f); setLogoPreview(URL.createObjectURL(f)); } }} className="cw-input" />
-          {logoPreview && <img src={logoPreview} alt="logo" style={{ width: 80, height: 80, marginTop: 8, borderRadius: 12, objectFit: "cover" }} />}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {logoPreview && <img src={logoPreview} alt="logo" style={{ width: 64, height: 64, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />}
+            <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setLogoFile(f); setLogoPreview(URL.createObjectURL(f)); } }} className="cw-input" />
+          </div>
           <p className="form-help">정사각형 이미지를 사용해 주세요.</p>
         </div>
         <div className="form-group">
           <label>파비콘</label>
-          <input type="file" accept="image/x-icon,image/png,image/svg+xml" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setFaviconFile(f); setFaviconPreview(URL.createObjectURL(f)); } }} className="cw-input" />
-          {faviconPreview && <img src={faviconPreview} alt="favicon" style={{ width: 32, height: 32, marginTop: 8, borderRadius: 4, objectFit: "cover" }} />}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {faviconPreview && <img src={faviconPreview} alt="favicon" style={{ width: 32, height: 32, borderRadius: 4, objectFit: "cover", flexShrink: 0 }} />}
+            <input type="file" accept="image/x-icon,image/png,image/svg+xml" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setFaviconFile(f); setFaviconPreview(URL.createObjectURL(f)); } }} className="cw-input" />
+          </div>
           <p className="form-help">정사각형 이미지를 사용해 주세요.</p>
         </div>
         <div className="form-group">
           <label>모바일 앱 아이콘</label>
-          <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setAppIconFile(f); setAppIconPreview(URL.createObjectURL(f)); } }} className="cw-input" />
-          {appIconPreview && <img src={appIconPreview} alt="app icon" style={{ width: 80, height: 80, marginTop: 8, borderRadius: 12, objectFit: "cover" }} />}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {appIconPreview && <img src={appIconPreview} alt="app icon" style={{ width: 64, height: 64, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />}
+            <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setAppIconFile(f); setAppIconPreview(URL.createObjectURL(f)); } }} className="cw-input" />
+          </div>
           <p className="form-help">정사각형 이미지를 사용해 주세요.</p>
         </div>
         <div className="form-group">

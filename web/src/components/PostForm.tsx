@@ -559,7 +559,8 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { formRef.current?.requestSubmit(); } }}
       />
       <div className="reply-form-footer">
-        <div style={{ display: "flex", gap: 4, alignItems: "center", marginRight: "auto" }}>
+        <VisibilitySelector value={visibility} onChange={(v) => setVisibilityOverride(v)} includeMention />
+        <div className="form-footer-center" style={{ display: "flex", gap: 4, alignItems: "center" }}>
           <button type="button" className="action-btn" onClick={() => mediaInputRef.current?.click()} title="미디어 첨부" disabled={mediaUploading || mediaItems.length >= 4}>
             <Icon name="image" />
           </button>
@@ -575,7 +576,6 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           }} />
           <EmojiPicker onEmoji={(e) => setContent(content + e)} />
         </div>
-        <VisibilitySelector value={visibility} onChange={(v) => setVisibilityOverride(v)} includeMention />
         <div className="form-footer-right">
           <span className="char-count char-count-inline">{totalLen}/{MAX_LENGTH}</span>
           <button type="submit" disabled={submitting || !content.trim()} className="btn btn-primary">
