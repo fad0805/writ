@@ -173,6 +173,7 @@ class Post(Base):
     is_pinned = Column(Boolean, default=False)
     is_dm = Column(Boolean, default=False)
     original_visibility = Column(String(16), default="")
+    tag_list = relationship("Tag", secondary=post_tags, lazy="selectin")
     created_at = Column(DateTime(timezone=True), default=now)
     bumped_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -301,6 +302,12 @@ class Boost(Base):
 novel_tags = Table(
     "novel_tags", Base.metadata,
     Column("novel_id", Integer, ForeignKey("novels.id"), primary_key=True),
+    Column("tag_id", Integer, ForeignKey("tags.id"), primary_key=True),
+)
+
+post_tags = Table(
+    "post_tags", Base.metadata,
+    Column("post_id", Integer, ForeignKey("posts.id"), primary_key=True),
     Column("tag_id", Integer, ForeignKey("tags.id"), primary_key=True),
 )
 

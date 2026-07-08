@@ -1520,6 +1520,8 @@ input[type="checkbox"] {
 /* ── Mention link ── */
 .mention-link { color: var(--accent-light); font-weight: 500; }
 .mention-link:hover { text-decoration: underline; }
+.hashtag-link { color: var(--accent-light); font-weight: 500; }
+.hashtag-link:hover { text-decoration: underline; }
 
 /* ── Visibility badge ── */
 

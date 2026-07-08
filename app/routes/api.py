@@ -135,6 +135,25 @@ def _parse_mentions(content):
         return [u.id for u in users]
 
 
+def _sync_post_tags(post, s):
+    """Parse #hashtags from post content and sync with Tag model."""
+    import re
+    tags = set(re.findall(r'(?<!\w)#([\w_가-힣]+)', post.content))
+    desired = set(t.lower() for t in tags)
+    current = {t.name for t in (post.tag_list or [])}
+    for name in desired - current:
+        tag = s.query(Tag).filter_by(name=name).first()
+        if not tag:
+            tag = Tag(name=name)
+            s.add(tag)
+            s.flush()
+        post.tag_list.append(tag)
+    for name in current - desired:
+        tag = next((t for t in post.tag_list if t.name == name), None)
+        if tag:
+            post.tag_list.remove(tag)
+
+
 TIMELINE_LABELS = {
     "federated": "연합", "local": "로컬", "social": "소셜", "home": "홈",
 }
@@ -553,6 +572,7 @@ def api_create_post(
         s.add(post)
         s.flush()
         post.ap_id = f"{BASE_URL}/@{user.username}/{post.number}"
+        _sync_post_tags(post, s)
         if parent_id:
             parent = s.query(Post).filter_by(id=parent_id).first()
             if parent:
@@ -1872,7 +1892,7 @@ def api_explore(request: Request):
 @router.get("/search")
 def api_search(request: Request, q: str = Query("")):
     user = get_current_user(request)
-    query = q.strip().lstrip("@")
+    query = q.strip().lstrip("@").lstrip("#")
     if not query:
         return {"posts": [], "novels": [], "users": []}
     # Check if the query contains a blocked/allowed domain
@@ -1896,17 +1916,30 @@ def api_search(request: Request, q: str = Query("")):
                             blocked_domain = domain
     with get_session() as s:
         pattern = f"%{query}%"
-        posts = s.query(Post).options(selectinload(Post.author)).filter(
-            Post.content.ilike(pattern),
-            Post.visibility == "public",
-            Post.is_deleted == False,
-            Post.in_reply_to_id == None,
-        ).order_by(desc(Post.created_at)).limit(20).all()
-        novels = s.query(Novel).options(selectinload(Novel.author)).filter(
-            or_(Novel.title.ilike(pattern), Novel.description.ilike(pattern)),
-            Novel.is_published == True,
-            Novel.visibility == "public",
-        ).order_by(desc(Novel.updated_at)).limit(20).all()
+        is_hashtag_search = q.strip().startswith("#")
+        if is_hashtag_search:
+            tag = s.query(Tag).filter_by(name=query.lower()).first()
+            if tag:
+                posts = s.query(Post).options(selectinload(Post.author)).filter(
+                    Post.tag_list.any(id=tag.id),
+                    Post.visibility == "public",
+                    Post.is_deleted == False,
+                ).order_by(desc(Post.created_at)).limit(20).all()
+            else:
+                posts = []
+            novels = []
+        else:
+            posts = s.query(Post).options(selectinload(Post.author)).filter(
+                Post.content.ilike(pattern),
+                Post.visibility == "public",
+                Post.is_deleted == False,
+                Post.in_reply_to_id == None,
+            ).order_by(desc(Post.created_at)).limit(20).all()
+            novels = s.query(Novel).options(selectinload(Novel.author)).filter(
+                or_(Novel.title.ilike(pattern), Novel.description.ilike(pattern)),
+                Novel.is_published == True,
+                Novel.visibility == "public",
+            ).order_by(desc(Novel.updated_at)).limit(20).all()
         local_users = s.query(User).filter(
             User.is_remote == False,
             or_(User.username.ilike(pattern), User.display_name.ilike(pattern)),
