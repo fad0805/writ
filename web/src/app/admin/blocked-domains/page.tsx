@@ -52,7 +52,7 @@ export default function AdminBlockedDomainsPage() {
 
   return (
     <>
-      <div className="page-header"><h2><Icon name="ban" /> 이메일 도메인 차단</h2></div>
+      <div className="page-header"><h2><Icon name="settings" /> 서버 관리</h2></div>
       <AdminNav current="blocked-domains" />
       {msg && <p style={{ marginBottom: 12, color: "var(--accent)", fontWeight: 600 }}>{msg}</p>}
 

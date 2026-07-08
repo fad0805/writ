@@ -117,7 +117,7 @@ export default function ReportDetailPage() {
   return (
     <>
       <div className="page-header" style={{ justifyContent: "space-between" }}>
-        <h2><Icon name="flag" /> 신고 상세</h2>
+        <h2><Icon name="settings" /> 서버 관리</h2>
         <Link href="/admin/reports" className="btn btn-small btn-outline">목록</Link>
       </div>
       <AdminNav current="reports" />

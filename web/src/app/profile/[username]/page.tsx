@@ -150,6 +150,22 @@ export default function ProfilePage() {
                     <button className="action-btn btn-action-sm" onClick={() => setShowNote(!showNote)}>
                       <Icon name="edit" /> 메모
                     </button>
+                    <button className="action-btn btn-action-sm" style={{ color: (profile as any).is_muted ? "var(--danger)" : undefined }}
+                      onClick={async () => {
+                        if ((profile as any).is_muted) { await fetch(`/api/mutes/users/${profile.id}`, { method: "DELETE", credentials: "include" }); }
+                        else { const form = new FormData(); form.append("duration", "0"); form.append("hide_notifications", "false"); await fetch(`/api/mutes/users/${profile.id}`, { method: "POST", credentials: "include", body: form }); }
+                        window.location.reload();
+                      }}>
+                      <Icon name="mute" /> {(profile as any).is_muted ? "뮤트됨" : "뮤트"}
+                    </button>
+                    <button className="action-btn btn-action-sm" style={{ color: (profile as any).is_blocked ? "var(--danger)" : undefined }}
+                      onClick={async () => {
+                        if ((profile as any).is_blocked) { await fetch(`/api/blocks/users/${profile.id}`, { method: "DELETE", credentials: "include" }); }
+                        else { await fetch(`/api/blocks/users/${profile.id}`, { method: "POST", credentials: "include" }); }
+                        window.location.reload();
+                      }}>
+                      <Icon name="block" /> {(profile as any).is_blocked ? "블락됨" : "블락"}
+                    </button>
                   </>
                 )}
               </div>

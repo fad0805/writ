@@ -9,7 +9,7 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, SeriesFollow, Tag, CustomEmoji, ProfileNote, Report, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, get_session
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, SeriesFollow, Tag, CustomEmoji, ProfileNote, Report, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, get_session
 from app.routes.auth import require_auth, get_current_user
 from app.log_utils import log_admin_action
 
@@ -791,6 +791,9 @@ def api_get_profile(request: Request, username: str):
         posts = [p for p in posts if _can_view(p, user, s)]
         followers_count = s.query(Follow).filter_by(following_id=profile.id, accepted=True).count()
         following_count = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).count()
+        is_muted = s.query(UserMute).filter_by(user_id=user.id, target_user_id=profile.id).first() is not None if user else False
+        is_blocked = s.query(UserBlock).filter_by(user_id=user.id, target_user_id=profile.id).first() is not None if user else False
+        am_i_blocked = s.query(UserBlock).filter_by(user_id=profile.id, target_user_id=user.id).first() is not None if user else False
         is_following = s.query(Follow).filter_by(
             follower_id=user.id, following_id=profile.id, accepted=True
         ).first() is not None if user else False
@@ -822,6 +825,9 @@ def api_get_profile(request: Request, username: str):
             "has_pending_follower": has_pending_follower,
             "is_follower": is_follower,
             "is_mine": profile.id == user.id if user else False,
+            "is_muted": is_muted,
+            "is_blocked": is_blocked,
+            "am_i_blocked": am_i_blocked,
         }
 
 
@@ -3497,6 +3503,137 @@ def api_admin_get_federation_mode(request: Request):
     with get_session() as s:
         settings = ServerSetting.get(s)
         return {"mode": settings.federation_mode or "blacklist"}
+
+
+# ── User mute/block ──
+@router.get("/mutes/users")
+def api_list_user_mutes(request: Request):
+    user = require_auth(request)
+    with get_session() as s:
+        mutes = s.query(UserMute).filter_by(user_id=user.id).order_by(UserMute.created_at.desc()).all()
+        return {"mutes": [{"id": m.id, "target_user_id": m.target_user_id, "username": m.target_user.username, "display_name": m.target_user.display_name, "duration": m.duration, "hide_notifications": m.hide_notifications, "created_at": _fmt_dt(m.created_at)} for m in mutes]}
+
+
+@router.post("/mutes/users/{target_user_id}")
+def api_mute_user(request: Request, target_user_id: int, duration: int = Form(0), hide_notifications: bool = Form(False)):
+    user = require_auth(request)
+    if user.id == target_user_id:
+        raise HTTPException(status_code=400, detail="Cannot mute yourself")
+    with get_session() as s:
+        existing = s.query(UserMute).filter_by(user_id=user.id, target_user_id=target_user_id).first()
+        if existing:
+            existing.duration = duration
+            existing.hide_notifications = hide_notifications
+            s.commit()
+            return {"ok": True}
+        s.add(UserMute(user_id=user.id, target_user_id=target_user_id, duration=duration, hide_notifications=hide_notifications))
+        s.commit()
+    return {"ok": True}
+
+
+@router.delete("/mutes/users/{target_user_id}")
+def api_unmute_user(request: Request, target_user_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        s.query(UserMute).filter_by(user_id=user.id, target_user_id=target_user_id).delete()
+        s.commit()
+    return {"ok": True}
+
+
+@router.get("/blocks/users")
+def api_list_user_blocks(request: Request):
+    user = require_auth(request)
+    with get_session() as s:
+        blocks = s.query(UserBlock).filter_by(user_id=user.id).order_by(UserBlock.created_at.desc()).all()
+        return {"blocks": [{"id": b.id, "target_user_id": b.target_user_id, "username": b.target_user.username, "display_name": b.target_user.display_name, "created_at": _fmt_dt(b.created_at)} for b in blocks]}
+
+
+@router.post("/blocks/users/{target_user_id}")
+def api_block_user(request: Request, target_user_id: int):
+    user = require_auth(request)
+    if user.id == target_user_id:
+        raise HTTPException(status_code=400, detail="Cannot block yourself")
+    with get_session() as s:
+        existing = s.query(UserBlock).filter_by(user_id=user.id, target_user_id=target_user_id).first()
+        if existing:
+            return {"ok": True}
+        s.add(UserBlock(user_id=user.id, target_user_id=target_user_id))
+        s.commit()
+    return {"ok": True}
+
+
+@router.delete("/blocks/users/{target_user_id}")
+def api_unblock_user(request: Request, target_user_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        s.query(UserBlock).filter_by(user_id=user.id, target_user_id=target_user_id).delete()
+        s.commit()
+    return {"ok": True}
+
+
+# ── Series mute ──
+@router.get("/mutes/series")
+def api_list_series_mutes(request: Request):
+    user = require_auth(request)
+    with get_session() as s:
+        mutes = s.query(SeriesMute).filter_by(user_id=user.id).order_by(SeriesMute.created_at.desc()).all()
+        return {"mutes": [{"id": m.id, "novel_id": m.novel_id, "title": m.novel.title, "created_at": _fmt_dt(m.created_at)} for m in mutes]}
+
+
+@router.post("/mutes/series/{novel_id}")
+def api_mute_series(request: Request, novel_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        existing = s.query(SeriesMute).filter_by(user_id=user.id, novel_id=novel_id).first()
+        if existing:
+            return {"ok": True}
+        s.add(SeriesMute(user_id=user.id, novel_id=novel_id))
+        s.commit()
+    return {"ok": True}
+
+
+@router.delete("/mutes/series/{novel_id}")
+def api_unmute_series(request: Request, novel_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        s.query(SeriesMute).filter_by(user_id=user.id, novel_id=novel_id).delete()
+        s.commit()
+    return {"ok": True}
+
+
+# ── Keyword mute ──
+@router.get("/mutes/keywords")
+def api_list_keyword_mutes(request: Request):
+    user = require_auth(request)
+    with get_session() as s:
+        mutes = s.query(KeywordMute).filter_by(user_id=user.id).order_by(KeywordMute.created_at.desc()).all()
+        return {"mutes": [{"id": m.id, "keyword": m.keyword, "mode": m.mode, "is_regex": m.is_regex, "created_at": _fmt_dt(m.created_at)} for m in mutes]}
+
+
+@router.post("/mutes/keywords")
+def api_add_keyword_mute(request: Request, keyword: str = Form(...), mode: str = Form("or"), is_regex: bool = Form(False)):
+    user = require_auth(request)
+    kw = keyword.strip()
+    if not kw:
+        raise HTTPException(status_code=400, detail="Keyword cannot be empty")
+    if mode not in ("and", "or"):
+        raise HTTPException(status_code=400, detail="Invalid mode")
+    with get_session() as s:
+        existing = s.query(KeywordMute).filter_by(user_id=user.id, keyword=kw, mode=mode, is_regex=is_regex).first()
+        if existing:
+            return {"ok": True}
+        s.add(KeywordMute(user_id=user.id, keyword=kw, mode=mode, is_regex=is_regex))
+        s.commit()
+    return {"ok": True}
+
+
+@router.delete("/mutes/keywords/{mute_id}")
+def api_remove_keyword_mute(request: Request, mute_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        s.query(KeywordMute).filter_by(id=mute_id, user_id=user.id).delete()
+        s.commit()
+    return {"ok": True}
 
 
 def _resolve_admin_users(s, admin_ids_str: str):

@@ -504,6 +504,46 @@ class AdminLog(Base):
     user = relationship("User", foreign_keys=[user_id], lazy="selectin")
 
 
+class UserMute(Base):
+    __tablename__ = "user_mutes"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    target_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    duration = Column(Integer, default=0)
+    hide_notifications = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), default=now)
+    user = relationship("User", foreign_keys=[user_id], lazy="selectin")
+    target_user = relationship("User", foreign_keys=[target_user_id], lazy="selectin")
+
+
+class UserBlock(Base):
+    __tablename__ = "user_blocks"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    target_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now)
+    user = relationship("User", foreign_keys=[user_id], lazy="selectin")
+    target_user = relationship("User", foreign_keys=[target_user_id], lazy="selectin")
+
+
+class SeriesMute(Base):
+    __tablename__ = "series_mutes"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    novel_id = Column(Integer, ForeignKey("novels.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+
+class KeywordMute(Base):
+    __tablename__ = "keyword_mutes"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    keyword = Column(String(512), nullable=False)
+    mode = Column(String(8), default="or")
+    is_regex = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+
 class ServerSetting(Base):
     __tablename__ = "server_settings"
 
