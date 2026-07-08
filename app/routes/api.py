@@ -26,7 +26,7 @@ from app.activitypub import broadcast_to_followers, _post_to_inbox, _process_emo
 from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY
 from app.crypto_utils import encrypt_key, get_private_key
 from app.eventbus import broadcast
-from app.timeline_stream import broadcast_post, add_stream, remove_stream
+from app.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream
 from app.utils.storage import LocalStorage
 
 logger = logging.getLogger("writ.api")
@@ -782,6 +782,7 @@ def api_like_post(request: Request, post_id: int):
             if post.author_id != user.id:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
             s.commit()
+            broadcast_refresh_notifs()
     return {"ok": True}
 
 
@@ -822,6 +823,7 @@ def api_boost_post(request: Request, post_id: int):
             if post.author_id != user.id:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id))
             s.commit()
+            broadcast_refresh_notifs()
     return {"ok": True}
 
 
@@ -1165,6 +1167,7 @@ def api_follow(request: Request, username: str):
             if not existing_notif:
                 s.add(Notification(user_id=target.id, from_user_id=user.id, notification_type="follow_request" if not accepted else "follow"))
             s.commit()
+            broadcast_refresh_notifs()
     return {"ok": True}
 
 
@@ -1396,6 +1399,25 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
             s.commit()
 
     return {"notifications": result, "has_more": has_more, "total": total}
+
+
+@router.get("/notifications/stream")
+async def api_notifications_stream(request: Request):
+    user = require_auth(request)
+    sid, q = add_notif_stream()
+    try:
+        async def event_gen():
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    payload = await asyncio.wait_for(q.get(), timeout=30)
+                    yield f"data: {payload}\n\n"
+                except asyncio.TimeoutError:
+                    yield ":keepalive\n\n"
+        return StreamingResponse(event_gen(), media_type="text/event-stream")
+    finally:
+        remove_notif_stream(sid)
 
 
 # ── Novels / Episodes API ──
