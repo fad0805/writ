@@ -560,7 +560,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       />
       <div className="reply-form-footer">
         <VisibilitySelector value={visibility} onChange={(v) => setVisibilityOverride(v)} includeMention />
-        <div className="form-footer-center" style={{ display: "flex", gap: 4, alignItems: "center" }}>
+        <div className="form-footer-right" style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: "auto" }}>
           <button type="button" className="action-btn" onClick={() => mediaInputRef.current?.click()} title="미디어 첨부" disabled={mediaUploading || mediaItems.length >= 4}>
             <Icon name="image" />
           </button>
@@ -568,6 +568,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
             const files = Array.from(e.target.files || []);
             for (const f of files) {
               const isVideo = f.type.startsWith("video/");
+              if (f.size > 26214400 && isVideo) continue;
               if (isVideo && mediaItems.some(m => m.type === "video")) continue;
               if (mediaItems.length >= 4) break;
               setMediaItems(prev => [...prev, { url: "", type: isVideo ? "video" : "image", file: f }]);
@@ -575,8 +576,6 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
             e.target.value = "";
           }} />
           <EmojiPicker onEmoji={(e) => setContent(content + e)} />
-        </div>
-        <div className="form-footer-right">
           <span className="char-count char-count-inline">{totalLen}/{MAX_LENGTH}</span>
           <button type="submit" disabled={submitting || !content.trim()} className="btn btn-primary">
             {submitting ? "..." : parentId ? "답글" : "게시"}

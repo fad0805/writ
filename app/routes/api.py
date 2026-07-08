@@ -1830,6 +1830,8 @@ def api_settings_change_email(request: Request, email: str = Form(...)):
     return {"ok": True, "email_changed": True}
 
 
+MAX_VIDEO_SIZE = 26214400
+
 @router.post("/media/upload")
 def api_upload_media(request: Request, file: UploadFile = File(...)):
     user = require_auth(request)
@@ -1842,15 +1844,21 @@ def api_upload_media(request: Request, file: UploadFile = File(...)):
     is_image = ext in (".jpg", ".jpeg", ".png", ".gif", ".webp")
     if not is_image and not is_video:
         raise HTTPException(status_code=400, detail="Unsupported file type")
+    if is_video:
+        file.file.seek(0, 2)
+        size = file.file.tell()
+        file.file.seek(0)
+        if size > MAX_VIDEO_SIZE:
+            raise HTTPException(status_code=400, detail="Video exceeds maximum size (25MB)")
     from uuid import uuid4
-    name = f"{uuid4().hex}{ext}"
+    name = f"{uuid4().hex}.webp" if is_image else f"{uuid4().hex}{ext}"
     key = f"media/{name}"
     if is_image:
         img = PILImage.open(io.BytesIO(file.file.read()))
         if img.mode == "RGBA":
             img = img.convert("RGB")
         buf = io.BytesIO()
-        img.save(buf, "JPEG", quality=85)
+        img.save(buf, "WEBP", quality=85)
         buf.seek(0)
         storage.save(key, buf)
         url = storage.url(key)
