@@ -7,9 +7,9 @@ from typing import AsyncGenerator
 
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
-from app.eventbus import add_queue, remove_queue
+from app.eventbus import add_queue, remove_queue, add_ws, remove_ws
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -514,6 +514,23 @@ async def sse_stream(request: Request):
         return StreamingResponse(event_gen(), media_type="text/event-stream")
     finally:
         remove_queue(queue)
+
+
+@app.websocket("/api/v1/streaming")
+async def websocket_stream(websocket: WebSocket):
+    await websocket.accept()
+    ws_id, ws_queue = add_ws()
+    try:
+        while True:
+            try:
+                payload = await asyncio.wait_for(ws_queue.get(), timeout=30)
+                await websocket.send_text(payload)
+            except asyncio.TimeoutError:
+                await websocket.send_text(json.dumps({"event": "ping"}))
+    except Exception:
+        pass
+    finally:
+        remove_ws(ws_id)
 
 
 @app.get("/.well-known/nodeinfo")
