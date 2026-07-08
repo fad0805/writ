@@ -43,11 +43,19 @@ def _check_rate_limit(key: str) -> bool:
     return True
 
 # ── logging configuration ──
+from datetime import datetime
+import os
+_log_handlers = [logging.StreamHandler()]
+_log_file_dir = os.environ.get("LOG_DIR", "")
+if _log_file_dir:
+    os.makedirs(_log_file_dir, exist_ok=True)
+    _log_date = datetime.now().strftime("%Y-%m-%d")
+    _log_handlers.append(logging.FileHandler(os.path.join(_log_file_dir, f"{_log_date}.log")))
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[logging.StreamHandler()],
+    handlers=_log_handlers,
 )
 logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)

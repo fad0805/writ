@@ -6,6 +6,7 @@ services:
     env_file: .env.production
     environment:
       - S3_ENABLED=${S3_ENABLED:-false}
+      - LOG_DIR=/app/logs
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
@@ -25,6 +26,9 @@ services:
     env_file: .env.production
     environment:
       - NODE_ENV=production
+    volumes:
+      - ./logs:/app/logs
+    command: sh -c "mkdir -p /app/logs && npm start 2>&1 | tee -a /app/logs/$$(date +%Y-%m-%d).log"
     depends_on:
       - api
     restart: unless-stopped
