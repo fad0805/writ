@@ -3972,11 +3972,17 @@ def api_admin_update_settings(request: Request,
         settings = ServerSetting.get(s)
         if server_name.strip():
             settings.server_name = server_name[:20]
-        if not logo and settings.logo:
+        if logo and settings.logo and logo != settings.logo:
             storage.delete(settings.logo)
-        if not favicon and settings.favicon:
+        elif not logo and settings.logo:
+            storage.delete(settings.logo)
+        if favicon and settings.favicon and favicon != settings.favicon:
             storage.delete(settings.favicon)
-        if not app_icon and settings.app_icon:
+        elif not favicon and settings.favicon:
+            storage.delete(settings.favicon)
+        if app_icon and settings.app_icon and app_icon != settings.app_icon:
+            storage.delete(settings.app_icon)
+        elif not app_icon and settings.app_icon:
             storage.delete(settings.app_icon)
         settings.logo = logo
         settings.favicon = favicon
