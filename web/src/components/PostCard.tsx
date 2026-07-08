@@ -344,7 +344,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
               const newPinned = !pinned;
               setPinned(newPinned);
               const res = await fetch(`/api/${newPinned ? "pin" : "unpin"}/post/${post.id}`, { method: "POST", credentials: "include" });
-              if (!res.ok) setPinned(!newPinned);
+              if (!res.ok) { setPinned(!newPinned); const d = await res.json().catch(() => ({})); if (d.detail) alert(d.detail); }
               else { window.dispatchEvent(new Event("pinchange")); window.dispatchEvent(new Event("profilechange")); }
             })(); }} className="action-btn" title={pinned ? "고정 해제" : "고정"} style={{ color: pinned ? "var(--danger)" : undefined }}>
               <Icon name={pinned ? "pin_filled" : "pin"} />
