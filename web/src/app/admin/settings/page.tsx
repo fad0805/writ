@@ -21,6 +21,9 @@ export default function AdminSettingsPage() {
   const [removeLogo, setRemoveLogo] = useState(false);
   const [removeFavicon, setRemoveFavicon] = useState(false);
   const [removeAppIcon, setRemoveAppIcon] = useState(false);
+  const [origLogo, setOrigLogo] = useState("");
+  const [origFavicon, setOrigFavicon] = useState("");
+  const [origAppIcon, setOrigAppIcon] = useState("");
   const [adminIds, setAdminIds] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [loading, setLoading] = useState(true);
@@ -42,6 +45,7 @@ export default function AdminSettingsPage() {
         setLogo(d.logo || ""); setLogoPreview(d.logo || "");
         setFavicon(d.favicon || ""); setFaviconPreview(d.favicon || "");
         setAppIcon(d.app_icon || ""); setAppIconPreview(d.app_icon || "");
+        setOrigLogo(d.logo || ""); setOrigFavicon(d.favicon || ""); setOrigAppIcon(d.app_icon || "");
         setAdminIds(d.admin_ids || "");
         setAdminEmail(d.admin_email || "");
         setLoading(false);
@@ -54,7 +58,7 @@ export default function AdminSettingsPage() {
     setSaving(true);
     setMsg("");
     try {
-      let finalLogo = removeLogo ? "" : logo, finalFavicon = removeFavicon ? "" : favicon, finalAppIcon = removeAppIcon ? "" : appIcon;
+      let finalLogo = removeLogo ? "" : (logo || origLogo), finalFavicon = removeFavicon ? "" : (favicon || origFavicon), finalAppIcon = removeAppIcon ? "" : (appIcon || origAppIcon);
       if (logoFile) {
         const fd = new FormData(); fd.append("file", logoFile);
         const r = await fetch("/api/media/upload", { method: "POST", credentials: "include", body: fd });
@@ -78,7 +82,7 @@ export default function AdminSettingsPage() {
       form.append("admin_ids", adminIds);
       form.append("admin_email", adminEmail);
       const res = await fetch("/api/admin/settings", { method: "POST", credentials: "include", body: form });
-      if (res.ok) { setMsg("저장되었습니다."); window.dispatchEvent(new Event("serverchange")); setLogoFile(null); setFaviconFile(null); setAppIconFile(null); setRemoveLogo(false); setRemoveFavicon(false); setRemoveAppIcon(false); fetch("/api/admin/settings", { credentials: "include" }).then(r => r.json()).then(d => { setLogoPreview(d.logo || ""); setFaviconPreview(d.favicon || ""); setAppIconPreview(d.app_icon || ""); }).catch(() => {}); }
+      if (res.ok) { setMsg("저장되었습니다."); window.dispatchEvent(new Event("serverchange")); setLogoFile(null); setFaviconFile(null); setAppIconFile(null); setRemoveLogo(false); setRemoveFavicon(false); setRemoveAppIcon(false); fetch("/api/admin/settings", { credentials: "include" }).then(r => r.json()).then(d => { setLogo(d.logo || ""); setLogoPreview(d.logo || ""); setFavicon(d.favicon || ""); setFaviconPreview(d.favicon || ""); setAppIcon(d.app_icon || ""); setAppIconPreview(d.app_icon || ""); setOrigLogo(d.logo || ""); setOrigFavicon(d.favicon || ""); setOrigAppIcon(d.app_icon || ""); }).catch(() => {}); }
       else { const d = await res.json().catch(() => ({})); setMsg(typeof d.detail === "string" ? d.detail : Array.isArray(d.detail) ? d.detail.map((e: any) => e.msg).join(", ") : "저장 실패"); }
     } catch { setMsg("오류 발생"); }
     setSaving(false);

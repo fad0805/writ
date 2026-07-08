@@ -3963,9 +3963,9 @@ def api_admin_update_settings(request: Request,
         settings = ServerSetting.get(s)
         if server_name.strip():
             settings.server_name = server_name[:20]
-        if logo: settings.logo = logo
-        if favicon: settings.favicon = favicon
-        if app_icon: settings.app_icon = app_icon
+        settings.logo = logo
+        settings.favicon = favicon
+        settings.app_icon = app_icon
         settings.admin_ids = admin_ids
         settings.admin_email = admin_email
         s.commit()
