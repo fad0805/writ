@@ -875,6 +875,20 @@ def api_users_autocomplete(request: Request, q: str = Query("")):
         return {"users": [_user_json(u) for u in ordered]}
 
 
+@router.get("/search/series")
+def api_search_series(request: Request, q: str = Query("")):
+    user = get_current_user(request)
+    query = q.strip()
+    if not query or not user:
+        return {"series": []}
+    with get_session() as s:
+        pattern = f"%{query}%"
+        novels = s.query(Novel).filter(
+            Novel.title.ilike(pattern),
+        ).order_by(desc(Novel.updated_at)).limit(5).all()
+        return {"series": [_novel_json(n, s) for n in novels]}
+
+
 @router.get("/search/tags")
 def api_recent_tags(request: Request, q: str = Query("")):
     user = get_current_user(request)

@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { api, User } from "@/lib/api";
+import Icon from "@/components/Icon";
 import { useRouter } from "next/navigation";
 import TextareaHighlight from "./TextareaHighlight";
 import EmojiPicker from "./EmojiPicker";
@@ -40,6 +41,9 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [hashtagResults, setHashtagResults] = useState<string[]>([]);
   const [hashtagIdx, setHashtagIdx] = useState(0);
   const [hashtagPos, setHashtagPos] = useState({ top: 0, left: 0 });
+  const [seriesResults, setSeriesResults] = useState<{ id: number; title: string; cover_image: string }[]>([]);
+  const [seriesIdx, setSeriesIdx] = useState(0);
+  const [seriesPos, setSeriesPos] = useState({ top: 0, left: 0 });
 
   const totalLen = content.length + summary.length;
   const nearLimit = totalLen > MAX_LENGTH - 50 && totalLen <= MAX_LENGTH;
@@ -151,6 +155,45 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     return () => clearTimeout(t);
   }, [hashtagQuery]);
 
+  const detectSeries = useCallback((val: string, cursor: number) => {
+    const before = val.slice(0, cursor);
+    const slashIdx = before.lastIndexOf("/");
+    if (slashIdx === -1 || (slashIdx > 0 && !/\s/.test(val[slashIdx - 1]))) {
+      setSeriesResults([]);
+      return;
+    }
+    const cmd = before.slice(slashIdx + 1).toLowerCase();
+    if (cmd !== "series" && !cmd.startsWith("series ")) {
+      setSeriesResults([]);
+      return;
+    }
+    const q = cmd.startsWith("series ") ? cmd.slice(7).trim() : "";
+    if (q.length === 0 && cmd !== "series") { setSeriesResults([]); return; }
+    const ta = taRef.current;
+    if (ta) {
+      const rect = ta.getBoundingClientRect();
+      const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
+      const textBefore = val.slice(0, cursor);
+      const lines = textBefore.split('\n');
+      const top = rect.top + lines.length * lineHeight + 4;
+      const lastLine = lines[lines.length - 1] || '';
+      const left = rect.left + lastLine.length * 8 + 10;
+      setSeriesPos({ top, left });
+    }
+    if (q) {
+      const t = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/search/series?q=${encodeURIComponent(q)}`, { credentials: "include" });
+          if (res.ok) { const d = await res.json(); setSeriesResults(d.series?.map((s: any) => ({ id: s.id, title: s.title, cover_image: s.cover_image })) || []); setSeriesIdx(0); }
+          else setSeriesResults([]);
+        } catch { setSeriesResults([]); }
+      }, 100);
+      return () => clearTimeout(t);
+    } else {
+      setSeriesResults([]);
+    }
+  }, []);
+
   useEffect(() => {
     if (!emojiQuery) { setEmojiResults([]); return; }
     const t = setTimeout(async () => {
@@ -248,11 +291,26 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     });
   }, [content, hashtagStart]);
 
+  const insertSeries = useCallback((novel: { id: number; title: string }) => {
+    const fullUrl = `${window.location.origin}/series/${novel.id}`;
+    const inserted = `${content}/series ${novel.title} ${fullUrl} `;
+    setContent(inserted);
+    setSeriesResults([]);
+    requestAnimationFrame(() => {
+      const ta = taRef.current;
+      if (ta) {
+        ta.setSelectionRange(inserted.length, inserted.length);
+        ta.focus();
+      }
+    });
+  }, [content]);
+
   const handleTaEvent = useCallback((e: React.KeyboardEvent | React.MouseEvent) => {
     const el = e.target as HTMLTextAreaElement;
     detectMention(el.value, el.selectionStart);
     detectEmoji(el.value, el.selectionStart);
     detectHashtag(el.value, el.selectionStart);
+    detectSeries(el.value, el.selectionStart);
   }, [detectMention]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -303,6 +361,21 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       } else if (e.key === "Escape") {
         setHashtagResults([]);
       }
+      return;
+    }
+    if (seriesResults.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSeriesIdx((i) => Math.min(i + 1, seriesResults.length - 1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSeriesIdx((i) => Math.max(i - 1, 0));
+      } else if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        if (seriesResults[seriesIdx]) insertSeries(seriesResults[seriesIdx]);
+      } else if (e.key === "Escape") {
+        setSeriesResults([]);
+      }
     }
   };
 
@@ -312,6 +385,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     detectMention(val, pos);
     detectEmoji(val, pos);
     detectHashtag(val, pos);
+    detectSeries(val, pos);
   };
 
   const handleTaRef = useCallback((ta: HTMLTextAreaElement | null) => {
@@ -375,6 +449,18 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
               <div className="mention-option-info">
                 <strong>{u.display_name}</strong>
                 <span>@{u.username}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {seriesResults.length > 0 && (
+        <div className="emoji-autocomplete" style={{ top: seriesPos.top, left: seriesPos.left }}>
+          {seriesResults.map((s, i) => (
+            <div key={s.id} className={`mention-option ${i === seriesIdx ? "active" : ""}`} onMouseDown={(e) => { e.preventDefault(); insertSeries(s); }} onMouseEnter={() => setSeriesIdx(i)} style={{ padding: "6px 12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {s.cover_image ? <img src={s.cover_image} alt="" style={{ width: 24, height: 24, borderRadius: 4, objectFit: "cover" }} /> : <div style={{ width: 24, height: 24, borderRadius: 4, background: "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7em" }}><Icon name="book" size={12} /></div>}
+                <span style={{ fontSize: "0.9em" }}>{s.title}</span>
               </div>
             </div>
           ))}
