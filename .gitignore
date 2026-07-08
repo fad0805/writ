@@ -2,6 +2,7 @@ venv/
 .venv/
 
 *.db
+db_data/
 
 .env
 .env.production
@@ -26,4 +27,3 @@ web/CLAUDE.md
 web/README.md
 web/public/emojis/*
 !web/public/emojis/.gitkeep
-db_data/
