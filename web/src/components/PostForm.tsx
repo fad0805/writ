@@ -537,15 +537,19 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         </div>
       )}
       {mediaItems.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8, marginTop: 8 }}>
           {mediaItems.map((m, i) => (
             <div key={i} style={{ position: "relative", width: 80, height: 80 }}>
+              <div style={{ position: "absolute", top: -4, left: -4, display: "flex", gap: 2, zIndex: 1 }}>
+                {i > 0 && <span onClick={(e) => { e.stopPropagation(); const c = [...mediaItems]; [c[i - 1], c[i]] = [c[i], c[i - 1]]; setMediaItems(c); }} style={{ width: 16, height: 16, borderRadius: "50%", background: "var(--bg-secondary)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, cursor: "pointer" }}>←</span>}
+                {i < mediaItems.length - 1 && <span onClick={(e) => { e.stopPropagation(); const c = [...mediaItems]; [c[i], c[i + 1]] = [c[i + 1], c[i]]; setMediaItems(c); }} style={{ width: 16, height: 16, borderRadius: "50%", background: "var(--bg-secondary)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, cursor: "pointer" }}>→</span>}
+              </div>
               {m.type === "video" ? (
                 <video src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6 }} />
               ) : (
                 <img src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6 }} />
               )}
-              <span onClick={() => setMediaItems(mediaItems.filter((_, j) => j !== i))} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "var(--danger)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer" }}>×</span>
+              <span onClick={(e) => { e.stopPropagation(); setMediaItems(mediaItems.filter((_, j) => j !== i)); }} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "var(--danger)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer" }}>×</span>
             </div>
           ))}
         </div>
@@ -561,13 +565,14 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       <div className="reply-form-footer">
         <VisibilitySelector value={visibility} onChange={(v) => setVisibilityOverride(v)} includeMention />
         <div className="form-footer-right" style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: "auto" }}>
-          <button type="button" className="action-btn" onClick={() => mediaInputRef.current?.click()} title="미디어 첨부" disabled={mediaUploading || mediaItems.length >= 4}>
+          <button type="button" className="action-btn" onClick={(e) => { e.stopPropagation(); mediaInputRef.current?.click(); }} title="미디어 첨부" disabled={mediaUploading || mediaItems.length >= 4}>
             <Icon name="image" />
           </button>
-          <input ref={mediaInputRef} type="file" accept="image/*,video/mp4,video/webm,video/ogg" multiple hidden onChange={async (e) => {
+          <input ref={mediaInputRef} type="file" accept="image/*,video/mp4,video/webm" multiple hidden onChange={async (e) => {
+            e.stopPropagation();
             const files = Array.from(e.target.files || []);
             for (const f of files) {
-              const isVideo = f.type.startsWith("video/");
+              const isVideo = f.type === "video/mp4" || f.type === "video/webm";
               if (f.size > 26214400 && isVideo) continue;
               if (isVideo && mediaItems.some(m => m.type === "video")) continue;
               if (mediaItems.length >= 4) break;
