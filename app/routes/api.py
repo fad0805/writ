@@ -3922,14 +3922,14 @@ def api_admin_get_settings(request: Request):
 @router.post("/admin/settings")
 def _save_server_file(file: UploadFile, name: str) -> str:
     import os, shutil
-    web_public = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "public")
+    web_public = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "web", "public")
     os.makedirs(web_public, exist_ok=True)
     ext = os.path.splitext(file.filename or "file")[1] if file.filename else ".png"
     filename = f"server_{name}{ext}"
     filepath = os.path.join(web_public, filename)
     # Delete old file if exists
     for old in os.listdir(web_public):
-        if old.startswith(f"server_{name}_") or old == filename:
+        if old.startswith(f"server_{name}."):
             try: os.remove(os.path.join(web_public, old))
             except: pass
     with open(filepath, "wb") as f:
