@@ -474,6 +474,29 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className={`relative ${overLimit ? "over-limit" : nearLimit ? "near-limit" : ""}`}>
+      {mediaItems.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+          {mediaItems.map((m, i) => (
+            <div key={m.id} draggable style={{ position: "relative", width: 80, height: 80 }}
+              onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(i)); e.currentTarget.style.opacity = "0.4"; }}
+              onDragEnd={(e) => { e.currentTarget.style.opacity = "1"; }}
+              onDragOver={(e) => { e.preventDefault(); }}
+              onDrop={(e) => { e.preventDefault(); const from = parseInt(e.dataTransfer.getData("text/plain")); const to = i; if (from !== to) { const c = [...mediaItems]; const [removed] = c.splice(from, 1); c.splice(to, 0, removed); setMediaItems(c); } }}
+            >
+              <div style={{ position: "absolute", top: -4, left: -4, display: "flex", gap: 2, zIndex: 1 }}>
+                {i > 0 && <span onClick={(e) => { e.stopPropagation(); const c = [...mediaItems]; [c[i - 1], c[i]] = [c[i], c[i - 1]]; setMediaItems(c); }} style={{ width: 16, height: 16, borderRadius: "50%", background: "var(--bg-secondary)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, cursor: "pointer" }}>←</span>}
+                {i < mediaItems.length - 1 && <span onClick={(e) => { e.stopPropagation(); const c = [...mediaItems]; [c[i], c[i + 1]] = [c[i + 1], c[i]]; setMediaItems(c); }} style={{ width: 16, height: 16, borderRadius: "50%", background: "var(--bg-secondary)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, cursor: "pointer" }}>→</span>}
+              </div>
+              {m.type === "video" ? (
+                <video src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6 }} />
+              ) : (
+                <img src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6 }} />
+              )}
+              <span onClick={(e) => { e.stopPropagation(); setMediaItems(mediaItems.filter((_, j) => j !== i)); }} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "var(--danger)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer" }}>×</span>
+            </div>
+          ))}
+        </div>
+      )}
       <div ref={wrapRef}>
         <TextareaHighlight
           value={content}
@@ -551,25 +574,6 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           {hashtagResults.map((tag, i) => (
             <div key={tag} className={`mention-option ${i === hashtagIdx ? "active" : ""}`} onMouseDown={(e) => { e.preventDefault(); insertHashtag(tag); }} onMouseEnter={() => setHashtagIdx(i)} style={{ padding: "6px 12px" }}>
               <span style={{ fontSize: "0.9em" }}>#{tag}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      {mediaItems.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8, marginTop: 8 }}>
-          {mediaItems.map((m, i) => (
-            <div key={m.id} draggable style={{ position: "relative", width: 80, height: 80 }}
-              onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(i)); e.currentTarget.style.opacity = "0.4"; }}
-              onDragEnd={(e) => { e.currentTarget.style.opacity = "1"; }}
-              onDragOver={(e) => { e.preventDefault(); }}
-              onDrop={(e) => { e.preventDefault(); const from = parseInt(e.dataTransfer.getData("text/plain")); const to = i; if (from !== to) { const c = [...mediaItems]; const [removed] = c.splice(from, 1); c.splice(to, 0, removed); setMediaItems(c); } }}
-            >
-              {m.type === "video" ? (
-                <video src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6 }} />
-              ) : (
-                <img src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6 }} />
-              )}
-              <span onClick={(e) => { e.stopPropagation(); setMediaItems(mediaItems.filter((_, j) => j !== i)); }} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "var(--danger)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer" }}>×</span>
             </div>
           ))}
         </div>
