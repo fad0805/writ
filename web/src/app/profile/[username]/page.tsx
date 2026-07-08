@@ -1,6 +1,6 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api, User, PostData, NovelData } from "@/lib/api";
 import PostCard from "@/components/PostCard";
 import Icon from "@/components/Icon";
@@ -47,6 +47,7 @@ export default function ProfilePage() {
   const [isMutedUser, setIsMutedUser] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("posts");
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,14 +97,14 @@ export default function ProfilePage() {
   useEffect(() => { loadProfile(); }, [loadProfile, router]);
 
   useEffect(() => {
-    const handleScroll = () => {
-      if (tab !== "posts") return;
-      const scrollBottom = window.innerHeight + window.scrollY;
-      const docHeight = document.documentElement.scrollHeight;
-      if (docHeight - scrollBottom < 300 && !loadingMore && hasMore) loadMore();
-    };
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
+    if (tab !== "posts") return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && !loadingMore && hasMore) loadMore();
+    }, { rootMargin: "200px" });
+    observer.observe(el);
+    return () => observer.disconnect();
   }, [tab, loadingMore, hasMore, loadMore]);
 
   useEffect(() => {
@@ -356,7 +357,7 @@ export default function ProfilePage() {
         {(() => {
           const pinnedIds = new Set(pinnedPosts.map((p: any) => p.id));
           const rest = posts.filter((p) => !pinnedIds.has(p.id));
-          return rest.length === 0 && pinnedPosts.length === 0 ? <p className="empty-state">게시글이 없습니다.</p> : rest.map((p) => <PostCard key={p.id} post={p} onUpdate={load} />);
+          return rest.length === 0 && pinnedPosts.length === 0 ? <p className="empty-state">게시글이 없습니다.</p> : <>{rest.map((p) => <PostCard key={p.id} post={p} onUpdate={load} />)}{hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}</>;
         })()}
       </div>
 
