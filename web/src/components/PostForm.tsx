@@ -44,6 +44,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [mediaItems, setMediaItems] = useState<{ id: number; url: string; type: string; file?: File }[]>([]);
   const mediaIdRef = useRef(0);
   const [mediaUploading, setMediaUploading] = useState(false);
+  const [mediaWarning, setMediaWarning] = useState("");
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const [seriesResults, setSeriesResults] = useState<{ id: number; title: string; cover_image: string }[]>([]);
   const [seriesIdx, setSeriesIdx] = useState(0);
@@ -474,6 +475,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className={`relative ${overLimit ? "over-limit" : nearLimit ? "near-limit" : ""}`} onClick={(e) => e.stopPropagation()}>
+      {mediaWarning && <div style={{ fontSize: "0.85em", color: "var(--danger)", marginBottom: 6, padding: "4px 8px", background: "var(--bg-tertiary)", borderRadius: 6 }}>{mediaWarning}</div>}
       {mediaItems.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
           {mediaItems.map((m, i) => (
@@ -597,7 +599,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
             const files = Array.from(e.target.files || []);
             for (const f of files) {
               const isVideo = f.type === "video/mp4" || f.type === "video/webm";
-              if (f.size > 26214400 && isVideo) continue;
+              if (f.size > 26214400 && isVideo) { setMediaWarning("비디오는 25MB를 초과할 수 없습니다."); continue; }
               if (isVideo && mediaItems.some(m => m.type === "video")) continue;
               if (mediaItems.length >= 4) break;
               const id = ++mediaIdRef.current; setMediaItems(prev => [...prev, { id, url: "", type: isVideo ? "video" : "image", file: f }]);
