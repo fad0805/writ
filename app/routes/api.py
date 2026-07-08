@@ -83,6 +83,8 @@ def _user_json(u):
         "default_visibility": u.default_visibility or "public",
         "series_default_visibility": u.series_default_visibility or "public",
         "episode_default_visibility": u.episode_default_visibility or "public",
+        "custom_fields": (u.custom_fields or []) if hasattr(u, 'custom_fields') else [],
+        "profile_hashtags": (u.profile_hashtags or []) if hasattr(u, 'profile_hashtags') else [],
     }
 
 
@@ -1834,7 +1836,8 @@ def _save_profile_image(user_id: int, file: UploadFile, prefix: str, max_size: t
 
 @router.post("/profile/update")
 def api_update_profile(request: Request, display_name: str = Form(""), summary: str = Form(""),
-                       image: UploadFile = File(None), header_image: UploadFile = File(None)):
+                       image: UploadFile = File(None), header_image: UploadFile = File(None),
+                       custom_fields: str = Form("[]"), profile_hashtags: str = Form("[]")):
     from app.utils.storage import get_storage
     user = require_auth(request)
     storage = get_storage()
@@ -1856,6 +1859,19 @@ def api_update_profile(request: Request, display_name: str = Form(""), summary: 
             s.flush()
             if old:
                 storage.delete(old)
+        import json
+        try:
+            parsed_fields = json.loads(custom_fields)
+            if isinstance(parsed_fields, list):
+                db.custom_fields = parsed_fields
+        except (json.JSONDecodeError, TypeError):
+            pass
+        try:
+            parsed_tags = json.loads(profile_hashtags)
+            if isinstance(parsed_tags, list):
+                db.profile_hashtags = parsed_tags
+        except (json.JSONDecodeError, TypeError):
+            pass
         s.commit()
     _cleanup_avatars()
     return {"ok": True}
@@ -1973,7 +1989,7 @@ def api_explore(request: Request):
 
 
 @router.get("/search")
-def api_search(request: Request, q: str = Query("")):
+def api_search(request: Request, q: str = Query(""), author: str = Query("")):
     user = get_current_user(request)
     query = q.strip().lstrip("@").lstrip("#")
     if not query:
@@ -2003,11 +2019,16 @@ def api_search(request: Request, q: str = Query("")):
         if is_hashtag_search:
             tag = s.query(Tag).filter_by(name=query.lower()).first()
             if tag:
-                posts = s.query(Post).options(selectinload(Post.author)).filter(
+                q_posts = s.query(Post).options(selectinload(Post.author)).filter(
                     Post.tag_list.any(id=tag.id),
                     Post.visibility == "public",
                     Post.is_deleted == False,
-                ).order_by(desc(Post.created_at)).limit(20).all()
+                )
+                if author:
+                    author_user = s.query(User).filter_by(username=author).first()
+                    if author_user:
+                        q_posts = q_posts.filter(Post.author_id == author_user.id)
+                posts = q_posts.order_by(desc(Post.created_at)).limit(20).all()
             else:
                 posts = []
             novels = []

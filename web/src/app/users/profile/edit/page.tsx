@@ -6,6 +6,7 @@ import { avatarColor } from "@/lib/avatar";
 import TextareaHighlight from "@/components/TextareaHighlight";
 import ImageCropper from "@/components/ImageCropper";
 import { useAuth } from "@/lib/auth";
+import Icon from "@/components/Icon";
 
 export default function ProfileEditPage() {
   const router = useRouter();
@@ -13,6 +14,9 @@ export default function ProfileEditPage() {
   const [user, setUser] = useState<User | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [summary, setSummary] = useState("");
+  const [customFields, setCustomFields] = useState<{ label: string; value: string }[]>([]);
+  const [profileHashtags, setProfileHashtags] = useState<string[]>([]);
+  const [newHashtag, setNewHashtag] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -37,12 +41,14 @@ export default function ProfileEditPage() {
   };
 
   useEffect(() => {
-    api.me().then((u) => {
+    api.me().then((u: any) => {
       setUser(u);
       setDisplayName(u.display_name);
       setSummary(u.summary);
       setAvatarUrl(u.avatar || "");
       setHeaderPreview(u.header || "");
+      setCustomFields(u.custom_fields || []);
+      setProfileHashtags(u.profile_hashtags || []);
       setLoading(false);
     }).catch(() => router.push("/login"));
     return revokeBlobs;
@@ -139,6 +145,8 @@ export default function ProfileEditPage() {
       const form = new FormData();
       form.append("display_name", displayName);
       form.append("summary", summary);
+      form.append("custom_fields", JSON.stringify(customFields));
+      form.append("profile_hashtags", JSON.stringify(profileHashtags));
       if (imageFile) form.append("image", imageFile);
       if (headerFile) form.append("header_image", headerFile);
       const res = await fetch("/api/profile/update", { method: "POST", credentials: "include", body: form });
@@ -197,6 +205,35 @@ export default function ProfileEditPage() {
           <label>소개글</label>
           <TextareaHighlight value={summary} onChange={(v) => setSummary(v)} placeholder="자기소개" maxLength={3000} cwLength={0} rows={3} />
           <div className="char-count">{summary.length}/{3000}</div>
+        </div>
+        <div className="form-group">
+          <label>사용자 정의 필드</label>
+          <p className="form-help">링크 등을 추가하세요. 라벨과 내용 각각 40자 제한.</p>
+          {customFields.map((f, i) => (
+            <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}>
+              <button type="button" onClick={() => { const c = [...customFields]; const tmp = c[i]; c[i] = c[i - 1]; c[i - 1] = tmp; setCustomFields(c); }} disabled={i === 0} style={{ background: "none", border: "none", cursor: i === 0 ? "default" : "pointer", color: "var(--text-muted)", padding: 0 }}>↑</button>
+              <button type="button" onClick={() => { const c = [...customFields]; const tmp = c[i]; c[i] = c[i + 1]; c[i + 1] = tmp; setCustomFields(c); }} disabled={i === customFields.length - 1} style={{ background: "none", border: "none", cursor: i === customFields.length - 1 ? "default" : "pointer", color: "var(--text-muted)", padding: 0 }}>↓</button>
+              <input type="text" value={f.label} onChange={e => { const c = [...customFields]; c[i] = { ...c[i], label: e.target.value.slice(0, 40) }; setCustomFields(c); }} placeholder="라벨" className="cw-input" style={{ width: 120 }} maxLength={40} />
+              <input type="text" value={f.value} onChange={e => { const c = [...customFields]; c[i] = { ...c[i], value: e.target.value.slice(0, 40) }; setCustomFields(c); }} placeholder="내용" className="cw-input" style={{ flex: 1 }} maxLength={40} />
+              <button type="button" onClick={() => setCustomFields(customFields.filter((_, j) => j !== i))} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--danger)", padding: 0 }}>×</button>
+            </div>
+          ))}
+          <button type="button" onClick={() => setCustomFields([...customFields, { label: "", value: "" }])} className="btn btn-small btn-outline">+ 필드 추가</button>
+        </div>
+        <div className="form-group">
+          <label>프로필 해시태그</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
+            {profileHashtags.map((tag, i) => (
+              <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 12, fontSize: "0.85em" }}>
+                #{tag}
+                <span style={{ cursor: "pointer", color: "var(--text-dim)", fontSize: "1.1em", lineHeight: 1 }} onClick={() => setProfileHashtags(profileHashtags.filter((_, j) => j !== i))}>×</span>
+              </span>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input type="text" value={newHashtag} onChange={e => setNewHashtag(e.target.value)} placeholder="해시태그 입력" className="cw-input" style={{ flex: 1 }} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const v = newHashtag.trim().replace(/^#/, ""); if (v && !profileHashtags.includes(v)) { setProfileHashtags([...profileHashtags, v]); setNewHashtag(""); } } }} />
+            <button type="button" onClick={() => { const v = newHashtag.trim().replace(/^#/, ""); if (v && !profileHashtags.includes(v)) { setProfileHashtags([...profileHashtags, v]); setNewHashtag(""); } }} className="btn btn-outline btn-small">추가</button>
+          </div>
         </div>
         <div className="form-actions">
           <button type="submit" disabled={submitting} className="btn btn-primary">저장</button>

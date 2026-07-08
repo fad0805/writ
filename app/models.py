@@ -65,6 +65,8 @@ class User(Base):
     episode_default_visibility = Column(String(16), default="public")
     is_locked = Column(Boolean, default=False)
     show_badge = Column(Boolean, default=False)
+    custom_fields = Column(JSON, default=list)
+    profile_hashtags = Column(JSON, default=list)
 
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
@@ -604,6 +606,8 @@ def init_db():
         tag_id INTEGER NOT NULL REFERENCES tags(id),
         PRIMARY KEY (post_id, tag_id)
     )""")
+    _run_alter("ALTER TABLE users ADD COLUMN custom_fields JSON DEFAULT '[]'")
+    _run_alter("ALTER TABLE users ADD COLUMN profile_hashtags JSON DEFAULT '[]'")
 
 
 def get_session():
