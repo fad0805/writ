@@ -43,6 +43,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   const [liked, setLiked] = useState(post.liked);
   const [boosted, setBoosted] = useState(post.boosted);
   const [bookmarked, setBookmarked] = useState(post.bookmarked);
+  const [pinned, setPinned] = useState(currentUser?.pinned_posts?.includes(post.id) || false);
   const [likesCount, setLikesCount] = useState(post.likes_count);
   const [boostsCount, setBoostsCount] = useState(post.boosts_count);
 
@@ -336,12 +337,13 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
           </button>
           {post.is_mine && (
             <button onClick={(e) => { e.stopPropagation(); (async () => {
-              const pinned = (post.author as any).pinned_posts || [];
-              const isPinned = pinned.includes(post.id);
-              await fetch(`/api/${isPinned ? "unpin" : "pin"}/post/${post.id}`, { method: "POST", credentials: "include" });
+              const wasPinned = pinned;
+              setPinned(!wasPinned);
+              await fetch(`/api/${wasPinned ? "unpin" : "pin"}/post/${post.id}`, { method: "POST", credentials: "include" });
               if (onUpdate) onUpdate();
-            })(); }} className="action-btn" title="고정">
-              <Icon name="pin" />
+              window.dispatchEvent(new Event("pinchange"));
+            })(); }} className="action-btn" title={pinned ? "고정 해제" : "고정"} style={{ color: pinned ? "var(--accent)" : undefined }}>
+              <Icon name={pinned ? "pin_filled" : "pin"} />
             </button>
           )}
           <ShareButton url={post.ap_id?.startsWith("http") ? post.ap_id : (post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`)} />

@@ -19,6 +19,7 @@ export default function NovelDetailPage() {
   const [isMine, setIsMine] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isSeriesMuted, setIsSeriesMuted] = useState(false);
+  const [isSeriesPinned, setIsSeriesPinned] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showSharePost, setShowSharePost] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -37,6 +38,7 @@ export default function NovelDetailPage() {
         .then((r) => r.json())
         .then((d) => setIsSeriesMuted((d.mutes || []).some((m: any) => m.novel_id === id)))
         .catch(() => {});
+      setIsSeriesPinned((user as any).pinned_series?.includes(id) || false);
     }
   }, [params.id, user]);
 
@@ -101,11 +103,10 @@ export default function NovelDetailPage() {
                 {isMine && (
                   <>
                     <button className="action-btn" onClick={async () => {
-                      const pinned = (author as any)?.pinned_series || [];
-                      const isPinned = pinned.includes(novel.id);
-                      await fetch(`/api/${isPinned ? "unpin" : "pin"}/series/${novel.id}`, { method: "POST", credentials: "include" });
-                      window.location.reload();
-                    }} title="고정"><Icon name="pin" /></button>
+                      const wasPinned = isSeriesPinned;
+                      setIsSeriesPinned(!wasPinned);
+                      await fetch(`/api/${wasPinned ? "unpin" : "pin"}/series/${novel.id}`, { method: "POST", credentials: "include" });
+                    }} title={isSeriesPinned ? "고정 해제" : "고정"} style={{ color: isSeriesPinned ? "var(--accent)" : undefined }}><Icon name={isSeriesPinned ? "pin_filled" : "pin"} /></button>
                     <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/edit`)}>시리즈 편집</button>
                     <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>
                   </>
