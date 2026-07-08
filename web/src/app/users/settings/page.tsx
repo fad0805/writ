@@ -12,7 +12,6 @@ export default function SettingsPage() {
   const router = useRouter();
   const { refresh: refreshAuth } = useAuth();
   const [defaultVis, setDefaultVis] = useState("public");
-  const [episodeDefaultVis, setEpisodeDefaultVis] = useState("public");
   const [showBadge, setShowBadge] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [isBot, setIsBot] = useState(false);
@@ -26,7 +25,6 @@ export default function SettingsPage() {
     api.me().then((u) => {
       const user = u as any;
       setDefaultVis(user.default_visibility || "public");
-      setEpisodeDefaultVis(user.episode_default_visibility || "public");
       setShowBadge(user.show_badge || false);
       setIsLocked(user.is_locked || false);
       setIsBot(user.is_bot || false);
