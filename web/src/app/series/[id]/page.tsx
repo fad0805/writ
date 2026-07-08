@@ -100,6 +100,12 @@ export default function NovelDetailPage() {
                 )}
                 {isMine && (
                   <>
+                    <button className="action-btn" onClick={async () => {
+                      const pinned = (author as any)?.pinned_series || [];
+                      const isPinned = pinned.includes(novel.id);
+                      await fetch(`/api/${isPinned ? "unpin" : "pin"}/series/${novel.id}`, { method: "POST", credentials: "include" });
+                      window.location.reload();
+                    }} title="고정"><Icon name="pin" /></button>
                     <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/edit`)}>시리즈 편집</button>
                     <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>
                   </>
