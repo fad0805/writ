@@ -129,11 +129,11 @@ class S3Storage(StorageBackend):
 
 def get_storage() -> StorageBackend:
     from app.config import (
-        STORAGE_BACKEND,
+        S3_ENABLED,
         S3_ENDPOINT, S3_REGION, S3_ACCESS_KEY, S3_SECRET_KEY,
         S3_BUCKET, S3_PUBLIC_URL,
     )
-    if STORAGE_BACKEND == "s3":
+    if S3_ENABLED:
         return S3Storage(
             endpoint=S3_ENDPOINT,
             region=S3_REGION,

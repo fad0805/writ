@@ -83,8 +83,8 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 # Mount uploads directory (local storage only)
 import os
-from app.config import STORAGE_BACKEND
-if STORAGE_BACKEND == "local":
+from app.config import S3_ENABLED
+if not S3_ENABLED:
     os.makedirs("uploads", exist_ok=True)
     app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 

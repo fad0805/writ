@@ -36,11 +36,11 @@ SMTP_FROM = os.environ.get("SMTP_FROM", "")
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",")
 
 # File storage
-STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "local")
 AVATAR_STORAGE_PATH = os.environ.get("AVATAR_STORAGE_PATH", "uploads/avatars")
 AVATAR_URL_PREFIX = os.environ.get("AVATAR_URL_PREFIX", "/uploads/avatars")
 
 # S3 / object storage
+S3_ENABLED = os.environ.get("S3_ENABLED", "").lower() in ("true", "1", "yes")
 S3_ENDPOINT = os.environ.get("S3_ENDPOINT", "")
 S3_REGION = os.environ.get("S3_REGION", "auto")
 S3_ACCESS_KEY = os.environ.get("S3_ACCESS_KEY", "")
