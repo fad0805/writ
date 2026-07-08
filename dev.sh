@@ -127,6 +127,16 @@ _prefix_frontend() {
 
 echo -e "${YELLOW}[backend]${NC} 데이터베이스 마이그레이션 실행 중..."
 cd "$ROOT_DIR" && . "$VENV_DIR"/bin/activate && "$PYTHON" -m alembic upgrade head 2>&1 | _prefix_output "[migrate]" "$YELLOW" || true
+# 마이그레이션 파일 정리 (5개 초과 시 오래된 것 제거)
+MIG_DIR="$ROOT_DIR/alembic/versions"
+MIG_COUNT=$(ls -1 "$MIG_DIR"/*.py 2>/dev/null | wc -l)
+if [ "$MIG_COUNT" -gt 5 ]; then
+    LATEST=$(cd "$ROOT_DIR" && . "$VENV_DIR"/bin/activate && "$PYTHON" -m alembic heads 2>/dev/null | head -1 | awk '{print $1}')
+    for f in $(ls -1t "$MIG_DIR"/*.py | tail -n +6); do
+        rm "$f"
+    done
+    echo -e "${YELLOW}[migrate]${NC} 오래된 마이그레이션 $((MIG_COUNT - 5))개 정리 완료"
+fi
 echo -e "${YELLOW}[backend]${NC} 서버 시작 중 (포트 $BACKEND_PORT)..."
 cd "$ROOT_DIR" && APP_ENV=development PYTHONUNBUFFERED=1 "$PYTHON" -m uvicorn app.main:app --reload --host 0.0.0.0 --port "$BACKEND_PORT" \
     > >(tee -a "$COMBINED_LOG" | _prefix_output "[backend]" "$GREEN") 2>&1 &
