@@ -668,6 +668,13 @@ def api_delete_post(request: Request, post_id: int):
             raise HTTPException(status_code=404, detail="Post not found")
         if post.author_id != user.id and not user.is_admin:
             raise HTTPException(status_code=403, detail="Cannot delete this post")
+        # Delete attached media files
+        if post.media_attachments:
+            from app.utils.storage import get_storage
+            storage = get_storage()
+            for m in post.media_attachments:
+                if isinstance(m, dict) and m.get("url"):
+                    storage.delete(m["url"])
         post.is_deleted = True
         s.commit()
     return {"ok": True}
