@@ -875,6 +875,26 @@ def api_users_autocomplete(request: Request, q: str = Query("")):
         return {"users": [_user_json(u) for u in ordered]}
 
 
+@router.get("/search/tags")
+def api_recent_tags(request: Request, q: str = Query("")):
+    user = get_current_user(request)
+    query = q.strip().lstrip("#")
+    if not query or not user:
+        return {"tags": []}
+    with get_session() as s:
+        recent_posts = s.query(Post).filter(
+            Post.author_id == user.id,
+            Post.tag_list.any(),
+        ).order_by(desc(Post.created_at)).limit(50).all()
+        tag_names: set[str] = set()
+        for p in recent_posts:
+            for t in (p.tag_list or []):
+                if query.lower() in t.name.lower():
+                    tag_names.add(t.name)
+        ordered = sorted(tag_names, key=lambda n: n.lower().startswith(query.lower()), reverse=True)[:10]
+        return {"tags": [{"name": t} for t in ordered]}
+
+
 @router.get("/users/{username}")
 def api_get_profile(request: Request, username: str):
     user = get_current_user(request)

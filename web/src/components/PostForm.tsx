@@ -35,6 +35,10 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [emojiStart, setEmojiStart] = useState(-1);
   const [emojiIdx, setEmojiIdx] = useState(0);
   const [emojiPos, setEmojiPos] = useState({ top: 0, left: 0 });
+  const [hashtagQuery, setHashtagQuery] = useState("");
+  const [hashtagResults, setHashtagResults] = useState<string[]>([]);
+  const [hashtagIdx, setHashtagIdx] = useState(0);
+  const [hashtagPos, setHashtagPos] = useState({ top: 0, left: 0 });
 
   const totalLen = content.length + summary.length;
   const nearLimit = totalLen > MAX_LENGTH - 50 && totalLen <= MAX_LENGTH;
@@ -106,6 +110,44 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     }, 100);
     return () => clearTimeout(t);
   }, [mentionQuery]);
+
+  const detectHashtag = useCallback((val: string, cursor: number) => {
+    const before = val.slice(0, cursor);
+    const hashIdx = before.lastIndexOf("#");
+    if (hashIdx === -1 || (hashIdx > 0 && !/\s/.test(val[hashIdx - 1]))) {
+      setHashtagQuery(""); setHashtagResults([]);
+      return;
+    }
+    const partial = before.slice(hashIdx + 1);
+    if (/[\s#]/.test(partial) || partial.length === 0) {
+      setHashtagQuery(""); setHashtagResults([]);
+      return;
+    }
+    setHashtagQuery(partial);
+    const ta = taRef.current;
+    if (ta) {
+      const rect = ta.getBoundingClientRect();
+      const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
+      const textBefore = val.slice(0, cursor);
+      const lines = textBefore.split('\n');
+      const top = rect.top + lines.length * lineHeight + 4;
+      const lastLine = lines[lines.length - 1] || '';
+      const left = rect.left + lastLine.length * 8 + 10;
+      setHashtagPos({ top, left });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hashtagQuery) { setHashtagResults([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search/tags?q=${encodeURIComponent(hashtagQuery)}`, { credentials: "include" });
+        if (res.ok) { const d = await res.json(); setHashtagResults(d.tags?.map((t: any) => t.name) || []); setHashtagIdx(0); }
+        else setHashtagResults([]);
+      } catch { setHashtagResults([]); }
+    }, 100);
+    return () => clearTimeout(t);
+  }, [hashtagQuery]);
 
   useEffect(() => {
     if (!emojiQuery) { setEmojiResults([]); return; }
@@ -184,10 +226,27 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     });
   }, [content, mentionStart]);
 
+  const insertHashtag = useCallback((tag: string) => {
+    if (!hashtagQuery) return;
+    const before = content;
+    const after = "";
+    const inserted = `${before}#${tag} `;
+    setContent(inserted);
+    setHashtagQuery(""); setHashtagResults([]);
+    requestAnimationFrame(() => {
+      const ta = taRef.current;
+      if (ta) {
+        ta.setSelectionRange(inserted.length, inserted.length);
+        ta.focus();
+      }
+    });
+  }, [content, hashtagQuery]);
+
   const handleTaEvent = useCallback((e: React.KeyboardEvent | React.MouseEvent) => {
     const el = e.target as HTMLTextAreaElement;
     detectMention(el.value, el.selectionStart);
     detectEmoji(el.value, el.selectionStart);
+    detectHashtag(el.value, el.selectionStart);
   }, [detectMention]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -223,6 +282,21 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       } else if (e.key === "Escape") {
         setMentionUsers([]);
       }
+      return;
+    }
+    if (hashtagResults.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setHashtagIdx((i) => Math.min(i + 1, hashtagResults.length - 1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setHashtagIdx((i) => Math.max(i - 1, 0));
+      } else if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        if (hashtagResults[hashtagIdx]) insertHashtag(hashtagResults[hashtagIdx]);
+      } else if (e.key === "Escape") {
+        setHashtagResults([]);
+      }
     }
   };
 
@@ -231,6 +305,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     const pos = cursor ?? (taRef.current?.selectionStart ?? val.length);
     detectMention(val, pos);
     detectEmoji(val, pos);
+    detectHashtag(val, pos);
   };
 
   const handleTaRef = useCallback((ta: HTMLTextAreaElement | null) => {
@@ -312,6 +387,15 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
               </div>
             ))}
           </div>
+        </div>
+      )}
+      {hashtagResults.length > 0 && (
+        <div className="emoji-autocomplete" style={{ top: hashtagPos.top, left: hashtagPos.left }}>
+          {hashtagResults.map((tag, i) => (
+            <div key={tag} className={`mention-option ${i === hashtagIdx ? "active" : ""}`} onMouseDown={(e) => { e.preventDefault(); insertHashtag(tag); }} onMouseEnter={() => setHashtagIdx(i)} style={{ padding: "6px 12px" }}>
+              <span style={{ fontSize: "0.9em" }}>#{tag}</span>
+            </div>
+          ))}
         </div>
       )}
       <input
