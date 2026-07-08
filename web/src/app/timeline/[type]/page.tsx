@@ -39,36 +39,23 @@ export default function TimelinePage() {
   postsRef.current = posts;
   const selectedIdxRef = useRef(selectedIdx);
   selectedIdxRef.current = selectedIdx;
-  const tabState = useRef<Record<string, { posts: PostData[]; hasMore: boolean; rawOffset: number }>>({});
-
-  const prevTlType = useRef(tlType);
+  const tabCache = useRef<Record<string, { posts: PostData[]; hasMore: boolean; rawOffset: number }>>({});
+  const prevTlRef = useRef(tlType);
 
   useEffect(() => {
-    if (prevTlType.current !== tlType) {
-      tabState.current[prevTlType.current] = { posts, hasMore, rawOffset };
+    if (prevTlRef.current !== tlType) {
+      tabCache.current[prevTlRef.current] = { posts, hasMore, rawOffset };
+      prevTlRef.current = tlType;
     }
-    prevTlType.current = tlType;
-    const saved = tabState.current[tlType];
+    const saved = tabCache.current[tlType];
     if (saved) {
       setPosts(saved.posts);
       setHasMore(saved.hasMore);
       setRawOffset(saved.rawOffset);
       setLoading(false);
-      skipLoadRef.current = true;
       return;
     }
-  }, [tlType]);
-
-  const skipLoadRef = useRef(false);
-  useEffect(() => {
-    if (skipLoadRef.current) { skipLoadRef.current = false; return; }
     load();
-  }, [tlType, refreshKey]);
-
-  useEffect(() => {
-    const handler = () => { skipLoadRef.current = false; load(); };
-    window.addEventListener("followchange", handler);
-    return () => window.removeEventListener("followchange", handler);
   }, [tlType]);
 
   const load = async () => {
@@ -79,13 +66,24 @@ export default function TimelinePage() {
       setPosts(data.posts);
       setHasMore(data.has_more);
       setRawOffset(LIMIT);
-      tabState.current[tlType] = { posts: data.posts, hasMore: data.has_more, rawOffset: LIMIT };
-      skipLoadRef.current = false;
+      tabCache.current[tlType] = { posts: data.posts, hasMore: data.has_more, rawOffset: LIMIT };
     } catch (e: any) {
       setError(e.message || "불러오기 실패");
     }
     setLoading(false);
   };
+
+  useEffect(() => {
+    if (refreshKey === 0) return;
+    tabCache.current[tlType] = { posts, hasMore, rawOffset };
+    load();
+  }, [refreshKey]);
+
+  useEffect(() => {
+    const handler = () => load();
+    window.addEventListener("followchange", handler);
+    return () => window.removeEventListener("followchange", handler);
+  }, [tlType]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
