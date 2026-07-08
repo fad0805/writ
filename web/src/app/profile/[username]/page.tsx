@@ -38,6 +38,9 @@ export default function ProfilePage() {
   const [isMine, setIsMine] = useState(false);
   const [pinnedPosts, setPinnedPosts] = useState<any[]>([]);
   const [pinnedSeries, setPinnedSeries] = useState<any[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [postOffset, setPostOffset] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
   const [amBlocked, setAmBlocked] = useState(false);
   const [isMutedUser, setIsMutedUser] = useState(false);
@@ -61,7 +64,7 @@ export default function ProfilePage() {
   const loadProfile = useCallback(async (noCache = false) => {
     if (!noCache) setLoading(true);
     try {
-      const url = `/api/users/${username}${noCache ? `?t=${Date.now()}` : ""}`;
+      const url = `/api/users/${username}?limit=10${noCache ? `&t=${Date.now()}` : ""}`;
       const res = await fetch(url, { credentials: "include" });
       const d = await res.json();
       setProfile(d.profile); setPosts(d.posts); setNovels(d.novels);
@@ -70,11 +73,36 @@ export default function ProfilePage() {
       setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setHasPendingFollower(d.has_pending_follower); setIsFollower(d.is_follower); setApprovedFollower(null); setIsMine(d.is_mine);
       setIsBlocked(!!(d as any).is_blocked); setAmBlocked(!!(d as any).am_i_blocked); setIsMutedUser(!!(d as any).is_muted);
       setPinnedPosts((d as any).pinned_posts_data || []); setPinnedSeries((d as any).pinned_series_data || []);
+      if (!noCache) { setHasMore((d as any).has_more || false); setPostOffset(10); }
     } catch (e) {}
     setLoading(false);
   }, [username]);
 
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await fetch(`/api/users/${username}?offset=${postOffset}&limit=5`, { credentials: "include" });
+      const d = await res.json();
+      setPosts(prev => [...prev, ...(d.posts || [])]);
+      setHasMore(d.has_more || false);
+      setPostOffset(prev => prev + 5);
+    } catch (e) {}
+    setLoadingMore(false);
+  }, [username, postOffset, hasMore, loadingMore]);
+
   useEffect(() => { loadProfile(); }, [loadProfile, router]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (tab !== "posts") return;
+      const scrollBottom = window.innerHeight + window.scrollY;
+      const docHeight = document.documentElement.scrollHeight;
+      if (docHeight - scrollBottom < 300 && !loadingMore && hasMore) loadMore();
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [tab, loadingMore, hasMore, loadMore]);
 
   useEffect(() => {
     if (!loading && profile && !isMine) {

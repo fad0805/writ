@@ -1008,7 +1008,7 @@ def api_recent_tags(request: Request, q: str = Query("")):
 
 
 @router.get("/users/{username}")
-def api_get_profile(request: Request, username: str):
+def api_get_profile(request: Request, username: str, offset: int = 0, limit: int = 10):
     user = get_current_user(request)
     with get_session() as s:
         profile = s.query(User).filter_by(username=username).first()
@@ -1037,8 +1037,9 @@ def api_get_profile(request: Request, username: str):
             Post.is_deleted == False,
         ).order_by(
             desc(func.coalesce(boost_subq, Post.created_at))
-        ).limit(50).all()
-        posts = [p for p in posts if _can_view(p, user, s)]
+        ).offset(offset).limit(limit + 1).all()
+        has_more = len(posts) > limit
+        posts = [p for p in posts[:limit] if _can_view(p, user, s)]
         followers_count = s.query(Follow).filter_by(following_id=profile.id, accepted=True).count()
         following_count = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).count()
         is_muted = s.query(UserMute).filter_by(user_id=user.id, target_user_id=profile.id).first() is not None if user else False
@@ -1078,6 +1079,8 @@ def api_get_profile(request: Request, username: str):
             "is_muted": is_muted,
             "is_blocked": is_blocked,
             "am_i_blocked": am_i_blocked,
+            "has_more": has_more,
+            "offset": offset,
             "pinned_posts_data": [_post_json(p, s, user) for p in (s.query(Post).filter(Post.id.in_(profile.pinned_posts or []), Post.is_deleted == False).all() if profile.pinned_posts else [])],
             "pinned_series_data": [_novel_json(n, s) for n in (s.query(Novel).filter(Novel.id.in_(profile.pinned_series or [])).all() if profile.pinned_series else [])],
         }
