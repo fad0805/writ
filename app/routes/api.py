@@ -1099,6 +1099,26 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         }
 
 
+@router.get("/users/{username}/media")
+def api_user_media(request: Request, username: str, limit: int = Query(12), offset: int = Query(0)):
+    user = get_current_user(request)
+    with get_session() as s:
+        profile = s.query(User).filter_by(username=username).first()
+        if not profile:
+            raise HTTPException(status_code=404, detail="User not found")
+        import json as _json
+        raw = s.query(Post).options(
+            selectinload(Post.author)
+        ).filter(
+            Post.author_id == profile.id,
+            Post.is_deleted == False,
+        ).order_by(desc(Post.created_at)).offset(offset).limit(limit + 1).all()
+        raw = [p for p in raw if p.media_attachments and len(_json.loads(p.media_attachments) if isinstance(p.media_attachments, str) else (p.media_attachments or [])) > 0]
+        has_more = len(raw) > limit
+        posts = [_post_json(p, s, user) for p in raw[:limit] if _can_view(p, user, s)]
+        return {"posts": posts, "has_more": has_more}
+
+
 @router.post("/users/{username}/follow")
 def api_follow(request: Request, username: str):
     user = require_auth(request)

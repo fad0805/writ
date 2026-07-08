@@ -43,6 +43,11 @@ export default function ProfilePage() {
   const [hasMore, setHasMore] = useState(false);
   const [postOffset, setPostOffset] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [mediaPosts, setMediaPosts] = useState<any[]>([]);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [mediaHasMore, setMediaHasMore] = useState(false);
+  const [mediaOffset, setMediaOffset] = useState(0);
+  const [mediaLoadingMore, setMediaLoadingMore] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
   const [amBlocked, setAmBlocked] = useState(false);
   const [isMutedUser, setIsMutedUser] = useState(false);
@@ -93,6 +98,33 @@ export default function ProfilePage() {
     } catch (e) {}
     setLoadingMore(false);
   }, [username, postOffset, hasMore, loadingMore]);
+
+  const loadMedia = useCallback(async () => {
+    setMediaLoading(true);
+    try {
+      const d = await (await fetch(`/api/users/${username}/media?limit=12&offset=0`, { credentials: "include" })).json();
+      setMediaPosts(d.posts || []);
+      setMediaHasMore(d.has_more || false);
+      setMediaOffset(12);
+    } catch {}
+    setMediaLoading(false);
+  }, [username]);
+
+  const loadMoreMedia = useCallback(async () => {
+    if (mediaLoadingMore || !mediaHasMore) return;
+    setMediaLoadingMore(true);
+    try {
+      const d = await (await fetch(`/api/users/${username}/media?limit=6&offset=${mediaOffset}`, { credentials: "include" })).json();
+      setMediaPosts((prev) => [...prev, ...(d.posts || [])]);
+      setMediaHasMore(d.has_more || false);
+      setMediaOffset((prev) => prev + 6);
+    } catch {}
+    setMediaLoadingMore(false);
+  }, [username, mediaOffset, mediaHasMore, mediaLoadingMore]);
+
+  useEffect(() => {
+    if (tab === "media" && mediaPosts.length === 0 && !mediaLoading) loadMedia();
+  }, [tab, loadMedia, mediaPosts.length, mediaLoading]);
 
   useEffect(() => { loadProfile(); }, [loadProfile, router]);
 
@@ -337,6 +369,7 @@ export default function ProfilePage() {
       <div className="profile-stats">
         <span className={`profile-stat ${tab === "posts" ? "active" : ""}`} onClick={() => setTab("posts")}><strong>{totalPosts || posts.length}</strong> 게시글</span>
         <span className={`profile-stat ${tab === "novels" ? "active" : ""}`} onClick={() => setTab("novels")}><strong>{novels.length}</strong> 시리즈</span>
+        <span className={`profile-stat ${tab === "media" ? "active" : ""}`} onClick={() => { setTab("media"); if (mediaPosts.length === 0 && !mediaLoading) loadMedia(); }}><strong>{mediaPosts.length || 0}</strong> 미디어</span>
         <span className={`profile-stat ${tab === "following" ? "active" : ""}`} onClick={() => setTab("following")}><strong>{followingCount}</strong> 팔로잉</span>
         <span className={`profile-stat ${tab === "followers" ? "active" : ""}`} onClick={() => setTab("followers")}><strong>{followersCount}</strong> 팔로워</span>
       </div>
@@ -349,6 +382,14 @@ export default function ProfilePage() {
           if (rest.length === 0 && pinnedPosts.length === 0) return <p className="empty-state">게시글이 없습니다.</p>;
           return <InfiniteScroll hasMore={hasMore && tab === "posts"} loadingMore={loadingMore} loadMore={loadMore}>{rest.map((p) => <PostCard key={p.id} post={p} onUpdate={load} />)}</InfiniteScroll>;
         })()}
+      </div>
+
+      <div id="tab-media" className="profile-tab-posts" style={{ display: tab === "media" ? "block" : "none" }}>
+        {mediaLoading ? <p className="empty-state">로딩 중...</p> : mediaPosts.length === 0 ? <p className="empty-state">미디어가 포함된 게시글이 없습니다.</p> : (
+          <InfiniteScroll hasMore={mediaHasMore} loadingMore={mediaLoadingMore} loadMore={loadMoreMedia}>
+            {mediaPosts.map((p: any) => <PostCard key={p.id} post={p} onUpdate={load} />)}
+          </InfiniteScroll>
+        )}
       </div>
 
       <div id="tab-novels" className="profile-novel-list profile-tab-novels" style={{ display: tab === "novels" ? "flex" : "none" }}>
