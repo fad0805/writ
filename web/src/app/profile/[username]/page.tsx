@@ -332,43 +332,49 @@ export default function ProfilePage() {
 
       <div id="tab-novels" className="profile-novel-list profile-tab-novels" style={{ display: tab === "novels" ? "flex" : "none" }}>
         {pinnedSeries.map((n: any) => (
-          <Link key={`pin-${n.id}`} href={n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`} className="profile-novel profile-novel-link" style={{ border: "1px solid var(--accent)", borderRadius: 8, padding: 8 }}>
+          <div key={`pin-${n.id}`} className="profile-novel profile-novel-link" style={{ border: "1px solid var(--accent)", borderRadius: 8, padding: 8, display: "flex", gap: 14, cursor: "pointer" }} onClick={() => router.push(n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`)}>
             <div className="cover-wrap-56">
               {n.cover_image ? <img src={n.cover_image} alt="" className="cover-img" /> : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(n.title) }}><Icon name="book" size={16} /></div>}
             </div>
-            <div className="novel-card-body-content">
-              <strong className="profile-novel-title"><Icon name="pin_filled" size={12} style={{ marginRight: 4, color: "var(--danger)" }} /> {n.title}</strong>
+            <div className="novel-card-body-content" style={{ flex: 1 }}>
+              <strong className="profile-novel-title">{n.title}</strong>
               <span className="profile-novel-meta">{n.episode_count}화 · {n.is_completed ? "완결" : "연재중"}</span>
               <p className="profile-novel-desc">{n.description || "설명 없음"}</p>
             </div>
-          </Link>
+            {isMine && (
+              <button className="action-btn" onClick={async (e) => { e.stopPropagation();
+                setPinnedSeries(pinnedSeries.filter((ps: any) => ps.id !== n.id));
+                const res = await fetch(`/api/unpin/series/${n.id}`, { method: "POST", credentials: "include" });
+                if (!res.ok) { setPinnedSeries([...pinnedSeries, n]); const d = await res.json().catch(() => ({})); if (d.detail) alert(d.detail); }
+                else window.dispatchEvent(new Event("pinchange"));
+              }} title="고정 해제" style={{ color: "var(--danger)" }}><Icon name="pin_filled" /></button>
+            )}
+          </div>
         ))}
         {novels.length === 0 && pinnedSeries.length === 0 ? <p className="empty-state">시리즈가 없습니다.</p> : novels.map((n) => (
-          <div key={n.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Link href={n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`} className="profile-novel profile-novel-link" style={{ flex: 1 }}>
-              <div className="cover-wrap-56">
-                {n.cover_image ? (
-                  <img src={n.cover_image} alt="" className="cover-img" />
-                ) : (
-                  <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(n.title) }}>
-                    <Icon name="book" size={16} />
-                  </div>
-                )}
-              </div>
-              <div className="novel-card-body-content">
-                <strong className="profile-novel-title">{n.title}</strong>
-                <span className="profile-novel-meta">{n.episode_count}화 · {n.is_completed ? "완결" : "연재중"}</span>
-                <p className="profile-novel-desc">{n.description || "설명 없음"}</p>
-                {n.tags && <p className="novel-tags"><Icon name="tag" />{n.tags.split(/[ ,]+/).filter(Boolean).map((t, i) => <span key={i} className="tag-spacing">{t}</span>)}</p>}
-              </div>
-            </Link>
+          <div key={n.id} className="profile-novel profile-novel-link" style={{ padding: "12px 0", display: "flex", gap: 14, cursor: "pointer", alignItems: "center" }} onClick={() => router.push(n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`)}>
+            <div className="cover-wrap-56">
+              {n.cover_image ? (
+                <img src={n.cover_image} alt="" className="cover-img" />
+              ) : (
+                <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(n.title) }}>
+                  <Icon name="book" size={16} />
+                </div>
+              )}
+            </div>
+            <div className="novel-card-body-content" style={{ flex: 1 }}>
+              <strong className="profile-novel-title">{n.title}</strong>
+              <span className="profile-novel-meta">{n.episode_count}화 · {n.is_completed ? "완결" : "연재중"}</span>
+              <p className="profile-novel-desc">{n.description || "설명 없음"}</p>
+              {n.tags && <p className="novel-tags"><Icon name="tag" />{n.tags.split(/[ ,]+/).filter(Boolean).map((t, i) => <span key={i} className="tag-spacing">{t}</span>)}</p>}
+            </div>
             {isMine && (
-              <button className="action-btn" onClick={async (e) => { e.stopPropagation(); e.preventDefault();
-                const wasPinned = pinnedSeries.some((ps: any) => ps.id === n.id);
-                if (wasPinned) { setPinnedSeries(pinnedSeries.filter((ps: any) => ps.id !== n.id)); }
+              <button className="action-btn" onClick={async (e) => { e.stopPropagation();
+                const nowPinned = pinnedSeries.some((ps: any) => ps.id === n.id);
+                if (nowPinned) { setPinnedSeries(pinnedSeries.filter((ps: any) => ps.id !== n.id)); }
                 else { setPinnedSeries([...pinnedSeries, n]); }
-                const res = await fetch(`/api/${wasPinned ? "unpin" : "pin"}/series/${n.id}`, { method: "POST", credentials: "include" });
-                if (!res.ok) { if (wasPinned) setPinnedSeries([...pinnedSeries, n]); else setPinnedSeries(pinnedSeries.filter((ps: any) => ps.id !== n.id)); const d = await res.json().catch(() => ({})); if (d.detail) alert(d.detail); }
+                const res = await fetch(`/api/${nowPinned ? "unpin" : "pin"}/series/${n.id}`, { method: "POST", credentials: "include" });
+                if (!res.ok) { if (nowPinned) setPinnedSeries([...pinnedSeries, n]); else setPinnedSeries(pinnedSeries.filter((ps: any) => ps.id !== n.id)); const d = await res.json().catch(() => ({})); if (d.detail) alert(d.detail); }
                 else window.dispatchEvent(new Event("pinchange"));
               }} title={(pinnedSeries.some((ps: any) => ps.id === n.id) ? "고정 해제" : "고정")} style={{ color: pinnedSeries.some((ps: any) => ps.id === n.id) ? "var(--danger)" : undefined }}><Icon name={pinnedSeries.some((ps: any) => ps.id === n.id) ? "pin_filled" : "pin"} /></button>
             )}
