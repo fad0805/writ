@@ -151,6 +151,21 @@ export default function TimelinePage() {
     new_post: () => { load(); },
   });
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      api.timeline(tlType, LIMIT, 0).then((data) => {
+        setPosts((prev) => {
+          const existingIds = new Set(prev.map((p) => p.id));
+          const newOnes = data.posts.filter((p: any) => !existingIds.has(p.id));
+          if (newOnes.length === 0) return prev;
+          return [...newOnes, ...prev];
+        });
+        setHasMore(data.has_more);
+      }).catch(() => {});
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [tlType]);
+
   return (
     <>
       <div className="post-form">
