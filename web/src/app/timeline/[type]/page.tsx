@@ -39,6 +39,31 @@ export default function TimelinePage() {
   postsRef.current = posts;
   const selectedIdxRef = useRef(selectedIdx);
   selectedIdxRef.current = selectedIdx;
+  const tabState = useRef<Record<string, { posts: PostData[]; hasMore: boolean; rawOffset: number }>>({});
+
+  const prevTlType = useRef(tlType);
+
+  useEffect(() => {
+    if (prevTlType.current !== tlType) {
+      tabState.current[prevTlType.current] = { posts, hasMore, rawOffset };
+    }
+    prevTlType.current = tlType;
+    const saved = tabState.current[tlType];
+    if (saved) {
+      setPosts(saved.posts);
+      setHasMore(saved.hasMore);
+      setRawOffset(saved.rawOffset);
+      setLoading(false);
+      skipLoadRef.current = true;
+      return;
+    }
+  }, [tlType]);
+
+  const skipLoadRef = useRef(false);
+  useEffect(() => {
+    if (skipLoadRef.current) { skipLoadRef.current = false; return; }
+    load();
+  }, [tlType, refreshKey]);
 
   const load = async () => {
     setLoading(true);
@@ -48,6 +73,8 @@ export default function TimelinePage() {
       setPosts(data.posts);
       setHasMore(data.has_more);
       setRawOffset(LIMIT);
+      tabState.current[tlType] = { posts: data.posts, hasMore: data.has_more, rawOffset: LIMIT };
+      skipLoadRef.current = false;
     } catch (e: any) {
       setError(e.message || "불러오기 실패");
     }
@@ -137,8 +164,6 @@ export default function TimelinePage() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [tlType]);
-
-  useEffect(() => { load(); }, [tlType, refreshKey]);
 
   useEffect(() => {
     const handler = () => load();
