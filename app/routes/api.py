@@ -900,8 +900,8 @@ def api_pin_series(request: Request, novel_id: int):
         pinned = list(user.pinned_series or [])
         if novel_id in pinned:
             return {"ok": True}
-        if len(pinned) >= 6:
-            raise HTTPException(status_code=400, detail="최대 6개까지 고정할 수 있습니다.")
+        if len(pinned) >= 3:
+            raise HTTPException(status_code=400, detail="최대 3개까지 고정할 수 있습니다.")
         pinned.append(novel_id)
         s.query(User).filter_by(id=user.id).update({"pinned_series": pinned})
         s.commit()
