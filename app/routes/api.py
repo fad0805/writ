@@ -727,6 +727,14 @@ def api_bookmarks(request: Request):
         return {"posts": [_post_json(b.post, s, user) for b in bookmarks if b.post and not b.post.is_deleted]}
 
 
+@router.get("/favorites")
+def api_favorites(request: Request):
+    user = require_auth(request)
+    with get_session() as s:
+        likes = s.query(Like).filter_by(user_id=user.id).order_by(desc(Like.created_at)).limit(50).all()
+        return {"posts": [_post_json(l.post, s, user) for l in likes if l.post and not l.post.is_deleted]}
+
+
 @router.post("/posts/{post_id}/unboost")
 def api_unboost_post(request: Request, post_id: int):
     user = require_auth(request)

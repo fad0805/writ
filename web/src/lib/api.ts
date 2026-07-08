@@ -157,6 +157,7 @@ export const api = {
   bookmark: (id: number) => request<{ ok: boolean }>(`/api/posts/${id}/bookmark`, { method: "POST" }),
   unbookmark: (id: number) => request<{ ok: boolean }>(`/api/posts/${id}/unbookmark`, { method: "POST" }),
   getBookmarks: () => request<{ posts: PostData[] }>("/api/bookmarks"),
+  getFavorites: () => request<{ posts: PostData[] }>("/api/favorites"),
 
   // Users
   getProfile: (username: string) =>
