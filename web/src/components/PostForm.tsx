@@ -67,37 +67,31 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     }
   }, []);
 
+  const fetchMentionUsers = useCallback(async (q: string) => {
+    try {
+      const res = await api.autocomplete(q);
+      setMentionUsers(res.users);
+      setMentionIdx(0);
+    } catch { setMentionUsers([]); }
+  }, []);
+
   const detectMention = useCallback((val: string, cursor: number) => {
     const before = val.slice(0, cursor);
     const atIdx = before.lastIndexOf("@");
     if (atIdx === -1 || (atIdx > 0 && !/\s/.test(val[atIdx - 1]))) {
       setMentionStart(-1);
-      setMentionQuery("");
       setMentionUsers([]);
       return;
     }
     const partial = before.slice(atIdx + 1);
     if (partial.length === 0 || /[\s@]/.test(partial)) {
       setMentionStart(-1);
-      setMentionQuery("");
       setMentionUsers([]);
       return;
     }
     setMentionStart(atIdx);
-    setMentionQuery(partial);
-  }, []);
-
-  useEffect(() => {
-    if (!mentionQuery) return;
-    const t = setTimeout(async () => {
-      try {
-        const res = await api.autocomplete(mentionQuery);
-        setMentionUsers(res.users);
-        setMentionIdx(0);
-      } catch { setMentionUsers([]); }
-    }, 100);
-    return () => clearTimeout(t);
-  }, [mentionQuery]);
+    fetchMentionUsers(partial);
+  }, [fetchMentionUsers]);
 
   useEffect(() => {
     if (!emojiQuery) { setEmojiResults([]); return; }
@@ -174,13 +168,12 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         ta.focus();
       }
     });
-  }, [content, mentionStart, mentionQuery]);
+  }, [content, mentionStart]);
 
-  const handleTaEvent = useCallback(() => {
-    if (taRef.current && taRef.current === document.activeElement) {
-      detectMention(taRef.current.value, taRef.current.selectionStart);
-      detectEmoji(taRef.current.value, taRef.current.selectionStart);
-    }
+  const handleTaEvent = useCallback((e: React.KeyboardEvent | React.MouseEvent) => {
+    const el = e.target as HTMLTextAreaElement;
+    detectMention(el.value, el.selectionStart);
+    detectEmoji(el.value, el.selectionStart);
   }, [detectMention]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
