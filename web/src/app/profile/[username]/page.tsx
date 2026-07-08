@@ -16,6 +16,10 @@ export default function ProfilePage() {
   const [showMention, setShowMention] = useState(false);
   const [showRemoveFollower, setShowRemoveFollower] = useState(false);
   const [showNote, setShowNote] = useState(false);
+  const [showMuteModal, setShowMuteModal] = useState(false);
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [muteDuration, setMuteDuration] = useState(0);
+  const [muteHideNotif, setMuteHideNotif] = useState(false);
   const [profileNote, setProfileNote] = useState("");
   const [noteLoaded, setNoteLoaded] = useState(false);
   const username = params.username as string;
@@ -93,7 +97,6 @@ export default function ProfilePage() {
             )}
           </div>
           <div className="profile-info-relative">
-            {(isFollower || hasPendingFollower || approvedFollower === true) && (
               <div className="profile-corner-actions">
                 {(isFollower || approvedFollower === true) && (
                   <span
@@ -110,8 +113,43 @@ export default function ProfilePage() {
                     <button onClick={async () => { await fetch(`/api/users/${profile.username}/reject-follow`, { method: "POST", credentials: "include" }); setHasPendingFollower(false); setApprovedFollower(false); }} className="btn btn-small btn-follow text-muted">거절</button>
                   </>
                 )}
+                {!isMine && (
+                  <div className="profile-corner-mute-block" style={{ display: "flex", gap: 4, marginTop: 6 }}>
+                    {(profile as any).is_muted ? (
+                      <button className="action-btn btn-action-sm" style={{ color: "var(--danger)", fontSize: "0.75em" }}
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          await fetch(`/api/mutes/users/${profile.id}`, { method: "DELETE", credentials: "include" });
+                          (profile as any).is_muted = false;
+                          setProfile({ ...profile } as any);
+                        }}>
+                        <Icon name="mute" size={13} /> 뮤트됨
+                      </button>
+                    ) : (
+                      <button className="action-btn btn-action-sm" style={{ fontSize: "0.75em" }}
+                        onClick={(e) => { e.preventDefault(); setMuteDuration(0); setMuteHideNotif(false); setShowMuteModal(true); }}>
+                        <Icon name="mute" size={13} /> 뮤트
+                      </button>
+                    )}
+                    {(profile as any).is_blocked ? (
+                      <button className="action-btn btn-action-sm" style={{ color: "var(--danger)", fontSize: "0.75em" }}
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          await fetch(`/api/blocks/users/${profile.id}`, { method: "DELETE", credentials: "include" });
+                          (profile as any).is_blocked = false;
+                          setProfile({ ...profile } as any);
+                        }}>
+                        <Icon name="block" size={13} /> 블락됨
+                      </button>
+                    ) : (
+                      <button className="action-btn btn-action-sm" style={{ fontSize: "0.75em" }}
+                        onClick={(e) => { e.preventDefault(); setShowBlockConfirm(true); }}>
+                        <Icon name="block" size={13} /> 블락
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
             <h2>{profile.display_name} {profile.is_locked && <Icon name="lock_filled" style={{ fontSize: "0.7em", verticalAlign: "middle", color: "var(--text-muted)" }} />} {(profile.role === "admin" || profile.role === "moderator" || profile.role === "owner") && (isMine || (profile as any).show_badge) && <Icon name={profile.role === "owner" ? "books_solid" : "shield_filled"} style={{ color: profile.role === "owner" ? "var(--accent)" : profile.role === "admin" ? "#27ae60" : "#cc8800", fontSize: "0.75em", verticalAlign: "middle", marginLeft: 3 }} title={profile.role === "owner" ? "오너" : profile.role === "admin" ? "관리자" : "조율자"} />}{(profile as any).is_deceased && <span className="deceased-badge"><svg viewBox="0 0 24 24" width="11" height="11" fill="#e8a0bf" stroke="#e8a0bf" stroke-width="0.5" style={{ verticalAlign: "middle", marginRight: 1 }}><circle cx="9" cy="8" r="2.8"/><circle cx="15" cy="8" r="2.8"/><circle cx="12" cy="5.5" r="2.8"/><path d="M6 12c2 3 4 5 6 8 2-3 4-5 6-8"/></svg> 당신을 만나고 싶습니다</span>}</h2>
             <p className="profile-username">@{profile.username}</p>
             {profile.summary && (
@@ -150,22 +188,6 @@ export default function ProfilePage() {
                     <button className="action-btn btn-action-sm" onClick={() => setShowNote(!showNote)}>
                       <Icon name="edit" /> 메모
                     </button>
-                    <button className="action-btn btn-action-sm" style={{ color: (profile as any).is_muted ? "var(--danger)" : undefined }}
-                      onClick={async () => {
-                        if ((profile as any).is_muted) { await fetch(`/api/mutes/users/${profile.id}`, { method: "DELETE", credentials: "include" }); }
-                        else { const form = new FormData(); form.append("duration", "0"); form.append("hide_notifications", "false"); await fetch(`/api/mutes/users/${profile.id}`, { method: "POST", credentials: "include", body: form }); }
-                        window.location.reload();
-                      }}>
-                      <Icon name="mute" /> {(profile as any).is_muted ? "뮤트됨" : "뮤트"}
-                    </button>
-                    <button className="action-btn btn-action-sm" style={{ color: (profile as any).is_blocked ? "var(--danger)" : undefined }}
-                      onClick={async () => {
-                        if ((profile as any).is_blocked) { await fetch(`/api/blocks/users/${profile.id}`, { method: "DELETE", credentials: "include" }); }
-                        else { await fetch(`/api/blocks/users/${profile.id}`, { method: "POST", credentials: "include" }); }
-                        window.location.reload();
-                      }}>
-                      <Icon name="block" /> {(profile as any).is_blocked ? "블락됨" : "블락"}
-                    </button>
                   </>
                 )}
               </div>
@@ -194,6 +216,55 @@ export default function ProfilePage() {
           }}
           onCancel={() => setShowRemoveFollower(false)}
         />
+      )}
+      {showBlockConfirm && (
+        <ConfirmModal
+          message={`@${profile.username} 님을 블락하시겠습니까? 블락하면 서로를 볼 수 없습니다.`}
+          onConfirm={async () => {
+            await fetch(`/api/blocks/users/${profile.id}`, { method: "POST", credentials: "include" });
+            (profile as any).is_blocked = true;
+            setProfile({ ...profile } as any);
+            setShowBlockConfirm(false);
+          }}
+          onCancel={() => setShowBlockConfirm(false)}
+        />
+      )}
+      {showMuteModal && (
+        <div className="reply-modal-backdrop active" onClick={() => setShowMuteModal(false)}>
+          <div className="reply-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
+            <button className="reply-modal-close" onClick={() => setShowMuteModal(false)}>×</button>
+            <h3>@${profile.username} 님 뮤트</h3>
+            <div className="form-group" style={{ marginTop: 12 }}>
+              <label>뮤트 기간</label>
+              <select value={muteDuration} onChange={(e) => setMuteDuration(Number(e.target.value))} className="cw-input">
+                <option value={0}>영구</option>
+                <option value={86400}>1일</option>
+                <option value={259200}>3일</option>
+                <option value={604800}>1주일</option>
+                <option value={2592000}>1개월</option>
+                <option value={7776000}>3개월</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="text-sm flex-center" style={{ gap: 6, cursor: "pointer", justifyContent: "flex-start" }}>
+                <input type="checkbox" checked={muteHideNotif} onChange={(e) => setMuteHideNotif(e.target.checked)} />
+                알림창에서도 숨기기
+              </label>
+            </div>
+            <div className="form-actions">
+              <button onClick={async () => {
+                const form = new FormData();
+                form.append("duration", String(muteDuration));
+                form.append("hide_notifications", muteHideNotif ? "true" : "false");
+                await fetch(`/api/mutes/users/${profile.id}`, { method: "POST", credentials: "include", body: form });
+                (profile as any).is_muted = true;
+                setProfile({ ...profile } as any);
+                setShowMuteModal(false);
+              }} className="btn btn-primary">뮤트</button>
+              <button onClick={() => setShowMuteModal(false)} className="btn btn-outline">취소</button>
+            </div>
+          </div>
+        </div>
       )}
       <div className="profile-stats">
         <span className={`profile-stat ${tab === "posts" ? "active" : ""}`} onClick={() => setTab("posts")}><strong>{posts.length}</strong> 게시글</span>
