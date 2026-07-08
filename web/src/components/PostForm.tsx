@@ -242,8 +242,8 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     const keyHandler = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
     document.addEventListener("keydown", keyHandler);
     const clickHandler = (e: MouseEvent) => {
-      const el = document.querySelector('[style*="z-index: 1100"]');
-      if (el && !el.contains(e.target as Node)) close();
+      const popup = document.querySelector('.emoji-autocomplete');
+      if (popup && !popup.contains(e.target as Node) && !taRef.current?.contains(e.target as Node)) close();
     };
     setTimeout(() => document.addEventListener("click", clickHandler), 0);
     return () => {
