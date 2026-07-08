@@ -78,7 +78,7 @@ export default function NotificationsPage() {
     setLoadingMore(true);
     try {
       const data = await api.getNotifications(filter || undefined, 10, offset);
-      setNotifs((prev) => [...prev, ...data.notifications]);
+      setNotifs((prev) => { const merged = [...prev, ...data.notifications]; if (merged.length >= 200) setHasMore(false); return merged; });
       setHasMore(data.has_more);
       setOffset((prev) => prev + 10);
     } catch {}
