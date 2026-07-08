@@ -59,6 +59,7 @@ export default function ProfilePage() {
   }, [username]);
 
   const loadProfile = useCallback(async (noCache = false) => {
+    if (!noCache) setLoading(true);
     try {
       const url = `/api/users/${username}${noCache ? `?t=${Date.now()}` : ""}`;
       const res = await fetch(url, { credentials: "include" });
@@ -70,6 +71,7 @@ export default function ProfilePage() {
       setIsBlocked(!!(d as any).is_blocked); setAmBlocked(!!(d as any).am_i_blocked); setIsMutedUser(!!(d as any).is_muted);
       setPinnedPosts((d as any).pinned_posts_data || []); setPinnedSeries((d as any).pinned_series_data || []);
     } catch (e) {}
+    setLoading(false);
   }, [username]);
 
   useEffect(() => { loadProfile(); }, [loadProfile, router]);
