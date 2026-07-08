@@ -146,6 +146,13 @@ class SeriesFollow(Base):
     novel = relationship("Novel", lazy="selectin")
 
 
+post_tags = Table(
+    "post_tags", Base.metadata,
+    Column("post_id", Integer, ForeignKey("posts.id"), primary_key=True),
+    Column("tag_id", Integer, ForeignKey("tags.id"), primary_key=True),
+)
+
+
 class Post(Base):
     __tablename__ = "posts"
 
@@ -302,12 +309,6 @@ class Boost(Base):
 novel_tags = Table(
     "novel_tags", Base.metadata,
     Column("novel_id", Integer, ForeignKey("novels.id"), primary_key=True),
-    Column("tag_id", Integer, ForeignKey("tags.id"), primary_key=True),
-)
-
-post_tags = Table(
-    "post_tags", Base.metadata,
-    Column("post_id", Integer, ForeignKey("posts.id"), primary_key=True),
     Column("tag_id", Integer, ForeignKey("tags.id"), primary_key=True),
 )
 
