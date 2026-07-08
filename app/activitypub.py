@@ -316,8 +316,8 @@ def _safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
         client.close()
         return None
 
-def _save_remote_image(image_url: str, prefix: str, local_username: str) -> str:
-    """Download remote image and save, return URL."""
+def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url: str = "") -> str:
+    """Download remote image and save, return URL. If old_url given, delete it first."""
     from app.utils.storage import get_storage
     if not _validate_url(image_url):
         return ""
@@ -331,14 +331,17 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str) -> str:
         if resp:
             storage = get_storage()
             ct = f"image/{ext}"
-            return storage.save(key, resp.content, ct)
+            new_url = storage.save(key, resp.content, ct)
+            if old_url:
+                storage.delete(old_url)
+            return new_url
     except Exception as e:
         logger.warning("Failed to save remote %s %s: %s", prefix, image_url, e)
     return ""
 
 
-def _save_remote_avatar(avatar_url: str, local_username: str) -> str:
-    return _save_remote_image(avatar_url, "avatars", local_username)
+def _save_remote_avatar(avatar_url: str, local_username: str, old_url: str = "") -> str:
+    return _save_remote_image(avatar_url, "avatars", local_username, old_url)
 
 
 def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User]:
@@ -393,9 +396,9 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User
             existing.display_name = data.get("name", existing.display_name)
             existing.summary = data.get("summary", existing.summary)
             if avatar_url:
-                existing.profile_image = _save_remote_avatar(avatar_url, base_username_clean)
+                existing.profile_image = _save_remote_avatar(avatar_url, base_username_clean, existing.profile_image)
             if header_url:
-                existing.header_image = _save_remote_image(header_url, "headers", base_username_clean)
+                existing.header_image = _save_remote_image(header_url, "headers", base_username_clean, existing.header_image)
             _process_emoji_tags(data.get("tag", []), session)
             session.commit()
             return existing
@@ -407,10 +410,10 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User
             by_username.public_key = public_key_pem or by_username.public_key
             by_username.display_name = data.get("name", by_username.display_name)
             by_username.summary = data.get("summary", by_username.summary)
-            if avatar_url and not by_username.profile_image:
-                by_username.profile_image = _save_remote_avatar(avatar_url, base_username_clean)
-            if header_url and not by_username.header_image:
-                by_username.header_image = _save_remote_image(header_url, "headers", base_username_clean)
+            if avatar_url:
+                by_username.profile_image = _save_remote_avatar(avatar_url, base_username_clean, by_username.profile_image)
+            if header_url:
+                by_username.header_image = _save_remote_image(header_url, "headers", base_username_clean, by_username.header_image)
             _process_emoji_tags(data.get("tag", []), session)
             session.commit()
             return by_username
