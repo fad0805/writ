@@ -23,6 +23,17 @@ export default function RightSidebar() {
     if (!user) return;
     api.getMyNovels().then((d) => setNovels(d.novels)).catch(() => {});
     api.getNotifications(undefined, 10, 0).then((d) => setNotifs(d.notifications)).catch(() => {});
+    const interval = setInterval(() => {
+      api.getNotifications(undefined, 10, 0).then((d) => {
+        setNotifs((prev) => {
+          const ids = new Set(prev.map((n) => n.id));
+          const newOnes = d.notifications.filter((n) => !ids.has(n.id));
+          if (newOnes.length === 0) return prev;
+          return [...newOnes.slice(0, 3), ...prev].slice(0, 10);
+        });
+      }).catch(() => {});
+    }, 15000);
+    return () => clearInterval(interval);
   }, [user, refreshKey]);
 
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
