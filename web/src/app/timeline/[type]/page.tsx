@@ -147,7 +147,9 @@ export default function TimelinePage() {
     return () => window.removeEventListener("followchange", handler);
   }, [tlType]);
 
-  useStream({});
+  useStream({
+    new_post: () => { load(); },
+  });
 
   return (
     <>
