@@ -223,13 +223,11 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     window.addEventListener("resize", close);
     document.addEventListener("keydown", keyHandler);
     const clickHandler = (e: MouseEvent) => {
-      const el = document.querySelector('[style*="z-index: 1100"]');
-      if (el && !el.contains(e.target as Node)) close();
+      const popup = document.querySelector('.emoji-autocomplete');
+      if (popup && !popup.contains(e.target as Node)) close();
     };
     setTimeout(() => document.addEventListener("click", clickHandler), 0);
-    return () => { 
-      window.removeEventListener("scroll", close, true); 
-      window.removeEventListener("resize", close);
+    return () => {
       document.removeEventListener("keydown", keyHandler);
       document.removeEventListener("click", clickHandler);
     };
