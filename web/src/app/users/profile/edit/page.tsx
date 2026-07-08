@@ -26,6 +26,8 @@ export default function ProfileEditPage() {
   const [headerFile, setHeaderFile] = useState<File | null>(null);
   const [headerPreview, setHeaderPreview] = useState("");
   const [headerCropSrc, setHeaderCropSrc] = useState("");
+  const [removeAvatar, setRemoveAvatar] = useState(false);
+  const [removeHeader, setRemoveHeader] = useState(false);
   const headerInputRef = useRef<HTMLInputElement>(null);
   const blobRef = useRef<string[]>([]);
 
@@ -148,7 +150,9 @@ export default function ProfileEditPage() {
       form.append("custom_fields", JSON.stringify(customFields));
       form.append("profile_hashtags", JSON.stringify(profileHashtags));
       if (imageFile) form.append("image", imageFile);
+      else if (removeAvatar) form.append("remove_avatar", "true");
       if (headerFile) form.append("header_image", headerFile);
+      else if (removeHeader) form.append("remove_header", "true");
       const res = await fetch("/api/profile/update", { method: "POST", credentials: "include", body: form });
       if (res.ok) { await refreshAuth(); window.dispatchEvent(new Event("profilechange")); router.push(`/@${user?.username}`); }
       else alert("저장 실패");
@@ -179,13 +183,14 @@ export default function ProfileEditPage() {
                 <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
               </label>
               {imageFile && <span className="profile-edit-file-name">{imageFile.name}</span>}
+              {avatarUrl && !removeAvatar && <button type="button" onClick={() => { setRemoveAvatar(true); setImageFile(null); setAvatarUrl(""); }} className="btn btn-small btn-outline" style={{ color: "var(--danger)" }}>제거</button>}
             </div>
           </div>
         </div>
         <div className="form-group">
           <label>헤더 이미지</label>
           <div className="profile-edit-avatar-wrap">
-            {headerPreview && <img src={headerPreview} alt="" className="profile-edit-header-thumb" />}
+            {headerPreview && !removeHeader && <img src={headerPreview} alt="" className="profile-edit-header-thumb" />}
             <div>
               <div className="profile-edit-file-row">
                 <label className="btn btn-outline btn-small profile-edit-file-label">
@@ -193,6 +198,7 @@ export default function ProfileEditPage() {
                   <input type="file" ref={headerInputRef} accept="image/*" onChange={handleHeaderFileChange} className="hidden" />
                 </label>
                 {headerFile && <span className="profile-edit-file-name">{headerFile.name}</span>}
+                {headerPreview && !removeHeader && <button type="button" onClick={() => { setRemoveHeader(true); setHeaderFile(null); setHeaderPreview(""); }} className="btn btn-small btn-outline" style={{ color: "var(--danger)" }}>제거</button>}
               </div>
             </div>
           </div>

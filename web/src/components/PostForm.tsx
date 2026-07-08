@@ -577,7 +577,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           }} />
           <EmojiPicker onEmoji={(e) => setContent(content + e)} />
           <span className="char-count char-count-inline">{totalLen}/{MAX_LENGTH}</span>
-          <button type="submit" disabled={submitting || !content.trim()} className="btn btn-primary">
+          <button type="submit" disabled={submitting || !content.trim() || showSeriesSearch} className="btn btn-primary">
             {submitting ? "..." : parentId ? "답글" : "게시"}
           </button>
         </div>

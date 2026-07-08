@@ -19,6 +19,7 @@ export default function EditNovelPage() {
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
   const [coverImageUrl, setCoverImageUrl] = useState("");
+  const [removeCover, setRemoveCover] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState("");
   const [cropSrc, setCropSrc] = useState("");
@@ -82,6 +83,7 @@ export default function EditNovelPage() {
       form.append("visibility", visibility);
       form.append("is_completed", isCompleted ? "true" : "");
       if (imageFile) form.append("cover_image", imageFile);
+      else if (removeCover) form.append("remove_cover", "true");
       const res = await fetch(`/api/series/${params.id}/edit`, { method: "POST", credentials: "include", body: form });
       if (res.ok) router.push(`/series/${params.id}`);
       else alert("저장 실패");
@@ -121,6 +123,7 @@ export default function EditNovelPage() {
                   <input type="file" ref={inputRef} accept="image/*" onChange={handleFileChange} style={{ display: "none" }} />
                 </label>
                 {imageFile && <span className="profile-edit-file-name">{imageFile.name}</span>}
+                {showPreview && !removeCover && <button type="button" onClick={() => { setRemoveCover(true); setImageFile(null); }} className="btn btn-small btn-outline" style={{ color: "var(--danger)" }}>제거</button>}
               </div>
             </div>
           </div>

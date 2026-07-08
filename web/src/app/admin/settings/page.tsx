@@ -18,6 +18,9 @@ export default function AdminSettingsPage() {
   const [logoPreview, setLogoPreview] = useState("");
   const [faviconPreview, setFaviconPreview] = useState("");
   const [appIconPreview, setAppIconPreview] = useState("");
+  const [removeLogo, setRemoveLogo] = useState(false);
+  const [removeFavicon, setRemoveFavicon] = useState(false);
+  const [removeAppIcon, setRemoveAppIcon] = useState(false);
   const [adminIds, setAdminIds] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [loading, setLoading] = useState(true);
@@ -51,7 +54,7 @@ export default function AdminSettingsPage() {
     setSaving(true);
     setMsg("");
     try {
-      let finalLogo = logo, finalFavicon = favicon, finalAppIcon = appIcon;
+      let finalLogo = removeLogo ? "" : logo, finalFavicon = removeFavicon ? "" : favicon, finalAppIcon = removeAppIcon ? "" : appIcon;
       if (logoFile) {
         const fd = new FormData(); fd.append("file", logoFile);
         const r = await fetch("/api/media/upload", { method: "POST", credentials: "include", body: fd });
@@ -75,7 +78,7 @@ export default function AdminSettingsPage() {
       form.append("admin_ids", adminIds);
       form.append("admin_email", adminEmail);
       const res = await fetch("/api/admin/settings", { method: "POST", credentials: "include", body: form });
-      if (res.ok) { setMsg("저장되었습니다."); window.dispatchEvent(new Event("serverchange")); setLogoFile(null); setFaviconFile(null); setAppIconFile(null); fetch("/api/admin/settings", { credentials: "include" }).then(r => r.json()).then(d => { setLogoPreview(d.logo || ""); setFaviconPreview(d.favicon || ""); setAppIconPreview(d.app_icon || ""); }).catch(() => {}); }
+      if (res.ok) { setMsg("저장되었습니다."); window.dispatchEvent(new Event("serverchange")); setLogoFile(null); setFaviconFile(null); setAppIconFile(null); setRemoveLogo(false); setRemoveFavicon(false); setRemoveAppIcon(false); fetch("/api/admin/settings", { credentials: "include" }).then(r => r.json()).then(d => { setLogoPreview(d.logo || ""); setFaviconPreview(d.favicon || ""); setAppIconPreview(d.app_icon || ""); }).catch(() => {}); }
       else { const d = await res.json().catch(() => ({})); setMsg(typeof d.detail === "string" ? d.detail : Array.isArray(d.detail) ? d.detail.map((e: any) => e.msg).join(", ") : "저장 실패"); }
     } catch { setMsg("오류 발생"); }
     setSaving(false);
@@ -98,25 +101,28 @@ export default function AdminSettingsPage() {
         </div>
         <div className="form-group">
           <label>대표 아이콘</label>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {logoPreview && <img src={logoPreview} alt="logo" style={{ width: 64, height: 64, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />}
-            <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setLogoFile(f); setLogoPreview(URL.createObjectURL(f)); } }} className="cw-input" />
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            {logoPreview && !removeLogo && <img src={logoPreview} alt="logo" style={{ width: 64, height: 64, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />}
+            <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setLogoFile(f); setLogoPreview(URL.createObjectURL(f)); setRemoveLogo(false); } }} className="cw-input" />
+            {logoPreview && <button type="button" onClick={() => { setRemoveLogo(true); setLogoFile(null); setLogoPreview(""); }} className="btn btn-small btn-outline" style={{ color: "var(--danger)" }}>제거</button>}
           </div>
           <p className="form-help">정사각형 이미지를 사용해 주세요.</p>
         </div>
         <div className="form-group">
           <label>파비콘</label>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {faviconPreview && <img src={faviconPreview} alt="favicon" style={{ width: 32, height: 32, borderRadius: 4, objectFit: "cover", flexShrink: 0 }} />}
-            <input type="file" accept="image/x-icon,image/png,image/svg+xml" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setFaviconFile(f); setFaviconPreview(URL.createObjectURL(f)); } }} className="cw-input" />
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            {faviconPreview && !removeFavicon && <img src={faviconPreview} alt="favicon" style={{ width: 32, height: 32, borderRadius: 4, objectFit: "cover", flexShrink: 0 }} />}
+            <input type="file" accept="image/x-icon,image/png,image/svg+xml" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setFaviconFile(f); setFaviconPreview(URL.createObjectURL(f)); setRemoveFavicon(false); } }} className="cw-input" />
+            {faviconPreview && <button type="button" onClick={() => { setRemoveFavicon(true); setFaviconFile(null); setFaviconPreview(""); }} className="btn btn-small btn-outline" style={{ color: "var(--danger)" }}>제거</button>}
           </div>
           <p className="form-help">정사각형 이미지를 사용해 주세요.</p>
         </div>
         <div className="form-group">
           <label>모바일 앱 아이콘</label>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {appIconPreview && <img src={appIconPreview} alt="app icon" style={{ width: 64, height: 64, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />}
-            <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setAppIconFile(f); setAppIconPreview(URL.createObjectURL(f)); } }} className="cw-input" />
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            {appIconPreview && !removeAppIcon && <img src={appIconPreview} alt="app icon" style={{ width: 64, height: 64, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />}
+            <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setAppIconFile(f); setAppIconPreview(URL.createObjectURL(f)); setRemoveAppIcon(false); } }} className="cw-input" />
+            {appIconPreview && <button type="button" onClick={() => { setRemoveAppIcon(true); setAppIconFile(null); setAppIconPreview(""); }} className="btn btn-small btn-outline" style={{ color: "var(--danger)" }}>제거</button>}
           </div>
           <p className="form-help">정사각형 이미지를 사용해 주세요.</p>
         </div>

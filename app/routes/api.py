@@ -1455,7 +1455,7 @@ def api_unfollow_novel(request: Request, novel_id: int):
 @router.post("/series/{novel_id}/edit")
 def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), description: str = Form(""),
                    tags: str = Form(""), visibility: str = Form("public"), is_completed: bool = Form(False),
-                   cover_image: UploadFile = File(None)):
+                   cover_image: UploadFile = File(None), remove_cover: bool = Form(False)):
     user = require_auth(request)
     if not title.strip():
         raise HTTPException(status_code=400, detail="Title cannot be empty")
@@ -1500,6 +1500,12 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
         novel.visibility = visibility
         novel.is_completed = is_completed
         novel.is_published = visibility != "private"
+        if remove_cover:
+            old = novel.cover_image
+            novel.cover_image = ""
+            s.flush()
+            if old and old.startswith("/"):
+                storage.delete(old)
         if cover_url:
             old = novel.cover_image
             novel.cover_image = cover_url
@@ -1907,7 +1913,8 @@ def _save_profile_image(user_id: int, file: UploadFile, prefix: str, max_size: t
 @router.post("/profile/update")
 def api_update_profile(request: Request, display_name: str = Form(""), summary: str = Form(""),
                        image: UploadFile = File(None), header_image: UploadFile = File(None),
-                       custom_fields: str = Form("[]"), profile_hashtags: str = Form("[]")):
+                       custom_fields: str = Form("[]"), profile_hashtags: str = Form("[]"),
+                       remove_avatar: bool = Form(False), remove_header: bool = Form(False)):
     from app.utils.storage import get_storage
     user = require_auth(request)
     storage = get_storage()
@@ -1915,14 +1922,26 @@ def api_update_profile(request: Request, display_name: str = Form(""), summary: 
         db = s.query(User).filter_by(id=user.id).first()
         db.display_name = display_name
         db.summary = summary
-        if image and image.filename:
+        if remove_avatar:
+            old = db.profile_image
+            db.profile_image = ""
+            s.flush()
+            if old:
+                storage.delete(old)
+        elif image and image.filename:
             new_url = _save_profile_image(user.id, image, "avatars", (400, 400), storage)
             old = db.profile_image
             db.profile_image = new_url
             s.flush()
             if old:
                 storage.delete(old)
-        if header_image and header_image.filename:
+        if remove_header:
+            old = db.header_image
+            db.header_image = ""
+            s.flush()
+            if old:
+                storage.delete(old)
+        elif header_image and header_image.filename:
             new_url = _save_profile_image(user.id, header_image, "headers", (1500, 500), storage)
             old = db.header_image
             db.header_image = new_url
