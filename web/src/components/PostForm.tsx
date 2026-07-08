@@ -337,6 +337,18 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   }, [detectMention]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showSeriesSearch) {
+      if (e.key === "Enter" && seriesResults.length > 0) {
+        e.preventDefault();
+        if (seriesResults[seriesIdx]) insertSeries(seriesResults[seriesIdx]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setShowSeriesSearch(false); setSeriesResults([]);
+        return;
+      }
+    }
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       formRef.current?.requestSubmit();
       return;
@@ -393,11 +405,6 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         setSeriesIdx((i) => Math.max(i - 1, 0));
-      } else if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault();
-        if (seriesResults[seriesIdx]) insertSeries(seriesResults[seriesIdx]);
-      } else if (e.key === "Escape") {
-        setShowSeriesSearch(false); setSeriesResults([]);
       }
     }
   };
