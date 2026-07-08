@@ -264,7 +264,7 @@ export default function RemoteServerDetailPage() {
                 </span>
               </span>
               <span style={{ width: 100, flexShrink: 0 }}>
-                <Link href={u.remote_url} target="_blank" className="btn btn-small btn-outline">방문</Link>
+                <Link href={`/admin/users/${u.id}`} className="btn btn-small btn-outline">방문</Link>
               </span>
             </div>
           ))}
