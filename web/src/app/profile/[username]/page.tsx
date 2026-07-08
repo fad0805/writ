@@ -36,6 +36,9 @@ export default function ProfilePage() {
   const [isFollower, setIsFollower] = useState(false);
   const [approvedFollower, setApprovedFollower] = useState<boolean | null>(null);
   const [isMine, setIsMine] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [amBlocked, setAmBlocked] = useState(false);
+  const [isMutedUser, setIsMutedUser] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("posts");
 
@@ -58,6 +61,7 @@ export default function ProfilePage() {
         setFollowers(d.followers); setFollowing(d.following);
         setFollowersCount(d.followers_count); setFollowingCount(d.following_count);
       setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setHasPendingFollower(d.has_pending_follower); setIsFollower(d.is_follower); setApprovedFollower(null); setIsMine(d.is_mine);
+      setIsBlocked(!!(d as any).is_blocked); setAmBlocked(!!(d as any).am_i_blocked); setIsMutedUser(!!(d as any).is_muted);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -115,13 +119,12 @@ export default function ProfilePage() {
                 )}
                 {!isMine && (
                   <div className="profile-corner-mute-block" style={{ display: "flex", gap: 4, marginTop: 6 }}>
-                    {(profile as any).is_muted ? (
+                    {isMutedUser ? (
                       <button className="action-btn btn-action-sm" style={{ color: "var(--danger)", fontSize: "0.75em" }}
                         onClick={async (e) => {
                           e.preventDefault();
                           await fetch(`/api/mutes/users/${profile.id}`, { method: "DELETE", credentials: "include" });
-                          (profile as any).is_muted = false;
-                          setProfile({ ...profile } as any);
+                          setIsMutedUser(false);
                         }}>
                         <Icon name="mute" size={13} /> 뮤트됨
                       </button>
@@ -131,13 +134,12 @@ export default function ProfilePage() {
                         <Icon name="mute" size={13} /> 뮤트
                       </button>
                     )}
-                    {(profile as any).is_blocked ? (
+                    {isBlocked ? (
                       <button className="action-btn btn-action-sm" style={{ color: "var(--danger)", fontSize: "0.75em" }}
                         onClick={async (e) => {
                           e.preventDefault();
                           await fetch(`/api/blocks/users/${profile.id}`, { method: "DELETE", credentials: "include" });
-                          (profile as any).is_blocked = false;
-                          setProfile({ ...profile } as any);
+                          setIsBlocked(false);
                         }}>
                         <Icon name="block" size={13} /> 블락됨
                       </button>
@@ -266,15 +268,15 @@ export default function ProfilePage() {
           </div>
         </div>
       )}
-      {(profile as any).am_i_blocked || (profile as any).is_blocked ? (
+      {amBlocked || isBlocked ? (
         <>
           <div className="profile-stats">
-            <span className="profile-stat disabled"><strong>—</strong> 게시글</span>
-            <span className="profile-stat disabled"><strong>—</strong> 시리즈</span>
-            <span className="profile-stat disabled"><strong>—</strong> 팔로잉</span>
-            <span className="profile-stat disabled"><strong>—</strong> 팔로워</span>
+            <span className="profile-stat disabled"><strong>0</strong> 게시글</span>
+            <span className="profile-stat disabled"><strong>0</strong> 시리즈</span>
+            <span className="profile-stat disabled"><strong>0</strong> 팔로잉</span>
+            <span className="profile-stat disabled"><strong>0</strong> 팔로워</span>
           </div>
-          <div className="empty-state">{(profile as any).is_blocked ? "차단한 유저입니다" : "상대방이 당신을 차단했습니다"}</div>
+          <div className="empty-state">{isBlocked ? "차단한 유저입니다" : "상대방이 당신을 차단했습니다"}</div>
         </>
       ) : (
       <>
