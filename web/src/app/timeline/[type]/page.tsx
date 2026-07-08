@@ -62,7 +62,10 @@ export default function TimelinePage() {
       const data = await api.timeline(tlType, LOAD_MORE, rawOffset);
       setPosts((prev) => {
         const ids = new Set(prev.map((p) => p.id));
-        return [...prev, ...data.posts.filter((p: any) => !ids.has(p.id))];
+        const newPosts = data.posts.filter((p: any) => !ids.has(p.id));
+        const total = prev.length + newPosts.length;
+        if (total >= 500) setHasMore(false);
+        return [...prev, ...newPosts];
       });
       setHasMore(data.has_more);
       setRawOffset((prev) => prev + LOAD_MORE);
