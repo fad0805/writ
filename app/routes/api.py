@@ -884,7 +884,9 @@ def api_search_series(request: Request, q: str = Query("")):
     if not user:
         return {"series": []}
     with get_session() as s:
-        qb = s.query(Novel).order_by(desc(Novel.updated_at))
+        qb = s.query(Novel).filter(
+            or_(Novel.visibility.in_(["public", "unlisted"]), Novel.author_id == user.id)
+        ).order_by(desc(Novel.updated_at))
         if query:
             qb = qb.filter(Novel.title.ilike(f"%{query}%"))
         novels = qb.limit(5).all()
