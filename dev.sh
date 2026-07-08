@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+APP_ENV="development"
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -125,7 +126,7 @@ _prefix_frontend() {
 }
 
 echo -e "${YELLOW}[backend]${NC} 서버 시작 중 (포트 $BACKEND_PORT)..."
-PYTHONUNBUFFERED=1 "$PYTHON" -m uvicorn app.main:app --reload --host 0.0.0.0 --port "$BACKEND_PORT" \
+cd "$ROOT_DIR" && APP_ENV=development PYTHONUNBUFFERED=1 "$PYTHON" -m uvicorn app.main:app --reload --host 0.0.0.0 --port "$BACKEND_PORT" \
     > >(tee -a "$COMBINED_LOG" | _prefix_output "[backend]" "$GREEN") 2>&1 &
 BACKEND_PID=$!
 PIDS+=("$BACKEND_PID")

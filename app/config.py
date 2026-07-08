@@ -2,18 +2,17 @@ import os
 from dotenv import load_dotenv
 
 # Load environment files
-_app_env = os.environ.get("APP_ENV", "development")
-load_dotenv(".env")
+_app_env = os.environ.get("APP_ENV")
 load_dotenv(f".env.{_app_env}")
 
 # Server configuration
-DOMAIN = os.environ.get("DOMAIN", "localhost:8000")
-SCHEME = os.environ.get("SCHEME", "http")
+DOMAIN = os.environ.get("DOMAIN")
+SCHEME = os.environ.get("SCHEME")
 BASE_URL = f"{SCHEME}://{DOMAIN}"
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./sns_blog.db")
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "change-me-to-a-random-secret-key")
+SECRET_KEY = os.environ.get("SECRET_KEY")
 SESSION_EXPIRE_DAYS = 30
 
 # ActivityPub
