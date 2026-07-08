@@ -1265,9 +1265,16 @@ def api_get_novel(request: Request, novel_id: int):
             pass
         episodes = s.query(Episode).filter_by(novel_id=novel_id).order_by(Episode.episode_number).all()
         author = s.query(User).get(novel.author_id)
+        is_mine = user.id == novel.author_id if user else False
+        episode_list = [_episode_json(e) for e in episodes]
+        novel_json = _novel_json(novel, s)
+        if not is_mine:
+            for e in episode_list:
+                e.pop("views", None)
+            novel_json.pop("total_views", None)
         result = {
-            "novel": _novel_json(novel, s),
-            "episodes": [_episode_json(e) for e in episodes],
+            "novel": novel_json,
+            "episodes": episode_list,
             "author": _user_json(author) if author else None,
             "is_mine": user.id == novel.author_id if user else False,
             "is_following": s.query(SeriesFollow).filter_by(user_id=user.id, novel_id=novel.id).count() > 0 if user else False,
@@ -1491,8 +1498,11 @@ def api_get_episode(request: Request, novel_id: int, episode_id: int):
                 episode.views = (episode.views or 0) + 1
                 s.add(EpisodeView(user_id=user.id, episode_id=episode.id))
         s.commit()
+        ep_json = _episode_json(episode)
+        if not is_mine:
+            ep_json.pop("views", None)
         result = {
-            "episode": _episode_json(episode),
+            "episode": ep_json,
             "novel": _novel_json(novel, s),
             "is_mine": is_mine,
             "prev_episode": _episode_json(prev_ep) if prev_ep else None,
