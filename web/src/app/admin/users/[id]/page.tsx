@@ -17,6 +17,18 @@ interface UserDetail {
   moderation_history?: { id: number; action: string; created_at: string; by: { display_name: string; username: string } | null; meta: { action?: string; message?: string } }[];
 }
 
+const actionLabels: Record<string, string> = {
+  warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지",
+  unsuspend: "정지 해제", unlimit: "제한 해제", unfreeze: "동결 해제", unsensitive: "민감 해제",
+  deceased: "고인 설정", undeceased: "고인 해제",
+  moderate: "중재", toggle_sensitive: "민감 전환",
+  change_role: "권한 변경", reset_password: "비밀번호 초기화",
+  admin_change_email: "이메일 강제 변경", verify_email: "이메일 인증",
+  remove_avatar: "아바타 제거", set_note: "메모 설정",
+  block_domain: "도메인 차단",
+  delete_post: "게시글 삭제",
+};
+
 export default function AdminUserDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -33,11 +45,23 @@ export default function AdminUserDetailPage() {
   const [modAction, setModAction] = useState("warning");
   const [modMessage, setModMessage] = useState("");
   const [modEmail, setModEmail] = useState(false);
+  const [logs, setLogs] = useState<any[]>([]);
 
-  const load = () => {
-    fetch(`/api/admin/users/${params.id}`, { credentials: "include" })
-      .then(r => r.json()).then(d => { setU(d); setNoteText(d.moderation_note || ""); setLoading(false); })
-      .catch(() => setLoading(false));
+  const load = async () => {
+    const [userRes, logsRes] = await Promise.all([
+      fetch(`/api/admin/users/${params.id}`, { credentials: "include" }),
+      fetch(`/api/admin/logs?target_type=user&target_id=${params.id}&limit=20`, { credentials: "include" }),
+    ]);
+    if (userRes.ok) {
+      const d = await userRes.json();
+      setU(d);
+      setNoteText(d.moderation_note || "");
+    }
+    if (logsRes.ok) {
+      const d = await logsRes.json();
+      setLogs(d.logs || []);
+    }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -113,15 +137,17 @@ export default function AdminUserDetailPage() {
               <td className="label">이메일</td>
               <td className="value">{u.email_domain ? `${u.username}@${u.email_domain}` : "-"}</td>
               <td className="action admin-action-cell">
-                <button onClick={() => setShowChangeEmail(!showChangeEmail)} className="btn btn-small btn-outline text-xs admin-action-btn-eq">변경</button>
-                {u.email_domain && (
-                  <button onClick={async () => {
-                    const form = new FormData(); form.append("domain", u.email_domain!);
-                    const res = await fetch("/api/admin/block-domain", { method: "POST", credentials: "include", body: form });
-                    const d = await res.json().catch(() => ({}));
-                    alert(res.ok ? `도메인 ${u.email_domain} 차단됨` : (d.detail || "실패"));
-                  }} className="btn btn-small btn-outline text-xs admin-action-btn-eq" style={{ color: "var(--danger)" }}>도메인 차단</button>
-                )}
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
+                  <button onClick={() => setShowChangeEmail(!showChangeEmail)} className="btn btn-small btn-outline text-xs admin-action-btn-eq">변경</button>
+                  {u.email_domain && (
+                    <button onClick={async () => {
+                      const form = new FormData(); form.append("domain", u.email_domain!);
+                      const res = await fetch("/api/admin/block-domain", { method: "POST", credentials: "include", body: form });
+                      const d = await res.json().catch(() => ({}));
+                      alert(res.ok ? `도메인 ${u.email_domain} 차단됨` : (d.detail || "실패"));
+                    }} className="btn btn-small btn-outline text-xs admin-action-btn-eq" style={{ color: "var(--danger)" }}>도메인 차단</button>
+                  )}
+                </div>
               </td>
             </tr>
             {showChangeEmail && (
@@ -234,6 +260,31 @@ export default function AdminUserDetailPage() {
           <button onClick={() => act(`/api/admin/users/${u.id}/reset-password`)} className="btn btn-small border-default">암호 초기화</button>
           <button onClick={() => router.push(`/@${u.username}`)} className="btn btn-small btn-outline">프로필 보기</button>
         </div>
+      </div>
+
+      {/* Moderation log */}
+      <div className="admin-detail-card" style={{ marginTop: 16 }}>
+        <div style={{ fontWeight: 600, padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>중재 기록 ({logs.length})</div>
+        {logs.length === 0 ? (
+          <div style={{ padding: "12px 16px", color: "var(--text-muted)", fontSize: "0.85em" }}>기록이 없습니다.</div>
+        ) : (
+          <div className="admin-table" style={{ display: "block", border: "none" }}>
+            <div className="admin-table-header">
+              <span style={{ width: 140, flexShrink: 0 }}>시간</span>
+              <span style={{ width: 80, flexShrink: 0 }}>진행자</span>
+              <span style={{ width: 100, flexShrink: 0 }}>액션</span>
+              <span style={{ flex: "1 1 0", minWidth: 0 }}>상세</span>
+            </div>
+            {logs.map((log: any) => (
+              <div key={log.id} className="admin-table-row">
+                <span style={{ width: 140, flexShrink: 0, fontSize: "0.85em", fontFamily: "monospace" }}>{log.created_at?.slice(0, 19) || "-"}</span>
+                <span style={{ width: 80, flexShrink: 0 }}>{log.username || "-"}</span>
+                <span style={{ width: 100, flexShrink: 0 }}>{actionLabels[log.action] || log.action}</span>
+                <span style={{ flex: "1 1 0", minWidth: 0, fontSize: "0.85em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{log.details || "-"}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {showModerate && (

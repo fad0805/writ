@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from app.models import User, Post, Follow, Like, Boost, Notification, CustomEmoji, FederationBlock, AllowedServer, ServerSetting, get_session
+from app.models import User, Post, Follow, Like, Boost, Notification, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, get_session
 from app.config import BASE_URL, SECRET_KEY
 from app.crypto_utils import generate_keypair, sign_string, encrypt_key, get_private_key
 
@@ -381,6 +381,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User
             existing.summary = data.get("summary", existing.summary)
             if avatar_url:
                 existing.profile_image = _save_remote_avatar(avatar_url, local_username.replace("@", "_"))
+            _process_emoji_tags(data.get("tag", []), session)
             session.commit()
             return existing
 
@@ -393,6 +394,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User
             by_username.summary = data.get("summary", by_username.summary)
             if avatar_url and not by_username.profile_image:
                 by_username.profile_image = _save_remote_avatar(avatar_url, local_username.replace("@", "_"))
+            _process_emoji_tags(data.get("tag", []), session)
             session.commit()
             return by_username
 
@@ -418,6 +420,8 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User
             profile_image=profile_image,
         )
         session.add(user)
+        session.flush()
+        _process_emoji_tags(data.get("tag", []), session)
         session.commit()
         return user
 
@@ -581,6 +585,13 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     User.username.in_(mentioned_names)
                 ).all()
                 mentioned_ids = [u.id for u in mentioned]
+
+            # Check if actor's domain is server-muted
+            actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
+            if actor_domain:
+                mute_entry = session.query(MutedServer).filter_by(domain=actor_domain).first()
+                if mute_entry and mute_entry.muted and visibility == "public":
+                    visibility = "home"
 
             # Process custom emoji tags
             _process_emoji_tags(obj.get("tag", []), session)

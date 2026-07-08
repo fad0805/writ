@@ -9,7 +9,7 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, SeriesFollow, Tag, CustomEmoji, ProfileNote, Report, BlockedDomain, FederationBlock, AllowedServer, ServerSetting, AdminLog, get_session
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, SeriesFollow, Tag, CustomEmoji, ProfileNote, Report, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, get_session
 from app.routes.auth import require_auth, get_current_user
 from app.log_utils import log_admin_action
 
@@ -598,7 +598,7 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
         s.add(report)
         s.flush()
         report_id = report.id
-        admins = s.query(User).filter(User.role.in_(["admin", "moderator"])).all()
+        admins = s.query(User).filter(User.role.in_(["admin", "moderator", "owner"])).all()
         target_label = ""
         target_author_name = ""
         if target_type == "post":
@@ -1509,7 +1509,7 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
         db.series_default_visibility = series_default_visibility
         db.episode_default_visibility = episode_default_visibility
         db.is_locked = is_locked
-        if user.role in ("admin", "moderator"):
+        if user.role in ("admin", "moderator", "owner"):
             db.show_badge = show_badge
         s.commit()
     return {"ok": True}
@@ -1713,6 +1713,25 @@ def api_search(request: Request, q: str = Query("")):
     query = q.strip().lstrip("@")
     if not query:
         return {"posts": [], "novels": [], "users": []}
+    # Check if the query contains a blocked/allowed domain
+    blocked_domain = None
+    if "@" in query and "." in query:
+        parts = query.split("@")
+        if len(parts) == 2 and parts[1]:
+            from urllib.parse import urlparse
+            domain = parts[1].strip().lower()
+            if domain:
+                from app.models import ServerSetting, FederationBlock, AllowedServer
+                with get_session() as s_check:
+                    mode = ServerSetting.get(s_check).federation_mode or "blacklist"
+                    if mode == "whitelist":
+                        allowed = s_check.query(AllowedServer).filter_by(domain=domain).first()
+                        if not allowed:
+                            blocked_domain = domain
+                    else:
+                        blocked = s_check.query(FederationBlock).filter_by(domain=domain).first()
+                        if blocked:
+                            blocked_domain = domain
     with get_session() as s:
         pattern = f"%{query}%"
         posts = s.query(Post).options(selectinload(Post.author)).filter(
@@ -1726,15 +1745,69 @@ def api_search(request: Request, q: str = Query("")):
             Novel.is_published == True,
             Novel.visibility == "public",
         ).order_by(desc(Novel.updated_at)).limit(20).all()
-        users = s.query(User).filter(
+        local_users = s.query(User).filter(
             User.is_remote == False,
             or_(User.username.ilike(pattern), User.display_name.ilike(pattern)),
         ).limit(20).all()
-        return {
+        remote_users = s.query(User).filter(
+            User.is_remote == True,
+            or_(User.username.ilike(pattern), User.display_name.ilike(pattern)),
+        ).limit(10).all()
+        all_users = list(local_users) + list(remote_users)
+        # If query is handle@domain and no remote match yet, try to resolve
+        if "@" in query and not blocked_domain:
+            at_parts = query.split("@", 1)
+            if len(at_parts) == 2 and at_parts[0] and at_parts[1]:
+                r_handle, r_domain = at_parts[0].strip().lower(), at_parts[1].strip().lower()
+                already_found = any(
+                    u.is_remote and u.username.lower().startswith(f"{r_handle}@") and u.username.lower().endswith(f"@{r_domain}")
+                    for u in all_users
+                )
+                if not already_found:
+                    try:
+                        import httpx
+                        from app.activitypub import _resolve_actor
+                        urls = [
+                            f"https://{r_domain}/users/{r_handle}",
+                            f"https://{r_domain}/@{r_handle}",
+                            f"https://{r_domain}/u/{r_handle}",
+                            f"https://{r_domain}/profile/{r_handle}",
+                        ]
+                        resolved = None
+                        for url in urls:
+                            try:
+                                resolved = _resolve_actor(url)
+                                if resolved:
+                                    break
+                            except Exception:
+                                continue
+                        if not resolved:
+                            wf = httpx.get(
+                                f"https://{r_domain}/.well-known/webfinger?resource=acct:{r_handle}@{r_domain}",
+                                timeout=5,
+                            )
+                            if wf.status_code == 200:
+                                wf_data = wf.json()
+                                for link in wf_data.get("links", []):
+                                    if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
+                                        href = link.get("href", "")
+                                        if href:
+                                            resolved = _resolve_actor(href)
+                                            break
+                        if resolved:
+                            refreshed = s.query(User).get(resolved.id)
+                            if refreshed:
+                                all_users.append(refreshed)
+                    except Exception:
+                        pass
+        result = {
             "posts": [_post_json(p, s, user) for p in posts],
             "novels": [_novel_json(n, s) for n in novels],
-            "users": [_user_json(u) for u in users],
+            "users": [_user_json(u) for u in all_users],
         }
+        if blocked_domain:
+            result["blocked_domain"] = blocked_domain
+        return result
 
 
 @router.get("/users/autocomplete")
@@ -1986,11 +2059,33 @@ def api_unread_count(request: Request):
     return {"count": count}
 
 
+def _check_fetch_domain_allowed(url: str) -> str | None:
+    """Return an error message if the URL's domain is federated-blocked, else None."""
+    from urllib.parse import urlparse
+    domain = urlparse(url).hostname or ""
+    if domain:
+        with get_session() as s:
+            mode = ServerSetting.get(s).federation_mode or "blacklist"
+            if mode == "whitelist":
+                allowed = s.query(AllowedServer).filter_by(domain=domain).first()
+                if not allowed:
+                    return f"허용되지 않은 서버입니다: {domain}"
+            else:
+                blocked = s.query(FederationBlock).filter_by(domain=domain).first()
+                if blocked:
+                    reason = f" ({blocked.reason})" if blocked.reason else ""
+                    return f"차단된 서버입니다{reason}: {domain}"
+    return None
+
+
 @router.post("/fetch-actor")
 def api_fetch_actor(request: Request, url: str = Form(...)):
     user = require_auth(request)
     if not url.startswith("http"):
         raise HTTPException(status_code=400, detail="Invalid URL")
+    err = _check_fetch_domain_allowed(url)
+    if err:
+        raise HTTPException(status_code=403, detail=err)
     from app.activitypub import _resolve_actor
     _resolve_actor(url)
     actor_id = None
@@ -2018,6 +2113,9 @@ def api_fetch_post(request: Request, url: str = Form(...)):
     user = require_auth(request)
     if not url.startswith("http"):
         raise HTTPException(status_code=400, detail="Invalid URL")
+    err = _check_fetch_domain_allowed(url)
+    if err:
+        raise HTTPException(status_code=403, detail=err)
 
     data = _ap_fetch(url, user)
     if not data:
@@ -2793,17 +2891,17 @@ def _is_federation_allowed(domain: str) -> bool:
 @router.get("/admin/federation-blocks")
 def api_admin_list_federation_blocks(request: Request):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         blocks = s.query(FederationBlock).order_by(FederationBlock.created_at.desc()).all()
-        return {"blocks": [{"id": b.id, "domain": b.domain, "created_by": b.created_by.username if b.created_by else "", "created_at": str(b.created_at) if b.created_at else ""} for b in blocks]}
+        return {"blocks": [{"id": b.id, "domain": b.domain, "reason": b.reason or "", "created_by": b.created_by.username if b.created_by else "", "created_at": str(b.created_at) if b.created_at else ""} for b in blocks]}
 
 
 @router.post("/admin/federation-block")
-def api_admin_add_federation_block(request: Request, domain: str = Form(...)):
+def api_admin_add_federation_block(request: Request, domain: str = Form(...), reason: str = Form("")):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     domain = domain.strip().lower()
     if not domain or "." not in domain:
@@ -2812,18 +2910,18 @@ def api_admin_add_federation_block(request: Request, domain: str = Form(...)):
         existing = s.query(FederationBlock).filter_by(domain=domain).first()
         if existing:
             raise HTTPException(status_code=400, detail="Already blocked")
-        s.add(FederationBlock(domain=domain, created_by_id=user.id))
+        s.add(FederationBlock(domain=domain, reason=reason, created_by_id=user.id))
         # Also remove from allowed list if present
         s.query(AllowedServer).filter_by(domain=domain).delete()
         s.commit()
-    log_admin_action(user.id, user.username, "federation_block", target_type="domain", target_username=domain, ip_address=request.client.host if request.client else "")
+    log_admin_action(user.id, user.username, "federation_block", target_type="domain", target_username=domain, details=reason, ip_address=request.client.host if request.client else "")
     return {"ok": True, "domain": domain}
 
 
 @router.delete("/admin/federation-block/{domain}")
 def api_admin_remove_federation_block(request: Request, domain: str):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     domain = domain.strip().lower()
     with get_session() as s:
@@ -2839,7 +2937,7 @@ def api_admin_remove_federation_block(request: Request, domain: str):
 @router.get("/admin/allowed-servers")
 def api_admin_list_allowed_servers(request: Request):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         servers = s.query(AllowedServer).order_by(AllowedServer.created_at.desc()).all()
@@ -2849,7 +2947,7 @@ def api_admin_list_allowed_servers(request: Request):
 @router.post("/admin/allowed-server")
 def api_admin_add_allowed_server(request: Request, domain: str = Form(...)):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     domain = domain.strip().lower()
     if not domain or "." not in domain:
@@ -2869,7 +2967,7 @@ def api_admin_add_allowed_server(request: Request, domain: str = Form(...)):
 @router.delete("/admin/allowed-server/{domain}")
 def api_admin_remove_allowed_server(request: Request, domain: str):
     user = require_auth(request)
-    if user.role not in ("admin", "moderator"):
+    if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     domain = domain.strip().lower()
     with get_session() as s:
@@ -2879,6 +2977,407 @@ def api_admin_remove_allowed_server(request: Request, domain: str):
         s.delete(sv)
         s.commit()
     log_admin_action(user.id, user.username, "federation_disallow", target_type="domain", target_username=domain, ip_address=request.client.host if request.client else "")
+    return {"ok": True}
+
+
+@router.get("/admin/remote-servers")
+def api_admin_remote_servers(request: Request):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        remote_users = s.query(User).filter(User.is_remote == True).all()
+        domains = set()
+        for u in remote_users:
+            if u.remote_url:
+                from urllib.parse import urlparse
+                domain = urlparse(u.remote_url).hostname
+                if domain:
+                    domains.add(domain)
+        return {"servers": sorted(domains)}
+
+
+@router.get("/admin/remote-server/{domain:path}")
+def api_admin_remote_server(domain: str, request: Request, offset: int = 0, limit: int = 20):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    from urllib.parse import urlparse
+    with get_session() as s:
+        from sqlalchemy import or_
+        candidates = s.query(User).filter(
+            User.is_remote == True,
+            or_(
+                User.remote_url.like(f"https://{domain}/%"),
+                User.remote_url.like(f"http://{domain}/%"),
+            )
+        ).all()
+        domain_users = []
+        for u in candidates:
+            if u.remote_url:
+                parsed = urlparse(u.remote_url)
+                if parsed.hostname == domain:
+                    domain_users.append(u)
+
+        total_users = len(domain_users)
+        remote_ids = [u.id for u in domain_users]
+
+        local_following = 0
+        local_followers = 0
+        if remote_ids:
+            local_following = s.query(Follow).filter(
+                Follow.following_id.in_(remote_ids),
+                Follow.accepted == True
+            ).count()
+            local_followers = s.query(Follow).filter(
+                Follow.follower_id.in_(remote_ids),
+                Follow.accepted == True
+            ).count()
+
+        is_blocked = s.query(FederationBlock).filter_by(domain=domain).first() is not None
+        mute_entry = s.query(MutedServer).filter_by(domain=domain).first()
+        is_muted = mute_entry is not None and mute_entry.muted
+        is_media_muted = mute_entry is not None and mute_entry.media_muted
+
+        import httpx
+        try:
+            resp = httpx.get(f"https://{domain}", timeout=5)
+            is_reachable = resp.status_code < 500
+        except:
+            is_reachable = False
+
+        paged = domain_users[offset:offset + limit + 1]
+        has_more = len(paged) > limit
+        paged = paged[:limit]
+
+        return {
+            "domain": domain,
+            "total_users": total_users,
+            "local_following": local_following,
+            "local_followers": local_followers,
+            "is_reachable": is_reachable,
+            "is_blocked": is_blocked,
+            "is_muted": is_muted,
+            "is_media_muted": is_media_muted,
+            "users": [
+                {
+                    "id": u.id,
+                    "username": u.username,
+                    "display_name": u.display_name,
+                    "profile_image": u.profile_image,
+                    "remote_url": u.remote_url,
+                }
+                for u in paged
+            ],
+            "has_more": has_more,
+            "total_users_count": total_users,
+            "server_icon": f"https://{domain}/favicon.ico",
+        }
+
+
+@router.get("/admin/federation-search")
+def api_admin_federation_search(request: Request, q: str = ""):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    q = q.strip()
+    logger.info("federation-search q=%r", q)
+    if not q:
+        return {"results": []}
+    results = []
+    # Try @handle@domain pattern
+    if q.startswith("@") and "@" in q[1:]:
+        parts = q[1:].split("@", 1)
+        if len(parts) == 2:
+            handle = parts[0].strip()
+            domain = parts[1].strip()
+            logger.info("federation-search handle=%r domain=%r", handle, domain)
+            if not handle or not domain:
+                return {"results": []}
+            local_username = f"{handle}@{domain}"
+            with get_session() as s:
+                # Check remote users by exact match on username
+                remote_user = s.query(User).filter(
+                    User.username == local_username,
+                    User.is_remote == True,
+                ).first()
+                logger.info("federation-search exact=%s id=%s", remote_user is not None, getattr(remote_user, 'id', None))
+                if not remote_user:
+                    remote_user = s.query(User).filter(
+                        func.lower(User.username) == local_username.lower(),
+                        User.is_remote == True,
+                    ).first()
+                    logger.info("federation-search casefold=%s id=%s", remote_user is not None, getattr(remote_user, 'id', None))
+                if not remote_user:
+                    from urllib.parse import urlparse
+                    all_remote = s.query(User).filter(
+                        User.is_remote == True,
+                        User.remote_url.isnot(None),
+                    ).limit(500).all()
+                    logger.info("federation-search scanning %d remote users for domain=%s handle=%s", len(all_remote), domain, handle)
+                    for u in all_remote:
+                        parsed = urlparse(u.remote_url)
+                        if parsed.hostname and parsed.hostname.lower() == domain.lower():
+                            uname = u.username.split("@")[0]
+                            if uname.lower() == handle.lower():
+                                remote_user = u
+                                logger.info("federation-search found by url match: id=%s username=%s", u.id, u.username)
+                                break
+                if remote_user:
+                    results.append({
+                        "source": "remote_cached",
+                        "id": remote_user.id,
+                        "username": remote_user.username,
+                        "display_name": remote_user.display_name,
+                        "profile_image": remote_user.profile_image,
+                        "remote_url": remote_user.remote_url,
+                    })
+                else:
+                    # Try to resolve via ActivityPub
+                    import httpx
+                    from app.activitypub import _resolve_actor
+                    # Try actor URL patterns
+                    actor_urls = [
+                        f"https://{domain}/users/{handle}",
+                        f"https://{domain}/@{handle}",
+                        f"https://{domain}/u/{handle}",
+                        f"https://{domain}/profile/{handle}",
+                    ]
+                    resolved = None
+                    for url in actor_urls:
+                        try:
+                            resolved = _resolve_actor(url)
+                            if resolved:
+                                break
+                        except Exception:
+                            continue
+                    if not resolved:
+                        # Try WebFinger discovery
+                        try:
+                            wf = httpx.get(
+                                f"https://{domain}/.well-known/webfinger?resource=acct:{handle}@{domain}",
+                                timeout=5,
+                            )
+                            if wf.status_code == 200:
+                                wf_data = wf.json()
+                                for link in wf_data.get("links", []):
+                                    if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
+                                        href = link.get("href", "")
+                                        if href:
+                                            resolved = _resolve_actor(href)
+                                            break
+                        except Exception:
+                            pass
+                    if resolved:
+                        results.append({
+                            "source": "remote_fetched",
+                            "id": resolved.id,
+                            "username": resolved.username,
+                            "display_name": resolved.display_name,
+                            "profile_image": resolved.profile_image,
+                            "remote_url": resolved.remote_url,
+                        })
+    else:
+        # Plain text: search local users and remote users by username
+        with get_session() as s:
+            local = s.query(User).filter(
+                func.lower(User.username).contains(q.lower()),
+                User.is_remote == False,
+            ).limit(20).all()
+            for u in local:
+                results.append({
+                    "source": "local",
+                    "id": u.id,
+                    "username": u.username,
+                    "display_name": u.display_name,
+                    "profile_image": u.profile_image,
+                    "remote_url": None,
+                })
+            # Also search remote users by username
+            remote = s.query(User).filter(
+                func.lower(User.username).contains(q.lower()),
+                User.is_remote == True,
+            ).limit(10).all()
+            for u in remote:
+                results.append({
+                    "source": "remote_cached",
+                    "id": u.id,
+                    "username": u.username,
+                    "display_name": u.display_name,
+                    "profile_image": u.profile_image,
+                    "remote_url": u.remote_url,
+                })
+    return {"results": results}
+
+
+def _domain_users(s, domain):
+    """Return all remote User objects whose remote_url hostname matches domain."""
+    from urllib.parse import urlparse
+    from sqlalchemy import or_
+    candidates = s.query(User).filter(
+        User.is_remote == True,
+        or_(
+            User.remote_url.like(f"https://{domain}/%"),
+            User.remote_url.like(f"http://{domain}/%"),
+        )
+    ).all()
+    result = []
+    for u in candidates:
+        if u.remote_url:
+            parsed = urlparse(u.remote_url)
+            if parsed.hostname == domain:
+                result.append(u)
+    return result
+
+
+@router.post("/admin/remote-server/{domain:path}/block")
+def api_admin_remote_server_block(domain: str, request: Request):
+    user = require_auth(request)
+    if user.role not in ("admin", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        existing = s.query(FederationBlock).filter_by(domain=domain).first()
+        if not existing:
+            s.add(FederationBlock(domain=domain, reason="", created_by_id=user.id))
+            s.commit()
+    log_admin_action(user.id, user.username, "federation_block", target_type="domain", target_username=domain, ip_address=request.client.host if request.client else "")
+    return {"ok": True}
+
+
+@router.post("/admin/remote-server/{domain:path}/unblock")
+def api_admin_remote_server_unblock(domain: str, request: Request):
+    user = require_auth(request)
+    if user.role not in ("admin", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        s.query(FederationBlock).filter_by(domain=domain).delete()
+        s.commit()
+    log_admin_action(user.id, user.username, "federation_unblock", target_type="domain", target_username=domain, ip_address=request.client.host if request.client else "")
+    return {"ok": True}
+
+
+@router.post("/admin/remote-server/{domain:path}/mute")
+def api_admin_remote_server_mute(domain: str, request: Request):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        mute = s.query(MutedServer).filter_by(domain=domain).first()
+        if not mute:
+            mute = MutedServer(domain=domain, muted=True, media_muted=False, created_by_id=user.id)
+            s.add(mute)
+        else:
+            mute.muted = True
+        # Apply limit action to all users from this domain
+        for u in _domain_users(s, domain):
+            u.is_limited = True
+            u.is_sensitive = True
+            for p in s.query(Post).filter(Post.author_id == u.id, Post.visibility == "public").all():
+                p.original_visibility = p.visibility
+                p.visibility = "home"
+        s.commit()
+    log_admin_action(user.id, user.username, "server_mute", target_type="domain", target_username=domain, ip_address=request.client.host if request.client else "")
+    return {"ok": True}
+
+
+@router.post("/admin/remote-server/{domain:path}/unmute")
+def api_admin_remote_server_unmute(domain: str, request: Request):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        mute = s.query(MutedServer).filter_by(domain=domain).first()
+        if mute:
+            mute.muted = False
+            # Only delete the row if both flags are off
+            if not mute.media_muted:
+                s.delete(mute)
+        # Restore visibility for users from this domain
+        for u in _domain_users(s, domain):
+            u.is_limited = False
+            u.is_sensitive = False
+            for p in s.query(Post).filter(Post.author_id == u.id, Post.original_visibility != "").all():
+                p.visibility = p.original_visibility
+                p.original_visibility = ""
+        s.commit()
+    log_admin_action(user.id, user.username, "server_unmute", target_type="domain", target_username=domain, ip_address=request.client.host if request.client else "")
+    return {"ok": True}
+
+
+@router.post("/admin/remote-server/{domain:path}/media-mute")
+def api_admin_remote_server_media_mute(domain: str, request: Request):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        mute = s.query(MutedServer).filter_by(domain=domain).first()
+        if not mute:
+            mute = MutedServer(domain=domain, muted=False, media_muted=True, created_by_id=user.id)
+            s.add(mute)
+        else:
+            mute.media_muted = True
+        for u in _domain_users(s, domain):
+            u.is_sensitive = True
+        s.commit()
+    log_admin_action(user.id, user.username, "server_media_mute", target_type="domain", target_username=domain, ip_address=request.client.host if request.client else "")
+    return {"ok": True}
+
+
+@router.post("/admin/remote-server/{domain:path}/unmedia-mute")
+def api_admin_remote_server_unmedia_mute(domain: str, request: Request):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        mute = s.query(MutedServer).filter_by(domain=domain).first()
+        if mute:
+            mute.media_muted = False
+            if not mute.muted:
+                s.delete(mute)
+        # Only clear is_sensitive if the user is not also muted (which sets is_sensitive)
+        for u in _domain_users(s, domain):
+            mute_user = s.query(MutedServer).filter_by(domain=domain).first()
+            if not mute_user or not mute_user.muted:
+                u.is_sensitive = False
+        s.commit()
+    log_admin_action(user.id, user.username, "server_unmedia_mute", target_type="domain", target_username=domain, ip_address=request.client.host if request.client else "")
+    return {"ok": True}
+
+
+@router.post("/admin/remote-server/{domain:path}/purge")
+def api_admin_remote_server_purge(domain: str, request: Request):
+    user = require_auth(request)
+    if user.role not in ("admin", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        users = _domain_users(s, domain)
+        user_ids = [u.id for u in users]
+        if user_ids:
+            # Delete follows involving these users
+            s.query(Follow).filter(
+                or_(Follow.follower_id.in_(user_ids), Follow.following_id.in_(user_ids))
+            ).delete(synchronize_session=False)
+            # Delete notifications
+            s.query(Notification).filter(
+                or_(Notification.from_user_id.in_(user_ids), Notification.user_id.in_(user_ids))
+            ).delete(synchronize_session=False)
+            # Delete likes, boosts, bookmarks
+            s.query(Like).filter(Like.user_id.in_(user_ids)).delete(synchronize_session=False)
+            s.query(Boost).filter(Boost.user_id.in_(user_ids)).delete(synchronize_session=False)
+            s.query(Bookmark).filter(Bookmark.user_id.in_(user_ids)).delete(synchronize_session=False)
+            # Delete posts
+            s.query(Post).filter(Post.author_id.in_(user_ids)).delete(synchronize_session=False)
+            # Finally delete the users
+            s.query(User).filter(User.id.in_(user_ids)).delete(synchronize_session=False)
+        # Delete AdminLog entries for this domain
+        s.query(AdminLog).filter(
+            AdminLog.target_type == "domain",
+            AdminLog.target_username == domain,
+        ).delete(synchronize_session=False)
+        # Clean up federation blocks, mutes, muted_servers
+        s.query(FederationBlock).filter_by(domain=domain).delete()
+        s.query(MutedServer).filter_by(domain=domain).delete()
+        s.commit()
     return {"ok": True}
 
 
@@ -2979,6 +3478,68 @@ def api_admin_update_settings(request: Request,
         s.commit()
     log_admin_action(user.id, user.username, "update_settings", ip_address=request.client.host if request.client else "")
     return {"ok": True}
+
+
+@router.get("/admin/logs")
+def api_admin_logs(request: Request, action: str = "", target_type: str = "", target_username: str = "", target_id: int = 0, offset: int = 0, limit: int = 50):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        q = s.query(AdminLog).order_by(AdminLog.created_at.desc())
+        if action:
+            q = q.filter(AdminLog.action == action)
+        if target_type:
+            q = q.filter(AdminLog.target_type == target_type)
+        if target_username:
+            q = q.filter(AdminLog.target_username == target_username)
+        if target_id:
+            q = q.filter(AdminLog.target_id == target_id)
+        total = q.count()
+        rows = q.offset(offset).limit(limit + 1).all()
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        return {
+            "logs": [{
+                "id": r.id,
+                "username": r.username,
+                "user_id": r.user_id,
+                "action": r.action,
+                "target_type": r.target_type,
+                "target_id": r.target_id,
+                "target_username": r.target_username,
+                "details": r.details,
+                "ip_address": r.ip_address,
+                "created_at": _fmt_dt(r.created_at),
+            } for r in rows],
+            "total": total,
+            "has_more": has_more,
+        }
+
+
+@router.post("/log")
+def api_client_log(request: Request):
+    """Receive log events from the frontend."""
+    try:
+        data = request.json()
+        action = data.get("action", "client_event")
+        details = data.get("details", "")
+        ip = request.client.host if request.client else ""
+        user = None
+        try:
+            user = require_auth(request)
+        except HTTPException:
+            pass
+        log_admin_action(
+            user_id=user.id if user else None,
+            username=user.username if user else "anonymous",
+            action=action,
+            details=details,
+            ip_address=ip,
+        )
+        return {"ok": True}
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
 
 
 

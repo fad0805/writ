@@ -111,6 +111,7 @@ export interface SearchResults {
   posts: PostData[];
   novels: NovelData[];
   users: User[];
+  blocked_domain?: string;
 }
 
 export interface EpisodeData {

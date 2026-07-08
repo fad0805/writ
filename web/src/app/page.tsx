@@ -22,7 +22,7 @@ export default function Home() {
 
   return (
     <div className="home-container">
-      <div className="home-logo"><img src={serverInfo?.logo || "/logo.svg"} alt={serverInfo?.name || "WRIT"} /></div>
+      <div className="home-logo">{serverInfo?.logo ? <img src={serverInfo.logo} alt={serverInfo?.name || "WRIT"} /> : <span className="home-logo-default" />}</div>
       <h1 className="home-title">{serverInfo?.name || "WRIT"}</h1>
       <p className="home-desc">
         작가를 위한 소셜 네트워크입니다.<br />

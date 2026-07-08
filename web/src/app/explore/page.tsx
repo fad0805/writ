@@ -9,6 +9,7 @@ import Avatar from "@/components/Avatar";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { Suspense } from "react";
+import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
 
 function ExploreFallback() {
   return <div className="empty-state">로딩 중...</div>;
@@ -23,6 +24,8 @@ function ExploreContent() {
   const [inputValue, setInputValue] = useState("");
   const [searched, setSearched] = useState(false);
   const [fetchedUrl, setFetchedUrl] = useState<string | null>(null);
+  const [blockedDomain, setBlockedDomain] = useState<string | null>(null);
+  const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchParams = useSearchParams();
 
@@ -33,12 +36,13 @@ function ExploreContent() {
 
   const doSearch = useCallback(async (q: string) => {
     if (!q.trim()) { loadExplore(); return; }
-    setLoading(true); setSearched(true); setFetchedUrl(null);
+    setLoading(true); setSearched(true); setFetchedUrl(null); setBlockedDomain(null);
     try {
       const res = await api.search(q.trim());
       setPosts(res.posts);
       setNovels(res.novels);
       setUsers(res.users);
+      if (res.blocked_domain) setBlockedDomain(res.blocked_domain);
     } catch { setPosts([]); setNovels([]); setUsers([]); }
     setLoading(false);
   }, [loadExplore]);
@@ -59,6 +63,8 @@ function ExploreContent() {
     } catch (e: unknown) { alert("불러오기 실패: " + ((e instanceof Error ? e.message : "") || "")); setPosts([]); setNovels([]); setUsers([]); }
     setLoading(false);
   }, []);
+
+  useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
 
   useEffect(() => {
     const urlParam = searchParams.get("url");
@@ -128,6 +134,11 @@ function ExploreContent() {
           </div>
         )}
       </div>
+      {blockedDomain && (
+        <div style={{ marginBottom: 12, padding: "8px 12px", background: "var(--danger-bg, #fff3cd)", border: "1px solid var(--danger, #ffc107)", borderRadius: 6, color: "var(--danger-text, #856404)", fontSize: "0.9em" }}>
+          <Icon name="ban" /> <strong>{blockedDomain}</strong> 서버는 연합이 차단되어 있습니다.
+        </div>
+      )}
       {loading && !searched ? (
         <div className="empty-state">로딩 중...</div>
       ) : posts.length === 0 && novels.length === 0 && users.length === 0 ? (
@@ -193,7 +204,7 @@ function ExploreContent() {
                       <Link key={u.id} href={`/@${u.username}`} className="user-search-card">
                         <Avatar user={u} className="sidebar-avatar rounded-[8px]" style={{ width: 36, height: 36, minWidth: 36 }} />
                         <div>
-                          <strong>{u.display_name}</strong>
+                          <strong dangerouslySetInnerHTML={{ __html: renderCustomEmojis(u.display_name, emojiMap) }} />
                           <span>@{u.username}</span>
                         </div>
                       </Link>

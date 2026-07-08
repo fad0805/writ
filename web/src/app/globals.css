@@ -2014,8 +2014,18 @@ input[type="checkbox"] {
 }
 .home-logo img {
   height: 64px;
+  width: 64px;
+  object-fit: cover;
+  border-radius: 12px;
   vertical-align: middle;
-  filter: brightness(0) saturate(100%) invert(40%) sepia(58%) saturate(562%) hue-rotate(50deg) brightness(92%);
+}
+.home-logo-default {
+  display: inline-block;
+  width: 64px;
+  height: 64px;
+  background-color: var(--accent);
+  mask: url(/logo.svg) center/contain no-repeat;
+  -webkit-mask: url(/logo.svg) center/contain no-repeat;
 }
 
 /* ── Sentinel ── */
@@ -2551,9 +2561,10 @@ input[type="checkbox"] {
   display: inline-block;
   width: 28px;
   height: 28px;
-  object-fit: contain;
+  object-fit: cover;
   vertical-align: middle;
   margin-right: 6px;
+  border-radius: 6px;
 }
 
 /* ── Utility extras ── */
@@ -2591,7 +2602,8 @@ input[type="checkbox"] {
   display: inline-block;
   width: 48px;
   height: 48px;
-  object-fit: contain;
+  object-fit: cover;
+  border-radius: 10px;
 }
 .not-found-link {
   display: inline-block;
@@ -2862,6 +2874,21 @@ input[type="checkbox"] {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85em;
+}
+.admin-table-header,
+.admin-table-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+.admin-table-header {
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+.admin-table-row + .admin-table-row {
+  border-top: 1px solid var(--border);
 }
 .admin-table th,
 .admin-table td {

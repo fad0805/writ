@@ -63,7 +63,7 @@ export default function ReportDetailPage() {
   };
 
   useEffect(() => {
-    if (!authLoading && user?.role !== "admin" && user?.role !== "moderator") {
+    if (!authLoading && user?.role !== "admin" && user?.role !== "moderator" && user?.role !== "owner") {
       router.push("/timeline/home");
     }
   }, [user, authLoading, router]);
@@ -104,7 +104,7 @@ export default function ReportDetailPage() {
   };
 
   if (authLoading || loading) return <div className="empty-state">로딩 중...</div>;
-  if (!user || (user.role !== "admin" && user.role !== "moderator")) return null;
+  if (!user || (user.role !== "admin" && user.role !== "moderator" && user.role !== "owner")) return null;
   if (!report) return <div className="empty-state">신고를 찾을 수 없습니다.</div>;
 
   const target = report.target;

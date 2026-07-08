@@ -453,6 +453,7 @@ class FederationBlock(Base):
 
     id = Column(Integer, primary_key=True)
     domain = Column(String(255), unique=True, nullable=False, index=True)
+    reason = Column(String(512), default="")
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), default=now)
 
@@ -464,6 +465,19 @@ class AllowedServer(Base):
 
     id = Column(Integer, primary_key=True)
     domain = Column(String(255), unique=True, nullable=False, index=True)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+    created_by = relationship("User", lazy="selectin")
+
+
+class MutedServer(Base):
+    __tablename__ = "muted_servers"
+
+    id = Column(Integer, primary_key=True)
+    domain = Column(String(255), unique=True, nullable=False, index=True)
+    muted = Column(Boolean, default=True)
+    media_muted = Column(Boolean, default=False)
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), default=now)
 
@@ -511,44 +525,9 @@ class ServerSetting(Base):
 
 def init_db():
     Base.metadata.create_all(engine)
-    # Sync existing is_admin users to admin role
-    try:
-        with Session(engine) as session:
-            session.query(User).filter(User.is_admin == True, User.role == "user").update({"role": "admin"})
-            session.commit()
-    except Exception:
-        pass
-    # Fill missing post numbers
-    try:
-        with Session(engine) as session:
-            import secrets
-            for post in session.query(Post).filter(Post.number == "").all():
-                post.number = secrets.token_hex(4)
-            session.commit()
-    except Exception:
-        pass
-    # Fill missing novel numbers
-    try:
-        with Session(engine) as session:
-            import secrets
-            for novel in session.query(Novel).filter(Novel.number == "").all():
-                novel.number = secrets.token_hex(4)
-            session.commit()
-    except Exception:
-        pass
-    # Add admin_email column to server_settings
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE server_settings ADD COLUMN admin_email VARCHAR(255) DEFAULT ''"))
-            session.commit()
-    except Exception:
-        pass
-    try:
-        with Session(engine) as session:
-            session.execute(text("ALTER TABLE server_settings ADD COLUMN federation_mode VARCHAR(16) DEFAULT 'blacklist'"))
-            session.commit()
-    except Exception:
-        pass
+    with Session(engine) as session:
+        from app.migrations import run_migrations
+        run_migrations(session)
 
 
 def get_session():

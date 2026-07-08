@@ -68,9 +68,9 @@ export default function Sidebar() {
 
   const handleLogout = async () => {
     const { api } = await import("@/lib/api");
+    router.replace("/");
     await api.logout();
     await refresh();
-    router.push("/");
   };
 
   const isActive = (href: string) => {
@@ -86,7 +86,7 @@ export default function Sidebar() {
     return (
       <aside className="sidebar">
         <div className="sidebar-header">
-          <Link href="/" className="sidebar-home-link"><h2><span className="sidebar-logo-icon" /> <span>{sidebarServerName}</span></h2></Link>
+          <Link href="/" className="sidebar-home-link"><h2>{sidebarLogo ? <img src={sidebarLogo} alt="" className="sidebar-logo-img" /> : <span className="sidebar-logo-icon" />} <span>{sidebarServerName}</span></h2></Link>
         </div>
       </aside>
     );
@@ -96,7 +96,7 @@ export default function Sidebar() {
     return (
       <aside className="sidebar">
         <div className="sidebar-header">
-          <Link href="/" className="sidebar-home-link"><h2><span className="sidebar-logo-icon" /> <span>{sidebarServerName}</span></h2></Link>
+          <Link href="/" className="sidebar-home-link"><h2>{sidebarLogo ? <img src={sidebarLogo} alt="" className="sidebar-logo-img" /> : <span className="sidebar-logo-icon" />} <span>{sidebarServerName}</span></h2></Link>
         </div>
         <ul className="nav-links">
           <NavItem href="/explore" active={isActive("/explore")}>

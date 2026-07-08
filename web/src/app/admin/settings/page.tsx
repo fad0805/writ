@@ -77,15 +77,18 @@ export default function AdminSettingsPage() {
         <div className="form-group">
           <label>대표 아이콘 (URL)</label>
           <input type="text" value={logo} onChange={(e) => setLogo(e.target.value)} className="cw-input" placeholder="https://example.com/logo.png" />
-          {logo && <img src={logo} alt="logo" style={{ maxWidth: 80, maxHeight: 80, marginTop: 8, borderRadius: 8 }} />}
+          <p className="form-help">정사각형 이미지를 사용해 주세요.</p>
+          {logo && <img src={logo} alt="logo" style={{ width: 80, height: 80, marginTop: 8, borderRadius: 12, objectFit: "cover" }} />}
         </div>
         <div className="form-group">
           <label>파비콘 (URL)</label>
           <input type="text" value={favicon} onChange={(e) => setFavicon(e.target.value)} className="cw-input" placeholder="https://example.com/favicon.ico" />
+          <p className="form-help">정사각형 이미지를 사용해 주세요. .ico 확장자만 지원됩니다.</p>
         </div>
         <div className="form-group">
           <label>모바일 앱 아이콘 (URL)</label>
           <input type="text" value={appIcon} onChange={(e) => setAppIcon(e.target.value)} className="cw-input" placeholder="https://example.com/app-icon.png" />
+          <p className="form-help">정사각형 이미지를 사용해 주세요.</p>
         </div>
         <div className="form-group">
           <label>관리자 계정</label>
