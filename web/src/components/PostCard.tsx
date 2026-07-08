@@ -101,10 +101,18 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
     html = rewriteLinks(html);
     if (quoteUrl) {
       const escUrl = quoteUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      html = html.replace(new RegExp(`<a[^>]*>${escUrl}</a>`, 'gi'), '');
-      html = html.replace(new RegExp(`series:\\s*${escUrl}`, 'gi'), '');
-      html = html.replace(new RegExp(`episode:\\s*${escUrl}`, 'gi'), '');
-      html = html.replace(new RegExp(escUrl, 'gi'), '');
+      const hasPrefix = new RegExp(`(series:|episode:)\\s*${escUrl}`, 'i').test(html);
+      if (hasPrefix) {
+        html = html.replace(new RegExp(`<a[^>]*>${escUrl}<\\/a>`, 'gi'), '');
+        html = html.replace(new RegExp(`(series:|episode:)\\s*${escUrl}`, 'gi'), '');
+        html = html.replace(new RegExp(escUrl, 'gi'), '');
+      } else {
+        const host = typeof window !== 'undefined' ? window.location.host : '';
+        const isLocal = host === (quoteUrl.match(/https?:\/\/([^/]+)/)?.[1]);
+        const linkHref = isLocal ? quoteUrl.replace(/https?:\/\/[^/]+/, '') : quoteUrl;
+        const linkTarget = isLocal ? '' : ' target="_blank" rel="noopener noreferrer"';
+        html = html.replace(new RegExp(escUrl, 'gi'), `<a href="${linkHref}"${linkTarget}>${quoteUrl}</a>`);
+      }
       html = html.replace(/<span class="quote-inline">\s*RE:\s*<\/span>/gi, '');
     }
     return html;

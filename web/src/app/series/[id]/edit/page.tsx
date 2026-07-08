@@ -1,24 +1,35 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import TextareaHighlight from "@/components/TextareaHighlight";
 import TagInput from "@/components/TagInput";
 import SeriesVisibilitySelector from "@/components/SeriesVisibilitySelector";
+import ImageCropper from "@/components/ImageCropper";
+
+function makeBlob(file: Blob): string {
+  return URL.createObjectURL(file);
+}
 
 export default function EditNovelPage() {
   const params = useParams();
   const router = useRouter();
-  const fileRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
-  const [coverImage, setCoverImage] = useState("");
+  const [coverImageUrl, setCoverImageUrl] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState("");
+  const [cropSrc, setCropSrc] = useState("");
   const [visibility, setVisibility] = useState("public");
   const [isCompleted, setIsCompleted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  const revokeBlobs = useCallback(() => {
+    if (coverPreview) URL.revokeObjectURL(coverPreview);
+  }, [coverPreview]);
 
   useEffect(() => {
     const id = Number(Array.isArray(params.id) ? params.id[0] : params.id);
@@ -30,12 +41,34 @@ export default function EditNovelPage() {
         setDescription(d.novel.description);
         setTags(d.novel.tags);
         setVisibility(d.novel.visibility || "public");
-        setCoverImage(d.novel.cover_image || "");
+        setCoverImageUrl(d.novel.cover_image || "");
         setIsCompleted(d.novel.is_completed);
         setLoading(false);
       })
       .catch(() => router.push("/series"));
   }, [params.id, router]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    revokeBlobs();
+    setImageFile(f);
+    setCoverPreview(makeBlob(f));
+    setCropSrc(makeBlob(f));
+  };
+
+  const handleCrop = useCallback((blob: Blob) => {
+    revokeBlobs();
+    const cropped = new File([blob], imageFile?.name || "cover.jpg", { type: "image/jpeg" });
+    setImageFile(cropped);
+    setCoverPreview(makeBlob(blob));
+    setCropSrc("");
+  }, [imageFile, revokeBlobs]);
+
+  const handleCropClose = useCallback(() => {
+    setCropSrc("");
+    if (!imageFile) setCoverPreview("");
+  }, [imageFile]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,7 +81,7 @@ export default function EditNovelPage() {
       form.append("tags", tags);
       form.append("visibility", visibility);
       form.append("is_completed", isCompleted ? "true" : "");
-      if (fileRef.current?.files?.[0]) form.append("cover_image", fileRef.current.files[0]);
+      if (imageFile) form.append("cover_image", imageFile);
       const res = await fetch(`/api/series/${params.id}/edit`, { method: "POST", credentials: "include", body: form });
       if (res.ok) router.push(`/series/${params.id}`);
       else alert("저장 실패");
@@ -57,6 +90,8 @@ export default function EditNovelPage() {
   };
 
   if (loading) return <p className="empty-state">로딩 중...</p>;
+
+  const showPreview = coverPreview || coverImageUrl;
 
   return (
     <>
@@ -77,11 +112,18 @@ export default function EditNovelPage() {
         </div>
         <div className="form-group">
           <label>표지 이미지</label>
-          <input type="file" ref={fileRef} accept="image/*" onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) setCoverPreview(URL.createObjectURL(f));
-          }} />
-          {(coverPreview || coverImage) && <img src={coverPreview || coverImage} alt="" className="cover-preview" />}
+          <div className="profile-edit-avatar-wrap">
+            {showPreview && <img src={showPreview} alt="" className="cover-preview" />}
+            <div>
+              <div className="profile-edit-file-row">
+                <label className="btn btn-outline profile-edit-file-label" style={{ cursor: "pointer" }}>
+                  파일 선택
+                  <input type="file" ref={inputRef} accept="image/*" onChange={handleFileChange} style={{ display: "none" }} />
+                </label>
+                {imageFile && <span className="profile-edit-file-name">{imageFile.name}</span>}
+              </div>
+            </div>
+          </div>
         </div>
         <div className="form-group">
           <label>공개 설정</label>
@@ -114,6 +156,7 @@ export default function EditNovelPage() {
           </div>
         </div>
       </form>
+      {cropSrc && <ImageCropper src={cropSrc} onCrop={handleCrop} onClose={handleCropClose} aspectRatio={3 / 4} />}
     </>
   );
 }

@@ -1,19 +1,53 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import TextareaHighlight from "@/components/TextareaHighlight";
 import TagInput from "@/components/TagInput";
 import SeriesVisibilitySelector from "@/components/SeriesVisibilitySelector";
+import ImageCropper from "@/components/ImageCropper";
+
+function makeBlob(file: Blob): string {
+  const url = URL.createObjectURL(file);
+  return url;
+}
 
 export default function NewNovelPage() {
   const router = useRouter();
-  const fileRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState("");
+  const [cropSrc, setCropSrc] = useState("");
   const [visibility, setVisibility] = useState("public");
   const [submitting, setSubmitting] = useState(false);
+
+  const revokeBlobs = useCallback(() => {
+    if (coverPreview) URL.revokeObjectURL(coverPreview);
+  }, [coverPreview]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    revokeBlobs();
+    setImageFile(f);
+    setCoverPreview(makeBlob(f));
+    setCropSrc(makeBlob(f));
+  };
+
+  const handleCrop = useCallback((blob: Blob) => {
+    revokeBlobs();
+    const cropped = new File([blob], imageFile?.name || "cover.jpg", { type: "image/jpeg" });
+    setImageFile(cropped);
+    setCoverPreview(makeBlob(blob));
+    setCropSrc("");
+  }, [imageFile, revokeBlobs]);
+
+  const handleCropClose = useCallback(() => {
+    setCropSrc("");
+    if (!imageFile) setCoverPreview("");
+  }, [imageFile]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +59,7 @@ export default function NewNovelPage() {
       form.append("description", description);
       form.append("tags", tags);
       form.append("visibility", visibility);
-      if (fileRef.current?.files?.[0]) form.append("cover_image", fileRef.current.files[0]);
+      if (imageFile) form.append("cover_image", imageFile);
       const res = await fetch("/api/series/new", { method: "POST", credentials: "include", body: form });
       const data = await res.json();
       if (res.ok) { window.dispatchEvent(new Event("novelchange")); router.push(`/series/${data.novel_id}`); }
@@ -53,11 +87,18 @@ export default function NewNovelPage() {
         </div>
         <div className="form-group">
           <label>표지 이미지</label>
-          <input type="file" ref={fileRef} accept="image/*" onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) setCoverPreview(URL.createObjectURL(f));
-          }} />
-          {coverPreview && <img src={coverPreview} alt="" className="cover-preview" />}
+          <div className="profile-edit-avatar-wrap">
+            {coverPreview && <img src={coverPreview} alt="" className="cover-preview" />}
+            <div>
+              <div className="profile-edit-file-row">
+                <label className="btn btn-outline profile-edit-file-label" style={{ cursor: "pointer" }}>
+                  파일 선택
+                  <input type="file" ref={inputRef} accept="image/*" onChange={handleFileChange} style={{ display: "none" }} />
+                </label>
+                {imageFile && <span className="profile-edit-file-name">{imageFile.name}</span>}
+              </div>
+            </div>
+          </div>
         </div>
         <div className="form-group">
           <label>공개 설정</label>
@@ -69,6 +110,7 @@ export default function NewNovelPage() {
           <button type="button" onClick={() => router.back()} className="btn btn-outline">취소</button>
         </div>
       </form>
+      {cropSrc && <ImageCropper src={cropSrc} onCrop={handleCrop} onClose={handleCropClose} aspectRatio={3 / 4} />}
     </>
   );
 }

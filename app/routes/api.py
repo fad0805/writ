@@ -1084,7 +1084,7 @@ def api_save_profile_note(request: Request, target_username: str, content: str =
     return {"ok": True}
 
 
-@router.get("/novels")
+@router.get("/series")
 def api_novels(request: Request):
     with get_session() as s:
         novels = s.query(Novel).filter_by(is_published=True, visibility="public").order_by(desc(Novel.updated_at)).all()
