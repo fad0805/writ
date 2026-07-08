@@ -45,6 +45,7 @@ export default function ProfilePage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [mediaPosts, setMediaPosts] = useState<any[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
+  const [mediaLoaded, setMediaLoaded] = useState(false);
   const [mediaHasMore, setMediaHasMore] = useState(false);
   const [mediaOffset, setMediaOffset] = useState(0);
   const [mediaLoadingMore, setMediaLoadingMore] = useState(false);
@@ -100,15 +101,17 @@ export default function ProfilePage() {
   }, [username, postOffset, hasMore, loadingMore]);
 
   const loadMedia = useCallback(async () => {
+    if (mediaLoaded) return;
     setMediaLoading(true);
     try {
       const d = await (await fetch(`/api/users/${username}/media?limit=12&offset=0`, { credentials: "include" })).json();
       setMediaPosts(d.posts || []);
       setMediaHasMore(d.has_more || false);
       setMediaOffset(12);
+      setMediaLoaded(true);
     } catch {}
     setMediaLoading(false);
-  }, [username]);
+  }, [username, mediaLoaded]);
 
   const loadMoreMedia = useCallback(async () => {
     if (mediaLoadingMore || !mediaHasMore) return;
@@ -123,8 +126,8 @@ export default function ProfilePage() {
   }, [username, mediaOffset, mediaHasMore, mediaLoadingMore]);
 
   useEffect(() => {
-    if (tab === "media" && mediaPosts.length === 0 && !mediaLoading) loadMedia();
-  }, [tab, loadMedia, mediaPosts.length, mediaLoading]);
+    if (tab === "media" && !mediaLoaded && !mediaLoading) loadMedia();
+  }, [tab, loadMedia, mediaLoaded, mediaLoading]);
 
   useEffect(() => { loadProfile(); }, [loadProfile, router]);
 
@@ -369,7 +372,7 @@ export default function ProfilePage() {
       <div className="profile-stats">
         <span className={`profile-stat ${tab === "posts" ? "active" : ""}`} onClick={() => setTab("posts")}><strong>{totalPosts || posts.length}</strong> 게시글</span>
         <span className={`profile-stat ${tab === "novels" ? "active" : ""}`} onClick={() => setTab("novels")}><strong>{novels.length}</strong> 시리즈</span>
-        <span className={`profile-stat ${tab === "media" ? "active" : ""}`} onClick={() => { setTab("media"); if (mediaPosts.length === 0 && !mediaLoading) loadMedia(); }}>미디어</span>
+        <span className={`profile-stat ${tab === "media" ? "active" : ""}`} onClick={() => { setTab("media"); if (!mediaLoaded && !mediaLoading) loadMedia(); }}>미디어</span>
         <span className={`profile-stat ${tab === "following" ? "active" : ""}`} onClick={() => setTab("following")}><strong>{followingCount}</strong> 팔로잉</span>
         <span className={`profile-stat ${tab === "followers" ? "active" : ""}`} onClick={() => setTab("followers")}><strong>{followersCount}</strong> 팔로워</span>
       </div>
