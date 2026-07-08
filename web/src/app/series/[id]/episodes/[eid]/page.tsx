@@ -77,9 +77,15 @@ export default function EpisodeDetailPage() {
           <span>{episode.created_at ? new Date(episode.created_at).toLocaleString("ko-KR") : ""}</span>
           <span><Icon name={episode.is_published ? "check" : "lock"} /> {episode.is_published ? "공개" : "비공개"}</span>
         </div>
-        {episode.summary && <blockquote className="episode-summary">{episode.summary}</blockquote>}
-        <div className="episode-body" dangerouslySetInnerHTML={{ __html: episode.content }} />
-        {episode.comment && <div className="episode-comment" dangerouslySetInnerHTML={{ __html: episode.comment }} />}
+        {!episode.is_published && !isMine ? (
+          <div className="empty-state" style={{ padding: "40px 0" }}>비공개 에피소드입니다</div>
+        ) : (
+          <>
+            {episode.summary && <blockquote className="episode-summary">{episode.summary}</blockquote>}
+            <div className="episode-body" dangerouslySetInnerHTML={{ __html: episode.content }} />
+            {episode.comment && <div className="episode-comment" dangerouslySetInnerHTML={{ __html: episode.comment }} />}
+          </>
+        )}
         <div className="episode-footer">
         <div className="episode-nav">
           <div className="episode-nav-side">

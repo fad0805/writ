@@ -1387,6 +1387,8 @@ input[type="checkbox"] {
   transition: border-color 0.2s;
 }
 .episode-item:hover { border-color: var(--card-hover); }
+.episode-item-private { opacity: 0.5; }
+.episode-item-private:hover { opacity: 0.7; }
 .episode-item:last-child { border-bottom: 2px solid var(--border); }
 .episode-number {
   color: var(--accent);

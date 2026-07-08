@@ -124,10 +124,10 @@ export default function NovelDetailPage() {
         {episodes.length === 0 ? (
           <p className="empty-state">아직 에피소드가 없습니다.</p>
         ) : episodes.map((e) => (
-          <div key={e.id} className="episode-item" onClick={() => router.push(`/series/${novel.id}/episodes/${e.id}`)}>
+          <div key={e.id} className={`episode-item${!e.is_published && !isMine ? " episode-item-private" : ""}`} onClick={() => router.push(`/series/${novel.id}/episodes/${e.id}`)}>
             <div className="episode-number">제 {e.episode_number}화</div>
             <div className="episode-info">
-              <span className="episode-title">{e.title}</span>
+              <span className="episode-title" style={{ color: !e.is_published && !isMine ? "var(--text-dim)" : undefined }}>{e.title}{!e.is_published && !isMine ? " (비공개)" : ""}</span>
               <div className="episode-meta">
                 {isMine && <span><Icon name={e.is_published ? "check" : "lock"} /> {e.is_published ? "공개" : "비공개"}</span>}
                 {isMine && e.views !== undefined && <span><Icon name="eye" /> {e.views}</span>}
