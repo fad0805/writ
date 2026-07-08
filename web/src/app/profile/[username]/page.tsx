@@ -350,7 +350,7 @@ export default function ProfilePage() {
       </div>
 
       <div id="tab-posts" className="profile-tab-posts" style={{ display: tab === "posts" ? "block" : "none" }}>
-        {pinnedPosts.map((p: any) => <PostCard key={`pin-${p.id}`} post={p} onUpdate={load} />)}
+        {pinnedPosts.map((p: any) => <div key={`pin-${p.id}`} style={{ outline: "1px solid var(--accent)", borderRadius: 8, marginBottom: 8 }}><PostCard post={p} onUpdate={load} /></div>)}
         {(() => {
           const pinnedIds = new Set(pinnedPosts.map((p: any) => p.id));
           const rest = posts.filter((p) => !pinnedIds.has(p.id));
@@ -360,7 +360,7 @@ export default function ProfilePage() {
 
       <div id="tab-novels" className="profile-novel-list profile-tab-novels" style={{ display: tab === "novels" ? "flex" : "none" }}>
         {pinnedSeries.map((n: any) => (
-          <div key={`pin-${n.id}`} className="profile-novel" style={{ display: "flex", gap: 14, cursor: "pointer", border: "1px solid var(--accent)" }} onClick={() => router.push(n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`)}>
+          <div key={`pin-${n.id}`} className="profile-novel" style={{ display: "flex", gap: 14, alignItems: "center", cursor: "pointer", border: "1px solid var(--accent)" }} onClick={() => router.push(n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`)}>
             <div className="cover-wrap-56">
               {n.cover_image ? <img src={n.cover_image} alt="" className="cover-img" /> : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(n.title) }}><Icon name="book" size={16} /></div>}
             </div>
@@ -368,6 +368,7 @@ export default function ProfilePage() {
               <strong className="profile-novel-title">{n.title}</strong>
               <span className="profile-novel-meta">{n.episode_count}화 · {n.is_completed ? "완결" : "연재중"}</span>
               <p className="profile-novel-desc">{n.description || "설명 없음"}</p>
+              {n.tags && <p className="novel-tags"><Icon name="tag" />{n.tags.split(/[ ,]+/).filter(Boolean).map((t: string, i: number) => <span key={i} className="tag-spacing">{t}</span>)}</p>}
             </div>
             {isMine && (
               <button className="action-btn" onClick={async (e) => { e.stopPropagation();
@@ -394,7 +395,7 @@ export default function ProfilePage() {
               <strong className="profile-novel-title">{n.title}</strong>
               <span className="profile-novel-meta">{n.episode_count}화 · {n.is_completed ? "완결" : "연재중"}</span>
               <p className="profile-novel-desc">{n.description || "설명 없음"}</p>
-              {n.tags && <p className="novel-tags"><Icon name="tag" />{n.tags.split(/[ ,]+/).filter(Boolean).map((t, i) => <span key={i} className="tag-spacing">{t}</span>)}</p>}
+              {n.tags && <p className="novel-tags"><Icon name="tag" />{n.tags.split(/[ ,]+/).filter(Boolean).map((t: string, i: number) => <span key={i} className="tag-spacing">{t}</span>)}</p>}
             </div>
             {isMine && (
               <button className="action-btn" onClick={async (e) => { e.stopPropagation();
