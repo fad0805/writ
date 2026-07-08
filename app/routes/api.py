@@ -1479,6 +1479,8 @@ def api_get_episode(request: Request, novel_id: int, episode_id: int):
         if not is_mine:
             next_ep = next_ep.filter(Episode.is_published == True)
         next_ep = next_ep.order_by(Episode.episode_number).first()
+        episode.views = (episode.views or 0) + 1
+        s.commit()
         result = {
             "episode": _episode_json(episode),
             "novel": _novel_json(novel, s),
