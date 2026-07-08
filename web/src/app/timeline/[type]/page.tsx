@@ -160,20 +160,12 @@ export default function TimelinePage() {
     const el = sentinelRef.current;
     if (!el) return;
     const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) loadMoreRef.current();
-      },
-      { rootMargin: "300px" }
+      () => { loadMoreRef.current(); },
+      { rootMargin: "400px" }
     );
     obs.observe(el);
     return () => obs.disconnect();
   }, [hasMore, posts.length]);
-
-  useEffect(() => {
-    if (!loading && posts.length > 0 && hasMore && document.documentElement.scrollHeight <= window.innerHeight) {
-      loadMoreRef.current();
-    }
-  }, [loading, hasMore, posts.length]);
 
   return (
     <>
