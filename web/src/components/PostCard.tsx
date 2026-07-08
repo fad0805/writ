@@ -126,6 +126,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   const [quotedSeries, setQuotedSeries] = useState<QuotedSeries | null>(null);
   const [quotedEpisode, setQuotedEpisode] = useState<QuotedEpisode | null>(null);
   const [loadingQuote, setLoadingQuote] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(-1);
   useEffect(() => {
     const newFormat = post.content.match(/https?:\/\/([^/]+)\/@(\w+(?:@[\w.-]+)?)\/([a-f0-9]+)/);
     const oldFormat = post.content.match(/https?:\/\/[^/]+\/post\/(\d+)/);
@@ -257,7 +258,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
               m.type === "video" ? (
                 <video key={i} src={m.url} controls style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "contain", background: "#000" }} />
               ) : (
-                <img key={i} src={m.url} alt="" style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "cover", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); window.open(m.url, "_blank"); }} />
+                <img key={i} src={m.url} alt="" style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "cover", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setViewerIndex(i); }} />
               )
             ))}
           </div>
@@ -363,6 +364,27 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
                 <button onClick={handleReport} className="btn" style={{ width: "100%" }}>신고 제출</button>
               </>
             )}
+          </div>
+        </div>
+      )}
+      {viewerIndex >= 0 && (post as any).media_attachments?.length > 0 && (
+        <div className="reply-modal-backdrop active" onClick={() => setViewerIndex(-1)}>
+          <div className="media-viewer" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "90vw", maxHeight: "90vh", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+            {(viewerIndex > 0) && (
+              <button onClick={(e) => { e.stopPropagation(); setViewerIndex(viewerIndex - 1); }} style={{ position: "absolute", left: -50, top: "50%", transform: "translateY(-50%)", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: "50%", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 10, fontSize: 20 }}>‹</button>
+            )}
+            {(viewerIndex < (post as any).media_attachments.length - 1) && (
+              <button onClick={(e) => { e.stopPropagation(); setViewerIndex(viewerIndex + 1); }} style={{ position: "absolute", right: -50, top: "50%", transform: "translateY(-50%)", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: "50%", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 10, fontSize: 20 }}>›</button>
+            )}
+            <button onClick={() => setViewerIndex(-1)} style={{ position: "absolute", top: -40, right: 0, background: "none", border: "none", color: "#fff", fontSize: 28, cursor: "pointer", zIndex: 10 }}>×</button>
+            {(() => {
+              const m = (post as any).media_attachments[viewerIndex];
+              return m?.type === "video" ? (
+                <video src={m.url} controls style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: 8 }} />
+              ) : (
+                <img src={m.url} alt="" style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: 8, objectFit: "contain" }} />
+              );
+            })()}
           </div>
         </div>
       )}
