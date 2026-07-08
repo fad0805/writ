@@ -41,6 +41,10 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [hashtagResults, setHashtagResults] = useState<string[]>([]);
   const [hashtagIdx, setHashtagIdx] = useState(0);
   const [hashtagPos, setHashtagPos] = useState({ top: 0, left: 0 });
+  const [mediaItems, setMediaItems] = useState<{ url: string; type: string; file?: File }[]>([]);
+  const [mediaUploading, setMediaUploading] = useState(false);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const [seriesResults, setSeriesResults] = useState<{ id: number; title: string; cover_image: string }[]>([]);
   const [seriesIdx, setSeriesIdx] = useState(0);
   const [seriesPos, setSeriesPos] = useState({ top: 0, left: 0 });
@@ -435,8 +439,15 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     if (!content.trim() || submitting) return;
     setSubmitting(true);
     try {
-      await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrl });
-      setContent(""); setSummary("");
+      const uploaded = mediaItems.filter(m => !m.file).map(m => ({ url: m.url, type: m.type }));
+      for (const m of mediaItems.filter(m => m.file)) {
+        const formData = new FormData();
+        formData.append("file", m.file!);
+        const res = await fetch("/api/media/upload", { method: "POST", credentials: "include", body: formData });
+        if (res.ok) { const d = await res.json(); uploaded.push({ url: d.url, type: d.type }); }
+      }
+      await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrl, media_attachments: JSON.stringify(uploaded) });
+      setContent(""); setSummary(""); setMediaItems([]);
       if (onDone) onDone();
       else router.refresh();
     } catch (err: unknown) { alert(err instanceof Error ? err.message : "오류가 발생했습니다"); }
@@ -526,6 +537,20 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           ))}
         </div>
       )}
+      {mediaItems.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+          {mediaItems.map((m, i) => (
+            <div key={i} style={{ position: "relative", width: 80, height: 80 }}>
+              {m.type === "video" ? (
+                <video src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6 }} />
+              ) : (
+                <img src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6 }} />
+              )}
+              <span onClick={() => setMediaItems(mediaItems.filter((_, j) => j !== i))} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "var(--danger)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer" }}>×</span>
+            </div>
+          ))}
+        </div>
+      )}
       <input
         type="text"
         value={summary}
@@ -535,6 +560,27 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { formRef.current?.requestSubmit(); } }}
       />
       <div className="reply-form-footer">
+        <div style={{ display: "flex", gap: 4, alignItems: "center", marginRight: "auto" }}>
+          <button type="button" className="action-btn" onClick={() => mediaInputRef.current?.click()} title="이미지 첨부" disabled={mediaUploading || mediaItems.filter(m => m.type === "image").length >= 4}>
+            <Icon name="image" />
+          </button>
+          <button type="button" className="action-btn" onClick={() => videoInputRef.current?.click()} title="비디오 첨부" disabled={mediaUploading || mediaItems.some(m => m.type === "video")}>
+            <Icon name="video" />
+          </button>
+          <input ref={mediaInputRef} type="file" accept="image/*" multiple hidden onChange={async (e) => {
+            const files = Array.from(e.target.files || []);
+            const remaining = 4 - mediaItems.filter(m => m.type === "image").length;
+            for (const f of files.slice(0, remaining)) {
+              setMediaItems(prev => [...prev, { url: "", type: "image", file: f }]);
+            }
+            e.target.value = "";
+          }} />
+          <input ref={videoInputRef} type="file" accept="video/mp4,video/webm,video/ogg" hidden onChange={async (e) => {
+            const f = e.target.files?.[0];
+            if (f) setMediaItems(prev => [...prev, { url: "", type: "video", file: f }]);
+            e.target.value = "";
+          }} />
+        </div>
         <VisibilitySelector value={visibility} onChange={(v) => setVisibilityOverride(v)} includeMention />
         <div className="form-footer-right">
           <EmojiPicker onEmoji={(e) => setContent(content + e)} />

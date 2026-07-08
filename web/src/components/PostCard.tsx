@@ -251,6 +251,17 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
         ) : (
           <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
         )}
+        {(post as any).media_attachments?.length > 0 && (
+          <div className="post-media-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min((post as any).media_attachments.length, 2)}, 1fr)`, gap: 4, marginTop: 8 }}>
+            {(post as any).media_attachments.slice(0, 16).map((m: any, i: number) => (
+              m.type === "video" ? (
+                <video key={i} src={m.url} controls style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "contain", background: "#000" }} />
+              ) : (
+                <img key={i} src={m.url} alt="" style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "cover", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); window.open(m.url, "_blank"); }} />
+              )
+            ))}
+          </div>
+        )}
         {loadingQuote && <div className="empty-small loading-small">인용 불러오는 중...</div>}
         {quotedPost && <div className="my-8"><MiniPostCard post={quotedPost} /></div>}
         {quotedSeries && (

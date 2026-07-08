@@ -184,6 +184,7 @@ class Post(Base):
     is_pinned = Column(Boolean, default=False)
     is_dm = Column(Boolean, default=False)
     original_visibility = Column(String(16), default="")
+    media_attachments = Column(JSON, default=list)
     tag_list = relationship("Tag", secondary=post_tags, lazy="selectin")
     created_at = Column(DateTime(timezone=True), default=now)
     bumped_at = Column(DateTime(timezone=True), nullable=True)
@@ -612,6 +613,7 @@ def init_db():
     _run_alter("ALTER TABLE users ADD COLUMN profile_hashtags JSON DEFAULT '[]'")
     _run_alter("ALTER TABLE users ADD COLUMN display_handle VARCHAR(64) DEFAULT ''")
     _run_alter("ALTER TABLE users ADD COLUMN is_bot BOOLEAN DEFAULT 0")
+    _run_alter("ALTER TABLE posts ADD COLUMN media_attachments JSON DEFAULT '[]'")
 
 
 def get_session():

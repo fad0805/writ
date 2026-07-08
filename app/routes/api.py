@@ -59,6 +59,7 @@ def _post_json(p, session, user):
         "ap_id": p.ap_id or "",
         "reply_context": _reply_context(p),
         "boosted_by": _user_json(booster) if booster and booster.id != p.author_id else None,
+        "media_attachments": (p.media_attachments or []) if hasattr(p, 'media_attachments') else [],
     }
 
 
@@ -539,6 +540,7 @@ def api_create_post(
     parent_id: int = Form(None),
     dm_target_id: int = Form(None),
     share_url: str = Form(""),
+    media_attachments: str = Form("[]"),
 ):
     user = require_auth(request)
     if share_url:
@@ -583,6 +585,13 @@ def api_create_post(
             ap_id="",
             is_dm=bool(dm_target_id),
         )
+        import json as _json
+        try:
+            media = _json.loads(media_attachments)
+            if isinstance(media, list):
+                post.media_attachments = media[:16]
+        except (_json.JSONDecodeError, TypeError):
+            pass
         s.add(post)
         s.flush()
         post.ap_id = f"{BASE_URL}/@{user.username}/{post.number}"
@@ -1819,6 +1828,36 @@ def api_settings_change_email(request: Request, email: str = Form(...)):
         s.commit()
     log_admin_action(user.id, user.username, "change_email", details=f"{old_email} -> {email}", ip_address=request.client.host if request.client else "")
     return {"ok": True, "email_changed": True}
+
+
+@router.post("/media/upload")
+def api_upload_media(request: Request, file: UploadFile = File(...)):
+    user = require_auth(request)
+    from app.utils.storage import get_storage
+    storage = get_storage()
+    from PIL import Image as PILImage
+    import io, os
+    ext = os.path.splitext(file.filename or "file")[1].lower() if file.filename else ""
+    is_video = ext in (".mp4", ".webm", ".ogg", ".mov")
+    is_image = ext in (".jpg", ".jpeg", ".png", ".gif", ".webp")
+    if not is_image and not is_video:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+    from uuid import uuid4
+    name = f"{uuid4().hex}{ext}"
+    key = f"media/{name}"
+    if is_image:
+        img = PILImage.open(io.BytesIO(file.file.read()))
+        if img.mode == "RGBA":
+            img = img.convert("RGB")
+        buf = io.BytesIO()
+        img.save(buf, "JPEG", quality=85)
+        buf.seek(0)
+        storage.save(key, buf)
+        url = storage.url(key)
+    else:
+        storage.save(key, file.file)
+        url = storage.url(key)
+    return {"url": url, "type": "image" if is_image else "video"}
 
 
 @router.post("/settings/change-password")
