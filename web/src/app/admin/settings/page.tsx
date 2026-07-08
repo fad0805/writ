@@ -63,7 +63,7 @@ export default function AdminSettingsPage() {
       form.append("admin_email", adminEmail);
       const res = await fetch("/api/admin/settings", { method: "POST", credentials: "include", body: form });
       if (res.ok) { setMsg("저장되었습니다."); window.dispatchEvent(new Event("serverchange")); }
-      else setMsg("저장 실패");
+      else { const d = await res.json().catch(() => ({})); setMsg(d.detail || "저장 실패"); }
     } catch { setMsg("오류 발생"); }
     setSaving(false);
   };
