@@ -16,13 +16,15 @@ services:
     restart: unless-stopped
 
   web:
-    build: ./web
+    build:
+      context: ./web
+      args:
+        - API_HOST=http://api:8000
     ports:
       - "3000:3000"
     env_file: .env.production
     environment:
       - NODE_ENV=production
-      - API_HOST=http://api:8000
     depends_on:
       - api
     restart: unless-stopped

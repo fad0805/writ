@@ -1,12 +1,14 @@
 FROM node:20-alpine AS builder
 
+ARG API_HOST
+
 WORKDIR /app
 
 COPY package*.json ./
 RUN npm install
 
 COPY . .
-RUN npm run build
+RUN API_HOST=${API_HOST} npm run build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
