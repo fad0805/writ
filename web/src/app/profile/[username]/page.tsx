@@ -337,30 +337,42 @@ export default function ProfilePage() {
               {n.cover_image ? <img src={n.cover_image} alt="" className="cover-img" /> : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(n.title) }}><Icon name="book" size={16} /></div>}
             </div>
             <div className="novel-card-body-content">
-              <strong className="profile-novel-title"><Icon name={pinnedSeries.some((ps: any) => ps.id === n.id) ? "pin_filled" : "pin"} size={12} style={{ marginRight: 4, color: pinnedSeries.some((ps: any) => ps.id === n.id) ? "var(--danger)" : undefined }} /> {n.title}</strong>
+              <strong className="profile-novel-title"><Icon name="pin_filled" size={12} style={{ marginRight: 4, color: "var(--danger)" }} /> {n.title}</strong>
               <span className="profile-novel-meta">{n.episode_count}화 · {n.is_completed ? "완결" : "연재중"}</span>
               <p className="profile-novel-desc">{n.description || "설명 없음"}</p>
             </div>
           </Link>
         ))}
         {novels.length === 0 && pinnedSeries.length === 0 ? <p className="empty-state">시리즈가 없습니다.</p> : novels.map((n) => (
-          <Link key={n.id} href={n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`} className="profile-novel profile-novel-link">
-            <div className="cover-wrap-56">
-              {n.cover_image ? (
-                <img src={n.cover_image} alt="" className="cover-img" />
-              ) : (
-                <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(n.title) }}>
-                  <Icon name="book" size={16} />
-                </div>
-              )}
-            </div>
-            <div className="novel-card-body-content">
-              <strong className="profile-novel-title">{n.title}</strong>
-              <span className="profile-novel-meta">{n.episode_count}화 · {n.is_completed ? "완결" : "연재중"}</span>
-              <p className="profile-novel-desc">{n.description || "설명 없음"}</p>
-              {n.tags && <p className="novel-tags"><Icon name="tag" />{n.tags.split(/[ ,]+/).filter(Boolean).map((t, i) => <span key={i} className="tag-spacing">{t}</span>)}</p>}
-            </div>
-          </Link>
+          <div key={n.id} className="profile-novel profile-novel-link" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+            <Link href={n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`} style={{ display: "flex", gap: 14, flex: 1, textDecoration: "none", color: "inherit" }}>
+              <div className="cover-wrap-56">
+                {n.cover_image ? (
+                  <img src={n.cover_image} alt="" className="cover-img" />
+                ) : (
+                  <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(n.title) }}>
+                    <Icon name="book" size={16} />
+                  </div>
+                )}
+              </div>
+              <div className="novel-card-body-content">
+                <strong className="profile-novel-title">{n.title}</strong>
+                <span className="profile-novel-meta">{n.episode_count}화 · {n.is_completed ? "완결" : "연재중"}</span>
+                <p className="profile-novel-desc">{n.description || "설명 없음"}</p>
+                {n.tags && <p className="novel-tags"><Icon name="tag" />{n.tags.split(/[ ,]+/).filter(Boolean).map((t, i) => <span key={i} className="tag-spacing">{t}</span>)}</p>}
+              </div>
+            </Link>
+            {isMine && (
+              <button className="action-btn" onClick={async (e) => { e.stopPropagation(); e.preventDefault();
+                const wasPinned = pinnedSeries.some((ps: any) => ps.id === n.id);
+                if (wasPinned) { setPinnedSeries(pinnedSeries.filter((ps: any) => ps.id !== n.id)); }
+                else { setPinnedSeries([...pinnedSeries, n]); }
+                const res = await fetch(`/api/${wasPinned ? "unpin" : "pin"}/series/${n.id}`, { method: "POST", credentials: "include" });
+                if (!res.ok) { if (wasPinned) setPinnedSeries([...pinnedSeries, n]); else setPinnedSeries(pinnedSeries.filter((ps: any) => ps.id !== n.id)); const d = await res.json().catch(() => ({})); if (d.detail) alert(d.detail); }
+                else window.dispatchEvent(new Event("pinchange"));
+              }} title={(pinnedSeries.some((ps: any) => ps.id === n.id) ? "고정 해제" : "고정")} style={{ color: pinnedSeries.some((ps: any) => ps.id === n.id) ? "var(--danger)" : undefined }}><Icon name={pinnedSeries.some((ps: any) => ps.id === n.id) ? "pin_filled" : "pin"} /></button>
+            )}
+          </div>
         ))}
       </div>
 
