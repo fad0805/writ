@@ -835,7 +835,6 @@ def api_users_autocomplete(request: Request, q: str = Query("")):
     with get_session() as s:
         pattern = f"{query}%"
         matches = s.query(User).filter(
-            User.is_remote == False,
             User.username.ilike(pattern),
         ).limit(20).all()
         if not matches:
