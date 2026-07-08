@@ -52,7 +52,7 @@ logging.basicConfig(
     format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
-        logging.FileHandler(f"logs/app-{log_date}.log"),
+        logging.FileHandler(f"logs/api-{log_date}.log"),
         logging.StreamHandler(),
     ],
 )
