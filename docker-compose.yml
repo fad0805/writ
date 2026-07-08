@@ -26,9 +26,3 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
-
-volumes:
-  data:
-  uploads:
-  static:
-  logs:
