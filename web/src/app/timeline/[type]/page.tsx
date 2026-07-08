@@ -54,16 +54,13 @@ export default function TimelinePage() {
   };
 
   const loadMore = useCallback(async () => {
-    console.log("[TL] loadMore called", { loadingMore, hasMore, len: posts.length, tlType });
     if (loadingMore || !hasMore) return;
-    console.log("[TL] loadMore proceeding");
     setLoadingMore(true);
     try {
       const data = await api.timeline(tlType, LOAD_MORE, posts.length);
-      console.log("[TL] loadMore response", data);
       setPosts((prev) => [...prev, ...data.posts]);
       setHasMore(data.has_more);
-    } catch (e) { console.error("[TL] loadMore error", e); }
+    } catch {}
     setLoadingMore(false);
   }, [tlType, posts.length, hasMore, loadingMore]);
 

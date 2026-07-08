@@ -13,12 +13,10 @@ export default function InfiniteScroll({
   loadingRef.current = loadingMore;
 
   useEffect(() => {
-    if (!hasMore) { console.log("[IO] no hasMore"); return; }
+    if (!hasMore) return;
     const el = sentinelRef.current;
-    if (!el) { console.log("[IO] no el"); return; }
-    console.log("[IO] observing", el, loadingRef.current, hasMore);
+    if (!el) return;
     const observer = new IntersectionObserver((entries) => {
-      console.log("[IO] callback", entries[0].isIntersecting, loadingRef.current, hasMore);
       if (entries[0].isIntersecting && !loadingRef.current && hasMore) loadMoreRef.current();
     }, { rootMargin: "200px" });
     observer.observe(el);

@@ -414,6 +414,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             Post.visibility == "public",
             Post.is_deleted == False,
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
+    raw_total = len(posts)
     # Remove leftover mention+DMs (post-filter to avoid SQL complexity)
     posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm)]
     # Apply user mutes, blocks, and keyword mutes
@@ -465,7 +466,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                     continue
             filtered.append(p)
         posts = filtered
-    has_more = len(posts) > limit
+    has_more = raw_total > limit
     return [_post_json(p, session, user) for p in posts[:limit]], has_more
 
 
