@@ -19,8 +19,9 @@ export default function MutesSettingsPage() {
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
   const [mutedSeries, setMutedSeries] = useState<MutedSeries[]>([]);
   const [keywordMutes, setKeywordMutes] = useState<KeywordMuteItem[]>([]);
-  const [newKeyword, setNewKeyword] = useState("");
   const [keywordName, setKeywordName] = useState("");
+  const [keywordItems, setKeywordItems] = useState<string[]>([]);
+  const [keywordInput, setKeywordInput] = useState("");
   const [keywordMode, setKeywordMode] = useState<"and" | "or">("or");
   const [keywordIsRegex, setKeywordIsRegex] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -106,15 +107,26 @@ export default function MutesSettingsPage() {
       {tab === "keyword-mutes" && (
         <>
           <div className="admin-detail-card" style={{ padding: 20, marginBottom: 20 }}>
-            <form onSubmit={async (e) => { e.preventDefault(); if (!newKeyword.trim()) return; const params = new URLSearchParams({ keyword: newKeyword.trim(), mode: keywordMode }); if (keywordIsRegex) params.set("is_regex", "true"); if (keywordName.trim()) params.set("name", keywordName.trim()); const res = await fetch("/api/mutes/keywords", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: params }); if (res.ok) { setNewKeyword(""); setKeywordName(""); fetch("/api/mutes/keywords", { credentials: "include" }).then(r => r.json()).then(d => setKeywordMutes(d.mutes || [])); } }}>
+            <form onSubmit={async (e) => { e.preventDefault(); if (keywordItems.length === 0) return; const params = new URLSearchParams({ keyword: keywordItems.join("\n"), mode: keywordMode }); if (keywordIsRegex) params.set("is_regex", "true"); if (keywordName.trim()) params.set("name", keywordName.trim()); const res = await fetch("/api/mutes/keywords", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: params }); if (res.ok) { setKeywordItems([]); setKeywordName(""); setKeywordInput(""); fetch("/api/mutes/keywords", { credentials: "include" }).then(r => r.json()).then(d => setKeywordMutes(d.mutes || [])); } }}>
               <div className="form-group">
                 <label>이름 (분류용)</label>
                 <input type="text" value={keywordName} onChange={e => setKeywordName(e.target.value)} placeholder="예: 정치 관련, 스포일러" className="cw-input" />
               </div>
               <div className="form-group">
                 <label>키워드</label>
-                <input type="text" value={newKeyword} onChange={e => setNewKeyword(e.target.value)} placeholder="키워드1, 키워드2, ..." className="cw-input" required />
-                <p className="form-help">여러 키워드는 쉼표로 구분해 입력하세요.</p>
+                <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                  <input type="text" value={keywordInput} onChange={e => setKeywordInput(e.target.value)} placeholder="키워드 입력" className="cw-input" style={{ flex: 1 }} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const v = keywordInput.trim(); if (v && !keywordItems.includes(v)) { setKeywordItems([...keywordItems, v]); setKeywordInput(""); } } }} />
+                  <button type="button" onClick={() => { const v = keywordInput.trim(); if (v && !keywordItems.includes(v)) { setKeywordItems([...keywordItems, v]); setKeywordInput(""); } }} className="btn btn-outline btn-small">추가</button>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {keywordItems.map((item, i) => (
+                    <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 12, fontSize: "0.85em" }}>
+                      {item}
+                      <span style={{ cursor: "pointer", color: "var(--text-dim)", fontSize: "1.1em", lineHeight: 1 }} onClick={() => setKeywordItems(keywordItems.filter((_, j) => j !== i))}>×</span>
+                    </span>
+                  ))}
+                </div>
+                <p className="form-help">Enter 키 또는 추가 버튼으로 키워드를 등록하세요.</p>
               </div>
               <div className="form-group">
                 <label>매칭 조건</label>
@@ -129,7 +141,7 @@ export default function MutesSettingsPage() {
                 </div>
               </div>
               <div className="form-actions" style={{ marginTop: 0 }}>
-                <button type="submit" className="btn btn-primary">저장</button>
+                <button type="submit" disabled={keywordItems.length === 0} className="btn btn-primary">저장</button>
               </div>
             </form>
           </div>

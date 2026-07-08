@@ -406,7 +406,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                         except re.error:
                             pass
                     else:
-                        keywords = [k.strip().lower() for k in kw.keyword.split(",") if k.strip()]
+                        keywords = [k.strip().lower() for k in kw.keyword.split("\n") if k.strip()]
                         if kw.mode == "and":
                             if all(k in content_lower for k in keywords):
                                 matched = True
