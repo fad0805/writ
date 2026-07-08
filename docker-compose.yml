@@ -1,7 +1,5 @@
-version: "3.9"
-
 services:
-  backend:
+  api:
     build: .
     ports:
       - "8000:8000"
@@ -15,14 +13,25 @@ services:
       - ./logs:/app/logs
     restart: unless-stopped
 
-  frontend:
+  web:
     build: ./web
     ports:
       - "3000:3000"
     env_file: .env.production
     environment:
       - NODE_ENV=production
-      - API_HOST=http://backend:8000
+      - API_HOST=http://api:8000
     depends_on:
-      - backend
+      - api
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    env_file: .env.production
+    environment:
+      - postgres_password=${DB_PASSWORD}
+      - postgres_user=${DB_USER}
+      - postgres_db=${DB_NAME}
+    volumes:
+      - ./db_data:/var/lib/postgresql/data
     restart: unless-stopped
