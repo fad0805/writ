@@ -82,6 +82,7 @@ def _user_json(u):
         "email_verified": u.email_verified or False,
         "default_visibility": u.default_visibility or "public",
         "display_handle": getattr(u, 'display_handle', '') or "",
+        "is_bot": getattr(u, 'is_bot', False) or False,
         "series_default_visibility": u.series_default_visibility or "public",
         "episode_default_visibility": u.episode_default_visibility or "public",
         "custom_fields": (u.custom_fields or []) if hasattr(u, 'custom_fields') else [],
@@ -1770,7 +1771,8 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
                         series_default_visibility: str = Form("public"),
                         episode_default_visibility: str = Form("public"),
                         is_locked: bool = Form(False),
-                        show_badge: bool = Form(False)):
+                        show_badge: bool = Form(False),
+                        is_bot: bool = Form(False)):
     user = require_auth(request)
     valid_post = ("public", "home", "followers", "mention")
     valid_series = ("public", "unlisted", "private")
@@ -1786,6 +1788,7 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
         db.series_default_visibility = series_default_visibility
         db.episode_default_visibility = episode_default_visibility
         db.is_locked = is_locked
+        db.is_bot = is_bot
         if user.role in ("admin", "moderator", "owner"):
             db.show_badge = show_badge
         s.commit()

@@ -15,6 +15,7 @@ export default function SettingsPage() {
   const [episodeDefaultVis, setEpisodeDefaultVis] = useState("public");
   const [showBadge, setShowBadge] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
+  const [isBot, setIsBot] = useState(false);
   const [followRequests, setFollowRequests] = useState<{ id: number; user: User }[]>([]);
   const [frLoading, setFrLoading] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -28,6 +29,7 @@ export default function SettingsPage() {
       setEpisodeDefaultVis(user.episode_default_visibility || "public");
       setShowBadge(user.show_badge || false);
       setIsLocked(user.is_locked || false);
+      setIsBot(user.is_bot || false);
       setLoading(false);
     }).catch(() => router.push("/login"));
   }, [router]);
@@ -59,6 +61,7 @@ export default function SettingsPage() {
       form.append("episode_default_visibility", episodeDefaultVis);
       form.append("show_badge", showBadge ? "true" : "");
       form.append("is_locked", isLocked ? "true" : "");
+      form.append("is_bot", isBot ? "true" : "");
       const res = await fetch("/api/settings/update", {
         method: "POST",
         credentials: "include",
@@ -85,6 +88,13 @@ export default function SettingsPage() {
           <p className="form-help">새 에피소드 홍보글에 기본으로 적용될 공개 범위입니다.</p>
         </div>
 
+        <div className="form-group">
+          <label>
+            <input type="checkbox" checked={isBot} onChange={(e) => setIsBot(e.target.checked)} />
+            {" "}<Icon name="mute" /> 자동화된 계정 (봇)
+          </label>
+          <p className="form-help">봇 계정은 사용자가 거의 개입하지 않고 프로그램으로 자동으로 운영되는 계정입니다. 이 설정을 켜면 계정에 봇 표시가 추가됩니다.</p>
+        </div>
         <div className="form-group">
           <label>
             <input type="checkbox" checked={isLocked} onChange={(e) => setIsLocked(e.target.checked)} />
