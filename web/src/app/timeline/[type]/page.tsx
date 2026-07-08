@@ -60,7 +60,10 @@ export default function TimelinePage() {
     setLoadingMore(true);
     try {
       const data = await api.timeline(tlType, LOAD_MORE, rawOffset);
-      setPosts((prev) => [...prev, ...data.posts]);
+      setPosts((prev) => {
+        const ids = new Set(prev.map((p) => p.id));
+        return [...prev, ...data.posts.filter((p: any) => !ids.has(p.id))];
+      });
       setHasMore(data.has_more);
       setRawOffset((prev) => prev + LOAD_MORE);
     } catch {}
@@ -144,17 +147,6 @@ export default function TimelinePage() {
   useStream({
     new_post: () => { load(); },
   });
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      api.timeline(tlType, LIMIT, 0).then((data) => {
-        setPosts(data.posts);
-        setHasMore(data.has_more);
-        setRawOffset(LIMIT);
-      }).catch(() => {});
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [tlType]);
 
   return (
     <>
