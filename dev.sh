@@ -125,6 +125,8 @@ _prefix_frontend() {
     done
 }
 
+echo -e "${YELLOW}[backend]${NC} 데이터베이스 마이그레이션 실행 중..."
+cd "$ROOT_DIR" && . "$VENV_DIR"/bin/activate && "$PYTHON" -m alembic upgrade head 2>&1 | _prefix_output "[migrate]" "$YELLOW" || true
 echo -e "${YELLOW}[backend]${NC} 서버 시작 중 (포트 $BACKEND_PORT)..."
 cd "$ROOT_DIR" && APP_ENV=development PYTHONUNBUFFERED=1 "$PYTHON" -m uvicorn app.main:app --reload --host 0.0.0.0 --port "$BACKEND_PORT" \
     > >(tee -a "$COMBINED_LOG" | _prefix_output "[backend]" "$GREEN") 2>&1 &

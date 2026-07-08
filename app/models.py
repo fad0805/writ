@@ -590,34 +590,8 @@ class ServerSetting(Base):
         return s
 
 
-def _run_alter(sql: str):
-    try:
-        with Session(engine) as session:
-            session.execute(text(sql))
-            session.commit()
-    except Exception:
-        pass
-
-
 def init_db():
     Base.metadata.create_all(engine)
-    _run_alter("ALTER TABLE user_mutes ADD COLUMN duration INTEGER DEFAULT 0")
-    _run_alter("ALTER TABLE user_mutes ADD COLUMN hide_notifications BOOLEAN DEFAULT 0")
-    _run_alter("ALTER TABLE keyword_mutes ADD COLUMN mode VARCHAR(8) DEFAULT 'or'")
-    _run_alter("ALTER TABLE keyword_mutes ADD COLUMN is_regex BOOLEAN DEFAULT 0")
-    _run_alter("ALTER TABLE keyword_mutes ADD COLUMN name VARCHAR(128) DEFAULT ''")
-    _run_alter("""CREATE TABLE IF NOT EXISTS post_tags (
-        post_id INTEGER NOT NULL REFERENCES posts(id),
-        tag_id INTEGER NOT NULL REFERENCES tags(id),
-        PRIMARY KEY (post_id, tag_id)
-    )""")
-    _run_alter("ALTER TABLE users ADD COLUMN custom_fields JSON DEFAULT '[]'")
-    _run_alter("ALTER TABLE users ADD COLUMN profile_hashtags JSON DEFAULT '[]'")
-    _run_alter("ALTER TABLE users ADD COLUMN display_handle VARCHAR(64) DEFAULT ''")
-    _run_alter("ALTER TABLE users ADD COLUMN is_bot BOOLEAN DEFAULT 0")
-    _run_alter("ALTER TABLE users ADD COLUMN pinned_posts JSON DEFAULT '[]'")
-    _run_alter("ALTER TABLE users ADD COLUMN pinned_series JSON DEFAULT '[]'")
-    _run_alter("ALTER TABLE posts ADD COLUMN media_attachments JSON DEFAULT '[]'")
 
 
 def get_session():
