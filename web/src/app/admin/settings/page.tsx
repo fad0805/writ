@@ -53,12 +53,12 @@ export default function AdminSettingsPage() {
     try {
       const form = new FormData();
       form.append("server_name", serverName);
+      form.append("logo_url", logo || "");
+      form.append("favicon_url", favicon || "");
+      form.append("app_icon_url", appIcon || "");
       if (logoFile) form.append("logo", logoFile);
-      else form.append("logo_url", logo);
       if (faviconFile) form.append("favicon", faviconFile);
-      else form.append("favicon_url", favicon);
       if (appIconFile) form.append("app_icon", appIconFile);
-      else form.append("app_icon_url", appIcon);
       form.append("admin_ids", adminIds);
       form.append("admin_email", adminEmail);
       const res = await fetch("/api/admin/settings", { method: "POST", credentials: "include", body: form });
