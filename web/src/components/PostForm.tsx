@@ -35,6 +35,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [emojiStart, setEmojiStart] = useState(-1);
   const [emojiIdx, setEmojiIdx] = useState(0);
   const [emojiPos, setEmojiPos] = useState({ top: 0, left: 0 });
+  const [hashtagStart, setHashtagStart] = useState(-1);
   const [hashtagQuery, setHashtagQuery] = useState("");
   const [hashtagResults, setHashtagResults] = useState<string[]>([]);
   const [hashtagIdx, setHashtagIdx] = useState(0);
@@ -115,14 +116,15 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     const before = val.slice(0, cursor);
     const hashIdx = before.lastIndexOf("#");
     if (hashIdx === -1 || (hashIdx > 0 && !/\s/.test(val[hashIdx - 1]))) {
-      setHashtagQuery(""); setHashtagResults([]);
+      setHashtagStart(-1); setHashtagQuery(""); setHashtagResults([]);
       return;
     }
     const partial = before.slice(hashIdx + 1);
     if (/[\s#]/.test(partial) || partial.length === 0) {
-      setHashtagQuery(""); setHashtagResults([]);
+      setHashtagStart(-1); setHashtagQuery(""); setHashtagResults([]);
       return;
     }
+    setHashtagStart(hashIdx);
     setHashtagQuery(partial);
     const ta = taRef.current;
     if (ta) {
@@ -227,20 +229,24 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   }, [content, mentionStart]);
 
   const insertHashtag = useCallback((tag: string) => {
-    if (!hashtagQuery) return;
-    const before = content;
-    const after = "";
-    const inserted = `${before}#${tag} `;
+    if (hashtagStart === -1) return;
+    const afterHash = content.slice(hashtagStart + 1);
+    const wordEndMatch = afterHash.search(/[\s#]|$/);
+    const wordEnd = hashtagStart + 1 + (wordEndMatch >= 0 ? wordEndMatch : afterHash.length);
+    const before = content.slice(0, hashtagStart);
+    const after = content.slice(wordEnd);
+    const inserted = `${before}#${tag} ${after}`;
     setContent(inserted);
-    setHashtagQuery(""); setHashtagResults([]);
+    setHashtagStart(-1); setHashtagQuery(""); setHashtagResults([]);
     requestAnimationFrame(() => {
       const ta = taRef.current;
       if (ta) {
-        ta.setSelectionRange(inserted.length, inserted.length);
+        const pos = before.length + tag.length + 2;
+        ta.setSelectionRange(pos, pos);
         ta.focus();
       }
     });
-  }, [content, hashtagQuery]);
+  }, [content, hashtagStart]);
 
   const handleTaEvent = useCallback((e: React.KeyboardEvent | React.MouseEvent) => {
     const el = e.target as HTMLTextAreaElement;
