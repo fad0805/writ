@@ -44,6 +44,9 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [seriesResults, setSeriesResults] = useState<{ id: number; title: string; cover_image: string }[]>([]);
   const [seriesIdx, setSeriesIdx] = useState(0);
   const [seriesPos, setSeriesPos] = useState({ top: 0, left: 0 });
+  const [showSeriesSearch, setShowSeriesSearch] = useState(false);
+  const [seriesSearchQ, setSeriesSearchQ] = useState("");
+  const seriesSearchRef = useRef<HTMLInputElement>(null);
 
   const totalLen = content.length + summary.length;
   const nearLimit = totalLen > MAX_LENGTH - 50 && totalLen <= MAX_LENGTH;
@@ -159,39 +162,43 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     const before = val.slice(0, cursor);
     const slashIdx = before.lastIndexOf("/");
     if (slashIdx === -1 || (slashIdx > 0 && !/\s/.test(val[slashIdx - 1]))) {
-      setSeriesResults([]);
-      return;
+      setShowSeriesSearch(false); setSeriesResults([]); return;
     }
     const raw = before.slice(slashIdx + 1);
     const cmd = raw.toLowerCase();
-    const isSeries = cmd === "series" || cmd === "시리즈";
-    const isSeriesWithQuery = cmd.startsWith("series ") || cmd.startsWith("시리즈 ");
-    if (!isSeries && !isSeriesWithQuery) {
-      setSeriesResults([]);
+    if (cmd !== "series" && cmd !== "시리즈" && !cmd.startsWith("series ") && !cmd.startsWith("시리즈 ")) {
+      setShowSeriesSearch(false); setSeriesResults([]); return;
+    }
+    if (!cmd.includes(" ") && (cmd === "series" || cmd === "시리즈")) {
+      setShowSeriesSearch(true); setSeriesSearchQ(""); setSeriesResults([]);
+      const ta = taRef.current;
+      if (ta) {
+        const rect = ta.getBoundingClientRect();
+        const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
+        const textBefore = val.slice(0, cursor);
+        const lines = textBefore.split('\n');
+        const top = rect.top + lines.length * lineHeight + 4;
+        const lastLine = lines[lines.length - 1] || '';
+        const left = rect.left + lastLine.length * 8 + 10;
+        setSeriesPos({ top, left });
+      }
+      setTimeout(() => seriesSearchRef.current?.focus(), 0);
       return;
     }
-    const q = isSeriesWithQuery ? raw.slice(raw.indexOf(" ") + 1).trim() : "";
-    if (!q && !isSeries) { setSeriesResults([]); return; }
-    const ta = taRef.current;
-    if (ta) {
-      const rect = ta.getBoundingClientRect();
-      const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
-      const textBefore = val.slice(0, cursor);
-      const lines = textBefore.split('\n');
-      const top = rect.top + lines.length * lineHeight + 4;
-      const lastLine = lines[lines.length - 1] || '';
-      const left = rect.left + lastLine.length * 8 + 10;
-      setSeriesPos({ top, left });
-    }
+    setShowSeriesSearch(false); setSeriesResults([]);
+  }, []);
+
+  useEffect(() => {
+    if (!showSeriesSearch) return;
     const t = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/search/series?q=${encodeURIComponent(q || "")}`, { credentials: "include" });
+        const res = await fetch(`/api/search/series?q=${encodeURIComponent(seriesSearchQ)}`, { credentials: "include" });
         if (res.ok) { const d = await res.json(); setSeriesResults(d.series?.map((s: any) => ({ id: s.id, title: s.title, cover_image: s.cover_image })) || []); setSeriesIdx(0); }
         else setSeriesResults([]);
       } catch { setSeriesResults([]); }
     }, 100);
     return () => clearTimeout(t);
-  }, []);
+  }, [seriesSearchQ, showSeriesSearch]);
 
   useEffect(() => {
     if (!emojiQuery) { setEmojiResults([]); return; }
@@ -291,11 +298,12 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   }, [content, hashtagStart]);
 
   const insertSeries = useCallback((novel: { id: number; title: string }) => {
+    const slashIdx = content.lastIndexOf("/");
+    const before = slashIdx > 0 ? content.slice(0, slashIdx - 1) : "";
     const fullUrl = `${window.location.origin}/series/${novel.id}`;
-    const before = content;
     const inserted = `${before} ${fullUrl} `;
     setContent(inserted);
-    setSeriesResults([]);
+    setShowSeriesSearch(false); setSeriesResults([]); setSeriesSearchQ("");
     requestAnimationFrame(() => {
       const ta = taRef.current;
       if (ta) {
@@ -374,7 +382,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         e.preventDefault();
         if (seriesResults[seriesIdx]) insertSeries(seriesResults[seriesIdx]);
       } else if (e.key === "Escape") {
-        setSeriesResults([]);
+        setShowSeriesSearch(false); setSeriesResults([]);
       }
     }
   };
@@ -454,16 +462,22 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           ))}
         </div>
       )}
-      {seriesResults.length > 0 && (
-        <div className="emoji-autocomplete" style={{ top: seriesPos.top, left: seriesPos.left }}>
-          {seriesResults.map((s, i) => (
-            <div key={s.id} className={`mention-option ${i === seriesIdx ? "active" : ""}`} onMouseDown={(e) => { e.preventDefault(); insertSeries(s); }} onMouseEnter={() => setSeriesIdx(i)} style={{ padding: "6px 12px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                {s.cover_image ? <img src={s.cover_image} alt="" style={{ width: 24, height: 24, borderRadius: 4, objectFit: "cover" }} /> : <div style={{ width: 24, height: 24, borderRadius: 4, background: "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7em" }}><Icon name="book" size={12} /></div>}
-                <span style={{ fontSize: "0.9em" }}>{s.title}</span>
-              </div>
+      {showSeriesSearch && (
+        <div className="emoji-autocomplete" style={{ top: seriesPos.top, left: seriesPos.left, padding: 8 }}>
+          <input ref={seriesSearchRef} type="text" value={seriesSearchQ} onChange={e => setSeriesSearchQ(e.target.value)} placeholder="시리즈 검색..." className="cw-input" style={{ width: "100%", marginBottom: seriesResults.length > 0 ? 6 : 0, fontSize: "0.85em" }} />
+          {seriesResults.length > 0 && (
+            <div style={{ maxHeight: 180, overflowY: "auto" }}>
+              {seriesResults.map((s, i) => (
+                <div key={s.id} className={`mention-option ${i === seriesIdx ? "active" : ""}`} onMouseDown={(e) => { e.preventDefault(); insertSeries(s); }} onMouseEnter={() => setSeriesIdx(i)} style={{ padding: "4px 8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {s.cover_image ? <img src={s.cover_image} alt="" style={{ width: 24, height: 24, borderRadius: 4, objectFit: "cover" }} /> : <div style={{ width: 24, height: 24, borderRadius: 4, background: "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7em" }}><Icon name="book" size={12} /></div>}
+                    <span style={{ fontSize: "0.9em" }}>{s.title}</span>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+          {!seriesSearchQ && seriesResults.length === 0 && <div style={{ fontSize: "0.85em", color: "var(--text-muted)", padding: "4px 0" }}>시리즈를 검색하세요.</div>}
         </div>
       )}
       {emojiResults.length > 0 && (
