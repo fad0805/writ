@@ -377,6 +377,48 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     # Remove leftover mention+DMs (post-filter to avoid SQL complexity)
     posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm)]
+    # Apply user mutes, blocks, and keyword mutes
+    if user:
+        muted_user_ids = {m.target_user_id for m in session.query(UserMute).filter_by(user_id=user.id).all()}
+        blocked_ids = {b.target_user_id for b in session.query(UserBlock).filter_by(user_id=user.id).all()}
+        blocked_by_ids = {b.user_id for b in session.query(UserBlock).filter_by(target_user_id=user.id).all()}
+        muted_series_ids = {m.novel_id for m in session.query(SeriesMute).filter_by(user_id=user.id).all()}
+        hidden_ids = muted_user_ids | blocked_ids | blocked_by_ids
+        kw_mutes = session.query(KeywordMute).filter_by(user_id=user.id).all()
+        import re
+        filtered = []
+        for p in posts:
+            if p.author_id in hidden_ids:
+                continue
+            # Check series mute
+            if p.novel_id and p.novel_id in muted_series_ids:
+                continue
+            # Check keyword mutes
+            if kw_mutes:
+                matched = False
+                content_lower = (p.content or "").lower()
+                for kw in kw_mutes:
+                    if kw.is_regex:
+                        try:
+                            if re.search(kw.keyword, content_lower):
+                                matched = True
+                                break
+                        except re.error:
+                            pass
+                    else:
+                        keywords = [k.strip().lower() for k in kw.keyword.split(",") if k.strip()]
+                        if kw.mode == "and":
+                            if all(k in content_lower for k in keywords):
+                                matched = True
+                                break
+                        else:
+                            if any(k in content_lower for k in keywords):
+                                matched = True
+                                break
+                if matched:
+                    continue
+            filtered.append(p)
+        posts = filtered
     has_more = len(posts) > limit
     return [_post_json(p, session, user) for p in posts[:limit]], has_more
 
