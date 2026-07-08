@@ -129,7 +129,11 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   const [viewerIndex, setViewerIndex] = useState(-1);
   useEffect(() => {
     if (viewerIndex < 0) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setViewerIndex(-1); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setViewerIndex(-1);
+      else if (e.key === "ArrowLeft" && viewerIndex > 0) setViewerIndex(viewerIndex - 1);
+      else if (e.key === "ArrowRight" && viewerIndex < (post as any).media_attachments.length - 1) setViewerIndex(viewerIndex + 1);
+    };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [viewerIndex]);
