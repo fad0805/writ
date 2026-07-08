@@ -836,7 +836,7 @@ def api_users_autocomplete(request: Request, q: str = Query("")):
         pattern = f"{query}%"
         matches = s.query(User).filter(
             User.username.ilike(pattern),
-        ).limit(20).all()
+        ).limit(5).all()
         if not matches:
             return {"users": []}
         following_ids = {f.following_id for f in s.query(Follow).filter_by(
