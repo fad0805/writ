@@ -406,7 +406,14 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                         except re.error:
                             pass
                     else:
-                        keywords = [k.strip().lower() for k in kw.keyword.split("\n") if k.strip()]
+                        import json
+                        try:
+                            keywords = json.loads(kw.keyword)
+                            if isinstance(keywords, str):
+                                keywords = [keywords]
+                        except (json.JSONDecodeError, TypeError):
+                            keywords = [kw.keyword]
+                        keywords = [k.strip().lower() for k in keywords if k.strip()]
                         if kw.mode == "and":
                             if all(k in content_lower for k in keywords):
                                 matched = True
@@ -3686,6 +3693,12 @@ def api_add_keyword_mute(request: Request, keyword: str = Form(...), mode: str =
         raise HTTPException(status_code=400, detail="Keyword cannot be empty")
     if mode not in ("and", "or"):
         raise HTTPException(status_code=400, detail="Invalid mode")
+    import json
+    if is_regex:
+        kw = json.dumps([kw])
+    else:
+        keywords = [k.strip() for k in kw.split("\n") if k.strip()]
+        kw = json.dumps(keywords)
     with get_session() as s:
         existing = s.query(KeywordMute).filter_by(user_id=user.id, keyword=kw, mode=mode, is_regex=is_regex).first()
         if existing:

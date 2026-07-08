@@ -107,7 +107,7 @@ export default function MutesSettingsPage() {
       {tab === "keyword-mutes" && (
         <>
           <div className="admin-detail-card" style={{ padding: 20, marginBottom: 20 }}>
-            <form onSubmit={async (e) => { e.preventDefault(); if (keywordItems.length === 0) return; const params = new URLSearchParams({ keyword: keywordItems.join("\n"), mode: keywordMode }); if (keywordIsRegex) params.set("is_regex", "true"); if (keywordName.trim()) params.set("name", keywordName.trim()); const res = await fetch("/api/mutes/keywords", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: params }); if (res.ok) { setKeywordItems([]); setKeywordName(""); setKeywordInput(""); fetch("/api/mutes/keywords", { credentials: "include" }).then(r => r.json()).then(d => setKeywordMutes(d.mutes || [])); } }}>
+            <form onSubmit={async (e) => { e.preventDefault(); if (keywordItems.length === 0) return; const params = new URLSearchParams(); params.set("keyword", keywordItems.join("\n")); params.set("mode", keywordMode); if (keywordIsRegex) params.set("is_regex", "true"); if (keywordName.trim()) params.set("name", keywordName.trim()); const res = await fetch("/api/mutes/keywords", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: params }); if (res.ok) { setKeywordItems([]); setKeywordName(""); setKeywordInput(""); fetch("/api/mutes/keywords", { credentials: "include" }).then(r => r.json()).then(d => setKeywordMutes(d.mutes || [])); } }}>
               <div className="form-group">
                 <label>이름 (분류용)</label>
                 <input type="text" value={keywordName} onChange={e => setKeywordName(e.target.value)} placeholder="예: 정치 관련, 스포일러" className="cw-input" />
@@ -152,7 +152,7 @@ export default function MutesSettingsPage() {
                   {k.name && <strong>{k.name}</strong>}
                   {k.name && <br />}
                   <span style={{ color: "var(--text-secondary)" }}>
-                    {k.keyword.split("\n").map((kw, i) => (
+                    {(JSON.parse(k.keyword) as string[]).map((kw, i) => (
                       <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "1px 6px", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8, fontSize: "0.85em", marginRight: 3, marginBottom: 2 }}>{kw}</span>
                     ))}
                   </span>
