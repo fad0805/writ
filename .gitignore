@@ -4,7 +4,6 @@ venv/
 *.db
 
 .env
-.env.development
 .env.production
 
 __pycache__
