@@ -129,6 +129,7 @@ export default function NovelDetailPage() {
             <div className="episode-info">
               <span className="episode-title">{e.title}</span>
               <div className="episode-meta">
+                {isMine && <span><Icon name={e.is_published ? "check" : "lock"} /> {e.is_published ? "공개" : "비공개"}</span>}
                 {isMine && e.views !== undefined && <span><Icon name="eye" /> {e.views}</span>}
                 <span>{e.created_at ? new Date(e.created_at).toISOString().slice(0, 10) : ""}</span>
               </div>
