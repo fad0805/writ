@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import PostCard from "@/components/PostCard";
 import PostForm from "@/components/PostForm";
 import ReplyModal from "@/components/ReplyModal";
+import InfiniteScroll from "@/components/InfiniteScroll";
 import Icon from "@/components/Icon";
 import Link from "next/link";
 import { useStream } from "@/lib/useStream";
@@ -33,7 +34,6 @@ export default function TimelinePage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedIdx, setSelectedIdx] = useState(-1);
   const [replyPost, setReplyPost] = useState<PostData | null>(null);
-  const sentinelRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
   const postsRef = useRef(posts);
   postsRef.current = posts;
@@ -53,19 +53,16 @@ export default function TimelinePage() {
     setLoading(false);
   };
 
-  const loadingRef = useRef(false);
-  const loadMoreRef = useRef<() => void>(() => {});
-  loadMoreRef.current = () => {
-    if (loadingRef.current || !hasMore) return;
-    loadingRef.current = true;
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
     setLoadingMore(true);
-    const currentLen = posts.length;
-    const currentType = tlType;
-    api.timeline(currentType, LOAD_MORE, currentLen).then((data) => {
+    try {
+      const data = await api.timeline(tlType, LOAD_MORE, posts.length);
       setPosts((prev) => [...prev, ...data.posts]);
       setHasMore(data.has_more);
-    }).catch(() => {}).finally(() => { loadingRef.current = false; setLoadingMore(false); });
-  };
+    } catch {}
+    setLoadingMore(false);
+  }, [tlType, posts.length, hasMore, loadingMore]);
 
   useEffect(() => { if (!authLoading && !user) router.replace("/"); }, [authLoading, user, router]);
 
@@ -155,17 +152,6 @@ export default function TimelinePage() {
     return () => clearInterval(interval);
   }, [tlType]);
 
-  useEffect(() => {
-    if (!hasMore) return;
-    const onScroll = () => {
-      const sb = window.innerHeight + window.scrollY;
-      const dh = document.documentElement.scrollHeight;
-      if (dh - sb < 400) loadMoreRef.current();
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [hasMore, loadingMore]);
-
   return (
     <>
       <div className="post-form">
@@ -190,11 +176,9 @@ export default function TimelinePage() {
         ) : posts.length === 0 ? (
           <p className="empty-state">표시할 글이 없습니다.</p>
         ) : (
-          <>
+          <InfiniteScroll hasMore={hasMore} loadingMore={loadingMore} loadMore={loadMore}>
             {posts.map((p, i) => <div key={p.id} ref={(el) => { cardRefs.current[i] = el; }}><PostCard post={p} onUpdate={load} selected={i === selectedIdx} /></div>)}
-            <div ref={sentinelRef} className="sentinel" />
-            {loadingMore && <p className="empty-state">불러오는 중...</p>}
-          </>
+          </InfiniteScroll>
         )}
       </div>
       {replyPost && <ReplyModal post={replyPost} onClose={() => setReplyPost(null)} onDone={() => { setReplyPost(null); load(); }} />}
