@@ -341,9 +341,9 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (showSeriesSearch) {
-      if (e.key === "Enter" && seriesResults.length > 0) {
+      if (e.key === "Enter") {
         e.preventDefault();
-        if (seriesResults[seriesIdx]) insertSeries(seriesResults[seriesIdx]);
+        if (seriesResults.length > 0 && seriesResults[seriesIdx]) insertSeries(seriesResults[seriesIdx]);
         return;
       }
       if (e.key === "Escape") {

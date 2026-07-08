@@ -1859,11 +1859,10 @@ def api_upload_media(request: Request, file: UploadFile = File(...)):
             img = img.convert("RGB")
         buf = io.BytesIO()
         img.save(buf, "WEBP", quality=85)
-        buf.seek(0)
-        storage.save(key, buf)
+        storage.save(key, buf.getvalue())
         url = storage.url(key)
     else:
-        storage.save(key, file.file)
+        storage.save(key, file.file.read())
         url = storage.url(key)
     return {"url": url, "type": "image" if is_image else "video"}
 
