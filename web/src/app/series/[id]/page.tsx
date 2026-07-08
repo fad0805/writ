@@ -111,7 +111,7 @@ export default function NovelDetailPage() {
         <div className="novel-status">
           <span><Icon name={novel.is_completed ? "check" : "edit"} /> {novel.is_completed ? "완결" : "연재중"}</span>
           <span><Icon name="book" /> 총 {novel.episode_count}화</span>
-          <span><Icon name="eye" /> 총 {novel.total_views}회 조회</span>
+          {isMine && <span><Icon name="eye" /> 총 {novel.total_views}회 조회</span>}
           <span><Icon name="eye" /> {novel.visibility === "public" ? "전체공개" : novel.visibility === "unlisted" ? "공개" : "비공개"}</span>
         </div>
         {novel.description && <p className="novel-description">{novel.description}</p>}
@@ -128,7 +128,7 @@ export default function NovelDetailPage() {
             <div className="episode-info">
               <span className="episode-title">{e.title}</span>
               <div className="episode-meta">
-                <span><Icon name="eye" /> {e.views}</span>
+                {isMine && <span><Icon name="eye" /> {e.views}</span>}
                 <span>{e.created_at ? new Date(e.created_at).toISOString().slice(0, 10) : ""}</span>
               </div>
             </div>

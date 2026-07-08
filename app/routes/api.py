@@ -3602,6 +3602,9 @@ def api_block_user(request: Request, target_user_id: int):
         if existing:
             return {"ok": True}
         s.add(UserBlock(user_id=user.id, target_user_id=target_user_id))
+        # Remove follows both ways
+        s.query(Follow).filter_by(follower_id=user.id, following_id=target_user_id).delete()
+        s.query(Follow).filter_by(follower_id=target_user_id, following_id=user.id).delete()
         s.commit()
     return {"ok": True}
 

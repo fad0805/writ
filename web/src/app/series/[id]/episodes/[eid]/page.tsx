@@ -73,7 +73,7 @@ export default function EpisodeDetailPage() {
           </div>
         </div>
         <div className="episode-meta episode-meta-bottom">
-          <span><Icon name="eye" /> {episode.views}</span>
+          {isMine && <span><Icon name="eye" /> {episode.views}</span>}
           <span>{episode.created_at ? new Date(episode.created_at).toLocaleString("ko-KR") : ""}</span>
           <span><Icon name={episode.is_published ? "check" : "lock"} /> {episode.is_published ? "공개" : "비공개"}</span>
         </div>
