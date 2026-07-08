@@ -23,6 +23,7 @@ services:
     env_file: .env.production
     environment:
       - NODE_ENV=production
+      - API_HOST=http://backend:8000
     depends_on:
       - backend
     restart: unless-stopped
