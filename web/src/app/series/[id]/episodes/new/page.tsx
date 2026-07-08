@@ -73,24 +73,22 @@ export default function NewEpisodePage() {
           <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="이 에피소드에 대한 작가의 코멘트 (선택사항)" />
         </div>
         <div className="form-group announce-group">
+          <div className="announce-vis-wrap">
+            <VisibilitySelector value={visibility} onChange={(v) => setVisibility(v)} />
+          </div>
           <label>
             <input type="checkbox" checked={announce} onChange={(e) => setAnnounce(e.target.checked)} />
             {" "}SNS에 홍보글 게시 (ActivityPub으로 연동됨)
           </label>
           {announce && (
-            <>
-              <textarea
-                value={announceComment}
-                onChange={(e) => setAnnounceComment(e.target.value)}
-                maxLength={100}
-                rows={2}
-                placeholder="홍보글에 추가할 코멘트 (선택, 100자 이내)"
-                className="announce-textarea"
-              />
-              <div className="announce-vis-wrap">
-                <VisibilitySelector value={visibility} onChange={(v) => setVisibility(v)} />
-              </div>
-            </>
+            <textarea
+              value={announceComment}
+              onChange={(e) => setAnnounceComment(e.target.value)}
+              maxLength={100}
+              rows={2}
+              placeholder="홍보글에 추가할 코멘트 (선택, 100자 이내)"
+              className="announce-textarea"
+            />
           )}
         </div>
         <div className="form-actions">
