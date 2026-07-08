@@ -343,8 +343,9 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
             <button onClick={(e) => { e.stopPropagation(); (async () => {
               const newPinned = !pinned;
               setPinned(newPinned);
-              await fetch(`/api/${newPinned ? "pin" : "unpin"}/post/${post.id}`, { method: "POST", credentials: "include" });
-              window.dispatchEvent(new Event("pinchange"));
+              const res = await fetch(`/api/${newPinned ? "pin" : "unpin"}/post/${post.id}`, { method: "POST", credentials: "include" });
+              if (!res.ok) setPinned(!newPinned);
+              else { window.dispatchEvent(new Event("pinchange")); window.dispatchEvent(new Event("profilechange")); }
             })(); }} className="action-btn" title={pinned ? "고정 해제" : "고정"} style={{ color: pinned ? "var(--danger)" : undefined }}>
               <Icon name={pinned ? "pin_filled" : "pin"} />
             </button>

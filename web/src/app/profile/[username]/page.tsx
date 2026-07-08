@@ -323,7 +323,11 @@ export default function ProfilePage() {
 
       <div id="tab-posts" className="profile-tab-posts" style={{ display: tab === "posts" ? "block" : "none" }}>
         {pinnedPosts.map((p: any) => <PostCard key={`pin-${p.id}`} post={p} onUpdate={load} />)}
-        {posts.length === 0 && pinnedPosts.length === 0 ? <p className="empty-state">게시글이 없습니다.</p> : posts.map((p) => <PostCard key={p.id} post={p} onUpdate={load} />)}
+        {(() => {
+          const pinnedIds = new Set(pinnedPosts.map((p: any) => p.id));
+          const rest = posts.filter((p) => !pinnedIds.has(p.id));
+          return rest.length === 0 && pinnedPosts.length === 0 ? <p className="empty-state">게시글이 없습니다.</p> : rest.map((p) => <PostCard key={p.id} post={p} onUpdate={load} />);
+        })()}
       </div>
 
       <div id="tab-novels" className="profile-novel-list profile-tab-novels" style={{ display: tab === "novels" ? "flex" : "none" }}>
