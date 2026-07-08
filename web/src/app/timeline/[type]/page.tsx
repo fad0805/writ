@@ -156,16 +156,15 @@ export default function TimelinePage() {
   }, [tlType]);
 
   useEffect(() => {
-    if (!hasMore || posts.length === 0) return;
-    const el = sentinelRef.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      () => { loadMoreRef.current(); },
-      { rootMargin: "400px" }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [hasMore, posts.length]);
+    if (!hasMore) return;
+    const onScroll = () => {
+      const sb = window.innerHeight + window.scrollY;
+      const dh = document.documentElement.scrollHeight;
+      if (dh - sb < 400) loadMoreRef.current();
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [hasMore, loadingMore]);
 
   return (
     <>
