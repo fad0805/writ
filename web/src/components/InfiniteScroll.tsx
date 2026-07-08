@@ -9,18 +9,19 @@ export default function InfiniteScroll({
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef(loadMore);
   loadMoreRef.current = loadMore;
+  const loadingRef = useRef(loadingMore);
+  loadingRef.current = loadingMore;
 
   useEffect(() => {
     if (!hasMore) return;
     const el = sentinelRef.current;
     if (!el) return;
-    const observer = new IntersectionObserver(
-      () => loadMoreRef.current(),
-      { rootMargin: "200px" }
-    );
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && !loadingRef.current && hasMore) loadMoreRef.current();
+    }, { rootMargin: "200px" });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [hasMore, loadingMore, loadMore]);
+  }, [hasMore]);
 
   return (
     <>
