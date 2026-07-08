@@ -67,31 +67,33 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     }
   }, []);
 
-  const fetchMentionUsers = useCallback(async (q: string) => {
-    try {
-      const res = await api.autocomplete(q);
-      setMentionUsers(res.users);
-      setMentionIdx(0);
-    } catch { setMentionUsers([]); }
-  }, []);
-
   const detectMention = useCallback((val: string, cursor: number) => {
     const before = val.slice(0, cursor);
     const atIdx = before.lastIndexOf("@");
     if (atIdx === -1 || (atIdx > 0 && !/\s/.test(val[atIdx - 1]))) {
-      setMentionStart(-1);
-      setMentionUsers([]);
+      setMentionStart(-1); setMentionQuery(""); setMentionUsers([]);
       return;
     }
     const partial = before.slice(atIdx + 1);
     if (partial.length === 0 || /[\s@]/.test(partial)) {
-      setMentionStart(-1);
-      setMentionUsers([]);
+      setMentionStart(-1); setMentionQuery(""); setMentionUsers([]);
       return;
     }
     setMentionStart(atIdx);
-    fetchMentionUsers(partial);
-  }, [fetchMentionUsers]);
+    setMentionQuery(partial);
+  }, []);
+
+  useEffect(() => {
+    if (!mentionQuery) { setMentionUsers([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const res = await api.autocomplete(mentionQuery);
+        setMentionUsers(res.users);
+        setMentionIdx(0);
+      } catch { setMentionUsers([]); }
+    }, 100);
+    return () => clearTimeout(t);
+  }, [mentionQuery]);
 
   useEffect(() => {
     if (!emojiQuery) { setEmojiResults([]); return; }
