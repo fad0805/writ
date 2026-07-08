@@ -33,6 +33,7 @@ export interface User {
   username: string;
   display_name: string;
   avatar: string;
+  header?: string;
   summary: string;
   is_admin: boolean;
   is_remote: boolean;

@@ -18,6 +18,11 @@ export default function ProfileEditPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [avatarUrl, setAvatarUrl] = useState("");
   const [cropSrc, setCropSrc] = useState("");
+  const [cropKind, setCropKind] = useState<"avatar" | "header">("avatar");
+  const [headerFile, setHeaderFile] = useState<File | null>(null);
+  const [headerPreview, setHeaderPreview] = useState("");
+  const [headerCropSrc, setHeaderCropSrc] = useState("");
+  const headerInputRef = useRef<HTMLInputElement>(null);
   const blobRef = useRef<string[]>([]);
 
   const revokeBlobs = () => {
@@ -37,6 +42,7 @@ export default function ProfileEditPage() {
       setDisplayName(u.display_name);
       setSummary(u.summary);
       setAvatarUrl(u.avatar || "");
+      setHeaderPreview(u.header || "");
       setLoading(false);
     }).catch(() => router.push("/login"));
     return revokeBlobs;
@@ -51,8 +57,11 @@ export default function ProfileEditPage() {
           setDisplayName(u.display_name);
           setSummary(u.summary);
           setAvatarUrl(u.avatar || "");
+          setHeaderPreview(u.header || "");
           setImageFile(null);
+          setHeaderFile(null);
           setCropSrc("");
+          setHeaderCropSrc("");
         }).catch(() => {});
       }
     };
@@ -69,22 +78,46 @@ export default function ProfileEditPage() {
     revokeBlobs();
     setImageFile(file);
     setAvatarUrl(makeBlob(file));
+    setCropKind("avatar");
     setCropSrc(makeBlob(file));
+  };
+
+  const handleHeaderFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    revokeBlobs();
+    setHeaderFile(file);
+    setHeaderPreview(makeBlob(file));
+    setCropKind("header");
+    setHeaderCropSrc(makeBlob(file));
   };
 
   const handleCrop = (blob: Blob) => {
     revokeBlobs();
-    const croppedFile = new File([blob], imageFile?.name || "avatar.jpg", { type: "image/jpeg" });
-    setImageFile(croppedFile);
-    setAvatarUrl(makeBlob(blob));
-    setCropSrc("");
+    if (cropKind === "header") {
+      const croppedFile = new File([blob], headerFile?.name || "header.jpg", { type: "image/jpeg" });
+      setHeaderFile(croppedFile);
+      setHeaderPreview(makeBlob(blob));
+      setHeaderCropSrc("");
+    } else {
+      const croppedFile = new File([blob], imageFile?.name || "avatar.jpg", { type: "image/jpeg" });
+      setImageFile(croppedFile);
+      setAvatarUrl(makeBlob(blob));
+      setCropSrc("");
+    }
   };
 
   const handleCropClose = () => {
     revokeBlobs();
-    setCropSrc("");
-    setImageFile(null);
-    setAvatarUrl(user?.avatar || "");
+    if (cropKind === "header") {
+      setHeaderCropSrc("");
+      setHeaderFile(null);
+      setHeaderPreview(user?.header || "");
+    } else {
+      setCropSrc("");
+      setImageFile(null);
+      setAvatarUrl(user?.avatar || "");
+    }
   };
 
   useEffect(() => {
@@ -107,6 +140,7 @@ export default function ProfileEditPage() {
       form.append("display_name", displayName);
       form.append("summary", summary);
       if (imageFile) form.append("image", imageFile);
+      if (headerFile) form.append("header_image", headerFile);
       const res = await fetch("/api/profile/update", { method: "POST", credentials: "include", body: form });
       if (res.ok) { await refreshAuth(); window.dispatchEvent(new Event("profilechange")); router.push(`/@${user?.username}`); }
       else alert("저장 실패");
@@ -141,6 +175,21 @@ export default function ProfileEditPage() {
           </div>
         </div>
         <div className="form-group">
+          <label>헤더 이미지</label>
+          <div className="profile-edit-avatar-wrap">
+            {headerPreview && <img src={headerPreview} alt="" className="profile-edit-header-thumb" />}
+            <div>
+              <div className="profile-edit-file-row">
+                <label className="btn btn-outline btn-small profile-edit-file-label">
+                  파일 선택
+                  <input type="file" ref={headerInputRef} accept="image/*" onChange={handleHeaderFileChange} className="hidden" />
+                </label>
+                {headerFile && <span className="profile-edit-file-name">{headerFile.name}</span>}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="form-group">
           <label>표시 이름</label>
           <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="사용자 표시 이름" />
         </div>
@@ -151,10 +200,11 @@ export default function ProfileEditPage() {
         </div>
         <div className="form-actions">
           <button type="submit" disabled={submitting} className="btn btn-primary">저장</button>
-          <button type="button" onClick={() => { revokeBlobs(); setImageFile(null); setAvatarUrl(user?.avatar || ""); router.back(); }} className="btn btn-outline">취소</button>
+          <button type="button" onClick={() => { revokeBlobs(); setImageFile(null); setHeaderFile(null); setAvatarUrl(user?.avatar || ""); setHeaderPreview(user?.header || ""); router.back(); }} className="btn btn-outline">취소</button>
         </div>
       </form>
       {cropSrc && <ImageCropper src={cropSrc} onCrop={handleCrop} onClose={handleCropClose} />}
+      {headerCropSrc && <ImageCropper src={headerCropSrc} onCrop={handleCrop} onClose={handleCropClose} aspectRatio={3 / 1} />}
     </>
   );
 }

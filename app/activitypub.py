@@ -316,25 +316,29 @@ def _safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
         client.close()
         return None
 
-def _save_remote_avatar(avatar_url: str, local_username: str) -> str:
-    """Download remote avatar and save, return profile_image URL."""
+def _save_remote_image(image_url: str, prefix: str, local_username: str) -> str:
+    """Download remote image and save, return URL."""
     from app.utils.storage import get_storage
-    if not _validate_url(avatar_url):
+    if not _validate_url(image_url):
         return ""
-    ext = avatar_url.rsplit(".", 1)[-1].lower() if "." in avatar_url else "jpg"
+    ext = image_url.rsplit(".", 1)[-1].lower() if "." in image_url else "jpg"
     if ext not in ("jpg", "jpeg", "png", "gif", "webp"):
         ext = "jpg"
     filename = f"{local_username}_{uuid.uuid4().hex[:8]}.{ext}"
-    key = f"avatars/remote/{filename}"
+    key = f"{prefix}/remote/{filename}"
     try:
-        resp = _safe_fetch(avatar_url)
+        resp = _safe_fetch(image_url)
         if resp:
             storage = get_storage()
             ct = f"image/{ext}"
             return storage.save(key, resp.content, ct)
     except Exception as e:
-        logger.warning("Failed to save remote avatar %s: %s", avatar_url, e)
+        logger.warning("Failed to save remote %s %s: %s", prefix, image_url, e)
     return ""
+
+
+def _save_remote_avatar(avatar_url: str, local_username: str) -> str:
+    return _save_remote_image(avatar_url, "avatars", local_username)
 
 
 def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User]:
@@ -361,7 +365,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User
     domain = parsed.netloc
     local_username = f"{preferred_username}@{domain}"
 
-    # Extract avatar URL
+    # Extract avatar and header URL
     avatar_url = ""
     icon = data.get("icon", {})
     if isinstance(icon, dict):
@@ -369,18 +373,29 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User
     elif isinstance(icon, list):
         avatar_url = icon[0].get("url", "") if icon else ""
 
+    header_url = ""
+    image_field = data.get("image", {})
+    if isinstance(image_field, dict):
+        header_url = image_field.get("url", "")
+    elif isinstance(image_field, list):
+        header_url = image_field[0].get("url", "") if image_field else ""
+
     public_key_pem = ""
     if "publicKey" in data:
         public_key_pem = data["publicKey"].get("publicKeyPem", "")
 
     with get_session() as session:
         existing = session.query(User).filter_by(remote_url=actor_url).first()
+        base_username_clean = local_username.replace("@", "_")
+
         if existing:
             existing.public_key = public_key_pem
             existing.display_name = data.get("name", existing.display_name)
             existing.summary = data.get("summary", existing.summary)
             if avatar_url:
-                existing.profile_image = _save_remote_avatar(avatar_url, local_username.replace("@", "_"))
+                existing.profile_image = _save_remote_avatar(avatar_url, base_username_clean)
+            if header_url:
+                existing.header_image = _save_remote_image(header_url, "headers", base_username_clean)
             _process_emoji_tags(data.get("tag", []), session)
             session.commit()
             return existing
@@ -393,7 +408,9 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User
             by_username.display_name = data.get("name", by_username.display_name)
             by_username.summary = data.get("summary", by_username.summary)
             if avatar_url and not by_username.profile_image:
-                by_username.profile_image = _save_remote_avatar(avatar_url, local_username.replace("@", "_"))
+                by_username.profile_image = _save_remote_avatar(avatar_url, base_username_clean)
+            if header_url and not by_username.header_image:
+                by_username.header_image = _save_remote_image(header_url, "headers", base_username_clean)
             _process_emoji_tags(data.get("tag", []), session)
             session.commit()
             return by_username
@@ -406,7 +423,8 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User
             counter += 1
 
         priv, pub = generate_keypair()
-        profile_image = _save_remote_avatar(avatar_url, local_username.replace("@", "_")) if avatar_url else ""
+        profile_image = _save_remote_avatar(avatar_url, base_username_clean) if avatar_url else ""
+        header_image = _save_remote_image(header_url, "headers", base_username_clean) if header_url else ""
         user = User(
             username=local_username,
             display_name=data.get("name", preferred_username),
@@ -418,6 +436,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User
             remote_url=actor_url,
             shared_inbox_url=data.get("endpoints", {}).get("sharedInbox", ""),
             profile_image=profile_image,
+            header_image=header_image,
         )
         session.add(user)
         session.flush()

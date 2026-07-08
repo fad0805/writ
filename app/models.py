@@ -59,6 +59,7 @@ class User(Base):
     remote_url = Column(String(512), default="")
     shared_inbox_url = Column(String(512), default="")
     profile_image = Column(String(512), default="")
+    header_image = Column(String(512), default="")
     default_visibility = Column(String(16), default="public")
     series_default_visibility = Column(String(16), default="public")
     episode_default_visibility = Column(String(16), default="public")
@@ -113,6 +114,8 @@ class User(Base):
         }
         if self.profile_image:
             result["icon"] = {"type": "Image", "url": self.profile_image}
+        if self.header_image:
+            result["image"] = {"type": "Image", "url": self.header_image}
         if hasattr(self, 'shared_inbox_url') and self.shared_inbox_url:
             result["endpoints"] = {"sharedInbox": self.shared_inbox_url}
         return result

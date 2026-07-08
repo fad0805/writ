@@ -81,6 +81,7 @@ export default function ProfilePage() {
 
   return (
     <>
+      {profile.header && <div className="profile-header-banner"><img src={profile.header} alt="" /></div>}
       <div className="profile-header">
         <div className="profile-info">
           <div className="profile-avatar-col">

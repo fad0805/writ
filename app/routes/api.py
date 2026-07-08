@@ -69,6 +69,7 @@ def _user_json(u):
         "username": u.username,
         "display_name": u.display_name or u.username,
         "avatar": u.profile_image or "",
+        "header": u.header_image or "",
         "summary": u.summary or "",
         "is_admin": u.is_admin,
         "is_locked": u.is_locked or False,
@@ -1540,14 +1541,16 @@ def _cleanup_avatars():
         return
     with get_session() as s:
         used_urls = {u.profile_image for u in s.query(User).filter(User.profile_image != "").all()}
+        used_urls |= {u.header_image for u in s.query(User).filter(User.header_image != "").all()}
     now = time.time()
-    for key in storage.list_keys("avatars"):
-        url = storage.url(key)
-        if url in used_urls:
-            continue
-        mtime = storage.mtime(key)
-        if mtime is not None and now - mtime > 86400:
-            storage.delete(key)
+    for path in ("avatars", "headers"):
+        for key in storage.list_keys(path):
+            url = storage.url(key)
+            if url in used_urls:
+                continue
+            mtime = storage.mtime(key)
+            if mtime is not None and now - mtime > 86400:
+                storage.delete(key)
 
 
 @router.post("/settings/update")
@@ -1624,9 +1627,25 @@ def api_settings_change_password(request: Request, current_password: str = Form(
     return {"ok": True}
 
 
+def _save_profile_image(user_id: int, file: UploadFile, prefix: str, max_size: tuple[int, int], storage) -> str:
+    from PIL import Image as PILImage
+    import io
+    from uuid import uuid4
+    key = f"{prefix}/local/u{user_id}_{uuid4().hex[:8]}.webp"
+    img = PILImage.open(file.file)
+    img.thumbnail(max_size, PILImage.Resampling.LANCZOS)
+    if img.mode in ("RGBA", "P"):
+        bg = PILImage.new("RGB", img.size, (255, 255, 255))
+        bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
+        img = bg
+    out = io.BytesIO()
+    img.save(out, format="WEBP", quality=100)
+    return storage.save(key, out.getvalue(), "image/webp")
+
+
 @router.post("/profile/update")
 def api_update_profile(request: Request, display_name: str = Form(""), summary: str = Form(""),
-                       image: UploadFile = File(None)):
+                       image: UploadFile = File(None), header_image: UploadFile = File(None)):
     from app.utils.storage import get_storage
     user = require_auth(request)
     storage = get_storage()
@@ -1635,21 +1654,16 @@ def api_update_profile(request: Request, display_name: str = Form(""), summary: 
         db.display_name = display_name
         db.summary = summary
         if image and image.filename:
-            from PIL import Image as PILImage
-            import io
-            from uuid import uuid4
-            key = f"avatars/local/u{user.id}_{uuid4().hex[:8]}.webp"
-            img = PILImage.open(image.file)
-            img.thumbnail((400, 400), PILImage.Resampling.LANCZOS)
-            if img.mode in ("RGBA", "P"):
-                bg = PILImage.new("RGB", img.size, (255, 255, 255))
-                bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
-                img = bg
-            out = io.BytesIO()
-            img.save(out, format="WEBP", quality=100)
-            new_url = storage.save(key, out.getvalue(), "image/webp")
+            new_url = _save_profile_image(user.id, image, "avatars", (400, 400), storage)
             old = db.profile_image
             db.profile_image = new_url
+            s.flush()
+            if old:
+                storage.delete(old)
+        if header_image and header_image.filename:
+            new_url = _save_profile_image(user.id, header_image, "headers", (1500, 500), storage)
+            old = db.header_image
+            db.header_image = new_url
             s.flush()
             if old:
                 storage.delete(old)
