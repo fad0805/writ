@@ -344,8 +344,8 @@ export default function ProfilePage() {
           </Link>
         ))}
         {novels.length === 0 && pinnedSeries.length === 0 ? <p className="empty-state">시리즈가 없습니다.</p> : novels.map((n) => (
-          <div key={n.id} className="profile-novel profile-novel-link" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
-            <Link href={n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`} style={{ display: "flex", gap: 14, flex: 1, textDecoration: "none", color: "inherit" }}>
+          <div key={n.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Link href={n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`} className="profile-novel profile-novel-link" style={{ flex: 1 }}>
               <div className="cover-wrap-56">
                 {n.cover_image ? (
                   <img src={n.cover_image} alt="" className="cover-img" />
