@@ -48,7 +48,7 @@ export default function EditEpisodePage() {
       form.append("content", content);
       form.append("summary", summary);
       form.append("comment", comment);
-      form.append("is_published", isPublished ? "true" : "");
+      form.append("is_published", isPublished ? "true" : "false");
       if (announce) {
         form.append("announce", "true");
         form.append("announce_comment", announceComment);
