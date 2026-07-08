@@ -219,12 +219,11 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     }
   };
 
-  const handleContentChange = (val: string) => {
+  const handleContentChange = (val: string, cursor?: number) => {
     setContent(val);
-    if (taRef.current) {
-      detectMention(val, taRef.current.selectionStart);
-      detectEmoji(val, taRef.current.selectionStart);
-    }
+    const pos = cursor ?? (taRef.current?.selectionStart ?? val.length);
+    detectMention(val, pos);
+    detectEmoji(val, pos);
   };
 
   const handleTaRef = useCallback((ta: HTMLTextAreaElement | null) => {

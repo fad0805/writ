@@ -4,7 +4,7 @@ import { useRef, useCallback } from "react";
 export default function TextareaHighlight({
   value, onChange, placeholder, maxLength, cwLength, textareaRef: externalRef, ...props
 }: {
-  value: string; onChange: (v: string) => void; placeholder?: string;
+  value: string; onChange: (v: string, cursor?: number) => void; placeholder?: string;
   maxLength: number; cwLength: number;
   rows?: number; required?: boolean;
   onKeyDown?: (e: React.KeyboardEvent) => void;
@@ -21,7 +21,7 @@ export default function TextareaHighlight({
       <textarea
         ref={setTextareaRef}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value, e.target.selectionStart)}
         placeholder={placeholder}
         className="textarea-ta"
         {...props}
