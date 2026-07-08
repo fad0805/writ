@@ -156,17 +156,24 @@ export default function TimelinePage() {
   }, [tlType]);
 
   useEffect(() => {
+    if (!hasMore || posts.length === 0) return;
     const el = sentinelRef.current;
     if (!el) return;
     const obs = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) loadMoreRef.current();
       },
-      { rootMargin: "200px" }
+      { rootMargin: "300px" }
     );
     obs.observe(el);
     return () => obs.disconnect();
   }, [hasMore, posts.length]);
+
+  useEffect(() => {
+    if (!loading && posts.length > 0 && hasMore && document.documentElement.scrollHeight <= window.innerHeight) {
+      loadMoreRef.current();
+    }
+  }, [loading, hasMore, posts.length]);
 
   return (
     <>
