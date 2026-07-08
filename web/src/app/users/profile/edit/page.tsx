@@ -218,7 +218,8 @@ export default function ProfileEditPage() {
               <button type="button" onClick={() => setCustomFields(customFields.filter((_, j) => j !== i))} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--danger)", padding: 0 }}>×</button>
             </div>
           ))}
-          <button type="button" onClick={() => setCustomFields([...customFields, { label: "", value: "" }])} className="btn btn-small btn-outline">+ 필드 추가</button>
+          {customFields.length < 4 && <button type="button" onClick={() => setCustomFields([...customFields, { label: "", value: "" }])} className="btn btn-small btn-outline">+ 필드 추가</button>}
+          <p className="form-help">최대 4개까지 추가할 수 있습니다.</p>
         </div>
         <div className="form-group">
           <label>프로필 해시태그</label>

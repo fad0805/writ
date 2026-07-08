@@ -162,13 +162,16 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       setSeriesResults([]);
       return;
     }
-    const cmd = before.slice(slashIdx + 1).toLowerCase();
-    if (cmd !== "series" && !cmd.startsWith("series ")) {
+    const raw = before.slice(slashIdx + 1);
+    const cmd = raw.toLowerCase();
+    const isSeries = cmd === "series" || cmd === "시리즈";
+    const isSeriesWithQuery = cmd.startsWith("series ") || cmd.startsWith("시리즈 ");
+    if (!isSeries && !isSeriesWithQuery) {
       setSeriesResults([]);
       return;
     }
-    const q = cmd.startsWith("series ") ? cmd.slice(7).trim() : "";
-    if (q.length === 0 && cmd !== "series") { setSeriesResults([]); return; }
+    const q = isSeriesWithQuery ? raw.slice(raw.indexOf(" ") + 1).trim() : "";
+    if (!q && !isSeries) { setSeriesResults([]); return; }
     const ta = taRef.current;
     if (ta) {
       const rect = ta.getBoundingClientRect();
@@ -293,7 +296,8 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
 
   const insertSeries = useCallback((novel: { id: number; title: string }) => {
     const fullUrl = `${window.location.origin}/series/${novel.id}`;
-    const inserted = `${content}/series ${novel.title} ${fullUrl} `;
+    const before = content;
+    const inserted = `${before} ${fullUrl} `;
     setContent(inserted);
     setSeriesResults([]);
     requestAnimationFrame(() => {
