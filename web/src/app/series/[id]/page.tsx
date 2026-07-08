@@ -111,6 +111,7 @@ export default function NovelDetailPage() {
         <div className="novel-status">
           <span><Icon name={novel.is_completed ? "check" : "edit"} /> {novel.is_completed ? "완결" : "연재중"}</span>
           <span><Icon name="book" /> 총 {novel.episode_count}화</span>
+          {isMine && (novel as any).followers_count !== undefined && <span><Icon name="user" /> {(novel as any).followers_count}명 팔로우</span>}
           {isMine && novel.total_views !== undefined && <span><Icon name="eye" /> 총 {novel.total_views}회 조회</span>}
           <span><Icon name="lock" /> {novel.visibility === "public" ? "전체공개" : novel.visibility === "unlisted" ? "공개" : "비공개"}</span>
         </div>

@@ -2,7 +2,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import VisibilitySelector from "@/components/VisibilitySelector";
+import Icon from "@/components/Icon";
 import EpisodeEditor from "@/components/EpisodeEditor";
 import Link from "next/link";
 
@@ -13,8 +13,8 @@ export default function NewEpisodePage() {
   const [summary, setSummary] = useState("");
   const [comment, setComment] = useState("");
   const [content, setContent] = useState("");
+  const [isPublished, setIsPublished] = useState(true);
   const [announce, setAnnounce] = useState(false);
-  const [visibility, setVisibility] = useState("public");
   const [announceComment, setAnnounceComment] = useState("");
   const [novelTitle, setNovelTitle] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -39,11 +39,11 @@ export default function NewEpisodePage() {
       form.append("content", content);
       form.append("summary", summary);
       form.append("comment", comment);
+      form.append("is_published", isPublished ? "true" : "false");
       if (announce) {
         form.append("announce", "true");
         form.append("announce_comment", announceComment);
       }
-      form.append("visibility", visibility);
       const res = await fetch(`/api/series/${params.id}/episodes/new`, { method: "POST", credentials: "include", body: form });
       const data = await res.json();
       if (res.ok) router.push(`/series/${params.id}/episodes/${data.episode_id}`);
@@ -72,10 +72,13 @@ export default function NewEpisodePage() {
           <label>작가 코멘트</label>
           <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="이 에피소드에 대한 작가의 코멘트 (선택사항)" />
         </div>
+        <div className="form-group">
+          <label className="flex-center" style={{ gap: 6, cursor: "pointer", justifyContent: "flex-start" }}>
+            <input type="checkbox" checked={isPublished} onChange={(e) => setIsPublished(e.target.checked)} />
+            <Icon name={isPublished ? "check" : "lock"} /> {isPublished ? "공개" : "비공개"}
+          </label>
+        </div>
         <div className="form-group announce-group">
-          <div className="announce-vis-wrap">
-            <VisibilitySelector value={visibility} onChange={(v) => setVisibility(v)} />
-          </div>
           <label>
             <input type="checkbox" checked={announce} onChange={(e) => setAnnounce(e.target.checked)} />
             {" "}SNS에 홍보글 게시 (ActivityPub으로 연동됨)

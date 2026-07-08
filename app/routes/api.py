@@ -1179,7 +1179,7 @@ def _novel_json(n, s=None):
     if hasattr(n, 'author') and n.author:
         author = _user_json(n.author)
     tag_names = " ".join(t.name for t in (n.tag_list or [])) if n.tag_list else (n.tags or "")
-    return {
+    result = {
         "id": n.id,
         "number": n.number or "",
         "title": n.title,
@@ -1196,6 +1196,9 @@ def _novel_json(n, s=None):
         "author": author,
         "author_id": n.author_id,
     }
+    if s is not None:
+        result["followers_count"] = s.query(SeriesFollow).filter_by(novel_id=n.id).count()
+    return result
 
 
 @router.post("/series/new")
@@ -1369,22 +1372,20 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
 @router.post("/series/{novel_id}/episodes/new")
 def api_create_episode(request: Request, novel_id: int, title: str = Form(...), content: str = Form(...),
                        summary: str = Form(""), comment: str = Form(""),
-                       announce: bool = Form(False), visibility: str = Form("public"),
-                       announce_comment: str = Form("")):
+                       announce: bool = Form(False), announce_comment: str = Form(""),
+                       is_published: bool = Form(True)):
     user = require_auth(request)
     if getattr(user, 'is_deceased', False):
         raise HTTPException(status_code=403, detail="고인 계정은 에피소드를 생성할 수 없습니다.")
     if not title.strip() or not content.strip():
         raise HTTPException(status_code=400, detail="Title and content are required")
-    if visibility not in ("public", "home", "followers", "mention"):
-        visibility = "public"
     with get_session() as s:
         novel = s.query(Novel).filter_by(id=novel_id, author_id=user.id).first()
         if not novel:
             raise HTTPException(status_code=404, detail="Novel not found")
         max_ep = s.query(Episode).filter_by(novel_id=novel.id).order_by(desc(Episode.episode_number)).first()
         next_num = (max_ep.episode_number + 1) if max_ep else 1
-        episode = Episode(novel_id=novel.id, episode_number=next_num, title=title, content=content, summary=summary, comment=comment)
+        episode = Episode(novel_id=novel.id, episode_number=next_num, title=title, content=content, summary=summary, comment=comment, is_published=is_published)
         s.add(episode)
         s.flush()
         if announce:
@@ -1401,7 +1402,7 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
             post = Post(
                 author_id=user.id,
                 content=post_content,
-                visibility=visibility,
+                visibility="public",
                 number=ep_post_number,
                 novel_id=novel.id,
                 episode_id=episode.id,
