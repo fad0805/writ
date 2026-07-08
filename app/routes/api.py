@@ -247,12 +247,22 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
     from app.crypto_utils import generate_keypair
     import re
     import secrets
+    RESERVED_HANDLES = {
+        "admin", "administrator", "root", "system", "moderator", "support",
+        "nodeinfo", "well-known", "api", "auth", "oauth", "inbox", "outbox",
+        "actor", "users", "accounts", "instance_actor", "login", "register",
+    }
+    h = username.lower()
+    if h in RESERVED_HANDLES:
+        raise HTTPException(status_code=400, detail="해당 아이디로 가입할 수 없습니다.")
+    if h != username:
+        raise HTTPException(status_code=400, detail="아이디는 소문자로 입력해주세요.")
     if not username or not password or not email:
         raise HTTPException(status_code=400, detail="Username, password, and email required")
     if len(username) < 3 or len(password) < 6:
         raise HTTPException(status_code=400, detail="Username (3+) and password (6+) required")
-    if not re.match(r'^[a-zA-Z0-9_]+$', username):
-        raise HTTPException(status_code=400, detail="Username can only contain letters, numbers, and underscores")
+    if not re.match(r'^[a-z0-9][a-z0-9_]{2,19}$', username):
+        raise HTTPException(status_code=400, detail="아이디는 영문 소문자, 숫자, 언더바만 사용 가능하며 3~20자입니다.")
     if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
         raise HTTPException(status_code=400, detail="Invalid email address")
     with get_session() as s:

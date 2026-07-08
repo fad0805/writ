@@ -83,7 +83,8 @@ export default function RegisterPage() {
         </div>
         <div className="form-group">
           <label>사용자 이름</label>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username" required />
+          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username (소문자)" required />
+          <p className="form-help">소문자, 숫자, 언더바만 사용 가능 (3~20자)</p>
         </div>
         <div className="form-group">
           <label>비밀번호</label>
