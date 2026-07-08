@@ -43,9 +43,13 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   const [liked, setLiked] = useState(post.liked);
   const [boosted, setBoosted] = useState(post.boosted);
   const [bookmarked, setBookmarked] = useState(post.bookmarked);
-  const [pinned, setPinned] = useState(currentUser?.pinned_posts?.includes(post.id) || false);
+  const [pinned, setPinned] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likes_count);
   const [boostsCount, setBoostsCount] = useState(post.boosts_count);
+
+  useEffect(() => {
+    if (currentUser?.pinned_posts) setPinned(currentUser.pinned_posts.includes(post.id));
+  }, [currentUser, post.id]);
 
   const toggleLike = async () => {
     try {
@@ -337,10 +341,9 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
           </button>
           {post.is_mine && (
             <button onClick={(e) => { e.stopPropagation(); (async () => {
-              const wasPinned = pinned;
-              setPinned(!wasPinned);
-              await fetch(`/api/${wasPinned ? "unpin" : "pin"}/post/${post.id}`, { method: "POST", credentials: "include" });
-              if (onUpdate) onUpdate();
+              const newPinned = !pinned;
+              setPinned(newPinned);
+              await fetch(`/api/${newPinned ? "pin" : "unpin"}/post/${post.id}`, { method: "POST", credentials: "include" });
               window.dispatchEvent(new Event("pinchange"));
             })(); }} className="action-btn" title={pinned ? "고정 해제" : "고정"} style={{ color: pinned ? "var(--danger)" : undefined }}>
               <Icon name={pinned ? "pin_filled" : "pin"} />
