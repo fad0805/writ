@@ -826,7 +826,7 @@ def api_unboost_post(request: Request, post_id: int):
 
 # ── User / Profile API ──
 
-@router.get("/users/autocomplete")
+@router.get("/users/_autocomplete")
 def api_users_autocomplete(request: Request, q: str = Query("")):
     user = get_current_user(request)
     query = q.strip().lstrip("@")

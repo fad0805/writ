@@ -203,7 +203,7 @@ export const api = {
   // Explore
   explore: () => request<{ posts: PostData[]; novels: NovelData[] }>("/api/explore"),
   search: (q: string) => request<SearchResults>(`/api/search?q=${encodeURIComponent(q)}`),
-  autocomplete: (q: string) => request<{ users: User[] }>(`/api/users/autocomplete?q=${encodeURIComponent(q)}`),
+  autocomplete: (q: string) => request<{ users: User[] }>(`/api/users/_autocomplete?q=${encodeURIComponent(q)}`),
 
   // Auth actions
   login: async (username: string, password: string) => {
