@@ -128,6 +128,12 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   const [loadingQuote, setLoadingQuote] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(-1);
   useEffect(() => {
+    if (viewerIndex < 0) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setViewerIndex(-1); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [viewerIndex]);
+  useEffect(() => {
     const newFormat = post.content.match(/https?:\/\/([^/]+)\/@(\w+(?:@[\w.-]+)?)\/([a-f0-9]+)/);
     const oldFormat = post.content.match(/https?:\/\/[^/]+\/post\/(\d+)/);
     const seriesFormat = post.content.match(/https?:\/\/[^/]+\/series\/(\d+)/);
