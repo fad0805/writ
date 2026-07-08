@@ -60,12 +60,13 @@ export default function TimelinePage() {
     setLoadingMore(true);
     try {
       const data = await api.timeline(tlType, LOAD_MORE, rawOffset);
+      console.log("[TL] loadMore resp", { rawOffset, postsCount: data.posts.length, hasMore: data.has_more });
       setPosts((prev) => {
         const ids = new Set(prev.map((p) => p.id));
         return [...prev, ...data.posts.filter((p: any) => !ids.has(p.id))];
       });
       setHasMore(data.has_more);
-      setRawOffset((prev) => prev + LOAD_MORE);
+      setRawOffset((prev) => { console.log("[TL] rawOffset", prev, "+", LOAD_MORE); return prev + LOAD_MORE; });
     } catch {}
     setLoadingMore(false);
   }, [tlType, rawOffset, hasMore, loadingMore]);
