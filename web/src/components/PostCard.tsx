@@ -212,7 +212,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
             {post.author.display_name} {(post.author.role === "admin" || post.author.role === "moderator" || post.author.role === "owner") && (post.author as any).show_badge && <Icon name={post.author.role === "owner" ? "books_solid" : "shield_filled"} style={{ color: post.author.role === "owner" ? "var(--accent)" : post.author.role === "admin" ? "#27ae60" : "#cc8800", fontSize: "0.65em", verticalAlign: "middle", marginLeft: 2 }} title={post.author.role === "owner" ? "오너" : post.author.role === "admin" ? "관리자" : "조율자"} />}
           </Link>
           <Link href={`/@${post.author.username}`} className="post-username" onClick={(e) => e.stopPropagation()}>
-            @{post.author.username}
+            @{post.author.display_handle || post.author.username}
           </Link>
           {post.author.is_locked && <Icon name="lock_filled" style={{ fontSize: "0.65em", verticalAlign: "middle", color: "var(--text-muted)", marginLeft: 2 }} />}
           <span className="post-time">

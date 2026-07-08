@@ -75,7 +75,7 @@ export default function MiniPostCard({ post, notifType }: { post: PostData; noti
         <div className="mini-post-author">
           {post.author.display_name}
           <span className="mini-post-handle">
-            @{post.author.username}
+            @{post.author.display_handle || post.author.username}
           </span>
         </div>
         {post.summary && (

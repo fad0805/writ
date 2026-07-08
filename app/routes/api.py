@@ -81,6 +81,7 @@ def _user_json(u):
         "show_badge": getattr(u, 'show_badge', False) or False,
         "email_verified": u.email_verified or False,
         "default_visibility": u.default_visibility or "public",
+        "display_handle": getattr(u, 'display_handle', '') or "",
         "series_default_visibility": u.series_default_visibility or "public",
         "episode_default_visibility": u.episode_default_visibility or "public",
         "custom_fields": (u.custom_fields or []) if hasattr(u, 'custom_fields') else [],
@@ -252,6 +253,7 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
         "nodeinfo", "well-known", "api", "auth", "oauth", "inbox", "outbox",
         "actor", "users", "accounts", "instance_actor", "login", "register",
     }
+    display_handle = username
     username = username.lower()
     if username in RESERVED_HANDLES:
         raise HTTPException(status_code=400, detail="해당 아이디로 가입할 수 없습니다.")
@@ -282,7 +284,8 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
         email_verified = is_first
         user = User(
             username=username,
-            display_name=display_name or username,
+            display_name=display_name or display_handle,
+            display_handle=display_handle,
             password_hash=salt + ":" + pwd_hash,
             private_key=encrypt_key(priv_key, SECRET_KEY), public_key=pub_key,
             is_remote=False,
