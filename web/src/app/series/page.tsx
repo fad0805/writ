@@ -23,7 +23,7 @@ export default function NovelsPage() {
     setLoadingMore(true);
     try {
       const d = await api.getNovels(6, offset);
-      setNovels((prev) => [...prev, ...d.novels]);
+      setNovels((prev) => { const merged = [...prev, ...d.novels]; if (merged.length >= 200) setHasMore(false); return merged; });
       setHasMore(d.has_more);
       setOffset((prev) => prev + 6);
     } catch {}
