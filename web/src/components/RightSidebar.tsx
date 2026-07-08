@@ -89,7 +89,17 @@ export default function RightSidebar() {
         <h4><Icon name="bell" /> 알림</h4>
         <div className="notif-mini-list">
           {notifs.length > 0 ? notifs.map((n) => {
-            if (n.post) return <MiniPostCard key={n.id} post={n.post} notifType={n.type} />;
+            if (n.post) return (
+              <div key={n.id}>
+                {(n.type === "like" || n.type === "boost") && n.from_user && (
+                  <div className="mini-post-author" style={{ padding: "0 12px", marginTop: 4, fontSize: "0.85em" }}>
+                    <strong>{n.from_user.display_name || n.from_user.username}</strong>
+                    <span className="text-muted" style={{ marginLeft: 4 }}>{n.type === "like" ? "님이 즐겨찾기했습니다" : "님이 부스트했습니다"}</span>
+                  </div>
+                )}
+                <MiniPostCard post={n.post} notifType={n.type} />
+              </div>
+            );
 
             if (n.type === "follow" || n.type === "follow_request") {
               return (
