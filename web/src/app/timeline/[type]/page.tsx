@@ -65,6 +65,12 @@ export default function TimelinePage() {
     load();
   }, [tlType, refreshKey]);
 
+  useEffect(() => {
+    const handler = () => { skipLoadRef.current = false; load(); };
+    window.addEventListener("followchange", handler);
+    return () => window.removeEventListener("followchange", handler);
+  }, [tlType]);
+
   const load = async () => {
     setLoading(true);
     setError("");
@@ -163,12 +169,6 @@ export default function TimelinePage() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [tlType]);
-
-  useEffect(() => {
-    const handler = () => load();
-    window.addEventListener("followchange", handler);
-    return () => window.removeEventListener("followchange", handler);
   }, [tlType]);
 
   useEffect(() => {
