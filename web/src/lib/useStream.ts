@@ -25,7 +25,7 @@ export function useStream(handlers: Record<string, EventHandler>) {
     }
 
     es.onerror = () => {
-      es.close();
+      console.warn("[SSE] connection error, will auto-reconnect");
     };
 
     return () => {
