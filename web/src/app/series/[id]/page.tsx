@@ -112,7 +112,7 @@ export default function NovelDetailPage() {
           <span><Icon name={novel.is_completed ? "check" : "edit"} /> {novel.is_completed ? "완결" : "연재중"}</span>
           <span><Icon name="book" /> 총 {novel.episode_count}화</span>
           {isMine && novel.total_views !== undefined && <span><Icon name="eye" /> 총 {novel.total_views}회 조회</span>}
-          <span><Icon name="eye" /> {novel.visibility === "public" ? "전체공개" : novel.visibility === "unlisted" ? "공개" : "비공개"}</span>
+          <span><Icon name="lock" /> {novel.visibility === "public" ? "전체공개" : novel.visibility === "unlisted" ? "공개" : "비공개"}</span>
         </div>
         {novel.description && <p className="novel-description">{novel.description}</p>}
         {novel.tags && <p className="novel-tags"><Icon name="tag" /> {novel.tags.split(/[ ,]+/).filter(Boolean).map((t, i) => <span key={i} className="tag-spacing">{t}</span>)}</p>}
