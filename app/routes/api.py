@@ -252,11 +252,9 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
         "nodeinfo", "well-known", "api", "auth", "oauth", "inbox", "outbox",
         "actor", "users", "accounts", "instance_actor", "login", "register",
     }
-    h = username.lower()
-    if h in RESERVED_HANDLES:
+    username = username.lower()
+    if username in RESERVED_HANDLES:
         raise HTTPException(status_code=400, detail="해당 아이디로 가입할 수 없습니다.")
-    if h != username:
-        raise HTTPException(status_code=400, detail="아이디는 소문자로 입력해주세요.")
     if not username or not password or not email:
         raise HTTPException(status_code=400, detail="Username, password, and email required")
     if len(username) < 3 or len(password) < 6:
