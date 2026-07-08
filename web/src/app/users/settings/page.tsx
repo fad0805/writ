@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import Icon from "@/components/Icon";
 import VisibilitySelector from "@/components/VisibilitySelector";
-import SeriesVisibilitySelector from "@/components/SeriesVisibilitySelector";
 import SettingsNav from "@/components/SettingsNav";
 import { useAuth } from "@/lib/auth";
 
@@ -12,7 +11,6 @@ export default function SettingsPage() {
   const router = useRouter();
   const { refresh: refreshAuth } = useAuth();
   const [defaultVis, setDefaultVis] = useState("public");
-  const [seriesDefaultVis, setSeriesDefaultVis] = useState("public");
   const [episodeDefaultVis, setEpisodeDefaultVis] = useState("public");
   const [showBadge, setShowBadge] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -23,7 +21,6 @@ export default function SettingsPage() {
     api.me().then((u) => {
       const user = u as any;
       setDefaultVis(user.default_visibility || "public");
-      setSeriesDefaultVis(user.series_default_visibility || "public");
       setEpisodeDefaultVis(user.episode_default_visibility || "public");
       setShowBadge(user.show_badge || false);
       setLoading(false);
@@ -48,7 +45,6 @@ export default function SettingsPage() {
     try {
       const form = new FormData();
       form.append("default_visibility", defaultVis);
-      form.append("series_default_visibility", seriesDefaultVis);
       form.append("episode_default_visibility", episodeDefaultVis);
       form.append("show_badge", showBadge ? "true" : "");
       const res = await fetch("/api/settings/update", {
@@ -71,11 +67,6 @@ export default function SettingsPage() {
       </div>
       <SettingsNav current="visibility" />
       <form onSubmit={handleSubmit} className="novel-form">
-        <div className="form-group">
-          <label>시리즈 기본 공개 설정</label>
-          <SeriesVisibilitySelector value={seriesDefaultVis} onChange={(v) => setSeriesDefaultVis(v)} />
-          <p className="form-help">새 시리즈 생성 시 기본으로 적용될 공개 범위입니다.</p>
-        </div>
         <div className="form-group">
           <label>에피소드 홍보글 기본 공개 설정</label>
           <VisibilitySelector value={episodeDefaultVis} onChange={(v) => setEpisodeDefaultVis(v)} />
