@@ -598,6 +598,11 @@ def init_db():
     _run_alter("ALTER TABLE keyword_mutes ADD COLUMN mode VARCHAR(8) DEFAULT 'or'")
     _run_alter("ALTER TABLE keyword_mutes ADD COLUMN is_regex BOOLEAN DEFAULT 0")
     _run_alter("ALTER TABLE keyword_mutes ADD COLUMN name VARCHAR(128) DEFAULT ''")
+    _run_alter("""CREATE TABLE IF NOT EXISTS post_tags (
+        post_id INTEGER NOT NULL REFERENCES posts(id),
+        tag_id INTEGER NOT NULL REFERENCES tags(id),
+        PRIMARY KEY (post_id, tag_id)
+    )""")
 
 
 def get_session():
