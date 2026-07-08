@@ -219,6 +219,9 @@ a:hover { color: var(--accent-light); text-decoration: none; }
   margin: 2px 0 2px 12px;
   border-left: 2px solid var(--border);
 }
+.nav-sub-links li {
+  list-style: none;
+}
 .nav-sub-links li a {
   font-size: 0.9em;
 }
