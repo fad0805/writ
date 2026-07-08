@@ -9,7 +9,7 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, SeriesFollow, Tag, CustomEmoji, ProfileNote, Report, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, get_session
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, SeriesFollow, Tag, CustomEmoji, ProfileNote, Report, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, get_session
 from app.routes.auth import require_auth, get_current_user
 from app.log_utils import log_admin_action
 
@@ -1479,7 +1479,17 @@ def api_get_episode(request: Request, novel_id: int, episode_id: int):
         if not is_mine:
             next_ep = next_ep.filter(Episode.is_published == True)
         next_ep = next_ep.order_by(Episode.episode_number).first()
-        episode.views = (episode.views or 0) + 1
+        if user and not is_mine:
+            from datetime import datetime, timedelta
+            today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            existing_view = s.query(EpisodeView).filter(
+                EpisodeView.user_id == user.id,
+                EpisodeView.episode_id == episode.id,
+                EpisodeView.viewed_at >= today_start,
+            ).first()
+            if not existing_view:
+                episode.views = (episode.views or 0) + 1
+                s.add(EpisodeView(user_id=user.id, episode_id=episode.id))
         s.commit()
         result = {
             "episode": _episode_json(episode),

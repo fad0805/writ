@@ -544,6 +544,14 @@ class KeywordMute(Base):
     created_at = Column(DateTime(timezone=True), default=now)
 
 
+class EpisodeView(Base):
+    __tablename__ = "episode_views"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    episode_id = Column(Integer, ForeignKey("episodes.id"), nullable=False)
+    viewed_at = Column(DateTime(timezone=True), default=now)
+
+
 class ServerSetting(Base):
     __tablename__ = "server_settings"
 
