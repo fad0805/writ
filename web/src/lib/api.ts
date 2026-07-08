@@ -185,9 +185,9 @@ export const api = {
   getFollowing: (username: string) => request<{ users: User[] }>(`/api/users/${username}/following`),
 
   // Notifications
-  getNotifications: (filter?: string) =>
-    request<{ notifications: NotificationData[] }>(
-      `/api/notifications${filter ? `?filter_type=${filter}` : ""}`
+  getNotifications: (filter?: string, limit = 20, offset = 0) =>
+    request<{ notifications: NotificationData[]; has_more: boolean; total: number }>(
+      `/api/notifications?limit=${limit}&offset=${offset}${filter ? `&filter_type=${filter}` : ""}`
     ),
 
   // Novels

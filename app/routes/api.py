@@ -1331,7 +1331,7 @@ def api_direct_threads(request: Request):
 
 
 @router.get("/notifications")
-def api_notifications(request: Request, filter_type: str = Query("")):
+def api_notifications(request: Request, filter_type: str = Query(""), limit: int = Query(20), offset: int = Query(0)):
     user = require_auth(request)
     with get_session() as s:
         q = s.query(Notification).filter_by(user_id=user.id)
@@ -1339,7 +1339,11 @@ def api_notifications(request: Request, filter_type: str = Query("")):
             q = q.filter(Notification.notification_type.in_(["follow", "follow_request"]))
         elif filter_type:
             q = q.filter_by(notification_type=filter_type)
-        notifs = q.order_by(desc(Notification.created_at)).limit(50).all()
+        q = q.order_by(desc(Notification.created_at))
+        total = q.count()
+        raw = q.offset(offset).limit(limit + 1).all()
+        has_more = len(raw) > limit
+        notifs = raw[:limit]
 
         result = []
         for n in notifs:
@@ -1361,11 +1365,12 @@ def api_notifications(request: Request, filter_type: str = Query("")):
             }
             result.append(item)
 
-        # mark as read
-        s.query(Notification).filter_by(user_id=user.id, is_read=False).update({"is_read": True})
-        s.commit()
+        # mark as read (only first page)
+        if offset == 0:
+            s.query(Notification).filter_by(user_id=user.id, is_read=False).update({"is_read": True})
+            s.commit()
 
-    return {"notifications": result}
+    return {"notifications": result, "has_more": has_more, "total": total}
 
 
 # ── Novels / Episodes API ──

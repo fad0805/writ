@@ -22,7 +22,7 @@ export default function RightSidebar() {
   useEffect(() => {
     if (!user) return;
     api.getMyNovels().then((d) => setNovels(d.novels)).catch(() => {});
-    api.getNotifications().then((d) => setNotifs(d.notifications.slice(0, 10))).catch(() => {});
+    api.getNotifications(undefined, 10, 0).then((d) => setNotifs(d.notifications)).catch(() => {});
   }, [user, refreshKey]);
 
   const [serverRefreshKey, setServerRefreshKey] = useState(0);

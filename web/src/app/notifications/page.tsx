@@ -6,6 +6,7 @@ import Link from "next/link";
 import PostCard from "@/components/PostCard";
 import Icon from "@/components/Icon";
 import DirectUserCard from "@/components/DirectUserCard";
+import InfiniteScroll from "@/components/InfiniteScroll";
 
 type DirectUserData = User & {
   latest_previews?: { text: string; is_me: boolean }[];
@@ -49,25 +50,42 @@ export default function NotificationsPage() {
     return "";
   });
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(20);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        if (filter === "direct") {
-          const res = await fetch("/api/notifications/direct-threads", { credentials: "include" });
-          const data = await res.json();
-          setDirectGroups(data.users || []);
-          setNotifs([]);
-        } else {
-          const data = await api.getNotifications(filter || undefined);
-          setNotifs(data.notifications);
-          setDirectGroups([]);
-        }
-      } catch {}
-      setLoading(false);
-    };
-    load();
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      if (filter === "direct") {
+        const res = await fetch("/api/notifications/direct-threads", { credentials: "include" });
+        const data = await res.json();
+        setDirectGroups(data.users || []);
+        setNotifs([]);
+      } else {
+        const data = await api.getNotifications(filter || undefined, 20, 0);
+        setNotifs(data.notifications);
+        setHasMore(data.has_more);
+        setOffset(20);
+        setDirectGroups([]);
+      }
+    } catch {}
+    setLoading(false);
   }, [filter]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const data = await api.getNotifications(filter || undefined, 10, offset);
+      setNotifs((prev) => [...prev, ...data.notifications]);
+      setHasMore(data.has_more);
+      setOffset((prev) => prev + 10);
+    } catch {}
+    setLoadingMore(false);
+  }, [filter, offset, hasMore, loadingMore]);
+
+  useEffect(() => { load(); }, [load]);
   useEffect(() => { window.dispatchEvent(new Event("notificationsread")); }, []);
 
   const actionNames: Record<string, string> = {
@@ -165,7 +183,8 @@ export default function NotificationsPage() {
       ) : notifs.length === 0 ? (
         <p className="empty-state">알림이 없습니다.</p>
       ) : (
-        notifs.map((n) => (
+        <InfiniteScroll hasMore={hasMore} loadingMore={loadingMore} loadMore={loadMore}>
+        {notifs.map((n) => (
           <div key={n.id} className="notif-card" data-type={n.type}
             onClick={() => {
               if (n.type === "moderation" && n.metadata?.type === "report") router.push(`/admin/reports/${n.metadata.report_id}`);
@@ -216,7 +235,8 @@ export default function NotificationsPage() {
               {n.post && <PostCard post={n.post} readonly />}
             </div>
           </div>
-        ))
+        ))}
+        </InfiniteScroll>
       )}
     </>
   );
