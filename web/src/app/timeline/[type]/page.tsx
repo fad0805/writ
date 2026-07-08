@@ -30,6 +30,7 @@ export default function TimelinePage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [rawOffset, setRawOffset] = useState(0);
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedIdx, setSelectedIdx] = useState(-1);
@@ -47,6 +48,7 @@ export default function TimelinePage() {
       const data = await api.timeline(tlType, LIMIT, 0);
       setPosts(data.posts);
       setHasMore(data.has_more);
+      setRawOffset(LIMIT);
     } catch (e: any) {
       setError(e.message || "불러오기 실패");
     }
@@ -57,15 +59,13 @@ export default function TimelinePage() {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     try {
-      const data = await api.timeline(tlType, LOAD_MORE, posts.length);
-      setPosts((prev) => {
-        const ids = new Set(prev.map((p) => p.id));
-        return [...prev, ...data.posts.filter((p: any) => !ids.has(p.id))];
-      });
+      const data = await api.timeline(tlType, LOAD_MORE, rawOffset);
+      setPosts((prev) => [...prev, ...data.posts]);
       setHasMore(data.has_more);
+      setRawOffset((prev) => prev + LOAD_MORE);
     } catch {}
     setLoadingMore(false);
-  }, [tlType, posts.length, hasMore, loadingMore]);
+  }, [tlType, rawOffset, hasMore, loadingMore]);
 
   useEffect(() => { if (!authLoading && !user) router.replace("/"); }, [authLoading, user, router]);
 
@@ -150,6 +150,7 @@ export default function TimelinePage() {
       api.timeline(tlType, LIMIT, 0).then((data) => {
         setPosts(data.posts);
         setHasMore(data.has_more);
+        setRawOffset(LIMIT);
       }).catch(() => {});
     }, 15000);
     return () => clearInterval(interval);
