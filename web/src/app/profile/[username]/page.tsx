@@ -369,7 +369,7 @@ export default function ProfilePage() {
       <div className="profile-stats">
         <span className={`profile-stat ${tab === "posts" ? "active" : ""}`} onClick={() => setTab("posts")}><strong>{totalPosts || posts.length}</strong> 게시글</span>
         <span className={`profile-stat ${tab === "novels" ? "active" : ""}`} onClick={() => setTab("novels")}><strong>{novels.length}</strong> 시리즈</span>
-        <span className={`profile-stat ${tab === "media" ? "active" : ""}`} onClick={() => { setTab("media"); if (mediaPosts.length === 0 && !mediaLoading) loadMedia(); }}><strong>{mediaPosts.length || 0}</strong> 미디어</span>
+        <span className={`profile-stat ${tab === "media" ? "active" : ""}`} onClick={() => { setTab("media"); if (mediaPosts.length === 0 && !mediaLoading) loadMedia(); }}>미디어</span>
         <span className={`profile-stat ${tab === "following" ? "active" : ""}`} onClick={() => setTab("following")}><strong>{followingCount}</strong> 팔로잉</span>
         <span className={`profile-stat ${tab === "followers" ? "active" : ""}`} onClick={() => setTab("followers")}><strong>{followersCount}</strong> 팔로워</span>
       </div>
