@@ -3965,7 +3965,8 @@ def api_admin_update_settings(request: Request,
     with get_session() as s:
         from app.models import ServerSetting
         settings = ServerSetting.get(s)
-        settings.server_name = server_name[:20]
+        if server_name.strip():
+            settings.server_name = server_name[:20]
         if logo: settings.logo = _save_server_file(logo, "logo")
         elif logo_url: settings.logo = logo_url
         if favicon: settings.favicon = _save_server_file(favicon, "favicon")

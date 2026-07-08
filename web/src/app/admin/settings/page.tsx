@@ -62,7 +62,7 @@ export default function AdminSettingsPage() {
       form.append("admin_ids", adminIds);
       form.append("admin_email", adminEmail);
       const res = await fetch("/api/admin/settings", { method: "POST", credentials: "include", body: form });
-      if (res.ok) { setMsg("저장되었습니다."); window.dispatchEvent(new Event("serverchange")); }
+      if (res.ok) { setMsg("저장되었습니다."); window.dispatchEvent(new Event("serverchange")); setLogoFile(null); setFaviconFile(null); setAppIconFile(null); fetch("/api/admin/settings", { credentials: "include" }).then(r => r.json()).then(d => { setLogoPreview(d.logo || ""); setFaviconPreview(d.favicon || ""); setAppIconPreview(d.app_icon || ""); }).catch(() => {}); }
       else { const d = await res.json().catch(() => ({})); setMsg(typeof d.detail === "string" ? d.detail : Array.isArray(d.detail) ? d.detail.map((e: any) => e.msg).join(", ") : "저장 실패"); }
     } catch { setMsg("오류 발생"); }
     setSaving(false);
