@@ -63,8 +63,6 @@ logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    from app.seed import seed_default_data
-    seed_default_data()
     try:
         from app.routes.api import _cleanup_avatars
         _cleanup_avatars()

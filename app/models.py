@@ -528,9 +528,6 @@ class ServerSetting(Base):
 
 def init_db():
     Base.metadata.create_all(engine)
-    with Session(engine) as session:
-        from app.migrations import run_migrations
-        run_migrations(session)
 
 
 def get_session():
