@@ -52,23 +52,27 @@ export default function ProfilePage() {
       setFollowers(d.followers); setFollowing(d.following);
       setFollowersCount(d.followers_count); setFollowingCount(d.following_count);
       setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setHasPendingFollower(d.has_pending_follower); setIsMine(d.is_mine);
+      setIsBlocked(!!(d as any).is_blocked); setAmBlocked(!!(d as any).am_i_blocked); setIsMutedUser(!!(d as any).is_muted);
+      setPinnedPosts((d as any).pinned_posts_data || []); setPinnedSeries((d as any).pinned_series_data || []);
     } catch {}
     setLoading(false);
   }, [username]);
 
-  useEffect(() => {
-    api.getProfile(username)
-      .then((d) => {
-        setProfile(d.profile); setPosts(d.posts); setNovels(d.novels);
-        setFollowers(d.followers); setFollowing(d.following);
-        setFollowersCount(d.followers_count); setFollowingCount(d.following_count);
+  const loadProfile = useCallback(async (noCache = false) => {
+    try {
+      const url = `/api/users/${username}${noCache ? `?t=${Date.now()}` : ""}`;
+      const res = await fetch(url, { credentials: "include" });
+      const d = await res.json();
+      setProfile(d.profile); setPosts(d.posts); setNovels(d.novels);
+      setFollowers(d.followers); setFollowing(d.following);
+      setFollowersCount(d.followers_count); setFollowingCount(d.following_count);
       setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setHasPendingFollower(d.has_pending_follower); setIsFollower(d.is_follower); setApprovedFollower(null); setIsMine(d.is_mine);
       setIsBlocked(!!(d as any).is_blocked); setAmBlocked(!!(d as any).am_i_blocked); setIsMutedUser(!!(d as any).is_muted);
       setPinnedPosts((d as any).pinned_posts_data || []); setPinnedSeries((d as any).pinned_series_data || []);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [username, router]);
+    } catch (e) {}
+  }, [username]);
+
+  useEffect(() => { loadProfile(); }, [loadProfile, router]);
 
   useEffect(() => {
     if (!loading && profile && !isMine) {
@@ -79,10 +83,10 @@ export default function ProfilePage() {
   }, [loading, profile, isMine]);
 
   useEffect(() => {
-    const handlePinChange = () => { api.getProfile(username).then((d: any) => { setPinnedPosts(d.pinned_posts_data || []); setPinnedSeries(d.pinned_series_data || []); }).catch(() => {}); };
+    const handlePinChange = () => loadProfile(true);
     window.addEventListener("pinchange", handlePinChange);
     return () => window.removeEventListener("pinchange", handlePinChange);
-  }, [username]);
+  }, [loadProfile]);
 
   if (loading) return <div className="empty-state">로딩 중...</div>;
   if (!profile) return <div className="empty-state">사용자를 찾을 수 없습니다.</div>;
