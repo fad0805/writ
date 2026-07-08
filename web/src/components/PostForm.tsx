@@ -183,18 +183,14 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       const left = rect.left + lastLine.length * 8 + 10;
       setSeriesPos({ top, left });
     }
-    if (q) {
-      const t = setTimeout(async () => {
-        try {
-          const res = await fetch(`/api/search/series?q=${encodeURIComponent(q)}`, { credentials: "include" });
-          if (res.ok) { const d = await res.json(); setSeriesResults(d.series?.map((s: any) => ({ id: s.id, title: s.title, cover_image: s.cover_image })) || []); setSeriesIdx(0); }
-          else setSeriesResults([]);
-        } catch { setSeriesResults([]); }
-      }, 100);
-      return () => clearTimeout(t);
-    } else {
-      setSeriesResults([]);
-    }
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search/series?q=${encodeURIComponent(q || "")}`, { credentials: "include" });
+        if (res.ok) { const d = await res.json(); setSeriesResults(d.series?.map((s: any) => ({ id: s.id, title: s.title, cover_image: s.cover_image })) || []); setSeriesIdx(0); }
+        else setSeriesResults([]);
+      } catch { setSeriesResults([]); }
+    }, 100);
+    return () => clearTimeout(t);
   }, []);
 
   useEffect(() => {

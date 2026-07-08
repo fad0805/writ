@@ -183,7 +183,7 @@ export default function ProfilePage() {
             {(profile as any).profile_hashtags?.length > 0 && (
               <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
                 {(profile as any).profile_hashtags.map((tag: string, i: number) => (
-                  <Link key={i} href={`/explore?q=%23${encodeURIComponent(tag)}&author=${profile.username}`} style={{ display: "inline-flex", padding: "2px 8px", background: "var(--bg-tertiary)", border: "1px solid var(--border)", borderRadius: 10, fontSize: "0.82em", color: "var(--text-dim)", textDecoration: "none" }}>
+                  <Link key={i} href={`/explore?q=%23${encodeURIComponent(tag)}&author=${profile.username}`} style={{ display: "inline-flex", padding: "2px 8px", background: "var(--bg-tertiary)", border: "1px solid var(--border)", borderRadius: 10, fontSize: "0.82em", color: "var(--accent)", textDecoration: "none" }}>
                     #{tag}
                   </Link>
                 ))}
