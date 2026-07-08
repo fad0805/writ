@@ -826,6 +826,56 @@ def api_unboost_post(request: Request, post_id: int):
 
 # ── User / Profile API ──
 
+@router.get("/users/autocomplete")
+def api_users_autocomplete(request: Request, q: str = Query("")):
+    user = get_current_user(request)
+    query = q.strip().lstrip("@")
+    if not query:
+        return {"users": []}
+    with get_session() as s:
+        pattern = f"{query}%"
+        matches = s.query(User).filter(
+            User.is_remote == False,
+            User.username.ilike(pattern),
+        ).limit(20).all()
+        if not matches:
+            return {"users": []}
+        following_ids = {f.following_id for f in s.query(Follow).filter_by(
+            follower_id=user.id, accepted=True
+        ).all()} if user else set()
+        mentioned_ids = set()
+        if user:
+            recent_posts = s.query(Post.mentioned_user_ids).filter(
+                Post.author_id == user.id,
+                Post.mentioned_user_ids != None,
+            ).order_by(desc(Post.created_at)).limit(50).all()
+            for row in recent_posts:
+                mids = row[0]
+                if isinstance(mids, list):
+                    for mid in mids:
+                        if isinstance(mid, int):
+                            mentioned_ids.add(mid)
+        match_ids = {m.id for m in matches}
+        follows_mentioned = sorted(
+            [m for m in matches if m.id in following_ids and m.id in mentioned_ids],
+            key=lambda m: (m.display_name or m.username).lower()
+        )
+        follows_only = sorted(
+            [m for m in matches if m.id in following_ids and m.id not in mentioned_ids],
+            key=lambda m: (m.display_name or m.username).lower()
+        )
+        mentioned_only = sorted(
+            [m for m in matches if m.id not in following_ids and m.id in mentioned_ids],
+            key=lambda m: (m.display_name or m.username).lower()
+        )
+        others = sorted(
+            [m for m in matches if m.id not in following_ids and m.id not in mentioned_ids],
+            key=lambda m: (m.display_name or m.username).lower()
+        )
+        ordered = follows_mentioned + follows_only + mentioned_only + others
+        return {"users": [_user_json(u) for u in ordered]}
+
+
 @router.get("/users/{username}")
 def api_get_profile(request: Request, username: str):
     user = get_current_user(request)
@@ -2004,55 +2054,6 @@ def api_search(request: Request, q: str = Query("")):
             result["blocked_domain"] = blocked_domain
         return result
 
-
-@router.get("/users/autocomplete")
-def api_users_autocomplete(request: Request, q: str = Query("")):
-    user = get_current_user(request)
-    query = q.strip().lstrip("@")
-    if not query:
-        return {"users": []}
-    with get_session() as s:
-        pattern = f"{query}%"
-        matches = s.query(User).filter(
-            User.is_remote == False,
-            User.username.ilike(pattern),
-        ).limit(20).all()
-        if not matches:
-            return {"users": []}
-        following_ids = {f.following_id for f in s.query(Follow).filter_by(
-            follower_id=user.id, accepted=True
-        ).all()} if user else set()
-        mentioned_ids = set()
-        if user:
-            recent_posts = s.query(Post.mentioned_user_ids).filter(
-                Post.author_id == user.id,
-                Post.mentioned_user_ids != None,
-            ).order_by(desc(Post.created_at)).limit(50).all()
-            for row in recent_posts:
-                mids = row[0]
-                if isinstance(mids, list):
-                    for mid in mids:
-                        if isinstance(mid, int):
-                            mentioned_ids.add(mid)
-        match_ids = {m.id for m in matches}
-        follows_mentioned = sorted(
-            [m for m in matches if m.id in following_ids and m.id in mentioned_ids],
-            key=lambda m: (m.display_name or m.username).lower()
-        )
-        follows_only = sorted(
-            [m for m in matches if m.id in following_ids and m.id not in mentioned_ids],
-            key=lambda m: (m.display_name or m.username).lower()
-        )
-        mentioned_only = sorted(
-            [m for m in matches if m.id not in following_ids and m.id in mentioned_ids],
-            key=lambda m: (m.display_name or m.username).lower()
-        )
-        others = sorted(
-            [m for m in matches if m.id not in following_ids and m.id not in mentioned_ids],
-            key=lambda m: (m.display_name or m.username).lower()
-        )
-        ordered = follows_mentioned + follows_only + mentioned_only + others
-        return {"users": [_user_json(u) for u in ordered]}
 
 
 def _fetch_and_save_ap_object(obj, user):
