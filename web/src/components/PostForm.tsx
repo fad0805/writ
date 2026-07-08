@@ -41,7 +41,8 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [hashtagResults, setHashtagResults] = useState<string[]>([]);
   const [hashtagIdx, setHashtagIdx] = useState(0);
   const [hashtagPos, setHashtagPos] = useState({ top: 0, left: 0 });
-  const [mediaItems, setMediaItems] = useState<{ url: string; type: string; file?: File }[]>([]);
+  const [mediaItems, setMediaItems] = useState<{ id: number; url: string; type: string; file?: File }[]>([]);
+  const mediaIdRef = useRef(0);
   const [mediaUploading, setMediaUploading] = useState(false);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const [seriesResults, setSeriesResults] = useState<{ id: number; title: string; cover_image: string }[]>([]);
@@ -557,7 +558,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       {mediaItems.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8, marginTop: 8 }}>
           {mediaItems.map((m, i) => (
-            <div key={i} draggable style={{ position: "relative", width: 80, height: 80 }}
+            <div key={m.id} draggable style={{ position: "relative", width: 80, height: 80 }}
               onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(i)); e.currentTarget.style.opacity = "0.4"; }}
               onDragEnd={(e) => { e.currentTarget.style.opacity = "1"; }}
               onDragOver={(e) => { e.preventDefault(); }}
@@ -595,7 +596,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
               if (f.size > 26214400 && isVideo) continue;
               if (isVideo && mediaItems.some(m => m.type === "video")) continue;
               if (mediaItems.length >= 4) break;
-              setMediaItems(prev => [...prev, { url: "", type: isVideo ? "video" : "image", file: f }]);
+              const id = ++mediaIdRef.current; setMediaItems(prev => [...prev, { id, url: "", type: isVideo ? "video" : "image", file: f }]);
             }
             e.target.value = "";
           }} />
