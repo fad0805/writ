@@ -104,7 +104,16 @@ export default function AdminUserDetailPage() {
             {u.role === "moderator" && <Icon name="shield_filled" style={{ color: "#cc8800", fontSize: "0.7em", verticalAlign: "middle", marginLeft: 4 }} title="조율자" />}
           </div>
           <div className="admin-profile-username">@{u.username}</div>
-          {u.summary && <div className="admin-profile-summary">{u.summary}</div>}
+          {u.summary && <div className="admin-profile-summary" dangerouslySetInnerHTML={{
+            __html: u.summary
+              .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+              .replace(/<[^>]+\s+on\w+\s*=\s*[^>]*>/gi, '')
+              .replace(/<img[^>]*>/gi, '')
+              .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '')
+              .replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '')
+              .replace(/<embed[^>]*>/gi, '')
+              .replace(/\n/g, '<br>')
+          }} />}
           <div className="admin-profile-actions">
             {u.avatar && <button onClick={() => act(`/api/admin/users/${u.id}/remove-avatar`)} className="btn btn-small btn-outline">프로필 사진 삭제</button>}
           </div>
