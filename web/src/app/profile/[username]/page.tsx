@@ -174,7 +174,7 @@ export default function ProfilePage() {
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
                 {(profile as any).custom_fields.map((f: { label: string; value: string }, i: number) => (
                   <div key={i} style={{ fontSize: "0.85em", color: "var(--text-secondary)" }}>
-                    <span style={{ fontWeight: 600, marginRight: 4 }}>{f.label}:</span>
+                    <span style={{ fontWeight: 600, marginRight: 4 }}>{f.label}</span>
                     {f.value.startsWith("http") ? <a href={f.value} target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>{f.value}</a> : <span>{f.value}</span>}
                   </div>
                 ))}
@@ -183,7 +183,7 @@ export default function ProfilePage() {
             {(profile as any).profile_hashtags?.length > 0 && (
               <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
                 {(profile as any).profile_hashtags.map((tag: string, i: number) => (
-                  <Link key={i} href={`/explore?q=%23${encodeURIComponent(tag)}&author=${profile.username}`} style={{ display: "inline-flex", padding: "2px 8px", background: "var(--bg-tertiary)", border: "1px solid var(--border)", borderRadius: 10, fontSize: "0.82em", color: "var(--accent-light)", textDecoration: "none" }}>
+                  <Link key={i} href={`/explore?q=%23${encodeURIComponent(tag)}&author=${profile.username}`} style={{ display: "inline-flex", padding: "2px 8px", background: "var(--bg-tertiary)", border: "1px solid var(--border)", borderRadius: 10, fontSize: "0.82em", color: "var(--text-dim)", textDecoration: "none" }}>
                     #{tag}
                   </Link>
                 ))}
