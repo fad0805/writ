@@ -2023,9 +2023,14 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
             if tag:
                 q_posts = s.query(Post).options(selectinload(Post.author)).filter(
                     Post.tag_list.any(id=tag.id),
-                    Post.visibility == "public",
                     Post.is_deleted == False,
                 )
+                if user:
+                    q_posts = q_posts.filter(
+                        or_(Post.visibility == "public", Post.author_id == user.id)
+                    )
+                else:
+                    q_posts = q_posts.filter(Post.visibility == "public")
                 if author:
                     author_user = s.query(User).filter_by(username=author).first()
                     if author_user:
