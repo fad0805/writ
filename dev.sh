@@ -68,7 +68,7 @@ fi
 LOG_DIR="$ROOT_DIR/logs"
 mkdir -p "$LOG_DIR"
 LOG_DATE=$(date +%Y-%m-%d)
-COMBINED_LOG="$LOG_DIR/web-$LOG_DATE.log"
+COMBINED_LOG="$LOG_DIR/combined-$LOG_DATE.log"
 
 # ── 서버 실행 및 오류 감지 ──
 
