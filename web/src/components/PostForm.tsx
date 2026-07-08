@@ -28,6 +28,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [mentionUsers, setMentionUsers] = useState<User[]>([]);
   const [mentionIdx, setMentionIdx] = useState(0);
   const [mentionStart, setMentionStart] = useState(-1);
+  const [mentionPos, setMentionPos] = useState({ top: 0, left: 0 });
   const mentionRef = useRef<HTMLDivElement>(null);
   const [emojiQuery, setEmojiQuery] = useState("");
   const [emojiResults, setEmojiResults] = useState<CustomEmoji[]>([]);
@@ -81,6 +82,17 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     }
     setMentionStart(atIdx);
     setMentionQuery(partial);
+    const ta = taRef.current;
+    if (ta) {
+      const rect = ta.getBoundingClientRect();
+      const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
+      const textBefore = val.slice(0, cursor);
+      const lines = textBefore.split('\n');
+      const top = rect.top + lines.length * lineHeight + 4;
+      const lastLine = lines[lines.length - 1] || '';
+      const left = rect.left + lastLine.length * 8 + 10;
+      setMentionPos({ top, left });
+    }
   }, []);
 
   useEffect(() => {
@@ -264,7 +276,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         />
       </div>
       {mentionUsers.length > 0 && (
-        <div ref={mentionRef} className="mention-dropdown">
+        <div className="emoji-autocomplete mention-dropdown-pos" style={{ top: mentionPos.top, left: mentionPos.left }}>
           {mentionUsers.map((u, i) => (
             <div
               key={u.id}
