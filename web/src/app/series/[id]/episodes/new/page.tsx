@@ -44,7 +44,7 @@ export default function NewEpisodePage() {
         form.append("announce_comment", announceComment);
       }
       form.append("visibility", visibility);
-      const res = await fetch(`/api/novels/${params.id}/episodes/new`, { method: "POST", credentials: "include", body: form });
+      const res = await fetch(`/api/series/${params.id}/episodes/new`, { method: "POST", credentials: "include", body: form });
       const data = await res.json();
       if (res.ok) router.push(`/series/${params.id}/episodes/${data.episode_id}`);
       else alert("게시 실패");

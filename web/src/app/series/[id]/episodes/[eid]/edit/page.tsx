@@ -54,7 +54,7 @@ export default function EditEpisodePage() {
         form.append("announce_comment", announceComment);
       }
       form.append("visibility", visibility);
-      const res = await fetch(`/api/novels/${params.id}/episodes/${params.eid}/edit`, { method: "POST", credentials: "include", body: form });
+      const res = await fetch(`/api/series/${params.id}/episodes/${params.eid}/edit`, { method: "POST", credentials: "include", body: form });
       if (res.ok) router.push(`/series/${params.id}/episodes/${params.eid}`);
       else alert("저장 실패");
     } catch { alert("저장 실패"); }

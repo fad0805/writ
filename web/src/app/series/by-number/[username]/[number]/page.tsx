@@ -101,7 +101,7 @@ export default function NovelByNumberPage() {
                 <button className="action-btn text-muted" onClick={async (ev) => {
                   ev.stopPropagation();
                   if (!confirm("정말 삭제하시겠습니까?")) return;
-                  try { await fetch(`/api/novels/${novel.id}/episodes/${e.id}/delete`, { method: "POST", credentials: "include" }); window.location.reload(); } catch {}
+                  try { await fetch(`/api/series/${novel.id}/episodes/${e.id}/delete`, { method: "POST", credentials: "include" }); window.location.reload(); } catch {}
                 }}>
                   <Icon name="trash" />
                 </button>

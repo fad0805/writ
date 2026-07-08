@@ -37,10 +37,10 @@ export default function NovelDetailPage() {
     if (!novel || !user) return;
     try {
       if (isFollowing) {
-        await fetch(`/api/novels/${novel.id}/unfollow`, { method: "POST", credentials: "include" });
+        await fetch(`/api/series/${novel.id}/unfollow`, { method: "POST", credentials: "include" });
         setIsFollowing(false);
       } else {
-        await fetch(`/api/novels/${novel.id}/follow`, { method: "POST", credentials: "include" });
+        await fetch(`/api/series/${novel.id}/follow`, { method: "POST", credentials: "include" });
         setIsFollowing(true);
       }
     } catch {}
@@ -125,7 +125,7 @@ export default function NovelDetailPage() {
                 <button className="action-btn text-muted" onClick={async (ev) => {
                   ev.stopPropagation();
                   if (!confirm("정말 삭제하시겠습니까?")) return;
-                  try { await fetch(`/api/novels/${novel.id}/episodes/${e.id}/delete`, { method: "POST", credentials: "include" }); window.location.reload(); } catch {}
+                  try { await fetch(`/api/series/${novel.id}/episodes/${e.id}/delete`, { method: "POST", credentials: "include" }); window.location.reload(); } catch {}
                 }}>
                   <Icon name="trash" />
                 </button>

@@ -185,14 +185,14 @@ export const api = {
     ),
 
   // Novels
-  getNovels: () => request<{ novels: NovelData[] }>("/api/novels"),
-  getMyNovels: () => request<{ novels: NovelData[] }>("/api/novels/my"),
-  getNovel: (id: number) => request<{ novel: NovelData; episodes: EpisodeData[]; author: User; is_mine: boolean; is_following: boolean }>(`/api/novels/${id}`),
-  deleteNovel: (id: number) => request<{ ok: boolean }>(`/api/novels/${id}/delete`, { method: "POST" }),
+  getNovels: () => request<{ novels: NovelData[] }>("/api/series"),
+  getMyNovels: () => request<{ novels: NovelData[] }>("/api/series/my"),
+  getNovel: (id: number) => request<{ novel: NovelData; episodes: EpisodeData[]; author: User; is_mine: boolean; is_following: boolean }>(`/api/series/${id}`),
+  deleteNovel: (id: number) => request<{ ok: boolean }>(`/api/series/${id}/delete`, { method: "POST" }),
   getEpisode: (id: number, eid: number) => request<{
     episode: EpisodeData; novel: NovelData; is_mine: boolean;
     prev_episode: EpisodeData | null; next_episode: EpisodeData | null;
-  }>(`/api/novels/${id}/episodes/${eid}`),
+  }>(`/api/series/${id}/episodes/${eid}`),
 
   // Reports
   report: (target_type: string, target_id: number, reason: string) =>

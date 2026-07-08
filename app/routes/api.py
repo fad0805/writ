@@ -1092,7 +1092,7 @@ def api_novels(request: Request):
     return result
 
 
-@router.get("/novels/my")
+@router.get("/series/my")
 def api_my_novels(request: Request):
     user = require_auth(request)
     with get_session() as s:
@@ -1141,7 +1141,7 @@ def _novel_json(n, s=None):
     }
 
 
-@router.post("/novels/new")
+@router.post("/series/new")
 def api_create_novel(request: Request, title: str = Form(...), description: str = Form(""),
                      tags: str = Form(""), visibility: str = Form("public"),
                      cover_image: UploadFile = File(None)):
@@ -1152,20 +1152,28 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
         raise HTTPException(status_code=400, detail="Title cannot be empty")
     if visibility not in ("public", "unlisted", "private"):
         visibility = "public"
+    from app.utils.storage import get_storage
+    storage = get_storage()
     cover_url = ""
     if cover_image and cover_image.filename:
         from uuid import uuid4
-        from app.utils.storage import get_storage
         from PIL import Image as PILImage
         import io
-        storage = get_storage()
         ext = "webp"
         ct = cover_image.content_type or ""
         if "gif" in ct:
             ext = "gif"
         key = f"series/icons/{uuid4().hex[:16]}.{ext}"
         img = PILImage.open(cover_image.file)
-        img.thumbnail((600, 600), PILImage.Resampling.LANCZOS)
+        target_w, target_h = 120, 160
+        img_w, img_h = img.size
+        ratio = max(target_w / img_w, target_h / img_h)
+        new_w = int(img_w * ratio)
+        new_h = int(img_h * ratio)
+        img = img.resize((new_w, new_h), PILImage.Resampling.LANCZOS)
+        left = (new_w - target_w) // 2
+        top = (new_h - target_h) // 2
+        img = img.crop((left, top, left + target_w, top + target_h))
         if img.mode in ("RGBA", "P"):
             bg = PILImage.new("RGB", img.size, (255, 255, 255))
             bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
@@ -1187,7 +1195,7 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
     return {"ok": True, "novel_id": nid}
 
 
-@router.get("/novels/{novel_id}")
+@router.get("/series/{novel_id}")
 def api_get_novel(request: Request, novel_id: int):
     user = get_current_user(request)
     with get_session() as s:
@@ -1210,7 +1218,7 @@ def api_get_novel(request: Request, novel_id: int):
     return result
 
 
-@router.post("/novels/{novel_id}/follow")
+@router.post("/series/{novel_id}/follow")
 def api_follow_novel(request: Request, novel_id: int):
     user = require_auth(request)
     with get_session() as s:
@@ -1225,7 +1233,7 @@ def api_follow_novel(request: Request, novel_id: int):
     return {"ok": True}
 
 
-@router.post("/novels/{novel_id}/unfollow")
+@router.post("/series/{novel_id}/unfollow")
 def api_unfollow_novel(request: Request, novel_id: int):
     user = require_auth(request)
     with get_session() as s:
@@ -1234,7 +1242,7 @@ def api_unfollow_novel(request: Request, novel_id: int):
     return {"ok": True}
 
 
-@router.post("/novels/{novel_id}/edit")
+@router.post("/series/{novel_id}/edit")
 def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), description: str = Form(""),
                    tags: str = Form(""), visibility: str = Form("public"), is_completed: bool = Form(False),
                    cover_image: UploadFile = File(None)):
@@ -1256,7 +1264,15 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
             ext = "gif"
         key = f"series/icons/{uuid4().hex[:16]}.{ext}"
         img = PILImage.open(cover_image.file)
-        img.thumbnail((600, 600), PILImage.Resampling.LANCZOS)
+        target_w, target_h = 120, 160
+        img_w, img_h = img.size
+        ratio = max(target_w / img_w, target_h / img_h)
+        new_w = int(img_w * ratio)
+        new_h = int(img_h * ratio)
+        img = img.resize((new_w, new_h), PILImage.Resampling.LANCZOS)
+        left = (new_w - target_w) // 2
+        top = (new_h - target_h) // 2
+        img = img.crop((left, top, left + target_w, top + target_h))
         if img.mode in ("RGBA", "P"):
             bg = PILImage.new("RGB", img.size, (255, 255, 255))
             bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
@@ -1286,7 +1302,7 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
     return {"ok": True}
 
 
-@router.post("/novels/{novel_id}/episodes/new")
+@router.post("/series/{novel_id}/episodes/new")
 def api_create_episode(request: Request, novel_id: int, title: str = Form(...), content: str = Form(...),
                        summary: str = Form(""), comment: str = Form(""),
                        announce: bool = Form(False), visibility: str = Form("public"),
@@ -1379,7 +1395,7 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
     return {"ok": True, "episode_id": eid}
 
 
-@router.get("/novels/{novel_id}/episodes/{episode_id}")
+@router.get("/series/{novel_id}/episodes/{episode_id}")
 def api_get_episode(request: Request, novel_id: int, episode_id: int):
     user = get_current_user(request)
     with get_session() as s:
@@ -1416,7 +1432,7 @@ def api_get_episode(request: Request, novel_id: int, episode_id: int):
     return result
 
 
-@router.post("/novels/{novel_id}/episodes/{episode_id}/edit")
+@router.post("/series/{novel_id}/episodes/{episode_id}/edit")
 def api_edit_episode(request: Request, novel_id: int, episode_id: int,
                      title: str = Form(...), content: str = Form(...),
                      summary: str = Form(""), comment: str = Form(""),
@@ -1476,7 +1492,7 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
     return {"ok": True}
 
 
-@router.post("/novels/{novel_id}/episodes/{episode_id}/delete")
+@router.post("/series/{novel_id}/episodes/{episode_id}/delete")
 def api_delete_episode(request: Request, novel_id: int, episode_id: int):
     user = require_auth(request)
     with get_session() as s:
@@ -1488,7 +1504,7 @@ def api_delete_episode(request: Request, novel_id: int, episode_id: int):
     return {"ok": True}
 
 
-@router.post("/novels/{novel_id}/delete")
+@router.post("/series/{novel_id}/delete")
 def api_delete_novel(request: Request, novel_id: int):
     user = require_auth(request)
     with get_session() as s:

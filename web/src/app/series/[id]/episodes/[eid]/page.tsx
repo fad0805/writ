@@ -41,7 +41,7 @@ export default function EpisodeDetailPage() {
   const handleDelete = async () => {
     if (!confirm("정말 삭제하시겠습니까?")) return;
     try {
-      const res = await fetch(`/api/novels/${params.id}/episodes/${params.eid}/delete`, { method: "POST", credentials: "include" });
+      const res = await fetch(`/api/series/${params.id}/episodes/${params.eid}/delete`, { method: "POST", credentials: "include" });
       if (res.ok) router.push(`/series/${params.id}`);
     } catch {}
   };

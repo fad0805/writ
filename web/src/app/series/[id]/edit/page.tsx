@@ -49,7 +49,7 @@ export default function EditNovelPage() {
       form.append("visibility", visibility);
       form.append("is_completed", isCompleted ? "true" : "");
       if (fileRef.current?.files?.[0]) form.append("cover_image", fileRef.current.files[0]);
-      const res = await fetch(`/api/novels/${params.id}/edit`, { method: "POST", credentials: "include", body: form });
+      const res = await fetch(`/api/series/${params.id}/edit`, { method: "POST", credentials: "include", body: form });
       if (res.ok) router.push(`/series/${params.id}`);
       else alert("저장 실패");
     } catch { alert("저장 실패"); }
@@ -101,7 +101,7 @@ export default function EditNovelPage() {
             onClick={async () => {
               if (!confirm("정말 삭제하시겠습니까?")) return;
               try {
-                const res = await fetch(`/api/novels/${params.id}/delete`, { method: "POST", credentials: "include" });
+                const res = await fetch(`/api/series/${params.id}/delete`, { method: "POST", credentials: "include" });
                 if (res.ok) { window.dispatchEvent(new Event("novelchange")); router.push("/series/my"); }
               } catch {}
             }}

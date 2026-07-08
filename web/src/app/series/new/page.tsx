@@ -26,7 +26,7 @@ export default function NewNovelPage() {
       form.append("tags", tags);
       form.append("visibility", visibility);
       if (fileRef.current?.files?.[0]) form.append("cover_image", fileRef.current.files[0]);
-      const res = await fetch("/api/novels/new", { method: "POST", credentials: "include", body: form });
+      const res = await fetch("/api/series/new", { method: "POST", credentials: "include", body: form });
       const data = await res.json();
       if (res.ok) { window.dispatchEvent(new Event("novelchange")); router.push(`/series/${data.novel_id}`); }
       else alert("만들기 실패");
