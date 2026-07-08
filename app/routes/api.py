@@ -84,6 +84,8 @@ def _user_json(u):
         "default_visibility": u.default_visibility or "public",
         "display_handle": getattr(u, 'display_handle', '') or "",
         "is_bot": getattr(u, 'is_bot', False) or False,
+        "pinned_posts": (u.pinned_posts or []) if hasattr(u, 'pinned_posts') else [],
+        "pinned_series": (u.pinned_series or []) if hasattr(u, 'pinned_series') else [],
         "series_default_visibility": u.series_default_visibility or "public",
         "episode_default_visibility": u.episode_default_visibility or "public",
         "custom_fields": (u.custom_fields or []) if hasattr(u, 'custom_fields') else [],
@@ -857,6 +859,67 @@ def api_unboost_post(request: Request, post_id: int):
     return {"ok": True}
 
 
+@router.post("/pin/post/{post_id}")
+def api_pin_post(request: Request, post_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id).first()
+        if not post or post.author_id != user.id:
+            raise HTTPException(status_code=404, detail="Post not found")
+        pinned = list(user.pinned_posts or [])
+        if post_id in pinned:
+            return {"ok": True}
+        if len(pinned) >= 5:
+            raise HTTPException(status_code=400, detail="최대 5개까지 고정할 수 있습니다.")
+        pinned.append(post_id)
+        s.query(User).filter_by(id=user.id).update({"pinned_posts": pinned})
+        s.commit()
+    return {"ok": True}
+
+
+@router.post("/unpin/post/{post_id}")
+def api_unpin_post(request: Request, post_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        pinned = list(user.pinned_posts or [])
+        if post_id in pinned:
+            pinned.remove(post_id)
+            s.query(User).filter_by(id=user.id).update({"pinned_posts": pinned})
+            s.commit()
+    return {"ok": True}
+
+
+@router.post("/pin/series/{novel_id}")
+def api_pin_series(request: Request, novel_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        from app.models import Novel
+        novel = s.query(Novel).filter_by(id=novel_id).first()
+        if not novel or novel.author_id != user.id:
+            raise HTTPException(status_code=404, detail="Series not found")
+        pinned = list(user.pinned_series or [])
+        if novel_id in pinned:
+            return {"ok": True}
+        if len(pinned) >= 6:
+            raise HTTPException(status_code=400, detail="최대 6개까지 고정할 수 있습니다.")
+        pinned.append(novel_id)
+        s.query(User).filter_by(id=user.id).update({"pinned_series": pinned})
+        s.commit()
+    return {"ok": True}
+
+
+@router.post("/unpin/series/{novel_id}")
+def api_unpin_series(request: Request, novel_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        pinned = list(user.pinned_series or [])
+        if novel_id in pinned:
+            pinned.remove(novel_id)
+            s.query(User).filter_by(id=user.id).update({"pinned_series": pinned})
+            s.commit()
+    return {"ok": True}
+
+
 # ── User / Profile API ──
 
 @router.get("/search/users")
@@ -1015,6 +1078,8 @@ def api_get_profile(request: Request, username: str):
             "is_muted": is_muted,
             "is_blocked": is_blocked,
             "am_i_blocked": am_i_blocked,
+            "pinned_posts_data": [_post_json(p, s, user) for p in (s.query(Post).filter(Post.id.in_(profile.pinned_posts or []), Post.is_deleted == False).all() if profile.pinned_posts else [])],
+            "pinned_series_data": [_novel_json(n, s) for n in (s.query(Novel).filter(Novel.id.in_(profile.pinned_series or [])).all() if profile.pinned_series else [])],
         }
 
 

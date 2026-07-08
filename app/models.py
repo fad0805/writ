@@ -69,6 +69,8 @@ class User(Base):
     display_handle = Column(String(64), default="")
     custom_fields = Column(JSON, default=list)
     profile_hashtags = Column(JSON, default=list)
+    pinned_posts = Column(JSON, default=list)
+    pinned_series = Column(JSON, default=list)
 
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
@@ -613,6 +615,8 @@ def init_db():
     _run_alter("ALTER TABLE users ADD COLUMN profile_hashtags JSON DEFAULT '[]'")
     _run_alter("ALTER TABLE users ADD COLUMN display_handle VARCHAR(64) DEFAULT ''")
     _run_alter("ALTER TABLE users ADD COLUMN is_bot BOOLEAN DEFAULT 0")
+    _run_alter("ALTER TABLE users ADD COLUMN pinned_posts JSON DEFAULT '[]'")
+    _run_alter("ALTER TABLE users ADD COLUMN pinned_series JSON DEFAULT '[]'")
     _run_alter("ALTER TABLE posts ADD COLUMN media_attachments JSON DEFAULT '[]'")
 
 
