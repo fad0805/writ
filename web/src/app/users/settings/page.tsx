@@ -90,17 +90,17 @@ export default function SettingsPage() {
 
         <div className="form-group">
           <label>
-            <input type="checkbox" checked={isBot} onChange={(e) => setIsBot(e.target.checked)} />
-            {" "}<Icon name="mute" /> 자동화된 계정 (봇)
-          </label>
-          <p className="form-help">봇 계정은 사용자가 거의 개입하지 않고 프로그램으로 자동으로 운영되는 계정입니다. 이 설정을 켜면 계정에 봇 표시가 추가됩니다.</p>
-        </div>
-        <div className="form-group">
-          <label>
             <input type="checkbox" checked={isLocked} onChange={(e) => setIsLocked(e.target.checked)} />
             {" "}<Icon name="lock" /> 팔로우 수동 승인
           </label>
-          <p className="form-help">켜면 다른 사용자가 회원님을 팔로우할 때 수락이 필요합니다. 기본 설정 페이지에서 팔로우 요청을 관리할 수 있습니다.</p>
+          <p className="form-help">켜면 다른 사용자가 회원님을 팔로우할 때 수락이 필요합니다. 아래 팔로우 요청에서 관리할 수 있습니다.</p>
+        </div>
+        <div className="form-group">
+          <label>
+            <input type="checkbox" checked={isBot} onChange={(e) => setIsBot(e.target.checked)} />
+            {" "}<Icon name="mute" /> 자동화된 계정 (봇)
+          </label>
+          <p className="form-help">봇 계정은 사용자가 거의 개입하지 않고 프로그램으로 자동 운영되는 계정입니다. 켜면 계정에 봇 표시가 추가됩니다.</p>
         </div>
         {(user?.role === "admin" || user?.role === "moderator" || user?.role === "owner") && (
           <div className="form-group">

@@ -252,7 +252,7 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
     RESERVED_HANDLES = {
         "admin", "administrator", "root", "system", "moderator", "support",
         "nodeinfo", "well-known", "api", "auth", "oauth", "inbox", "outbox",
-        "actor", "users", "accounts", "instance_actor", "login", "register",
+        "actor", "users", "accounts", "instance_actor", "login", "register", "writ",
     }
     display_handle = username
     username = username.lower()
