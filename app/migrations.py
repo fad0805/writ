@@ -9,6 +9,7 @@ logger = logging.getLogger("writ.migrations")
 
 def run_migrations(session: Session):
     _add_admin_role_column(session)
+    _add_header_image_column(session)
     _fill_post_numbers(session)
     _fill_novel_numbers(session)
     _add_admin_email_column(session)
@@ -24,6 +25,13 @@ def _add_federation_block_reason_column(session: Session):
     except Exception:
         session.rollback()
 
+
+def _add_header_image_column(session: Session):
+    try:
+        session.execute(text("ALTER TABLE users ADD COLUMN header_image VARCHAR(512) DEFAULT ''"))
+        session.commit()
+    except Exception:
+        session.rollback()
 
 def _add_admin_role_column(session: Session):
     try:
