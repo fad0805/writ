@@ -176,6 +176,13 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     });
   }, [content, mentionStart, mentionQuery]);
 
+  const handleTaEvent = useCallback(() => {
+    if (taRef.current && taRef.current === document.activeElement) {
+      detectMention(taRef.current.value, taRef.current.selectionStart);
+      detectEmoji(taRef.current.value, taRef.current.selectionStart);
+    }
+  }, [detectMention]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       formRef.current?.requestSubmit();
@@ -214,22 +221,15 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
 
   const handleContentChange = (val: string) => {
     setContent(val);
+    if (taRef.current) {
+      detectMention(val, taRef.current.selectionStart);
+      detectEmoji(val, taRef.current.selectionStart);
+    }
   };
 
   const handleTaRef = useCallback((ta: HTMLTextAreaElement | null) => {
     taRef.current = ta;
-    if (ta) {
-      const handler = () => {
-        if (ta === document.activeElement) {
-          detectMention(ta.value, ta.selectionStart);
-          detectEmoji(ta.value, ta.selectionStart);
-        }
-      };
-      ta.addEventListener("input", handler);
-      ta.addEventListener("click", handler);
-      ta.addEventListener("keyup", handler);
-    }
-  }, [detectMention]);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -264,6 +264,8 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           rows={3}
           required
           onKeyDown={handleKeyDown}
+          onKeyUp={handleTaEvent}
+          onMouseUp={handleTaEvent}
           textareaRef={handleTaRef}
         />
       </div>

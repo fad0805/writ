@@ -8,6 +8,8 @@ export default function TextareaHighlight({
   maxLength: number; cwLength: number;
   rows?: number; required?: boolean;
   onKeyDown?: (e: React.KeyboardEvent) => void;
+  onKeyUp?: (e: React.KeyboardEvent) => void;
+  onMouseUp?: (e: React.MouseEvent) => void;
   textareaRef?: (el: HTMLTextAreaElement | null) => void;
 }) {
   const setTextareaRef = useCallback((el: HTMLTextAreaElement | null) => {
