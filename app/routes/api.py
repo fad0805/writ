@@ -3553,7 +3553,7 @@ def api_list_user_mutes(request: Request):
     user = require_auth(request)
     with get_session() as s:
         mutes = s.query(UserMute).filter_by(user_id=user.id).order_by(UserMute.created_at.desc()).all()
-        return {"mutes": [{"id": m.id, "target_user_id": m.target_user_id, "username": m.target_user.username, "display_name": m.target_user.display_name, "duration": m.duration, "hide_notifications": m.hide_notifications, "created_at": _fmt_dt(m.created_at)} for m in mutes]}
+        return {"mutes": [{"id": m.id, "target_user_id": m.target_user_id, "username": m.target_user.username, "display_name": m.target_user.display_name, "avatar": m.target_user.profile_image or "", "duration": m.duration, "hide_notifications": m.hide_notifications, "created_at": _fmt_dt(m.created_at)} for m in mutes]}
 
 
 @router.post("/mutes/users/{target_user_id}")
@@ -3587,7 +3587,7 @@ def api_list_user_blocks(request: Request):
     user = require_auth(request)
     with get_session() as s:
         blocks = s.query(UserBlock).filter_by(user_id=user.id).order_by(UserBlock.created_at.desc()).all()
-        return {"blocks": [{"id": b.id, "target_user_id": b.target_user_id, "username": b.target_user.username, "display_name": b.target_user.display_name, "created_at": _fmt_dt(b.created_at)} for b in blocks]}
+        return {"blocks": [{"id": b.id, "target_user_id": b.target_user_id, "username": b.target_user.username, "display_name": b.target_user.display_name, "avatar": b.target_user.profile_image or "", "created_at": _fmt_dt(b.created_at)} for b in blocks]}
 
 
 @router.post("/blocks/users/{target_user_id}")
@@ -3619,7 +3619,7 @@ def api_list_series_mutes(request: Request):
     user = require_auth(request)
     with get_session() as s:
         mutes = s.query(SeriesMute).filter_by(user_id=user.id).order_by(SeriesMute.created_at.desc()).all()
-        return {"mutes": [{"id": m.id, "novel_id": m.novel_id, "title": m.novel.title, "created_at": _fmt_dt(m.created_at)} for m in mutes]}
+        return {"mutes": [{"id": m.id, "novel_id": m.novel_id, "title": m.novel.title, "cover_image": m.novel.cover_image or "", "created_at": _fmt_dt(m.created_at)} for m in mutes]}
 
 
 @router.post("/mutes/series/{novel_id}")

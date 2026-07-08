@@ -2,13 +2,14 @@
 import { useState, useEffect } from "react";
 import Icon from "@/components/Icon";
 import SettingsNav from "@/components/SettingsNav";
+import Avatar from "@/components/Avatar";
 import { useAuth } from "@/lib/auth";
 
 type Tab = "user-mutes" | "user-blocks" | "series-mutes" | "keyword-mutes";
 
-interface MutedUser { id: number; target_user_id: number; username: string; display_name: string; duration: number; hide_notifications: boolean; created_at: string | null; }
-interface BlockedUser { id: number; target_user_id: number; username: string; display_name: string; created_at: string | null; }
-interface MutedSeries { id: number; novel_id: number; title: string; created_at: string | null; }
+interface MutedUser { id: number; target_user_id: number; username: string; display_name: string; avatar: string; duration: number; hide_notifications: boolean; created_at: string | null; }
+interface BlockedUser { id: number; target_user_id: number; username: string; display_name: string; avatar: string; created_at: string | null; }
+interface MutedSeries { id: number; novel_id: number; title: string; cover_image: string; created_at: string | null; }
 interface KeywordMuteItem { id: number; keyword: string; mode: string; is_regex: boolean; created_at: string | null; }
 
 export default function MutesSettingsPage() {
@@ -58,8 +59,11 @@ export default function MutesSettingsPage() {
       {tab === "user-mutes" && (
         <div className="novel-form">
           {mutedUsers.length === 0 ? <p className="empty-small">뮤트한 사용자가 없습니다.</p> : mutedUsers.map(m => (
-            <div key={m.id} className="admin-table-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "var(--bg-tertiary)", borderRadius: 6, marginBottom: 4 }}>
-              <span><strong>{m.display_name}</strong> @{m.username}</span>
+            <div key={m.id} className="admin-table-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 12px", background: "var(--bg-tertiary)", borderRadius: 6, marginBottom: 4 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Avatar user={{ username: m.username, display_name: m.display_name, avatar: m.avatar } as any} className="sidebar-avatar rounded-[8px]" style={{ width: 28, height: 28, minWidth: 28 }} />
+                <span><strong>{m.display_name}</strong> @{m.username}</span>
+              </div>
               <button onClick={async () => { await fetch(`/api/mutes/users/${m.target_user_id}`, { method: "DELETE", credentials: "include" }); setMutedUsers(prev => prev.filter(x => x.id !== m.id)); }} className="btn btn-small btn-outline text-xs">해제</button>
             </div>
           ))}
@@ -69,8 +73,11 @@ export default function MutesSettingsPage() {
       {tab === "user-blocks" && (
         <div className="novel-form">
           {blockedUsers.length === 0 ? <p className="empty-small">블락한 사용자가 없습니다.</p> : blockedUsers.map(b => (
-            <div key={b.id} className="admin-table-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "var(--bg-tertiary)", borderRadius: 6, marginBottom: 4 }}>
-              <span><strong>{b.display_name}</strong> @{b.username}</span>
+            <div key={b.id} className="admin-table-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 12px", background: "var(--bg-tertiary)", borderRadius: 6, marginBottom: 4 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Avatar user={{ username: b.username, display_name: b.display_name, avatar: b.avatar } as any} className="sidebar-avatar rounded-[8px]" style={{ width: 28, height: 28, minWidth: 28 }} />
+                <span><strong>{b.display_name}</strong> @{b.username}</span>
+              </div>
               <button onClick={async () => { await fetch(`/api/blocks/users/${b.target_user_id}`, { method: "DELETE", credentials: "include" }); setBlockedUsers(prev => prev.filter(x => x.id !== b.id)); }} className="btn btn-small btn-outline text-xs">해제</button>
             </div>
           ))}
@@ -80,8 +87,15 @@ export default function MutesSettingsPage() {
       {tab === "series-mutes" && (
         <div className="novel-form">
           {mutedSeries.length === 0 ? <p className="empty-small">뮤트한 시리즈가 없습니다.</p> : mutedSeries.map(s => (
-            <div key={s.id} className="admin-table-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "var(--bg-tertiary)", borderRadius: 6, marginBottom: 4 }}>
-              <span>{s.title}</span>
+            <div key={s.id} className="admin-table-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 12px", background: "var(--bg-tertiary)", borderRadius: 6, marginBottom: 4 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {s.cover_image ? (
+                  <img src={s.cover_image} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: "cover" }} />
+                ) : (
+                  <div style={{ width: 28, height: 28, borderRadius: 6, background: "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: "0.8em" }}><Icon name="book" size={14} /></div>
+                )}
+                <span>{s.title}</span>
+              </div>
               <button onClick={async () => { await fetch(`/api/mutes/series/${s.novel_id}`, { method: "DELETE", credentials: "include" }); setMutedSeries(prev => prev.filter(x => x.id !== s.id)); }} className="btn btn-small btn-outline text-xs">해제</button>
             </div>
           ))}
