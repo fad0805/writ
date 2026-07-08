@@ -20,7 +20,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Ensure DATABASE_URL is set even when .env is not loaded
 os.environ.setdefault("DATABASE_URL", "sqlite:///./sns_blog.db")
-os.environ.setdefault("SECRET_KEY", "change-me")
 
 from app.models import Base as AppBase
 target_metadata = AppBase.metadata
