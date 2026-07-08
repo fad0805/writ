@@ -318,10 +318,10 @@ export default function ProfilePage() {
         {pinnedSeries.map((n: any) => (
           <Link key={`pin-${n.id}`} href={n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`} className="profile-novel profile-novel-link" style={{ border: "1px solid var(--accent)", borderRadius: 8, padding: 8 }}>
             <div className="cover-wrap-56">
-              {n.cover_image ? <img src={n.cover_image} alt="" className="cover-img" /> : <div className="cover-fallback cover-fallback-sm"><Icon name="book" size={16} /></div>}
+              {n.cover_image ? <img src={n.cover_image} alt="" className="cover-img" /> : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(n.title) }}><Icon name="book" size={16} /></div>}
             </div>
             <div className="novel-card-body-content">
-              <strong className="profile-novel-title"><Icon name="pin" size={12} style={{ marginRight: 4 }} /> {n.title}</strong>
+              <strong className="profile-novel-title"><Icon name={pinnedSeries.some((ps: any) => ps.id === n.id) ? "pin_filled" : "pin"} size={12} style={{ marginRight: 4, color: pinnedSeries.some((ps: any) => ps.id === n.id) ? "var(--danger)" : undefined }} /> {n.title}</strong>
               <span className="profile-novel-meta">{n.episode_count}화 · {n.is_completed ? "완결" : "연재중"}</span>
               <p className="profile-novel-desc">{n.description || "설명 없음"}</p>
             </div>
@@ -333,7 +333,7 @@ export default function ProfilePage() {
               {n.cover_image ? (
                 <img src={n.cover_image} alt="" className="cover-img" />
               ) : (
-                <div className="cover-fallback cover-fallback-sm">
+                <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(n.title) }}>
                   <Icon name="book" size={16} />
                 </div>
               )}

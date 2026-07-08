@@ -106,7 +106,7 @@ export default function NovelDetailPage() {
                       const wasPinned = isSeriesPinned;
                       setIsSeriesPinned(!wasPinned);
                       await fetch(`/api/${wasPinned ? "unpin" : "pin"}/series/${novel.id}`, { method: "POST", credentials: "include" });
-                    }} title={isSeriesPinned ? "고정 해제" : "고정"} style={{ color: isSeriesPinned ? "var(--accent)" : undefined }}><Icon name={isSeriesPinned ? "pin_filled" : "pin"} /></button>
+                    }} title={isSeriesPinned ? "고정 해제" : "고정"} style={{ color: isSeriesPinned ? "var(--danger)" : undefined }}><Icon name={isSeriesPinned ? "pin_filled" : "pin"} /></button>
                     <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/edit`)}>시리즈 편집</button>
                     <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>
                   </>
