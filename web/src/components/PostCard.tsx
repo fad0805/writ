@@ -299,13 +299,13 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
             <Icon name="reply" /> {post.replies_count}
           </button>
           <form className="inline-form" onSubmit={(e) => e.preventDefault()}>
-            <button type="button" onClick={toggleLike} className={`action-btn ${liked ? "liked" : ""}`}>
-              <Icon name={liked ? "star_filled" : "star"} /> {likesCount}
+            <button type="button" onClick={toggleBoost} className={`action-btn ${boosted ? "boosted" : ""}`}>
+              <Icon name="refresh" /> {boostsCount}
             </button>
           </form>
           <form className="inline-form" onSubmit={(e) => e.preventDefault()}>
-            <button type="button" onClick={toggleBoost} className={`action-btn ${boosted ? "boosted" : ""}`}>
-              <Icon name="refresh" /> {boostsCount}
+            <button type="button" onClick={toggleLike} className={`action-btn ${liked ? "liked" : ""}`}>
+              <Icon name={liked ? "star_filled" : "star"} /> {likesCount}
             </button>
           </form>
             <button onClick={(e) => { e.stopPropagation(); toggleBookmark(); }} className={`action-btn${bookmarked ? " bookmarked" : ""}`} style={{ color: bookmarked ? "#5b7db5" : undefined }}>
