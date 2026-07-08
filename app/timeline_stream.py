@@ -1,8 +1,7 @@
 import json
 import asyncio
 import logging
-from app.database import get_session
-from app.models import Post, Follow, User, Boost
+from app.models import get_session, Post, Follow, User, Boost
 from sqlalchemy import or_
 
 logger = logging.getLogger(__name__)
