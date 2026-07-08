@@ -235,6 +235,23 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     };
   }, [emojiQuery]);
 
+  // Close series search on click-outside/Escape
+  useEffect(() => {
+    if (!showSeriesSearch) return;
+    const close = () => { setShowSeriesSearch(false); setSeriesResults([]); };
+    const keyHandler = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("keydown", keyHandler);
+    const clickHandler = (e: MouseEvent) => {
+      const el = document.querySelector('[style*="z-index: 1100"]');
+      if (el && !el.contains(e.target as Node)) close();
+    };
+    setTimeout(() => document.addEventListener("click", clickHandler), 0);
+    return () => {
+      document.removeEventListener("keydown", keyHandler);
+      document.removeEventListener("click", clickHandler);
+    };
+  }, [showSeriesSearch]);
+
   const insertEmoji = useCallback((emo: CustomEmoji) => {
     if (emojiStart === -1) return;
     const afterEmoji = content.slice(emojiStart + 1);
