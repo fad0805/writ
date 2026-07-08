@@ -332,7 +332,7 @@ export default function ProfilePage() {
 
       <div id="tab-novels" className="profile-novel-list profile-tab-novels" style={{ display: tab === "novels" ? "flex" : "none" }}>
         {pinnedSeries.map((n: any) => (
-          <div key={`pin-${n.id}`} className="profile-novel profile-novel-link" style={{ border: "1px solid var(--accent)", borderRadius: 8, padding: 8, display: "flex", gap: 14, cursor: "pointer" }} onClick={() => router.push(n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`)}>
+          <div key={`pin-${n.id}`} className="profile-novel" style={{ display: "flex", gap: 14, cursor: "pointer", border: "1px solid var(--accent)" }} onClick={() => router.push(n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`)}>
             <div className="cover-wrap-56">
               {n.cover_image ? <img src={n.cover_image} alt="" className="cover-img" /> : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(n.title) }}><Icon name="book" size={16} /></div>}
             </div>
