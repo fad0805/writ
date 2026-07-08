@@ -1,8 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, User } from "@/lib/api";
 import Icon from "@/components/Icon";
+import Avatar from "@/components/Avatar";
 import VisibilitySelector from "@/components/VisibilitySelector";
 import SettingsNav from "@/components/SettingsNav";
 import { useAuth } from "@/lib/auth";
@@ -13,6 +14,8 @@ export default function SettingsPage() {
   const [defaultVis, setDefaultVis] = useState("public");
   const [episodeDefaultVis, setEpisodeDefaultVis] = useState("public");
   const [showBadge, setShowBadge] = useState(false);
+  const [followRequests, setFollowRequests] = useState<{ id: number; user: User }[]>([]);
+  const [frLoading, setFrLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const { user } = useAuth();
@@ -26,6 +29,12 @@ export default function SettingsPage() {
       setLoading(false);
     }).catch(() => router.push("/login"));
   }, [router]);
+
+  useEffect(() => {
+    fetch("/api/follow-requests", { credentials: "include" })
+      .then(r => r.json()).then(d => { setFollowRequests(d.requests || []); setFrLoading(false); })
+      .catch(() => setFrLoading(false));
+  }, []);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -86,6 +95,31 @@ export default function SettingsPage() {
           <button type="submit" disabled={submitting} className="btn btn-primary">설정 저장</button>
         </div>
       </form>
+
+      <div className="novel-form" style={{ marginTop: 20 }}>
+        <h3 style={{ fontSize: "1.1em", marginBottom: 16 }}><Icon name="user_solid" /> 팔로우 요청</h3>
+        {frLoading ? (
+          <p className="empty-small">로딩 중...</p>
+        ) : followRequests.length === 0 ? (
+          <p className="empty-small">팔로우 요청이 없습니다.</p>
+        ) : followRequests.map((fr) => (
+          <div key={fr.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "var(--bg-tertiary)", borderRadius: 8, marginBottom: 6 }}>
+            <Avatar user={fr.user} className="sidebar-avatar" style={{ width: 32, height: 32, minWidth: 32 }} />
+            <div style={{ flex: 1 }}>
+              <strong style={{ fontSize: "0.9em" }}>{fr.user.display_name}</strong>
+              <span style={{ fontSize: "0.8em", color: "var(--text-muted)", marginLeft: 4 }}>@{fr.user.display_handle || fr.user.username}</span>
+            </div>
+            <button onClick={async () => {
+              await fetch(`/api/users/${fr.user.username}/approve-follow`, { method: "POST", credentials: "include" });
+              setFollowRequests(prev => prev.filter(x => x.id !== fr.id));
+            }} className="btn btn-primary btn-small">수락</button>
+            <button onClick={async () => {
+              await fetch(`/api/users/${fr.user.username}/reject-follow`, { method: "POST", credentials: "include" });
+              setFollowRequests(prev => prev.filter(x => x.id !== fr.id));
+            }} className="btn btn-small btn-outline">거절</button>
+          </div>
+        ))}
+      </div>
     </>
   );
 }

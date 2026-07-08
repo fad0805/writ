@@ -1057,6 +1057,14 @@ def api_remove_follower(request: Request, username: str):
         s.commit()
     return {"ok": True}
 
+@router.get("/follow-requests")
+def api_list_follow_requests(request: Request):
+    user = require_auth(request)
+    with get_session() as s:
+        pending = s.query(Follow).filter_by(following_id=user.id, accepted=False).all()
+        return {"requests": [{"id": f.id, "user": _user_json(f.follower)} for f in pending]}
+
+
 @router.post("/users/{username}/reject-follow")
 def api_reject_follow(request: Request, username: str):
     user = require_auth(request)
