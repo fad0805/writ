@@ -26,6 +26,7 @@ function ExploreContent() {
   const [fetchedUrl, setFetchedUrl] = useState<string | null>(null);
   const [blockedDomain, setBlockedDomain] = useState<string | null>(null);
   const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
+  const [searchAuthor, setSearchAuthor] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const searchParams = useSearchParams();
 
@@ -34,11 +35,11 @@ function ExploreContent() {
     api.explore().then((d) => { setPosts(d.posts); setNovels(d.novels); setUsers([]); setLoading(false); }).catch(() => setLoading(false));
   }, []);
 
-  const doSearch = useCallback(async (q: string) => {
+  const doSearch = useCallback(async (q: string, author?: string) => {
     if (!q.trim()) { loadExplore(); return; }
     setLoading(true); setSearched(true); setFetchedUrl(null); setBlockedDomain(null);
     try {
-      const res = await api.search(q.trim());
+      const res = await api.search(q.trim(), author);
       setPosts(res.posts);
       setNovels(res.novels);
       setUsers(res.users);
@@ -69,12 +70,14 @@ function ExploreContent() {
   useEffect(() => {
     const urlParam = searchParams.get("url");
     const qParam = searchParams.get("q");
+    const authorParam = searchParams.get("author");
     if (urlParam) {
       setInputValue(urlParam);
       handleUrlFetch(urlParam);
     } else if (qParam) {
       setInputValue(qParam);
-      doSearch(qParam);
+      setSearchAuthor(authorParam || "");
+      doSearch(qParam, authorParam || undefined);
     } else {
       loadExplore();
     }

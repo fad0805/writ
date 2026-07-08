@@ -202,7 +202,7 @@ export const api = {
 
   // Explore
   explore: () => request<{ posts: PostData[]; novels: NovelData[] }>("/api/explore"),
-  search: (q: string) => request<SearchResults>(`/api/search?q=${encodeURIComponent(q)}`),
+  search: (q: string, author?: string) => request<SearchResults>(`/api/search?q=${encodeURIComponent(q)}${author ? `&author=${encodeURIComponent(author)}` : ""}`),
   autocomplete: (q: string) => request<{ users: User[] }>(`/api/search/users?q=${encodeURIComponent(q)}`),
 
   // Auth actions
