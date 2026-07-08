@@ -3425,9 +3425,17 @@ def api_admin_remote_server_purge(domain: str, request: Request):
     user = require_auth(request)
     if user.role not in ("admin", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
+    from app.utils.storage import get_storage
+    storage = get_storage()
     with get_session() as s:
         users = _domain_users(s, domain)
         user_ids = [u.id for u in users]
+        # Delete stored avatar/header files first
+        for u in users:
+            if u.profile_image:
+                storage.delete(u.profile_image)
+            if u.header_image:
+                storage.delete(u.header_image)
         if user_ids:
             # Delete follows involving these users
             s.query(Follow).filter(
