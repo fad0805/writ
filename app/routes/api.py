@@ -1144,7 +1144,7 @@ def _novel_json(n, s=None):
 @router.post("/novels/new")
 def api_create_novel(request: Request, title: str = Form(...), description: str = Form(""),
                      tags: str = Form(""), visibility: str = Form("public"),
-                     cover_image: str = Form("")):
+                     cover_image: UploadFile = File(None)):
     user = require_auth(request)
     if getattr(user, 'is_deceased', False):
         raise HTTPException(status_code=403, detail="고인 계정은 시리즈를 생성할 수 없습니다.")
@@ -1152,12 +1152,33 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
         raise HTTPException(status_code=400, detail="Title cannot be empty")
     if visibility not in ("public", "unlisted", "private"):
         visibility = "public"
+    cover_url = ""
+    if cover_image and cover_image.filename:
+        from uuid import uuid4
+        from app.utils.storage import get_storage
+        from PIL import Image as PILImage
+        import io
+        storage = get_storage()
+        ext = "webp"
+        ct = cover_image.content_type or ""
+        if "gif" in ct:
+            ext = "gif"
+        key = f"series/icons/{uuid4().hex[:16]}.{ext}"
+        img = PILImage.open(cover_image.file)
+        img.thumbnail((600, 600), PILImage.Resampling.LANCZOS)
+        if img.mode in ("RGBA", "P"):
+            bg = PILImage.new("RGB", img.size, (255, 255, 255))
+            bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
+            img = bg
+        out = io.BytesIO()
+        img.save(out, format="WEBP" if ext != "gif" else "GIF", quality=90)
+        cover_url = storage.save(key, out.getvalue(), f"image/{ext}")
     with get_session() as s:
         import secrets
         novel_number = secrets.token_hex(4)
         novel = Novel(author_id=user.id, title=title, description=description, tags=tags,
                       visibility=visibility, is_published=visibility != "private",
-                      cover_image=cover_image, number=novel_number)
+                      cover_image=cover_url, number=novel_number)
         s.add(novel)
         s.flush()
         _sync_tags(novel, s)
@@ -1216,12 +1237,33 @@ def api_unfollow_novel(request: Request, novel_id: int):
 @router.post("/novels/{novel_id}/edit")
 def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), description: str = Form(""),
                    tags: str = Form(""), visibility: str = Form("public"), is_completed: bool = Form(False),
-                   cover_image: str = Form("")):
+                   cover_image: UploadFile = File(None)):
     user = require_auth(request)
     if not title.strip():
         raise HTTPException(status_code=400, detail="Title cannot be empty")
     if visibility not in ("public", "unlisted", "private"):
         visibility = "public"
+    from app.utils.storage import get_storage
+    storage = get_storage()
+    cover_url = ""
+    if cover_image and cover_image.filename:
+        from uuid import uuid4
+        from PIL import Image as PILImage
+        import io
+        ext = "webp"
+        ct = cover_image.content_type or ""
+        if "gif" in ct:
+            ext = "gif"
+        key = f"series/icons/{uuid4().hex[:16]}.{ext}"
+        img = PILImage.open(cover_image.file)
+        img.thumbnail((600, 600), PILImage.Resampling.LANCZOS)
+        if img.mode in ("RGBA", "P"):
+            bg = PILImage.new("RGB", img.size, (255, 255, 255))
+            bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
+            img = bg
+        out = io.BytesIO()
+        img.save(out, format="WEBP" if ext != "gif" else "GIF", quality=90)
+        cover_url = storage.save(key, out.getvalue(), f"image/{ext}")
     with get_session() as s:
         novel = s.query(Novel).filter_by(id=novel_id, author_id=user.id).first()
         if not novel:
@@ -1232,8 +1274,12 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
         novel.visibility = visibility
         novel.is_completed = is_completed
         novel.is_published = visibility != "private"
-        if cover_image:
-            novel.cover_image = cover_image
+        if cover_url:
+            old = novel.cover_image
+            novel.cover_image = cover_url
+            s.flush()
+            if old and old.startswith("/"):
+                storage.delete(old)
         s.flush()
         _sync_tags(novel, s)
         s.commit()

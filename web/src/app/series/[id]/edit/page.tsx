@@ -1,6 +1,6 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import TextareaHighlight from "@/components/TextareaHighlight";
 import TagInput from "@/components/TagInput";
@@ -9,10 +9,12 @@ import SeriesVisibilitySelector from "@/components/SeriesVisibilitySelector";
 export default function EditNovelPage() {
   const params = useParams();
   const router = useRouter();
+  const fileRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
   const [coverImage, setCoverImage] = useState("");
+  const [coverPreview, setCoverPreview] = useState("");
   const [visibility, setVisibility] = useState("public");
   const [isCompleted, setIsCompleted] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -46,7 +48,7 @@ export default function EditNovelPage() {
       form.append("tags", tags);
       form.append("visibility", visibility);
       form.append("is_completed", isCompleted ? "true" : "");
-      if (coverImage) form.append("cover_image", coverImage);
+      if (fileRef.current?.files?.[0]) form.append("cover_image", fileRef.current.files[0]);
       const res = await fetch(`/api/novels/${params.id}/edit`, { method: "POST", credentials: "include", body: form });
       if (res.ok) router.push(`/series/${params.id}`);
       else alert("저장 실패");
@@ -74,9 +76,12 @@ export default function EditNovelPage() {
           <TagInput value={tags} onChange={(v) => setTags(v)} />
         </div>
         <div className="form-group">
-          <label>표지 이미지 URL</label>
-          <input type="text" value={coverImage} onChange={(e) => setCoverImage(e.target.value)} placeholder="https://..." />
-          {coverImage && <img src={coverImage} alt="" className="cover-preview" />}
+          <label>표지 이미지</label>
+          <input type="file" ref={fileRef} accept="image/*" onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) setCoverPreview(URL.createObjectURL(f));
+          }} />
+          {(coverPreview || coverImage) && <img src={coverPreview || coverImage} alt="" className="cover-preview" />}
         </div>
         <div className="form-group">
           <label>공개 설정</label>

@@ -1,16 +1,17 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import TextareaHighlight from "@/components/TextareaHighlight";
 import TagInput from "@/components/TagInput";
 import SeriesVisibilitySelector from "@/components/SeriesVisibilitySelector";
 
 export default function NewNovelPage() {
   const router = useRouter();
+  const fileRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
-  const [coverImage, setCoverImage] = useState("");
+  const [coverPreview, setCoverPreview] = useState("");
   const [visibility, setVisibility] = useState("public");
   const [submitting, setSubmitting] = useState(false);
 
@@ -24,7 +25,7 @@ export default function NewNovelPage() {
       form.append("description", description);
       form.append("tags", tags);
       form.append("visibility", visibility);
-      if (coverImage) form.append("cover_image", coverImage);
+      if (fileRef.current?.files?.[0]) form.append("cover_image", fileRef.current.files[0]);
       const res = await fetch("/api/novels/new", { method: "POST", credentials: "include", body: form });
       const data = await res.json();
       if (res.ok) { window.dispatchEvent(new Event("novelchange")); router.push(`/series/${data.novel_id}`); }
@@ -51,9 +52,12 @@ export default function NewNovelPage() {
           <TagInput value={tags} onChange={(v) => setTags(v)} />
         </div>
         <div className="form-group">
-          <label>표지 이미지 URL</label>
-          <input type="text" value={coverImage} onChange={(e) => setCoverImage(e.target.value)} placeholder="https://..." />
-          {coverImage && <img src={coverImage} alt="" className="cover-preview" />}
+          <label>표지 이미지</label>
+          <input type="file" ref={fileRef} accept="image/*" onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) setCoverPreview(URL.createObjectURL(f));
+          }} />
+          {coverPreview && <img src={coverPreview} alt="" className="cover-preview" />}
         </div>
         <div className="form-group">
           <label>공개 설정</label>
