@@ -33,7 +33,7 @@ export default function ReplyModal({ post, onClose, onDone }: { post: PostData; 
   }, [post, user]);
 
   return (
-    <div className="reply-modal-backdrop active" onClick={onClose}>
+    <div className="reply-modal-backdrop active" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="reply-modal" onClick={(e) => e.stopPropagation()}>
         <button className="reply-modal-close" onClick={onClose}>×</button>
         <h3>답글 작성</h3>

@@ -24,7 +24,7 @@ export default function SharePostModal({ url, title, authorName, description, ta
   };
 
   return (
-    <div className="reply-modal-backdrop active" onClick={onClose}>
+    <div className="reply-modal-backdrop active" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="reply-modal" onClick={(e) => e.stopPropagation()}>
         <button className="reply-modal-close" onClick={onClose}>×</button>
         <h3>포스트로 공유</h3>
