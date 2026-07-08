@@ -147,7 +147,8 @@ export default function TimelinePage() {
   }, [tlType]);
 
   useEffect(() => {
-    const es = new EventSource(`/api/timeline/stream?type=${tlType}`);
+    let es: EventSource | null = null;
+    try { es = new EventSource(`/api/timeline/stream?type=${tlType}`); } catch { return; }
     es.onmessage = (event) => {
       try {
         const newPost = JSON.parse(event.data);
@@ -158,7 +159,7 @@ export default function TimelinePage() {
       } catch {}
     };
     es.onerror = () => {};
-    return () => es.close();
+    return () => { es?.close(); };
   }, [tlType]);
 
   useEffect(() => {
