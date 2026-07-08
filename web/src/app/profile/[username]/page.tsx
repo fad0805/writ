@@ -78,6 +78,12 @@ export default function ProfilePage() {
     }
   }, [loading, profile, isMine]);
 
+  useEffect(() => {
+    const handlePinChange = () => { api.getProfile(username).then((d: any) => { setPinnedPosts(d.pinned_posts_data || []); setPinnedSeries(d.pinned_series_data || []); }).catch(() => {}); };
+    window.addEventListener("pinchange", handlePinChange);
+    return () => window.removeEventListener("pinchange", handlePinChange);
+  }, [username]);
+
   if (loading) return <div className="empty-state">로딩 중...</div>;
   if (!profile) return <div className="empty-state">사용자를 찾을 수 없습니다.</div>;
 
