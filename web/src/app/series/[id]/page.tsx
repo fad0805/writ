@@ -18,6 +18,7 @@ export default function NovelDetailPage() {
   const [author, setAuthor] = useState<User | null>(null);
   const [isMine, setIsMine] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [isSeriesMuted, setIsSeriesMuted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showSharePost, setShowSharePost] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -31,7 +32,13 @@ export default function NovelDetailPage() {
     api.getNovel(id)
       .then((d) => { setNovel(d.novel); setEpisodes(d.episodes); setAuthor(d.author); setIsMine(d.is_mine); setIsFollowing(d.is_following); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [params.id]);
+    if (user) {
+      fetch("/api/mutes/series", { credentials: "include" })
+        .then((r) => r.json())
+        .then((d) => setIsSeriesMuted((d.mutes || []).some((m: any) => m.novel_id === id)))
+        .catch(() => {});
+    }
+  }, [params.id, user]);
 
   const toggleFollow = async () => {
     if (!novel || !user) return;
@@ -71,6 +78,14 @@ export default function NovelDetailPage() {
                 </p>
               </div>
               <div className="series-header-btns">
+                {user && (
+                  <button className="action-btn" onClick={async () => {
+                    if (isSeriesMuted) { await fetch(`/api/mutes/series/${novel.id}`, { method: "DELETE", credentials: "include" }); setIsSeriesMuted(false); }
+                    else { await fetch(`/api/mutes/series/${novel.id}`, { method: "POST", credentials: "include" }); setIsSeriesMuted(true); }
+                  }} title={isSeriesMuted ? "뮤트 해제" : "시리즈 뮤트"}>
+                    <Icon name={isSeriesMuted ? "mute" : "bell"} />
+                  </button>
+                )}
                 {novel.visibility !== "private" && <ShareButton url={`/series/${novel.id}`} />}
                 {user && <button className="action-btn" onClick={() => setShowSharePost(true)} title="포스트로 공유"><Icon name="edit" /></button>}
                 {user && !isMine && (
