@@ -51,14 +51,27 @@ export default function AdminSettingsPage() {
     setSaving(true);
     setMsg("");
     try {
+      let finalLogo = logo, finalFavicon = favicon, finalAppIcon = appIcon;
+      if (logoFile) {
+        const fd = new FormData(); fd.append("file", logoFile);
+        const r = await fetch("/api/media/upload", { method: "POST", credentials: "include", body: fd });
+        if (r.ok) { const d = await r.json(); finalLogo = d.url; }
+      }
+      if (faviconFile) {
+        const fd = new FormData(); fd.append("file", faviconFile);
+        const r = await fetch("/api/media/upload", { method: "POST", credentials: "include", body: fd });
+        if (r.ok) { const d = await r.json(); finalFavicon = d.url; }
+      }
+      if (appIconFile) {
+        const fd = new FormData(); fd.append("file", appIconFile);
+        const r = await fetch("/api/media/upload", { method: "POST", credentials: "include", body: fd });
+        if (r.ok) { const d = await r.json(); finalAppIcon = d.url; }
+      }
       const form = new FormData();
       form.append("server_name", serverName);
-      form.append("logo_url", logo || "");
-      form.append("favicon_url", favicon || "");
-      form.append("app_icon_url", appIcon || "");
-      if (logoFile) form.append("logo", logoFile);
-      if (faviconFile) form.append("favicon", faviconFile);
-      if (appIconFile) form.append("app_icon", appIconFile);
+      form.append("logo", finalLogo || "");
+      form.append("favicon", finalFavicon || "");
+      form.append("app_icon", finalAppIcon || "");
       form.append("admin_ids", adminIds);
       form.append("admin_email", adminEmail);
       const res = await fetch("/api/admin/settings", { method: "POST", credentials: "include", body: form });

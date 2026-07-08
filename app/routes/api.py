@@ -3928,33 +3928,11 @@ def api_admin_get_settings(request: Request):
 
 
 @router.post("/admin/settings")
-def _save_server_file(file: UploadFile, name: str) -> str:
-    import os, shutil, io
-    from PIL import Image as PILImage
-    web_public = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "web", "public")
-    os.makedirs(web_public, exist_ok=True)
-    filename = f"server_{name}.webp"
-    filepath = os.path.join(web_public, filename)
-    # Delete old file if exists
-    for old in os.listdir(web_public):
-        if old.startswith(f"server_{name}."):
-            try: os.remove(os.path.join(web_public, old))
-            except: pass
-    img = PILImage.open(io.BytesIO(file.file.read()))
-    if img.mode == "RGBA":
-        img = img.convert("RGB")
-    img.save(filepath, "WEBP", quality=85)
-    return f"/{filename}"
-
-
 def api_admin_update_settings(request: Request,
                                server_name: str = Form("WRIT"),
-                               logo: UploadFile = File(None),
-                               favicon: UploadFile = File(None),
-                               app_icon: UploadFile = File(None),
-                               logo_url: str = Form(""),
-                               favicon_url: str = Form(""),
-                               app_icon_url: str = Form(""),
+                               logo: str = Form(""),
+                               favicon: str = Form(""),
+                               app_icon: str = Form(""),
                                admin_ids: str = Form(""),
                                admin_email: str = Form("")):
     user = require_auth(request)
@@ -3967,12 +3945,9 @@ def api_admin_update_settings(request: Request,
         settings = ServerSetting.get(s)
         if server_name.strip():
             settings.server_name = server_name[:20]
-        if logo: settings.logo = _save_server_file(logo, "logo")
-        elif logo_url: settings.logo = logo_url
-        if favicon: settings.favicon = _save_server_file(favicon, "favicon")
-        elif favicon_url: settings.favicon = favicon_url
-        if app_icon: settings.app_icon = _save_server_file(app_icon, "app_icon")
-        elif app_icon_url: settings.app_icon = app_icon_url
+        if logo: settings.logo = logo
+        if favicon: settings.favicon = favicon
+        if app_icon: settings.app_icon = app_icon
         settings.admin_ids = admin_ids
         settings.admin_email = admin_email
         s.commit()
