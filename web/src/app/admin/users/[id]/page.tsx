@@ -87,8 +87,7 @@ export default function AdminUserDetailPage() {
 
   return (
     <>
-      <div className="page-header"><h2><Icon name="settings" /> 서버 관리</h2></div>
-      <AdminNav current="users" />
+            <AdminNav current="users" />
 
       {msg && <div className="empty-state" style={{ background: "var(--accent)", color: "#fff", padding: "10px 16px", borderRadius: 8, marginBottom: 12 }}>{msg}</div>}
 

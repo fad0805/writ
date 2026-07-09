@@ -88,8 +88,7 @@ export default function AdminUsersPage() {
 
   return (
     <>
-      <div className="page-header"><h2><Icon name="settings" /> 서버 관리</h2></div>
-      <AdminNav current="users" />
+            <AdminNav current="users" />
 
       <div className="admin-users-container">
         <div className="admin-action-bar">

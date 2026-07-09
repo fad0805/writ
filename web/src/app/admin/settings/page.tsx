@@ -96,8 +96,7 @@ export default function AdminSettingsPage() {
 
   return (
     <>
-      <div className="page-header"><h2><Icon name="settings" /> 서버 관리</h2></div>
-      <AdminNav current="settings" />
+            <AdminNav current="settings" />
       {msg && <p style={{ marginBottom: 12, color: "var(--accent)", fontWeight: 600 }}>{msg}</p>}
 
       <form onSubmit={handleSubmit} className="novel-form">

@@ -68,9 +68,6 @@ export default function AdminReportsPage() {
 
   return (
     <>
-      <div className="page-header">
-        <h2><Icon name="settings" /> 서버 관리</h2>
-      </div>
       <AdminNav current="reports" />
       <div style={{ marginBottom: 16, display: "flex", gap: 8 }}>
         {["pending", "resolved", "dismissed"].map((s) => (
