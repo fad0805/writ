@@ -70,7 +70,7 @@ def _check_daily_limit(key: str) -> bool:
 # ── logging configuration ──
 from datetime import datetime
 _log_handlers = [logging.StreamHandler()]
-_log_file_dir = os.environ.get("LOG_DIR", "")
+_log_file_dir = "logs"
 if _log_file_dir:
     os.makedirs(_log_file_dir, exist_ok=True)
     _log_date = datetime.now().strftime("%Y-%m-%d")
