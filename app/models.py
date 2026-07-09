@@ -287,8 +287,8 @@ class Post(Base):
             obj["to"] = [followers_uri]
         elif self.visibility == "mention":
             obj["to"] = []
-        media_sensitive = False
-        if self.media_attachments:
+        media_sensitive = getattr(self.author, 'is_sensitive', False) or False
+        if not media_sensitive and self.media_attachments:
             for _m in (self.media_attachments or []):
                 if isinstance(_m, dict) and _m.get("sensitive"):
                     media_sensitive = True

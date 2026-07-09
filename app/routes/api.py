@@ -81,6 +81,7 @@ def _user_json(u):
         "is_frozen": getattr(u, 'is_frozen', False) or False,
         "is_deceased": getattr(u, 'is_deceased', False) or False,
         "is_deactivated": getattr(u, 'is_deactivated', False) or False,
+        "is_sensitive": getattr(u, 'is_sensitive', False) or False,
         "is_remote": u.is_remote,
         "role": role,
         "show_badge": getattr(u, 'show_badge', False) or False,

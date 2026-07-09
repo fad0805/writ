@@ -282,8 +282,10 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
         {(post as any).media_attachments?.length > 0 && (
           <div className="post-media-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min((post as any).media_attachments.length, 2)}, 1fr)`, gap: 4, marginTop: 8 }}>
              {(post as any).media_attachments.slice(0, 16).map((m: any, i: number) => {
-              const isSensitive = m.sensitive && !revealedSensitive.has(i);
-              const revealed = m.sensitive && revealedSensitive.has(i);
+              const authorSensitive = (post.author as any)?.is_sensitive;
+              const mediaSensitive = m.sensitive || authorSensitive;
+              const isSensitive = mediaSensitive && !revealedSensitive.has(i);
+              const revealed = mediaSensitive && revealedSensitive.has(i);
               return m.type === "video" ? (
                 <div key={i} style={{ position: "relative", lineHeight: 0 }}>
                   {isSensitive && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 1, cursor: "pointer", color: "#fff", fontSize: 13, fontWeight: 600 }} onClick={(e) => { e.stopPropagation(); e.preventDefault(); setRevealedSensitive((prev) => new Set(prev).add(i)); }}><span style={{ fontSize: 12, fontWeight: 600, textAlign: "center", lineHeight: 1.3 }}>클릭하여 표시</span></div>}
