@@ -1374,7 +1374,7 @@ def api_direct_threads(request: Request):
 
 
 @router.get("/notifications")
-def api_notifications(request: Request, filter_type: str = Query(""), limit: int = Query(20), offset: int = Query(0)):
+def api_notifications(request: Request, filter_type: str = Query(""), limit: int = Query(20), offset: int = Query(0), mark_read: bool = Query(True)):
     user = require_auth(request)
     with get_session() as s:
         q = s.query(Notification).filter_by(user_id=user.id)
@@ -1408,8 +1408,8 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
             }
             result.append(item)
 
-        # mark as read (only first page)
-        if offset == 0:
+        # mark as read (only first page, when mark_read=true)
+        if offset == 0 and mark_read:
             s.query(Notification).filter_by(user_id=user.id, is_read=False).update({"is_read": True})
             s.commit()
 

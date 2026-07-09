@@ -26,7 +26,7 @@ export default function RightSidebar() {
     const es = new EventSource("/api/notifications/stream");
     es.onmessage = (event) => {
       if (event.data === "refresh") {
-        api.getNotifications(undefined, 10, 0).then((d) => {
+        api.getNotifications(undefined, 10, 0, false).then((d) => {
           setNotifs(d.notifications);
           window.dispatchEvent(new Event("notifchange"));
         }).catch(() => {});
