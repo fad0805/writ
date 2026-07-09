@@ -31,6 +31,7 @@ export default function RightSidebar() {
             const ids = new Set(prev.map((n) => n.id));
             const newOnes = d.notifications.filter((n) => !ids.has(n.id));
             if (newOnes.length === 0) return prev;
+            window.dispatchEvent(new Event("notifchange"));
             return [...newOnes.slice(0, 3), ...prev].slice(0, 10);
           });
         }).catch(() => {});
