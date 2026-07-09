@@ -616,6 +616,7 @@ class ServerSetting(Base):
 
     id = Column(Integer, primary_key=True)
     server_name = Column(String(255), default="WRIT")
+    server_description = Column(Text, default="")
     logo = Column(String(512), default="")
     favicon = Column(String(512), default="")
     app_icon = Column(String(512), default="")

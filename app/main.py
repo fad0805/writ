@@ -1,6 +1,8 @@
+import datetime
 import hashlib
 import json
 import logging
+import os
 import time
 from collections import defaultdict
 from typing import AsyncGenerator
@@ -67,7 +69,6 @@ def _check_daily_limit(key: str) -> bool:
 
 # ── logging configuration ──
 from datetime import datetime
-import os
 _log_handlers = [logging.StreamHandler()]
 _log_file_dir = os.environ.get("LOG_DIR", "")
 if _log_file_dir:
@@ -170,7 +171,6 @@ app.add_middleware(
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 # Mount uploads directory (local storage only)
-import os
 from app.config import S3_ENABLED
 if not S3_ENABLED:
     os.makedirs("uploads", exist_ok=True)

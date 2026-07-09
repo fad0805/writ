@@ -9,6 +9,7 @@ export default function AdminSettingsPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const [serverName, setServerName] = useState("");
+  const [serverDescription, setServerDescription] = useState("");
   const [logo, setLogo] = useState("");
   const [favicon, setFavicon] = useState("");
   const [appIcon, setAppIcon] = useState("");
@@ -42,6 +43,7 @@ export default function AdminSettingsPage() {
       .then((r) => r.json())
       .then((d) => {
         setServerName(d.server_name || "");
+        setServerDescription(d.server_description || "");
         setLogo(d.logo || ""); setLogoPreview(d.logo || "");
         setFavicon(d.favicon || ""); setFaviconPreview(d.favicon || "");
         setAppIcon(d.app_icon || ""); setAppIconPreview(d.app_icon || "");
@@ -76,6 +78,7 @@ export default function AdminSettingsPage() {
       }
       const form = new FormData();
       form.append("server_name", serverName);
+      form.append("server_description", serverDescription);
       form.append("logo", finalLogo || "");
       form.append("favicon", finalFavicon || "");
       form.append("app_icon", finalAppIcon || "");
@@ -102,6 +105,11 @@ export default function AdminSettingsPage() {
           <label>서버 이름</label>
           <input type="text" value={serverName} onChange={(e) => setServerName(e.target.value.slice(0, 20))} className="cw-input" placeholder="WRIT" maxLength={20} />
           <p className="form-help">최대 20자까지 입력 가능합니다.</p>
+        </div>
+        <div className="form-group">
+          <label>서버 설명</label>
+          <textarea value={serverDescription} onChange={(e) => setServerDescription(e.target.value.slice(0, 500))} className="cw-input" placeholder="서버에 대한 설명을 입력하세요" rows={3} style={{ resize: "vertical" }} maxLength={500} />
+          <p className="form-help">NodeInfo를 통해 연합에 공개될 서버 설명입니다. 최대 500자.</p>
         </div>
         <div className="form-group">
           <label>대표 아이콘</label>

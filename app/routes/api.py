@@ -4321,6 +4321,7 @@ def api_admin_get_settings(request: Request):
         settings = ServerSetting.get(s)
         return {
             "server_name": settings.server_name,
+            "server_description": getattr(settings, 'server_description', '') or '',
             "logo": settings.logo,
             "favicon": settings.favicon,
             "app_icon": settings.app_icon,
@@ -4332,6 +4333,7 @@ def api_admin_get_settings(request: Request):
 @router.post("/admin/settings")
 def api_admin_update_settings(request: Request,
                                server_name: str = Form("WRIT"),
+                               server_description: str = Form(""),
                                logo: str = Form(""),
                                favicon: str = Form(""),
                                app_icon: str = Form(""),
@@ -4349,6 +4351,7 @@ def api_admin_update_settings(request: Request,
         settings = ServerSetting.get(s)
         if server_name.strip():
             settings.server_name = server_name[:20]
+        settings.server_description = server_description[:500] if server_description else ""
         if logo and settings.logo and logo != settings.logo:
             storage.delete(settings.logo)
         elif not logo and settings.logo:
