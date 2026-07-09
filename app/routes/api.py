@@ -2231,6 +2231,8 @@ def api_migrate_account(request: Request, target_username: str = Form(...), seri
             raise HTTPException(status_code=400, detail="자기 자신에게 이전할 수 없습니다.")
         if target.is_frozen:
             raise HTTPException(status_code=400, detail="대상 계정이 동결되어 있습니다.")
+        if getattr(target, 'is_deactivated', False) or getattr(target, 'moved_to', ''):
+            raise HTTPException(status_code=400, detail="대상 계정이 이미 이전된 계정입니다.")
 
         import json as _json
         try:
@@ -2275,9 +2277,10 @@ def api_approve_migrate(request: Request, notification_id: int = Form(...)):
 
         from_user_id = meta.get("from_user_id")
         from_user = s.query(User).get(from_user_id)
-        if not from_user or not from_user.is_frozen:
-            # Source account might already be frozen from failed attempt
-            pass
+        if not from_user:
+            raise HTTPException(status_code=404, detail="요청한 계정을 찾을 수 없습니다.")
+        if getattr(from_user, 'is_deactivated', False):
+            raise HTTPException(status_code=400, detail="이미 이전된 계정입니다.")
 
         series_ids = meta.get("series_ids", [])
         if series_ids:
@@ -2311,6 +2314,9 @@ def api_set_aliases(request: Request, aliases: str = Form("[]")):
     except (_json.JSONDecodeError, TypeError):
         parsed = []
     parsed = [a.strip() for a in parsed if isinstance(a, str) and a.strip()]
+    own_handle = f"{user.username}@{_domain_from_actor(user)}"
+    own_handle2 = user.username
+    parsed = [a for a in parsed if a not in (own_handle, own_handle2)]
     with get_session() as s:
         db = s.query(User).filter_by(id=user.id).first()
         db.aliases = parsed
