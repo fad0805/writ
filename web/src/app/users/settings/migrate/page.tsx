@@ -114,7 +114,7 @@ export default function MigratePage() {
           <div style={{ marginBottom: 10 }}>
             {aliases.map((a) => (
               <div key={a} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
-                <span style={{ fontSize: 14 }}>{a}</span>
+                <span style={{ fontSize: 14 }}>@{a}</span>
                 <button onClick={() => handleRemoveAlias(a)} className="btn btn-small btn-outline" style={{ color: "var(--danger)", padding: "2px 8px", fontSize: 12 }}>제거</button>
               </div>
             ))}
@@ -122,7 +122,7 @@ export default function MigratePage() {
         )}
 
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input type="text" value={aliasInput} onChange={(e) => setAliasInput(e.target.value)} placeholder="user@domain" style={{ flex: 1 }} />
+          <input type="text" value={aliasInput} onChange={(e) => setAliasInput(e.target.value)} placeholder="@user@domain" style={{ flex: 1 }} />
           <button onClick={handleAddAlias} disabled={submitting || !aliasInput.trim()} className="btn btn-primary btn-small">등록</button>
         </div>
       </div>

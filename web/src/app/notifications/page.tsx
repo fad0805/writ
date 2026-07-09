@@ -214,6 +214,17 @@ export default function NotificationsPage() {
                 </>
               ) : n.type === "moderation" && n.metadata?.type === "new_user" ? (
                 <><Link href={`/@${n.from_user?.username}`} className="notif-from-link">{n.from_user?.display_name}</Link> 님이 가입했습니다</>
+              ) : n.type === "moderation" && n.metadata?.type === "migrate_request" ? (
+                <><Link href={`/@${n.from_user?.username}`} className="notif-from-link">{n.from_user?.display_name || n.from_user?.username}</Link> 님이 계정 이전을 요청했습니다
+                <div style={{ marginTop: 6 }}>
+                  <button onClick={async () => {
+                    const form = new FormData();
+                    form.append("notification_id", String(n.id));
+                    await fetch("/api/settings/migrate/approve", { method: "POST", credentials: "include", body: form });
+                    setNotifs((prev) => prev.filter((x) => x.id !== n.id));
+                    window.dispatchEvent(new Event("followchange"));
+                  }} className="btn btn-primary btn-small">수락</button>
+                </div></>
               ) : n.type === "moderation" ? (
                 <><span className="font-bold" style={{ color: "var(--danger)" }}>{actionNames[n.metadata?.action] || n.metadata?.action || "중재"}</span> 조치가 적용되었습니다.</>
               ) : (
