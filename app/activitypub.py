@@ -384,6 +384,60 @@ def _cleanup_expired_media():
         logger.warning("Failed to cleanup expired media: %s", e)
 
 
+_REMOTE_POST_RETENTION_DAYS = 90
+_PROCESSED_ACTIVITY_RETENTION_DAYS = 7
+_REMOTE_USER_CLEANUP_DAYS = 30
+
+
+def _cleanup_remote_data():
+    """Remove old remote posts, processed activities, and stale remote users."""
+    cutoff = datetime.datetime.now(datetime.timezone.utc)
+    try:
+        with get_session() as s:
+            # Clean old remote posts
+            post_cutoff = cutoff - datetime.timedelta(days=_REMOTE_POST_RETENTION_DAYS)
+            old_remote_posts = s.query(Post).filter(
+                Post.author.has(is_remote=True),
+                Post.created_at < post_cutoff,
+            ).limit(500).all()
+            for p in old_remote_posts:
+                s.delete(p)
+            if old_remote_posts:
+                logger.info("Cleaned %d old remote posts", len(old_remote_posts))
+
+            # Clean old processed activities (dedup tracking)
+            pa_cutoff = cutoff - datetime.timedelta(days=_PROCESSED_ACTIVITY_RETENTION_DAYS)
+            from app.models import ProcessedActivity
+            old_pa = s.query(ProcessedActivity).filter(
+                ProcessedActivity.created_at < pa_cutoff
+            ).limit(1000).all()
+            for pa in old_pa:
+                s.delete(pa)
+            if old_pa:
+                logger.info("Cleaned %d old processed activities", len(old_pa))
+
+            # Clean stale remote users with no relationships
+            user_cutoff = cutoff - datetime.timedelta(days=_REMOTE_USER_CLEANUP_DAYS)
+            stale_remotes = s.query(User).filter(
+                User.is_remote == True,
+                User.created_at < user_cutoff,
+            ).all()
+            removed = 0
+            for u in stale_remotes:
+                follows = s.query(Follow).filter(
+                    (Follow.follower_id == u.id) | (Follow.following_id == u.id)
+                ).count()
+                posts = s.query(Post).filter_by(author_id=u.id).count()
+                if follows == 0 and posts == 0:
+                    s.delete(u)
+                    removed += 1
+            if removed:
+                logger.info("Cleaned %d stale remote users", removed)
+            s.commit()
+    except Exception as e:
+        logger.warning("Failed to cleanup remote data: %s", e)
+
+
 def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url: str = "") -> str:
     """Download remote image and save, return URL. If old_url given, delete it first."""
     from app.utils.storage import get_storage
