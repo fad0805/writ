@@ -7,7 +7,7 @@ import Icon from "@/components/Icon";
 export default function Home() {
   const { user, loading } = useAuth();
   const router = useRouter();
-  const [serverInfo, setServerInfo] = useState<{ name: string; logo: string } | null>(null);
+  const [serverInfo, setServerInfo] = useState<{ name: string; logo: string; description?: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/server-info").then((r) => r.json()).then(setServerInfo).catch(() => {});
@@ -24,6 +24,7 @@ export default function Home() {
     <div className="home-container">
       <div className="home-logo">{serverInfo?.logo ? <img src={serverInfo.logo} alt={serverInfo?.name || "WRIT"} /> : <span className="home-logo-default" />}</div>
       <h1 className="home-title">{serverInfo?.name || "WRIT"}</h1>
+      {serverInfo?.description && <p className="home-desc" style={{ marginTop: -8 }}>{serverInfo.description}</p>}
       <p className="home-desc">
         작가를 위한 소셜 네트워크입니다.<br />
         소설을 연재하고, 독자와 소통하고, 글을 나누세요.

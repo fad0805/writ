@@ -17,7 +17,7 @@ export default function RightSidebar() {
   const [novels, setNovels] = useState<NovelData[]>([]);
   const [notifs, setNotifs] = useState<NotificationData[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [serverInfo, setServerInfo] = useState<{ name: string; admins: { username: string; email: string }[] } | null>(null);
+  const [serverInfo, setServerInfo] = useState<{ name: string; description?: string; admins: { username: string; email: string }[] } | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -204,6 +204,7 @@ export default function RightSidebar() {
         {serverInfo ? (
           <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>{serverInfo.name}</div>
+            {serverInfo.description && <div style={{ fontSize: 12, marginBottom: 6, color: "var(--text-dim)" }}>{serverInfo.description}</div>}
             {serverInfo.admins.length > 0 && (
               <div style={{ marginBottom: 8 }}>
                 {serverInfo.admins.map((a) => (

@@ -4301,6 +4301,7 @@ def api_server_info():
         admin_email = settings.admin_email or (admins[0].email if admins else "")
         return {
             "name": settings.server_name,
+            "description": getattr(settings, 'server_description', '') or '',
             "admins": [
                 {"username": a.username, "email": admin_email or ""}
                 for a in admins
