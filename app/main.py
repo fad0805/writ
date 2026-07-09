@@ -26,20 +26,43 @@ from app.activitypub import (
     get_outbox, get_followers, get_following, handle_inbox
 )
 
-_RATE_LIMIT_WINDOW = 60
-_RATE_LIMIT_MAX = 30
+_RATE_LIMIT_WINDOW = int(os.environ.get("RATE_LIMIT_WINDOW", "60"))
+_RATE_LIMIT_MAX = int(os.environ.get("RATE_LIMIT_MAX", "30"))
+_RATE_LIMIT_BURST = int(os.environ.get("RATE_LIMIT_BURST", "10"))
+_RATE_LIMIT_DAILY = int(os.environ.get("RATE_LIMIT_DAILY", "500"))
 _rate_limit_store: dict[str, list[float]] = defaultdict(list)
+_rate_limit_daily: dict[str, list[float]] = defaultdict(list)
 
 
 def _check_rate_limit(key: str) -> bool:
     now = time.time()
     window_start = now - _RATE_LIMIT_WINDOW
     timestamps = _rate_limit_store[key]
-    # Prune old entries
-    _rate_limit_store[key] = [t for t in timestamps if t > window_start]
-    if len(_rate_limit_store[key]) >= _RATE_LIMIT_MAX:
+    pruned = [t for t in timestamps if t > window_start]
+    if len(pruned) >= _RATE_LIMIT_MAX:
         return False
-    _rate_limit_store[key].append(now)
+    _rate_limit_store[key] = pruned + [now]
+    return True
+
+
+def _check_burst_limit(key: str) -> bool:
+    now = time.time()
+    burst_start = now - 5
+    timestamps = _rate_limit_store[key]
+    recent = [t for t in timestamps if t > burst_start]
+    if len(recent) >= _RATE_LIMIT_BURST:
+        return False
+    return True
+
+
+def _check_daily_limit(key: str) -> bool:
+    now = time.time()
+    day_start = now - 86400
+    timestamps = _rate_limit_daily[key]
+    pruned = [t for t in timestamps if t > day_start]
+    if len(pruned) >= _RATE_LIMIT_DAILY:
+        return False
+    _rate_limit_daily[key] = pruned + [now]
     return True
 
 # ── logging configuration ──
@@ -391,11 +414,16 @@ async def user_inbox(request: Request, username: str):
             if already:
                 return JSONResponse({"status": "ok", "message": "Already processed"}, status_code=200)
 
-    # Rate limiting — per actor + per IP
+    # Rate limiting — per actor + per IP + daily cap
     client_ip = request.client.host if request.client else ""
-    rate_key = f"inbox:{actor_url or client_ip}"
-    if not _check_rate_limit(rate_key):
-        return JSONResponse({"status": "error", "message": "Too many requests"}, status_code=429)
+    actor_key = f"actor:{actor_url}" if actor_url else ""
+    ip_key = f"ip:{client_ip}" if client_ip else ""
+    daily_key = f"daily:{actor_key or ip_key}"
+    if not _check_daily_limit(daily_key):
+        return JSONResponse({"status": "error", "message": "Daily limit exceeded"}, status_code=429)
+    for rk in [actor_key, ip_key]:
+        if rk and (not _check_rate_limit(rk) or not _check_burst_limit(rk)):
+            return JSONResponse({"status": "error", "message": "Too many requests"}, status_code=429)
 
     # Validate inbox destination — check to/cc includes this user
     to_list = activity.get("to", [])
