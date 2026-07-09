@@ -693,7 +693,10 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
         follow_rel = session.query(Follow).filter_by(
             following_id=local_user.id,
             follower_id=remote_follower.id,
+            accepted=False,
         ).first()
+        if not follow_rel:
+            return (200, "No pending follow request found")
         if follow_rel:
             follow_rel.accepted = True
             session.commit()
@@ -721,8 +724,12 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if obj_attributed and obj_attributed != actor_url and obj_attributed != actor.actor_uri() and obj_attributed != (actor.remote_url or ""):
             return (403, "attributedTo does not match actor")
 
+        # Limit content length (65536 chars ~ 64KB)
+        raw_content = obj.get("content", "") or ""
+        if len(raw_content) > 65536:
+            raw_content = raw_content[:65536]
         post_id = obj.get("id", "")
-        content = _sanitize_html(obj.get("content", ""))
+        content = _sanitize_html(raw_content)
         summary = obj.get("summary", "")
         in_reply_to = obj.get("inReplyTo", "")
 

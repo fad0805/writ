@@ -396,6 +396,29 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
     return (ok, remote_actor if ok else None)
 
 
+@app.post("/inbox")
+async def shared_inbox(request: Request):
+    body = await request.body()
+    if len(body) > 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Request body too large")
+    try:
+        activity = json.loads(body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    actor_url = activity.get("actor", "")
+    if isinstance(actor_url, list):
+        actor_url = actor_url[0]
+    client_ip = request.client.host if request.client else ""
+    rate_key = f"inbox:{actor_url or client_ip}"
+    if not _check_rate_limit(rate_key):
+        return JSONResponse({"status": "error", "message": "Too many requests"}, status_code=429)
+    ok, remote_actor = _verify_http_signature(request, body, activity)
+    if not ok:
+        return JSONResponse({"status": "error", "message": "Invalid signature"}, status_code=401)
+    status_code, message = handle_inbox(activity)
+    return JSONResponse({"status": status_code, "message": message}, status_code=200)
+
+
 @app.post("/users/{username}/inbox")
 async def user_inbox(request: Request, username: str):
     with get_session() as session:
@@ -494,6 +517,20 @@ async def user_inbox(request: Request, username: str):
 
     status_code, message = handle_inbox(activity)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)
+
+
+@app.get("/activities/create/{post_id}")
+def get_create_activity(request: Request, post_id: int):
+    from app.models import Post, get_session
+    accept = request.headers.get("Accept", "")
+    if "application/activity+json" not in accept:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    with get_session() as session:
+        post = session.query(Post).filter_by(id=post_id, is_deleted=False).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Not found")
+        return JSONResponse(content=post.to_ap_create(),
+                            media_type="application/activity+json")
 
 
 @app.get("/posts/{post_id}")

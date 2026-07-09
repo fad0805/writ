@@ -134,6 +134,10 @@ class User(Base):
             result["image"] = {"type": "Image", "url": self.header_image}
         if self.shared_inbox_url:
             result["endpoints"] = {"sharedInbox": self.shared_inbox_url}
+        elif not self.is_remote:
+            result["endpoints"] = {"sharedInbox": f"{BASE_URL}/inbox"}
+        if self.updated_at:
+            result["updated"] = self.updated_at.isoformat()
         custom_fields = getattr(self, 'custom_fields', None) or []
         if custom_fields:
             result["attachment"] = [
