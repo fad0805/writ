@@ -4819,7 +4819,7 @@ def api_pwa_favicon():
         os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "favicon.ico"),
     ]:
         if os.path.exists(path):
-            return FileResponse(path, media_type="image/x-icon", headers={"Cache-Control": "no-cache, max-age=0"})
+            return FileResponse(path, media_type="image/png", headers={"Cache-Control": "no-cache, max-age=0"})
     return JSONResponse({"error": "Not found"}, status_code=404)
 
 
