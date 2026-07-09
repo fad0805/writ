@@ -289,6 +289,8 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
         return _handle_delete(activity)
     elif atype == "Flag":
         return _handle_flag(activity)
+    elif atype == "Move":
+        return _handle_move(activity)
     else:
         return (202, f"Accepted {atype}")
 
@@ -965,6 +967,61 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
                 s.add(report)
         s.commit()
     return (200, "Flagged")
+
+
+def _handle_move(activity: dict) -> tuple[int, str]:
+    actor_url = activity.get("actor")
+    if isinstance(actor_url, list):
+        actor_url = actor_url[0]
+    if not actor_url:
+        return (400, "Missing actor")
+
+    old_actor_url = activity.get("object", "")
+    if isinstance(old_actor_url, dict):
+        old_actor_url = old_actor_url.get("id", "")
+    if isinstance(old_actor_url, list):
+        old_actor_url = old_actor_url[0] if old_actor_url else ""
+    if not old_actor_url:
+        return (400, "Missing object")
+
+    new_actor_url = activity.get("target", "")
+    if isinstance(new_actor_url, dict):
+        new_actor_url = new_actor_url.get("id", "")
+    if isinstance(new_actor_url, list):
+        new_actor_url = new_actor_url[0] if new_actor_url else ""
+    if not new_actor_url:
+        return (400, "Missing target")
+
+    with get_session() as session:
+        local_user = session.query(User).filter(
+            User.actor_uri() == old_actor_url,
+            User.is_remote == False,
+        ).first()
+        if not local_user:
+            local_user = session.query(User).filter(
+                User.remote_url == old_actor_url,
+                User.is_remote == True,
+            ).first()
+        if not local_user:
+            return (200, "OK (not a local/known account)")
+
+        new_actor = _resolve_actor(new_actor_url)
+        if not new_actor:
+            return (404, "New actor not found")
+
+        followers = session.query(Follow).filter_by(following_id=local_user.id, accepted=True).all()
+        moved_count = 0
+        for f in followers:
+            existing = session.query(Follow).filter_by(
+                follower_id=f.follower_id, following_id=new_actor.id
+            ).first()
+            if not existing:
+                f.following_id = new_actor.id
+                moved_count += 1
+        session.commit()
+
+    logger.info("Move: moved %d followers from %s to %s", moved_count, old_actor_url, new_actor_url)
+    return (200, f"Moved {moved_count} followers")
 
 
 def _send_flag(reporter: User, target_type: str, target_obj, reason: str, rule_ids: list = None):
