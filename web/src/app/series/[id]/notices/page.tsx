@@ -17,7 +17,6 @@ export default function NoticesPage() {
   const load = () => {
     if (isNaN(novelId)) return;
     api.getNovel(novelId).then((d) => {
-      if (!d.is_mine) { router.push(`/series/${novelId}`); return; }
       setNovel(d.novel);
       setIsMine(d.is_mine);
     }).catch(() => router.push("/series"));

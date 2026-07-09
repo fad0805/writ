@@ -1438,6 +1438,8 @@ input[type="checkbox"] {
   padding: 20px;
 }
 .episode-list h3 {
+  display: flex;
+  align-items: center;
   border-bottom: 2px solid var(--border);
   padding-bottom: 12px;
   margin-bottom: 0;

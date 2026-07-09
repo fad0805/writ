@@ -148,7 +148,7 @@ export default function NovelDetailPage() {
       )}
       <div className="episode-list">
         <h3>목차
-          {isMine && <Link href={`/series/${novel.id}/notices`} className="btn btn-small btn-outline" style={{ marginLeft: "auto", fontSize: "0.75em" }}>공지사항</Link>}
+          <Link href={`/series/${novel.id}/notices`} className="btn btn-small btn-outline" style={{ marginLeft: "auto", fontSize: "0.75em" }}>공지사항</Link>
         </h3>
         {episodes.length === 0 ? (
           <p className="empty-state">아직 에피소드가 없습니다.</p>

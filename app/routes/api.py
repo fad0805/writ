@@ -1967,13 +1967,10 @@ def _notice_json(n):
 
 @router.get("/series/{novel_id}/notices")
 def api_list_notices(request: Request, novel_id: int):
-    user = require_auth(request)
     with get_session() as s:
         novel = s.query(Novel).filter_by(id=novel_id).first()
         if not novel:
             raise HTTPException(status_code=404, detail="Series not found")
-        if novel.author_id != user.id and not user.is_admin:
-            raise HTTPException(status_code=403, detail="Not allowed")
         notices = s.query(SeriesNotice).filter_by(novel_id=novel_id).order_by(
             SeriesNotice.is_pinned.desc(), SeriesNotice.created_at.desc()).all()
         return [_notice_json(n) for n in notices]

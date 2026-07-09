@@ -20,7 +20,7 @@ export default function NoticeDetailPage() {
     api.getNovel(novelId).then((d) => {
       setNovel(d.novel);
       setIsMine(d.is_mine);
-    }).catch(() => router.push("/series"));
+    }).catch(() => {});
     fetch(`/api/series/${novelId}/notices`, { credentials: "include" })
       .then((r) => r.json())
       .then((list) => {
