@@ -42,7 +42,9 @@ def remove_stream(sid: int):
 def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, post_is_dm: bool):
     import time as _time
     _t0 = _time.time()
+    print(f"[TIMING] broadcast_post ENTER streams={len(_streams)} vis={post_visibility}")
     if post_visibility not in ("public", "home", "followers") or not _streams:
+        print(f"[TIMING] broadcast_post EARLY RETURN (vis={post_visibility}, streams={len(_streams)})")
         return
     _t1 = _time.time()
     payload = json.dumps(post_json, default=str)

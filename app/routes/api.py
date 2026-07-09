@@ -585,10 +585,15 @@ def _broadcast_federation(user, post, visibility):
 
 def _broadcast_timeline(post_json, author_id, visibility, is_dm):
     """Deliver post to connected timeline streams (background thread)."""
+    import time as _time
+    _t0 = _time.time()
+    print(f"[TIMING] _broadcast_timeline THREAD STARTED vis={visibility} is_dm={is_dm}")
     try:
         broadcast_post(post_json, author_id, visibility, is_dm)
     except Exception as e:
+        print(f"[TIMING] _broadcast_timeline EXCEPTION: {e}")
         logger.warning("Failed to broadcast timeline: %s", e)
+    print(f"[TIMING] _broadcast_timeline THREAD END {_time.time()-_t0:.3f}s")
 
 
 @router.post("/posts")
