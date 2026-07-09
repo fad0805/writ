@@ -4,8 +4,8 @@
   "description": "작가를 위한 소셜 네트워크",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#1a1a2e",
-  "theme_color": "#1a1a2e",
+  "background_color": "#689f38",
+  "theme_color": "#689f38",
   "orientation": "portrait",
   "categories": ["social", "books", "writing"],
   "icons": [
