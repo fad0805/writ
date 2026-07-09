@@ -67,7 +67,7 @@ export default function MigratePage() {
 
   return (
     <>
-      <div className="page-header"><h2><Icon name="direct" /> 계정 이전</h2></div>
+      <div className="page-header"><h2><Icon name="settings" /> 설정 관리</h2></div>
       <SettingsNav current="migrate" />
       {msg && <p style={{ color: "var(--accent)", fontWeight: 600, marginBottom: 12 }}>{msg}</p>}
 
