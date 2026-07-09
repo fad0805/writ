@@ -139,7 +139,7 @@ export default function SettingsPage() {
                 else alert("실패");
               } catch { alert("오류"); }
             }} className="btn btn-primary btn-small">비활성화 해제</button>
-            <a href="/api/settings/export" className="btn btn-outline btn-small" download>데이터 내려받기</a>
+            <a href="/users/settings/export" className="btn btn-outline btn-small">데이터 내려받기</a>
           </div>
         </div>
       )}

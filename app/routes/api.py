@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PendingDelivery, get_session
-from app.routes.auth import require_auth, get_current_user
+from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.log_utils import log_admin_action
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
@@ -508,6 +508,8 @@ def api_timeline(request: Request, tl_type: str, limit: int = Query(10), offset:
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    if getattr(user, 'is_deactivated', False):
+        return JSONResponse({"error": "Account deactivated"}, status_code=403)
     if tl_type not in TIMELINE_LABELS:
         tl_type = "home"
     with get_session() as s:
@@ -612,7 +614,7 @@ def api_create_post(
     share_url: str = Form(""),
     media_attachments: str = Form("[]"),
 ):
-    user = require_auth(request)
+    user = require_active_auth(request)
     if share_url:
         if "/episodes/" in share_url:
             content = content + "\n\nepisode: " + share_url
@@ -699,7 +701,7 @@ def api_create_post(
 
 @router.post("/posts/{post_id}/edit")
 def api_edit_post(request: Request, post_id: int, content: str = Form(...), summary: str = Form("")):
-    user = require_auth(request)
+    user = require_active_auth(request)
     if not content.strip():
         raise HTTPException(status_code=400, detail="Content cannot be empty")
     with get_session() as s:
@@ -716,7 +718,7 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
 
 @router.post("/posts/{post_id}/delete")
 def api_delete_post(request: Request, post_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id).first()
         if not post:
@@ -737,7 +739,7 @@ def api_delete_post(request: Request, post_id: int):
 
 @router.post("/reports")
 def api_create_report(request: Request, target_type: str = Form(...), target_id: int = Form(...), reason: str = Form(...), forward_to_remote: bool = Form(False), rule_ids: str = Form("")):
-    user = require_auth(request)
+    user = require_active_auth(request)
     target_type = target_type.strip().lower()
     if target_type not in ("post", "novel", "episode"):
         raise HTTPException(status_code=400, detail="Invalid target_type")
@@ -818,7 +820,7 @@ def api_list_rules():
 
 @router.post("/posts/{post_id}/like")
 def api_like_post(request: Request, post_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
@@ -835,7 +837,7 @@ def api_like_post(request: Request, post_id: int):
 
 @router.post("/posts/{post_id}/unlike")
 def api_unlike_post(request: Request, post_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
@@ -853,7 +855,7 @@ def api_unlike_post(request: Request, post_id: int):
 
 @router.post("/posts/{post_id}/boost")
 def api_boost_post(request: Request, post_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
@@ -877,7 +879,7 @@ def api_boost_post(request: Request, post_id: int):
 
 @router.post("/posts/{post_id}/bookmark")
 def api_bookmark_post(request: Request, post_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
@@ -891,7 +893,7 @@ def api_bookmark_post(request: Request, post_id: int):
 
 @router.post("/posts/{post_id}/unbookmark")
 def api_unbookmark_post(request: Request, post_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         existing = s.query(Bookmark).filter_by(user_id=user.id, post_id=post_id).first()
         if existing:
@@ -902,7 +904,7 @@ def api_unbookmark_post(request: Request, post_id: int):
 
 @router.get("/bookmarks")
 def api_bookmarks(request: Request, limit: int = Query(20), offset: int = Query(0)):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         raw = s.query(Bookmark).filter_by(user_id=user.id).order_by(desc(Bookmark.created_at)).offset(offset).limit(limit + 1).all()
         has_more = len(raw) > limit
@@ -912,7 +914,7 @@ def api_bookmarks(request: Request, limit: int = Query(20), offset: int = Query(
 
 @router.get("/favorites")
 def api_favorites(request: Request, limit: int = Query(10), offset: int = Query(0)):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         raw = s.query(Like).filter_by(user_id=user.id).order_by(desc(Like.created_at)).offset(offset).limit(limit + 1).all()
         has_more = len(raw) > limit
@@ -922,7 +924,7 @@ def api_favorites(request: Request, limit: int = Query(10), offset: int = Query(
 
 @router.post("/posts/{post_id}/unboost")
 def api_unboost_post(request: Request, post_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
@@ -943,7 +945,7 @@ def api_unboost_post(request: Request, post_id: int):
 
 @router.post("/pin/post/{post_id}")
 def api_pin_post(request: Request, post_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id).first()
         if not post or post.author_id != user.id:
@@ -961,7 +963,7 @@ def api_pin_post(request: Request, post_id: int):
 
 @router.post("/unpin/post/{post_id}")
 def api_unpin_post(request: Request, post_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         pinned = list(user.pinned_posts or [])
         if post_id in pinned:
@@ -973,7 +975,7 @@ def api_unpin_post(request: Request, post_id: int):
 
 @router.post("/pin/series/{novel_id}")
 def api_pin_series(request: Request, novel_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         from app.models import Novel
         novel = s.query(Novel).filter_by(id=novel_id).first()
@@ -992,7 +994,7 @@ def api_pin_series(request: Request, novel_id: int):
 
 @router.post("/unpin/series/{novel_id}")
 def api_unpin_series(request: Request, novel_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         pinned = list(user.pinned_series or [])
         if novel_id in pinned:
@@ -1224,7 +1226,7 @@ def api_user_media(request: Request, username: str, limit: int = Query(12), offs
 
 @router.post("/users/{username}/follow")
 def api_follow(request: Request, username: str):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         target = s.query(User).filter_by(username=username, is_remote=False).first()
         if not target:
@@ -1247,7 +1249,7 @@ def api_follow(request: Request, username: str):
 
 @router.post("/users/{username}/approve-follow")
 def api_approve_follow(request: Request, username: str):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         target = s.query(Follow).filter_by(
             following_id=user.id
@@ -1263,7 +1265,7 @@ def api_approve_follow(request: Request, username: str):
 
 @router.post("/users/{username}/remove-follower")
 def api_remove_follower(request: Request, username: str):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         follower = s.query(User).filter_by(username=username).first()
         if not follower:
@@ -1292,7 +1294,7 @@ def api_list_follow_requests(request: Request):
 
 @router.post("/users/{username}/reject-follow")
 def api_reject_follow(request: Request, username: str):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         target = s.query(Follow).filter_by(
             following_id=user.id
@@ -1308,7 +1310,7 @@ def api_reject_follow(request: Request, username: str):
 
 @router.post("/users/{username}/unfollow")
 def api_unfollow(request: Request, username: str):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         target = s.query(User).filter_by(username=username, is_remote=False).first()
         if not target:
@@ -1591,7 +1593,7 @@ def _novel_json(n, s=None):
 def api_create_novel(request: Request, title: str = Form(...), description: str = Form(""),
                      tags: str = Form(""), visibility: str = Form("public"),
                      cover_image: UploadFile = File(None)):
-    user = require_auth(request)
+    user = require_active_auth(request)
     if getattr(user, 'is_deceased', False):
         raise HTTPException(status_code=403, detail="고인 계정은 시리즈를 생성할 수 없습니다.")
     if not title.strip():
@@ -1673,7 +1675,7 @@ def api_get_novel(request: Request, novel_id: int):
 
 @router.post("/series/{novel_id}/follow")
 def api_follow_novel(request: Request, novel_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         novel = s.query(Novel).filter_by(id=novel_id).first()
         if not novel:
@@ -1688,7 +1690,7 @@ def api_follow_novel(request: Request, novel_id: int):
 
 @router.post("/series/{novel_id}/unfollow")
 def api_unfollow_novel(request: Request, novel_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         s.query(SeriesFollow).filter_by(user_id=user.id, novel_id=novel_id).delete()
         s.commit()
@@ -1699,7 +1701,7 @@ def api_unfollow_novel(request: Request, novel_id: int):
 def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), description: str = Form(""),
                    tags: str = Form(""), visibility: str = Form("public"), status: str = Form("ongoing"),
                    cover_image: UploadFile = File(None), remove_cover: bool = Form(False)):
-    user = require_auth(request)
+    user = require_active_auth(request)
     if not title.strip():
         raise HTTPException(status_code=400, detail="Title cannot be empty")
     if visibility not in ("public", "unlisted", "private"):
@@ -1766,7 +1768,7 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
                        summary: str = Form(""), comment: str = Form(""),
                        announce: bool = Form(False), announce_comment: str = Form(""),
                        is_published: bool = Form(True)):
-    user = require_auth(request)
+    user = require_active_auth(request)
     if getattr(user, 'is_deceased', False):
         raise HTTPException(status_code=403, detail="고인 계정은 에피소드를 생성할 수 없습니다.")
     if not title.strip() or not content.strip():
@@ -1910,7 +1912,7 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
                      summary: str = Form(""), comment: str = Form(""),
                      is_published: bool = Form(True), announce: bool = Form(False),
                      visibility: str = Form("public"), announce_comment: str = Form("")):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         episode = s.query(Episode).filter_by(id=episode_id, novel_id=novel_id).first()
         if not episode or episode.novel.author_id != user.id:
@@ -1966,7 +1968,7 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
 
 @router.post("/series/{novel_id}/episodes/{episode_id}/delete")
 def api_delete_episode(request: Request, novel_id: int, episode_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         episode = s.query(Episode).filter_by(id=episode_id, novel_id=novel_id).first()
         if not episode or episode.novel.author_id != user.id:
@@ -1978,7 +1980,7 @@ def api_delete_episode(request: Request, novel_id: int, episode_id: int):
 
 @router.post("/series/{novel_id}/delete")
 def api_delete_novel(request: Request, novel_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         novel = s.query(Novel).filter_by(id=novel_id, author_id=user.id).first()
         if not novel:
@@ -2160,7 +2162,7 @@ MAX_VIDEO_SIZE = 26214400
 
 @router.post("/media/upload")
 def api_upload_media(request: Request, file: UploadFile = File(...)):
-    user = require_auth(request)
+    user = require_active_auth(request)
     from app.utils.storage import get_storage
     storage = get_storage()
     from PIL import Image as PILImage
@@ -2339,24 +2341,61 @@ def api_reactivate_account(request: Request):
 
 
 @router.get("/settings/export")
-def api_export_account(request: Request):
+def api_export_account(request: Request, type: str = Query("relationships")):
     user = require_auth(request)
     import csv, io
+    buf = io.StringIO()
+    w = csv.writer(buf)
     with get_session() as s:
-        buf = io.StringIO()
-        w = csv.writer(buf)
-        w.writerow(["type", "id", "title", "content", "created_at"])
-        posts = s.query(Post).filter_by(author_id=user.id, is_deleted=False).all()
-        for p in posts:
-            w.writerow(["post", p.id, "", p.content or "", str(p.created_at)])
-        novels = s.query(Novel).filter_by(author_id=user.id).all()
-        for n in novels:
-            w.writerow(["novel", n.id, n.title, n.description or "", str(n.created_at)])
-            episodes = s.query(Episode).filter_by(novel_id=n.id).all()
-            for ep in episodes:
-                w.writerow(["episode", ep.id, ep.title, ep.content[:200] if ep.content else "", str(ep.created_at)])
-        from fastapi.responses import PlainTextResponse
-        return PlainTextResponse(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=export.csv"})
+        if type == "relationships":
+            w.writerow(["type", "id", "target", "created_at"])
+            follows = s.query(Follow).filter_by(follower_id=user.id, accepted=True).all()
+            for f in follows:
+                target = s.query(User).get(f.following_id)
+                if target:
+                    w.writerow(["follow", f.id, target.username, str(f.created_at)])
+            mutes = s.query(UserMute).filter_by(user_id=user.id).all()
+            for m in mutes:
+                target = s.query(User).get(m.target_user_id)
+                if target:
+                    w.writerow(["mute", m.id, target.username, str(m.created_at)])
+            blocks = s.query(UserBlock).filter_by(user_id=user.id).all()
+            for b in blocks:
+                target = s.query(User).get(b.target_user_id)
+                if target:
+                    w.writerow(["block", b.id, target.username, str(b.created_at)])
+            bookmarks = s.query(Bookmark).filter_by(user_id=user.id).all()
+            for bm in bookmarks:
+                w.writerow(["bookmark", bm.id, bm.post_id, str(bm.created_at)])
+            kw_mutes = s.query(KeywordMute).filter_by(user_id=user.id).all()
+            for kw in kw_mutes:
+                w.writerow(["keyword_mute", kw.id, kw.keyword, kw.mode or "or"])
+        elif type == "posts":
+            w.writerow(["type", "id", "content", "created_at"])
+            posts = s.query(Post).filter_by(author_id=user.id, is_deleted=False).all()
+            for p in posts:
+                w.writerow(["post", p.id, p.content or "", str(p.created_at)])
+        else:
+            raise HTTPException(status_code=400, detail="Invalid type")
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={type}.csv"})
+
+
+@router.post("/settings/archive-request")
+def api_archive_request(request: Request):
+    user = require_auth(request)
+    with get_session() as s:
+        admins = s.query(User).filter(User.role.in_(["admin", "moderator", "owner"])).all()
+        for admin in admins:
+            if admin.id == user.id:
+                continue
+            s.add(Notification(
+                user_id=admin.id, from_user_id=user.id,
+                notification_type="moderation",
+                metadata_json=json.dumps({"type": "archive_request", "user_id": user.id, "username": user.username}),
+            ))
+        s.commit()
+    return {"ok": True, "message": "아카이브 요청이 접수되었습니다."}
 
 
 def _save_profile_image(user_id: int, file: UploadFile, prefix: str, max_size: tuple[int, int], storage) -> str:
@@ -2381,7 +2420,7 @@ def api_update_profile(request: Request, display_name: str = Form(""), summary: 
                        custom_fields: str = Form("[]"), profile_hashtags: str = Form("[]"),
                        remove_avatar: bool = Form(False), remove_header: bool = Form(False)):
     from app.utils.storage import get_storage
-    user = require_auth(request)
+    user = require_active_auth(request)
     storage = get_storage()
     with get_session() as s:
         db = s.query(User).filter_by(id=user.id).first()
@@ -4325,7 +4364,7 @@ def api_list_user_mutes(request: Request):
 
 @router.post("/mutes/users/{target_user_id}")
 def api_mute_user(request: Request, target_user_id: int, duration: int = Form(0), hide_notifications: bool = Form(False)):
-    user = require_auth(request)
+    user = require_active_auth(request)
     if user.id == target_user_id:
         raise HTTPException(status_code=400, detail="Cannot mute yourself")
     with get_session() as s:
@@ -4342,7 +4381,7 @@ def api_mute_user(request: Request, target_user_id: int, duration: int = Form(0)
 
 @router.delete("/mutes/users/{target_user_id}")
 def api_unmute_user(request: Request, target_user_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         s.query(UserMute).filter_by(user_id=user.id, target_user_id=target_user_id).delete()
         s.commit()
@@ -4359,7 +4398,7 @@ def api_list_user_blocks(request: Request):
 
 @router.post("/blocks/users/{target_user_id}")
 def api_block_user(request: Request, target_user_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     if user.id == target_user_id:
         raise HTTPException(status_code=400, detail="Cannot block yourself")
     with get_session() as s:
@@ -4376,7 +4415,7 @@ def api_block_user(request: Request, target_user_id: int):
 
 @router.delete("/blocks/users/{target_user_id}")
 def api_unblock_user(request: Request, target_user_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         s.query(UserBlock).filter_by(user_id=user.id, target_user_id=target_user_id).delete()
         s.commit()
@@ -4394,7 +4433,7 @@ def api_list_series_mutes(request: Request):
 
 @router.post("/mutes/series/{novel_id}")
 def api_mute_series(request: Request, novel_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         existing = s.query(SeriesMute).filter_by(user_id=user.id, novel_id=novel_id).first()
         if existing:
@@ -4406,7 +4445,7 @@ def api_mute_series(request: Request, novel_id: int):
 
 @router.delete("/mutes/series/{novel_id}")
 def api_unmute_series(request: Request, novel_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         s.query(SeriesMute).filter_by(user_id=user.id, novel_id=novel_id).delete()
         s.commit()
@@ -4424,7 +4463,7 @@ def api_list_keyword_mutes(request: Request):
 
 @router.post("/mutes/keywords")
 def api_add_keyword_mute(request: Request, keyword: str = Form(...), mode: str = Form("or"), is_regex: bool = Form(False), name: str = Form("")):
-    user = require_auth(request)
+    user = require_active_auth(request)
     kw = keyword.strip()
     if not kw:
         raise HTTPException(status_code=400, detail="Keyword cannot be empty")
@@ -4447,7 +4486,7 @@ def api_add_keyword_mute(request: Request, keyword: str = Form(...), mode: str =
 
 @router.delete("/mutes/keywords/{mute_id}")
 def api_remove_keyword_mute(request: Request, mute_id: int):
-    user = require_auth(request)
+    user = require_active_auth(request)
     with get_session() as s:
         s.query(KeywordMute).filter_by(id=mute_id, user_id=user.id).delete()
         s.commit()
