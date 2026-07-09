@@ -4794,13 +4794,13 @@ def api_pwa_favicon():
     try:
         data = storage.get("pwa/favicon.png")
         if data:
-            return Response(content=data, media_type="image/png")
+            return Response(content=data, media_type="image/png", headers={"Cache-Control": "no-cache, max-age=0"})
     except Exception:
         pass
     import os
     default_path = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "favicon.ico")
     if os.path.exists(default_path):
-        return FileResponse(default_path, media_type="image/x-icon")
+        return FileResponse(default_path, media_type="image/x-icon", headers={"Cache-Control": "no-cache, max-age=0"})
     return JSONResponse({"error": "Not found"}, status_code=404)
 
 
