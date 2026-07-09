@@ -156,6 +156,22 @@ export default function RightSidebar() {
                   </Link>
                 );
               }
+              if (n.metadata?.type === "migrate_request") {
+                const fromName = n.from_user?.display_name || n.from_user?.username || "알 수 없음";
+                return (
+                  <div key={n.id} className="mini-post-link" style={{ background: "var(--bg-tertiary)" }}>
+                    <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#e67e22" }}>
+                      <Icon name="direct" size={14} />
+                    </div>
+                    <div className="mini-post-content">
+                      <div className="text-sm" style={{ color: "var(--text)" }}>
+                        <strong>{fromName}</strong>
+                        <span style={{ color: "var(--text-muted)", marginLeft: 4 }}>님이 계정 이전을 요청했습니다</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
               const actionName = MODAL_ACTION_NAMES[n.metadata?.action] || n.metadata?.action || "중재";
               return (
                 <div key={n.id} className="mini-post-link" style={{ background: "var(--bg-tertiary)" }}>
