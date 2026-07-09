@@ -203,7 +203,14 @@ export default function TimelinePage() {
   return (
     <>
       <div className="post-form">
-        <PostForm onDone={() => setRefreshKey((k) => k + 1)} />
+        <PostForm onDone={(newPost) => {
+          if (newPost) {
+            setPosts((prev) => {
+              if (prev.some((p) => p.id === newPost.id)) return prev;
+              return [newPost, ...prev];
+            });
+          }
+        }} />
       </div>
       <div className="timeline-tabs">
         {TABS.map((t) => (

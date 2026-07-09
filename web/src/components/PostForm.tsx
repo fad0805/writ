@@ -11,7 +11,7 @@ import { useAuth } from "@/lib/auth";
 
 const MAX_LENGTH = 500;
 
-export default function PostForm({ parentId, onDone, placeholder, initialContent, initialVisibility, shareUrl }: { parentId?: number; onDone?: () => void; placeholder?: string; initialContent?: string; initialVisibility?: string; shareUrl?: string }) {
+export default function PostForm({ parentId, onDone, placeholder, initialContent, initialVisibility, shareUrl }: { parentId?: number; onDone?: (post?: any) => void; placeholder?: string; initialContent?: string; initialVisibility?: string; shareUrl?: string }) {
   const [content, setContent] = useState(initialContent || "");
   const [summary, setSummary] = useState("");
   const { user: authUser } = useAuth();
@@ -465,9 +465,9 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         const res = await fetch("/api/media/upload", { method: "POST", credentials: "include", body: formData });
         if (res.ok) { const d = await res.json(); uploaded.push({ url: d.url, type: d.type }); }
       }
-      await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrl, media_attachments: JSON.stringify(uploaded) });
+      const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrl, media_attachments: JSON.stringify(uploaded) });
       setContent(""); setSummary(""); setMediaItems([]);
-      if (onDone) onDone();
+      if (onDone) onDone(result);
       else router.refresh();
     } catch (err: unknown) { alert(err instanceof Error ? err.message : "오류가 발생했습니다"); }
     setSubmitting(false);

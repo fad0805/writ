@@ -490,8 +490,8 @@ async def api_timeline_stream(request: Request, tl_type: str = "home"):
     if tl_type not in TIMELINE_LABELS:
         tl_type = "home"
     sid, q = add_stream(user.id, tl_type)
-    try:
-        async def event_gen():
+    async def event_gen():
+        try:
             while True:
                 if await request.is_disconnected():
                     break
@@ -500,9 +500,9 @@ async def api_timeline_stream(request: Request, tl_type: str = "home"):
                     yield f"data: {payload}\n\n"
                 except asyncio.TimeoutError:
                     yield ":keepalive\n\n"
-        return StreamingResponse(event_gen(), media_type="text/event-stream")
-    finally:
-        remove_stream(sid)
+        finally:
+            remove_stream(sid)
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
 
 
 # ── Post CRUD ──
@@ -585,15 +585,10 @@ def _broadcast_federation(user, post, visibility):
 
 def _broadcast_timeline(post_json, author_id, visibility, is_dm):
     """Deliver post to connected timeline streams (background thread)."""
-    import time as _time
-    _t0 = _time.time()
-    print(f"[TIMING] _broadcast_timeline THREAD STARTED vis={visibility} is_dm={is_dm}")
     try:
         broadcast_post(post_json, author_id, visibility, is_dm)
     except Exception as e:
-        print(f"[TIMING] _broadcast_timeline EXCEPTION: {e}")
         logger.warning("Failed to broadcast timeline: %s", e)
-    print(f"[TIMING] _broadcast_timeline THREAD END {_time.time()-_t0:.3f}s")
 
 
 @router.post("/posts")
@@ -607,10 +602,7 @@ def api_create_post(
     share_url: str = Form(""),
     media_attachments: str = Form("[]"),
 ):
-    import time as _time
-    _t0 = _time.time()
     user = require_auth(request)
-    print(f"[TIMING] require_auth: {_time.time()-_t0:.3f}s")
     if share_url:
         if "/episodes/" in share_url:
             content = content + "\n\nepisode: " + share_url
@@ -636,13 +628,10 @@ def api_create_post(
                 if vis_order.get(parent_vis, 0) > vis_order.get(visibility, 0):
                     visibility = parent_vis
 
-    _t_parse = _time.time()
     mentioned_ids = _parse_mentions(content)
     if dm_target_id and dm_target_id not in mentioned_ids:
         mentioned_ids.append(dm_target_id)
-    print(f"[TIMING] _parse_mentions: {_time.time()-_t_parse:.3f}s")
     with get_session() as s:
-        print(f"[TIMING] session open: {_time.time()-_t0:.3f}s")
         import secrets
         post_number = secrets.token_hex(4)
         post = Post(
@@ -672,7 +661,6 @@ def api_create_post(
             if parent:
                 pass
         s.commit()
-        print(f"[TIMING] first commit (post+tags): {_time.time()-_t0:.3f}s")
 
         # notify mentioned users
         for mu_id in mentioned_ids:
@@ -685,24 +673,17 @@ def api_create_post(
                 notif = Notification(user_id=parent.author_id, from_user_id=user.id, notification_type="reply", post_id=post.id)
                 s.add(notif)
         s.commit()
-        print(f"[TIMING] second commit (notifications): {_time.time()-_t0:.3f}s")
 
         # Async federation broadcast (background thread so it doesn't block response)
         threading.Thread(target=_broadcast_federation, args=(user, post, visibility), daemon=True).start()
 
-        _t_bc = _time.time()
         try:
             broadcast("new_post", {"post_id": post.id, "author_id": user.id})
         except Exception as e:
             logger.warning("Failed to broadcast new_post event: %s", e)
-        print(f"[TIMING] broadcast new_post: {_time.time()-_t_bc:.3f}s")
 
-        _t_pj = _time.time()
         pj = _post_json(post, s, user)
-        print(f"[TIMING] _post_json: {_time.time()-_t_pj:.3f}s")
-
         threading.Thread(target=_broadcast_timeline, args=(pj, user.id, visibility, bool(dm_target_id)), daemon=True).start()
-        print(f"[TIMING] TOTAL api_create_post: {_time.time()-_t0:.3f}s")
         return pj
 
 
@@ -1437,8 +1418,8 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
 async def api_notifications_stream(request: Request):
     user = require_auth(request)
     sid, q = add_notif_stream()
-    try:
-        async def event_gen():
+    async def event_gen():
+        try:
             while True:
                 if await request.is_disconnected():
                     break
@@ -1447,9 +1428,9 @@ async def api_notifications_stream(request: Request):
                     yield f"data: {payload}\n\n"
                 except asyncio.TimeoutError:
                     yield ":keepalive\n\n"
-        return StreamingResponse(event_gen(), media_type="text/event-stream")
-    finally:
-        remove_notif_stream(sid)
+        finally:
+            remove_notif_stream(sid)
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
 
 
 # ── Novels / Episodes API ──
