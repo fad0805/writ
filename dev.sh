@@ -27,6 +27,9 @@ if [ -d "$ROOT_DIR/web" ]; then
     (cd "$ROOT_DIR/web" && npm install --silent)
 fi
 
+# Docker PostgreSQL 볼륨 정리 (watchfiles 권한 충돌 방지)
+rm -rf "$ROOT_DIR/db_data"
+
 # ── 포트 충돌 감지 및 대체 포트 할당 ──
 
 _find_port() {
