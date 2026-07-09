@@ -24,6 +24,8 @@ export default function EpisodeDetailPage() {
   const [reportReason, setReportReason] = useState("");
   const [reportError, setReportError] = useState("");
   const [reportDone, setReportDone] = useState(false);
+  const [reportRules, setReportRules] = useState<any[]>([]);
+  const [selectedRuleIds, setSelectedRuleIds] = useState<number[]>([]);
 
   useEffect(() => {
     api.getEpisode(Number(params.id), Number(params.eid))
@@ -59,7 +61,7 @@ export default function EpisodeDetailPage() {
             {novel?.visibility !== "private" && <ShareButton url={`/series/${novel.id}/episodes/${episode.id}`} />}
             {user && <button className="action-btn" onClick={() => setShowSharePost(true)} title="포스트로 공유"><Icon name="edit" /></button>}
             {user && !isMine && (
-              <button className="action-btn" onClick={() => { setShowReport(true); setReportReason(""); setReportError(""); setReportDone(false); }} title="신고">
+              <button className="action-btn" onClick={() => { setShowReport(true); setReportReason(""); setReportError(""); setReportDone(false); setSelectedRuleIds([]); fetch("/api/rules").then((r) => r.json()).then((d) => setReportRules(d)).catch(() => {}); }} title="신고">
                 <Icon name="flag" />
               </button>
             )}
@@ -120,6 +122,18 @@ export default function EpisodeDetailPage() {
               <p style={{ color: "var(--text-secondary)", margin: "16px 0" }}>신고가 접수되었습니다. 검토 후 조치하겠습니다.</p>
             ) : (
               <>
+                {reportRules.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    {reportRules.map((rule) => (
+                      <label key={rule.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", cursor: "pointer", fontSize: "0.9em" }}>
+                        <input type="checkbox" checked={selectedRuleIds.includes(rule.id)} onChange={(e) => {
+                          setSelectedRuleIds((prev) => e.target.checked ? [...prev, rule.id] : prev.filter((id) => id !== rule.id));
+                        }} />
+                        {rule.title}
+                      </label>
+                    ))}
+                  </div>
+                )}
                 <textarea
                   value={reportReason}
                   onChange={(e) => setReportReason(e.target.value)}
@@ -130,7 +144,7 @@ export default function EpisodeDetailPage() {
                 <button onClick={async () => {
                   if (reportReason.trim().length < 10) { setReportError("최소 10자 이상 입력해주세요."); return; }
                   setReportError("");
-                  try { await api.report("episode", episode.id, reportReason.trim()); setReportDone(true); }
+                  try { await api.report("episode", episode.id, reportReason.trim(), selectedRuleIds); setReportDone(true); }
                   catch (e: any) { setReportError(e.message || "신고 처리 중 오류가 발생했습니다."); }
                 }} className="btn" style={{ width: "100%" }}>신고 제출</button>
               </>

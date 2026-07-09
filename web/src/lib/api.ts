@@ -214,8 +214,8 @@ export const api = {
   getNotices: (novel_id: number) => request<NoticeData[]>(`/api/series/${novel_id}/notices`),
 
   // Reports
-  report: (target_type: string, target_id: number, reason: string) =>
-    formRequest<{ ok: boolean; report_id: number }>("/api/reports", { target_type, target_id, reason }),
+  report: (target_type: string, target_id: number, reason: string, rule_ids?: number[]) =>
+    formRequest<{ ok: boolean; report_id: number }>("/api/reports", { target_type, target_id, reason, rule_ids: rule_ids ? JSON.stringify(rule_ids) : "" }),
 
   // Explore
   explore: () => request<{ posts: PostData[]; novels: NovelData[] }>("/api/explore"),

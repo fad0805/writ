@@ -18,12 +18,20 @@ interface TargetInfo {
   is_deleted?: boolean;
 }
 
+interface RuleInfo {
+  id: number;
+  title: string;
+  description: string;
+}
+
 interface ReportDetail {
   id: number;
   reporter: { id: number; username: string; display_name: string };
   target_type: string;
   target_id: number;
   reason: string;
+  rule_ids?: number[];
+  rules?: RuleInfo[];
   status: string;
   created_at: string | null;
   target?: TargetInfo;
@@ -179,6 +187,18 @@ export default function ReportDetailPage() {
           <div className="report-label">신고 사유</div>
           <div style={{ fontSize: 14, whiteSpace: "pre-wrap", background: "var(--bg-tertiary)", padding: 12, borderRadius: 8, lineHeight: 1.6 }}>{report.reason}</div>
         </div>
+
+        {/* Rules */}
+        {report.rules && report.rules.length > 0 && (
+          <div className="report-section">
+            <div className="report-label">위반 규칙</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {report.rules.map((rule) => (
+                <span key={rule.id} className="badge badge-warning">{rule.title}</span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Resolver */}
         {report.resolved_by && (

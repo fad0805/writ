@@ -11,6 +11,8 @@ interface Report {
   target_type: string;
   target_id: number;
   reason: string;
+  rule_ids?: number[];
+  rules?: { id: number; title: string; description: string }[];
   status: string;
   created_at: string | null;
   target?: any;
@@ -105,6 +107,13 @@ export default function AdminReportsPage() {
                     : `#${r.target_id}`}
                 </span>
               </div>
+              {r.rules && r.rules.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "4px 12px 0" }}>
+                  {r.rules.map((rule: any) => (
+                    <span key={rule.id} className="badge badge-warning" style={{ fontSize: 11 }}>{rule.title}</span>
+                  ))}
+                </div>
+              )}
               <div className="report-card-reason">{r.reason.slice(0, 100)}{r.reason.length > 100 ? "..." : ""}</div>
               <div className="report-card-footer">
                 <span className="report-card-time">{r.created_at ? new Date(r.created_at).toLocaleString("ko-KR") : ""}</span>

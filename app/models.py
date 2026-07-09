@@ -468,6 +468,17 @@ class ProfileNote(Base):
     target = relationship("User", foreign_keys=[target_user_id], lazy="selectin")
 
 
+class ServerRule(Base):
+    __tablename__ = "server_rules"
+
+    id = Column(Integer, primary_key=True)
+    title = Column(String(256), nullable=False)
+    description = Column(Text, default="")
+    sort_order = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now)
+    updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
+
+
 class Report(Base):
     __tablename__ = "reports"
 
@@ -476,6 +487,7 @@ class Report(Base):
     target_type = Column(String(32), nullable=False)  # post, novel, episode
     target_id = Column(Integer, nullable=False)
     reason = Column(Text, nullable=False)
+    rule_ids = Column(JSON, default=list)
     status = Column(String(16), default="pending", nullable=False)  # pending, resolved, dismissed
     forward_to_remote = Column(Boolean, default=False)
     resolved_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)

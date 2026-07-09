@@ -108,6 +108,10 @@ export default function Sidebar() {
           <NavItem href="/series" active={isActive("/series")}>
             <Icon name="books_solid" /> 모든 시리즈
           </NavItem>
+          <li className="nav-divider" />
+          <NavItem href="/rules" active={isActive("/rules")}>
+            <Icon name="shield" /> 서버 규칙
+          </NavItem>
         </ul>
         <div className="spacer" />
         <button className="theme-toggle" onClick={toggleTheme}>
