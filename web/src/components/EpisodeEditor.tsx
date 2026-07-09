@@ -15,14 +15,25 @@ const AlignableImage = Image.extend({
       alt: { default: null },
       "data-align": { default: "center" },
       "data-width": { default: "75" },
+      "data-wrap": { default: "true" },
     };
   },
   renderHTML({ node, HTMLAttributes }) {
     const w = node.attrs["data-width"] as string;
-    return ["img", { ...HTMLAttributes, style: `width:${w}%` }];
+    const align = node.attrs["data-align"] as string;
+    const wrap = node.attrs["data-wrap"] as string;
+    const style = `width:${w}%`;
+    return ["img", { ...HTMLAttributes, style }];
   },
   parseHTML() {
-    return [{ tag: "img[style*=width]" }];
+    return [{
+      tag: "img",
+      getAttrs: (el) => ({
+        "data-align": (el as HTMLElement).getAttribute("data-align") || "center",
+        "data-width": (el as HTMLElement).getAttribute("data-width") || "75",
+        "data-wrap": (el as HTMLElement).getAttribute("data-wrap") || "true",
+      }),
+    }];
   },
 });
 
@@ -75,16 +86,22 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
     return val;
   };
 
+  const setImgAttr = (key: string, val: string) => {
+    if (!editor) return;
+    const { from, to } = editor.state.selection;
+    editor.state.doc.nodesBetween(from, to, (node, pos) => {
+      if (node.type.name === "image") {
+        editor.chain().focus().setNodeSelection(pos).updateAttributes("image", { [key]: val }).run();
+        return false;
+      }
+    });
+  };
+
   const align = (dir: string) => {
     if (!editor) return;
     if (editor.isActive("image")) {
-      const { from, to } = editor.state.selection;
-      editor.state.doc.nodesBetween(from, to, (node, pos) => {
-        if (node.type.name === "image") {
-          editor.chain().focus().setNodeSelection(pos).updateAttributes("image", { "data-align": dir }).run();
-          return false;
-        }
-      });
+      setImgAttr("data-align", dir);
+      if (dir === "center") setImgAttr("data-wrap", "true");
     } else {
       editor.chain().focus().setTextAlign(dir).run();
     }
@@ -100,15 +117,17 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
     const cur = imgAttr("data-width") || "75";
     const idx = SIZES.indexOf(cur);
     const next = SIZES[(idx + 1) % SIZES.length];
-    if (!editor) return;
-    const { from, to } = editor.state.selection;
-    editor.state.doc.nodesBetween(from, to, (node, pos) => {
-      if (node.type.name === "image") {
-        editor.chain().focus().setNodeSelection(pos).updateAttributes("image", { "data-width": next }).run();
-        return false;
-      }
-    });
+    setImgAttr("data-width", next);
   };
+
+  const toggleWrap = () => {
+    const cur = imgAttr("data-wrap");
+    setImgAttr("data-wrap", cur === "false" ? "true" : "false");
+  };
+
+  const isImageSelected = editor?.isActive("image") ?? false;
+  const imgAlign = imgAttr("data-align");
+  const imgWrap = imgAttr("data-wrap");
 
   return (
     <div className="episode-editor">
@@ -125,13 +144,18 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
         <button type="button" onClick={() => align("right")} data-active={isAlign("right")}>→</button>
         <span className="toolbar-sep" />
         <button type="button" onClick={() => fileRef.current?.click()} title="이미지 첨부">🖼</button>
-        <button type="button" onClick={cycleSize} title="이미지 크기">{editor?.isActive("image") ? `${imgAttr("data-width") || "75"}%` : "□"}</button>
+        <button type="button" onClick={cycleSize} title="이미지 크기">{isImageSelected ? `${imgAttr("data-width") || "75"}%` : "□"}</button>
+        {isImageSelected && imgAlign && imgAlign !== "center" && (
+          <button type="button" onClick={toggleWrap} data-active={imgWrap === "true"} title="텍스트 줄바꿈">{imgWrap === "true" ? "↩" : "↪"}</button>
+        )}
       </div>
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={handleImageUpload} />
       <EditorContent editor={editor} className="episode-editor-content" />
       <style>{`
-        .episode-editor-content img[data-align="left"] { float: left; margin: 0 16px 8px 0; }
-        .episode-editor-content img[data-align="right"] { float: right; margin: 0 0 8px 16px; }
+        .episode-editor-content img[data-align="left"][data-wrap="true"] { float: left; margin: 0 16px 8px 0; }
+        .episode-editor-content img[data-align="right"][data-wrap="true"] { float: right; margin: 0 0 8px 16px; }
+        .episode-editor-content img[data-align="left"][data-wrap="false"] { display: block; margin: 8px 0; }
+        .episode-editor-content img[data-align="right"][data-wrap="false"] { display: block; margin: 8px 0 8px auto; }
         .episode-editor-content img[data-align="center"] { display: block; margin: 8px auto; }
         .toolbar-sep { display: inline-block; width: 1px; height: 20px; background: var(--border); margin: 0 4px; vertical-align: middle; }
       `}</style>
