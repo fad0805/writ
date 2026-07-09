@@ -35,9 +35,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <KeyboardShortcuts />
           <DeactivatedRedirect />
         </AuthProvider>
-        <script src="/register-sw.js" defer />
         <script dangerouslySetInnerHTML={{
           __html: `
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(function(regs) {
+                for (var r of regs) r.unregister();
+              });
+            }
             if (localStorage.getItem('theme') === 'dark') {
               document.body.classList.add('dark-theme');
             }
