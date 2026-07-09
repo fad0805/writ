@@ -58,7 +58,6 @@ export default function SettingsPage() {
     try {
       const form = new FormData();
       form.append("default_visibility", defaultVis);
-      form.append("default_visibility", defaultVis);
       form.append("show_badge", showBadge ? "true" : "");
       form.append("is_locked", isLocked ? "true" : "");
       form.append("is_bot", isBot ? "true" : "");

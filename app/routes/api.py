@@ -88,7 +88,6 @@ def _user_json(u):
         "is_bot": getattr(u, 'is_bot', False) or False,
         "pinned_posts": (u.pinned_posts or []) if hasattr(u, 'pinned_posts') else [],
         "pinned_series": (u.pinned_series or []) if hasattr(u, 'pinned_series') else [],
-        "series_default_visibility": u.series_default_visibility or "public",
         "episode_default_visibility": u.episode_default_visibility or "public",
         "follow_list_visibility": getattr(u, 'follow_list_visibility', 'public') or 'public',
         "custom_fields": (u.custom_fields or []) if hasattr(u, 'custom_fields') else [],
@@ -147,7 +146,6 @@ def _parse_mentions(content):
 
 def _sync_post_tags(post, s):
     """Parse #hashtags from post content and sync with Tag model."""
-    import re
     tags = set(re.findall(r'(?<!\w)#([\w_가-힣]+)', post.content))
     desired = set(t.lower() for t in tags)
     current = {t.name for t in (post.tag_list or [])}
@@ -1490,7 +1488,7 @@ def _novel_json(n, s=None):
     author = None
     if hasattr(n, 'author') and n.author:
         author = _user_json(n.author)
-    tag_names = " ".join(t.name for t in (n.tag_list or [])) if n.tag_list else (n.tags or "")
+    tag_names = " ".join(t.name for t in (n.tag_list or [])) or (n.tags or "")
     result = {
         "id": n.id,
         "number": n.number or "",
@@ -1952,7 +1950,6 @@ def _cleanup_avatars():
 
 @router.post("/settings/update")
 def api_update_settings(request: Request, default_visibility: str = Form("public"),
-                        series_default_visibility: str = Form("public"),
                         episode_default_visibility: str = Form("public"),
                         is_locked: bool = Form(False),
                         show_badge: bool = Form(False),
@@ -1960,11 +1957,8 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
                         follow_list_visibility: str = Form("public")):
     user = require_auth(request)
     valid_post = ("public", "home", "followers", "mention")
-    valid_series = ("public", "unlisted", "private")
     if default_visibility not in valid_post:
         default_visibility = "public"
-    if series_default_visibility not in valid_series:
-        series_default_visibility = "public"
     if episode_default_visibility not in valid_post:
         episode_default_visibility = "public"
     if follow_list_visibility not in ("public", "private"):
@@ -1972,7 +1966,6 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
     with get_session() as s:
         db = s.query(User).filter_by(id=user.id).first()
         db.default_visibility = default_visibility
-        db.series_default_visibility = series_default_visibility
         db.episode_default_visibility = episode_default_visibility
         db.is_locked = is_locked
         db.is_bot = is_bot
@@ -2953,8 +2946,9 @@ def api_admin_reset_password(request: Request, user_id: int):
             raise HTTPException(status_code=404, detail="User not found")
         u.password_hash = salt + ":" + hsh
         u.session_token = ""
+        target_username = u.username
         s.commit()
-    log_admin_action(user.id, user.username, "reset_password", target_type="user", target_id=user_id, target_username=u.username, ip_address=request.client.host if request.client else "")
+    log_admin_action(user.id, user.username, "reset_password", target_type="user", target_id=user_id, target_username=target_username, ip_address=request.client.host if request.client else "")
     return {"ok": True, "new_password": new_pass}
 
 
@@ -2970,8 +2964,9 @@ def api_admin_change_email(request: Request, user_id: int, email: str = Form(...
         old_email = u.email
         u.email = email
         u.email_verified = False
+        target_username = u.username
         s.commit()
-    log_admin_action(user.id, user.username, "admin_change_email", target_type="user", target_id=user_id, target_username=u.username, details=f"{old_email} -> {email}", ip_address=request.client.host if request.client else "")
+    log_admin_action(user.id, user.username, "admin_change_email", target_type="user", target_id=user_id, target_username=target_username, details=f"{old_email} -> {email}", ip_address=request.client.host if request.client else "")
     return {"ok": True}
 
 
@@ -2989,8 +2984,9 @@ def api_admin_change_role(request: Request, user_id: int, role: str = Form("user
         old_role = u.role
         u.role = role
         u.is_admin = role in ("admin", "owner")
+        target_username = u.username
         s.commit()
-    log_admin_action(user.id, user.username, "change_role", target_type="user", target_id=user_id, target_username=u.username, details=f"{old_role} -> {role}", ip_address=request.client.host if request.client else "")
+    log_admin_action(user.id, user.username, "change_role", target_type="user", target_id=user_id, target_username=target_username, details=f"{old_role} -> {role}", ip_address=request.client.host if request.client else "")
     return {"ok": True}
 
 
@@ -3026,7 +3022,8 @@ def api_admin_remove_avatar(request: Request, user_id: int):
             old_path = old.lstrip("/")
             if os.path.isfile(old_path):
                 os.remove(old_path)
-    log_admin_action(user.id, user.username, "remove_avatar", target_type="user", target_id=user_id, target_username=u.username, ip_address=request.client.host if request.client else "")
+        target_username = u.username
+    log_admin_action(user.id, user.username, "remove_avatar", target_type="user", target_id=user_id, target_username=target_username, ip_address=request.client.host if request.client else "")
     return {"ok": True}
 
 
@@ -3042,8 +3039,9 @@ def api_admin_suspend_users(request: Request, user_ids: str = Form(...)):
         for t in targets:
             t.is_suspended = True
         s.commit()
-    for t in targets:
-        log_admin_action(user.id, user.username, "suspend", target_type="user", target_id=t.id, target_username=t.username, ip_address=ip)
+        target_infos = [(t.id, t.username) for t in targets]
+    for t_id, t_username in target_infos:
+        log_admin_action(user.id, user.username, "suspend", target_type="user", target_id=t_id, target_username=t_username, ip_address=ip)
     return {"ok": True}
 
 
@@ -3059,8 +3057,9 @@ def api_admin_unsuspend_users(request: Request, user_ids: str = Form(...)):
         for t in targets:
             t.is_suspended = False
         s.commit()
-    for t in targets:
-        log_admin_action(user.id, user.username, "unsuspend", target_type="user", target_id=t.id, target_username=t.username, ip_address=ip)
+        target_infos = [(t.id, t.username) for t in targets]
+    for t_id, t_username in target_infos:
+        log_admin_action(user.id, user.username, "unsuspend", target_type="user", target_id=t_id, target_username=t_username, ip_address=ip)
     return {"ok": True}
 
 
@@ -3073,8 +3072,9 @@ def api_admin_user_note(request: Request, user_id: int, note: str = Form("")):
         u = s.query(User).get(user_id)
         if not u: raise HTTPException(status_code=404, detail="User not found")
         u.moderation_note = note
+        target_username = u.username
         s.commit()
-    log_admin_action(user.id, user.username, "set_note", target_type="user", target_id=user_id, target_username=u.username, details=note[:200], ip_address=request.client.host if request.client else "")
+    log_admin_action(user.id, user.username, "set_note", target_type="user", target_id=user_id, target_username=target_username, details=note[:200], ip_address=request.client.host if request.client else "")
     return {"ok": True}
 
 
@@ -3171,8 +3171,10 @@ def api_admin_toggle_sensitive(request: Request, user_id: int):
         if not u: raise HTTPException(status_code=404, detail="User not found")
         u.is_sensitive = not u.is_sensitive
         s.commit()
-    log_admin_action(user.id, user.username, f"toggle_sensitive:{u.is_sensitive}", target_type="user", target_id=user_id, target_username=u.username, ip_address=request.client.host if request.client else "")
-    return {"ok": True, "is_sensitive": u.is_sensitive}
+        target_username = u.username
+        is_sensitive = u.is_sensitive
+    log_admin_action(user.id, user.username, f"toggle_sensitive:{is_sensitive}", target_type="user", target_id=user_id, target_username=target_username, ip_address=request.client.host if request.client else "")
+    return {"ok": True, "is_sensitive": is_sensitive}
 
 
 @router.get("/admin/reports")
@@ -3339,7 +3341,8 @@ def api_admin_set_post_cw(request: Request, post_id: int, summary: str = Form(""
             summary = tag + summary
         post.summary = summary
         s.commit()
-    log_admin_action(user.id, user.username, "set_post_cw", target_type="post", target_id=post_id, target_username=f"@{post.author.username}", details=summary, ip_address=request.client.host if request.client else "")
+        author_username = post.author.username
+    log_admin_action(user.id, user.username, "set_post_cw", target_type="post", target_id=post_id, target_username=f"@{author_username}", details=summary, ip_address=request.client.host if request.client else "")
     return {"ok": True, "summary": summary}
 
 

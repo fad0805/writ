@@ -61,7 +61,6 @@ class User(Base):
     profile_image = Column(String(512), default="")
     header_image = Column(String(512), default="")
     default_visibility = Column(String(16), default="public")
-    series_default_visibility = Column(String(16), default="public")
     episode_default_visibility = Column(String(16), default="public")
     is_locked = Column(Boolean, default=False)
     show_badge = Column(Boolean, default=False)
@@ -97,6 +96,9 @@ class User(Base):
         return f"{BASE_URL}/users/{self.username}/outbox"
 
     def to_ap_actor(self):
+        tags = []
+        for ht in (getattr(self, 'profile_hashtags', None) or []):
+            tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={ht}", "name": f"#{ht}"})
         result = {
             "@context": [
                 "https://www.w3.org/ns/activitystreams",
@@ -117,14 +119,24 @@ class User(Base):
                 "owner": self.actor_uri(),
                 "publicKeyPem": self.public_key,
             },
-            "manuallyApprovesFollowers": self.is_locked if hasattr(self, 'is_locked') and self.is_locked else False,
+            "published": (self.created_at.isoformat() if self.created_at else ""),
+            "discoverable": True,
+            "manuallyApprovesFollowers": bool(self.is_locked),
         }
+        if tags:
+            result["tag"] = tags
         if self.profile_image:
             result["icon"] = {"type": "Image", "url": self.profile_image}
         if self.header_image:
             result["image"] = {"type": "Image", "url": self.header_image}
-        if hasattr(self, 'shared_inbox_url') and self.shared_inbox_url:
+        if self.shared_inbox_url:
             result["endpoints"] = {"sharedInbox": self.shared_inbox_url}
+        custom_fields = getattr(self, 'custom_fields', None) or []
+        if custom_fields:
+            result["attachment"] = [
+                {"type": "PropertyValue", "name": cf.get("name", ""), "value": cf.get("value", "")}
+                for cf in custom_fields if cf.get("name") and cf.get("value")
+            ]
         return result
 
 

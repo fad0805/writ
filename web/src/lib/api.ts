@@ -44,7 +44,6 @@ export interface User {
   email_verified?: boolean;
   role?: string;
   default_visibility?: string;
-  series_default_visibility?: string;
   episode_default_visibility?: string;
   display_handle?: string;
   follow_list_visibility?: string;
