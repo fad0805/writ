@@ -30,6 +30,7 @@ export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [fetched, setFetched] = useState(false);
 
   useEffect(() => {
     if (!authLoading && user?.role !== "admin" && user?.role !== "moderator" && user?.role !== "owner") {
@@ -38,7 +39,8 @@ export default function AdminSettingsPage() {
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || fetched) return;
+    setFetched(true);
     fetch("/api/admin/settings", { credentials: "include" })
       .then((r) => r.json())
       .then((d) => {
@@ -53,7 +55,7 @@ export default function AdminSettingsPage() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [authLoading]);
+  }, [authLoading, fetched]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
