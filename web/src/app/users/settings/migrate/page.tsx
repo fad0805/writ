@@ -159,6 +159,7 @@ export default function MigratePage() {
           <div className="form-group">
             <label>함께 가져갈 시리즈 (같은 서버만 가능)</label>
             <p className="form-help" style={{ marginBottom: 8 }}>같은 서버 내 계정으로만 시리즈 이전이 가능합니다.</p>
+            <p style={{ color: "var(--danger)", fontSize: 13, marginBottom: 8 }}>⚠ 시리즈 이전은 되돌릴 수 없습니다. 신중히 선택해주세요.</p>
             {mySeries.map((n) => (
               <label key={n.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", cursor: "pointer", fontSize: 14 }}>
                 <input type="checkbox" checked={selectedSeries.includes(n.id)} onChange={(e) => setSelectedSeries((prev) => e.target.checked ? [...prev, n.id] : prev.filter((id) => id !== n.id))} />

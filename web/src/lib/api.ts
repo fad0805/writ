@@ -47,6 +47,8 @@ export interface User {
   episode_default_visibility?: string;
   display_handle?: string;
   follow_list_visibility?: string;
+  aliases?: string[];
+  moved_to?: string;
   pinned_posts?: number[];
   pinned_series?: number[];
 }

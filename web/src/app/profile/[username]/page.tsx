@@ -132,6 +132,17 @@ export default function ProfilePage() {
   useEffect(() => { loadProfile(); }, [loadProfile, router]);
 
   useEffect(() => {
+    if (profile?.moved_to && !isMine) {
+      const match = profile.moved_to.match(/\/@([^/]+)/);
+      if (match) {
+        const newHandle = match[1];
+        if (!confirm(`${profile.display_name || profile.username}님은 ${newHandle}(으)로 계정을 이전했습니다.\n\n이동하시겠습니까?`)) return;
+        router.push(`/@${newHandle}`);
+      }
+    }
+  }, [profile, isMine, router]);
+
+  useEffect(() => {
     if (!loading && profile && !isMine) {
       fetch(`/api/profile-notes/${profile.username}`, { credentials: "include" })
         .then(r => r.json()).then(d => { setProfileNote(d.content || ""); setNoteLoaded(true); })

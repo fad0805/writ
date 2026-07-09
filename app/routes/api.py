@@ -94,6 +94,7 @@ def _user_json(u):
         "custom_fields": (u.custom_fields or []) if hasattr(u, 'custom_fields') else [],
         "profile_hashtags": (u.profile_hashtags or []) if hasattr(u, 'profile_hashtags') else [],
         "aliases": (u.aliases or []) if hasattr(u, 'aliases') else [],
+        "moved_to": getattr(u, 'moved_to', '') or '',
     }
 
 
@@ -2260,6 +2261,7 @@ def api_approve_migrate(request: Request, notification_id: int = Form(...)):
             from_user.is_frozen = True
             from_user.is_suspended = False
             from_user.session_token = ""
+            from_user.moved_to = user.actor_uri()
 
         s.delete(n)
         s.commit()

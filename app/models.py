@@ -72,6 +72,7 @@ class User(Base):
     pinned_posts = Column(JSON, default=list)
     pinned_series = Column(JSON, default=list)
     aliases = Column(JSON, default=list)
+    moved_to = Column(String(512), default="")
 
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
