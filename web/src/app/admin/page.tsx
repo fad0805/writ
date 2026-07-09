@@ -26,6 +26,10 @@ export default function AdminDashboard() {
 
   return (
     <>
+      <div className="page-header">
+        <h2><Icon name="settings" /> 서버 관리</h2>
+      </div>
+
       <AdminNav current="dashboard" />
 
       <div className="grid-3">

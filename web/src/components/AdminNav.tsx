@@ -5,9 +5,6 @@ import Icon from "./Icon";
 export default function AdminNav({ current }: { current: "dashboard" | "reports" | "users" | "emojis" | "settings" | "federation" | "moderation-log" | "blocked-domains" | "rules" }) {
   return (
     <>
-      <div className="admin-tabs">
-        <Link href="/admin" className={`btn btn-small ${current === "dashboard" ? "btn-primary" : "btn-outline"}`}>서버 관리</Link>
-      </div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
         <Link href="/admin/users" className={`btn btn-small ${current === "users" ? "btn-primary" : "btn-outline"}`}>유저 관리</Link>
         <Link href="/admin/reports" className={`btn btn-small ${current === "reports" ? "btn-primary" : "btn-outline"}`}>신고 관리</Link>

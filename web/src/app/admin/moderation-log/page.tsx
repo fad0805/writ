@@ -71,7 +71,8 @@ export default function AdminModerationLogPage() {
 
   return (
     <>
-            <AdminNav current="moderation-log" />
+      <div className="page-header"><h2><Icon name="settings" /> 서버 관리</h2></div>
+      <AdminNav current="moderation-log" />
       <div style={{ marginBottom: 12, display: "flex", gap: 6, alignItems: "center" }}>
         <select value={actionFilter} onChange={e => { setActionFilter(e.target.value); }} className="cw-input" style={{ width: 180 }}>
           <option value="">전체</option>

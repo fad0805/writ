@@ -136,12 +136,13 @@ export default function RemoteServerDetailPage() {
 
   if (authLoading || loading) return <div className="empty-state">로딩 중...</div>;
   if (!user || (user.role !== "admin" && user.role !== "moderator" && user.role !== "owner")) return null;
-  if (error) return <><AdminNav current="federation" /><div className="empty-state">{error}</div></>;
+  if (error) return <><div className="page-header"><h2><Icon name="settings" /> 서버 관리</h2></div><AdminNav current="federation" /><div className="empty-state">{error}</div></>;
   if (!server) return null;
 
   return (
     <>
-            <AdminNav current="federation" />
+      <div className="page-header"><h2><Icon name="settings" /> 서버 관리</h2></div>
+      <AdminNav current="federation" />
 
       <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 20 }}>
         <img
