@@ -20,15 +20,14 @@ fi
 
 echo -e "${YELLOW}[setup]${NC} Python 의존성 확인 중..."
 "$PYTHON" -m pip install -r "$ROOT_DIR/app/requirements.txt" --quiet
+# watchfiles가 있으면 RustNotify가 db_data/ 권한 오류로 크래시 → 제거
+"$PYTHON" -m pip uninstall -y watchfiles 2>/dev/null || true
 
 # Frontend setup
 if [ -d "$ROOT_DIR/web" ]; then
     echo -e "${YELLOW}[setup]${NC} npm 확인 중..."
     (cd "$ROOT_DIR/web" && npm install --silent)
 fi
-
-# Docker PostgreSQL 볼륨 정리 (watchfiles 권한 충돌 방지)
-rm -rf "$ROOT_DIR/db_data"
 
 # ── 포트 충돌 감지 및 대체 포트 할당 ──
 
@@ -141,7 +140,7 @@ if [ "$MIG_COUNT" -gt 5 ]; then
     echo -e "${YELLOW}[migrate]${NC} 오래된 마이그레이션 $((MIG_COUNT - 5))개 정리 완료"
 fi
 echo -e "${YELLOW}[api]${NC} 서버 시작 중 (포트 $BACKEND_PORT)..."
-cd "$ROOT_DIR" && APP_ENV=development PYTHONUNBUFFERED=1 "$PYTHON" -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port "$BACKEND_PORT" \
+cd "$ROOT_DIR" && APP_ENV=development PYTHONUNBUFFERED=1 "$PYTHON" -m uvicorn app.main:app --reload --reload-dir "$ROOT_DIR/app" --host 0.0.0.0 --port "$BACKEND_PORT" \
     > >(tee -a "$COMBINED_LOG" | _prefix_output "[api]" "$GREEN") 2>&1 &
 BACKEND_PID=$!
 PIDS+=("$BACKEND_PID")
