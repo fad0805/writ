@@ -738,9 +738,6 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
     target_type = target_type.strip().lower()
     if target_type not in ("post", "novel", "episode"):
         raise HTTPException(status_code=400, detail="Invalid target_type")
-    if not reason or len(reason.strip()) < 10:
-        if not parsed_rule_ids:
-            raise HTTPException(status_code=400, detail="Reason must be at least 10 characters")
     parsed_rule_ids = []
     if rule_ids and rule_ids.strip():
         try:
@@ -749,6 +746,9 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
                 parsed_rule_ids = parsed
         except (json.JSONDecodeError, TypeError):
             pass
+    if not reason or len(reason.strip()) < 10:
+        if not parsed_rule_ids:
+            raise HTTPException(status_code=400, detail="Reason must be at least 10 characters")
     with get_session() as s:
         existing = s.query(Report).filter_by(
             reporter_id=user.id, target_type=target_type, target_id=target_id, status="pending"
