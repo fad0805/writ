@@ -131,7 +131,7 @@ def _validate_url(url: str) -> bool:
 def _parse_username_from_url(url: str) -> str:
     url = url.rstrip("/")
     # Handle /users/{username} or /@{username}
-    match = re.search(r'/(?:users/)?@?(\w+)$', url)
+    match = re.search(r'/(?:users/)?@?([\w.\-]+)$', url)
     if match:
         return match.group(1)
     # Fallback: last segment
@@ -482,6 +482,16 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User
         logger.warning("Failed to fetch remote actor %s: %s", actor_url, e)
         return None
 
+    # Verify the response's id domain matches the requested URL's domain
+    resp_id = data.get("id", "")
+    if resp_id:
+        from urllib.parse import urlparse
+        req_domain = urlparse(actor_url).hostname or ""
+        resp_domain = urlparse(resp_id).hostname or ""
+        if req_domain and resp_domain and req_domain != resp_domain:
+            logger.warning("Domain mismatch: requested %s, response claims %s", req_domain, resp_domain)
+            return None
+
     preferred_username = data.get("preferredUsername", "")
     if not preferred_username:
         return None
@@ -809,28 +819,26 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             session.flush()
 
             # Notify local users mentioned or replied to
-            if reply_to_post:
-                n = Notification(
+            if reply_to_post and reply_to_post.author_id != actor.id:
+                session.add(Notification(
                     user_id=reply_to_post.author_id,
                     from_user_id=actor.id,
                     notification_type="reply",
                     post_id=post.id,
-                )
-                session.add(n)
+                ))
 
-            # Notify local followers
+            # Notify local followers (skip self)
             followers = session.query(Follow).filter(
                 Follow.following_id == actor.id,
             ).all()
             for f in followers:
-                if not f.follower.is_remote:
-                    n = Notification(
+                if not f.follower.is_remote and f.follower.id != actor.id:
+                    session.add(Notification(
                         user_id=f.follower.id,
                         from_user_id=actor.id,
                         notification_type="post",
                         post_id=post.id,
-                    )
-                    session.add(n)
+                    ))
 
             session.commit()
             try:
@@ -1201,14 +1209,15 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
 
     parsed = urlparse(inbox_url)
     path = parsed.path or "/"
-    signed_string = f"(request-target): post {path}\nhost: {parsed.netloc}\ndate: {date}\ndigest: SHA-256={digest}"
+    created = int(time.time())
+    signed_string = f"(request-target): post {path}\nhost: {parsed.netloc}\ndate: {date}\ndigest: SHA-256={digest}\n(request-created): {created}"
 
     signature = sign_string(signed_string, get_private_key(sender, SECRET_KEY))
     signature_header = (
         f'keyId="{sender.actor_uri()}#main-key",'
         f'algorithm="hs2019",'
-        f'created="{int(time.time())}",'
-        f'headers="(request-target) host date digest",'
+        f'created="{created}",'
+        f'headers="(request-target) host date digest (request-created)",'
         f'signature="{signature}"'
     )
 

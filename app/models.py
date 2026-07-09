@@ -190,9 +190,9 @@ class Post(Base):
     mentioned_user_ids = Column(JSON, default=list)
 
     # ActivityPub IDs
-    ap_id = Column(String(512), unique=True)
+    ap_id = Column(String(1024), unique=True)
     in_reply_to_id = Column(Integer, ForeignKey("posts.id"), index=True)
-    in_reply_to_ap_id = Column(String(512), default="")
+    in_reply_to_ap_id = Column(String(1024), default="")
 
     # Novel post (if this post is a novel episode announcement)
     novel_id = Column(Integer, ForeignKey("novels.id"), nullable=True)
@@ -285,6 +285,25 @@ class Post(Base):
             obj["to"] = []
         if self.summary:
             obj["summary"] = self.summary
+            obj["sensitive"] = True
+        if self.media_attachments:
+            from urllib.parse import urlparse
+            attachments = []
+            for m in (self.media_attachments or [])[:4]:
+                if isinstance(m, dict):
+                    url = m.get("url", "")
+                    mtype = m.get("type", "image")
+                    if url:
+                        ext = url.rsplit(".", 1)[-1].lower() if "." in url else "png"
+                        ct = f"image/{ext}" if mtype == "image" else "video/webm"
+                        attachments.append({
+                            "type": "Document",
+                            "mediaType": ct,
+                            "url": url,
+                            "name": "",
+                        })
+            if attachments:
+                obj["attachment"] = attachments
         if self.in_reply_to_ap_id:
             obj["inReplyTo"] = self.in_reply_to_ap_id
         return obj
@@ -309,7 +328,7 @@ class Like(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     post_id = Column(Integer, ForeignKey("posts.id"), nullable=False, index=True)
-    ap_id = Column(String(512), unique=True)
+    ap_id = Column(String(1024), unique=True)
     created_at = Column(DateTime(timezone=True), default=now)
 
     user = relationship("User", lazy="selectin")
@@ -322,7 +341,7 @@ class Boost(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     post_id = Column(Integer, ForeignKey("posts.id"), nullable=False, index=True)
-    ap_id = Column(String(512), unique=True)
+    ap_id = Column(String(1024), unique=True)
     created_at = Column(DateTime(timezone=True), default=now)
 
     user = relationship("User", lazy="selectin")
@@ -640,7 +659,7 @@ class ServerSetting(Base):
 class ProcessedActivity(Base):
     __tablename__ = "processed_activities"
 
-    id = Column(String(512), primary_key=True)
+    id = Column(String(1024), primary_key=True)
     created_at = Column(DateTime(timezone=True), default=now)
 
 

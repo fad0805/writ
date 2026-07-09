@@ -179,7 +179,7 @@ if not S3_ENABLED:
 
 # AP/WebFinger routes must be registered before routers to take priority
 @app.get("/.well-known/webfinger")
-def webfinger(resource: str = ""):
+def webfinger(request: Request, resource: str = ""):
     if not resource or not resource.startswith("acct:"):
         return JSONResponse({"error": "Invalid resource"}, status_code=400)
 
@@ -216,7 +216,7 @@ def webfinger(resource: str = ""):
                 "href": user.actor_uri(),
             },
         ],
-    })
+    }, media_type="application/jrd+json")
 
 
 @app.get('/favicon.ico', include_in_schema=False)
@@ -371,11 +371,14 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
         "digest": digest_val,
     }
     method = request.method.lower()
+    created_param = params.get("created", "")
     signed_lines = []
     for h in headers_str.split():
         h = h.strip()
         if h == "(request-target)":
             signed_lines.append(f"(request-target): {method} {path}")
+        elif h == "(request-created)":
+            signed_lines.append(f"(request-created): {created_param}")
         elif h in signed_parts:
             signed_lines.append(f"{h}: {signed_parts[h]}")
         else:
@@ -538,13 +541,13 @@ def get_like(like_uuid: str):
         actor = s.query(User).get(like.user_id)
         if not post or not actor:
             return JSONResponse({"error": "Not found"}, status_code=404)
-        return {
+        return JSONResponse({
             "@context": "https://www.w3.org/ns/activitystreams",
             "id": ap_id,
             "type": "Like",
             "actor": actor.actor_uri(),
             "object": post.ap_id,
-        }
+        }, media_type="application/activity+json")
 
 @app.get("/boosts/{boost_uuid}")
 def get_boost(boost_uuid: str):
@@ -559,13 +562,13 @@ def get_boost(boost_uuid: str):
         actor = s.query(User).get(boost.user_id)
         if not post or not actor:
             return JSONResponse({"error": "Not found"}, status_code=404)
-        return {
+        return JSONResponse({
             "@context": "https://www.w3.org/ns/activitystreams",
             "id": ap_id,
             "type": "Announce",
             "actor": actor.actor_uri(),
             "object": post.ap_id,
-        }
+        }, media_type="application/activity+json")
 
 @app.get("/@{username}/{number}")
 def get_post_by_handle(request: Request, username: str, number: str):
