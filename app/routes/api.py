@@ -3688,8 +3688,9 @@ def api_admin_toggle_novel_sensitive(request: Request, novel_id: int):
         n = s.query(Novel).get(novel_id)
         if not n: raise HTTPException(status_code=404, detail="Novel not found")
         n.is_sensitive = not (n.is_sensitive or False)
+        is_sensitive = n.is_sensitive
         s.commit()
-    return {"ok": True, "is_sensitive": n.is_sensitive}
+    return {"ok": True, "is_sensitive": is_sensitive}
 
 
 @router.post("/admin/novels/{novel_id}/set-visibility")
