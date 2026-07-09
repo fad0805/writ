@@ -4,13 +4,13 @@ import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
 
 const EXPORT_TYPES = [
-  { key: "follows", label: "팔로우" },
-  { key: "mutes", label: "뮤트" },
-  { key: "blocks", label: "차단" },
-  { key: "domain_blocks", label: "도메인 차단" },
-  { key: "bookmarks", label: "북마크" },
-  { key: "keyword_mutes", label: "키워드 필터" },
-  { key: "posts", label: "게시글" },
+  { key: "follows", label: "팔로우", icon: "user_solid" },
+  { key: "mutes", label: "뮤트", icon: "mute" },
+  { key: "blocks", label: "차단", icon: "block" },
+  { key: "domain_blocks", label: "도메인 차단", icon: "globe" },
+  { key: "bookmarks", label: "북마크", icon: "star_filled" },
+  { key: "keyword_mutes", label: "키워드 필터", icon: "tag" },
+  { key: "posts", label: "게시글", icon: "edit" },
 ];
 
 export default function DeactivatedPage() {
@@ -56,7 +56,7 @@ export default function DeactivatedPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {EXPORT_TYPES.map((t) => (
               <a key={t.key} href={`/api/settings/export/${t.key}`} className="btn btn-outline" style={{ justifyContent: "flex-start", fontSize: 14 }} download>
-                <Icon name="direct" size={14} /> {t.label}
+                <Icon name={t.icon} size={14} /> {t.label}
               </a>
             ))}
           </div>
