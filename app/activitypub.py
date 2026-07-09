@@ -702,6 +702,15 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if not actor:
             return (404, "Actor not found")
 
+        # Verify attributedTo matches activity actor
+        obj_attributed = obj.get("attributedTo", "")
+        if isinstance(obj_attributed, list):
+            obj_attributed = obj_attributed[0] if obj_attributed else ""
+        if isinstance(obj_attributed, dict):
+            obj_attributed = obj_attributed.get("id", "")
+        if obj_attributed and obj_attributed != actor_url and obj_attributed != actor.actor_uri() and obj_attributed != (actor.remote_url or ""):
+            return (403, "attributedTo does not match actor")
+
         post_id = obj.get("id", "")
         content = _sanitize_html(obj.get("content", ""))
         summary = obj.get("summary", "")
@@ -739,6 +748,13 @@ def _handle_create(activity: dict) -> tuple[int, str]:
 
             # Parse mentioned users from content
             mentioned_names = set(re.findall(r'@(\w+)', content or ""))
+            # Also parse mentions from AP tag array
+            for tag in (obj.get("tag", []) or []):
+                if isinstance(tag, dict) and tag.get("type") == "Mention":
+                    href = tag.get("href", "")
+                    name = tag.get("name", "")
+                    if name and name.startswith("@"):
+                        mentioned_names.add(name.lstrip("@"))
             mentioned_ids = []
             if mentioned_names:
                 mentioned = session.query(User).filter(
@@ -1024,10 +1040,9 @@ def _send_delete_post(post: Post, sender: User):
             "type": "Note",
         },
     }
-    from app.activitypub import broadcast_to_followers, send_to_shared_inbox
+    from app.activitypub import broadcast_to_followers
     try:
         broadcast_to_followers(sender, delete)
-        send_to_shared_inbox(sender, delete)
     except Exception as e:
         logger.warning("Failed to broadcast Delete: %s", e)
 

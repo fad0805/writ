@@ -319,13 +319,14 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
     if not key_id or not sig_b64:
         return (False, None)
 
-    # Digest validation — mandatory for POST (has body)
-    digest_header = request.headers.get("Digest", "")
-    if not digest_header:
-        return (False, None)
-    expected = "SHA-256=" + hashlib.sha256(body).hexdigest()
-    if digest_header != expected:
-        return (False, None)
+    # Digest validation — skip for GET (no body)
+    if body:
+        digest_header = request.headers.get("Digest", "")
+        if not digest_header:
+            return (False, None)
+        expected = "SHA-256=" + hashlib.sha256(body).hexdigest()
+        if digest_header != expected:
+            return (False, None)
 
     # Resolve the remote actor who signed
     from app.activitypub import _resolve_actor
@@ -343,16 +344,19 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
         return (False, None)
 
     # Date freshness check — ±30s window to prevent replay
+    import email.utils
     from datetime import datetime, timezone
     date_header = request.headers.get("Date", "")
     if date_header:
         try:
-            date_dt = datetime.strptime(date_header, "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=timezone.utc)
-            now = datetime.now(timezone.utc)
-            diff = abs((now - date_dt).total_seconds())
-            if diff > 30:
-                return (False, None)
-        except (ValueError, TypeError):
+            date_tuple = email.utils.parsedate_tz(date_header)
+            if date_tuple:
+                date_dt = datetime.fromtimestamp(email.utils.mktime_tz(date_tuple), tz=timezone.utc)
+                now = datetime.now(timezone.utc)
+                diff = abs((now - date_dt).total_seconds())
+                if diff > 30:
+                    return (False, None)
+        except (ValueError, TypeError, OverflowError):
             return (False, None)
 
     # Build signed string (Fix 7 — use request Host header, not keyId host)
@@ -366,11 +370,12 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
         "date": date,
         "digest": digest_val,
     }
+    method = request.method.lower()
     signed_lines = []
     for h in headers_str.split():
         h = h.strip()
         if h == "(request-target)":
-            signed_lines.append(f"(request-target): post {path}")
+            signed_lines.append(f"(request-target): {method} {path}")
         elif h in signed_parts:
             signed_lines.append(f"{h}: {signed_parts[h]}")
         else:
