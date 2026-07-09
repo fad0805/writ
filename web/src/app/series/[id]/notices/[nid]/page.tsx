@@ -2,6 +2,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api, NoticeData, NovelData } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
 import Link from "next/link";
 
@@ -10,6 +11,7 @@ export default function NoticeDetailPage() {
   const router = useRouter();
   const [novel, setNovel] = useState<NovelData | null>(null);
   const [notice, setNotice] = useState<NoticeData | null>(null);
+  const { user } = useAuth();
   const [isMine, setIsMine] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -47,13 +49,20 @@ export default function NoticeDetailPage() {
           {notice.created_at ? new Date(notice.created_at).toISOString().slice(0, 10) : ""}
         </p>
         <div className="notice-content" dangerouslySetInnerHTML={{ __html: notice.content }}></div>
-        {isMine && (
+        {(isMine || user?.role === "admin" || user?.role === "moderator" || user?.role === "owner") && (
           <div className="form-actions" style={{ marginTop: 24 }}>
-            <Link href={`/series/${novelId}/notices/${noticeId}/edit`} className="btn">편집</Link>
+            {isMine && <Link href={`/series/${novelId}/notices/${noticeId}/edit`} className="btn">편집</Link>}
+            <button type="button" onClick={async () => {
+              if (!confirm(`공지 "${notice.title}"를 삭제하시겠습니까?`)) return;
+              try {
+                await fetch(`/api/series/${novelId}/notices/${noticeId}/delete`, { method: "POST", credentials: "include" });
+                router.push(`/series/${novelId}/notices`);
+              } catch {}
+            }} className="btn" style={{ color: "var(--danger)" }}>삭제</button>
             <button type="button" onClick={() => router.push(`/series/${novelId}/notices`)} className="btn btn-outline">공지 목록</button>
           </div>
         )}
-        {!isMine && (
+        {!isMine && user?.role !== "admin" && user?.role !== "moderator" && user?.role !== "owner" && (
           <div className="form-actions" style={{ marginTop: 24 }}>
             <button type="button" onClick={() => router.push(`/series/${novelId}/notices`)} className="btn btn-outline">공지 목록</button>
           </div>

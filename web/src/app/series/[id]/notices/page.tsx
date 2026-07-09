@@ -3,6 +3,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api, NoticeData, NovelData } from "@/lib/api";
 import Icon from "@/components/Icon";
+import { useAuth } from "@/lib/auth";
 import Link from "next/link";
 
 export default function NoticesPage() {
@@ -10,6 +11,7 @@ export default function NoticesPage() {
   const router = useRouter();
   const [novel, setNovel] = useState<NovelData | null>(null);
   const [notices, setNotices] = useState<NoticeData[]>([]);
+  const { user } = useAuth();
   const [isMine, setIsMine] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -69,12 +71,12 @@ export default function NoticesPage() {
             </span>
             <span className="notice-date">{n.created_at ? new Date(n.created_at).toISOString().slice(0, 10) : ""}</span>
           </div>
-          {isMine && (
+          {(isMine || user?.role === "admin" || user?.role === "moderator" || user?.role === "owner") && (
             <div className="notice-actions">
-              <button className="action-btn" onClick={() => togglePin(n)} title={n.is_pinned ? "고정 해제" : "고정 (최대 3개)"} style={{ color: n.is_pinned ? "var(--danger)" : undefined }}>
+              {isMine && <button className="action-btn" onClick={() => togglePin(n)} title={n.is_pinned ? "고정 해제" : "고정 (최대 3개)"} style={{ color: n.is_pinned ? "var(--danger)" : undefined }}>
                 <Icon name={n.is_pinned ? "pin_filled" : "pin"} />
-              </button>
-              <button className="action-btn" onClick={() => router.push(`/series/${novelId}/notices/${n.id}/edit`)}><Icon name="edit" /></button>
+              </button>}
+              {isMine && <button className="action-btn" onClick={() => router.push(`/series/${novelId}/notices/${n.id}/edit`)}><Icon name="edit" /></button>}
               <button className="action-btn text-muted" onClick={() => handleDelete(n)}><Icon name="trash" /></button>
             </div>
           )}

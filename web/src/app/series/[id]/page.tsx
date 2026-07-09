@@ -154,6 +154,13 @@ export default function NovelDetailPage() {
               <span className="pinned-notice-icon"><Icon name="pin_filled" /></span>
               <span className="pinned-notice-title">{n.title}</span>
               <span className="pinned-notice-date">{n.created_at ? new Date(n.created_at).toISOString().slice(0, 10) : ""}</span>
+              {(user?.role === "admin" || user?.role === "moderator" || user?.role === "owner") && (
+                <button className="action-btn text-muted" onClick={async (ev) => {
+                  ev.stopPropagation();
+                  if (!confirm(`공지 "${n.title}"를 삭제하시겠습니까?`)) return;
+                  try { await fetch(`/api/series/${novel.id}/notices/${n.id}/delete`, { method: "POST", credentials: "include" }); setPinnedNotices(pinnedNotices.filter(pn => pn.id !== n.id)); } catch {}
+                }}><Icon name="trash" /></button>
+              )}
             </div>
           ))}
         </div>
