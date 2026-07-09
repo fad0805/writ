@@ -1070,12 +1070,9 @@ def api_search_series(request: Request, q: str = Query("")):
     if not user:
         return {"series": []}
     with get_session() as s:
-        latest_act = _latest_activity_subquery(s)
-        qb = s.query(Novel).filter(
+        qb = _apply_latest_activity_order(s.query(Novel).filter(
             or_(Novel.visibility.in_(["public", "unlisted"]), Novel.author_id == user.id)
-        ).outerjoin(
-            latest_act, Novel.id == latest_act.c.nid
-        ).order_by(desc(func.coalesce(latest_act.c.max_created, Novel.created_at)))
+        ), s)
         if query:
             qb = qb.filter(Novel.title.ilike(f"%{query}%"))
         novels = qb.limit(5).all()
@@ -1187,12 +1184,7 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         novels_q = s.query(Novel).filter_by(author_id=profile.id)
         if not user or profile.id != user.id:
             novels_q = novels_q.filter(Novel.visibility != "private")
-        latest_act = _latest_activity_subquery(s)
-        novels = novels_q.outerjoin(
-            latest_act, Novel.id == latest_act.c.nid
-        ).order_by(
-            desc(func.coalesce(latest_act.c.max_created, Novel.created_at))
-        ).all()
+        novels = _apply_latest_activity_order(novels_q, s).all()
         show_follows = user and (profile.id == user.id or profile.follow_list_visibility != "private")
         followers = s.query(Follow).filter_by(following_id=profile.id, accepted=True).all()
         following = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).all()
@@ -1578,29 +1570,22 @@ def api_save_profile_note(request: Request, target_username: str, content: str =
     return {"ok": True}
 
 
-def _latest_activity_subquery(s):
-    from sqlalchemy import union_all
-    ep = s.query(
-        Episode.novel_id.label("nid"),
-        Episode.created_at.label("ca")
-    )
-    nt = s.query(
-        SeriesNotice.novel_id.label("nid"),
-        SeriesNotice.created_at.label("ca")
-    )
-    combined = union_all(ep, nt).subquery()
-    return s.query(
-        combined.c.nid,
-        func.max(combined.c.ca).label("max_created")
-    ).group_by(combined.c.nid).subquery()
+def _apply_latest_activity_order(q, s):
+    latest_ep = s.query(
+        Episode.novel_id, func.max(Episode.created_at).label("max_ep")
+    ).group_by(Episode.novel_id).subquery()
+    latest_nt = s.query(
+        SeriesNotice.novel_id, func.max(SeriesNotice.created_at).label("max_nt")
+    ).group_by(SeriesNotice.novel_id).subquery()
+    q = q.outerjoin(latest_ep, Novel.id == latest_ep.c.novel_id)
+    q = q.outerjoin(latest_nt, Novel.id == latest_nt.c.novel_id)
+    q = q.order_by(desc(func.coalesce(latest_ep.c.max_ep, latest_nt.c.max_nt, Novel.created_at)))
+    return q
 
 @router.get("/series")
 def api_novels(request: Request, limit: int = Query(12), offset: int = Query(0)):
     with get_session() as s:
-        latest_act = _latest_activity_subquery(s)
-        q = s.query(Novel).filter_by(is_published=True, visibility="public").outerjoin(
-            latest_act, Novel.id == latest_act.c.nid
-        ).order_by(desc(func.coalesce(latest_act.c.max_created, Novel.created_at)))
+        q = _apply_latest_activity_order(s.query(Novel).filter_by(is_published=True, visibility="public"), s)
         raw = q.offset(offset).limit(limit + 1).all()
         has_more = len(raw) > limit
         novels = [_novel_json(n, s) for n in raw[:limit]]
@@ -1611,10 +1596,7 @@ def api_novels(request: Request, limit: int = Query(12), offset: int = Query(0))
 def api_my_novels(request: Request, limit: int = Query(12), offset: int = Query(0)):
     user = require_auth(request)
     with get_session() as s:
-        latest_act = _latest_activity_subquery(s)
-        q = s.query(Novel).filter_by(author_id=user.id).outerjoin(
-            latest_act, Novel.id == latest_act.c.nid
-        ).order_by(desc(func.coalesce(latest_act.c.max_created, Novel.created_at)))
+        q = _apply_latest_activity_order(s.query(Novel).filter_by(author_id=user.id), s)
         total = q.count()
         raw = q.offset(offset).limit(limit).all()
         novels = [_novel_json(n, s) for n in raw]
@@ -2703,19 +2685,13 @@ def api_explore(request: Request):
             Post.in_reply_to_id == None,
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).limit(30).all()
 
-        latest_act = _latest_activity_subquery(s)
-
-        novels = s.query(Novel).options(
+        novels = _apply_latest_activity_order(s.query(Novel).options(
             selectinload(Novel.author),
             selectinload(Novel.tag_list),
-        ).outerjoin(
-            latest_act, Novel.id == latest_act.c.nid
         ).filter(
             Novel.visibility == "public",
             Novel.is_published == True,
-        ).order_by(
-            desc(func.coalesce(latest_act.c.max_created, Novel.created_at))
-        ).limit(20).all()
+        ), s).limit(20).all()
 
         return {
             "posts": [_post_json(p, s, user) for p in posts],
@@ -2779,14 +2755,11 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 Post.is_deleted == False,
                 Post.in_reply_to_id == None,
             ).order_by(desc(Post.created_at)).limit(20).all()
-            latest_act = _latest_activity_subquery(s)
-            novels = s.query(Novel).options(selectinload(Novel.author)).filter(
+            novels = _apply_latest_activity_order(s.query(Novel).options(selectinload(Novel.author)).filter(
                 or_(Novel.title.ilike(pattern), Novel.description.ilike(pattern)),
                 Novel.is_published == True,
                 Novel.visibility == "public",
-            ).outerjoin(
-                latest_act, Novel.id == latest_act.c.nid
-            ).order_by(desc(func.coalesce(latest_act.c.max_created, Novel.created_at))).limit(20).all()
+            ), s).limit(20).all()
         local_users = s.query(User).filter(
             User.is_remote == False,
             or_(User.username.ilike(pattern), User.display_name.ilike(pattern)),
@@ -3691,10 +3664,7 @@ def api_admin_content_search(request: Request, q: str = "", mode: str = "series"
                 )
             else:
                 novels_q = novels_q.filter(Novel.title.ilike(like))
-            latest_act = _latest_activity_subquery(s)
-            novels = novels_q.outerjoin(
-                latest_act, Novel.id == latest_act.c.nid
-            ).order_by(desc(func.coalesce(latest_act.c.max_created, Novel.created_at))).limit(50).all()
+            novels = _apply_latest_activity_order(novels_q, s).limit(50).all()
             novel_ids = [n.id for n in novels]
             episodes = s.query(Episode).filter(
                 Episode.novel_id.in_(novel_ids)
