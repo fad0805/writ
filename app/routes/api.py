@@ -328,6 +328,12 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
 
         log_admin_action(user_id, user.username, "register", ip_address=client_ip, details="first_user" if is_first else "email_required")
 
+        if is_first:
+            from app.routes.auth import create_session
+            sess = create_session(user.id)
+            resp = JSONResponse({"ok": True, "email_sent": not is_first})
+            resp.set_cookie(key="session", value=sess, max_age=30*86400, httponly=True, samesite="lax", path="/")
+            return resp
         return {"ok": True, "email_sent": not is_first}
 
 
