@@ -1578,7 +1578,6 @@ def api_save_profile_note(request: Request, target_username: str, content: str =
     return {"ok": True}
 
 
-@router.get("/series")
 def _latest_activity_subquery(s):
     from sqlalchemy import union_all
     ep = s.query(
@@ -1595,6 +1594,7 @@ def _latest_activity_subquery(s):
         func.max(combined.c.ca).label("max_created")
     ).group_by(combined.c.nid).subquery()
 
+@router.get("/series")
 def api_novels(request: Request, limit: int = Query(12), offset: int = Query(0)):
     with get_session() as s:
         latest_act = _latest_activity_subquery(s)
