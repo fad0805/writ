@@ -171,7 +171,12 @@ export default function TimelinePage() {
 
   useEffect(() => {
     let es: EventSource | null = null;
-    try { es = new EventSource(`/api/timeline/stream?type=${tlType}`); } catch { return; }
+    try {
+      const u = typeof window !== "undefined" && window.location.hostname === "localhost" && window.location.port === "3000"
+        ? `http://localhost:8000/api/timeline/stream?type=${tlType}`
+        : `/api/timeline/stream?type=${tlType}`;
+      es = new EventSource(u, { withCredentials: true });
+    } catch { return; }
     es.onmessage = (event) => {
       try {
         const newPost = JSON.parse(event.data);
@@ -196,7 +201,7 @@ export default function TimelinePage() {
         });
         setHasMore(data.has_more);
       }).catch(() => {});
-    }, 30000);
+    }, 5000);
     return () => clearInterval(interval);
   }, [tlType]);
 
