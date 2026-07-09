@@ -11,7 +11,7 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, SeriesFollow, Tag, CustomEmoji, ProfileNote, Report, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, get_session
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, get_session
 from app.routes.auth import require_auth, get_current_user
 from app.log_utils import log_admin_action
 
@@ -1950,6 +1950,87 @@ def _episode_json(e):
         "created_at": _fmt_dt(e.created_at),
         "updated_at": _fmt_dt(e.updated_at),
     }
+
+
+def _notice_json(n):
+    return {
+        "id": n.id,
+        "uuid": n.uuid,
+        "novel_id": n.novel_id,
+        "title": n.title,
+        "content": n.content,
+        "is_pinned": n.is_pinned,
+        "created_at": _fmt_dt(n.created_at),
+        "updated_at": _fmt_dt(n.updated_at),
+    }
+
+
+@router.get("/series/{novel_id}/notices")
+def api_list_notices(request: Request, novel_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        novel = s.query(Novel).filter_by(id=novel_id).first()
+        if not novel:
+            raise HTTPException(status_code=404, detail="Series not found")
+        if novel.author_id != user.id and not user.is_admin:
+            raise HTTPException(status_code=403, detail="Not allowed")
+        notices = s.query(SeriesNotice).filter_by(novel_id=novel_id).order_by(
+            SeriesNotice.is_pinned.desc(), SeriesNotice.created_at.desc()).all()
+        return [_notice_json(n) for n in notices]
+
+
+@router.post("/series/{novel_id}/notices/new")
+def api_create_notice(request: Request, novel_id: int, title: str = Form(...), content: str = Form(...)):
+    user = require_auth(request)
+    with get_session() as s:
+        novel = s.query(Novel).filter_by(id=novel_id).first()
+        if not novel or novel.author_id != user.id:
+            raise HTTPException(status_code=404, detail="Series not found")
+        notice = SeriesNotice(novel_id=novel_id, title=title, content=content)
+        s.add(notice)
+        s.commit()
+        return _notice_json(notice)
+
+
+@router.post("/series/{novel_id}/notices/{notice_id}/edit")
+def api_edit_notice(request: Request, novel_id: int, notice_id: int, title: str = Form(...), content: str = Form(...)):
+    user = require_auth(request)
+    with get_session() as s:
+        notice = s.query(SeriesNotice).filter_by(id=notice_id, novel_id=novel_id).first()
+        if not notice or notice.novel.author_id != user.id:
+            raise HTTPException(status_code=404, detail="Notice not found")
+        notice.title = title
+        notice.content = content
+        s.commit()
+        return _notice_json(notice)
+
+
+@router.post("/series/{novel_id}/notices/{notice_id}/delete")
+def api_delete_notice(request: Request, novel_id: int, notice_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        notice = s.query(SeriesNotice).filter_by(id=notice_id, novel_id=novel_id).first()
+        if not notice or notice.novel.author_id != user.id:
+            raise HTTPException(status_code=404, detail="Notice not found")
+        s.delete(notice)
+        s.commit()
+    return {"ok": True}
+
+
+@router.post("/series/{novel_id}/notices/{notice_id}/pin")
+def api_toggle_pin_notice(request: Request, novel_id: int, notice_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        notice = s.query(SeriesNotice).filter_by(id=notice_id, novel_id=novel_id).first()
+        if not notice or notice.novel.author_id != user.id:
+            raise HTTPException(status_code=404, detail="Notice not found")
+        if not notice.is_pinned:
+            pinned_count = s.query(SeriesNotice).filter_by(novel_id=novel_id, is_pinned=True).count()
+            if pinned_count >= 3:
+                raise HTTPException(status_code=400, detail="최대 3개까지 고정할 수 있습니다")
+        notice.is_pinned = not notice.is_pinned
+        s.commit()
+        return _notice_json(notice)
 
 
 def _cleanup_avatars():

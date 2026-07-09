@@ -375,6 +375,8 @@ class Novel(Base):
     episodes = relationship("Episode", back_populates="novel", cascade="all, delete-orphan",
                             order_by="Episode.episode_number", lazy="selectin")
     tag_list = relationship("Tag", secondary=novel_tags, lazy="selectin")
+    notices = relationship("SeriesNotice", back_populates="novel", cascade="all, delete-orphan",
+                           order_by="SeriesNotice.is_pinned.desc(), SeriesNotice.created_at.desc()", lazy="selectin")
 
     @property
     def episode_count(self):
@@ -385,6 +387,21 @@ class Novel(Base):
         if self.episodes is not None:
             return sum(e.views for e in self.episodes)
         return 0
+
+
+class SeriesNotice(Base):
+    __tablename__ = "series_notices"
+
+    id = Column(Integer, primary_key=True)
+    uuid = Column(String(36), default=generate_uuid, unique=True, nullable=False)
+    novel_id = Column(Integer, ForeignKey("novels.id"), nullable=False, index=True)
+    title = Column(String(256), nullable=False)
+    content = Column(Text, nullable=False)
+    is_pinned = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), default=now)
+    updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
+
+    novel = relationship("Novel", back_populates="notices", lazy="selectin")
 
 
 class Episode(Base):
