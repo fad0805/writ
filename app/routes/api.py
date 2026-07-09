@@ -2,6 +2,7 @@ import os
 import re
 import json
 import asyncio
+import queue
 import datetime
 import logging
 import threading
@@ -496,9 +497,9 @@ async def api_timeline_stream(request: Request, tl_type: str = "home"):
                 if await request.is_disconnected():
                     break
                 try:
-                    payload = await asyncio.wait_for(q.get(), timeout=30)
+                    payload = await asyncio.to_thread(q.get, timeout=30)
                     yield f"data: {payload}\n\n"
-                except asyncio.TimeoutError:
+                except queue.Empty:
                     yield ":keepalive\n\n"
         return StreamingResponse(event_gen(), media_type="text/event-stream")
     finally:
@@ -1424,9 +1425,9 @@ async def api_notifications_stream(request: Request):
                 if await request.is_disconnected():
                     break
                 try:
-                    payload = await asyncio.wait_for(q.get(), timeout=30)
+                    payload = await asyncio.to_thread(q.get, timeout=30)
                     yield f"data: {payload}\n\n"
-                except asyncio.TimeoutError:
+                except queue.Empty:
                     yield ":keepalive\n\n"
         return StreamingResponse(event_gen(), media_type="text/event-stream")
     finally:

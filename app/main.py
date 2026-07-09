@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import queue
 import time
 from collections import defaultdict
 from typing import AsyncGenerator
@@ -500,33 +501,33 @@ def nodeinfo():
 
 @app.get("/api/stream")
 async def sse_stream(request: Request):
-    queue: asyncio.Queue = asyncio.Queue(maxsize=50)
-    add_queue(queue)
+    q: queue.Queue = queue.Queue(maxsize=50)
+    add_queue(q)
     try:
         async def event_gen() -> AsyncGenerator[str, None]:
             while True:
                 if await request.is_disconnected():
                     break
                 try:
-                    payload = await asyncio.wait_for(queue.get(), timeout=30)
+                    payload = await asyncio.to_thread(q.get, timeout=30)
                     yield payload
-                except asyncio.TimeoutError:
+                except queue.Empty:
                     yield ":keepalive\n\n"
         return StreamingResponse(event_gen(), media_type="text/event-stream")
     finally:
-        remove_queue(queue)
+        remove_queue(q)
 
 
 @app.websocket("/api/v1/streaming")
 async def websocket_stream(websocket: WebSocket):
     await websocket.accept()
-    ws_id, ws_queue = add_ws()
+    ws_id, ws_q = add_ws()
     try:
         while True:
             try:
-                payload = await asyncio.wait_for(ws_queue.get(), timeout=30)
+                payload = await asyncio.to_thread(ws_q.get, timeout=30)
                 await websocket.send_text(payload)
-            except asyncio.TimeoutError:
+            except queue.Empty:
                 await websocket.send_text(json.dumps({"event": "ping"}))
     except Exception:
         pass
