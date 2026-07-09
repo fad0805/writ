@@ -2210,23 +2210,62 @@ def api_migrate_account(request: Request, target_username: str = Form(...), seri
         except (_json.JSONDecodeError, TypeError):
             sids = []
 
-        # Transfer selected series
-        novels = s.query(Novel).filter(Novel.id.in_(sids), Novel.author_id == user.id).all()
-        for n in novels:
-            n.author_id = target.id
-            # Also transfer episodes
-            s.query(Episode).filter(Episode.novel_id == n.id).update({"author_id": target.id})
-
-        # Freeze old account
-        user.is_frozen = True
-        user.is_suspended = False
-        # Clear session
-        user.session_token = ""
+        # Notify target user for approval
+        meta = _json.dumps({
+            "type": "migrate_request",
+            "from_user_id": user.id,
+            "from_username": user.username,
+            "from_display": user.display_name or user.username,
+            "series_ids": sids,
+        })
+        s.add(Notification(
+            user_id=target.id, from_user_id=user.id,
+            notification_type="moderation",
+            metadata_json=meta,
+        ))
         s.commit()
 
-        log_admin_action(target.id, target.username, "account_migrated", target_type="user", target_id=user.id, target_username=user.username, ip_address=request.client.host if request.client else "")
+    return {"ok": True, "message": f"{target_username}님에게 이전 요청을 보냈습니다. 상대방이 수락하면 이전이 완료됩니다."}
 
-    return {"ok": True, "message": f"계정이 {target_username}(으)로 이전되었습니다."}
+
+@router.post("/settings/migrate/approve")
+def api_approve_migrate(request: Request, notification_id: int = Form(...)):
+    user = require_auth(request)
+    with get_session() as s:
+        n = s.query(Notification).filter_by(id=notification_id, user_id=user.id).first()
+        if not n or n.notification_type != "moderation":
+            raise HTTPException(status_code=404, detail="요청을 찾을 수 없습니다.")
+        meta = {}
+        try:
+            meta = json.loads(n.metadata_json or "{}")
+        except json.JSONDecodeError:
+            pass
+        if meta.get("type") != "migrate_request":
+            raise HTTPException(status_code=400, detail="잘못된 요청입니다.")
+
+        from_user_id = meta.get("from_user_id")
+        from_user = s.query(User).get(from_user_id)
+        if not from_user or not from_user.is_frozen:
+            # Source account might already be frozen from failed attempt
+            pass
+
+        series_ids = meta.get("series_ids", [])
+        if series_ids:
+            novels = s.query(Novel).filter(Novel.id.in_(series_ids), Novel.author_id == from_user_id).all()
+            for nv in novels:
+                nv.author_id = user.id
+
+        if from_user:
+            from_user.is_frozen = True
+            from_user.is_suspended = False
+            from_user.session_token = ""
+
+        s.delete(n)
+        s.commit()
+
+        log_admin_action(user.id, user.username, "account_migrated", target_type="user", target_id=from_user.id if from_user else 0, target_username=from_user.username if from_user else "", ip_address=request.client.host if request.client else "")
+
+    return {"ok": True, "message": "계정 이전이 완료되었습니다."}
 
 
 def _save_profile_image(user_id: int, file: UploadFile, prefix: str, max_size: tuple[int, int], storage) -> str:
