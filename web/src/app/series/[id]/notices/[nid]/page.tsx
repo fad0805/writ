@@ -36,7 +36,10 @@ export default function NoticeDetailPage() {
 
   return (
     <>
-      <h2><Link href={`/series/${novelId}`} className="no-underline" style={{ color: "inherit" }}>{novel?.title || "시리즈"}</Link></h2>
+      <div style={{ marginBottom: 16 }}>
+        <a href={`/series/${novelId}`} className="btn btn-outline btn-small" style={{ marginBottom: 8 }}>← 작품으로 돌아가기</a>
+        <h2 style={{ margin: "8px 0 0" }}>{novel?.title || "시리즈"} — 공지사항</h2>
+      </div>
       <div className="notice-detail">
         <h3>{notice.is_pinned && <span style={{ color: "var(--danger)", marginRight: 6 }}>📌</span>}{notice.title}</h3>
         <p className="text-secondary" style={{ fontSize: "0.85em", marginBottom: 16 }}>
@@ -46,7 +49,12 @@ export default function NoticeDetailPage() {
         {isMine && (
           <div className="form-actions" style={{ marginTop: 24 }}>
             <Link href={`/series/${novelId}/notices/${noticeId}/edit`} className="btn">편집</Link>
-            <button type="button" onClick={() => router.push(`/series/${novelId}/notices`)} className="btn btn-outline">목록</button>
+            <button type="button" onClick={() => router.push(`/series/${novelId}/notices`)} className="btn btn-outline">공지 목록</button>
+          </div>
+        )}
+        {!isMine && (
+          <div className="form-actions" style={{ marginTop: 24 }}>
+            <button type="button" onClick={() => router.push(`/series/${novelId}/notices`)} className="btn btn-outline">공지 목록</button>
           </div>
         )}
       </div>

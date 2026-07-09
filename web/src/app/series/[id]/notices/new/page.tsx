@@ -2,7 +2,6 @@
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import Link from "next/link";
 
 export default function NewNoticePage() {
   const params = useParams();
@@ -39,7 +38,10 @@ export default function NewNoticePage() {
 
   return (
     <>
-      <h2><Link href={`/series/${novelId}`} className="no-underline" style={{ color: "inherit" }}>{novelTitle || "로딩 중..."}</Link></h2>
+      <div style={{ marginBottom: 16 }}>
+        <a href={`/series/${novelId}/notices`} className="btn btn-outline btn-small" style={{ marginBottom: 8 }}>← 공지 목록</a>
+        <h2 style={{ margin: "8px 0 0" }}>{novelTitle || "로딩 중..."} — 새 공지</h2>
+      </div>
       <form onSubmit={handleSubmit} className="episode-form">
         <div className="form-group">
           <label>제목</label>
