@@ -472,6 +472,27 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     return [_post_json(p, session, user) for p in posts[:limit]], has_more
 
 
+@router.get("/timeline/stream")
+async def api_timeline_stream(request: Request, tl_type: str = "home"):
+    user = require_auth(request)
+    if tl_type not in TIMELINE_LABELS:
+        tl_type = "home"
+    sid, q = add_stream(user.id, tl_type)
+    async def event_gen():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    payload = await asyncio.wait_for(q.get(), timeout=30)
+                    yield f"data: {payload}\n\n"
+                except asyncio.TimeoutError:
+                    yield ":keepalive\n\n"
+        finally:
+            remove_stream(sid)
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
 @router.get("/timeline/{tl_type}")
 def api_timeline(request: Request, tl_type: str, limit: int = Query(10), offset: int = Query(0)):
     user = get_current_user(request)
@@ -482,36 +503,6 @@ def api_timeline(request: Request, tl_type: str, limit: int = Query(10), offset:
     with get_session() as s:
         feed, has_more = _get_feed(user, tl_type, s, limit=limit, offset=offset)
     return {"posts": feed, "timeline_type": tl_type, "has_more": has_more}
-
-
-@router.get("/timeline/stream")
-async def api_timeline_stream(request: Request, tl_type: str = "home"):
-    logger.info("api_timeline_stream ENTERED: tl_type=%s", tl_type)
-    user = require_auth(request)
-    if tl_type not in TIMELINE_LABELS:
-        tl_type = "home"
-    sid, q = add_stream(user.id, tl_type)
-    async def event_gen():
-        try:
-            while True:
-                if await request.is_disconnected():
-                    logger.info("event_gen: client disconnected sid=%s", sid)
-                    break
-                try:
-                    payload = await asyncio.wait_for(q.get(), timeout=30)
-                    logger.info("event_gen: got payload sid=%s len=%s", sid, len(payload))
-                    yield f"data: {payload}\n\n"
-                except asyncio.TimeoutError:
-                    yield ":keepalive\n\n"
-        finally:
-            remove_stream(sid)
-    return StreamingResponse(event_gen(), media_type="text/event-stream")
-
-
-@router.get("/timeline/stream-test")
-async def api_timeline_stream_test():
-    logger.info("api_timeline_stream_test ENTERED")
-    return {"ok": True}
 
 
 # ── Post CRUD ──
@@ -594,7 +585,6 @@ def _broadcast_federation(user, post, visibility):
 
 def _broadcast_timeline(post_json, author_id, visibility, is_dm):
     """Deliver post to connected timeline streams (background thread)."""
-    logger.info("_broadcast_timeline called: author=%s visibility=%s is_dm=%s", author_id, visibility, is_dm)
     try:
         broadcast_post(post_json, author_id, visibility, is_dm)
     except Exception as e:
