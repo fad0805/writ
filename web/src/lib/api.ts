@@ -118,6 +118,17 @@ export interface SearchResults {
   blocked_domain?: string;
 }
 
+export interface NoticeData {
+  id: number;
+  uuid: string;
+  novel_id: number;
+  title: string;
+  content: string;
+  is_pinned: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 export interface EpisodeData {
   id: number;
   novel_id: number;
@@ -198,6 +209,9 @@ export const api = {
     episode: EpisodeData; novel: NovelData; is_mine: boolean;
     prev_episode: EpisodeData | null; next_episode: EpisodeData | null;
   }>(`/api/series/${id}/episodes/${eid}`),
+
+  // Notices
+  getNotices: (novel_id: number) => request<NoticeData[]>(`/api/series/${novel_id}/notices`),
 
   // Reports
   report: (target_type: string, target_id: number, reason: string) =>

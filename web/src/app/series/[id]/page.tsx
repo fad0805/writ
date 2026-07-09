@@ -1,7 +1,7 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { api, NovelData, EpisodeData, User } from "@/lib/api";
+import { api, NovelData, EpisodeData, NoticeData, User } from "@/lib/api";
 import Icon from "@/components/Icon";
 import ShareButton from "@/components/ShareButton";
 import SharePostModal from "@/components/SharePostModal";
@@ -24,6 +24,7 @@ export default function NovelDetailPage() {
   const [isSeriesMuted, setIsSeriesMuted] = useState(false);
   const [isSeriesPinned, setIsSeriesPinned] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [pinnedNotices, setPinnedNotices] = useState<NoticeData[]>([]);
   const [showSharePost, setShowSharePost] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [reportReason, setReportReason] = useState("");
@@ -43,6 +44,10 @@ export default function NovelDetailPage() {
         .catch(() => {});
       setIsSeriesPinned((user as any).pinned_series?.includes(id) || false);
     }
+    fetch(`/api/series/${id}/notices`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((list) => setPinnedNotices((list as NoticeData[]).filter((n) => n.is_pinned)))
+      .catch(() => {});
   }, [params.id, user]);
 
   const toggleFollow = async () => {
@@ -83,7 +88,7 @@ export default function NovelDetailPage() {
                 </p>
               </div>
               <div className="series-header-btns">
-                {user && (
+                {user && !isMine && (
                   <button className="action-btn" onClick={async () => {
                     if (isSeriesMuted) { await fetch(`/api/mutes/series/${novel.id}`, { method: "DELETE", credentials: "include" }); setIsSeriesMuted(false); }
                     else { await fetch(`/api/mutes/series/${novel.id}`, { method: "POST", credentials: "include" }); setIsSeriesMuted(true); }
@@ -130,8 +135,22 @@ export default function NovelDetailPage() {
         {novel.tags && <p className="novel-tags"><Icon name="tag" /> {novel.tags.split(/[ ,]+/).filter(Boolean).map((t, i) => <span key={i} className="tag-spacing">{t}</span>)}</p>}
       </div>
 
+      {pinnedNotices.length > 0 && (
+        <div className="pinned-notices">
+          {pinnedNotices.map((n) => (
+            <div key={n.id} className="pinned-notice-item" onClick={() => router.push(`/series/${novel.id}/notices/${n.id}`)}>
+              <span className="pinned-notice-icon"><Icon name="pin_filled" /></span>
+              <span className="pinned-notice-title">{n.title}</span>
+              <span className="pinned-notice-date">{n.created_at ? new Date(n.created_at).toISOString().slice(0, 10) : ""}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="episode-list">
-        <h3>목차</h3>
+        <div className="episode-list-header">
+          <h3 style={{ margin: 0, border: "none", padding: 0 }}>목차</h3>
+          <a href={`/series/${novel.id}/notices`} className="btn btn-small btn-outline" style={{ fontSize: "0.75em" }}>공지사항</a>
+        </div>
         {episodes.length === 0 ? (
           <p className="empty-state">아직 에피소드가 없습니다.</p>
         ) : episodes.map((e) => (
