@@ -391,12 +391,12 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
             ) : (
               <>
                 {reportRules.length > 0 && (
-                  <div style={{ marginBottom: 8 }}>
-                    <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, color: "var(--text-secondary)" }}>위반 규칙</p>
+                  <div style={{ marginBottom: 10 }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, color: "var(--text-secondary)" }}>위반 규칙</p>
                     {reportRules.map((rule) => (
-                      <label key={rule.id} style={{ display: "flex", alignItems: "flex-start", gap: 6, fontSize: 13, marginBottom: 4, color: "var(--text-secondary)", cursor: "pointer" }}>
-                        <input type="checkbox" checked={selectedRuleIds.includes(rule.id)} onChange={(e) => setSelectedRuleIds((prev) => e.target.checked ? [...prev, rule.id] : prev.filter((id) => id !== rule.id))} style={{ marginTop: 2 }} />
-                        <span><strong>{rule.title}</strong>{rule.description ? ` — ${rule.description}` : ""}</span>
+                      <label key={rule.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "8px 10px", marginBottom: 4, borderRadius: 6, border: selectedRuleIds.includes(rule.id) ? "1px solid var(--accent)" : "1px solid var(--border)", background: selectedRuleIds.includes(rule.id) ? "var(--bg-tertiary)" : "var(--bg-secondary)", cursor: "pointer", transition: "all 0.15s" }}>
+                        <input type="checkbox" checked={selectedRuleIds.includes(rule.id)} onChange={(e) => setSelectedRuleIds((prev) => e.target.checked ? [...prev, rule.id] : prev.filter((id) => id !== rule.id))} style={{ marginTop: 2, accentColor: "var(--accent)" }} />
+                        <span style={{ fontSize: 13, color: "var(--text)" }}><strong>{rule.title}</strong>{rule.description ? <span style={{ color: "var(--text-secondary)" }}>{` — ${rule.description}`}</span> : ""}</span>
                       </label>
                     ))}
                   </div>
