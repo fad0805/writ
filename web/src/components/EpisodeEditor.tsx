@@ -4,9 +4,17 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import TextAlign from "@tiptap/extension-text-align";
 import Image from "@tiptap/extension-image";
+import Underline from "@tiptap/extension-underline";
+import Strike from "@tiptap/extension-strike";
 import { useEffect, useRef } from "react";
 
 const SIZES = ["50", "75", "100"];
+
+const CustomStrike = Strike.extend({
+  addInputRules() {
+    return [];
+  },
+});
 
 const AlignableImage = Image.extend({
   addAttributes() {
@@ -49,7 +57,10 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
     extensions: [
       StarterKit.configure({
         heading: { levels: [2, 3] },
+        strike: false,
       }),
+      CustomStrike,
+      Underline,
       Placeholder.configure({ placeholder: "소설 내용을 입력하세요..." }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       AlignableImage,
@@ -126,6 +137,11 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
   return (
     <div className="episode-editor">
       <div className="episode-editor-toolbar">
+        <button type="button" onClick={() => editor?.chain().focus().toggleBold().run()} data-active={editor?.isActive("bold")}><b>B</b></button>
+        <button type="button" onClick={() => editor?.chain().focus().toggleItalic().run()} data-active={editor?.isActive("italic")}><i>I</i></button>
+        <button type="button" onClick={() => editor?.chain().focus().toggleUnderline().run()} data-active={editor?.isActive("underline")}><u>U</u></button>
+        <button type="button" onClick={() => editor?.chain().focus().toggleStrike().run()} data-active={editor?.isActive("strike")}><s>S</s></button>
+        <span className="toolbar-sep" />
         <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} data-active={editor?.isActive("heading", { level: 2 })}>H2</button>
         <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()} data-active={editor?.isActive("heading", { level: 3 })}>H3</button>
         <button type="button" onClick={() => editor?.chain().focus().toggleBlockquote().run()} data-active={editor?.isActive("blockquote")}>⏎</button>

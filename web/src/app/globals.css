@@ -1258,6 +1258,8 @@ input[type="checkbox"] {
 .episode-body ul, .episode-body ol { padding-left: 20px; margin: 8px 0; }
 .episode-body hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 .episode-body img { max-width: 100%; height: auto; }
+.episode-body s, .episode-body strike { text-decoration: line-through; }
+.episode-body u { text-decoration: underline; }
 .episode-comment {
   background: var(--bg-tertiary);
   border-radius: 8px;
