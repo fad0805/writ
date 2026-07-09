@@ -799,7 +799,7 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
         if forward_to_remote and target_obj and hasattr(target_obj, 'author') and target_obj.author and target_obj.author.is_remote:
             try:
                 from app.activitypub import _send_flag
-                _send_flag(user, target_type, target_obj, reason.strip()[:200])
+                _send_flag(user, target_type, target_obj, reason.strip()[:200], parsed_rule_ids)
             except Exception as e:
                 logger.warning("Failed to send Flag activity: %s", e)
     return {"ok": True, "report_id": report_id}

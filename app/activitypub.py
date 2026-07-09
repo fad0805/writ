@@ -881,7 +881,7 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
     return (200, "Flagged")
 
 
-def _send_flag(reporter: User, target_type: str, target_obj, reason: str):
+def _send_flag(reporter: User, target_type: str, target_obj, reason: str, rule_ids: list = None):
     if target_type == "post":
         object_id = target_obj.ap_id
         target_actor_uri = target_obj.author.actor_uri()
@@ -891,13 +891,17 @@ def _send_flag(reporter: User, target_type: str, target_obj, reason: str):
         return
     else:
         return
+    content = reason
+    if rule_ids:
+        rules_text = ", ".join(str(rid) for rid in rule_ids)
+        content = f"[Rules violated: {rules_text}] {reason}"
     flag = {
         "@context": "https://www.w3.org/ns/activitystreams",
         "id": f"{reporter.actor_uri()}/flags/{target_obj.id}",
         "type": "Flag",
         "actor": reporter.actor_uri(),
         "object": [object_id],
-        "content": reason,
+        "content": content,
     }
     inbox = target_obj.author.inbox_uri()
     if inbox:

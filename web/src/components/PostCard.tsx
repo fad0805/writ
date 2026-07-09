@@ -41,6 +41,8 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   const [reportError, setReportError] = useState("");
   const [reportDone, setReportDone] = useState(false);
   const [reportForward, setReportForward] = useState(false);
+  const [reportRules, setReportRules] = useState<{ id: number; title: string; description: string }[]>([]);
+  const [selectedRuleIds, setSelectedRuleIds] = useState<number[]>([]);
   const [liked, setLiked] = useState(post.liked);
   const [boosted, setBoosted] = useState(post.boosted);
   const [bookmarked, setBookmarked] = useState(post.bookmarked);
@@ -88,6 +90,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
       form.append("target_id", String(post.id));
       form.append("reason", reportReason.trim());
       form.append("forward_to_remote", reportForward ? "true" : "");
+      form.append("rule_ids", JSON.stringify(selectedRuleIds));
       const res = await fetch("/api/reports", { method: "POST", credentials: "include", body: form });
       if (!res.ok) { const d = await res.json(); throw new Error(d.detail || "신고 실패"); }
       setReportDone(true);
@@ -370,7 +373,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
             </>
           )}
           {currentUser && !post.is_mine && (
-            <button onClick={() => { setShowReport(true); setReportReason(""); setReportError(""); setReportDone(false); }} className="action-btn" title="신고" style={{ marginLeft: 12, color: "var(--text-muted)" }}>
+            <button onClick={() => { setShowReport(true); setReportReason(""); setReportError(""); setReportDone(false); setSelectedRuleIds([]); fetch("/api/rules").then(r => r.json()).then(setReportRules).catch(() => {}); }} className="action-btn" title="신고" style={{ marginLeft: 12, color: "var(--text-muted)" }}>
               <Icon name="flag" />
             </button>
           )}
@@ -387,6 +390,17 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
               <p style={{ color: "var(--text-secondary)", margin: "16px 0" }}>신고가 접수되었습니다. 검토 후 조치하겠습니다.</p>
             ) : (
               <>
+                {reportRules.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, color: "var(--text-secondary)" }}>위반 규칙</p>
+                    {reportRules.map((rule) => (
+                      <label key={rule.id} style={{ display: "flex", alignItems: "flex-start", gap: 6, fontSize: 13, marginBottom: 4, color: "var(--text-secondary)", cursor: "pointer" }}>
+                        <input type="checkbox" checked={selectedRuleIds.includes(rule.id)} onChange={(e) => setSelectedRuleIds((prev) => e.target.checked ? [...prev, rule.id] : prev.filter((id) => id !== rule.id))} style={{ marginTop: 2 }} />
+                        <span><strong>{rule.title}</strong>{rule.description ? ` — ${rule.description}` : ""}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
                 <textarea
                   value={reportReason}
                   onChange={(e) => setReportReason(e.target.value)}
