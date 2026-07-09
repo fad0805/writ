@@ -201,7 +201,7 @@ export default function TimelinePage() {
         });
         setHasMore(data.has_more);
       }).catch(() => {});
-    }, 5000);
+    }, 30000);
     return () => clearInterval(interval);
   }, [tlType]);
 
