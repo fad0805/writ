@@ -2,6 +2,7 @@
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
+import TextAlign from "@tiptap/extension-text-align";
 import Image from "@tiptap/extension-image";
 import { useEffect, useRef } from "react";
 
@@ -34,6 +35,7 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
         heading: { levels: [2, 3] },
       }),
       Placeholder.configure({ placeholder: "소설 내용을 입력하세요..." }),
+      TextAlign.configure({ types: ["heading", "paragraph"] }),
       AlignableImage,
     ],
     content: value,
@@ -63,7 +65,7 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
     e.target.value = "";
   };
 
-  const attr = (key: string) => {
+  const imgAttr = (key: string) => {
     if (!editor) return null;
     const { from, to } = editor.state.selection;
     let val: string | null = null;
@@ -73,22 +75,39 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
     return val;
   };
 
-  const updateImageAttr = (key: string, val: string) => {
+  const align = (dir: string) => {
+    if (!editor) return;
+    if (editor.isActive("image")) {
+      const { from, to } = editor.state.selection;
+      editor.state.doc.nodesBetween(from, to, (node, pos) => {
+        if (node.type.name === "image") {
+          editor.chain().focus().setNodeSelection(pos).updateAttributes("image", { "data-align": dir }).run();
+          return false;
+        }
+      });
+    } else {
+      editor.chain().focus().setTextAlign(dir).run();
+    }
+  };
+
+  const isAlign = (dir: string) => {
+    if (!editor) return false;
+    if (editor.isActive("image")) return imgAttr("data-align") === dir;
+    return editor.isActive({ textAlign: dir });
+  };
+
+  const cycleSize = () => {
+    const cur = imgAttr("data-width") || "75";
+    const idx = SIZES.indexOf(cur);
+    const next = SIZES[(idx + 1) % SIZES.length];
     if (!editor) return;
     const { from, to } = editor.state.selection;
     editor.state.doc.nodesBetween(from, to, (node, pos) => {
       if (node.type.name === "image") {
-        editor.chain().focus().setNodeSelection(pos).updateAttributes("image", { [key]: val }).run();
+        editor.chain().focus().setNodeSelection(pos).updateAttributes("image", { "data-width": next }).run();
         return false;
       }
     });
-  };
-
-  const cycleSize = () => {
-    const cur = attr("data-width") || "75";
-    const idx = SIZES.indexOf(cur);
-    const next = SIZES[(idx + 1) % SIZES.length];
-    updateImageAttr("data-width", next);
   };
 
   return (
@@ -101,11 +120,12 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
         <button type="button" onClick={() => editor?.chain().focus().toggleOrderedList().run()} data-active={editor?.isActive("orderedList")}>1.</button>
         <button type="button" onClick={() => editor?.chain().focus().setHorizontalRule().run()}>—</button>
         <span className="toolbar-sep" />
+        <button type="button" onClick={() => align("left")} data-active={isAlign("left")}>←</button>
+        <button type="button" onClick={() => align("center")} data-active={isAlign("center")}>↔</button>
+        <button type="button" onClick={() => align("right")} data-active={isAlign("right")}>→</button>
+        <span className="toolbar-sep" />
         <button type="button" onClick={() => fileRef.current?.click()} title="이미지 첨부">🖼</button>
-        <button type="button" onClick={() => updateImageAttr("data-align", "left")} data-active={attr("data-align") === "left"}>←정렬</button>
-        <button type="button" onClick={() => updateImageAttr("data-align", "center")} data-active={attr("data-align") === "center"}>가운데</button>
-        <button type="button" onClick={() => updateImageAttr("data-align", "right")} data-active={attr("data-align") === "right"}>정렬→</button>
-        <button type="button" onClick={cycleSize} title="이미지 크기">{attr("data-width") ? `${attr("data-width")}%` : "크기"}</button>
+        <button type="button" onClick={cycleSize} title="이미지 크기">{editor?.isActive("image") ? `${imgAttr("data-width") || "75"}%` : "□"}</button>
       </div>
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={handleImageUpload} />
       <EditorContent editor={editor} className="episode-editor-content" />
