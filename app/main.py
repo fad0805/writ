@@ -221,8 +221,8 @@ def webfinger(request: Request, resource: str = ""):
 
 @app.get('/favicon.ico', include_in_schema=False)
 def favicon():
-    from app.routes.api import api_pwa_favicon
-    return api_pwa_favicon()
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/api/pwa/favicon")
 
 
 @app.get("/users/{username}")
