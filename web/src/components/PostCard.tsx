@@ -94,6 +94,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
       const res = await fetch("/api/reports", { method: "POST", credentials: "include", body: form });
       if (!res.ok) { const d = await res.json(); throw new Error(d.detail || "신고 실패"); }
       setReportDone(true);
+      setShowReport(false);
     } catch (e: any) {
       setReportError(e.message || "신고 처리 중 오류가 발생했습니다.");
     }
