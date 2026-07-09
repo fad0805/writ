@@ -46,7 +46,7 @@ export default function NoticeDetailPage() {
         <p className="text-secondary" style={{ fontSize: "0.85em", marginBottom: 16 }}>
           {notice.created_at ? new Date(notice.created_at).toISOString().slice(0, 10) : ""}
         </p>
-        <div className="notice-content">{notice.content}</div>
+        <div className="notice-content" dangerouslySetInnerHTML={{ __html: notice.content }}></div>
         {isMine && (
           <div className="form-actions" style={{ marginTop: 24 }}>
             <Link href={`/series/${novelId}/notices/${noticeId}/edit`} className="btn">편집</Link>

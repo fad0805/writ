@@ -2,6 +2,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api, NoticeData } from "@/lib/api";
+import EpisodeEditor from "@/components/EpisodeEditor";
 
 export default function EditNoticePage() {
   const params = useParams();
@@ -61,7 +62,7 @@ export default function EditNoticePage() {
         </div>
         <div className="form-group">
           <label>내용 *</label>
-          <textarea value={content} onChange={(e) => setContent(e.target.value)} required rows={10} placeholder="공지 내용" style={{ width: "100%", resize: "vertical" }}></textarea>
+          <EpisodeEditor value={content} onChange={(v) => setContent(v)} />
         </div>
         <div className="form-actions">
           <button type="submit" disabled={submitting || !title.trim() || !content.trim()} className="btn btn-primary">수정</button>
