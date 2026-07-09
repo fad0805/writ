@@ -4692,26 +4692,37 @@ def api_admin_update_settings(request: Request,
     return {"ok": True}
 
 
-def _resolve_url(url: str) -> str:
-    if url.startswith("/"):
-        return f"{BASE_URL}{url}"
-    return url
+def _read_storage_file(url: str) -> bytes:
+    """Read file from storage by URL. Handles both /uploads/... and absolute URLs."""
+    from app.utils.storage import get_storage
+    storage = get_storage()
+    if isinstance(storage, LocalStorage):
+        key = storage._extract_path(url)
+        if key and os.path.isfile(key):
+            with open(key, "rb") as f:
+                return f.read()
+    try:
+        if not url.startswith("http"):
+            from app.config import BASE_URL
+            url = f"{BASE_URL}{url}"
+        import httpx
+        resp = httpx.get(url, timeout=10)
+        if resp.is_success:
+            return resp.content
+    except Exception as e:
+        logger.warning("Failed to read file via HTTP %s: %s", url, e)
+    raise FileNotFoundError(url)
 
 
 def _save_pwa_icons(source_url: str):
-    """Resize app_icon to PWA icon sizes and save."""
     if not source_url:
         return
     from PIL import Image
     from app.utils.storage import get_storage
-    import io
+    import io, os
     try:
-        import httpx
-        resp = httpx.get(_resolve_url(source_url), timeout=10)
-        if not resp.is_success:
-            logger.warning("Failed to fetch %s for PWA icons: HTTP %d", source_url, resp.status_code)
-            return
-        img = Image.open(io.BytesIO(resp.content))
+        data = _read_storage_file(source_url)
+        img = Image.open(io.BytesIO(data))
         img = img.convert("RGBA")
         storage = get_storage()
         for size in (192, 512):
@@ -4729,14 +4740,10 @@ def _save_favicon(source_url: str):
         return
     from PIL import Image
     from app.utils.storage import get_storage
-    import io
+    import io, os
     try:
-        import httpx
-        resp = httpx.get(_resolve_url(source_url), timeout=10)
-        if not resp.is_success:
-            logger.warning("Failed to fetch %s for favicon: HTTP %d", source_url, resp.status_code)
-            return
-        img = Image.open(io.BytesIO(resp.content))
+        data = _read_storage_file(source_url)
+        img = Image.open(io.BytesIO(data))
         img = img.convert("RGBA")
         resized = img.resize((32, 32), Image.LANCZOS)
         buf = io.BytesIO()
