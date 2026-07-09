@@ -9,6 +9,17 @@ import Link from "next/link";
 import { hashColor } from "@/lib/avatar";
 import { useAuth } from "@/lib/auth";
 
+function CoverImg({ novel, coverRevealed, setCoverRevealed }: { novel: any; coverRevealed: boolean; setCoverRevealed: (v: boolean) => void }) {
+  const isCovSensitive = novel.is_sensitive;
+  return (
+    <div style={{ position: "relative", display: "inline-block" }}>
+      <img src={novel.cover_image} alt="" className="cover-img" style={{ filter: isCovSensitive && !coverRevealed ? "blur(12px)" : "none", transition: "filter 0.2s", cursor: isCovSensitive ? "pointer" : undefined }} onClick={() => { if (isCovSensitive && !coverRevealed) setCoverRevealed(true); }} />
+      {isCovSensitive && coverRevealed && <button onClick={(e) => { e.stopPropagation(); setCoverRevealed(false); }} style={{ position: "absolute", top: 4, right: 4, zIndex: 2, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: 4, color: "#fff", fontSize: 12, padding: "3px 10px", cursor: "pointer" }}>가리기</button>}
+      {isCovSensitive && !coverRevealed && <div style={{ position: "absolute", inset: 0, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }} onClick={() => setCoverRevealed(true)}><span style={{ background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 12, fontWeight: 600, padding: "6px 14px", borderRadius: 6 }}>클릭하여 표시</span></div>}
+    </div>
+  );
+}
+
 export default function NovelByNumberPage() {
   const params = useParams();
   const router = useRouter();
@@ -20,6 +31,7 @@ export default function NovelByNumberPage() {
   const [loading, setLoading] = useState(true);
   const [pinnedNotices, setPinnedNotices] = useState<NoticeData[]>([]);
   const [showSharePost, setShowSharePost] = useState(false);
+  const [coverRevealed, setCoverRevealed] = useState(false);
 
   useEffect(() => {
     fetch(`/api/by-series-number/${params.username}/${params.number}`, { credentials: "include" })
@@ -45,9 +57,7 @@ export default function NovelByNumberPage() {
       <div className="novel-header">
         <div className="series-header-row">
           <div className="cover-wrap-120">
-            {novel.cover_image ? (
-              <img src={novel.cover_image} alt="" className="cover-img" style={(novel as any).is_sensitive ? { filter: "blur(12px)" } : undefined} />
-            ) : (
+            {novel.cover_image ? <CoverImg novel={novel} coverRevealed={coverRevealed} setCoverRevealed={setCoverRevealed} /> : (
               <div className="cover-fallback cover-fallback-xl" style={{ backgroundColor: hashColor(novel.title) }}>
                 <Icon name="book" size={36} />
               </div>
