@@ -138,6 +138,11 @@ export default function MigratePage() {
                 <span style={{ marginLeft: 8, color: "var(--text-secondary)" }}>님이 계정 이전을 요청했습니다</span>
               </div>
               <button onClick={() => handleApprove(n)} disabled={submitting} className="btn btn-primary btn-small">수락</button>
+              <button onClick={async () => {
+                const form = new FormData(); form.append("notification_id", String(n.id));
+                await fetch("/api/settings/migrate/reject", { method: "POST", credentials: "include", body: form });
+                setPendingRequests((prev) => prev.filter((x) => x.id !== n.id));
+              }} className="btn btn-small btn-outline">거절</button>
             </div>
           ))}
         </div>
