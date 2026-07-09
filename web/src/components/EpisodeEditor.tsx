@@ -91,22 +91,11 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
     return val;
   };
 
-  const setImgAttr = (key: string, val: string) => {
-    if (!editor) return;
-    const { from, to } = editor.state.selection;
-    editor.state.doc.nodesBetween(from, to, (node, pos) => {
-      if (node.type.name === "image") {
-        editor.chain().focus().setNodeSelection(pos).updateAttributes("image", { [key]: val }).run();
-        return false;
-      }
-    });
-  };
-
   const align = (dir: string) => {
     if (!editor) return;
     if (editor.isActive("image")) {
-      setImgAttr("data-align", dir);
-      if (dir === "center") setImgAttr("data-wrap", "true");
+      editor.chain().focus().updateAttributes("image", { "data-align": dir }).run();
+      if (dir === "center") editor.chain().focus().updateAttributes("image", { "data-wrap": "true" }).run();
     } else {
       editor.chain().focus().setTextAlign(dir).run();
     }
@@ -122,12 +111,12 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
     const cur = imgAttr("data-width") || "75";
     const idx = SIZES.indexOf(cur);
     const next = SIZES[(idx + 1) % SIZES.length];
-    setImgAttr("data-width", next);
+    editor?.chain().focus().updateAttributes("image", { "data-width": next }).run();
   };
 
   const toggleWrap = () => {
     const cur = imgAttr("data-wrap");
-    setImgAttr("data-wrap", cur === "false" ? "true" : "false");
+    editor?.chain().focus().updateAttributes("image", { "data-wrap": cur === "false" ? "true" : "false" }).run();
   };
 
   const isImageSelected = editor?.isActive("image") ?? false;
