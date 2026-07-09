@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="https://github.com/fad0805/writ/blob/main/web/public/icons/icon-512.png" alt="WRIT Logo" width="100px" />
-</p>
+<img src="https://github.com/fad0805/writ/blob/main/web/public/icons/icon-512.png" alt="WRIT Logo" width="100px" />
 
 # WRIT
 한국어로 만들어진 ActivityPub 기반 SNS입니다.
