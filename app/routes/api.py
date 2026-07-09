@@ -486,6 +486,7 @@ def api_timeline(request: Request, tl_type: str, limit: int = Query(10), offset:
 
 @router.get("/timeline/stream")
 async def api_timeline_stream(request: Request, tl_type: str = "home"):
+    logger.info("api_timeline_stream ENTERED: tl_type=%s", tl_type)
     user = require_auth(request)
     if tl_type not in TIMELINE_LABELS:
         tl_type = "home"
