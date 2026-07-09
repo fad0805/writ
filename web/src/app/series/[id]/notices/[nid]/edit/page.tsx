@@ -1,7 +1,8 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api, NoticeData } from "@/lib/api";
+import { useBeforeUnload } from "@/lib/useBeforeUnload";
 import EpisodeEditor from "@/components/EpisodeEditor";
 
 export default function EditNoticePage() {
@@ -12,6 +13,11 @@ export default function EditNoticePage() {
   const [novelTitle, setNovelTitle] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [dirty, setDirty] = useState(false);
+  const loadedRef = useRef(false);
+  useBeforeUnload(dirty);
+  useEffect(() => { if (!loading) loadedRef.current = true; }, [loading]);
+  useEffect(() => { if (loadedRef.current) setDirty(true); }, [title, content]);
 
   const novelId = Number(Array.isArray(params.id) ? params.id[0] : params.id);
   const noticeId = Number(Array.isArray(params.nid) ? params.nid[0] : params.nid);
@@ -41,7 +47,7 @@ export default function EditNoticePage() {
       form.append("title", title);
       form.append("content", content);
       const res = await fetch(`/api/series/${novelId}/notices/${noticeId}/edit`, { method: "POST", credentials: "include", body: form });
-      if (res.ok) router.push(`/series/${novelId}/notices`);
+      if (res.ok) { setDirty(false); router.push(`/series/${novelId}/notices`); }
       else alert("수정 실패");
     } catch { alert("수정 실패"); }
     setSubmitting(false);

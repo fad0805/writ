@@ -1,7 +1,8 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
+import { useBeforeUnload } from "@/lib/useBeforeUnload";
 import EpisodeEditor from "@/components/EpisodeEditor";
 import VisibilitySelector from "@/components/VisibilitySelector";
 
@@ -19,6 +20,11 @@ export default function EditEpisodePage() {
   const [announce, setAnnounce] = useState(false);
   const [visibility, setVisibility] = useState("public");
   const [announceComment, setAnnounceComment] = useState("");
+  const [dirty, setDirty] = useState(false);
+  const loadedRef = useRef(false);
+  useBeforeUnload(dirty);
+  useEffect(() => { if (!loading) loadedRef.current = true; }, [loading]);
+  useEffect(() => { if (loadedRef.current) setDirty(true); }, [title, summary, comment, content, isPublished, announce, announceComment, visibility]);
 
   useEffect(() => {
     const novelId = Number(Array.isArray(params.id) ? params.id[0] : params.id);
@@ -55,7 +61,7 @@ export default function EditEpisodePage() {
       }
       form.append("visibility", visibility);
       const res = await fetch(`/api/series/${params.id}/episodes/${params.eid}/edit`, { method: "POST", credentials: "include", body: form });
-      if (res.ok) router.push(`/series/${params.id}/episodes/${params.eid}`);
+      if (res.ok) { setDirty(false); router.push(`/series/${params.id}/episodes/${params.eid}`); }
       else alert("저장 실패");
     } catch { alert("저장 실패"); }
     setSubmitting(false);

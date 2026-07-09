@@ -106,6 +106,7 @@ export default function NewNovelPage() {
                 <input type="checkbox" checked={coverSensitive} onChange={(e) => setCoverSensitive(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
                 표지 민감 처리
               </label>
+              <p className="form-help" style={{ fontSize: 12, marginTop: 4 }}>켜면 시리즈 표지가 블러 처리되어 표시됩니다.</p>
             </div>
           </div>
         </div>

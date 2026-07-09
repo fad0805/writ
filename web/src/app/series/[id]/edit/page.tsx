@@ -2,6 +2,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useRef, useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
+import { useBeforeUnload } from "@/lib/useBeforeUnload";
 import TextareaHighlight from "@/components/TextareaHighlight";
 import TagInput from "@/components/TagInput";
 import SeriesVisibilitySelector from "@/components/SeriesVisibilitySelector";
@@ -29,6 +30,12 @@ export default function EditNovelPage() {
   const [coverSensitive, setCoverSensitive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  const loadedRef = useRef(false);
+  useBeforeUnload(dirty);
+  useEffect(() => { if (!loading) loadedRef.current = true; }, [loading]);
+  useEffect(() => { if (loadedRef.current) setDirty(true); }, [title, description, tags, visibility, seriesStatus, coverSensitive, imageFile, removeCover]);
 
   const revokeBlobs = useCallback(() => {
     if (coverPreview) URL.revokeObjectURL(coverPreview);
@@ -89,7 +96,7 @@ export default function EditNovelPage() {
       if (imageFile) form.append("cover_image", imageFile);
       else if (removeCover) form.append("remove_cover", "true");
       const res = await fetch(`/api/series/${params.id}/edit`, { method: "POST", credentials: "include", body: form });
-      if (res.ok) router.push(`/series/${params.id}`);
+      if (res.ok) { setDirty(false); router.push(`/series/${params.id}`); }
       else alert("저장 실패");
     } catch { alert("저장 실패"); }
     setSubmitting(false);
@@ -131,6 +138,11 @@ export default function EditNovelPage() {
               </div>
             </div>
           </div>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: "var(--text-secondary)", marginTop: 8 }}>
+            <input type="checkbox" checked={coverSensitive} onChange={(e) => setCoverSensitive(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
+            표지 민감 처리
+          </label>
+          <p className="form-help" style={{ marginLeft: 0 }}>켜면 시리즈 표지가 블러 처리되어 표시됩니다.</p>
         </div>
         <div className="form-group">
           <label>공개 설정</label>
@@ -140,13 +152,6 @@ export default function EditNovelPage() {
         <div className="form-group">
           <label>연재 상태</label>
           <SeriesStatusSelector value={seriesStatus} onChange={(v) => setSeriesStatus(v)} />
-        </div>
-        <div className="form-group">
-          <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: "var(--text-secondary)" }}>
-            <input type="checkbox" checked={coverSensitive} onChange={(e) => setCoverSensitive(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
-            표지 민감 처리
-          </label>
-          <p className="form-help">켜면 시리즈 표지가 블러 처리되어 표시됩니다.</p>
         </div>
         <div className="form-actions form-actions-between">
           <button
