@@ -733,7 +733,7 @@ def api_delete_post(request: Request, post_id: int):
 
 
 @router.post("/reports")
-def api_create_report(request: Request, target_type: str = Form(...), target_id: int = Form(...), reason: str = Form(...)):
+def api_create_report(request: Request, target_type: str = Form(...), target_id: int = Form(...), reason: str = Form(...), forward_to_remote: bool = Form(False)):
     user = require_auth(request)
     target_type = target_type.strip().lower()
     if target_type not in ("post", "novel", "episode"):
@@ -746,28 +746,29 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
         ).first()
         if existing:
             raise HTTPException(status_code=409, detail="Already reported")
-        report = Report(reporter_id=user.id, target_type=target_type, target_id=target_id, reason=reason.strip())
+        report = Report(reporter_id=user.id, target_type=target_type, target_id=target_id, reason=reason.strip(), forward_to_remote=forward_to_remote)
         s.add(report)
         s.flush()
         report_id = report.id
         admins = s.query(User).filter(User.role.in_(["admin", "moderator", "owner"])).all()
         target_label = ""
         target_author_name = ""
+        target_obj = None
         if target_type == "post":
-            p = s.query(Post).filter_by(id=target_id).first()
-            if p:
-                target_label = (p.content or "")[:120]
-                target_author_name = p.author.username
+            target_obj = s.query(Post).filter_by(id=target_id).first()
+            if target_obj:
+                target_label = (target_obj.content or "")[:120]
+                target_author_name = target_obj.author.username
         elif target_type == "novel":
-            nv = s.query(Novel).filter_by(id=target_id).first()
-            if nv:
-                target_label = nv.title[:120]
-                target_author_name = nv.author.username
+            target_obj = s.query(Novel).filter_by(id=target_id).first()
+            if target_obj:
+                target_label = target_obj.title[:120]
+                target_author_name = target_obj.author.username
         elif target_type == "episode":
-            ep = s.query(Episode).filter_by(id=target_id).first()
-            if ep:
-                target_label = ep.title[:120]
-                target_author_name = ep.novel.author.username if ep.novel else ""
+            target_obj = s.query(Episode).filter_by(id=target_id).first()
+            if target_obj:
+                target_label = target_obj.title[:120]
+                target_author_name = target_obj.novel.author.username if target_obj.novel else ""
         meta = {
             "type": "report",
             "report_id": report_id,
@@ -786,6 +787,13 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
                 metadata_json=json.dumps(meta),
             ))
         s.commit()
+
+        if forward_to_remote and target_obj and hasattr(target_obj, 'author') and target_obj.author and target_obj.author.is_remote:
+            try:
+                from app.activitypub import _send_flag
+                _send_flag(user, target_type, target_obj, reason.strip()[:200])
+            except Exception as e:
+                logger.warning("Failed to send Flag activity: %s", e)
     return {"ok": True, "report_id": report_id}
 
 

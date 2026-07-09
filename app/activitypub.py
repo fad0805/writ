@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from app.models import User, Post, Follow, Like, Boost, Notification, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, get_session
+from app.models import User, Post, Follow, Like, Boost, Notification, Report, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, get_session
 from app.config import BASE_URL, SECRET_KEY
 from app.crypto_utils import generate_keypair, sign_string, encrypt_key, get_private_key
 
@@ -287,6 +287,8 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
         return _handle_update(activity)
     elif atype == "Delete":
         return _handle_delete(activity)
+    elif atype == "Flag":
+        return _handle_flag(activity)
     else:
         return (202, f"Accepted {atype}")
 
@@ -851,6 +853,55 @@ def _handle_delete(activity: dict) -> tuple[int, str]:
             session.commit()
 
     return (200, "Deleted")
+
+
+def _handle_flag(activity: dict) -> tuple[int, str]:
+    with get_session() as s:
+        actor_url = activity.get("actor")
+        if isinstance(actor_url, list):
+            actor_url = actor_url[0]
+        if not actor_url:
+            return (400, "Missing actor")
+        reporter = s.query(User).filter_by(actor_url=actor_url).first()
+        if not reporter:
+            return (202, "Accepted (unknown reporter)")
+        objects = activity.get("object", [])
+        if isinstance(objects, str):
+            objects = [objects]
+        content = activity.get("content", "")
+        for obj_url in objects:
+            post = s.query(Post).filter_by(ap_id=obj_url).first()
+            if post:
+                report = Report(
+                    reporter_id=reporter.id, target_type="post", target_id=post.id,
+                    reason=content or "Reported via federation", forward_to_remote=False,
+                )
+                s.add(report)
+        s.commit()
+    return (200, "Flagged")
+
+
+def _send_flag(reporter: User, target_type: str, target_obj, reason: str):
+    if target_type == "post":
+        object_id = target_obj.ap_id
+        target_actor_uri = target_obj.author.actor_uri()
+    elif target_type == "novel":
+        return
+    elif target_type == "episode":
+        return
+    else:
+        return
+    flag = {
+        "@context": "https://www.w3.org/ns/activitystreams",
+        "id": f"{reporter.actor_uri()}/flags/{target_obj.id}",
+        "type": "Flag",
+        "actor": reporter.actor_uri(),
+        "object": [object_id],
+        "content": reason,
+    }
+    inbox = target_obj.author.inbox_uri()
+    if inbox:
+        _post_to_inbox(inbox, flag, reporter)
 
 
 def _post_to_inbox(inbox_url: str, activity: dict, sender: User):

@@ -477,6 +477,7 @@ class Report(Base):
     target_id = Column(Integer, nullable=False)
     reason = Column(Text, nullable=False)
     status = Column(String(16), default="pending", nullable=False)  # pending, resolved, dismissed
+    forward_to_remote = Column(Boolean, default=False)
     resolved_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
