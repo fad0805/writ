@@ -3441,7 +3441,8 @@ def api_admin_resolve_report(request: Request, report_id: int):
         report.status = "resolved"
         report.resolved_by_id = user.id
         s.commit()
-    log_admin_action(user.id, user.username, "resolve_report", target_type="report", target_id=report_id, details=f"target:{report.target_type}:{report.target_id}", ip_address=request.client.host if request.client else "")
+        r_type, r_id = report.target_type, report.target_id
+    log_admin_action(user.id, user.username, "resolve_report", target_type="report", target_id=report_id, details=f"target:{r_type}:{r_id}", ip_address=request.client.host if request.client else "")
     return {"ok": True}
 
 
@@ -3457,7 +3458,8 @@ def api_admin_dismiss_report(request: Request, report_id: int):
         report.status = "dismissed"
         report.resolved_by_id = user.id
         s.commit()
-    log_admin_action(user.id, user.username, "dismiss_report", target_type="report", target_id=report_id, details=f"target:{report.target_type}:{report.target_id}", ip_address=request.client.host if request.client else "")
+        r_type, r_id = report.target_type, report.target_id
+    log_admin_action(user.id, user.username, "dismiss_report", target_type="report", target_id=report_id, details=f"target:{r_type}:{r_id}", ip_address=request.client.host if request.client else "")
     return {"ok": True}
 
 
