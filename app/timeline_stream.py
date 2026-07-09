@@ -66,16 +66,20 @@ def add_notif_stream() -> tuple[int, asyncio.Queue]:
     _notif_counter += 1
     q: asyncio.Queue = asyncio.Queue(maxsize=50)
     _notif_streams[_notif_counter] = q
+    logger.info("add_notif_stream: sid=%s total=%s", _notif_counter, len(_notif_streams))
     return _notif_counter, q
 
 def remove_notif_stream(sid: int):
+    logger.info("remove_notif_stream: sid=%s remaining=%s", sid, len(_notif_streams) - 1)
     _notif_streams.pop(sid, None)
 
 def broadcast_notif(payload: str):
+    logger.info("broadcast_notif: payload=%s streams=%s", payload, len(_notif_streams))
     for q in list(_notif_streams.values()):
         _enqueue(q, payload)
 
 def broadcast_refresh_notifs():
+    logger.info("broadcast_refresh_notifs called")
     broadcast_notif("refresh")
 
 
