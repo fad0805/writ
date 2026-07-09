@@ -4692,6 +4692,12 @@ def api_admin_update_settings(request: Request,
     return {"ok": True}
 
 
+def _resolve_url(url: str) -> str:
+    if url.startswith("/"):
+        return f"{BASE_URL}{url}"
+    return url
+
+
 def _save_pwa_icons(source_url: str):
     """Resize app_icon to PWA icon sizes and save."""
     if not source_url:
@@ -4701,8 +4707,9 @@ def _save_pwa_icons(source_url: str):
     import io
     try:
         import httpx
-        resp = httpx.get(source_url, timeout=10)
+        resp = httpx.get(_resolve_url(source_url), timeout=10)
         if not resp.is_success:
+            logger.warning("Failed to fetch %s for PWA icons: HTTP %d", source_url, resp.status_code)
             return
         img = Image.open(io.BytesIO(resp.content))
         img = img.convert("RGBA")
@@ -4725,8 +4732,9 @@ def _save_favicon(source_url: str):
     import io
     try:
         import httpx
-        resp = httpx.get(source_url, timeout=10)
+        resp = httpx.get(_resolve_url(source_url), timeout=10)
         if not resp.is_success:
+            logger.warning("Failed to fetch %s for favicon: HTTP %d", source_url, resp.status_code)
             return
         img = Image.open(io.BytesIO(resp.content))
         img = img.convert("RGBA")
