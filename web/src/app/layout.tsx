@@ -12,9 +12,14 @@ export const metadata: Metadata = {
   icons: { icon: "/favicon.ico", apple: "/icons/icon-192.png" },
   manifest: "/api/pwa/manifest",
   appleWebApp: { capable: true, title: "WRIT", statusBarStyle: "black-translucent" },
-  themeColor: "#1a1a2e",
-  viewport: "width=device-width, initial-scale=1, viewport-fit=cover",
   other: { "mobile-web-app-capable": "yes" },
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#1a1a2e",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
