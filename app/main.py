@@ -61,6 +61,65 @@ logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
 
+def _delivery_worker():
+    import time
+    from app.activitypub import _deliver_sync
+    from app.models import PendingDelivery, get_session
+    while True:
+        time.sleep(30)
+        try:
+            with get_session() as s:
+                items = s.query(PendingDelivery).filter_by(status="pending").order_by(PendingDelivery.created_at).limit(50).all()
+                for item in items:
+                    try:
+                        sender = s.query(User).get(item.sender_id)
+                        if not sender:
+                            item.status = "failed"
+                            item.last_error = "Sender not found"
+                            continue
+                        activity = json.loads(item.activity_json)
+                        body = json.dumps(activity, ensure_ascii=False).encode("utf-8")
+                        digest = hashlib.sha256(body).hexdigest()
+                        date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+                        from urllib.parse import urlparse
+                        parsed = urlparse(item.inbox_url)
+                        path = parsed.path or "/"
+                        signed_string = f"(request-target): post {path}\nhost: {parsed.netloc}\ndate: {date}\ndigest: SHA-256={digest}"
+                        from app.crypto_utils import sign_string, get_private_key
+                        from app.config import SECRET_KEY
+                        signature = sign_string(signed_string, get_private_key(sender, SECRET_KEY))
+                        signature_header = (
+                            f'keyId="{sender.actor_uri()}#main-key",'
+                            f'algorithm="hs2019",'
+                            f'created="{int(time.time())}",'
+                            f'headers="(request-target) host date digest",'
+                            f'signature="{signature}"'
+                        )
+                        headers = {
+                            "Content-Type": "application/activity+json",
+                            "Signature": signature_header,
+                            "Date": date,
+                            "Digest": f"SHA-256={digest}",
+                            "Host": parsed.netloc,
+                        }
+                        ok = _deliver_sync(item.inbox_url, body, headers)
+                        if ok:
+                            s.delete(item)
+                        else:
+                            item.attempts += 1
+                            if item.attempts >= 7:
+                                item.status = "failed"
+                            item.last_error = "Max retries reached"
+                    except Exception as e:
+                        item.attempts += 1
+                        item.last_error = str(e)
+                        if item.attempts >= 7:
+                            item.status = "failed"
+                s.commit()
+        except Exception as e:
+            logger.error("Delivery worker error: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
@@ -69,6 +128,9 @@ async def lifespan(app: FastAPI):
         _cleanup_avatars()
     except Exception:
         pass
+    import threading
+    t = threading.Thread(target=_delivery_worker, daemon=True)
+    t.start()
     yield
 
 app = FastAPI(title="WRIT, the sns for writers", version="1.0.0", lifespan=lifespan)

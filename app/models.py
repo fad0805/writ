@@ -621,6 +621,20 @@ class ServerSetting(Base):
         return s
 
 
+class PendingDelivery(Base):
+    __tablename__ = "pending_deliveries"
+
+    id = Column(Integer, primary_key=True)
+    inbox_url = Column(String(512), nullable=False)
+    activity_json = Column(Text, nullable=False)
+    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status = Column(String(16), default="pending")  # pending, failed
+    attempts = Column(Integer, default=0)
+    last_error = Column(Text, default="")
+    created_at = Column(DateTime(timezone=True), default=now)
+    updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
+
+
 def init_db():
     Base.metadata.create_all(engine)
 

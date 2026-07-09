@@ -904,6 +904,18 @@ def _send_flag(reporter: User, target_type: str, target_obj, reason: str):
         _post_to_inbox(inbox, flag, reporter)
 
 
+def _deliver_sync(inbox_url: str, body: bytes, headers: dict) -> bool:
+    for attempt in range(3):
+        try:
+            httpx.post(inbox_url, content=body, headers=headers, timeout=15)
+            return True
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(2 ** attempt)
+            logger.warning("Delivery attempt %d/3 failed for %s: %s", attempt + 1, inbox_url, e)
+    return False
+
+
 def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     if not _validate_url(inbox_url):
         return
@@ -934,15 +946,20 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
         "Host": parsed.netloc,
     }
 
-    # Retry up to 3 times with exponential backoff
-    for attempt in range(3):
-        try:
-            httpx.post(inbox_url, content=body, headers=headers, timeout=10)
-            return
-        except Exception as e:
-            if attempt < 2:
-                time.sleep(2 ** attempt)
-            logger.warning("Failed to deliver to %s (attempt %d/3): %s", inbox_url, attempt + 1, e)
+    # Immediate delivery attempt with inline retry
+    if _deliver_sync(inbox_url, body, headers):
+        return
+
+    # Queue for background retry if immediate delivery fails
+    from app.models import PendingDelivery
+    with get_session() as session:
+        session.add(PendingDelivery(
+            inbox_url=inbox_url,
+            activity_json=json.dumps(activity, ensure_ascii=False),
+            sender_id=sender.id,
+            status="pending",
+        ))
+        session.commit()
 
 
 def send_to_shared_inbox(user: User, activity: dict):
