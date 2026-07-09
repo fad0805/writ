@@ -598,26 +598,35 @@ def get_series_by_handle(request: Request, username: str, number: str):
 @app.get("/nodeinfo/2.0")
 def nodeinfo():
     with get_session() as session:
-        user_count = session.query(User).count()
-        post_count = session.query(Post).count()
+        user_count = session.query(User).filter_by(is_remote=False).count()
+        active_users = session.query(User).filter(
+            User.is_remote == False,
+            User.id.in_(session.query(Post.author_id).filter(Post.created_at > (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30))))
+        ).count()
+        local_post_count = session.query(Post).filter(Post.author.has(is_remote=False)).count()
+        from app.models import ServerSetting
+        settings = ServerSetting.get(session)
+        server_name = settings.server_name or "WRIT"
+        server_desc = getattr(settings, 'server_description', '') or ''
+        open_reg = not (getattr(settings, 'require_invite', False) or False)
 
     return JSONResponse({
         "version": "2.0",
         "software": {
-            "name": "sns-novel-blog",
+            "name": "writ",
             "version": "1.0.0",
-            "repository": "https://github.com/example/sns-novel-blog",
+            "repository": "https://github.com/fad0805/writ",
         },
         "protocols": ["activitypub"],
         "services": {"inbound": [], "outbound": []},
-        "openRegistrations": True,
+        "openRegistrations": open_reg,
         "usage": {
-            "users": {"total": user_count},
-            "localPosts": post_count,
+            "users": {"total": user_count, "activeHalfyear": active_users, "activeMonth": active_users},
+            "localPosts": local_post_count,
         },
         "metadata": {
-            "nodeName": "SNS + Novel Blog",
-            "nodeDescription": "ActivityPub SNS with serial novel publishing blog",
+            "nodeName": server_name,
+            "nodeDescription": server_desc,
         },
     })
 
