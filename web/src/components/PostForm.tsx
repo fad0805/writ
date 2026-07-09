@@ -445,6 +445,30 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     taRef.current = ta;
   }, []);
 
+  const handleMediaFiles = useCallback((files: File[]) => {
+    setMediaWarning("");
+    for (const f of files) {
+      const isVideo = f.type === "video/mp4" || f.type === "video/webm";
+      if (f.size > 26214400 && isVideo) { setMediaWarning("비디오는 25MB를 초과할 수 없습니다."); continue; }
+      if (isVideo && mediaItems.some(m => m.type === "video")) continue;
+      if (mediaItems.length >= 4) break;
+      const id = ++mediaIdRef.current; setMediaItems(prev => [...prev, { id, url: "", type: isVideo ? "video" : "image", file: f }]);
+    }
+  }, [mediaItems]);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const files = Array.from(e.clipboardData.files).filter(f => f.type.startsWith("image/") || f.type === "video/mp4" || f.type === "video/webm");
+    if (files.length > 0) { e.preventDefault(); handleMediaFiles(files); }
+  }, [handleMediaFiles]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/") || f.type === "video/mp4" || f.type === "video/webm");
+    if (files.length > 0) handleMediaFiles(files);
+  }, [handleMediaFiles]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (overLimit) {
@@ -474,7 +498,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   };
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className={`relative ${overLimit ? "over-limit" : nearLimit ? "near-limit" : ""}`} onClick={(e) => e.stopPropagation()}>
+    <form ref={formRef} onSubmit={handleSubmit} className={`relative ${overLimit ? "over-limit" : nearLimit ? "near-limit" : ""}`} onClick={(e) => e.stopPropagation()} onDragOver={handleDragOver} onDrop={handleDrop}>
       {mediaWarning && <div style={{ fontSize: "0.85em", color: "var(--danger)", marginBottom: 6, padding: "4px 8px", background: "var(--bg-tertiary)", borderRadius: 6 }}>{mediaWarning}</div>}
       {mediaItems.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
@@ -511,6 +535,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           onKeyDown={handleKeyDown}
           onKeyUp={handleTaEvent}
           onMouseUp={handleTaEvent}
+          onPaste={handlePaste}
           textareaRef={handleTaRef}
         />
       </div>
@@ -597,13 +622,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           <input ref={mediaInputRef} type="file" accept="image/*,video/mp4,video/webm" multiple hidden onChange={async (e) => {
             e.stopPropagation();
             const files = Array.from(e.target.files || []);
-            for (const f of files) {
-              const isVideo = f.type === "video/mp4" || f.type === "video/webm";
-              if (f.size > 26214400 && isVideo) { setMediaWarning("비디오는 25MB를 초과할 수 없습니다."); continue; }
-              if (isVideo && mediaItems.some(m => m.type === "video")) continue;
-              if (mediaItems.length >= 4) break;
-              const id = ++mediaIdRef.current; setMediaItems(prev => [...prev, { id, url: "", type: isVideo ? "video" : "image", file: f }]);
-            }
+            handleMediaFiles(files);
             e.target.value = "";
           }} />
           <EmojiPicker onEmoji={(e) => setContent(content + e)} />
