@@ -11,7 +11,7 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, get_session
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, get_session
 from app.routes.auth import require_auth, get_current_user
 from app.log_utils import log_admin_action
 
@@ -733,20 +733,28 @@ def api_delete_post(request: Request, post_id: int):
 
 
 @router.post("/reports")
-def api_create_report(request: Request, target_type: str = Form(...), target_id: int = Form(...), reason: str = Form(...)):
+def api_create_report(request: Request, target_type: str = Form(...), target_id: int = Form(...), reason: str = Form(...), rule_ids: str = Form("")):
     user = require_auth(request)
     target_type = target_type.strip().lower()
     if target_type not in ("post", "novel", "episode"):
         raise HTTPException(status_code=400, detail="Invalid target_type")
     if not reason or len(reason.strip()) < 10:
         raise HTTPException(status_code=400, detail="Reason must be at least 10 characters")
+    parsed_rule_ids = []
+    if rule_ids:
+        try:
+            parsed_rule_ids = json.loads(rule_ids)
+            if not isinstance(parsed_rule_ids, list):
+                parsed_rule_ids = []
+        except json.JSONDecodeError:
+            parsed_rule_ids = []
     with get_session() as s:
         existing = s.query(Report).filter_by(
             reporter_id=user.id, target_type=target_type, target_id=target_id, status="pending"
         ).first()
         if existing:
             raise HTTPException(status_code=409, detail="Already reported")
-        report = Report(reporter_id=user.id, target_type=target_type, target_id=target_id, reason=reason.strip())
+        report = Report(reporter_id=user.id, target_type=target_type, target_id=target_id, reason=reason.strip(), rule_ids=parsed_rule_ids)
         s.add(report)
         s.flush()
         report_id = report.id
@@ -787,6 +795,13 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
             ))
         s.commit()
     return {"ok": True, "report_id": report_id}
+
+
+@router.get("/rules")
+def api_list_rules():
+    with get_session() as s:
+        rules = s.query(ServerRule).order_by(ServerRule.sort_order).all()
+        return [{"id": r.id, "title": r.title, "description": r.description, "sort_order": r.sort_order} for r in rules]
 
 
 @router.post("/posts/{post_id}/like")
@@ -3302,9 +3317,13 @@ def api_admin_list_reports(request: Request, status: str = "pending", target_typ
                 "target_type": r.target_type,
                 "target_id": r.target_id,
                 "reason": r.reason,
+                "rule_ids": r.rule_ids if r.rule_ids else [],
                 "status": r.status,
                 "created_at": _fmt_dt(r.created_at),
             }
+            if r.rule_ids:
+                rules = s.query(ServerRule).filter(ServerRule.id.in_(r.rule_ids)).all()
+                item["rules"] = [{"id": rule.id, "title": rule.title} for rule in rules]
             if r.target_type == "post":
                 post = s.query(Post).filter_by(id=r.target_id).first()
                 if post:
@@ -3355,9 +3374,13 @@ def api_admin_get_report(request: Request, report_id: int):
             "target_type": r.target_type,
             "target_id": r.target_id,
             "reason": r.reason,
+            "rule_ids": r.rule_ids if r.rule_ids else [],
             "status": r.status,
             "created_at": _fmt_dt(r.created_at),
         }
+        if r.rule_ids:
+            rules = s.query(ServerRule).filter(ServerRule.id.in_(r.rule_ids)).all()
+            item["rules"] = [{"id": rule.id, "title": rule.title, "description": rule.description} for rule in rules]
         if r.target_type == "post":
             post = s.query(Post).filter_by(id=r.target_id).first()
             if post:
@@ -3426,6 +3449,75 @@ def api_admin_dismiss_report(request: Request, report_id: int):
         report.resolved_by_id = user.id
         s.commit()
     log_admin_action(user.id, user.username, "dismiss_report", target_type="report", target_id=report_id, details=f"target:{report.target_type}:{report.target_id}", ip_address=request.client.host if request.client else "")
+    return {"ok": True}
+
+
+@router.get("/admin/rules")
+def api_admin_list_rules(request: Request):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        rules = s.query(ServerRule).order_by(ServerRule.sort_order).all()
+        return [{"id": r.id, "title": r.title, "description": r.description, "sort_order": r.sort_order} for r in rules]
+
+
+@router.post("/admin/rules/new")
+def api_admin_create_rule(request: Request, title: str = Form(...), description: str = Form("")):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        max_order = s.query(func.max(ServerRule.sort_order)).scalar() or 0
+        rule = ServerRule(title=title, description=description, sort_order=max_order + 1)
+        s.add(rule)
+        s.commit()
+        return {"id": rule.id, "title": rule.title, "description": rule.description, "sort_order": rule.sort_order}
+
+
+@router.post("/admin/rules/{rule_id}/edit")
+def api_admin_edit_rule(request: Request, rule_id: int, title: str = Form(...), description: str = Form("")):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        rule = s.query(ServerRule).get(rule_id)
+        if not rule:
+            raise HTTPException(status_code=404, detail="Rule not found")
+        rule.title = title
+        rule.description = description
+        s.commit()
+        return {"id": rule.id, "title": rule.title, "description": rule.description, "sort_order": rule.sort_order}
+
+
+@router.post("/admin/rules/{rule_id}/delete")
+def api_admin_delete_rule(request: Request, rule_id: int):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        rule = s.query(ServerRule).get(rule_id)
+        if not rule:
+            raise HTTPException(status_code=404, detail="Rule not found")
+        s.delete(rule)
+        s.commit()
+    return {"ok": True}
+
+
+@router.post("/admin/rules/reorder")
+def api_admin_reorder_rules(request: Request, rule_ids: str = Form(...)):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    ids = []
+    try:
+        ids = json.loads(rule_ids)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid rule_ids")
+    with get_session() as s:
+        for i, rid in enumerate(ids):
+            s.query(ServerRule).filter_by(id=rid).update({"sort_order": i})
+        s.commit()
     return {"ok": True}
 
 

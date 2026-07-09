@@ -219,7 +219,8 @@ export default function RightSidebar() {
           <p className="empty-small">로딩 중...</p>
         )}
       </div>
-      <div style={{ borderTop: "1px solid var(--border)", padding: "10px 0 4px", fontSize: 12, color: "var(--text-dim)" }}>
+      <div style={{ borderTop: "1px solid var(--border)", padding: "10px 0 4px", fontSize: 12, color: "var(--text-dim)", display: "flex", gap: 12 }}>
+        <Link href="/rules" style={{ color: "var(--accent)" }}>서버 규칙</Link>
         <a href="https://github.com/fad0805/writ" target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>
           소스코드 (GitHub)
         </a>

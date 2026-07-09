@@ -40,6 +40,8 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   const [reportReason, setReportReason] = useState("");
   const [reportError, setReportError] = useState("");
   const [reportDone, setReportDone] = useState(false);
+  const [reportRules, setReportRules] = useState<any[]>([]);
+  const [selectedRuleIds, setSelectedRuleIds] = useState<number[]>([]);
   const [liked, setLiked] = useState(post.liked);
   const [boosted, setBoosted] = useState(post.boosted);
   const [bookmarked, setBookmarked] = useState(post.bookmarked);
@@ -82,7 +84,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
     if (reportReason.trim().length < 10) { setReportError("최소 10자 이상 입력해주세요."); return; }
     setReportError("");
     try {
-      await api.report("post", post.id, reportReason.trim());
+      await api.report("post", post.id, reportReason.trim(), selectedRuleIds);
       setReportDone(true);
     } catch (e: any) {
       setReportError(e.message || "신고 처리 중 오류가 발생했습니다.");
@@ -363,7 +365,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
             </>
           )}
           {currentUser && !post.is_mine && (
-            <button onClick={() => { setShowReport(true); setReportReason(""); setReportError(""); setReportDone(false); }} className="action-btn" title="신고" style={{ marginLeft: 12, color: "var(--text-muted)" }}>
+            <button onClick={() => { setShowReport(true); setReportReason(""); setReportError(""); setReportDone(false); setSelectedRuleIds([]); fetch("/api/rules").then((r) => r.json()).then((d) => setReportRules(d)).catch(() => {}); }} className="action-btn" title="신고" style={{ marginLeft: 12, color: "var(--text-muted)" }}>
               <Icon name="flag" />
             </button>
           )}
@@ -380,6 +382,18 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
               <p style={{ color: "var(--text-secondary)", margin: "16px 0" }}>신고가 접수되었습니다. 검토 후 조치하겠습니다.</p>
             ) : (
               <>
+                {reportRules.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    {reportRules.map((rule) => (
+                      <label key={rule.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", cursor: "pointer", fontSize: "0.9em" }}>
+                        <input type="checkbox" checked={selectedRuleIds.includes(rule.id)} onChange={(e) => {
+                          setSelectedRuleIds((prev) => e.target.checked ? [...prev, rule.id] : prev.filter((id) => id !== rule.id));
+                        }} />
+                        {rule.title}
+                      </label>
+                    ))}
+                  </div>
+                )}
                 <textarea
                   value={reportReason}
                   onChange={(e) => setReportReason(e.target.value)}
