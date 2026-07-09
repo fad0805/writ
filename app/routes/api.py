@@ -2223,10 +2223,8 @@ def api_upload_media(request: Request, file: UploadFile = File(...)):
     key = f"media/{name}"
     if is_image:
         img = PILImage.open(io.BytesIO(file.file.read()))
-        if img.mode == "RGBA":
-            img = img.convert("RGB")
         buf = io.BytesIO()
-        img.save(buf, "WEBP", quality=85)
+        img.save(buf, "WEBP", quality=85, lossless=(img.mode == "RGBA"))
         storage.save(key, buf.getvalue())
         url = storage.url(key)
     else:
