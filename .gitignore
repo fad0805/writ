@@ -17,6 +17,7 @@ static/uploads/*
 .DS_Store
 
 logs/
+TODO.md
 
 # Next.js
 web/node_modules/
