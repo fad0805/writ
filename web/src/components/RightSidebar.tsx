@@ -23,10 +23,7 @@ export default function RightSidebar() {
     if (!user) return;
     api.getMyNovels().then((d) => setNovels(d.novels)).catch(() => {});
     api.getNotifications(undefined, 10, 0).then((d) => setNotifs(d.notifications)).catch(() => {});
-    const notifUrl = typeof window !== "undefined" && window.location.hostname === "localhost" && window.location.port === "3000"
-      ? "http://localhost:8000/api/notifications/stream"
-      : "/api/notifications/stream";
-    const es = new EventSource(notifUrl, { withCredentials: true });
+    const es = new EventSource("/api/notifications/stream");
     es.onmessage = (event) => {
       if (event.data === "refresh") {
         api.getNotifications(undefined, 10, 0).then((d) => {

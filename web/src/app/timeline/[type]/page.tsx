@@ -172,10 +172,7 @@ export default function TimelinePage() {
   useEffect(() => {
     let es: EventSource | null = null;
     try {
-      const u = typeof window !== "undefined" && window.location.hostname === "localhost" && window.location.port === "3000"
-        ? `http://localhost:8000/api/timeline/stream?type=${tlType}`
-        : `/api/timeline/stream?type=${tlType}`;
-      es = new EventSource(u, { withCredentials: true });
+      es = new EventSource(`/api/timeline/stream?type=${tlType}`);
     } catch { return; }
     es.onmessage = (event) => {
       try {
