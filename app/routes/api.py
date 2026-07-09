@@ -2217,9 +2217,6 @@ def api_migrate_account(request: Request, target_username: str = Form(...), seri
             # Also transfer episodes
             s.query(Episode).filter(Episode.novel_id == n.id).update({"author_id": target.id})
 
-        # Transfer all posts from user to target
-        s.query(Post).filter(Post.author_id == user.id).update({"author_id": target.id})
-
         # Freeze old account
         user.is_frozen = True
         user.is_suspended = False
