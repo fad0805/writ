@@ -1184,7 +1184,15 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         novels_q = s.query(Novel).filter_by(author_id=profile.id)
         if not user or profile.id != user.id:
             novels_q = novels_q.filter(Novel.visibility != "private")
-        novels = novels_q.order_by(desc(Novel.updated_at)).all()
+        latest_ep = s.query(
+            Episode.novel_id,
+            func.max(Episode.created_at).label("max_created")
+        ).group_by(Episode.novel_id).subquery()
+        novels = novels_q.outerjoin(
+            latest_ep, Novel.id == latest_ep.c.novel_id
+        ).order_by(
+            desc(func.coalesce(latest_ep.c.max_created, Novel.created_at))
+        ).all()
         show_follows = user and (profile.id == user.id or profile.follow_list_visibility != "private")
         followers = s.query(Follow).filter_by(following_id=profile.id, accepted=True).all()
         following = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).all()
@@ -1573,7 +1581,13 @@ def api_save_profile_note(request: Request, target_username: str, content: str =
 @router.get("/series")
 def api_novels(request: Request, limit: int = Query(12), offset: int = Query(0)):
     with get_session() as s:
-        q = s.query(Novel).filter_by(is_published=True, visibility="public").order_by(desc(Novel.updated_at))
+        latest_ep = s.query(
+            Episode.novel_id,
+            func.max(Episode.created_at).label("max_created")
+        ).group_by(Episode.novel_id).subquery()
+        q = s.query(Novel).filter_by(is_published=True, visibility="public").outerjoin(
+            latest_ep, Novel.id == latest_ep.c.novel_id
+        ).order_by(desc(func.coalesce(latest_ep.c.max_created, Novel.created_at)))
         raw = q.offset(offset).limit(limit + 1).all()
         has_more = len(raw) > limit
         novels = [_novel_json(n, s) for n in raw[:limit]]
@@ -1584,7 +1598,13 @@ def api_novels(request: Request, limit: int = Query(12), offset: int = Query(0))
 def api_my_novels(request: Request, limit: int = Query(12), offset: int = Query(0)):
     user = require_auth(request)
     with get_session() as s:
-        q = s.query(Novel).filter_by(author_id=user.id).order_by(desc(Novel.updated_at))
+        latest_ep = s.query(
+            Episode.novel_id,
+            func.max(Episode.created_at).label("max_created")
+        ).group_by(Episode.novel_id).subquery()
+        q = s.query(Novel).filter_by(author_id=user.id).outerjoin(
+            latest_ep, Novel.id == latest_ep.c.novel_id
+        ).order_by(desc(func.coalesce(latest_ep.c.max_created, Novel.created_at)))
         total = q.count()
         raw = q.offset(offset).limit(limit).all()
         novels = [_novel_json(n, s) for n in raw]
@@ -3722,10 +3742,13 @@ def api_admin_toggle_episode_publish(request: Request, episode_id: int):
     with get_session() as s:
         ep = s.query(Episode).get(episode_id)
         if not ep: raise HTTPException(status_code=404, detail="Episode not found")
-        ep.is_published = not ep.is_published
+        new_val = not ep.is_published
+        s.query(Episode).filter_by(id=episode_id).update(
+            {"is_published": new_val}, synchronize_session=False
+        )
         s.commit()
-        log_admin_action(user.id, user.username, "toggle_episode_publish", target_type="episode", target_id=episode_id, target_username=ep.novel.author.username if ep.novel else "", details=f"published={ep.is_published}", ip_address=request.client.host if request.client else "")
-    return {"ok": True, "is_published": ep.is_published}
+        log_admin_action(user.id, user.username, "toggle_episode_publish", target_type="episode", target_id=episode_id, target_username=ep.novel.author.username if ep.novel else "", details=f"published={new_val}", ip_address=request.client.host if request.client else "")
+    return {"ok": True, "is_published": new_val}
 
 
 @router.get("/admin/reports")
