@@ -70,9 +70,9 @@ export default function Sidebar() {
 
   const handleLogout = async () => {
     const { api } = await import("@/lib/api");
-    router.replace("/");
     await api.logout();
     await refresh();
+    router.replace("/");
   };
 
   const isActive = (href: string) => {
