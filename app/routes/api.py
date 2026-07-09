@@ -1301,11 +1301,20 @@ def api_reject_follow(request: Request, username: str):
         ).join(User, Follow.follower_id == User.id).filter(User.username == username).first()
         if not target:
             raise HTTPException(status_code=404, detail="Follow request not found")
+        follower = s.query(User).get(target.follower_id)
+        follower_is_remote = follower and follower.is_remote
         s.query(Notification).filter_by(
             from_user_id=target.follower_id, user_id=user.id, notification_type="follow_request"
         ).delete()
         s.delete(target)
         s.commit()
+        if follower_is_remote and follower:
+            from app.activitypub import _send_reject
+            try:
+                follow_activity_id = f"{follower.actor_uri()}#follows/{user.id}"
+                _send_reject(follower.actor_uri(), follow_activity_id, user)
+            except Exception as e:
+                logger.warning("Failed to send Reject: %s", e)
     return {"ok": True}
 
 @router.post("/users/{username}/unfollow")

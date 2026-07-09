@@ -574,6 +574,22 @@ def _send_accept(actor_url: str, activity_id: str, target: User):
     _post_to_inbox(actor_url, accept, target)
 
 
+def _send_reject(actor_url: str, activity_id: str, target: User):
+    reject = {
+        "@context": "https://www.w3.org/ns/activitystreams",
+        "id": f"{target.actor_uri()}#rejects/{activity_id.split('/')[-1]}",
+        "type": "Reject",
+        "actor": target.actor_uri(),
+        "object": {
+            "id": activity_id,
+            "type": "Follow",
+            "actor": actor_url,
+            "object": target.actor_uri(),
+        },
+    }
+    _post_to_inbox(actor_url, reject, target)
+
+
 def _handle_accept(activity: dict) -> tuple[int, str]:
     obj = activity.get("object", {})
     if isinstance(obj, dict):
