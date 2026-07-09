@@ -138,7 +138,7 @@ if [ "$MIG_COUNT" -gt 5 ]; then
     echo -e "${YELLOW}[migrate]${NC} 오래된 마이그레이션 $((MIG_COUNT - 5))개 정리 완료"
 fi
 echo -e "${YELLOW}[api]${NC} 서버 시작 중 (포트 $BACKEND_PORT)..."
-cd "$ROOT_DIR" && APP_ENV=development PYTHONUNBUFFERED=1 "$PYTHON" -m uvicorn app.main:app --reload --host 0.0.0.0 --port "$BACKEND_PORT" \
+cd "$ROOT_DIR" && APP_ENV=development PYTHONUNBUFFERED=1 "$PYTHON" -m uvicorn app.main:app --reload --reload-exclude 'db_data/*' --host 0.0.0.0 --port "$BACKEND_PORT" \
     > >(tee -a "$COMBINED_LOG" | _prefix_output "[api]" "$GREEN") 2>&1 &
 BACKEND_PID=$!
 PIDS+=("$BACKEND_PID")
