@@ -71,6 +71,7 @@ class User(Base):
     profile_hashtags = Column(JSON, default=list)
     pinned_posts = Column(JSON, default=list)
     pinned_series = Column(JSON, default=list)
+    aliases = Column(JSON, default=list)
 
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)

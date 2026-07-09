@@ -1009,6 +1009,17 @@ def _handle_move(activity: dict) -> tuple[int, str]:
         if not new_actor:
             return (404, "New actor not found")
 
+        # Verify that the new account has the old account in its aliases
+        new_actor_local = session.query(User).filter_by(id=new_actor.id, is_remote=False).first()
+        if new_actor_local:
+            aliases = new_actor_local.aliases or []
+            if old_actor_url not in aliases and local_user.actor_uri() not in aliases:
+                return (403, "New account has not aliased the old account")
+        elif new_actor.is_remote:
+            aliases = new_actor.aliases or []
+            if old_actor_url not in aliases and local_user.remote_url not in aliases:
+                return (403, "New account has not aliased the old account")
+
         followers = session.query(Follow).filter_by(following_id=local_user.id, accepted=True).all()
         moved_count = 0
         for f in followers:

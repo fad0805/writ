@@ -93,6 +93,7 @@ def _user_json(u):
         "follow_list_visibility": getattr(u, 'follow_list_visibility', 'public') or 'public',
         "custom_fields": (u.custom_fields or []) if hasattr(u, 'custom_fields') else [],
         "profile_hashtags": (u.profile_hashtags or []) if hasattr(u, 'profile_hashtags') else [],
+        "aliases": (u.aliases or []) if hasattr(u, 'aliases') else [],
     }
 
 
@@ -2266,6 +2267,32 @@ def api_approve_migrate(request: Request, notification_id: int = Form(...)):
         log_admin_action(user.id, user.username, "account_migrated", target_type="user", target_id=from_user.id if from_user else 0, target_username=from_user.username if from_user else "", ip_address=request.client.host if request.client else "")
 
     return {"ok": True, "message": "계정 이전이 완료되었습니다."}
+
+
+@router.post("/settings/aliases")
+def api_set_aliases(request: Request, aliases: str = Form("[]")):
+    user = require_auth(request)
+    import json as _json
+    try:
+        parsed = _json.loads(aliases)
+        if not isinstance(parsed, list):
+            parsed = []
+    except (_json.JSONDecodeError, TypeError):
+        parsed = []
+    parsed = [a.strip() for a in parsed if isinstance(a, str) and a.strip()]
+    with get_session() as s:
+        db = s.query(User).filter_by(id=user.id).first()
+        db.aliases = parsed
+        s.commit()
+    return {"ok": True, "aliases": parsed}
+
+
+@router.get("/settings/aliases")
+def api_get_aliases(request: Request):
+    user = require_auth(request)
+    with get_session() as s:
+        db = s.query(User).filter_by(id=user.id).first()
+        return {"aliases": (db.aliases or []) if hasattr(db, 'aliases') else []}
 
 
 def _save_profile_image(user_id: int, file: UploadFile, prefix: str, max_size: tuple[int, int], storage) -> str:
