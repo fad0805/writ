@@ -5,7 +5,7 @@ import type { NextRequest } from "next/server";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const apiHost = process.env.API_HOST || "http://api:8000";
+  const apiHost = process.env.API_HOST || "http://localhost:8000";
   const backendUrl = new URL(`${apiHost}/api/notifications/stream`);
   const cookie = request.headers.get("cookie") || "";
 

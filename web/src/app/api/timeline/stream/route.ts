@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const tlType = searchParams.get("type") || "home";
-  const apiHost = process.env.API_HOST || "http://api:8000";
+  const apiHost = process.env.API_HOST || "http://localhost:8000";
   const backendUrl = new URL(`${apiHost}/api/timeline/stream?type=${tlType}`);
   const cookie = request.headers.get("cookie") || "";
 
