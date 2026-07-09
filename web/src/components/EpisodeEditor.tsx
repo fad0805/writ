@@ -5,13 +5,23 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
 import { useEffect, useRef } from "react";
 
+const SIZES = ["50", "75", "100"];
+
 const AlignableImage = Image.extend({
   addAttributes() {
     return {
       src: { default: null },
       alt: { default: null },
       "data-align": { default: "center" },
+      "data-width": { default: "75" },
     };
+  },
+  renderHTML({ node, HTMLAttributes }) {
+    const w = node.attrs["data-width"] as string;
+    return ["img", { ...HTMLAttributes, style: `width:${w}%` }];
+  },
+  parseHTML() {
+    return [{ tag: "img[style*=width]" }];
   },
 });
 
@@ -53,15 +63,32 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
     e.target.value = "";
   };
 
-  const setImageAlign = (align: string) => {
+  const attr = (key: string) => {
+    if (!editor) return null;
+    const { from, to } = editor.state.selection;
+    let val: string | null = null;
+    editor.state.doc.nodesBetween(from, to, (node) => {
+      if (node.type.name === "image") val = node.attrs[key] as string;
+    });
+    return val;
+  };
+
+  const updateImageAttr = (key: string, val: string) => {
     if (!editor) return;
     const { from, to } = editor.state.selection;
     editor.state.doc.nodesBetween(from, to, (node, pos) => {
       if (node.type.name === "image") {
-        editor.chain().focus().setNodeSelection(pos).updateAttributes("image", { "data-align": align }).run();
+        editor.chain().focus().setNodeSelection(pos).updateAttributes("image", { [key]: val }).run();
         return false;
       }
     });
+  };
+
+  const cycleSize = () => {
+    const cur = attr("data-width") || "75";
+    const idx = SIZES.indexOf(cur);
+    const next = SIZES[(idx + 1) % SIZES.length];
+    updateImageAttr("data-width", next);
   };
 
   return (
@@ -75,16 +102,17 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
         <button type="button" onClick={() => editor?.chain().focus().setHorizontalRule().run()}>—</button>
         <span className="toolbar-sep" />
         <button type="button" onClick={() => fileRef.current?.click()} title="이미지 첨부">🖼</button>
-        <button type="button" onClick={() => setImageAlign("left")} data-active={editor?.isActive("image", { "data-align": "left" })}>←정렬</button>
-        <button type="button" onClick={() => setImageAlign("center")} data-active={editor?.isActive("image", { "data-align": "center" })}>가운데</button>
-        <button type="button" onClick={() => setImageAlign("right")} data-active={editor?.isActive("image", { "data-align": "right" })}>정렬→</button>
+        <button type="button" onClick={() => updateImageAttr("data-align", "left")} data-active={attr("data-align") === "left"}>←정렬</button>
+        <button type="button" onClick={() => updateImageAttr("data-align", "center")} data-active={attr("data-align") === "center"}>가운데</button>
+        <button type="button" onClick={() => updateImageAttr("data-align", "right")} data-active={attr("data-align") === "right"}>정렬→</button>
+        <button type="button" onClick={cycleSize} title="이미지 크기">{attr("data-width") ? `${attr("data-width")}%` : "크기"}</button>
       </div>
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={handleImageUpload} />
       <EditorContent editor={editor} className="episode-editor-content" />
       <style>{`
-        .episode-editor-content img[data-align="left"] { float: left; margin: 0 16px 8px 0; max-width: 50%; }
-        .episode-editor-content img[data-align="right"] { float: right; margin: 0 0 8px 16px; max-width: 50%; }
-        .episode-editor-content img[data-align="center"] { display: block; margin: 8px auto; max-width: 100%; }
+        .episode-editor-content img[data-align="left"] { float: left; margin: 0 16px 8px 0; }
+        .episode-editor-content img[data-align="right"] { float: right; margin: 0 0 8px 16px; }
+        .episode-editor-content img[data-align="center"] { display: block; margin: 8px auto; }
         .toolbar-sep { display: inline-block; width: 1px; height: 20px; background: var(--border); margin: 0 4px; vertical-align: middle; }
       `}</style>
     </div>
