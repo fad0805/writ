@@ -2188,6 +2188,50 @@ def api_settings_change_password(request: Request, current_password: str = Form(
     return {"ok": True}
 
 
+@router.post("/settings/migrate")
+def api_migrate_account(request: Request, target_username: str = Form(...), series_ids: str = Form("[]")):
+    user = require_auth(request)
+    if user.is_frozen:
+        raise HTTPException(status_code=400, detail="이미 동결된 계정입니다.")
+    with get_session() as s:
+        target = s.query(User).filter_by(username=target_username.strip(), is_remote=False).first()
+        if not target:
+            raise HTTPException(status_code=404, detail="대상 계정을 찾을 수 없습니다.")
+        if target.id == user.id:
+            raise HTTPException(status_code=400, detail="자기 자신에게 이전할 수 없습니다.")
+        if target.is_frozen:
+            raise HTTPException(status_code=400, detail="대상 계정이 동결되어 있습니다.")
+
+        import json as _json
+        try:
+            sids = _json.loads(series_ids)
+            if not isinstance(sids, list):
+                sids = []
+        except (_json.JSONDecodeError, TypeError):
+            sids = []
+
+        # Transfer selected series
+        novels = s.query(Novel).filter(Novel.id.in_(sids), Novel.author_id == user.id).all()
+        for n in novels:
+            n.author_id = target.id
+            # Also transfer episodes
+            s.query(Episode).filter(Episode.novel_id == n.id).update({"author_id": target.id})
+
+        # Transfer all posts from user to target
+        s.query(Post).filter(Post.author_id == user.id).update({"author_id": target.id})
+
+        # Freeze old account
+        user.is_frozen = True
+        user.is_suspended = False
+        # Clear session
+        user.session_token = ""
+        s.commit()
+
+        log_admin_action(target.id, target.username, "account_migrated", target_type="user", target_id=user.id, target_username=user.username, ip_address=request.client.host if request.client else "")
+
+    return {"ok": True, "message": f"계정이 {target_username}(으)로 이전되었습니다."}
+
+
 def _save_profile_image(user_id: int, file: UploadFile, prefix: str, max_size: tuple[int, int], storage) -> str:
     from PIL import Image as PILImage
     import io
