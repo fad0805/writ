@@ -1039,7 +1039,12 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
             actor_url = actor_url[0]
         if not actor_url:
             return (400, "Missing actor")
-        reporter = s.query(User).filter_by(actor_url=actor_url).first()
+        reporter = s.query(User).filter_by(remote_url=actor_url).first()
+        if not reporter:
+            for u in s.query(User).filter(User.is_remote == False).all():
+                if u.actor_uri() == actor_url:
+                    reporter = u
+                    break
         if not reporter:
             return (202, "Accepted (unknown reporter)")
         objects = activity.get("object", [])
@@ -1081,11 +1086,13 @@ def _handle_move(activity: dict) -> tuple[int, str]:
     if not new_actor_url:
         return (400, "Missing target")
 
+    from app.config import BASE_URL
     with get_session() as session:
-        local_user = session.query(User).filter(
-            User.actor_uri() == old_actor_url,
-            User.is_remote == False,
-        ).first()
+        local_user = None
+        for u in session.query(User).filter(User.is_remote == False).all():
+            if u.actor_uri() == old_actor_url:
+                local_user = u
+                break
         if not local_user:
             local_user = session.query(User).filter(
                 User.remote_url == old_actor_url,
@@ -1154,8 +1161,13 @@ def _send_flag(reporter: User, target_type: str, target_obj, reason: str, rule_i
 def _deliver_sync(inbox_url: str, body: bytes, headers: dict) -> bool:
     for attempt in range(3):
         try:
-            httpx.post(inbox_url, content=body, headers=headers, timeout=15)
-            return True
+            resp = httpx.post(inbox_url, content=body, headers=headers, timeout=15)
+            if resp.is_success:
+                return True
+            if resp.status_code in (400, 401, 403, 404, 405, 410, 422):
+                logger.warning("Permanent failure delivering to %s: HTTP %d", inbox_url, resp.status_code)
+                return False
+            logger.warning("Delivery to %s returned HTTP %d (attempt %d/3)", inbox_url, resp.status_code, attempt + 1)
         except Exception as e:
             if attempt < 2:
                 time.sleep(2 ** attempt)

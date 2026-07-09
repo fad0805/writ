@@ -1,4 +1,5 @@
 import os
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 # Load environment files
@@ -6,9 +7,15 @@ _app_env = os.environ.get("APP_ENV")
 load_dotenv(f".env.{_app_env}")
 
 # Server configuration
-DOMAIN = os.environ.get("DOMAIN")
-SCHEME = os.environ.get("SCHEME")
-BASE_URL = f"{SCHEME}://{DOMAIN}"
+BASE_URL_ENV = os.environ.get("BASE_URL", "")
+if BASE_URL_ENV:
+    DOMAIN = os.environ.get("DOMAIN") or urlparse(BASE_URL_ENV).hostname or ""
+    SCHEME = os.environ.get("SCHEME") or urlparse(BASE_URL_ENV).scheme or "http"
+    BASE_URL = BASE_URL_ENV
+else:
+    DOMAIN = os.environ.get("DOMAIN", "localhost:3000")
+    SCHEME = os.environ.get("SCHEME", "http")
+    BASE_URL = f"{SCHEME}://{DOMAIN}"
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 

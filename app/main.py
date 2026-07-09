@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from urllib.parse import urlparse
 from app.crypto_utils import verify_signature
 from app.config import BASE_URL, DOMAIN, CORS_ORIGINS
-from app.models import User, Follow, Post, ProcessedActivity, get_session, init_db
+from app.models import User, Follow, Post, Novel, ProcessedActivity, get_session, init_db
 from app.routes.auth import router as auth_router
 from app.routes.sns import router as sns_router
 from app.routes.admin import router as admin_router
