@@ -494,9 +494,11 @@ async def api_timeline_stream(request: Request, tl_type: str = "home"):
         try:
             while True:
                 if await request.is_disconnected():
+                    logger.info("event_gen: client disconnected sid=%s", sid)
                     break
                 try:
                     payload = await asyncio.wait_for(q.get(), timeout=30)
+                    logger.info("event_gen: got payload sid=%s len=%s", sid, len(payload))
                     yield f"data: {payload}\n\n"
                 except asyncio.TimeoutError:
                     yield ":keepalive\n\n"
@@ -585,6 +587,7 @@ def _broadcast_federation(user, post, visibility):
 
 def _broadcast_timeline(post_json, author_id, visibility, is_dm):
     """Deliver post to connected timeline streams (background thread)."""
+    logger.info("_broadcast_timeline called: author=%s visibility=%s is_dm=%s", author_id, visibility, is_dm)
     try:
         broadcast_post(post_json, author_id, visibility, is_dm)
     except Exception as e:

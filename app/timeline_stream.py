@@ -18,6 +18,7 @@ def _set_loop():
             _main_loop = asyncio.get_event_loop()
 
 def _enqueue(queue: asyncio.Queue, item: str):
+    logger.info("_enqueue called item_len=%s loop=%s", len(item), _main_loop.is_running() if _main_loop else False)
     if _main_loop and _main_loop.is_running():
         _main_loop.call_soon_threadsafe(queue.put_nowait, item)
     else:
@@ -32,13 +33,20 @@ def add_stream(user_id: int, tl_type: str) -> tuple[int, asyncio.Queue]:
     _counter += 1
     q: asyncio.Queue = asyncio.Queue(maxsize=50)
     _streams[_counter] = {"queue": q, "user_id": user_id, "tl_type": tl_type}
+    logger.info("add_stream: sid=%s user_id=%s tl_type=%s total_streams=%s loop=%s",
+                _counter, user_id, tl_type, len(_streams), _main_loop is not None)
     return _counter, q
 
 def remove_stream(sid: int):
+    logger.info("remove_stream: sid=%s remaining=%s", sid, len(_streams) - 1)
     _streams.pop(sid, None)
 
 def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, post_is_dm: bool):
+    logger.info("broadcast_post called: author=%s visibility=%s streams=%s _main_loop=%s running=%s",
+                post_author_id, post_visibility, len(_streams),
+                _main_loop is not None, _main_loop.is_running() if _main_loop else False)
     if post_visibility not in ("public", "home", "followers") or not _streams:
+        logger.info("broadcast_post early return: visibility=%s _streams=%s", post_visibility, bool(_streams))
         return
     payload = json.dumps(post_json, default=str)
     with get_session() as s:
