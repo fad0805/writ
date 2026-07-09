@@ -222,7 +222,7 @@ def webfinger(request: Request, resource: str = ""):
 @app.get('/favicon.ico', include_in_schema=False)
 def favicon():
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/api/pwa/favicon")
+    return RedirectResponse(url="/api/pwa/favicon", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/users/{username}")
