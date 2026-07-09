@@ -126,10 +126,10 @@ export default function AdminSettingsPage() {
           <label>파비콘</label>
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             {faviconPreview && !removeFavicon && <img src={faviconPreview} alt="favicon" style={{ width: 32, height: 32, borderRadius: 4, objectFit: "cover", flexShrink: 0 }} />}
-            <input type="file" accept=".ico" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setFaviconFile(f); setFaviconPreview(URL.createObjectURL(f)); setRemoveFavicon(false); } }} className="cw-input" />
+            <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setFaviconFile(f); setFaviconPreview(URL.createObjectURL(f)); setRemoveFavicon(false); } }} className="cw-input" />
             {faviconPreview && <button type="button" onClick={() => { setRemoveFavicon(true); setFaviconFile(null); setFaviconPreview(""); }} className="btn btn-small btn-outline" style={{ color: "var(--danger)" }}>제거</button>}
           </div>
-          <p className="form-help">정사각형 이미지를 사용해 주세요.</p>
+          <p className="form-help">정사각형 이미지를 사용해 주세요. 자동으로 리사이즈됩니다.</p>
         </div>
         <div className="form-group">
           <label>모바일 앱 아이콘</label>
