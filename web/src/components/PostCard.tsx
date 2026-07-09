@@ -291,7 +291,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
               ) : (
                 <div key={i} style={{ position: "relative" }}>
                   {isSensitive && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1, cursor: "pointer", color: "#fff", fontSize: 13, fontWeight: 600 }} onClick={() => setRevealedSensitive((prev) => new Set(prev).add(i))}>민감한 내용<br /><span style={{ fontSize: 11, fontWeight: 400 }}>클릭하여 표시</span></div>}
-                  <img key={i} src={m.url} alt="" style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "cover", cursor: "pointer", filter: isSensitive ? "blur(20px)" : "none" }} onClick={(e) => { if (!isSensitive) { e.stopPropagation(); setViewerIndex(i); } }} />
+                  <img key={i} src={m.url} alt={m.alt || ""} style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "cover", cursor: "pointer", filter: isSensitive ? "blur(20px)" : "none" }} onClick={(e) => { if (!isSensitive) { e.stopPropagation(); setViewerIndex(i); } }} />
                 </div>
               );
             })}
@@ -445,7 +445,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
               return m?.type === "video" ? (
                 <video src={m.url} controls style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: 8 }} />
               ) : (
-                <img src={m.url} alt="" style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: 8, objectFit: "contain" }} />
+                <img src={m.url} alt={m.alt || ""} style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: 8, objectFit: "contain" }} />
               );
             })()}
           </div>
