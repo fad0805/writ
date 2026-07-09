@@ -176,18 +176,18 @@ export default function NovelDetailPage() {
                 <span>{e.created_at ? new Date(e.created_at).toISOString().slice(0, 10) : ""}</span>
               </div>
             </div>
-            {isMine && (
+            {(isMine || user?.role === "admin" || user?.role === "moderator" || user?.role === "owner") && (
               <div className="episode-actions-row">
-                <button className="action-btn" onClick={(ev) => { ev.stopPropagation(); router.push(`/series/${novel.id}/episodes/${e.id}/edit`); }}>
+                {isMine && <button className="action-btn" onClick={(ev) => { ev.stopPropagation(); router.push(`/series/${novel.id}/episodes/${e.id}/edit`); }}>
                   <Icon name="edit" />
-                </button>
-                <button className="action-btn text-muted" onClick={async (ev) => {
+                </button>}
+                {(isMine || user?.role === "admin" || user?.role === "moderator" || user?.role === "owner") && <button className="action-btn text-muted" onClick={async (ev) => {
                   ev.stopPropagation();
                   if (!confirm("정말 삭제하시겠습니까?")) return;
                   try { await fetch(`/api/series/${novel.id}/episodes/${e.id}/delete`, { method: "POST", credentials: "include" }); window.location.reload(); } catch {}
                 }}>
                   <Icon name="trash" />
-                </button>
+                </button>}
               </div>
             )}
           </div>

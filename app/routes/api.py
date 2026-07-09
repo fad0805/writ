@@ -2020,8 +2020,13 @@ def api_delete_episode(request: Request, novel_id: int, episode_id: int):
     user = require_active_auth(request)
     with get_session() as s:
         episode = s.query(Episode).filter_by(id=episode_id, novel_id=novel_id).first()
-        if not episode or episode.novel.author_id != user.id:
+        if not episode:
             raise HTTPException(status_code=404, detail="Episode not found")
+        if episode.novel.author_id != user.id and user.role not in ("admin", "moderator", "owner"):
+            raise HTTPException(status_code=404, detail="Episode not found")
+        # Log admin action
+        if episode.novel.author_id != user.id:
+            log_admin_action(user.id, user.username, "delete_episode", target_type="episode", target_id=episode_id, target_username=episode.novel.author.username if episode.novel else "", details=episode.title, ip_address=request.client.host if request.client else "")
         s.delete(episode)
         s.commit()
     return {"ok": True}
@@ -2110,7 +2115,9 @@ def api_delete_notice(request: Request, novel_id: int, notice_id: int):
     user = require_auth(request)
     with get_session() as s:
         notice = s.query(SeriesNotice).filter_by(id=notice_id, novel_id=novel_id).first()
-        if not notice or notice.novel.author_id != user.id:
+        if not notice:
+            raise HTTPException(status_code=404, detail="Notice not found")
+        if notice.novel.author_id != user.id and user.role not in ("admin", "moderator", "owner"):
             raise HTTPException(status_code=404, detail="Notice not found")
         s.delete(notice)
         s.commit()
@@ -3623,31 +3630,54 @@ def api_admin_toggle_sensitive(request: Request, user_id: int):
     return {"ok": True, "is_sensitive": is_sensitive}
 
 
-@router.get("/admin/users/{user_id}/novels")
-def api_admin_user_novels(request: Request, user_id: int):
+@router.get("/admin/content/search")
+def api_admin_content_search(request: Request, q: str = "", mode: str = "series"):
     user = require_auth(request)
     if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
+    if not q.strip():
+        return {"novels": [], "episodes": []}
     with get_session() as s:
-        u = s.query(User).get(user_id)
-        if not u: raise HTTPException(status_code=404, detail="User not found")
-        novels = s.query(Novel).filter_by(author_id=user_id).order_by(desc(Novel.updated_at)).all()
-        from sqlalchemy.orm import selectinload
-        episodes = s.query(Episode).options(selectinload(Episode.novel)).filter(
-            Episode.novel_id.in_([n.id for n in novels])
-        ).order_by(desc(Episode.created_at)).all()
-        ep_map: dict[int, list] = {}
-        for ep in episodes:
-            ep_map.setdefault(ep.novel_id, []).append({
+        from sqlalchemy.orm import selectinload, joinedload
+        query = q.strip()
+        like = f"%{query}%"
+        if mode == "episode":
+            episodes = s.query(Episode).options(joinedload(Episode.novel)).filter(
+                Episode.title.ilike(like)
+            ).order_by(desc(Episode.created_at)).limit(50).all()
+            return {"novels": [], "episodes": [{
                 "id": ep.id, "title": ep.title, "number": ep.number, "is_published": ep.is_published,
-                "created_at": _fmt_dt(ep.created_at),
-            })
-        result = []
-        for n in novels:
-            nj = _novel_json(n, s)
-            nj["episodes"] = ep_map.get(n.id, [])
-            result.append(nj)
-        return {"novels": result, "user": _user_json(u)}
+                "created_at": _fmt_dt(ep.created_at), "novel_id": ep.novel_id,
+            } for ep in episodes]}
+        else:
+            novels_q = s.query(Novel).options(selectinload(Novel.author))
+            if re.match(r'^\d+$', query):
+                novels_q = novels_q.filter(
+                    or_(Novel.title.ilike(like), Novel.id == int(query))
+                )
+            elif re.match(r'^[a-f0-9]{6,16}$', query):
+                novels_q = novels_q.filter(
+                    or_(Novel.title.ilike(like), Novel.number == query)
+                )
+            else:
+                novels_q = novels_q.filter(Novel.title.ilike(like))
+            novels = novels_q.order_by(desc(Novel.updated_at)).limit(50).all()
+            novel_ids = [n.id for n in novels]
+            episodes = s.query(Episode).filter(
+                Episode.novel_id.in_(novel_ids)
+            ).order_by(desc(Episode.created_at)).all()
+            ep_map: dict[int, list] = {}
+            for ep in episodes:
+                ep_map.setdefault(ep.novel_id, []).append({
+                    "id": ep.id, "title": ep.title, "number": ep.number, "is_published": ep.is_published,
+                    "created_at": _fmt_dt(ep.created_at), "novel_id": ep.novel_id,
+                })
+            result = []
+            for n in novels:
+                nj = _novel_json(n, s)
+                nj["episodes"] = ep_map.get(n.id, [])
+                result.append(nj)
+            return {"novels": result, "episodes": []}
 
 @router.post("/admin/novels/{novel_id}/toggle-sensitive")
 def api_admin_toggle_novel_sensitive(request: Request, novel_id: int):
