@@ -4672,13 +4672,16 @@ def api_admin_update_settings(request: Request,
             storage.delete(settings.favicon)
         elif not favicon and settings.favicon:
             storage.delete(settings.favicon)
+            _delete_favicon()
+        settings.logo = logo
+        settings.favicon = favicon
+        if favicon:
+            _save_favicon(favicon)
         if app_icon and settings.app_icon and app_icon != settings.app_icon:
             storage.delete(settings.app_icon)
         elif not app_icon and settings.app_icon:
             storage.delete(settings.app_icon)
             _delete_pwa_icons()
-        settings.logo = logo
-        settings.favicon = favicon
         settings.app_icon = app_icon
         if app_icon:
             _save_pwa_icons(app_icon)
@@ -4712,6 +4715,37 @@ def _save_pwa_icons(source_url: str):
             storage.save(f"pwa/icon-{size}.png", buf.getvalue(), "image/png")
     except Exception as e:
         logger.warning("Failed to save PWA icons: %s", e)
+
+
+def _save_favicon(source_url: str):
+    if not source_url:
+        return
+    from PIL import Image
+    from app.utils.storage import get_storage
+    import io
+    try:
+        import httpx
+        resp = httpx.get(source_url, timeout=10)
+        if not resp.is_success:
+            return
+        img = Image.open(io.BytesIO(resp.content))
+        img = img.convert("RGBA")
+        resized = img.resize((32, 32), Image.LANCZOS)
+        buf = io.BytesIO()
+        resized.save(buf, format="PNG")
+        buf.seek(0)
+        storage = get_storage()
+        storage.save("pwa/favicon.png", buf.getvalue(), "image/png")
+    except Exception as e:
+        logger.warning("Failed to save favicon: %s", e)
+
+
+def _delete_favicon():
+    from app.utils.storage import get_storage
+    try:
+        get_storage().delete("pwa/favicon.png")
+    except Exception:
+        pass
 
 
 def _delete_pwa_icons():
@@ -4750,6 +4784,23 @@ def api_pwa_manifest():
         "categories": ["social", "books", "writing"],
         "icons": icons,
     }
+
+
+@router.get("/pwa/favicon")
+def api_pwa_favicon():
+    from app.utils.storage import get_storage
+    storage = get_storage()
+    try:
+        data = storage.get("pwa/favicon.png")
+        if data:
+            return Response(content=data, media_type="image/png")
+    except Exception:
+        pass
+    import os
+    default_path = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "favicon.ico")
+    if os.path.exists(default_path):
+        return FileResponse(default_path, media_type="image/x-icon")
+    return JSONResponse({"error": "Not found"}, status_code=404)
 
 
 @router.get("/pwa/icon/{size}")
