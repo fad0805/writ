@@ -22,7 +22,12 @@ const AlignableImage = Image.extend({
     const w = node.attrs["data-width"] as string;
     const align = node.attrs["data-align"] as string;
     const wrap = node.attrs["data-wrap"] as string;
-    const style = `width:${w}%`;
+    let style = `width:${w}%`;
+    if (align === "left" && wrap === "true") style += "; float: left; margin: 0 16px 8px 0";
+    else if (align === "right" && wrap === "true") style += "; float: right; margin: 0 0 8px 16px";
+    else if (align === "left" && wrap === "false") style += "; display: block; margin: 8px 0";
+    else if (align === "right" && wrap === "false") style += "; display: block; margin: 8px 0 8px auto";
+    else if (align === "center") style += "; display: block; margin: 8px auto";
     return ["img", { ...HTMLAttributes, style }];
   },
   parseHTML() {
@@ -152,11 +157,7 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={handleImageUpload} />
       <EditorContent editor={editor} className="episode-editor-content" />
       <style>{`
-        .episode-editor-content img[data-align="left"][data-wrap="true"] { float: left; margin: 0 16px 8px 0; }
-        .episode-editor-content img[data-align="right"][data-wrap="true"] { float: right; margin: 0 0 8px 16px; }
-        .episode-editor-content img[data-align="left"][data-wrap="false"] { display: block; margin: 8px 0; }
-        .episode-editor-content img[data-align="right"][data-wrap="false"] { display: block; margin: 8px 0 8px auto; }
-        .episode-editor-content img[data-align="center"] { display: block; margin: 8px auto; }
+        .episode-editor-content img.ProseMirror-selectednode { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
         .toolbar-sep { display: inline-block; width: 1px; height: 20px; background: var(--border); margin: 0 4px; vertical-align: middle; }
       `}</style>
     </div>
