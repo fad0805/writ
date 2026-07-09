@@ -40,6 +40,7 @@ export default function AdminUserDetailPage() {
   const [showChangeRole, setShowChangeRole] = useState(false);
   const [newRole, setNewRole] = useState("user");
   const [msg, setMsg] = useState("");
+  const [resetPwResult, setResetPwResult] = useState("");
   const [noteText, setNoteText] = useState("");
   const [showModerate, setShowModerate] = useState(false);
   const [modAction, setModAction] = useState("warning");
@@ -77,7 +78,7 @@ export default function AdminUserDetailPage() {
     const res = await fetch(path, { method: "POST", credentials: "include", body: form });
     const d = await res.json().catch(() => ({}));
     if (!res.ok) { alert(d.detail || "실패"); return; }
-    if (d.new_password) setMsg(`임시 비밀번호: ${d.new_password}`);
+    if (d.new_password) setResetPwResult(d.new_password);
     load();
   };
 
@@ -266,7 +267,10 @@ export default function AdminUserDetailPage() {
               load();
             }} className="btn btn-small btn-outline">정지 해제</button>
           )}
-          <button onClick={() => act(`/api/admin/users/${u.id}/reset-password`)} className="btn btn-small border-default">암호 초기화</button>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+            <button onClick={() => act(`/api/admin/users/${u.id}/reset-password`)} className="btn btn-small border-default">암호 초기화</button>
+            {resetPwResult && <div style={{ fontSize: "0.75em", color: "var(--accent)", fontWeight: 600 }}>임시 비밀번호: {resetPwResult}</div>}
+          </div>
           <button onClick={() => router.push(`/@${u.username}`)} className="btn btn-small btn-outline">프로필 보기</button>
         </div>
       </div>
