@@ -132,17 +132,6 @@ export default function ProfilePage() {
   useEffect(() => { loadProfile(); }, [loadProfile, router]);
 
   useEffect(() => {
-    if (profile?.moved_to && !isMine) {
-      const match = profile.moved_to.match(/\/@([^/]+)/);
-      if (match) {
-        const newHandle = match[1];
-        if (!confirm(`${profile.display_name || profile.username}님은 ${newHandle}(으)로 계정을 이전했습니다.\n\n이동하시겠습니까?`)) return;
-        router.push(`/@${newHandle}`);
-      }
-    }
-  }, [profile, isMine, router]);
-
-  useEffect(() => {
     if (!loading && profile && !isMine) {
       fetch(`/api/profile-notes/${profile.username}`, { credentials: "include" })
         .then(r => r.json()).then(d => { setProfileNote(d.content || ""); setNoteLoaded(true); })
@@ -380,6 +369,15 @@ export default function ProfilePage() {
         </>
       ) : (
       <>
+      {profile?.moved_to && !isMine && (() => {
+        const match = (profile as any).moved_to.match(/\/@([^/]+)/);
+        const newHandle = match ? match[1] : (profile as any).moved_to;
+        return (
+          <div style={{ padding: "12px 16px", marginBottom: 12, background: "var(--bg-tertiary)", borderRadius: 8, border: "1px solid var(--border)", fontSize: 14, lineHeight: 1.5 }}>
+            {isFollowing ? <><strong>@{profile?.display_handle || profile?.username}</strong> 님이 <strong>@{newHandle}</strong>(으)로 계정을 이전했습니다.<br />팔로우하고 있던 계정입니다.</> : <><strong>@{profile?.display_handle || profile?.username}</strong> 님은 <strong>@{newHandle}</strong>(으)로 이전된 계정입니다.</>}
+          </div>
+        );
+      })()}
       <div className="profile-stats">
         <span className={`profile-stat ${tab === "posts" ? "active" : ""}`} onClick={() => setTab("posts")}><strong>{totalPosts || posts.length}</strong> 게시글</span>
         <span className={`profile-stat ${tab === "novels" ? "active" : ""}`} onClick={() => setTab("novels")}><strong>{novels.length}</strong> 시리즈</span>
