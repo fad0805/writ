@@ -287,8 +287,16 @@ class Post(Base):
             obj["to"] = [followers_uri]
         elif self.visibility == "mention":
             obj["to"] = []
+        media_sensitive = False
+        if self.media_attachments:
+            for _m in (self.media_attachments or []):
+                if isinstance(_m, dict) and _m.get("sensitive"):
+                    media_sensitive = True
+                    break
         if self.summary:
             obj["summary"] = self.summary
+            obj["sensitive"] = True
+        elif media_sensitive:
             obj["sensitive"] = True
         if self.media_attachments:
             from urllib.parse import urlparse
