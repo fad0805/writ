@@ -370,7 +370,7 @@ export default function ProfilePage() {
       ) : (
       <>
       {profile?.moved_to && !isMine && (() => {
-        const match = (profile as any).moved_to.match(/\/@([^/]+)/);
+        const match = (profile as any).moved_to.match(/\/(?:@|users\/)([^/]+)/);
         const newHandle = match ? match[1] : (profile as any).moved_to;
         return (
           <div style={{ padding: "12px 16px", marginBottom: 12, background: "var(--bg-tertiary)", borderRadius: 8, border: "1px solid var(--border)", fontSize: 14, lineHeight: 1.5 }}>
