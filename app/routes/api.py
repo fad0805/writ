@@ -4788,6 +4788,7 @@ def api_pwa_manifest():
 
 @router.get("/pwa/favicon")
 def api_pwa_favicon():
+    from fastapi.responses import Response, FileResponse
     from app.utils.storage import get_storage
     storage = get_storage()
     try:
@@ -4805,6 +4806,7 @@ def api_pwa_favicon():
 
 @router.get("/pwa/icon/{size}")
 def api_pwa_icon(size: int):
+    from fastapi.responses import Response, FileResponse
     from app.utils.storage import get_storage
     storage = get_storage()
     try:
