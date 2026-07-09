@@ -88,7 +88,7 @@ export default function NovelByNumberPage() {
         <div className="pinned-notices">
           {pinnedNotices.map((n) => (
             <div key={n.id} className="pinned-notice-item" onClick={() => router.push(`/series/${novel.id}/notices/${n.id}`)}>
-              <span className="pinned-notice-icon">📌</span>
+              <span className="pinned-notice-icon"><Icon name="pin_filled" /></span>
               <span className="pinned-notice-title">{n.title}</span>
               <span className="pinned-notice-date">{n.created_at ? new Date(n.created_at).toISOString().slice(0, 10) : ""}</span>
             </div>

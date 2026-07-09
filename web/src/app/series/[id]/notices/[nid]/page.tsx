@@ -2,6 +2,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api, NoticeData, NovelData } from "@/lib/api";
+import Icon from "@/components/Icon";
 import Link from "next/link";
 
 export default function NoticeDetailPage() {
@@ -41,7 +42,7 @@ export default function NoticeDetailPage() {
         <h2 style={{ margin: "8px 0 0" }}>{novel?.title || "시리즈"} — 공지사항</h2>
       </div>
       <div className="notice-detail">
-        <h3>{notice.is_pinned && <span style={{ color: "var(--danger)", marginRight: 6 }}>📌</span>}{notice.title}</h3>
+        <h3>{notice.is_pinned && <span style={{ color: "var(--danger)", marginRight: 6 }}><Icon name="pin_filled" /></span>}{notice.title}</h3>
         <p className="text-secondary" style={{ fontSize: "0.85em", marginBottom: 16 }}>
           {notice.created_at ? new Date(notice.created_at).toISOString().slice(0, 10) : ""}
         </p>
