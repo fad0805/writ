@@ -903,6 +903,7 @@ def api_unboost_post(request: Request, post_id: int):
             if remaining == 0:
                 post.bumped_at = None
             s.commit()
+            broadcast_refresh_notifs()
     return {"ok": True}
 
 
