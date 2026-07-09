@@ -4676,14 +4676,100 @@ def api_admin_update_settings(request: Request,
             storage.delete(settings.app_icon)
         elif not app_icon and settings.app_icon:
             storage.delete(settings.app_icon)
+            _delete_pwa_icons()
         settings.logo = logo
         settings.favicon = favicon
         settings.app_icon = app_icon
+        if app_icon:
+            _save_pwa_icons(app_icon)
         settings.admin_ids = admin_ids
         settings.admin_email = admin_email
         s.commit()
     log_admin_action(user.id, user.username, "update_settings", ip_address=request.client.host if request.client else "")
     return {"ok": True}
+
+
+def _save_pwa_icons(source_url: str):
+    """Resize app_icon to PWA icon sizes and save."""
+    if not source_url:
+        return
+    from PIL import Image
+    from app.utils.storage import get_storage
+    import io
+    try:
+        import httpx
+        resp = httpx.get(source_url, timeout=10)
+        if not resp.is_success:
+            return
+        img = Image.open(io.BytesIO(resp.content))
+        img = img.convert("RGBA")
+        storage = get_storage()
+        for size in (192, 512):
+            resized = img.resize((size, size), Image.LANCZOS)
+            buf = io.BytesIO()
+            resized.save(buf, format="PNG")
+            buf.seek(0)
+            storage.save(f"pwa/icon-{size}.png", buf.getvalue(), "image/png")
+    except Exception as e:
+        logger.warning("Failed to save PWA icons: %s", e)
+
+
+def _delete_pwa_icons():
+    """Remove PWA icons from storage, restoring default."""
+    from app.utils.storage import get_storage
+    storage = get_storage()
+    for size in (192, 512):
+        try:
+            storage.delete(f"pwa/icon-{size}.png")
+        except Exception:
+            pass
+
+
+@router.get("/pwa/manifest")
+def api_pwa_manifest():
+    from app.models import ServerSetting
+    with get_session() as s:
+        settings = ServerSetting.get(s)
+        name = settings.server_name or "WRIT"
+        app_icon = settings.app_icon or ""
+    icons = []
+    for size in (192, 512):
+        if app_icon:
+            icons.append({"src": f"/api/pwa/icon/{size}", "sizes": f"{size}x{size}", "type": "image/png"})
+        else:
+            icons.append({"src": f"/icons/icon-{size}.png", "sizes": f"{size}x{size}", "type": "image/png"})
+    return {
+        "name": name,
+        "short_name": name,
+        "description": "작가를 위한 소셜 네트워크",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#1a1a2e",
+        "theme_color": "#1a1a2e",
+        "orientation": "portrait",
+        "categories": ["social", "books", "writing"],
+        "icons": icons,
+    }
+
+
+@router.get("/pwa/icon/{size}")
+def api_pwa_icon(size: int):
+    from app.utils.storage import get_storage
+    storage = get_storage()
+    try:
+        data = storage.get(f"pwa/icon-{size}.png")
+        if data:
+            from fastapi.responses import Response
+            return Response(content=data, media_type="image/png")
+    except Exception:
+        pass
+    # Fallback to default icon
+    import os
+    default_path = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "icons", f"icon-{size}.png")
+    if os.path.exists(default_path):
+        from fastapi.responses import FileResponse
+        return FileResponse(default_path, media_type="image/png")
+    return JSONResponse({"error": "Not found"}, status_code=404)
 
 
 @router.get("/admin/logs")

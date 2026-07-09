@@ -16,6 +16,10 @@ class StorageBackend(ABC):
         ...
 
     @abstractmethod
+    def get(self, key: str) -> bytes:
+        ...
+
+    @abstractmethod
     def exists(self, key: str) -> bool:
         ...
 
@@ -42,6 +46,13 @@ class LocalStorage(StorageBackend):
             os.remove(path)
             return True
         return False
+
+    def get(self, key: str) -> bytes:
+        filepath = os.path.join(self.base_dir, key)
+        if os.path.isfile(filepath):
+            with open(filepath, "rb") as f:
+                return f.read()
+        raise FileNotFoundError(filepath)
 
     def exists(self, key: str) -> bool:
         return os.path.isfile(os.path.join(self.base_dir, key))
@@ -106,6 +117,11 @@ class S3Storage(StorageBackend):
         except Exception as e:
             logger.warning("S3 delete failed for %s: %s", key, e)
             return False
+
+    def get(self, key: str) -> bytes:
+        import io
+        resp = self.client.get_object(Bucket=self.bucket, Key=key)
+        return resp["Body"].read()
 
     def exists(self, key: str) -> bool:
         try:

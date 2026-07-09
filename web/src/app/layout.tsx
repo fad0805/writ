@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: "WRIT",
   description: "SNS for writers",
   icons: { icon: "/favicon.ico", apple: "/icons/icon-192.png" },
-  manifest: "/manifest.json",
+  manifest: "/api/pwa/manifest",
   appleWebApp: { capable: true, title: "WRIT", statusBarStyle: "black-translucent" },
   themeColor: "#1a1a2e",
   viewport: "width=device-width, initial-scale=1, viewport-fit=cover",
