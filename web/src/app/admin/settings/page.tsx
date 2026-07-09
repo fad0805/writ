@@ -39,7 +39,8 @@ export default function AdminSettingsPage() {
 
   const initRef = useRef(false);
   useEffect(() => {
-    if (authLoading || initRef.current) return;
+    if (initRef.current) return;
+    if (!user || authLoading) return;
     initRef.current = true;
     fetch("/api/admin/settings", { credentials: "include" })
       .then((r) => r.json())
@@ -55,7 +56,7 @@ export default function AdminSettingsPage() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [authLoading]);
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
