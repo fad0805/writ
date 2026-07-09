@@ -2209,7 +2209,7 @@ def api_upload_media(request: Request, file: UploadFile = File(...)):
     import io, os
     ext = os.path.splitext(file.filename or "file")[1].lower() if file.filename else ""
     is_video = ext in (".mp4", ".webm", ".ogg", ".mov")
-    is_image = ext in (".jpg", ".jpeg", ".png", ".gif", ".webp")
+    is_image = ext in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".ico")
     if not is_image and not is_video:
         raise HTTPException(status_code=400, detail="Unsupported file type")
     if is_video:
