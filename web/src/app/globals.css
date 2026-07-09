@@ -1245,6 +1245,7 @@ input[type="checkbox"] {
   color: var(--text-primary);
   white-space: pre-wrap;
   margin-bottom: 50px;
+  overflow: hidden;
 }
 .episode-body p { margin: 0 0 10px; white-space: pre-wrap; }
 .episode-body h2 { font-size: 1.2em; margin: 20px 0 8px; }
