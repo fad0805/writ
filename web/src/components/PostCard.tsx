@@ -82,7 +82,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   };
 
   const handleReport = async () => {
-    if (reportReason.trim().length < 10) { setReportError("최소 10자 이상 입력해주세요."); return; }
+    if (selectedRuleIds.length === 0 && reportReason.trim().length < 10) { setReportError("규칙을 선택하거나 사유를 10자 이상 입력해주세요."); return; }
     setReportError("");
     try {
       const form = new FormData();
@@ -405,7 +405,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
                 <textarea
                   value={reportReason}
                   onChange={(e) => setReportReason(e.target.value)}
-                  placeholder="신고 사유를 입력해주세요 (최소 10자)"
+                  placeholder={selectedRuleIds.length > 0 ? "추가 사유 (선택)" : "신고 사유를 입력해주세요 (최소 10자)"}
                   style={{ width: "100%", minHeight: 80, resize: "vertical", marginBottom: 8 }}
                 />
                 {reportError && <p style={{ color: "var(--error)", fontSize: 14, marginBottom: 8 }}>{reportError}</p>}
