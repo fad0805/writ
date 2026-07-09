@@ -125,6 +125,42 @@ export default function Sidebar() {
     );
   }
 
+  const isDeactivated = (user as any)?.is_deactivated;
+
+  if (isDeactivated) {
+    return (
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <Link href="/" className="sidebar-home-link"><h2>{sidebarLogo ? <img src={sidebarLogo} alt="" className="sidebar-logo-img" /> : <span className="sidebar-logo-icon" />} <span>{sidebarServerName}</span></h2></Link>
+        </div>
+        <ul className="nav-links">
+          <NavItem href="/explore" active={isActive("/explore")}>
+            <Icon name="search" /> 탐색
+          </NavItem>
+          <li className="nav-divider" />
+          <NavItem href="/series" active={isActive("/series")}>
+            <Icon name="books_solid" /> 모든 시리즈
+          </NavItem>
+          <li className="nav-divider" />
+          <NavItem href="/rules" active={isActive("/rules")}>
+            <Icon name="shield" /> 서버 규칙
+          </NavItem>
+          <li className="nav-divider" />
+          <NavItem href="/users/settings" active={isActive("/users/settings")}>
+            <Icon name="settings_solid" /> 설정 관리
+          </NavItem>
+        </ul>
+        <div className="spacer" />
+        <button className="theme-toggle" onClick={toggleTheme}>
+          <Icon name={isDark ? "star" : "moon"} /> {isDark ? "라이트모드" : "다크모드"}
+        </button>
+        <button className="sidebar-btn sidebar-btn-logout" onClick={handleLogout}>
+          로그아웃
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
