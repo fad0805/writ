@@ -310,18 +310,6 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
         s.flush()
         user_id = user.id
 
-        # Notify admins/moderators about new registration
-        if not is_first:
-            admins = s.query(User).filter(User.role.in_(["admin", "moderator", "owner"])).all()
-            for admin in admins:
-                if admin.id == user_id:
-                    continue
-                s.add(Notification(
-                    user_id=admin.id, from_user_id=user_id,
-                    notification_type="moderation",
-                    metadata_json=json.dumps({"type": "new_user", "user_id": user_id, "username": username, "display_name": display_name}),
-                ))
-
         if not is_first:
             _send_verification_email(user)
         s.commit()
@@ -346,6 +334,19 @@ def api_verify_email(request: Request, token: str = Form(...)):
             raise HTTPException(status_code=400, detail="유효하지 않은 인증 토큰입니다.")
         u.email_verified = True
         u.verification_token = ""
+
+        # Notify admins/moderators about newly verified user
+        if u.role != "owner":
+            admins = s.query(User).filter(User.role.in_(["admin", "moderator", "owner"])).all()
+            for admin in admins:
+                if admin.id == u.id:
+                    continue
+                s.add(Notification(
+                    user_id=admin.id, from_user_id=u.id,
+                    notification_type="moderation",
+                    metadata_json=json.dumps({"type": "new_user", "user_id": u.id, "username": u.username, "display_name": u.display_name}),
+                ))
+
         s.commit()
         sess = create_session(u.id)
         resp = JSONResponse({"ok": True, "email_verified": True})
@@ -2076,6 +2077,8 @@ def api_settings_change_password(request: Request, current_password: str = Form(
         salt, hval = stored.split(":", 1)
         if not verify_password(current_password, salt, hval):
             raise HTTPException(status_code=400, detail="Current password is incorrect")
+        if verify_password(new_password, salt, hval):
+            raise HTTPException(status_code=400, detail="New password must be different from current password")
         new_salt, new_hsh = hash_password(new_password)
         db.password_hash = new_salt + ":" + new_hsh
         s.commit()
