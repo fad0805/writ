@@ -508,6 +508,12 @@ async def api_timeline_stream(request: Request, tl_type: str = "home"):
     return StreamingResponse(event_gen(), media_type="text/event-stream")
 
 
+@router.get("/timeline/stream-test")
+async def api_timeline_stream_test():
+    logger.info("api_timeline_stream_test ENTERED")
+    return {"ok": True}
+
+
 # ── Post CRUD ──
 
 @router.get("/posts/{post_id}")
