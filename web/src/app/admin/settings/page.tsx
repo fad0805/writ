@@ -39,7 +39,7 @@ export default function AdminSettingsPage() {
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    if (authLoading || dataFetched) return;
+    if (dataFetched) return;
     setDataFetched(true);
     fetch("/api/admin/settings", { credentials: "include" })
       .then((r) => r.json())
@@ -55,7 +55,7 @@ export default function AdminSettingsPage() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [authLoading, dataFetched]);
+  }, [dataFetched]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
