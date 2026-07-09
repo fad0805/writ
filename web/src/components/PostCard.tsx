@@ -143,6 +143,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   const [quotedEpisode, setQuotedEpisode] = useState<QuotedEpisode | null>(null);
   const [loadingQuote, setLoadingQuote] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(-1);
+  const [revealedSensitive, setRevealedSensitive] = useState<Set<number>>(new Set());
   useEffect(() => {
     if (viewerIndex < 0) return;
     const handler = (e: KeyboardEvent) => {
@@ -280,13 +281,20 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
         )}
         {(post as any).media_attachments?.length > 0 && (
           <div className="post-media-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min((post as any).media_attachments.length, 2)}, 1fr)`, gap: 4, marginTop: 8 }}>
-            {(post as any).media_attachments.slice(0, 16).map((m: any, i: number) => (
-              m.type === "video" ? (
-                <video key={i} src={m.url} controls style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "contain", background: "#000" }} />
+             {(post as any).media_attachments.slice(0, 16).map((m: any, i: number) => {
+              const isSensitive = m.sensitive && !revealedSensitive.has(i);
+              return m.type === "video" ? (
+                <div key={i} style={{ position: "relative" }}>
+                  {isSensitive && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1, cursor: "pointer", color: "#fff", fontSize: 13, fontWeight: 600 }} onClick={() => setRevealedSensitive((prev) => new Set(prev).add(i))}>민감한 내용<br /><span style={{ fontSize: 11, fontWeight: 400 }}>클릭하여 표시</span></div>}
+                  <video src={m.url} controls style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "contain", background: "#000", filter: isSensitive ? "blur(20px)" : "none" }} />
+                </div>
               ) : (
-                <img key={i} src={m.url} alt="" style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "cover", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setViewerIndex(i); }} />
-              )
-            ))}
+                <div key={i} style={{ position: "relative" }}>
+                  {isSensitive && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1, cursor: "pointer", color: "#fff", fontSize: 13, fontWeight: 600 }} onClick={() => setRevealedSensitive((prev) => new Set(prev).add(i))}>민감한 내용<br /><span style={{ fontSize: 11, fontWeight: 400 }}>클릭하여 표시</span></div>}
+                  <img key={i} src={m.url} alt="" style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "cover", cursor: "pointer", filter: isSensitive ? "blur(20px)" : "none" }} onClick={(e) => { if (!isSensitive) { e.stopPropagation(); setViewerIndex(i); } }} />
+                </div>
+              );
+            })}
           </div>
         )}
         {loadingQuote && <div className="empty-small loading-small">인용 불러오는 중...</div>}

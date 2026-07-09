@@ -41,7 +41,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [hashtagResults, setHashtagResults] = useState<string[]>([]);
   const [hashtagIdx, setHashtagIdx] = useState(0);
   const [hashtagPos, setHashtagPos] = useState({ top: 0, left: 0 });
-  const [mediaItems, setMediaItems] = useState<{ id: number; url: string; type: string; file?: File }[]>([]);
+  const [mediaItems, setMediaItems] = useState<{ id: number; url: string; type: string; file?: File; sensitive?: boolean }[]>([]);
   const mediaIdRef = useRef(0);
   const [mediaUploading, setMediaUploading] = useState(false);
   const [mediaWarning, setMediaWarning] = useState("");
@@ -482,12 +482,12 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     if (!content.trim() || submitting) return;
     setSubmitting(true);
     try {
-      const uploaded = mediaItems.filter(m => !m.file).map(m => ({ url: m.url, type: m.type }));
+      const uploaded = mediaItems.filter(m => !m.file).map(m => ({ url: m.url, type: m.type, sensitive: m.sensitive || false }));
       for (const m of mediaItems.filter(m => m.file)) {
         const formData = new FormData();
         formData.append("file", m.file!);
         const res = await fetch("/api/media/upload", { method: "POST", credentials: "include", body: formData });
-        if (res.ok) { const d = await res.json(); uploaded.push({ url: d.url, type: d.type }); }
+        if (res.ok) { const d = await res.json(); uploaded.push({ url: d.url, type: d.type, sensitive: m.sensitive || false }); }
       }
       const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrl, media_attachments: JSON.stringify(uploaded) });
       setContent(""); setSummary(""); setMediaItems([]);
@@ -518,6 +518,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
               ) : (
                 <img src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6 }} />
               )}
+              <span onClick={(e) => { e.stopPropagation(); setMediaItems(prev => prev.map((item, j) => j === i ? { ...item, sensitive: !item.sensitive } : item)); }} style={{ position: "absolute", bottom: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: m.sensitive ? "var(--danger)" : "var(--bg-secondary)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, cursor: "pointer", color: m.sensitive ? "#fff" : "var(--text-muted)" }} title={m.sensitive ? "민감 해제" : "민감 표시"}>!</span>
               <span onClick={(e) => { e.stopPropagation(); setMediaItems(mediaItems.filter((_, j) => j !== i)); }} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "var(--danger)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer" }}>×</span>
             </div>
           ))}
