@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { api, NovelData } from "@/lib/api";
 import Icon from "@/components/Icon";
 import { hashColor } from "@/lib/avatar";
+import ClickableCover from "@/components/ClickableCover";
 import InfiniteScroll from "@/components/InfiniteScroll";
 
 export default function NovelsPage() {
@@ -35,7 +36,7 @@ export default function NovelsPage() {
       <div className="novel-card-body novel-card-body-flex">
         <div className="cover-wrap-80">
           {n.cover_image ? (
-                  <img src={n.cover_image} alt="" className="cover-img" style={(n as any).is_sensitive ? { filter: "blur(12px)" } : undefined} />
+                  <ClickableCover src={n.cover_image} isSensitive={(n as any).is_sensitive} className="cover-img" />
                 ) : (
             <div className="cover-fallback cover-fallback-lg" style={{ backgroundColor: hashColor(n.title) }}>
               <Icon name="book" size={24} />

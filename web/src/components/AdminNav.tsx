@@ -2,7 +2,7 @@
 import Link from "next/link";
 import Icon from "./Icon";
 
-export default function AdminNav({ current }: { current: "dashboard" | "reports" | "users" | "emojis" | "settings" | "federation" | "moderation-log" | "blocked-domains" | "rules" }) {
+export default function AdminNav({ current }: { current: "dashboard" | "reports" | "users" | "emojis" | "settings" | "federation" | "moderation-log" | "blocked-domains" | "rules" | "content" }) {
   return (
     <>
       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", marginBottom: 6 }}>중재</div>
@@ -18,6 +18,7 @@ export default function AdminNav({ current }: { current: "dashboard" | "reports"
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
         <Link href="/admin/settings" className={`btn btn-small ${current === "settings" ? "btn-primary" : "btn-outline"}`}>서버 정보</Link>
         <Link href="/admin/emojis" className={`btn btn-small ${current === "emojis" ? "btn-primary" : "btn-outline"}`}>커스텀 이모지</Link>
+        <Link href="/admin/content" className={`btn btn-small ${current === "content" ? "btn-primary" : "btn-outline"}`}>콘텐츠 관리</Link>
       </div>
     </>
   );

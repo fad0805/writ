@@ -9,6 +9,7 @@ import Avatar from "@/components/Avatar";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { Suspense } from "react";
+import ClickableCover from "@/components/ClickableCover";
 import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
 
 function ExploreFallback() {
@@ -118,7 +119,7 @@ function ExploreContent() {
                 <div key={n.id} className="explore-series-card" onClick={() => router.push(`/series/${n.id}`)}>
                   <div className="explore-series-cover">
                     {n.cover_image ? (
-                      <img src={n.cover_image} alt={n.title} className="cover-img" style={(n as any).is_sensitive ? { filter: "blur(12px)" } : undefined} />
+                      <ClickableCover src={n.cover_image} isSensitive={(n as any).is_sensitive} className="cover-img" />
                     ) : (
                       <div className="cover-fallback cover-fallback-md" style={{ backgroundColor: hashColor(n.title) }}>
                         {n.title[0]}
@@ -175,7 +176,7 @@ function ExploreContent() {
                         <div className="novel-card-body novel-card-body-flex">
                           <div className="cover-wrap-80">
                             {n.cover_image ? (
-                              <img src={n.cover_image} alt={n.title} className="cover-img" style={(n as any).is_sensitive ? { filter: "blur(12px)" } : undefined} />
+                      <ClickableCover src={n.cover_image} isSensitive={(n as any).is_sensitive} className="cover-img" />
                             ) : (
                               <div className="cover-fallback cover-fallback-lg" style={{ backgroundColor: hashColor(n.title) }}>
                                 <Icon name="book" size={24} />

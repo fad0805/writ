@@ -3623,6 +3623,32 @@ def api_admin_toggle_sensitive(request: Request, user_id: int):
     return {"ok": True, "is_sensitive": is_sensitive}
 
 
+@router.get("/admin/users/{user_id}/novels")
+def api_admin_user_novels(request: Request, user_id: int):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        u = s.query(User).get(user_id)
+        if not u: raise HTTPException(status_code=404, detail="User not found")
+        novels = s.query(Novel).filter_by(author_id=user_id).order_by(desc(Novel.updated_at)).all()
+        from sqlalchemy.orm import selectinload
+        episodes = s.query(Episode).options(selectinload(Episode.novel)).filter(
+            Episode.novel_id.in_([n.id for n in novels])
+        ).order_by(desc(Episode.created_at)).all()
+        ep_map: dict[int, list] = {}
+        for ep in episodes:
+            ep_map.setdefault(ep.novel_id, []).append({
+                "id": ep.id, "title": ep.title, "number": ep.number, "is_published": ep.is_published,
+                "created_at": _fmt_dt(ep.created_at),
+            })
+        result = []
+        for n in novels:
+            nj = _novel_json(n, s)
+            nj["episodes"] = ep_map.get(n.id, [])
+            result.append(nj)
+        return {"novels": result, "user": _user_json(u)}
+
 @router.post("/admin/novels/{novel_id}/toggle-sensitive")
 def api_admin_toggle_novel_sensitive(request: Request, novel_id: int):
     user = require_auth(request)

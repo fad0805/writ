@@ -95,13 +95,6 @@ export default function NewNovelPage() {
           <div className="profile-edit-avatar-wrap">
             {coverPreview && <img src={coverPreview} alt="" className="cover-preview" style={coverSensitive ? { filter: "blur(12px)" } : undefined} />}
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-              {coverPreview && (
-                <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: "var(--text-secondary)" }}>
-                  <input type="checkbox" checked={coverSensitive} onChange={(e) => setCoverSensitive(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
-                  표지 민감 처리
-                </label>
-              )}
-              {coverPreview && <p className="form-help" style={{ margin: 0 }}>켜면 시리즈 표지가 블러 처리되어 표시됩니다.</p>}
               <div className="profile-edit-file-row">
                 <label className="btn btn-outline profile-edit-file-label" style={{ cursor: "pointer" }}>
                   파일 선택
@@ -109,6 +102,13 @@ export default function NewNovelPage() {
                 </label>
                 {imageFile && <span className="profile-edit-file-name">{imageFile.name}</span>}
               </div>
+              {coverPreview && (
+                <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: "var(--text-secondary)" }}>
+                  <input type="checkbox" checked={coverSensitive} onChange={(e) => setCoverSensitive(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
+                  표지 민감 처리
+                </label>
+              )}
+              {coverPreview && <p className="form-help" style={{ margin: 0 }}>켜면 시리즈 표지가 블러 처리되어 표시됩니다.</p>}
             </div>
           </div>
         </div>

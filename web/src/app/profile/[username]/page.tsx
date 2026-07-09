@@ -9,6 +9,7 @@ import { hashColor } from "@/lib/avatar";
 import Link from "next/link";
 import Avatar from "@/components/Avatar";
 import MentionModal from "@/components/MentionModal";
+import ClickableCover from "@/components/ClickableCover";
 import ConfirmModal from "@/components/ConfirmModal";
 
 export default function ProfilePage() {
@@ -411,7 +412,7 @@ export default function ProfilePage() {
         {pinnedSeries.map((n: any) => (
           <div key={`pin-${n.id}`} className="profile-novel series-card-pinned" style={{ display: "flex", gap: 14, alignItems: "center", cursor: "pointer" }} onClick={() => router.push(n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`)}>
             <div className="cover-wrap-56">
-              {n.cover_image ? <img src={n.cover_image} alt="" className="cover-img" style={(n as any).is_sensitive ? { filter: "blur(12px)" } : undefined} /> : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(n.title) }}><Icon name="book" size={16} /></div>}
+              {n.cover_image ? <ClickableCover src={n.cover_image} isSensitive={(n as any).is_sensitive} className="cover-img" /> : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(n.title) }}><Icon name="book" size={16} /></div>}
             </div>
             <div className="novel-card-body-content" style={{ flex: 1 }}>
               <strong className="profile-novel-title">{n.title}</strong>
@@ -433,7 +434,7 @@ export default function ProfilePage() {
           <div key={n.id} className="profile-novel" style={{ display: "flex", gap: 14, alignItems: "center", cursor: "pointer" }} onClick={() => router.push(n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`)}>
             <div className="cover-wrap-56">
               {n.cover_image ? (
-                <img src={n.cover_image} alt="" className="cover-img" style={(n as any).is_sensitive ? { filter: "blur(12px)" } : undefined} />
+                <ClickableCover src={n.cover_image} isSensitive={(n as any).is_sensitive} className="cover-img" />
               ) : (
                 <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(n.title) }}>
                   <Icon name="book" size={16} />

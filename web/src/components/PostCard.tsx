@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import EditModal from "./EditModal";
 import ReplyModal from "./ReplyModal";
+import ClickableCover from "./ClickableCover";
 import Icon from "./Icon";
 import Avatar from "./Avatar";
 import MiniPostCard from "./MiniPostCard";
@@ -310,7 +311,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
           <div className="quoted-series" onClick={(e) => { e.stopPropagation(); router.push(`/series/${quotedSeries.novel.id}`); }}>
               <div className="cover-wrap-64 bg-tertiary">
               {quotedSeries.novel.cover_image ? (
-                <img src={quotedSeries.novel.cover_image} alt="" className="cover-img" />
+                <ClickableCover src={quotedSeries.novel.cover_image} isSensitive={(quotedSeries.novel as any).is_sensitive} className="cover-img" />
               ) : (
                 <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(quotedSeries.novel.title) }}>
                   {quotedSeries.novel.title[0]}
@@ -329,7 +330,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
           <div className="quoted-series" onClick={(e) => { e.stopPropagation(); router.push(`/series/${quotedEpisode.novel.id}/episodes/${quotedEpisode.episode.id}`); }}>
             <div className="cover-wrap-64 bg-tertiary">
               {quotedEpisode.novel.cover_image ? (
-                <img src={quotedEpisode.novel.cover_image} alt="" className="cover-img" />
+                <ClickableCover src={quotedEpisode.novel.cover_image} isSensitive={(quotedEpisode.novel as any).is_sensitive} className="cover-img" />
               ) : (
                 <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(quotedEpisode.novel.title) }}>
                   {quotedEpisode.novel.title[0]}
