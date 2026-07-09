@@ -3687,10 +3687,12 @@ def api_admin_toggle_novel_sensitive(request: Request, novel_id: int):
     with get_session() as s:
         n = s.query(Novel).get(novel_id)
         if not n: raise HTTPException(status_code=404, detail="Novel not found")
-        n.is_sensitive = not (n.is_sensitive or False)
-        is_sensitive = n.is_sensitive
+        new_val = not (n.is_sensitive or False)
+        s.query(Novel).filter_by(id=novel_id).update(
+            {"is_sensitive": new_val}, synchronize_session=False
+        )
         s.commit()
-    return {"ok": True, "is_sensitive": is_sensitive}
+    return {"ok": True, "is_sensitive": new_val}
 
 
 @router.post("/admin/novels/{novel_id}/set-visibility")
@@ -3703,8 +3705,11 @@ def api_admin_set_novel_visibility(request: Request, novel_id: int, visibility: 
     with get_session() as s:
         n = s.query(Novel).get(novel_id)
         if not n: raise HTTPException(status_code=404, detail="Novel not found")
-        n.visibility = visibility
-        n.is_published = visibility != "private"
+        is_published = visibility != "private"
+        s.query(Novel).filter_by(id=novel_id).update(
+            {"visibility": visibility, "is_published": is_published},
+            synchronize_session=False
+        )
         s.commit()
     return {"ok": True, "visibility": visibility}
 
