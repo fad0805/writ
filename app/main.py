@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from urllib.parse import urlparse
 from app.crypto_utils import verify_signature
 from app.config import BASE_URL, DOMAIN, CORS_ORIGINS
-from app.models import User, Follow, Post, get_session, init_db
+from app.models import User, Follow, Post, ProcessedActivity, get_session, init_db
 from app.routes.auth import router as auth_router
 from app.routes.sns import router as sns_router
 from app.routes.admin import router as admin_router
@@ -379,16 +379,25 @@ async def user_inbox(request: Request, username: str):
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
-    # Rate limiting (Fix 6) — per actor + per IP
     actor_url = activity.get("actor", "")
     if isinstance(actor_url, list):
         actor_url = actor_url[0]
+
+    # Activity ID uniqueness (prevent replay/double-processing)
+    activity_id = activity.get("id", "")
+    if activity_id:
+        with get_session() as s:
+            already = s.query(ProcessedActivity).filter_by(id=activity_id).first()
+            if already:
+                return JSONResponse({"status": "ok", "message": "Already processed"}, status_code=200)
+
+    # Rate limiting — per actor + per IP
     client_ip = request.client.host if request.client else ""
     rate_key = f"inbox:{actor_url or client_ip}"
     if not _check_rate_limit(rate_key):
         return JSONResponse({"status": "error", "message": "Too many requests"}, status_code=429)
 
-    # Validate inbox destination (Fix 11) — check to/cc includes this user
+    # Validate inbox destination — check to/cc includes this user
     to_list = activity.get("to", [])
     if isinstance(to_list, str):
         to_list = [to_list]
@@ -397,31 +406,54 @@ async def user_inbox(request: Request, username: str):
         cc_list = [cc_list]
     all_audiences = to_list + cc_list
     user_uri = user.actor_uri()
-    if activity.get("type") in ("Follow", "Delete"):
-        # Follow/Delete target the user directly, not via to/cc
+    atype = activity.get("type")
+    if atype in ("Follow", "Delete"):
+        pass
+    elif atype == "Flag":
         pass
     elif user_uri not in all_audiences and f"{user_uri}/followers" not in all_audiences:
         return JSONResponse({"status": "error", "message": "Not addressed to this user"}, status_code=403)
 
+    # Verify HTTP Signature
     ok, remote_actor = _verify_http_signature(request, body, activity)
     if not ok:
         return JSONResponse({"status": "error", "message": "Invalid signature"}, status_code=401)
 
-    # Additional check for Delete (Fix 2) — verify actor owns the deleted post
-    if activity.get("type") == "Delete":
-        object_url = activity.get("object", "")
-        if isinstance(object_url, dict):
-            object_url = object_url.get("id", "")
-        if object_url:
-            with get_session() as session:
-                post = session.query(Post).filter_by(ap_id=object_url).first()
-                if post:
-                    author_uri = post.author.actor_uri() if not post.author.is_remote else post.author.remote_url
-                    actor_url = activity.get("actor")
-                    if isinstance(actor_url, list):
-                        actor_url = actor_url[0]
-                    if author_uri != actor_url:
-                        return JSONResponse({"status": "error", "message": "Forbidden"}, status_code=403)
+    # Validate required fields per activity type
+    if not atype:
+        return JSONResponse({"status": "error", "message": "Missing activity type"}, status_code=400)
+    if not actor_url:
+        return JSONResponse({"status": "error", "message": "Missing actor"}, status_code=400)
+    if atype in ("Create", "Update") and not activity.get("object"):
+        return JSONResponse({"status": "error", "message": "Missing object"}, status_code=400)
+    if atype in ("Like", "Announce", "Undo") and not activity.get("object"):
+        return JSONResponse({"status": "error", "message": "Missing object"}, status_code=400)
+
+    # Follow target validation
+    if atype == "Follow":
+        target = activity.get("object", "")
+        if isinstance(target, dict):
+            target = target.get("id", "")
+        if isinstance(target, str) and target != user.actor_uri():
+            return JSONResponse({"status": "error", "message": "Follow target mismatch"}, status_code=403)
+
+    # Object ownership check for Like/Announce/Undo (actor must be the one who created the original activity)
+    if atype in ("Like", "Announce"):
+        pass
+    if atype == "Undo":
+        object_data = activity.get("object", {})
+        if isinstance(object_data, dict):
+            obj_actor = object_data.get("actor", "")
+            if isinstance(obj_actor, list):
+                obj_actor = obj_actor[0]
+            if obj_actor and obj_actor != actor_url:
+                return JSONResponse({"status": "error", "message": "Undo actor mismatch"}, status_code=403)
+
+    # Record activity ID to prevent replay
+    if activity_id:
+        with get_session() as s:
+            s.add(ProcessedActivity(id=activity_id))
+            s.commit()
 
     status_code, message = handle_inbox(activity)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)

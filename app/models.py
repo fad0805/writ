@@ -633,6 +633,13 @@ class ServerSetting(Base):
         return s
 
 
+class ProcessedActivity(Base):
+    __tablename__ = "processed_activities"
+
+    id = Column(String(512), primary_key=True)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+
 class RemoteMedia(Base):
     __tablename__ = "remote_media"
 
