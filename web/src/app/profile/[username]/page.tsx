@@ -370,11 +370,14 @@ export default function ProfilePage() {
       ) : (
       <>
       {profile?.moved_to && !isMine && (() => {
-        const match = (profile as any).moved_to.match(/\/(?:@|users\/)([^/]+)/);
-        const newHandle = match ? match[1] : (profile as any).moved_to;
+        const match = (profile as any).moved_to.match(/https?:\/\/([^/]+)\/(?:@|users\/)([^/]+)/);
+        const newDomain = match ? match[1] : "";
+        const newUser = match ? match[2] : "";
+        const newFull = newUser && newDomain ? `@${newUser}@${newDomain}` : (profile as any).moved_to;
+        const oldFull = `@${profile?.display_handle || profile?.username}@${window.location.host}`;
         return (
           <div style={{ padding: "12px 16px", marginBottom: 12, background: "var(--bg-tertiary)", borderRadius: 8, border: "1px solid var(--border)", fontSize: 14, lineHeight: 1.5 }}>
-            {isFollowing ? <><strong>@{profile?.display_handle || profile?.username}</strong> 님이 <strong>@{newHandle}</strong>(으)로 계정을 이전했습니다.<br />팔로우하고 있던 계정입니다.</> : <><strong>@{profile?.display_handle || profile?.username}</strong> 님은 <strong>@{newHandle}</strong>(으)로 이전된 계정입니다.</>}
+            {isFollowing ? <><strong>{oldFull}</strong> 님이 <strong>{newFull}</strong>(으)로 계정을 이전했습니다.<br />팔로우하고 있던 계정입니다.</> : <><strong>{oldFull}</strong> 님은 <strong>{newFull}</strong>(으)로 이전된 계정입니다.</>}
           </div>
         );
       })()}

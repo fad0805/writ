@@ -2303,6 +2303,17 @@ def api_approve_migrate(request: Request, notification_id: int = Form(...)):
     return {"ok": True, "message": "계정 이전이 완료되었습니다."}
 
 
+@router.post("/settings/migrate/reject")
+def api_reject_migrate(request: Request, notification_id: int = Form(...)):
+    user = require_auth(request)
+    with get_session() as s:
+        n = s.query(Notification).filter_by(id=notification_id, user_id=user.id).first()
+        if n:
+            s.delete(n)
+            s.commit()
+    return {"ok": True}
+
+
 @router.post("/settings/aliases")
 def api_set_aliases(request: Request, aliases: str = Form("[]")):
     user = require_auth(request)

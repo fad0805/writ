@@ -160,13 +160,25 @@ export default function RightSidebar() {
                 const fromName = n.from_user?.display_name || n.from_user?.username || "알 수 없음";
                 return (
                   <div key={n.id} className="mini-post-link" style={{ background: "var(--bg-tertiary)" }}>
-                    <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#e67e22" }}>
-                      <Icon name="direct" size={14} />
+                    <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#e74c3c" }}>
+                      <Icon name="user_solid" size={14} />
                     </div>
                     <div className="mini-post-content">
                       <div className="text-sm" style={{ color: "var(--text)" }}>
                         <strong>{fromName}</strong>
                         <span style={{ color: "var(--text-muted)", marginLeft: 4 }}>님이 계정 이전을 요청했습니다</span>
+                      </div>
+                      <div className="mini-notif-btns" style={{ display: "flex", gap: 4, marginTop: 4 }}>
+                        <button onClick={async () => {
+                          const form = new FormData(); form.append("notification_id", String(n.id));
+                          await fetch("/api/settings/migrate/approve", { method: "POST", credentials: "include", body: form });
+                          setNotifs((prev) => prev.filter((x) => x.id !== n.id));
+                        }} className="btn btn-primary btn-small btn-follow">수락</button>
+                        <button onClick={async () => {
+                          const form = new FormData(); form.append("notification_id", String(n.id));
+                          await fetch("/api/settings/migrate/reject", { method: "POST", credentials: "include", body: form });
+                          setNotifs((prev) => prev.filter((x) => x.id !== n.id));
+                        }} className="btn btn-small btn-follow text-muted">거절</button>
                       </div>
                     </div>
                   </div>
