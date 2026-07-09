@@ -4809,12 +4809,14 @@ def api_pwa_favicon():
     try:
         data = storage.get("pwa/favicon.png")
         if data:
-            return Response(content=data, media_type="image/png", headers={"Cache-Control": "no-cache, max-age=0"})
-    except Exception:
-        pass
+            logger.info("[favicon] serving custom favicon (%d bytes)", len(data))
+            return Response(content=data, media_type="image/png", headers={"Cache-Control": "no-cache, max-age=0", "Vary": "Accept-Encoding"})
+    except Exception as e:
+        logger.info("[favicon] no custom favicon: %s", e)
     import os
     default_path = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "favicon.ico")
     if os.path.exists(default_path):
+        logger.info("[favicon] serving default favicon")
         return FileResponse(default_path, media_type="image/x-icon", headers={"Cache-Control": "no-cache, max-age=0"})
     return JSONResponse({"error": "Not found"}, status_code=404)
 
