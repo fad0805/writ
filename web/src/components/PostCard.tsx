@@ -401,6 +401,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
                     ))}
                   </div>
                 )}
+                <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, color: "var(--text-secondary)" }}>기타 사유</p>
                 <textarea
                   value={reportReason}
                   onChange={(e) => setReportReason(e.target.value)}
