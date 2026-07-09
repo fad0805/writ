@@ -4,6 +4,7 @@ import { AuthProvider } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import RightSidebar from "@/components/RightSidebar";
 import KeyboardShortcuts from "@/components/KeyboardShortcuts";
+import DeactivatedRedirect from "@/components/DeactivatedRedirect";
 
 export const metadata: Metadata = {
   title: "WRIT",
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <RightSidebar />
           </div>
           <KeyboardShortcuts />
+          <DeactivatedRedirect />
         </AuthProvider>
         <script dangerouslySetInnerHTML={{
           __html: `
