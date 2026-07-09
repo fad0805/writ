@@ -9,7 +9,7 @@ import DeactivatedRedirect from "@/components/DeactivatedRedirect";
 export const metadata: Metadata = {
   title: "WRIT",
   description: "SNS for writers",
-  icons: { icon: "/api/pwa/favicon", apple: "/icons/icon-192.png" },
+  icons: { icon: [{ url: "/api/pwa/favicon", sizes: "any", type: "image/png" }], apple: "/icons/icon-192.png" },
   manifest: "/api/pwa/manifest",
   appleWebApp: { capable: true, title: "WRIT", statusBarStyle: "black-translucent" },
   other: { "mobile-web-app-capable": "yes" },
