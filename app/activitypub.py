@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from app.models import User, Post, Follow, Like, Boost, Notification, Report, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, get_session
+from app.models import User, Post, Follow, Like, Boost, Notification, Report, RemoteMedia, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, get_session
 from app.config import BASE_URL, SECRET_KEY
 from app.crypto_utils import generate_keypair, sign_string, encrypt_key, get_private_key
 
@@ -317,6 +317,70 @@ def _safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
     except Exception:
         client.close()
         return None
+
+_REMOTE_MEDIA_MAX_SIZE = 10 * 1024 * 1024
+_REMOTE_MEDIA_EXPIRY_DAYS = 30
+
+
+def _cache_remote_media(remote_url: str) -> str:
+    from app.models import RemoteMedia
+    from app.utils.storage import get_storage
+    if not _validate_url(remote_url):
+        return remote_url
+    with get_session() as s:
+        existing = s.query(RemoteMedia).filter_by(remote_url=remote_url).first()
+        if existing and existing.expires_at and existing.expires_at > datetime.datetime.now(datetime.timezone.utc):
+            return existing.local_url
+    try:
+        resp = _safe_fetch(remote_url, max_size=_REMOTE_MEDIA_MAX_SIZE)
+        if not resp:
+            return remote_url
+        data = resp.content
+        ext = remote_url.rsplit(".", 1)[-1].lower() if "." in remote_url else ""
+        is_image = ext in ("jpg", "jpeg", "png", "gif", "webp")
+        if is_image and len(data) < _REMOTE_MEDIA_MAX_SIZE:
+            from PIL import Image
+            img = Image.open(io.BytesIO(data))
+            img = img.convert("RGB")
+            out = io.BytesIO()
+            img.save(out, format="WEBP", quality=85)
+            data = out.getvalue()
+            ext = "webp"
+        name = f"remote_{uuid.uuid4().hex[:12]}.{ext}"
+        key = f"media/remote/{name}"
+        storage = get_storage()
+        ct = f"image/{ext}" if is_image else "application/octet-stream"
+        local_url = storage.save(key, data, ct)
+        expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=_REMOTE_MEDIA_EXPIRY_DAYS)
+        with get_session() as s:
+            existing2 = s.query(RemoteMedia).filter_by(remote_url=remote_url).first()
+            if existing2:
+                return existing2.local_url
+            s.add(RemoteMedia(remote_url=remote_url, local_url=local_url, size=len(data), expires_at=expires))
+            s.commit()
+        return local_url
+    except Exception as e:
+        logger.warning("Failed to cache remote media %s: %s", remote_url, e)
+    return remote_url
+
+
+def _cleanup_expired_media():
+    from app.models import RemoteMedia
+    from app.utils.storage import get_storage
+    storage = get_storage()
+    try:
+        with get_session() as s:
+            items = s.query(RemoteMedia).filter(RemoteMedia.expires_at < datetime.datetime.now(datetime.timezone.utc)).all()
+            for item in items:
+                try:
+                    storage.delete(item.local_url)
+                except Exception:
+                    pass
+                s.delete(item)
+            s.commit()
+    except Exception as e:
+        logger.warning("Failed to cleanup expired media: %s", e)
+
 
 def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url: str = "") -> str:
     """Download remote image and save, return URL. If old_url given, delete it first."""
@@ -621,6 +685,27 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             _process_emoji_tags(obj.get("tag", []), session)
             session.flush()
 
+            import json as _json
+            raw_attachments = obj.get("attachment", []) if isinstance(obj, dict) else []
+            media_list = []
+            if isinstance(raw_attachments, list):
+                for att in raw_attachments:
+                    if not isinstance(att, dict):
+                        continue
+                    att_type = att.get("mediaType", "")
+                    url = ""
+                    if isinstance(att.get("url"), str):
+                        url = att["url"]
+                    elif isinstance(att.get("url"), dict):
+                        url = att["url"].get("href", "")
+                    if not url:
+                        continue
+                    cached = _cache_remote_media(url)
+                    if att_type.startswith("image/"):
+                        media_list.append({"url": cached, "type": "image"})
+                    elif att_type.startswith("video/"):
+                        media_list.append({"url": cached, "type": "video"})
+
             post = Post(
                 author_id=actor.id,
                 content=content,
@@ -630,6 +715,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 ap_id=post_id,
                 in_reply_to_ap_id=in_reply_to,
                 in_reply_to_id=reply_to_post.id if reply_to_post else None,
+                media_attachments=media_list if media_list else None,
             )
             session.add(post)
             session.flush()

@@ -633,6 +633,17 @@ class ServerSetting(Base):
         return s
 
 
+class RemoteMedia(Base):
+    __tablename__ = "remote_media"
+
+    id = Column(Integer, primary_key=True)
+    remote_url = Column(String(1024), nullable=False, index=True)
+    local_url = Column(String(512), nullable=False)
+    size = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), default=now)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class PendingDelivery(Base):
     __tablename__ = "pending_deliveries"
 

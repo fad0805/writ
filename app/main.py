@@ -131,6 +131,8 @@ async def lifespan(app: FastAPI):
     import threading
     t = threading.Thread(target=_delivery_worker, daemon=True)
     t.start()
+    from app.activitypub import _cleanup_expired_media
+    _cleanup_expired_media()
     yield
 
 app = FastAPI(title="WRIT, the sns for writers", version="1.0.0", lifespan=lifespan)
