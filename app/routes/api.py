@@ -2294,6 +2294,7 @@ def api_approve_migrate(request: Request, notification_id: int = Form(...)):
             from_user.is_suspended = False
             from_user.session_token = ""
             from_user.moved_to = f"{BASE_URL}/@{user.username}"
+            from_user.aliases = []
 
         s.delete(n)
         s.commit()
