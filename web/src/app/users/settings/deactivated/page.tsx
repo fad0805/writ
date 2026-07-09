@@ -3,6 +3,16 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
 
+const EXPORT_TYPES = [
+  { key: "follows", label: "팔로우" },
+  { key: "mutes", label: "뮤트" },
+  { key: "blocks", label: "차단" },
+  { key: "domain_blocks", label: "도메인 차단" },
+  { key: "bookmarks", label: "북마크" },
+  { key: "keyword_mutes", label: "키워드 필터" },
+  { key: "posts", label: "게시글" },
+];
+
 export default function DeactivatedPage() {
   const router = useRouter();
   const { user, refresh } = useAuth();
@@ -14,7 +24,7 @@ export default function DeactivatedPage() {
   }
 
   return (
-    <div style={{ maxWidth: 480, margin: "60px auto", padding: "0 16px" }}>
+    <div style={{ maxWidth: 520, margin: "60px auto", padding: "0 16px" }}>
       <div style={{ textAlign: "center", marginBottom: 32 }}>
         <div style={{ fontSize: 48, marginBottom: 16, color: "var(--danger)" }}>⚠</div>
         <h2 style={{ marginBottom: 8 }}>계정 비활성화</h2>
@@ -40,10 +50,15 @@ export default function DeactivatedPage() {
 
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label>데이터 내려받기</label>
-          <p className="form-help" style={{ marginBottom: 8 }}>계정 데이터를 CSV 파일로 내려받을 수 있습니다.</p>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <a href="/api/settings/export?type=relationships" className="btn btn-outline" download>팔로우/뮤트/차단 등</a>
-            <a href="/api/settings/export?type=posts" className="btn btn-outline" download>게시글</a>
+          <p className="form-help" style={{ marginBottom: 8 }}>
+            각 항목을 개별 CSV 파일로 내려받을 수 있습니다. Mastodon 등 다른 ActivityPub 서버에 업로드하여 가져올 수 있습니다.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {EXPORT_TYPES.map((t) => (
+              <a key={t.key} href={`/api/settings/export/${t.key}`} className="btn btn-outline" style={{ justifyContent: "flex-start", fontSize: 14 }} download>
+                <Icon name="direct" size={14} /> {t.label}
+              </a>
+            ))}
           </div>
         </div>
       </div>

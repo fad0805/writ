@@ -2340,45 +2340,80 @@ def api_reactivate_account(request: Request):
     return {"ok": True}
 
 
-@router.get("/settings/export")
-def api_export_account(request: Request, type: str = Query("relationships")):
+def _domain_from_actor(u) -> str:
+    if not u:
+        return ""
+    if u.is_remote and u.remote_url:
+        from urllib.parse import urlparse
+        return urlparse(u.remote_url).hostname or ""
+    from app.config import DOMAIN
+    return DOMAIN
+
+
+@router.get("/settings/export/{export_type}")
+def api_export_account(request: Request, export_type: str):
     user = require_auth(request)
     import csv, io
     buf = io.StringIO()
     w = csv.writer(buf)
     with get_session() as s:
-        if type == "relationships":
-            w.writerow(["type", "id", "target", "created_at"])
+        if export_type == "follows":
+            w.writerow(["Account address", "Show boosts", "Notify on new posts"])
             follows = s.query(Follow).filter_by(follower_id=user.id, accepted=True).all()
             for f in follows:
                 target = s.query(User).get(f.following_id)
                 if target:
-                    w.writerow(["follow", f.id, target.username, str(f.created_at)])
+                    handle = f"{target.username}@{_domain_from_actor(target)}" if target.is_remote else target.username
+                    w.writerow([handle, "true", "false"])
+        elif export_type == "mutes":
+            w.writerow(["Account address"])
             mutes = s.query(UserMute).filter_by(user_id=user.id).all()
             for m in mutes:
                 target = s.query(User).get(m.target_user_id)
                 if target:
-                    w.writerow(["mute", m.id, target.username, str(m.created_at)])
+                    handle = f"{target.username}@{_domain_from_actor(target)}" if target.is_remote else target.username
+                    w.writerow([handle])
+        elif export_type == "blocks":
+            w.writerow(["Account address"])
             blocks = s.query(UserBlock).filter_by(user_id=user.id).all()
             for b in blocks:
                 target = s.query(User).get(b.target_user_id)
                 if target:
-                    w.writerow(["block", b.id, target.username, str(b.created_at)])
+                    handle = f"{target.username}@{_domain_from_actor(target)}" if target.is_remote else target.username
+                    w.writerow([handle])
+        elif export_type == "bookmarks":
+            w.writerow(["Post URL", "Created at"])
             bookmarks = s.query(Bookmark).filter_by(user_id=user.id).all()
             for bm in bookmarks:
-                w.writerow(["bookmark", bm.id, bm.post_id, str(bm.created_at)])
+                post = s.query(Post).get(bm.post_id)
+                if post:
+                    w.writerow([post.ap_id or f"{BASE_URL}/post/{post.id}", str(bm.created_at)])
+        elif export_type == "keyword_mutes":
+            w.writerow(["Keyword", "Whole word"])
             kw_mutes = s.query(KeywordMute).filter_by(user_id=user.id).all()
             for kw in kw_mutes:
-                w.writerow(["keyword_mute", kw.id, kw.keyword, kw.mode or "or"])
-        elif type == "posts":
-            w.writerow(["type", "id", "content", "created_at"])
+                w.writerow([kw.keyword, "false"])
+        elif export_type == "domain_blocks":
+            w.writerow(["Domain"])
+            blocks = s.query(UserBlock).filter_by(user_id=user.id).all()
+            domains = set()
+            for b in blocks:
+                target = s.query(User).get(b.target_user_id)
+                if target and target.is_remote:
+                    domain = _domain_from_actor(target)
+                    if domain:
+                        domains.add(domain)
+            for d in sorted(domains):
+                w.writerow([d])
+        elif export_type == "posts":
+            w.writerow(["id", "content", "created_at"])
             posts = s.query(Post).filter_by(author_id=user.id, is_deleted=False).all()
             for p in posts:
-                w.writerow(["post", p.id, p.content or "", str(p.created_at)])
+                w.writerow([p.id, p.content or "", str(p.created_at)])
         else:
             raise HTTPException(status_code=400, detail="Invalid type")
     from fastapi.responses import PlainTextResponse
-    return PlainTextResponse(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={type}.csv"})
+    return PlainTextResponse(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={export_type}.csv"})
 
 
 @router.post("/settings/archive-request")
