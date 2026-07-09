@@ -46,6 +46,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [mediaUploading, setMediaUploading] = useState(false);
   const [mediaWarning, setMediaWarning] = useState("");
   const mediaInputRef = useRef<HTMLInputElement>(null);
+  const [altModalIdx, setAltModalIdx] = useState<number | null>(null);
   const [seriesResults, setSeriesResults] = useState<{ id: number; title: string; cover_image: string }[]>([]);
   const [seriesIdx, setSeriesIdx] = useState(0);
   const [seriesPos, setSeriesPos] = useState({ top: 0, left: 0 });
@@ -501,33 +502,44 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     <form ref={formRef} onSubmit={handleSubmit} className={`relative ${overLimit ? "over-limit" : nearLimit ? "near-limit" : ""}`} onClick={(e) => e.stopPropagation()} onDragOver={handleDragOver} onDrop={handleDrop}>
       {mediaWarning && <div style={{ fontSize: "0.85em", color: "var(--danger)", marginBottom: 6, padding: "4px 8px", background: "var(--bg-tertiary)", borderRadius: 6 }}>{mediaWarning}</div>}
       {mediaItems.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
-          {mediaItems.map((m, i) => (
-            <div key={m.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: 8, background: "var(--bg-secondary)", borderRadius: 8, border: "1px solid var(--border)" }}>
-              <div draggable
-                onDragStart={(e) => { const dt = e.dataTransfer; dt.setData("text/plain", String(i)); (e.currentTarget as HTMLElement).style.opacity = "0.4"; }}
+        <div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+            {mediaItems.map((m, i) => (
+              <div key={m.id} draggable style={{ position: "relative", width: 80, height: 80 }}
+                onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(i)); (e.currentTarget as HTMLElement).style.opacity = "0.4"; }}
                 onDragEnd={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
                 onDragOver={(e) => { e.preventDefault(); }}
                 onDrop={(e) => { e.preventDefault(); const from = parseInt(e.dataTransfer.getData("text/plain")); const to = i; if (from !== to) { const c = [...mediaItems]; const [removed] = c.splice(from, 1); c.splice(to, 0, removed); setMediaItems(c); } }}
-                style={{ position: "relative", width: 80, height: 80, flexShrink: 0, cursor: "grab" }}
               >
-                <div style={{ position: "absolute", top: -4, left: -4, display: "flex", gap: 2, zIndex: 1 }}>
-                  {i > 0 && <span onClick={(e) => { e.stopPropagation(); const c = [...mediaItems]; [c[i - 1], c[i]] = [c[i], c[i - 1]]; setMediaItems(c); }} style={{ width: 16, height: 16, borderRadius: "50%", background: "var(--bg-secondary)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, cursor: "pointer" }}>←</span>}
-                  {i < mediaItems.length - 1 && <span onClick={(e) => { e.stopPropagation(); const c = [...mediaItems]; [c[i], c[i + 1]] = [c[i + 1], c[i]]; setMediaItems(c); }} style={{ width: 16, height: 16, borderRadius: "50%", background: "var(--bg-secondary)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, cursor: "pointer" }}>→</span>}
-                </div>
                 {m.type === "video" ? (
-                  <video src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6, filter: m.sensitive ? "blur(8px)" : "none" }} />
+                  <video src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6, filter: m.sensitive ? "blur(8px)" : "none", pointerEvents: "none" }} />
                 ) : (
-                  <img src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6, filter: m.sensitive ? "blur(8px)" : "none" }} />
+                  <img src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6, filter: m.sensitive ? "blur(8px)" : "none", pointerEvents: "none" }} />
                 )}
+                <span onClick={(e) => { e.stopPropagation(); setAltModalIdx(i); }} style={{ position: "absolute", bottom: -4, left: -4, width: 18, height: 18, borderRadius: "50%", background: m.alt ? "var(--accent)" : "var(--bg-secondary)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, cursor: "pointer", color: m.alt ? "#fff" : "var(--text-muted)" }} title="미디어 설명">i</span>
                 <span onClick={(e) => { e.stopPropagation(); setMediaItems(prev => prev.map((item, j) => j === i ? { ...item, sensitive: !item.sensitive } : item)); }} style={{ position: "absolute", bottom: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: m.sensitive ? "var(--danger)" : "var(--bg-secondary)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, cursor: "pointer", color: m.sensitive ? "#fff" : "var(--text-muted)" }} title={m.sensitive ? "민감 해제" : "민감 표시"}>!</span>
                 <span onClick={(e) => { e.stopPropagation(); setMediaItems(mediaItems.filter((_, j) => j !== i)); }} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "var(--danger)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer" }}>×</span>
               </div>
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-                <input type="text" value={m.alt || ""} onChange={(e) => setMediaItems(prev => prev.map((item, j) => j === i ? { ...item, alt: e.target.value } : item))} placeholder="미디어 설명 (시각장애인용)" style={{ fontSize: 13, padding: "4px 8px", border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg)", color: "var(--text)", width: "100%" }} />
+            ))}
+          </div>
+          {altModalIdx !== null && (
+            <div className="reply-modal-backdrop active" onClick={() => setAltModalIdx(null)}>
+              <div className="reply-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+                <button className="reply-modal-close" onClick={() => setAltModalIdx(null)}>×</button>
+                <h3>미디어 설명</h3>
+                <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 8 }}>시각 장애인을 위한 미디어 설명을 입력해주세요. 화면 낭독기에 전달됩니다.</p>
+                <textarea
+                  value={mediaItems[altModalIdx]?.alt || ""}
+                  onChange={(e) => setMediaItems(prev => prev.map((item, j) => j === altModalIdx ? { ...item, alt: e.target.value } : item))}
+                  placeholder="예: 푸른 하늘 아래 펼쳐진 녹색 언덕 위에 서있는 사람"
+                  style={{ width: "100%", minHeight: 80, resize: "vertical", marginBottom: 8 }}
+                />
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button onClick={() => setAltModalIdx(null)} className="btn btn-primary">확인</button>
+                </div>
               </div>
             </div>
-          ))}
+          )}
         </div>
       )}
       <div ref={wrapRef}>

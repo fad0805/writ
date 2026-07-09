@@ -283,14 +283,17 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
           <div className="post-media-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min((post as any).media_attachments.length, 2)}, 1fr)`, gap: 4, marginTop: 8 }}>
              {(post as any).media_attachments.slice(0, 16).map((m: any, i: number) => {
               const isSensitive = m.sensitive && !revealedSensitive.has(i);
+              const revealed = m.sensitive && revealedSensitive.has(i);
               return m.type === "video" ? (
                 <div key={i} style={{ position: "relative" }}>
-                  {isSensitive && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1, cursor: "pointer", color: "#fff", fontSize: 13, fontWeight: 600 }} onClick={() => setRevealedSensitive((prev) => new Set(prev).add(i))}>민감한 내용<br /><span style={{ fontSize: 11, fontWeight: 400 }}>클릭하여 표시</span></div>}
+                  {isSensitive && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 1, cursor: "pointer", color: "#fff", fontSize: 13, fontWeight: 600 }} onClick={() => setRevealedSensitive((prev) => new Set(prev).add(i))}><span>민감한 내용</span><span style={{ fontSize: 11, fontWeight: 400 }}>클릭하여 표시</span></div>}
+                  {revealed && <button onClick={() => setRevealedSensitive((prev) => { const n = new Set(prev); n.delete(i); return n; })} style={{ position: "absolute", top: 4, right: 4, zIndex: 2, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: 4, color: "#fff", fontSize: 11, padding: "2px 8px", cursor: "pointer" }}>블러</button>}
                   <video src={m.url} controls style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "contain", background: "#000", filter: isSensitive ? "blur(20px)" : "none" }} />
                 </div>
               ) : (
                 <div key={i} style={{ position: "relative" }}>
-                  {isSensitive && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1, cursor: "pointer", color: "#fff", fontSize: 13, fontWeight: 600 }} onClick={() => setRevealedSensitive((prev) => new Set(prev).add(i))}>민감한 내용<br /><span style={{ fontSize: 11, fontWeight: 400 }}>클릭하여 표시</span></div>}
+                  {isSensitive && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 1, cursor: "pointer", color: "#fff", fontSize: 13, fontWeight: 600 }} onClick={() => setRevealedSensitive((prev) => new Set(prev).add(i))}><span>민감한 내용</span><span style={{ fontSize: 11, fontWeight: 400 }}>클릭하여 표시</span></div>}
+                  {revealed && <button onClick={() => setRevealedSensitive((prev) => { const n = new Set(prev); n.delete(i); return n; })} style={{ position: "absolute", top: 4, right: 4, zIndex: 2, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: 4, color: "#fff", fontSize: 11, padding: "2px 8px", cursor: "pointer" }}>블러</button>}
                   <img key={i} src={m.url} alt={m.alt || ""} style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "cover", cursor: "pointer", filter: isSensitive ? "blur(20px)" : "none" }} onClick={(e) => { if (!isSensitive) { e.stopPropagation(); setViewerIndex(i); } }} />
                 </div>
               );
