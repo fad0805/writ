@@ -267,12 +267,10 @@ export default function AdminUserDetailPage() {
               load();
             }} className="btn btn-small btn-outline">정지 해제</button>
           )}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-            <button onClick={() => act(`/api/admin/users/${u.id}/reset-password`)} className="btn btn-small border-default">암호 초기화</button>
-            {resetPwResult && <div style={{ fontSize: "0.75em", color: "var(--accent)", fontWeight: 600 }}>임시 비밀번호: {resetPwResult}</div>}
-          </div>
+          <button onClick={() => act(`/api/admin/users/${u.id}/reset-password`)} className="btn btn-small border-default">암호 초기화</button>
           <button onClick={() => router.push(`/@${u.username}`)} className="btn btn-small btn-outline">프로필 보기</button>
         </div>
+        {resetPwResult && <div style={{ background: "var(--accent)", color: "#fff", padding: "10px 16px", borderRadius: 8, marginTop: 12 }}>임시 비밀번호: {resetPwResult}</div>}
       </div>
 
       {/* Moderation log */}
