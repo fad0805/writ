@@ -3622,6 +3622,35 @@ def api_admin_toggle_sensitive(request: Request, user_id: int):
     return {"ok": True, "is_sensitive": is_sensitive}
 
 
+@router.post("/admin/novels/{novel_id}/toggle-sensitive")
+def api_admin_toggle_novel_sensitive(request: Request, novel_id: int):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        n = s.query(Novel).get(novel_id)
+        if not n: raise HTTPException(status_code=404, detail="Novel not found")
+        n.is_sensitive = not (n.is_sensitive or False)
+        s.commit()
+    return {"ok": True, "is_sensitive": n.is_sensitive}
+
+
+@router.post("/admin/novels/{novel_id}/set-visibility")
+def api_admin_set_novel_visibility(request: Request, novel_id: int, visibility: str = Form("public")):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if visibility not in ("public", "unlisted", "private"):
+        raise HTTPException(status_code=400, detail="Invalid visibility")
+    with get_session() as s:
+        n = s.query(Novel).get(novel_id)
+        if not n: raise HTTPException(status_code=404, detail="Novel not found")
+        n.visibility = visibility
+        n.is_published = visibility != "private"
+        s.commit()
+    return {"ok": True, "visibility": visibility}
+
+
 @router.get("/admin/reports")
 def api_admin_list_reports(request: Request, status: str = "pending", target_type: str = "", offset: int = 0, limit: int = 50):
     user = require_auth(request)

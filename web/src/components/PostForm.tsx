@@ -634,17 +634,17 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       <input
         type="text"
         value={summary}
-        onChange={(e) => setSummary(e.target.value)}
+        onChange={(e) => { setSummary(e.target.value); if (e.target.value && !postSensitive) setPostSensitive(true); }}
         placeholder="CW (선택사항)"
         className="cw-input"
         onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { formRef.current?.requestSubmit(); } }}
       />
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, fontSize: 13 }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", color: "var(--text-secondary)" }}>
-          <input type="checkbox" checked={postSensitive} onChange={(e) => setPostSensitive(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
+        <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: !!summary ? "not-allowed" : "pointer", color: "var(--text-secondary)", opacity: !!summary ? 0.6 : 1 }}>
+          <input type="checkbox" checked={postSensitive || !!summary} disabled={!!summary} onChange={(e) => setPostSensitive(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
           민감함
         </label>
-        {postSensitive && <span style={{ color: "var(--danger)", fontSize: 12 }}>이 포스트의 모든 미디어가 블러 처리됩니다</span>}
+        {(postSensitive || !!summary) && <span style={{ color: "var(--danger)", fontSize: 12 }}>{summary ? "CW 설정 시 자동 민감 처리됩니다" : "이 포스트의 모든 미디어가 블러 처리됩니다"}</span>}
       </div>
       <div className="reply-form-footer">
         <VisibilitySelector value={visibility} onChange={(v) => setVisibilityOverride(v)} includeMention />
