@@ -19,14 +19,22 @@ def remove_stream(sid: int):
     _streams.pop(sid, None)
 
 def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, post_is_dm: bool):
-    if post_visibility not in ("public", "home", "followers"):
+    if post_visibility not in ("public", "home", "followers") or not _streams:
         return
     payload = json.dumps(post_json, default=str)
     with get_session() as s:
+        follower_ids = {f.follower_id for f in s.query(Follow).filter_by(
+            following_id=post_author_id, accepted=True
+        ).all()}
+        booster_ids = {b.user_id for b in s.query(Boost).join(Post, Boost.post_id == Post.id).filter(
+            Post.author_id == post_author_id
+        ).all()}
+        author_is_local = s.query(User).get(post_author_id).is_remote == False if post_author_id else False
+
         for sid, info in list(_streams.items()):
             uid = info["user_id"]
             tl = info["tl_type"]
-            if _should_deliver(s, uid, tl, post_author_id, post_visibility):
+            if _should_deliver_fast(uid, tl, post_author_id, post_visibility, follower_ids, booster_ids, author_is_local):
                 try:
                     loop = asyncio.get_event_loop()
                     if loop.is_running():
@@ -64,20 +72,13 @@ def broadcast_refresh_notifs():
     broadcast_notif("refresh")
 
 
-def _should_deliver(session, user_id: int, tl_type: str, author_id: int, visibility: str) -> bool:
+def _should_deliver_fast(user_id: int, tl_type: str, author_id: int, visibility: str,
+                         follower_ids: set[int], booster_ids: set[int], author_is_local: bool) -> bool:
     if tl_type == "home":
         if user_id == author_id:
             return True
         if visibility in ("public", "home", "followers"):
-            following = session.query(Follow).filter_by(
-                follower_id=user_id, following_id=author_id, accepted=True
-            ).first()
-            if following:
-                return True
-            if session.query(Boost).join(Post, Boost.post_id == Post.id).filter(
-                Boost.user_id == user_id, Post.author_id == author_id
-            ).first():
-                return True
+            return user_id in follower_ids or user_id in booster_ids
         return False
     elif tl_type == "social":
         if user_id == author_id:
@@ -85,13 +86,9 @@ def _should_deliver(session, user_id: int, tl_type: str, author_id: int, visibil
         if visibility == "public":
             return True
         if visibility in ("home", "followers"):
-            following = session.query(Follow).filter_by(
-                follower_id=user_id, following_id=author_id, accepted=True
-            ).first()
-            return following is not None
+            return user_id in follower_ids
         return False
     elif tl_type == "local":
-        author = session.query(User).get(author_id)
-        return visibility == "public" and author and not author.is_remote
+        return visibility == "public" and author_is_local
     else:
         return visibility == "public"

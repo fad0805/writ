@@ -4,6 +4,7 @@ import json
 import asyncio
 import datetime
 import logging
+import threading
 from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import desc, or_, and_, func
@@ -559,6 +560,37 @@ def api_get_post(request: Request, post_id: int):
     return result
 
 
+def _broadcast_federation(user, post, visibility):
+    """Deliver Create activity to remote followers (background thread)."""
+    try:
+        create_activity = {
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": f"{BASE_URL}/activities/create/{post.id}",
+            "type": "Create",
+            "actor": user.actor_uri(),
+            "object": post.to_ap_note(),
+        }
+        if visibility == "mention" and post.mentioned_user_ids:
+            with get_session() as ap_s:
+                mu_users = ap_s.query(User).filter(
+                    User.id.in_(post.mentioned_user_ids), User.is_remote == True
+                ).all()
+                for mu in mu_users:
+                    _post_to_inbox(mu.inbox_uri(), create_activity, user)
+        else:
+            broadcast_to_followers(user, create_activity)
+    except Exception as e:
+        logger.warning("Failed to broadcast federation activity: %s", e)
+
+
+def _broadcast_timeline(post_json, author_id, visibility, is_dm):
+    """Deliver post to connected timeline streams (background thread)."""
+    try:
+        broadcast_post(post_json, author_id, visibility, is_dm)
+    except Exception as e:
+        logger.warning("Failed to broadcast timeline: %s", e)
+
+
 @router.post("/posts")
 def api_create_post(
     request: Request,
@@ -642,34 +674,17 @@ def api_create_post(
                 s.add(notif)
         s.commit()
 
-        try:
-            create_activity = {
-                "@context": "https://www.w3.org/ns/activitystreams",
-                "id": f"{BASE_URL}/activities/create/{post.id}",
-                "type": "Create",
-                "actor": user.actor_uri(),
-                "object": post.to_ap_note(),
-            }
-            if visibility == "mention":
-                if post.mentioned_user_ids:
-                    with get_session() as ap_s:
-                        mu_users = ap_s.query(User).filter(
-                            User.id.in_(post.mentioned_user_ids), User.is_remote == True
-                        ).all()
-                        for mu in mu_users:
-                            _post_to_inbox(mu.inbox_uri(), create_activity, user)
-            else:
-                broadcast_to_followers(user, create_activity)
-        except Exception as e:
-            logger.warning("Failed to broadcast federation activity: %s", e)
+        # Async federation broadcast (background thread so it doesn't block response)
+        threading.Thread(target=_broadcast_federation, args=(user, post, visibility), daemon=True).start()
 
         try:
             broadcast("new_post", {"post_id": post.id, "author_id": user.id})
-            pj = _post_json(post, s, user)
-            broadcast_post(pj, user.id, visibility or "public", bool(dm_target_id))
         except Exception as e:
-            logger.warning("Failed to broadcast new_post: %s", e)
-        return _post_json(post, s, user)
+            logger.warning("Failed to broadcast new_post event: %s", e)
+
+        pj = _post_json(post, s, user)
+        threading.Thread(target=_broadcast_timeline, args=(pj, user.id, visibility, bool(dm_target_id)), daemon=True).start()
+        return pj
 
 
 @router.post("/posts/{post_id}/edit")
