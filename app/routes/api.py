@@ -1234,11 +1234,13 @@ def api_follow(request: Request, username: str):
         from app.activitypub import _resolve_actor, _post_to_inbox
         remote_username = username
         with get_session() as s:
-            target = s.query(User).filter_by(username=remote_username, is_remote=True).first()
+            target = s.query(User).filter_by(username=remote_username).first()
             if not target:
-                actor_url = f"https://{username.split('@')[1]}/@{username.split('@')[0]}"
-                target = _resolve_actor(actor_url)
-            if not target:
+                parts = remote_username.split("@")
+                if len(parts) == 2:
+                    actor_url = f"https://{parts[1]}/@{parts[0]}"
+                    target = _resolve_actor(actor_url)
+            if not target or not target.is_remote:
                 raise HTTPException(status_code=404, detail="Remote user not found")
             existing = s.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
             if not existing:
