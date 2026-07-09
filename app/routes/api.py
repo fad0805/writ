@@ -1638,7 +1638,7 @@ def _novel_json(n, s=None):
 @router.post("/series/new")
 def api_create_novel(request: Request, title: str = Form(...), description: str = Form(""),
                      tags: str = Form(""), visibility: str = Form("public"),
-                     cover_image: UploadFile = File(None)):
+                     cover_image: UploadFile = File(None), is_sensitive: bool = Form(False)):
     user = require_active_auth(request)
     if getattr(user, 'is_deceased', False):
         raise HTTPException(status_code=403, detail="고인 계정은 시리즈를 생성할 수 없습니다.")
@@ -1680,7 +1680,7 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
         novel_number = secrets.token_hex(4)
         novel = Novel(author_id=user.id, title=title, description=description, tags=tags,
                       visibility=visibility, is_published=visibility != "private",
-                      cover_image=cover_url, number=novel_number)
+                      cover_image=cover_url, number=novel_number, is_sensitive=is_sensitive)
         s.add(novel)
         s.flush()
         _sync_tags(novel, s)
@@ -3649,6 +3649,20 @@ def api_admin_set_novel_visibility(request: Request, novel_id: int, visibility: 
         n.is_published = visibility != "private"
         s.commit()
     return {"ok": True, "visibility": visibility}
+
+
+@router.post("/admin/episodes/{episode_id}/toggle-publish")
+def api_admin_toggle_episode_publish(request: Request, episode_id: int):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        ep = s.query(Episode).get(episode_id)
+        if not ep: raise HTTPException(status_code=404, detail="Episode not found")
+        ep.is_published = not ep.is_published
+        s.commit()
+        log_admin_action(user.id, user.username, "toggle_episode_publish", target_type="episode", target_id=episode_id, target_username=ep.novel.author.username if ep.novel else "", details=f"published={ep.is_published}", ip_address=request.client.host if request.client else "")
+    return {"ok": True, "is_published": ep.is_published}
 
 
 @router.get("/admin/reports")

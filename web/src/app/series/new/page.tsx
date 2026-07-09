@@ -21,6 +21,7 @@ export default function NewNovelPage() {
   const [coverPreview, setCoverPreview] = useState("");
   const [cropSrc, setCropSrc] = useState("");
   const [visibility, setVisibility] = useState("public");
+  const [coverSensitive, setCoverSensitive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const revokeBlobs = useCallback(() => {
@@ -59,6 +60,7 @@ export default function NewNovelPage() {
       form.append("description", description);
       form.append("tags", tags);
       form.append("visibility", visibility);
+      form.append("is_sensitive", coverSensitive ? "true" : "");
       if (imageFile) form.append("cover_image", imageFile);
       const res = await fetch("/api/series/new", { method: "POST", credentials: "include", body: form });
       const data = await res.json();
@@ -101,6 +103,10 @@ export default function NewNovelPage() {
           </div>
         </div>
         <div className="form-group">
+          <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: "var(--text-secondary)", marginBottom: 12 }}>
+            <input type="checkbox" checked={coverSensitive} onChange={(e) => setCoverSensitive(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
+            표지 민감 처리
+          </label>
           <label>공개 설정</label>
           <SeriesVisibilitySelector value={visibility} onChange={(v) => setVisibility(v)} />
           <p className="form-help">전체공개는 모든 시리즈 목록에 노출되고, 공개는 작가 프로필과 URL로만 접근할 수 있습니다.</p>

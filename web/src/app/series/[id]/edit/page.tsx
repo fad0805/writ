@@ -119,7 +119,7 @@ export default function EditNovelPage() {
         <div className="form-group">
           <label>표지 이미지</label>
           <div className="profile-edit-avatar-wrap">
-            {showPreview && <img src={showPreview} alt="" className="cover-preview" />}
+            {showPreview && <img src={showPreview} alt="" className="cover-preview" style={coverSensitive ? { filter: "blur(12px)" } : undefined} />}
             <div>
               <div className="profile-edit-file-row">
                 <label className="btn btn-outline profile-edit-file-label" style={{ cursor: "pointer" }}>
@@ -127,7 +127,7 @@ export default function EditNovelPage() {
                   <input type="file" ref={inputRef} accept="image/*" onChange={handleFileChange} style={{ display: "none" }} />
                 </label>
                 {imageFile && <span className="profile-edit-file-name">{imageFile.name}</span>}
-                {showPreview && !removeCover && <button type="button" onClick={() => { setRemoveCover(true); setImageFile(null); }} className="btn btn-small btn-outline" style={{ color: "var(--danger)" }}>제거</button>}
+                {showPreview && !removeCover && <button type="button" onClick={() => { setRemoveCover(true); setImageFile(null); }} style={{ color: "var(--danger)", background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>제거</button>}
               </div>
             </div>
           </div>
