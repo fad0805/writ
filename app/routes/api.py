@@ -1579,7 +1579,7 @@ def _apply_latest_activity_order(q, s):
     ).group_by(SeriesNotice.novel_id).subquery()
     q = q.outerjoin(latest_ep, Novel.id == latest_ep.c.novel_id)
     q = q.outerjoin(latest_nt, Novel.id == latest_nt.c.novel_id)
-    q = q.order_by(desc(func.coalesce(latest_ep.c.max_ep, latest_nt.c.max_nt, Novel.created_at)))
+    q = q.order_by(desc(func.coalesce(latest_ep.c.max_ep, latest_nt.c.max_nt)))
     return q
 
 @router.get("/series")
