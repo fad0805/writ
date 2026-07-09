@@ -1437,13 +1437,16 @@ input[type="checkbox"] {
   border-radius: 12px;
   padding: 20px;
 }
-.episode-list h3 {
+.episode-list-header {
   display: flex;
   align-items: center;
   border-bottom: 2px solid var(--border);
   padding-bottom: 12px;
   margin-bottom: 0;
 }
+.episode-list-header h3 { margin: 0; font-size: 1.17em; }
+.episode-list-header a { margin-left: auto; }
+.episode-list > h3 { border-bottom: 2px solid var(--border); padding-bottom: 12px; margin-bottom: 0; }
 .episode-item {
   display: flex;
   gap: 15px;

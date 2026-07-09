@@ -88,7 +88,7 @@ export default function NovelDetailPage() {
                 </p>
               </div>
               <div className="series-header-btns">
-                {user && (
+                {user && !isMine && (
                   <button className="action-btn" onClick={async () => {
                     if (isSeriesMuted) { await fetch(`/api/mutes/series/${novel.id}`, { method: "DELETE", credentials: "include" }); setIsSeriesMuted(false); }
                     else { await fetch(`/api/mutes/series/${novel.id}`, { method: "POST", credentials: "include" }); setIsSeriesMuted(true); }
@@ -147,9 +147,10 @@ export default function NovelDetailPage() {
         </div>
       )}
       <div className="episode-list">
-        <h3>목차
-          <Link href={`/series/${novel.id}/notices`} className="btn btn-small btn-outline" style={{ marginLeft: "auto", fontSize: "0.75em" }}>공지사항</Link>
-        </h3>
+        <div className="episode-list-header">
+          <h3 style={{ margin: 0, border: "none", padding: 0 }}>목차</h3>
+          <a href={`/series/${novel.id}/notices`} className="btn btn-small btn-outline" style={{ fontSize: "0.75em" }}>공지사항</a>
+        </div>
         {episodes.length === 0 ? (
           <p className="empty-state">아직 에피소드가 없습니다.</p>
         ) : episodes.map((e) => (
