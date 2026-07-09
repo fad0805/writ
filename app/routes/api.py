@@ -1230,6 +1230,32 @@ def api_user_media(request: Request, username: str, limit: int = Query(12), offs
 @router.post("/users/{username}/follow")
 def api_follow(request: Request, username: str):
     user = require_active_auth(request)
+    if "@" in username and not username.startswith("@"):
+        from app.activitypub import _resolve_actor, _post_to_inbox
+        remote_username = username
+        with get_session() as s:
+            target = s.query(User).filter_by(username=remote_username, is_remote=True).first()
+            if not target:
+                actor_url = f"https://{username.split('@')[1]}/@{username.split('@')[0]}"
+                target = _resolve_actor(actor_url)
+            if not target:
+                raise HTTPException(status_code=404, detail="Remote user not found")
+            existing = s.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
+            if not existing:
+                follow_activity = {
+                    "@context": "https://www.w3.org/ns/activitystreams",
+                    "id": f"{user.actor_uri()}#follows/{target.id}",
+                    "type": "Follow",
+                    "actor": user.actor_uri(),
+                    "object": target.actor_uri(),
+                }
+                s.add(Follow(follower_id=user.id, following_id=target.id, accepted=False))
+                s.commit()
+                inbox = target.inbox_uri()
+                if inbox:
+                    _post_to_inbox(inbox, follow_activity, user)
+        return {"ok": True}
+
     with get_session() as s:
         target = s.query(User).filter_by(username=username, is_remote=False).first()
         if not target:
