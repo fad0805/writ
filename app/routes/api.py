@@ -2318,6 +2318,14 @@ def api_set_aliases(request: Request, aliases: str = Form("[]")):
     own_handle2 = user.username
     parsed = [a for a in parsed if a not in (own_handle, own_handle2)]
     with get_session() as s:
+        for alias in parsed[:]:
+            uname = alias.split("@")[0] if "@" in alias else alias
+            local = s.query(User).filter_by(username=uname, is_remote=False).first()
+            if local:
+                if local.id == user.id:
+                    parsed.remove(alias)
+                elif getattr(local, 'is_suspended', False) or getattr(local, 'is_deactivated', False):
+                    parsed.remove(alias)
         db = s.query(User).filter_by(id=user.id).first()
         db.aliases = parsed
         s.commit()
