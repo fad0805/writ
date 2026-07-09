@@ -10,12 +10,12 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [showPw, setShowPw] = useState(false);
+  const [showPwConfirm, setShowPwConfirm] = useState(false);
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
-  const [isFirst, setIsFirst] = useState(false);
   const router = useRouter();
   const { refresh } = useAuth();
 
@@ -33,8 +33,9 @@ export default function RegisterPage() {
       if (res.ok) {
         const data = await res.json();
         if (data.email_sent === false) {
-          setIsFirst(true);
           await refresh();
+          router.replace("/users/settings/account");
+          return;
         }
         setDone(true);
       } else {
@@ -46,17 +47,6 @@ export default function RegisterPage() {
   };
 
   if (done) {
-    if (isFirst) {
-      return (
-        <div className="auth-container">
-          <h1>WRIT</h1>
-          <div className="auth-success">
-            <p>첫 번째 계정이 생성되었습니다. 관리자로 자동 설정되었습니다.</p>
-          </div>
-          <Link href="/timeline/home" className="btn btn-primary">시작하기</Link>
-        </div>
-      );
-    }
     return (
       <div className="auth-container">
         <h1>WRIT</h1>
@@ -95,12 +85,12 @@ export default function RegisterPage() {
             <span className="pw-toggle" onClick={() => setShowPw(!showPw)}><Icon name={showPw ? "eye_off" : "eye"} size={16} /></span>
           </div>
         </div>
-        <div className="form-group">
-          <label>비밀번호 확인</label>
-          <div className="pw-input-wrap">
-            <input type={showPw ? "text" : "password"} value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} placeholder="비밀번호 다시 입력" required />
-            <span className="pw-toggle" onClick={() => setShowPw(!showPw)}><Icon name={showPw ? "eye_off" : "eye"} size={16} /></span>
-          </div>
+          <div className="form-group">
+            <label>비밀번호 확인</label>
+            <div className="pw-input-wrap">
+              <input type={showPwConfirm ? "text" : "password"} value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} placeholder="비밀번호 다시 입력" required />
+              <span className="pw-toggle" onClick={() => setShowPwConfirm(!showPwConfirm)}><Icon name={showPwConfirm ? "eye_off" : "eye"} size={16} /></span>
+            </div>
           {passwordConfirm && password !== passwordConfirm && <p className="form-help" style={{ color: "var(--danger)" }}>비밀번호가 일치하지 않습니다</p>}
         </div>
         {error && <p className="auth-error">{error}</p>}

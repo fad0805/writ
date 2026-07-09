@@ -7,8 +7,10 @@ export default function AccountSettingsPage() {
   const [email, setEmail] = useState("");
   const [curPw, setCurPw] = useState("");
   const [newPw, setNewPw] = useState("");
+  const [newPwConfirm, setNewPwConfirm] = useState("");
   const [showCurPw, setShowCurPw] = useState(false);
   const [showNewPw, setShowNewPw] = useState(false);
+  const [showNewPwConfirm, setShowNewPwConfirm] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
@@ -27,13 +29,14 @@ export default function AccountSettingsPage() {
         setEmail("");
       }
       if (curPw && newPw) {
+        if (newPw !== newPwConfirm) { setErr("새 비밀번호가 일치하지 않습니다."); setLoading(false); return; }
         const form = new FormData();
         form.append("current_password", curPw);
         form.append("new_password", newPw);
         const res = await fetch("/api/settings/change-password", { method: "POST", credentials: "include", body: form });
         const d = await res.json().catch(() => ({}));
         if (!res.ok) { setErr(d.detail || "비밀번호 변경 실패"); setLoading(false); return; }
-        setCurPw(""); setNewPw("");
+        setCurPw(""); setNewPw(""); setNewPwConfirm("");
       }
       setMsg("저장되었습니다.");
     } catch { setErr("오류 발생"); }
@@ -67,6 +70,16 @@ export default function AccountSettingsPage() {
               <input type={showNewPw ? "text" : "password"} value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="6자 이상" className="cw-input" />
               <span className="pw-toggle" onClick={() => setShowNewPw(!showNewPw)}><Icon name={showNewPw ? "eye_off" : "eye"} size={16} /></span>
             </div>
+          </div>
+          <div className="form-group">
+            <label>새 비밀번호 확인</label>
+            <div className="pw-input-wrap">
+              <input type={showNewPwConfirm ? "text" : "password"} value={newPwConfirm} onChange={(e) => setNewPwConfirm(e.target.value)} placeholder="새 비밀번호 다시 입력" className="cw-input" />
+              <span className="pw-toggle" onClick={() => setShowNewPwConfirm(!showNewPwConfirm)}><Icon name={showNewPwConfirm ? "eye_off" : "eye"} size={16} /></span>
+            </div>
+            {newPwConfirm && newPw !== newPwConfirm && <p className="form-help" style={{ color: "var(--danger)" }}>비밀번호가 일치하지 않습니다</p>}
+          </div>
+          <div className="form-group">
             <p className="form-help">비워두면 비밀번호가 변경되지 않습니다. 변경 시 현재 비밀번호와 새 비밀번호를 모두 입력하세요.</p>
           </div>
           {msg && <p className="auth-success">{msg}</p>}
