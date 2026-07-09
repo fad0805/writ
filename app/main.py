@@ -28,10 +28,10 @@ from app.activitypub import (
     get_outbox, get_followers, get_following, handle_inbox
 )
 
-_RATE_LIMIT_WINDOW = int(os.environ.get("RATE_LIMIT_WINDOW", "60"))
-_RATE_LIMIT_MAX = int(os.environ.get("RATE_LIMIT_MAX", "30"))
-_RATE_LIMIT_BURST = int(os.environ.get("RATE_LIMIT_BURST", "10"))
-_RATE_LIMIT_DAILY = int(os.environ.get("RATE_LIMIT_DAILY", "500"))
+_RATE_LIMIT_WINDOW = 60
+_RATE_LIMIT_MAX = 30
+_RATE_LIMIT_BURST = 10
+_RATE_LIMIT_DAILY = 500
 _rate_limit_store: dict[str, list[float]] = defaultdict(list)
 _rate_limit_daily: dict[str, list[float]] = defaultdict(list)
 
