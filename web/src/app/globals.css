@@ -1257,6 +1257,10 @@ input[type="checkbox"] {
 }
 .episode-body ul, .episode-body ol { padding-left: 20px; margin: 8px 0; }
 .episode-body hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+.episode-body img[data-align="left"] { float: left; margin: 0 16px 8px 0; }
+.episode-body img[data-align="right"] { float: right; margin: 0 0 8px 16px; }
+.episode-body img[data-align="center"] { display: block; margin: 8px auto; }
+.episode-body img { max-width: 100%; height: auto; }
 .episode-comment {
   background: var(--bg-tertiary);
   border-radius: 8px;
