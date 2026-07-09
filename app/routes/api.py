@@ -3646,7 +3646,7 @@ def api_admin_content_search(request: Request, q: str = "", mode: str = "series"
                 Episode.title.ilike(like)
             ).order_by(desc(Episode.created_at)).limit(50).all()
             return {"novels": [], "episodes": [{
-                "id": ep.id, "title": ep.title, "number": ep.number, "is_published": ep.is_published,
+                "id": ep.id, "title": ep.title, "number": ep.episode_number, "is_published": ep.is_published,
                 "created_at": _fmt_dt(ep.created_at), "novel_id": ep.novel_id,
             } for ep in episodes]}
         else:
@@ -3669,7 +3669,7 @@ def api_admin_content_search(request: Request, q: str = "", mode: str = "series"
             ep_map: dict[int, list] = {}
             for ep in episodes:
                 ep_map.setdefault(ep.novel_id, []).append({
-                    "id": ep.id, "title": ep.title, "number": ep.number, "is_published": ep.is_published,
+                    "id": ep.id, "title": ep.title, "number": ep.episode_number, "is_published": ep.is_published,
                     "created_at": _fmt_dt(ep.created_at), "novel_id": ep.novel_id,
                 })
             result = []
