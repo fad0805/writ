@@ -2,6 +2,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api, NoticeData, NovelData } from "@/lib/api";
+import Icon from "@/components/Icon";
 import Link from "next/link";
 
 export default function NoticesPage() {
@@ -63,18 +64,18 @@ export default function NoticesPage() {
         <div key={n.id} className="notice-item">
           <div className="notice-item-top">
             <span className="notice-title" onClick={() => router.push(`/series/${novelId}/notices/${n.id}`)}>
-              {n.is_pinned && <span style={{ color: "var(--danger)", marginRight: 6 }}>📌</span>}
+              {n.is_pinned && <span style={{ color: "var(--danger)", marginRight: 6 }}><Icon name="pin_filled" /></span>}
               {n.title}
             </span>
             <span className="notice-date">{n.created_at ? new Date(n.created_at).toISOString().slice(0, 10) : ""}</span>
           </div>
           {isMine && (
             <div className="notice-actions">
-              <button className="action-btn" onClick={() => togglePin(n)} title={n.is_pinned ? "고정 해제" : "고정 (최대 3개)"}>
-                {n.is_pinned ? "📌고정됨" : "📌고정"}
+              <button className="action-btn" onClick={() => togglePin(n)} title={n.is_pinned ? "고정 해제" : "고정 (최대 3개)"} style={{ color: n.is_pinned ? "var(--danger)" : undefined }}>
+                <Icon name={n.is_pinned ? "pin_filled" : "pin"} />
               </button>
-              <button className="action-btn" onClick={() => router.push(`/series/${novelId}/notices/${n.id}/edit`)}>✏️</button>
-              <button className="action-btn text-muted" onClick={() => handleDelete(n)}>🗑️</button>
+              <button className="action-btn" onClick={() => router.push(`/series/${novelId}/notices/${n.id}/edit`)}><Icon name="edit" /></button>
+              <button className="action-btn text-muted" onClick={() => handleDelete(n)}><Icon name="trash" /></button>
             </div>
           )}
         </div>

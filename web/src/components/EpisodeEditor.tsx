@@ -141,18 +141,18 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
         <button type="button" onClick={() => editor?.chain().focus().toggleItalic().run()} data-active={editor?.isActive("italic")}><i>I</i></button>
         <button type="button" onClick={() => editor?.chain().focus().toggleUnderline().run()} data-active={editor?.isActive("underline")}><u>U</u></button>
         <button type="button" onClick={() => editor?.chain().focus().toggleStrike().run()} data-active={editor?.isActive("strike")}><s>S</s></button>
-        <span className="toolbar-sep" />
+        <span className="toolbar-sep">:</span>
         <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} data-active={editor?.isActive("heading", { level: 2 })}>H2</button>
         <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()} data-active={editor?.isActive("heading", { level: 3 })}>H3</button>
         <button type="button" onClick={() => editor?.chain().focus().toggleBlockquote().run()} data-active={editor?.isActive("blockquote")}>⏎</button>
         <button type="button" onClick={() => editor?.chain().focus().toggleBulletList().run()} data-active={editor?.isActive("bulletList")}>•</button>
         <button type="button" onClick={() => editor?.chain().focus().toggleOrderedList().run()} data-active={editor?.isActive("orderedList")}>1.</button>
         <button type="button" onClick={() => editor?.chain().focus().setHorizontalRule().run()}>—</button>
-        <span className="toolbar-sep" />
+        <span className="toolbar-sep">:</span>
         <button type="button" onClick={() => align("left")} data-active={isAlign("left")}>←</button>
         <button type="button" onClick={() => align("center")} data-active={isAlign("center")}>↔</button>
         <button type="button" onClick={() => align("right")} data-active={isAlign("right")}>→</button>
-        <span className="toolbar-sep" />
+        <span className="toolbar-sep">:</span>
         <button type="button" onClick={() => fileRef.current?.click()} title="이미지 첨부">🖼</button>
         <button type="button" onClick={cycleSize} title="이미지 크기">{isImageSelected ? `${imgAttr("data-width") || "75"}%` : "□"}</button>
         {isImageSelected && imgAlign && imgAlign !== "center" && (
@@ -163,7 +163,7 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
       <EditorContent editor={editor} className="episode-editor-content" />
       <style>{`
         .episode-editor-content img.ProseMirror-selectednode { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
-        .toolbar-sep { display: inline-block; width: 1px; height: 20px; background: var(--border); margin: 0 4px; vertical-align: middle; }
+        .toolbar-sep { color: var(--text-dim); margin: 0 2px; font-size: 0.85em; vertical-align: middle; }
       `}</style>
     </div>
   );
