@@ -47,12 +47,14 @@ export default function Sidebar() {
     check();
     const handler = () => { setUnreadNotifs(0); };
     const profileHandler = () => refresh();
+    const notifChangeHandler = () => check();
     window.addEventListener("notificationsread", handler);
     window.addEventListener("profilechange", profileHandler);
+    window.addEventListener("notifchange", notifChangeHandler);
     const serverHandler = () => setSidebarRefreshKey((k) => k + 1);
     window.addEventListener("serverchange", serverHandler);
     const interval = setInterval(check, 30000);
-    return () => { clearInterval(interval); window.removeEventListener("notificationsread", handler); window.removeEventListener("profilechange", profileHandler); window.removeEventListener("serverchange", serverHandler); };
+    return () => { clearInterval(interval); window.removeEventListener("notificationsread", handler); window.removeEventListener("profilechange", profileHandler); window.removeEventListener("notifchange", notifChangeHandler); window.removeEventListener("serverchange", serverHandler); };
   }, [user, refresh]);
   useEffect(() => {
     setIsDark(document.body.classList.contains("dark-theme"));
@@ -68,9 +70,9 @@ export default function Sidebar() {
 
   const handleLogout = async () => {
     const { api } = await import("@/lib/api");
-    router.replace("/");
     await api.logout();
     await refresh();
+    router.replace("/");
   };
 
   const isActive = (href: string) => {

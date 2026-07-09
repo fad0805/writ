@@ -26,13 +26,9 @@ export default function RightSidebar() {
     const es = new EventSource("/api/notifications/stream");
     es.onmessage = (event) => {
       if (event.data === "refresh") {
-        api.getNotifications(undefined, 10, 0).then((d) => {
-          setNotifs((prev) => {
-            const ids = new Set(prev.map((n) => n.id));
-            const newOnes = d.notifications.filter((n) => !ids.has(n.id));
-            if (newOnes.length === 0) return prev;
-            return [...newOnes.slice(0, 3), ...prev].slice(0, 10);
-          });
+        api.getNotifications(undefined, 10, 0, false).then((d) => {
+          setNotifs(d.notifications);
+          window.dispatchEvent(new Event("notifchange"));
         }).catch(() => {});
       }
     };
@@ -62,6 +58,7 @@ export default function RightSidebar() {
     try {
       await fetch(`/api/users/${username}/approve-follow`, { method: "POST", credentials: "include" });
       setNotifs((prev) => prev.filter((n) => !(n.type === "follow_request" && n.from_user?.username === username)));
+      window.dispatchEvent(new Event("notifchange"));
     } catch {}
   }, []);
 
@@ -69,6 +66,7 @@ export default function RightSidebar() {
     try {
       await fetch(`/api/users/${username}/reject-follow`, { method: "POST", credentials: "include" });
       setNotifs((prev) => prev.filter((n) => !(n.type === "follow_request" && n.from_user?.username === username)));
+      window.dispatchEvent(new Event("notifchange"));
     } catch {}
   }, []);
 

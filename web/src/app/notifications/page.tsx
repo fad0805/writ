@@ -148,6 +148,8 @@ export default function NotificationsPage() {
         setNotifs(data.notifications);
         setDirectGroups([]);
       }
+      window.dispatchEvent(new Event("notificationsread"));
+      window.dispatchEvent(new Event("notifchange"));
     } catch {}
   };
 

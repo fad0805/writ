@@ -328,6 +328,12 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
 
         log_admin_action(user_id, user.username, "register", ip_address=client_ip, details="first_user" if is_first else "email_required")
 
+        if is_first:
+            from app.routes.auth import create_session
+            sess = create_session(user.id)
+            resp = JSONResponse({"ok": True, "email_sent": not is_first})
+            resp.set_cookie(key="session", value=sess, max_age=30*86400, httponly=True, samesite="lax", path="/")
+            return resp
         return {"ok": True, "email_sent": not is_first}
 
 
@@ -813,6 +819,7 @@ def api_unlike_post(request: Request, post_id: int):
                 from_user_id=user.id, notification_type="like", post_id=post_id
             ).delete()
             s.commit()
+            broadcast_refresh_notifs()
     return {"ok": True}
 
 
@@ -902,6 +909,7 @@ def api_unboost_post(request: Request, post_id: int):
             if remaining == 0:
                 post.bumped_at = None
             s.commit()
+            broadcast_refresh_notifs()
     return {"ok": True}
 
 
@@ -1372,7 +1380,7 @@ def api_direct_threads(request: Request):
 
 
 @router.get("/notifications")
-def api_notifications(request: Request, filter_type: str = Query(""), limit: int = Query(20), offset: int = Query(0)):
+def api_notifications(request: Request, filter_type: str = Query(""), limit: int = Query(20), offset: int = Query(0), mark_read: bool = Query(True)):
     user = require_auth(request)
     with get_session() as s:
         q = s.query(Notification).filter_by(user_id=user.id)
@@ -1406,8 +1414,8 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
             }
             result.append(item)
 
-        # mark as read (only first page)
-        if offset == 0:
+        # mark as read (only first page, when mark_read=true)
+        if offset == 0 and mark_read:
             s.query(Notification).filter_by(user_id=user.id, is_read=False).update({"is_read": True})
             s.commit()
 
