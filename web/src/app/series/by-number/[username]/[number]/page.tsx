@@ -46,7 +46,7 @@ export default function NovelByNumberPage() {
         <div className="series-header-row">
           <div className="cover-wrap-120">
             {novel.cover_image ? (
-              <img src={novel.cover_image} alt="" className="cover-img" />
+              <img src={novel.cover_image} alt="" className="cover-img" style={(novel as any).is_sensitive ? { filter: "blur(12px)" } : undefined} />
             ) : (
               <div className="cover-fallback cover-fallback-xl" style={{ backgroundColor: hashColor(novel.title) }}>
                 <Icon name="book" size={36} />

@@ -447,9 +447,16 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     taRef.current = ta;
   }, []);
 
+  const _isAllowedFile = (f: File) => {
+    const ext = f.name.split(".").pop()?.toLowerCase() || "";
+    const allowedExts = ["jpg", "jpeg", "png", "gif", "webp", "ico", "mp4", "webm"];
+    return allowedExts.includes(ext) && (f.type.startsWith("image/") || f.type === "video/mp4" || f.type === "video/webm");
+  };
+
   const handleMediaFiles = useCallback((files: File[]) => {
     setMediaWarning("");
     for (const f of files) {
+      if (!_isAllowedFile(f)) continue;
       const isVideo = f.type === "video/mp4" || f.type === "video/webm";
       if (f.size > 26214400 && isVideo) { setMediaWarning("비디오는 25MB를 초과할 수 없습니다."); continue; }
       if (isVideo && mediaItems.some(m => m.type === "video")) continue;

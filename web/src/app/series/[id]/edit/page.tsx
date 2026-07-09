@@ -26,6 +26,7 @@ export default function EditNovelPage() {
   const [cropSrc, setCropSrc] = useState("");
   const [visibility, setVisibility] = useState("public");
   const [seriesStatus, setSeriesStatus] = useState("ongoing");
+  const [coverSensitive, setCoverSensitive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -45,6 +46,7 @@ export default function EditNovelPage() {
         setVisibility(d.novel.visibility || "public");
         setCoverImageUrl(d.novel.cover_image || "");
         setSeriesStatus(d.novel.status || "ongoing");
+        setCoverSensitive((d.novel as any).is_sensitive || false);
         setLoading(false);
       })
       .catch(() => router.push("/series"));
@@ -83,6 +85,7 @@ export default function EditNovelPage() {
       form.append("tags", tags);
       form.append("visibility", visibility);
       form.append("status", seriesStatus);
+      form.append("is_sensitive", coverSensitive ? "true" : "");
       if (imageFile) form.append("cover_image", imageFile);
       else if (removeCover) form.append("remove_cover", "true");
       const res = await fetch(`/api/series/${params.id}/edit`, { method: "POST", credentials: "include", body: form });
@@ -137,6 +140,13 @@ export default function EditNovelPage() {
         <div className="form-group">
           <label>연재 상태</label>
           <SeriesStatusSelector value={seriesStatus} onChange={(v) => setSeriesStatus(v)} />
+        </div>
+        <div className="form-group">
+          <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: "var(--text-secondary)" }}>
+            <input type="checkbox" checked={coverSensitive} onChange={(e) => setCoverSensitive(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
+            표지 민감 처리
+          </label>
+          <p className="form-help">켜면 시리즈 표지가 블러 처리되어 표시됩니다.</p>
         </div>
         <div className="form-actions form-actions-between">
           <button

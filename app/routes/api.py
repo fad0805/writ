@@ -1621,6 +1621,7 @@ def _novel_json(n, s=None):
         "tags": tag_names,
         "status": n.status or "ongoing",
         "is_published": n.is_published,
+        "is_sensitive": getattr(n, 'is_sensitive', False) or False,
         "episode_count": n.episode_count or 0,
         "total_views": n.total_views or 0,
         "visibility": n.visibility or "public",
@@ -1745,7 +1746,8 @@ def api_unfollow_novel(request: Request, novel_id: int):
 @router.post("/series/{novel_id}/edit")
 def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), description: str = Form(""),
                    tags: str = Form(""), visibility: str = Form("public"), status: str = Form("ongoing"),
-                   cover_image: UploadFile = File(None), remove_cover: bool = Form(False)):
+                   cover_image: UploadFile = File(None), remove_cover: bool = Form(False),
+                   is_sensitive: bool = Form(False)):
     user = require_active_auth(request)
     if not title.strip():
         raise HTTPException(status_code=400, detail="Title cannot be empty")
@@ -1790,6 +1792,7 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
         novel.visibility = visibility
         novel.status = status if status in ("ongoing", "hiatus", "discontinued", "completed") else "ongoing"
         novel.is_published = visibility != "private"
+        novel.is_sensitive = is_sensitive
         if remove_cover:
             old = novel.cover_image
             novel.cover_image = ""

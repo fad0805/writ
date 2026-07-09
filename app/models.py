@@ -397,6 +397,7 @@ class Novel(Base):
     tags = Column(String(512), default="")
     status = Column(String(16), default="ongoing")
     is_published = Column(Boolean, default=True)
+    is_sensitive = Column(Boolean, default=False)
     visibility = Column(String(16), default="public", nullable=False)
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
