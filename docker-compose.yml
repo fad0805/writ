@@ -1,13 +1,16 @@
 services:
+  db:
+    image: postgres:16-alpine
+    env_file: .env.production
+    volumes:
+      - ./db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
   api:
     build: .
     ports:
       - "8000:8000"
     env_file: .env.production
-    environment:
-      - S3_ENABLED=${S3_ENABLED:-false}
-      - LOG_DIR=/app/logs
-      - DATABASE_URL=postgresql+psycopg2://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
@@ -33,15 +36,4 @@ services:
     command: sh -c "mkdir -p /app/logs && npm start 2>&1 | tee -a /app/logs/$$(date +%Y-%m-%d).log"
     depends_on:
       - api
-    restart: unless-stopped
-
-  db:
-    image: postgres:16-alpine
-    env_file: .env.production
-    environment:
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_DB=${DB_NAME}
-    volumes:
-      - ./db_data:/var/lib/postgresql/data
     restart: unless-stopped
