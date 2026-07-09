@@ -124,6 +124,26 @@ export default function SettingsPage() {
         </div>
       </form>
 
+      {(user as any)?.is_deactivated && (
+        <div className="novel-form" style={{ marginTop: 20, borderColor: "var(--danger)" }}>
+          <h3 style={{ fontSize: "1.1em", marginBottom: 12, color: "var(--danger)" }}><Icon name="block" /> 계정 비활성화</h3>
+          <p style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 12 }}>
+            이 계정은 이전되어 비활성화 상태입니다. 비활성화를 해제하거나 데이터를 내려받을 수 있습니다.
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={async () => {
+              if (!confirm("계정을 다시 활성화하시겠습니까?")) return;
+              try {
+                const res = await fetch("/api/settings/reactivate", { method: "POST", credentials: "include" });
+                if (res.ok) { alert("계정이 활성화되었습니다. 다시 로그인해주세요."); router.refresh(); }
+                else alert("실패");
+              } catch { alert("오류"); }
+            }} className="btn btn-primary btn-small">비활성화 해제</button>
+            <a href="/api/settings/export" className="btn btn-outline btn-small" download>데이터 내려받기</a>
+          </div>
+        </div>
+      )}
+
       <div className="novel-form" style={{ marginTop: 20 }}>
         <h3 style={{ fontSize: "1.1em", marginBottom: 16 }}><Icon name="user_solid" /> 팔로우 요청</h3>
         {frLoading ? (

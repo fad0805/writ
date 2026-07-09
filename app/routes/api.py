@@ -80,6 +80,7 @@ def _user_json(u):
         "is_limited": u.is_limited or False,
         "is_frozen": getattr(u, 'is_frozen', False) or False,
         "is_deceased": getattr(u, 'is_deceased', False) or False,
+        "is_deactivated": getattr(u, 'is_deactivated', False) or False,
         "is_remote": u.is_remote,
         "role": role,
         "show_badge": getattr(u, 'show_badge', False) or False,
@@ -1103,6 +1104,31 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                 profile = s.query(User).filter_by(username=username).first()
         if not profile:
             raise HTTPException(status_code=404, detail="User not found")
+        is_deactivated = getattr(profile, 'is_deactivated', False) or False
+        is_viewer_owner = user and profile.id == user.id
+        if is_deactivated and not is_viewer_owner:
+            return {
+                "profile": _user_json(profile),
+                "posts": [],
+                "novels": [],
+                "followers": [],
+                "following": [],
+                "total_posts": 0,
+                "followers_count": 0,
+                "following_count": 0,
+                "is_following": False,
+                "is_follow_pending": False,
+                "has_pending_follower": False,
+                "is_follower": False,
+                "is_mine": False,
+                "is_muted": False,
+                "is_blocked": False,
+                "am_i_blocked": False,
+                "has_more": False,
+                "offset": offset,
+                "pinned_posts_data": [],
+                "pinned_series_data": [],
+            }
         boosted_ids = [b.post_id for b in s.query(Boost).filter_by(user_id=profile.id).all()]
         from sqlalchemy import select
         boost_subq = select(Boost.created_at).where(
@@ -2258,7 +2284,8 @@ def api_approve_migrate(request: Request, notification_id: int = Form(...)):
                 nv.author_id = user.id
 
         if from_user:
-            from_user.is_frozen = True
+            from_user.is_deactivated = True
+            from_user.is_frozen = False
             from_user.is_suspended = False
             from_user.session_token = ""
             from_user.moved_to = user.actor_uri()
@@ -2295,6 +2322,41 @@ def api_get_aliases(request: Request):
     with get_session() as s:
         db = s.query(User).filter_by(id=user.id).first()
         return {"aliases": (db.aliases or []) if hasattr(db, 'aliases') else []}
+
+
+@router.post("/settings/reactivate")
+def api_reactivate_account(request: Request):
+    user = require_auth(request)
+    with get_session() as s:
+        db = s.query(User).filter_by(id=user.id).first()
+        if not getattr(db, 'is_deactivated', False):
+            raise HTTPException(status_code=400, detail="비활성화된 계정이 아닙니다.")
+        db.is_deactivated = False
+        db.moved_to = ""
+        db.session_token = ""
+        s.commit()
+    return {"ok": True}
+
+
+@router.get("/settings/export")
+def api_export_account(request: Request):
+    user = require_auth(request)
+    import csv, io
+    with get_session() as s:
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["type", "id", "title", "content", "created_at"])
+        posts = s.query(Post).filter_by(author_id=user.id, is_deleted=False).all()
+        for p in posts:
+            w.writerow(["post", p.id, "", p.content or "", str(p.created_at)])
+        novels = s.query(Novel).filter_by(author_id=user.id).all()
+        for n in novels:
+            w.writerow(["novel", n.id, n.title, n.description or "", str(n.created_at)])
+            episodes = s.query(Episode).filter_by(novel_id=n.id).all()
+            for ep in episodes:
+                w.writerow(["episode", ep.id, ep.title, ep.content[:200] if ep.content else "", str(ep.created_at)])
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=export.csv"})
 
 
 def _save_profile_image(user_id: int, file: UploadFile, prefix: str, max_size: tuple[int, int], storage) -> str:

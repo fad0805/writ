@@ -39,6 +39,7 @@ class User(Base):
     recent_ips = Column(JSON, default=list)
     is_suspended = Column(Boolean, default=False)
     is_frozen = Column(Boolean, default=False)
+    is_deactivated = Column(Boolean, default=False)
     is_sensitive = Column(Boolean, default=False)
     is_limited = Column(Boolean, default=False)
     is_deceased = Column(Boolean, default=False)
