@@ -151,7 +151,7 @@ _wait_or_die "$BACKEND_PID" "backend"
 FRONTEND_PID=""
 if [ -d "$ROOT_DIR/web" ]; then
   echo -e "${YELLOW}[web]${NC} 서버 시작 중 (포트 $FRONTEND_PORT)..."
-  (cd "$ROOT_DIR/web" && exec stdbuf -oL npx next dev --port "$FRONTEND_PORT") \
+  (cd "$ROOT_DIR/web" && exec stdbuf -oL npx next dev --port "$FRONTEND_PORT --no-turbopack") \
     > >(tee -a "$COMBINED_LOG" | _prefix_web "[web]" "$BLUE") 2>&1 &
   FRONTEND_PID=$!
   PIDS+=("$FRONTEND_PID")
