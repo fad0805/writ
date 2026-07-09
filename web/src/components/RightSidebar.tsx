@@ -27,13 +27,8 @@ export default function RightSidebar() {
     es.onmessage = (event) => {
       if (event.data === "refresh") {
         api.getNotifications(undefined, 10, 0).then((d) => {
-          setNotifs((prev) => {
-            const ids = new Set(prev.map((n) => n.id));
-            const newOnes = d.notifications.filter((n) => !ids.has(n.id));
-            if (newOnes.length === 0) return prev;
-            window.dispatchEvent(new Event("notifchange"));
-            return [...newOnes.slice(0, 3), ...prev].slice(0, 10);
-          });
+          setNotifs(d.notifications);
+          window.dispatchEvent(new Event("notifchange"));
         }).catch(() => {});
       }
     };

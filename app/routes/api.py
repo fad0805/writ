@@ -813,6 +813,7 @@ def api_unlike_post(request: Request, post_id: int):
                 from_user_id=user.id, notification_type="like", post_id=post_id
             ).delete()
             s.commit()
+            broadcast_refresh_notifs()
     return {"ok": True}
 
 
