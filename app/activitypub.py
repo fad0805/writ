@@ -959,6 +959,25 @@ def _handle_delete(activity: dict) -> tuple[int, str]:
     return (200, "Deleted")
 
 
+def _send_delete_post(post: Post, sender: User):
+    delete = {
+        "@context": "https://www.w3.org/ns/activitystreams",
+        "id": f"{sender.actor_uri()}#delete/{post.id}",
+        "type": "Delete",
+        "actor": sender.actor_uri(),
+        "object": {
+            "id": post.ap_id,
+            "type": "Note",
+        },
+    }
+    from app.activitypub import broadcast_to_followers, send_to_shared_inbox
+    try:
+        broadcast_to_followers(sender, delete)
+        send_to_shared_inbox(sender, delete)
+    except Exception as e:
+        logger.warning("Failed to broadcast Delete: %s", e)
+
+
 def _handle_flag(activity: dict) -> tuple[int, str]:
     with get_session() as s:
         actor_url = activity.get("actor")

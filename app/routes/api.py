@@ -734,6 +734,9 @@ def api_delete_post(request: Request, post_id: int):
                     storage.delete(m["url"])
         post.is_deleted = True
         s.commit()
+        if post.ap_id and post.ap_id.startswith("http") and not post.author.is_remote:
+            from app.activitypub import _send_delete_post
+            _send_delete_post(post, user)
     return {"ok": True}
 
 
