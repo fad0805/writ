@@ -742,13 +742,13 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
         if not parsed_rule_ids:
             raise HTTPException(status_code=400, detail="Reason must be at least 10 characters")
     parsed_rule_ids = []
-    if rule_ids:
+    if rule_ids and rule_ids.strip():
         try:
-            parsed_rule_ids = json.loads(rule_ids)
-            if not isinstance(parsed_rule_ids, list):
-                parsed_rule_ids = []
-        except json.JSONDecodeError:
-            parsed_rule_ids = []
+            parsed = json.loads(rule_ids)
+            if isinstance(parsed, list):
+                parsed_rule_ids = parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
     with get_session() as s:
         existing = s.query(Report).filter_by(
             reporter_id=user.id, target_type=target_type, target_id=target_id, status="pending"
