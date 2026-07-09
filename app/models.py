@@ -205,6 +205,7 @@ class Post(Base):
     is_deleted = Column(Boolean, default=False)
     is_pinned = Column(Boolean, default=False)
     is_dm = Column(Boolean, default=False)
+    is_sensitive = Column(Boolean, default=False)
     original_visibility = Column(String(16), default="")
     media_attachments = Column(JSON, default=list)
     tag_list = relationship("Tag", secondary=post_tags, lazy="selectin")
@@ -287,16 +288,11 @@ class Post(Base):
             obj["to"] = [followers_uri]
         elif self.visibility == "mention":
             obj["to"] = []
-        media_sensitive = getattr(self.author, 'is_sensitive', False) or False
-        if not media_sensitive and self.media_attachments:
-            for _m in (self.media_attachments or []):
-                if isinstance(_m, dict) and _m.get("sensitive"):
-                    media_sensitive = True
-                    break
+        is_sensitive = self.is_sensitive or getattr(self.author, 'is_sensitive', False) or False
         if self.summary:
             obj["summary"] = self.summary
             obj["sensitive"] = True
-        elif media_sensitive:
+        elif is_sensitive:
             obj["sensitive"] = True
         if self.media_attachments:
             from urllib.parse import urlparse

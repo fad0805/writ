@@ -14,6 +14,7 @@ const MAX_LENGTH = 500;
 export default function PostForm({ parentId, onDone, placeholder, initialContent, initialVisibility, shareUrl }: { parentId?: number; onDone?: (post?: any) => void; placeholder?: string; initialContent?: string; initialVisibility?: string; shareUrl?: string }) {
   const [content, setContent] = useState(initialContent || "");
   const [summary, setSummary] = useState("");
+  const [postSensitive, setPostSensitive] = useState(false);
   const { user: authUser } = useAuth();
   const [visibilityOverride, setVisibilityOverride] = useState<string | null>(
     initialVisibility || null
@@ -41,7 +42,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [hashtagResults, setHashtagResults] = useState<string[]>([]);
   const [hashtagIdx, setHashtagIdx] = useState(0);
   const [hashtagPos, setHashtagPos] = useState({ top: 0, left: 0 });
-  const [mediaItems, setMediaItems] = useState<{ id: number; url: string; type: string; file?: File; sensitive?: boolean; alt?: string }[]>([]);
+  const [mediaItems, setMediaItems] = useState<{ id: number; url: string; type: string; file?: File; alt?: string }[]>([]);
   const mediaIdRef = useRef(0);
   const [mediaUploading, setMediaUploading] = useState(false);
   const [mediaWarning, setMediaWarning] = useState("");
@@ -483,15 +484,15 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     if (!content.trim() || submitting) return;
     setSubmitting(true);
     try {
-      const uploaded = mediaItems.filter(m => !m.file).map(m => ({ url: m.url, type: m.type, sensitive: m.sensitive || false, alt: m.alt || "" }));
+      const uploaded = mediaItems.filter(m => !m.file).map(m => ({ url: m.url, type: m.type, alt: m.alt || "" }));
       for (const m of mediaItems.filter(m => m.file)) {
         const formData = new FormData();
         formData.append("file", m.file!);
         const res = await fetch("/api/media/upload", { method: "POST", credentials: "include", body: formData });
-        if (res.ok) { const d = await res.json(); uploaded.push({ url: d.url, type: d.type, sensitive: m.sensitive || false, alt: m.alt || "" }); }
+        if (res.ok) { const d = await res.json(); uploaded.push({ url: d.url, type: d.type, alt: m.alt || "" }); }
       }
-      const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrl, media_attachments: JSON.stringify(uploaded) });
-      setContent(""); setSummary(""); setMediaItems([]);
+      const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrl, media_attachments: JSON.stringify(uploaded), is_sensitive: postSensitive });
+      setContent(""); setSummary(""); setPostSensitive(false); setMediaItems([]);
       if (onDone) onDone(result);
       else router.refresh();
     } catch (err: unknown) { alert(err instanceof Error ? err.message : "오류가 발생했습니다"); }
@@ -512,12 +513,11 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
                 onDrop={(e) => { e.preventDefault(); const from = parseInt(e.dataTransfer.getData("text/plain")); const to = i; if (from !== to) { const c = [...mediaItems]; const [removed] = c.splice(from, 1); c.splice(to, 0, removed); setMediaItems(c); } }}
               >
                 {m.type === "video" ? (
-                  <video src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6, filter: m.sensitive ? "blur(8px)" : "none", pointerEvents: "none" }} />
+                  <video src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6, pointerEvents: "none" }} />
                 ) : (
-                  <img src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6, filter: m.sensitive ? "blur(8px)" : "none", pointerEvents: "none" }} />
+                  <img src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6, pointerEvents: "none" }} />
                 )}
-                <span onClick={(e) => { e.stopPropagation(); setAltModalIdx(i); }} style={{ position: "absolute", bottom: -4, right: 18, width: 18, height: 18, borderRadius: "50%", background: m.alt ? "var(--accent)" : "var(--bg-secondary)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontStyle: "italic", cursor: "pointer", color: m.alt ? "#fff" : "var(--text-muted)" }} title="미디어 설명">a</span>
-                <span onClick={(e) => { e.stopPropagation(); setMediaItems(prev => prev.map((item, j) => j === i ? { ...item, sensitive: !item.sensitive } : item)); }} style={{ position: "absolute", bottom: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "var(--danger)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, cursor: "pointer", color: "#fff", opacity: m.sensitive ? 1 : 0.5 }} title={m.sensitive ? "민감 해제" : "민감 표시"}>!</span>
+                <span onClick={(e) => { e.stopPropagation(); setAltModalIdx(i); }} style={{ position: "absolute", bottom: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: m.alt ? "var(--accent)" : "var(--bg-secondary)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontStyle: "italic", cursor: "pointer", color: m.alt ? "#fff" : "var(--text-muted)" }} title="미디어 설명">a</span>
                 <span onClick={(e) => { e.stopPropagation(); setMediaItems(mediaItems.filter((_, j) => j !== i)); }} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "var(--danger)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer" }}>×</span>
               </div>
             ))}
@@ -632,6 +632,13 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         className="cw-input"
         onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { formRef.current?.requestSubmit(); } }}
       />
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, fontSize: 13 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", color: "var(--text-secondary)" }}>
+          <input type="checkbox" checked={postSensitive} onChange={(e) => setPostSensitive(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
+          민감함
+        </label>
+        {postSensitive && <span style={{ color: "var(--danger)", fontSize: 12 }}>이 포스트의 모든 미디어가 블러 처리됩니다</span>}
+      </div>
       <div className="reply-form-footer">
         <VisibilitySelector value={visibility} onChange={(v) => setVisibilityOverride(v)} includeMention />
         <div className="form-footer-right" style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: "auto" }}>

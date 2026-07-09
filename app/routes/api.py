@@ -59,6 +59,7 @@ def _post_json(p, session, user):
         "bookmarked": bookmarked,
         "is_mine": p.author_id == user.id if user else False,
         "is_dm": p.is_dm or False,
+        "is_sensitive": getattr(p, 'is_sensitive', False) or False,
         "ap_id": p.ap_id or "",
         "reply_context": _reply_context(p),
         "boosted_by": _user_json(booster) if booster and booster.id != p.author_id else None,
@@ -614,6 +615,7 @@ def api_create_post(
     dm_target_id: int = Form(None),
     share_url: str = Form(""),
     media_attachments: str = Form("[]"),
+    is_sensitive: bool = Form(False),
 ):
     user = require_active_auth(request)
     if share_url:
@@ -647,6 +649,7 @@ def api_create_post(
     with get_session() as s:
         import secrets
         post_number = secrets.token_hex(4)
+        author_is_sensitive = getattr(user, 'is_sensitive', False) or False
         post = Post(
             author_id=user.id,
             content=content,
@@ -657,6 +660,7 @@ def api_create_post(
             number=post_number,
             ap_id="",
             is_dm=bool(dm_target_id),
+            is_sensitive=is_sensitive or author_is_sensitive,
         )
         import json as _json
         try:

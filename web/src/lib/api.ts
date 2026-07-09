@@ -161,7 +161,7 @@ export const api = {
     request<PostData & { total_replies: number; has_more_replies: boolean }>(
       `/api/posts/${id}?reply_offset=${reply_offset}&reply_limit=${reply_limit}`
     ),
-  createPost: (data: { content: string; summary?: string; visibility?: string; parent_id?: number; share_url?: string; media_attachments?: string }) =>
+  createPost: (data: { content: string; summary?: string; visibility?: string; parent_id?: number; share_url?: string; media_attachments?: string; is_sensitive?: boolean }) =>
     formRequest<PostData>("/api/posts", data),
   editPost: (id: number, data: { content: string; summary?: string }) =>
     formRequest<PostData>(`/api/posts/${id}/edit`, data),
