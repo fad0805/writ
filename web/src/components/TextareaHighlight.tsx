@@ -10,6 +10,7 @@ export default function TextareaHighlight({
   onKeyDown?: (e: React.KeyboardEvent) => void;
   onKeyUp?: (e: React.KeyboardEvent) => void;
   onMouseUp?: (e: React.MouseEvent) => void;
+  onPaste?: (e: React.ClipboardEvent) => void;
   textareaRef?: (el: HTMLTextAreaElement | null) => void;
 }) {
   const setTextareaRef = useCallback((el: HTMLTextAreaElement | null) => {
