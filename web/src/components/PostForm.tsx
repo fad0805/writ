@@ -644,7 +644,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           <input type="checkbox" checked={postSensitive || !!summary} disabled={!!summary} onChange={(e) => setPostSensitive(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
           민감함
         </label>
-        {(postSensitive || !!summary) && <span style={{ color: "var(--danger)", fontSize: 12 }}>{summary ? "CW 설정 시 자동 민감 처리됩니다" : "이 포스트의 모든 미디어가 블러 처리됩니다"}</span>}
+        {(postSensitive || !!summary) && <span style={{ color: summary ? "var(--text-muted)" : "var(--danger)", fontSize: 12 }}>{summary ? "CW 설정 시 자동 민감 처리됩니다" : "이 포스트의 모든 미디어가 블러 처리됩니다"}</span>}
       </div>
       <div className="reply-form-footer">
         <VisibilitySelector value={visibility} onChange={(v) => setVisibilityOverride(v)} includeMention />

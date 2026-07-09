@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from "react";
 import TextareaHighlight from "@/components/TextareaHighlight";
 import TagInput from "@/components/TagInput";
 import SeriesVisibilitySelector from "@/components/SeriesVisibilitySelector";
+import SeriesStatusSelector from "@/components/SeriesStatusSelector";
 import ImageCropper from "@/components/ImageCropper";
 
 function makeBlob(file: Blob): string {
@@ -21,6 +22,7 @@ export default function NewNovelPage() {
   const [coverPreview, setCoverPreview] = useState("");
   const [cropSrc, setCropSrc] = useState("");
   const [visibility, setVisibility] = useState("public");
+  const [seriesStatus, setSeriesStatus] = useState("ongoing");
   const [coverSensitive, setCoverSensitive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -60,6 +62,7 @@ export default function NewNovelPage() {
       form.append("description", description);
       form.append("tags", tags);
       form.append("visibility", visibility);
+      form.append("status", seriesStatus);
       form.append("is_sensitive", coverSensitive ? "true" : "");
       if (imageFile) form.append("cover_image", imageFile);
       const res = await fetch("/api/series/new", { method: "POST", credentials: "include", body: form });
@@ -90,7 +93,7 @@ export default function NewNovelPage() {
         <div className="form-group">
           <label>표지 이미지</label>
           <div className="profile-edit-avatar-wrap">
-            {coverPreview && <img src={coverPreview} alt="" className="cover-preview" />}
+            {coverPreview && <img src={coverPreview} alt="" className="cover-preview" style={coverSensitive ? { filter: "blur(12px)" } : undefined} />}
             <div>
               <div className="profile-edit-file-row">
                 <label className="btn btn-outline profile-edit-file-label" style={{ cursor: "pointer" }}>
@@ -99,14 +102,18 @@ export default function NewNovelPage() {
                 </label>
                 {imageFile && <span className="profile-edit-file-name">{imageFile.name}</span>}
               </div>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: "var(--text-secondary)", marginTop: 8 }}>
+                <input type="checkbox" checked={coverSensitive} onChange={(e) => setCoverSensitive(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
+                표지 민감 처리
+              </label>
             </div>
           </div>
         </div>
         <div className="form-group">
-          <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: "var(--text-secondary)", marginBottom: 12 }}>
-            <input type="checkbox" checked={coverSensitive} onChange={(e) => setCoverSensitive(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
-            표지 민감 처리
-          </label>
+          <label>연재 상태</label>
+          <SeriesStatusSelector value={seriesStatus} onChange={(v) => setSeriesStatus(v)} />
+        </div>
+        <div className="form-group">
           <label>공개 설정</label>
           <SeriesVisibilitySelector value={visibility} onChange={(v) => setVisibility(v)} />
           <p className="form-help">전체공개는 모든 시리즈 목록에 노출되고, 공개는 작가 프로필과 URL로만 접근할 수 있습니다.</p>

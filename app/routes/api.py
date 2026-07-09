@@ -1637,7 +1637,7 @@ def _novel_json(n, s=None):
 
 @router.post("/series/new")
 def api_create_novel(request: Request, title: str = Form(...), description: str = Form(""),
-                     tags: str = Form(""), visibility: str = Form("public"),
+                     tags: str = Form(""), visibility: str = Form("public"), status: str = Form("ongoing"),
                      cover_image: UploadFile = File(None), is_sensitive: bool = Form(False)):
     user = require_active_auth(request)
     if getattr(user, 'is_deceased', False):
@@ -1678,8 +1678,9 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
     with get_session() as s:
         import secrets
         novel_number = secrets.token_hex(4)
+        novel_status = status if status in ("ongoing", "hiatus", "discontinued", "completed") else "ongoing"
         novel = Novel(author_id=user.id, title=title, description=description, tags=tags,
-                      visibility=visibility, is_published=visibility != "private",
+                      visibility=visibility, is_published=visibility != "private", status=novel_status,
                       cover_image=cover_url, number=novel_number, is_sensitive=is_sensitive)
         s.add(novel)
         s.flush()
