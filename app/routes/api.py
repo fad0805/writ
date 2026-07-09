@@ -602,7 +602,10 @@ def api_create_post(
     share_url: str = Form(""),
     media_attachments: str = Form("[]"),
 ):
+    import time as _time
+    _t0 = _time.time()
     user = require_auth(request)
+    print(f"[TIMING] require_auth: {_time.time()-_t0:.3f}s")
     if share_url:
         if "/episodes/" in share_url:
             content = content + "\n\nepisode: " + share_url
@@ -628,10 +631,13 @@ def api_create_post(
                 if vis_order.get(parent_vis, 0) > vis_order.get(visibility, 0):
                     visibility = parent_vis
 
+    _t_parse = _time.time()
     mentioned_ids = _parse_mentions(content)
     if dm_target_id and dm_target_id not in mentioned_ids:
         mentioned_ids.append(dm_target_id)
+    print(f"[TIMING] _parse_mentions: {_time.time()-_t_parse:.3f}s")
     with get_session() as s:
+        print(f"[TIMING] session open: {_time.time()-_t0:.3f}s")
         import secrets
         post_number = secrets.token_hex(4)
         post = Post(
@@ -661,6 +667,7 @@ def api_create_post(
             if parent:
                 pass
         s.commit()
+        print(f"[TIMING] first commit (post+tags): {_time.time()-_t0:.3f}s")
 
         # notify mentioned users
         for mu_id in mentioned_ids:
@@ -673,17 +680,24 @@ def api_create_post(
                 notif = Notification(user_id=parent.author_id, from_user_id=user.id, notification_type="reply", post_id=post.id)
                 s.add(notif)
         s.commit()
+        print(f"[TIMING] second commit (notifications): {_time.time()-_t0:.3f}s")
 
         # Async federation broadcast (background thread so it doesn't block response)
         threading.Thread(target=_broadcast_federation, args=(user, post, visibility), daemon=True).start()
 
+        _t_bc = _time.time()
         try:
             broadcast("new_post", {"post_id": post.id, "author_id": user.id})
         except Exception as e:
             logger.warning("Failed to broadcast new_post event: %s", e)
+        print(f"[TIMING] broadcast new_post: {_time.time()-_t_bc:.3f}s")
 
+        _t_pj = _time.time()
         pj = _post_json(post, s, user)
+        print(f"[TIMING] _post_json: {_time.time()-_t_pj:.3f}s")
+
         threading.Thread(target=_broadcast_timeline, args=(pj, user.id, visibility, bool(dm_target_id)), daemon=True).start()
+        print(f"[TIMING] TOTAL api_create_post: {_time.time()-_t0:.3f}s")
         return pj
 
 
