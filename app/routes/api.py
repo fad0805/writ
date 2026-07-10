@@ -3374,17 +3374,12 @@ def _check_fetch_domain_allowed(url: str) -> str | None:
 @router.post("/fetch-actor")
 def api_fetch_actor(request: Request, url: str = Form(...)):
     import sys
-    print("=== FETCH ACTOR called ===", flush=True)
     user = require_auth(request)
-    print("1. auth ok, user:", user.username if user else "none", flush=True)
     if not url.startswith("http"):
-        print("2. FAIL: url not http", url, flush=True)
         raise HTTPException(status_code=400, detail="Invalid URL")
     err = _check_fetch_domain_allowed(url)
     if err:
-        print("2b. FAIL: domain blocked", url, flush=True)
         raise HTTPException(status_code=403, detail=err)
-    print("2. url ok:", url, flush=True)
     from app.activitypub import _resolve_actor, _safe_fetch
     from app.activitypub import _safe_fetch
     actor = _resolve_actor(url, force_refresh=True, sign_as=user)
