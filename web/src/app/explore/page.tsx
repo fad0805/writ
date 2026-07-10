@@ -94,6 +94,21 @@ function ExploreContent() {
       handleUrlFetch(q);
       return;
     }
+    // @username@domain 형식 → 원격 유저 검색
+    const match = q.match(/^@?(\w+)@([\w.-]+)$/);
+    if (match) {
+      const form = new FormData(); form.append("url", `https://${match[2]}/@${match[1]}`);
+      try {
+        const res = await fetch("/api/fetch-actor", { method: "POST", credentials: "include", body: form });
+        if (res.ok) {
+          const d = await res.json();
+          window.location.href = `/profile/${d.username}`;
+          return;
+        }
+      } catch {}
+      alert("사용자를 찾을 수 없습니다");
+      return;
+    }
     doSearch(q);
   };
 
