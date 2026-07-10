@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth";
 import { api, NotificationData, User } from "@/lib/api";
 import Link from "next/link";
 import PostCard from "@/components/PostCard";
@@ -36,7 +37,13 @@ const NOTIF_ICONS: Record<string, string> = {
 };
 
 export default function NotificationsPage() {
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  useEffect(() => {
+    if (!authLoading && !user) router.replace("/login");
+  }, [user, authLoading, router]);
+  if (authLoading) return <div className="empty-state">로딩 중...</div>;
+  if (!user) return null;
   const [notifs, setNotifs] = useState<NotificationData[]>([]);
   const [directGroups, setDirectGroups] = useState<DirectUserData[]>([]);
   const [filter, setFilter] = useState(() => {

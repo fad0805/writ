@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useState, useRef, useCallback } from "react";
+import { useAuth } from "@/lib/auth";
+import { useState, useRef, useCallback, useEffect } from "react";
 import TextareaHighlight from "@/components/TextareaHighlight";
 import TagInput from "@/components/TagInput";
 import SeriesVisibilitySelector from "@/components/SeriesVisibilitySelector";
@@ -13,7 +14,13 @@ function makeBlob(file: Blob): string {
 }
 
 export default function NewNovelPage() {
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  useEffect(() => {
+    if (!authLoading && !user) router.replace("/login");
+  }, [user, authLoading, router]);
+  if (authLoading) return <div className="empty-state">로딩 중...</div>;
+  if (!user) return null;
   const inputRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");

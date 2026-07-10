@@ -1,10 +1,12 @@
 "use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth";
 import NewPostModal from "./NewPostModal";
 
 export default function KeyboardShortcuts() {
   const router = useRouter();
+  const { user } = useAuth();
   const [showHelp, setShowHelp] = useState(false);
   const [showPostModal, setShowPostModal] = useState(false);
   const gPendingRef = useRef(false);
@@ -54,6 +56,7 @@ export default function KeyboardShortcuts() {
     }
 
       if (e.key === "n" && !isEditing) {
+        if (!user) return;
         e.preventDefault();
         const ta = document.querySelector<HTMLTextAreaElement>(".post-form textarea, .textarea-ta");
         if (ta) { ta.focus(); ta.scrollIntoView({ behavior: "smooth", block: "center" }); }

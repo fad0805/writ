@@ -1,6 +1,7 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
 import { useRef, useState, useEffect, useCallback } from "react";
+import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { useBeforeUnload } from "@/lib/useBeforeUnload";
 import TextareaHighlight from "@/components/TextareaHighlight";
@@ -14,8 +15,14 @@ function makeBlob(file: Blob): string {
 }
 
 export default function EditNovelPage() {
+  const { user, loading: authLoading } = useAuth();
   const params = useParams();
   const router = useRouter();
+  useEffect(() => {
+    if (!authLoading && !user) router.replace("/login");
+  }, [user, authLoading, router]);
+  if (authLoading) return <div className="empty-state">로딩 중...</div>;
+  if (!user) return null;
   const inputRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");

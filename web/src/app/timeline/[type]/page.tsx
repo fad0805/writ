@@ -103,7 +103,7 @@ export default function TimelinePage() {
     setLoadingMore(false);
   }, [tlType, rawOffset, hasMore, loadingMore]);
 
-  useEffect(() => { if (!authLoading && !user) router.replace("/"); }, [authLoading, user, router]);
+  useEffect(() => { if (!authLoading && !user) router.replace("/login"); }, [authLoading, user, router]);
 
   useEffect(() => {
     const handler = (e: FocusEvent) => {
@@ -202,6 +202,8 @@ export default function TimelinePage() {
     return () => clearInterval(interval);
   }, [tlType]);
 
+  if (authLoading) return <div className="empty-state">로딩 중...</div>;
+  if (!user) return null;
   return (
     <>
       <div className="post-form">
