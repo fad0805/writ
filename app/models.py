@@ -740,6 +740,12 @@ def init_db():
         command.stamp(Config("alembic.ini"), "head")
     except Exception:
         pass
+    # Migrate missing columns
+    _migrate_add_column("users", "enable_reactions", "BOOLEAN DEFAULT 1")
+    _migrate_add_column("users", "email_verified", "BOOLEAN DEFAULT 0")
+    _migrate_add_column("users", "is_deactivated", "BOOLEAN DEFAULT 0")
+    _migrate_add_column("users", "aliases", "TEXT DEFAULT '[]'")
+    _migrate_add_column("users", "moved_to", "TEXT DEFAULT ''")
     # Create additional composite indexes for performance
     try:
         with engine.connect() as conn:
@@ -748,6 +754,15 @@ def init_db():
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_notif_user_created ON notifications(user_id, created_at)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_notif_user_type ON notifications(user_id, notification_type)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_follows_follower_following ON follows(follower_id, following_id)"))
+            conn.commit()
+    except Exception:
+        pass
+
+
+def _migrate_add_column(table: str, column: str, col_def: str):
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}"))
             conn.commit()
     except Exception:
         pass

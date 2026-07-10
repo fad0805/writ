@@ -250,9 +250,9 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
             return resp
     except HTTPException:
         raise
-    except Exception as exc:
+    except Exception:
         logger.exception("Login error")
-        raise HTTPException(status_code=500, detail=f"Login error: {exc}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 def _send_verification_email(u: User):
