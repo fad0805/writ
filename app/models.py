@@ -737,11 +737,10 @@ def init_db():
     try:
         from alembic.config import Config
         from alembic import command
-        command.stamp(Config("alembic.ini"), "head")
+        cfg = Config("alembic.ini")
+        command.upgrade(cfg, "head")
     except Exception:
         pass
-    # Auto-migrate any missing columns across all tables
-    _migrate_missing_columns()
     # Create additional composite indexes for performance
     try:
         with engine.connect() as conn:
@@ -753,55 +752,6 @@ def init_db():
             conn.commit()
     except Exception:
         pass
-
-
-def _migrate_missing_columns():
-    from sqlalchemy import inspect as sa_inspect
-    try:
-        inspector = sa_inspect(engine)
-    except Exception:
-        return
-    for table_name, table in Base.metadata.tables.items():
-        try:
-            existing = {c["name"] for c in inspector.get_columns(table_name)}
-        except Exception:
-            continue
-        for col in table.columns:
-            if col.name in existing:
-                continue
-            # Map SQLAlchemy type to a SQLite-compatible type string
-            col_type = _sa_type_to_sqlite(col.type)
-            default = _col_default_sql(col)
-            try:
-                with engine.connect() as conn:
-                    conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col.name} {col_type}{default}"))
-                    conn.commit()
-            except Exception:
-                pass
-
-
-def _sa_type_to_sqlite(col_type):
-    type_str = str(col_type).upper()
-    if "INTEGER" in type_str or "BOOLEAN" in type_str:
-        return "INTEGER"
-    if "TIMESTAMP" in type_str or "DATETIME" in type_str or "DATE" in type_str:
-        return "TIMESTAMP"
-    return "TEXT"
-
-
-def _col_default_sql(col):
-    if col.default is None or not col.default.is_scalar:
-        return " DEFAULT NULL" if col.nullable else ""
-    v = col.default.arg
-    if v is None:
-        return " DEFAULT NULL"
-    if isinstance(v, bool):
-        return f" DEFAULT {1 if v else 0}"
-    if isinstance(v, int):
-        return f" DEFAULT {v}"
-    if isinstance(v, (list, dict)):
-        return " DEFAULT '[]'"
-    return f" DEFAULT '{v}'"
 
 
 def get_session():
