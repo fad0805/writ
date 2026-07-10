@@ -722,49 +722,41 @@ def _send_reject(inbox_url: str, activity_id: str, target: User, follower_actor_
 
 
 def _handle_reject(activity: dict) -> tuple[int, str]:
-    import sys; print(f"[handle_reject] type={type(activity.get('object')).__name__} obj_keys={list(activity.get('object',{}).keys()) if isinstance(activity.get('object'), dict) else 'N/A'}", flush=True)
-    obj = activity.get("object", {})
-    if isinstance(obj, dict):
-        follower_url = obj.get("actor", "")
-    elif isinstance(obj, str):
-        try:
-            resp = httpx.get(obj, headers={"Accept": "application/activity+json"}, timeout=10)
-            if resp.status_code == 200:
-                follow_activity = resp.json()
-                follower_url = follow_activity.get("actor", "")
-        except Exception:
-            pass
-    else:
-        follower_url = ""
-
-    if not follower_url:
-        return (200, "OK")
-
     rejecter_url = activity.get("actor", "")
     if isinstance(rejecter_url, list):
         rejecter_url = rejecter_url[0]
 
-    local_username = _parse_username_from_url(follower_url)
-    if not local_username:
-        return (200, "OK")
+    # Find the target user from the Reject's object
+    obj = activity.get("object", {})
+    if isinstance(obj, dict):
+        target_url = obj.get("object", "")
 
+    # Look up the local user who initiated the follow
     with get_session() as session:
-        local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
+        if target_url:
+            local_username = _parse_username_from_url(target_url)
+            if local_username:
+                local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
+            else:
+                local_user = None
+        else:
+            local_user = None
         if not local_user:
             return (200, "OK")
 
-    remote_actor = _resolve_actor(rejecter_url, sign_as=local_user)
-    if not remote_actor:
-        return (200, "OK")
+        # Find the remote user by actor URL
+        remote_user = session.query(User).filter_by(remote_url=rejecter_url).first()
+        if not remote_user:
+            return (200, "OK")
 
         follow_rel = session.query(Follow).filter_by(
             follower_id=local_user.id,
-            following_id=remote_actor.id,
+            following_id=remote_user.id,
         ).first()
         if not follow_rel:
             return (200, "No pending follow request found")
         session.query(Notification).filter_by(
-            from_user_id=remote_actor.id, user_id=local_user.id,
+            from_user_id=remote_user.id, user_id=local_user.id,
             notification_type="follow_request",
         ).delete()
         session.delete(follow_rel)
