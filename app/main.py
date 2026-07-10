@@ -339,6 +339,7 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
         activity_actor = activity_actor[0]
     signer_uri = remote_actor.actor_uri() if not remote_actor.is_remote else remote_actor.remote_url
     if not activity_actor or signer_uri != activity_actor:
+        import sys; print(f"[verify] actor binding fail: signer={signer_uri} activity={str(activity_actor)[:80]}", flush=True)
         return (False, None)
 
     # Date freshness check — 5분 window to prevent replay
@@ -351,8 +352,10 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
                 now = datetime.datetime.now(datetime.timezone.utc)
                 diff = abs((now - date_dt).total_seconds())
                 if diff > 300:
+                    import sys; print(f"[verify] date drift too large: {diff}s for {date_header}", flush=True)
                     return (False, None)
         except (ValueError, TypeError, OverflowError):
+            import sys; print(f"[verify] date parse error for {date_header}", flush=True)
             return (False, None)
 
     # Build signed string (Fix 7 — use request Host header, not keyId host)
@@ -381,12 +384,14 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
             val = request.headers.get(h, "")
             signed_lines.append(f"{h}: {val}")
     signed_string = "\n".join(signed_lines)
+    import sys; print(f"[verify] building signed_string with {len(headers_str.split())} headers: {headers_str[:80]}", flush=True)
     ok = verify_signature(signed_string, sig_b64, remote_actor.public_key)
     if not ok:
-        # Retry with forced actor re-fetch (key rotation)
+        print(f"[verify] signature verify FAILED with cached key, trying force refresh", flush=True)
         fresh = _resolve_actor(actor_url, force_refresh=True)
         if fresh and fresh.public_key:
             ok = verify_signature(signed_string, sig_b64, fresh.public_key)
+            print(f"[verify] signature verify after refresh: {ok}", flush=True)
             return (ok, fresh if ok else None)
     return (ok, remote_actor if ok else None)
 
