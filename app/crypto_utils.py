@@ -52,7 +52,7 @@ def sign_string(text: str, private_key_pem: str) -> str:
     )
     signature = private_key.sign(
         text.encode("utf-8"),
-        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.DIGEST_LENGTH),
+        padding.PKCS1v15(),
         hashes.SHA256(),
     )
     return base64.b64encode(signature).decode("utf-8")
