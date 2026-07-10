@@ -168,7 +168,7 @@ export default function Sidebar() {
           <h2 style={{ "--title-size": `${Math.max(0.75, 1.4 - sidebarServerName.length * 0.035)}em` } as React.CSSProperties}>{sidebarLogo ? <img src={sidebarLogo} alt="" className="sidebar-logo-img" /> : <span className="sidebar-logo-icon" />} <span>{sidebarServerName}</span></h2>
         </Link>
       </div>
-      {user && <form className="sidebar-search" onSubmit={async (e) => {
+      {user && !pathname.startsWith("/explore") && <form className="sidebar-search" onSubmit={async (e) => {
         e.preventDefault();
         const q = (e.target as HTMLFormElement).q.value.trim();
         if (!q) return;
@@ -180,16 +180,16 @@ export default function Sidebar() {
             try {
               const form = new FormData(); form.append("url", q);
               const res = await fetch("/api/fetch-actor", { method: "POST", credentials: "include", body: form });
-              if (res.ok) { const d = await res.json(); router.push(`/@${d.username}`); }
-              else { alert("사용자를 찾을 수 없습니다"); }
-            } catch { alert("사용자를 찾을 수 없습니다"); }
+              if (res.ok) { const d = await res.json(); router.push(`/@${d.username}`); return; }
+            } catch {}
+            router.push(`/explore?q=${encodeURIComponent(q)}`);
           } else {
             try {
               const form = new FormData(); form.append("url", q);
               const res = await fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form });
-              if (res.ok) { const d = await res.json(); router.push(d.number ? `/@${d.author.username}/${d.number}` : `/post/${d.id}`); }
-              else { alert("불러오기 실패"); }
-            } catch { alert("불러오기 실패"); }
+              if (res.ok) { const d = await res.json(); router.push(d.number ? `/@${d.author.username}/${d.number}` : `/post/${d.id}`); return; }
+            } catch {}
+            router.push(`/explore?q=${encodeURIComponent(q)}`);
           }
         } else {
           router.push(`/explore?q=${encodeURIComponent(q)}`);
