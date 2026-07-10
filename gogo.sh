@@ -168,6 +168,24 @@ print('Host 헤더(raw):', repr(req.headers.get('host')))
 print('path:', repr(req.url.path))
 "
 
+elif [ "$1" = "debug-follow" ]; then
+  docker compose exec api python3 -c "
+from app.models import Follow, User, get_session
+with get_session() as s:
+    local = s.query(User).filter_by(username='siarte', is_remote=False).first()
+    remote = s.query(User).filter_by(username='siarte@daydream.ink').first()
+    if not local or not remote: print('users not found'); exit()
+    f = s.query(Follow).filter_by(follower_id=local.id, following_id=remote.id).first()
+    print('=== OUTGOING (writ→remote) ===')
+    print('follow in DB:', f is not None)
+    if f: print('accepted:', f.accepted)
+    # Also check incoming
+    f2 = s.query(Follow).filter_by(follower_id=remote.id, following_id=local.id).first()
+    print('=== INCOMING (remote→writ) ===')
+    print('follow in DB:', f2 is not None)
+    if f2: print('accepted:', f2.accepted)
+"
+
 elif [ "$1" = "clear-follow" ]; then
   docker compose exec api python3 -c "
 from app.models import Follow, User, ProcessedActivity, get_session
