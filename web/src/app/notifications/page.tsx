@@ -42,8 +42,7 @@ export default function NotificationsPage() {
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
   }, [user, authLoading, router]);
-  if (authLoading) return <div className="empty-state">로딩 중...</div>;
-  if (!user) return null;
+  if (authLoading || !user) return <div className="empty-state">{authLoading ? "로딩 중..." : "로그인이 필요합니다"}</div>;
   const [notifs, setNotifs] = useState<NotificationData[]>([]);
   const [directGroups, setDirectGroups] = useState<DirectUserData[]>([]);
   const [filter, setFilter] = useState(() => {

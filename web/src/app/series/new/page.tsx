@@ -20,7 +20,7 @@ export default function NewNovelPage() {
     if (!authLoading && !user) router.replace("/login");
   }, [user, authLoading, router]);
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
-  if (!user) return null;
+  if (!user) return <div className="empty-state">로그인이 필요합니다</div>;
   const inputRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
