@@ -728,6 +728,9 @@ def _handle_reject(activity: dict) -> tuple[int, str]:
         rejecter_url = rejecter_url[0]
     print(f"[reject] rejecter={rejecter_url[:80]}", flush=True)
 
+    obj = activity.get("object", {})
+    follower_url = obj.get("actor", "") if isinstance(obj, dict) else ""
+
     with get_session() as session:
         remote_user = session.query(User).filter_by(remote_url=rejecter_url).first()
         if not remote_user:
@@ -735,15 +738,26 @@ def _handle_reject(activity: dict) -> tuple[int, str]:
             return (200, "OK")
         print(f"[reject] remote_user id={remote_user.id} username={remote_user.username}", flush=True)
 
-        follow_rel = session.query(Follow).filter_by(
-            following_id=remote_user.id,
-            accepted=False,
-        ).first()
+        local_user = None
+        if follower_url:
+            local_user = session.query(User).filter_by(remote_url=follower_url).first()
+
+        query_filter = {
+            "following_id": remote_user.id,
+            "accepted": False
+        }
+        if local_user:
+            query_filter["follower_id"] = local_user.id
+
+        follow_rel = session.query(Follow).filter_by(**query_filter).first()
+        
         if not follow_rel:
-            print(f"[reject] no pending follow for remote user {remote_user.id}", flush=True)
+            print(f"[reject] no pending follow for remote user {remote_user.id} (local_user match failed)", flush=True)
             return (200, "No pending follow request found")
 
-        local_user = session.query(User).get(follow_rel.follower_id)
+        if not local_user:
+            local_user = session.query(User).get(follow_rel.follower_id)
+
         print(f"[reject] deleting follow: local={local_user.id} remote={remote_user.id}", flush=True)
         session.query(Notification).filter_by(
             from_user_id=remote_user.id, user_id=local_user.id,
