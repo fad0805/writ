@@ -168,6 +168,28 @@ print('Host 헤더(raw):', repr(req.headers.get('host')))
 print('path:', repr(req.url.path))
 "
 
+elif [ "$1" = "mastodon-test" ]; then
+  echo "⚠️  daydream.ink 서버에서 docker compose exec web 로 실행:"
+  echo ""
+  echo "# 1. HTTP 연결 테스트"
+  echo 'docker compose exec web curl -s -o /dev/null -w "%{http_code}" -H "Accept: application/activity+json" https://writ.daydream.ink/users/siarte'
+  echo ""
+  echo "# 2. DNS + SSL + HTTP 한 번에"
+  echo 'docker compose exec web python3 -c "'
+  echo 'import socket, ssl, http.client'
+  echo 'try:'
+  echo '    ip = socket.getaddrinfo(\"writ.daydream.ink\", 443)'
+  echo '    print(\"DNS OK:\", ip[0][4][0])'
+  echo '    ctx = ssl.create_default_context()'
+  echo '    conn = http.client.HTTPSConnection(\"writ.daydream.ink\", 443, context=ctx, timeout=5)'
+  echo '    conn.request(\"GET\", \"/users/siarte\", headers={\"Accept\": \"application/activity+json\"})'
+  echo '    r = conn.getresponse()'
+  echo '    print(\"HTTP:\", r.status)'
+  echo '    conn.close()'
+  echo 'except Exception as e:'
+  echo '    print(\"FAIL:\", e)'
+  echo '"'
+
 elif [ "$1" = "webfinger-test" ]; then
   docker compose exec api python3 -c "
 import httpx
