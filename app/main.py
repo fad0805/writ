@@ -339,14 +339,7 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
             remote_actor = None  # force network fetch below
 
     if not remote_actor or not remote_actor.public_key:
-        # Fallback: network fetch
-        remote_actor = _resolve_actor(actor_url)
-        if not remote_actor or not remote_actor.public_key:
-            _sign_as = getattr(request.state, 'sign_as_user', None)
-            if _sign_as:
-                remote_actor = _resolve_actor(actor_url, sign_as=_sign_as)
-        if not remote_actor or not remote_actor.public_key:
-            return (False, None)
+        return (False, None)
 
     # Actor binding check (Fix 1) — verify the signer matches activity.actor
     activity_actor = activity.get("actor")
@@ -548,13 +541,16 @@ async def user_inbox(request: Request, username: str):
             if obj_actor and obj_actor != actor_url:
                 return JSONResponse({"status": "error", "message": "Undo actor mismatch"}, status_code=403)
 
+    import sys
+    print(f"[inbox] step: before ProcessedActivity", flush=True)
     # Record activity ID to prevent replay
     if activity_id:
         with get_session() as s:
             s.add(ProcessedActivity(id=activity_id))
             s.commit()
+        print(f"[inbox] step: ProcessedActivity done", flush=True)
 
-    import sys; print(f"[inbox] calling handle_inbox for {atype}", flush=True)
+    print(f"[inbox] calling handle_inbox for {atype}", flush=True)
     status_code, message = handle_inbox(activity)
     print(f"[inbox] handle_inbox result: {status_code} {message}", flush=True)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)
