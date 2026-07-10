@@ -3143,12 +3143,14 @@ def _fetch_and_save_ap_object(obj, user):
     from app.activitypub import _sanitize_html
     content = _sanitize_html(obj.get("content", ""))
     if not content:
+        logger.warning("fetch_save: empty content, obj keys=%s", list(obj.keys())[:10])
         return None
 
     attributed_to = obj.get("attributedTo", "")
     if isinstance(attributed_to, list):
         attributed_to = attributed_to[0] if attributed_to else ""
     if not attributed_to:
+        logger.warning("fetch_save: no attributedTo, obj keys=%s", list(obj.keys())[:10])
         return None
 
     from app.activitypub import _resolve_actor
@@ -3159,6 +3161,7 @@ def _fetch_and_save_ap_object(obj, user):
         if u:
             author_id = u.id
     if not author_id:
+        logger.warning("fetch_save: cannot resolve author for %s", attributed_to)
         # fallback: try parsing username from attributed_to URL
         try:
             from urllib.parse import urlparse
