@@ -278,7 +278,7 @@ def _send_verification_email(u: User):
                 smtp.login(SMTP_USER, SMTP_PASSWORD or "")
             smtp.send_message(msg)
     except Exception as e:
-        logger.warning("Failed to send verification email to %s: %s", u.email, e)
+        logger.exception("Failed to send verification email to %s", u.email)
 
 
 @router.post("/auth/register")
@@ -3893,7 +3893,7 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
                         smtp.login(SMTP_USER, SMTP_PASSWORD or "")
                     smtp.send_message(msg)
             except Exception as e:
-                logger.warning("Failed to send moderation email to %s: %s", u.email, e)
+                logger.exception("Failed to send moderation email to %s", u.email)
     return {"ok": True, "action": action}
 
 
