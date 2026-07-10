@@ -763,6 +763,19 @@ def init_db():
     _migrate_add_column("users", "moved_to", "TEXT DEFAULT ''")
     _migrate_add_column("users", "is_limited", "BOOLEAN DEFAULT 0")
     _migrate_add_column("users", "is_locked", "BOOLEAN DEFAULT 0")
+    _migrate_add_column("posts", "is_sensitive", "BOOLEAN DEFAULT 0")
+    _migrate_add_column("posts", "original_visibility", "TEXT DEFAULT ''")
+    _migrate_add_column("posts", "media_attachments", "TEXT DEFAULT '[]'")
+    _migrate_add_column("posts", "poll_data", "TEXT DEFAULT NULL")
+    _migrate_add_column("posts", "bumped_at", "TIMESTAMP DEFAULT NULL")
+    _migrate_add_column("posts", "is_dm", "BOOLEAN DEFAULT 0")
+    _migrate_add_column("posts", "novel_id", "INTEGER DEFAULT NULL")
+    _migrate_add_column("posts", "episode_id", "INTEGER DEFAULT NULL")
+    _migrate_add_column("posts", "mentioned_user_ids", "TEXT DEFAULT '[]'")
+    _migrate_add_column("posts", "in_reply_to_ap_id", "TEXT DEFAULT ''")
+    _migrate_add_column("novels", "is_sensitive", "BOOLEAN DEFAULT 0")
+    _migrate_add_column("episodes", "summary", "TEXT DEFAULT ''")
+    _migrate_add_column("episodes", "comment", "TEXT DEFAULT ''")
     # Create additional composite indexes for performance
     try:
         with engine.connect() as conn:
