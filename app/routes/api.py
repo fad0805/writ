@@ -3388,46 +3388,8 @@ def api_fetch_actor(request: Request, url: str = Form(...)):
     from app.activitypub import _resolve_actor
     actor = _resolve_actor(url, force_refresh=True, sign_as=user)
     if not actor:
-        print("3. FAIL: _resolve_actor returned None", flush=True)
-        # Log details from the previous run if available
         raise HTTPException(status_code=400, detail="Cannot resolve actor")
-    print("3. _resolve_actor ok, actor:", actor.id, actor.username, actor.remote_url[:60], flush=True)
-    actor_id = None
-    from urllib.parse import urlparse
-    parsed = urlparse(url)
-    path = parsed.path.rstrip("/")
-    username_from_url = path.split("/@")[-1] if "/@" in path else path.split("/")[-1]
-    print("4. path:", path, "username_from_url:", username_from_url, "netloc:", parsed.netloc, flush=True)
-    if username_from_url:
-        remote_username = f"{username_from_url}@{parsed.netloc}"
-        print("5. remote_username:", remote_username, flush=True)
-        with get_session() as s:
-            u = s.query(User).filter_by(username=remote_username).first()
-            if u:
-                actor_id = u.id
-                print("6. found user:", u.id, u.username, flush=True)
-            else:
-                print("6. user NOT found in DB:", remote_username, "but actor was created as:", actor.username, flush=True)
-    else:
-        print("5. no username_from_url", flush=True)
-    if not actor_id:
-        # Fallback: use the actor returned by _resolve_actor
-        print("7. using actor from _resolve_actor:", actor.id, actor.username, flush=True)
-        actor_id = actor.id
-    if not actor_id:
-        # Last fallback: search by remote_url
-        with get_session() as s:
-            u = s.query(User).filter_by(remote_url=url).first()
-            if u:
-                print("7b. found by remote_url:", u.id, u.username, flush=True)
-                actor_id = u.id
-    with get_session() as s:
-        u = s.query(User).get(actor_id)
-        if u:
-            print("8. success, returning user:", u.username, flush=True)
-            return _user_json(u)
-    print("9. FAIL: user not found by id:", actor_id, flush=True)
-    raise HTTPException(status_code=400, detail="Cannot resolve actor")
+    return _user_json(actor)
 
 
 @router.post("/fetch-post")
