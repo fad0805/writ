@@ -762,9 +762,15 @@ def _handle_reject(activity: dict) -> tuple[int, str]:
         ).first()
         if not follow_rel:
             return (200, "No pending follow request found")
+        session.query(Notification).filter_by(
+            from_user_id=remote_actor.id, user_id=local_user.id,
+            notification_type="follow_request",
+        ).delete()
         session.delete(follow_rel)
         session.commit()
 
+    from app.timeline_stream import broadcast_refresh_notifs
+    broadcast_refresh_notifs()
     return (200, "Rejected follow removed")
 
 def _handle_accept(activity: dict) -> tuple[int, str]:
