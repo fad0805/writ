@@ -740,42 +740,8 @@ def init_db():
         command.stamp(Config("alembic.ini"), "head")
     except Exception:
         pass
-    # Migrate missing columns
-    _migrate_add_column("users", "enable_reactions", "BOOLEAN DEFAULT 1")
-    _migrate_add_column("users", "email_verified", "BOOLEAN DEFAULT 0")
-    _migrate_add_column("users", "is_deactivated", "BOOLEAN DEFAULT 0")
-    _migrate_add_column("users", "is_deceased", "BOOLEAN DEFAULT 0")
-    _migrate_add_column("users", "is_sensitive", "BOOLEAN DEFAULT 0")
-    _migrate_add_column("users", "show_badge", "BOOLEAN DEFAULT 0")
-    _migrate_add_column("users", "is_bot", "BOOLEAN DEFAULT 0")
-    _migrate_add_column("users", "display_handle", "TEXT DEFAULT ''")
-    _migrate_add_column("users", "follow_list_visibility", "TEXT DEFAULT 'public'")
-    _migrate_add_column("users", "custom_fields", "TEXT DEFAULT '[]'")
-    _migrate_add_column("users", "profile_hashtags", "TEXT DEFAULT '[]'")
-    _migrate_add_column("users", "pinned_posts", "TEXT DEFAULT '[]'")
-    _migrate_add_column("users", "pinned_series", "TEXT DEFAULT '[]'")
-    _migrate_add_column("users", "episode_default_visibility", "TEXT DEFAULT 'public'")
-    _migrate_add_column("users", "session_token", "TEXT DEFAULT ''")
-    _migrate_add_column("users", "moderation_note", "TEXT DEFAULT ''")
-    _migrate_add_column("users", "verification_token", "TEXT DEFAULT ''")
-    _migrate_add_column("users", "recent_ips", "TEXT DEFAULT '[]'")
-    _migrate_add_column("users", "aliases", "TEXT DEFAULT '[]'")
-    _migrate_add_column("users", "moved_to", "TEXT DEFAULT ''")
-    _migrate_add_column("users", "is_limited", "BOOLEAN DEFAULT 0")
-    _migrate_add_column("users", "is_locked", "BOOLEAN DEFAULT 0")
-    _migrate_add_column("posts", "is_sensitive", "BOOLEAN DEFAULT 0")
-    _migrate_add_column("posts", "original_visibility", "TEXT DEFAULT ''")
-    _migrate_add_column("posts", "media_attachments", "TEXT DEFAULT '[]'")
-    _migrate_add_column("posts", "poll_data", "TEXT DEFAULT NULL")
-    _migrate_add_column("posts", "bumped_at", "TIMESTAMP DEFAULT NULL")
-    _migrate_add_column("posts", "is_dm", "BOOLEAN DEFAULT 0")
-    _migrate_add_column("posts", "novel_id", "INTEGER DEFAULT NULL")
-    _migrate_add_column("posts", "episode_id", "INTEGER DEFAULT NULL")
-    _migrate_add_column("posts", "mentioned_user_ids", "TEXT DEFAULT '[]'")
-    _migrate_add_column("posts", "in_reply_to_ap_id", "TEXT DEFAULT ''")
-    _migrate_add_column("novels", "is_sensitive", "BOOLEAN DEFAULT 0")
-    _migrate_add_column("episodes", "summary", "TEXT DEFAULT ''")
-    _migrate_add_column("episodes", "comment", "TEXT DEFAULT ''")
+    # Auto-migrate any missing columns across all tables
+    _migrate_missing_columns()
     # Create additional composite indexes for performance
     try:
         with engine.connect() as conn:
@@ -789,13 +755,53 @@ def init_db():
         pass
 
 
-def _migrate_add_column(table: str, column: str, col_def: str):
+def _migrate_missing_columns():
+    from sqlalchemy import inspect as sa_inspect
     try:
-        with engine.connect() as conn:
-            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}"))
-            conn.commit()
+        inspector = sa_inspect(engine)
     except Exception:
-        pass
+        return
+    for table_name, table in Base.metadata.tables.items():
+        try:
+            existing = {c["name"] for c in inspector.get_columns(table_name)}
+        except Exception:
+            continue
+        for col in table.columns:
+            if col.name in existing:
+                continue
+            # Map SQLAlchemy type to a SQLite-compatible type string
+            col_type = _sa_type_to_sqlite(col.type)
+            default = _col_default_sql(col)
+            try:
+                with engine.connect() as conn:
+                    conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col.name} {col_type}{default}"))
+                    conn.commit()
+            except Exception:
+                pass
+
+
+def _sa_type_to_sqlite(col_type):
+    type_str = str(col_type).upper()
+    if "INTEGER" in type_str or "BOOLEAN" in type_str:
+        return "INTEGER"
+    if "TIMESTAMP" in type_str or "DATETIME" in type_str or "DATE" in type_str:
+        return "TIMESTAMP"
+    return "TEXT"
+
+
+def _col_default_sql(col):
+    if col.default is None or not col.default.is_scalar:
+        return " DEFAULT NULL" if col.nullable else ""
+    v = col.default.arg
+    if v is None:
+        return " DEFAULT NULL"
+    if isinstance(v, bool):
+        return f" DEFAULT {1 if v else 0}"
+    if isinstance(v, int):
+        return f" DEFAULT {v}"
+    if isinstance(v, (list, dict)):
+        return " DEFAULT '[]'"
+    return f" DEFAULT '{v}'"
 
 
 def get_session():
