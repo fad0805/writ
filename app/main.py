@@ -424,17 +424,24 @@ async def shared_inbox(request: Request):
 
 @app.post("/users/{username}/inbox")
 async def user_inbox(request: Request, username: str):
+    import sys; print(f"[inbox] RECEIVED from {request.client.host if request.client else '?'}", flush=True)
     with get_session() as session:
         user = session.query(User).filter_by(username=username, is_remote=False).first()
         if not user:
+            print(f"[inbox] user not found: {username}", flush=True)
             raise HTTPException(status_code=404, detail="User not found")
+    print(f"[inbox] target user: {user.username} ({user.id})", flush=True)
 
     body = await request.body()
+    print(f"[inbox] body size: {len(body)} bytes", flush=True)
     if len(body) > 1024 * 1024:
+        print(f"[inbox] body too large", flush=True)
         raise HTTPException(status_code=413, detail="Request body too large")
     try:
         activity = json.loads(body)
+        print(f"[inbox] activity type: {activity.get('type')} actor: {str(activity.get('actor',''))[:80]}", flush=True)
     except json.JSONDecodeError:
+        print(f"[inbox] invalid JSON", flush=True)
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
     actor_url = activity.get("actor", "")
@@ -480,8 +487,11 @@ async def user_inbox(request: Request, username: str):
     # Verify HTTP Signature
     request.state.sign_as_user = user
     ok, remote_actor = _verify_http_signature(request, body, activity)
+    import sys; print(f"[inbox] verify ok={ok} remote={remote_actor.id if remote_actor else 'None'}", flush=True)
     if not ok:
+        print(f"[inbox] SIGNATURE VERIFICATION FAILED", flush=True)
         return JSONResponse({"status": "error", "message": "Invalid signature"}, status_code=401)
+    print(f"[inbox] signature OK, processing activity", flush=True)
 
     # Validate required fields per activity type
     if not atype:
