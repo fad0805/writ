@@ -3297,44 +3297,50 @@ def _safe_httpx_get(url, headers=None, timeout=15, max_size=5*1024*1024):
 def _ap_fetch(url, user):
     """Fetch a remote URL with HTTP Signature, return parsed JSON."""
     from app.activitypub import _validate_url
+    from urllib.parse import urlparse
+    import datetime, time
+
     if not _validate_url(url):
         return None
-    from urllib.parse import urlparse
 
-    # Try unsigned first (many servers serve public posts without auth)
-    headers = {"Accept": "application/activity+json"}
-    resp = _safe_httpx_get(url, headers=headers)
-    if resp and resp.status_code == 200:
-        try:
-            return resp.json()
-        except Exception:
-            return None
-
-    # Fall back to signed request
-    import hashlib, time
     from app.crypto_utils import sign_string
-    date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+
+    date_str = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
     parsed = urlparse(url)
-    path = parsed.path or "/"
-    created = int(time.time())
-    signed_string = f"(request-target): get {path}\nhost: {parsed.netloc}\ndate: {date}\n(created): {created}"
-    signature = sign_string(signed_string, get_private_key(user, SECRET_KEY))
+    path_with_query = parsed.path or "/"
+    if parsed.query:
+        path_with_query += f"?{parsed.query}"
+
+    signed_string = (
+        f"(request-target): get {path_with_query}\n"
+        f"host: {parsed.netloc}\n"
+        f"date: {date_str}"
+    )
+
+    try:
+        signature = sign_string(signed_string, get_private_key(user, SECRET_KEY))
+    except Exception:
+        return None
+
     signature_header = (
         f'keyId="{user.actor_uri()}#main-key",'
-        f'algorithm="hs2019",'
-        f'created="{created}",'
-        f'headers="(request-target) host date (created)",'
+        f'headers="(request-target) host date",'
         f'signature="{signature}"'
     )
-    headers = {"Accept": "application/activity+json", "Signature": signature_header,
-               "Date": date, "Host": parsed.netloc}
+
+    headers = {
+        "Accept": "application/activity+json",
+        "Signature": signature_header,
+        "Date": date_str,
+        "Host": parsed.netloc,
+    }
+
     resp = _safe_httpx_get(url, headers=headers)
-    if resp and resp.status_code == 200:
-        try:
-            return resp.json()
-        except Exception:
-            return None
-    else:
+    if not resp or resp.status_code != 200:
+        return None
+    try:
+        return resp.json()
+    except Exception:
         return None
 
 @router.get("/notifications/unread-count")
