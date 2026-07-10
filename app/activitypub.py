@@ -743,7 +743,11 @@ def _handle_reject(activity: dict) -> tuple[int, str]:
     if isinstance(rejecter_url, list):
         rejecter_url = rejecter_url[0]
 
-    local_username = _parse_username_from_url(rejecter_url)
+    remote_actor = _resolve_actor(rejecter_url)
+    if not remote_actor:
+        return (200, "OK")
+
+    local_username = _parse_username_from_url(follower_url)
     if not local_username:
         return (200, "OK")
 
@@ -752,14 +756,9 @@ def _handle_reject(activity: dict) -> tuple[int, str]:
         if not local_user:
             return (200, "OK")
 
-        remote_follower = _resolve_actor(follower_url)
-        if not remote_follower:
-            return (200, "OK")
-
         follow_rel = session.query(Follow).filter_by(
-            following_id=local_user.id,
-            follower_id=remote_follower.id,
-            accepted=False,
+            follower_id=local_user.id,
+            following_id=remote_actor.id,
         ).first()
         if not follow_rel:
             return (200, "No pending follow request found")
