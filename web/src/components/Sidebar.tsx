@@ -168,7 +168,7 @@ export default function Sidebar() {
           <h2 style={{ "--title-size": `${Math.max(0.75, 1.4 - sidebarServerName.length * 0.035)}em` } as React.CSSProperties}>{sidebarLogo ? <img src={sidebarLogo} alt="" className="sidebar-logo-img" /> : <span className="sidebar-logo-icon" />} <span>{sidebarServerName}</span></h2>
         </Link>
       </div>
-      <form className="sidebar-search" onSubmit={async (e) => {
+      {user && <form className="sidebar-search" onSubmit={async (e) => {
         e.preventDefault();
         const q = (e.target as HTMLFormElement).q.value.trim();
         if (!q) return;
@@ -204,7 +204,7 @@ export default function Sidebar() {
             <Icon name="x" size={14} />
           </span>
         )}
-      </form>
+      </form>}
       <Link href={`/@${user.username}`} className="user-info-link">
         <div className="user-info">
            <Avatar user={user} className="sidebar-avatar rounded-[8px] flex items-center justify-center text-white font-bold text-lg" />
