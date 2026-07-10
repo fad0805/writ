@@ -203,7 +203,7 @@ export default function TimelinePage() {
   }, [tlType]);
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
-  if (!user) return null;
+  if (!user) return <div className="empty-state">{authLoading ? "로딩 중..." : "로그인이 필요합니다"}</div>;
   return (
     <>
       <div className="post-form">

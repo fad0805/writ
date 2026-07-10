@@ -17,7 +17,7 @@ export default function DeactivatedPage() {
   const router = useRouter();
   const { user, refresh } = useAuth();
 
-  if (!user) return null;
+  if (!user) return <div className="empty-state">로그인이 필요합니다</div>;
   if (!(user as any).is_deactivated) {
     router.replace("/timeline/home");
     return null;
