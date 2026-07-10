@@ -813,14 +813,15 @@ def _add_cols(table: str, inspector, cols: list[tuple[str, str]]):
         existing = {c["name"] for c in inspector.get_columns(table)}
     except Exception:
         return
-    for col_name, col_def in cols:
-        if col_name not in existing:
-            try:
-                with engine.connect() as conn:
-                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}"))
-                    conn.commit()
-            except Exception:
-                pass
+    col_defs = [f"ADD COLUMN {col_name} {col_def}" for col_name, col_def in cols if col_name not in existing]
+    if not col_defs:
+        return
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f"ALTER TABLE {table} {', '.join(col_defs)}"))
+            conn.commit()
+    except Exception:
+        pass
 
 
 def get_session():
