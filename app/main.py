@@ -358,10 +358,14 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
             import sys; print(f"[verify] date parse error for {date_header}", flush=True)
             return (False, None)
 
-    # Build signed string (Fix 7 — use request Host header, not keyId host)
+    # Build signed string (Fix 7 — use original Host header, not rewritten one)
     path = request.url.path
     date = request.headers.get("Date", "")
     host_header = request.headers.get("Host", "")
+    # Rewrite가 Host를 api:8000으로 변경하면 DOMAIN으로 대체
+    if host_header in ("api:8000", "localhost:8000") or host_header.startswith("172."):
+        from app.config import DOMAIN
+        host_header = DOMAIN
     digest_val = request.headers.get("Digest", "")
     signed_parts = {
         "(request-target)": f"post {path}",
