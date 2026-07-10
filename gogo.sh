@@ -168,6 +168,19 @@ print('Host 헤더(raw):', repr(req.headers.get('host')))
 print('path:', repr(req.url.path))
 "
 
+elif [ "$1" = "clear-follow" ]; then
+  docker compose exec api python3 -c "
+from app.models import Follow, User, ProcessedActivity, get_session
+with get_session() as s:
+    local = s.query(User).filter_by(username='siarte', is_remote=False).first()
+    remote = s.query(User).filter_by(username='siarte@daydream.ink').first()
+    f = s.query(Follow).filter_by(follower_id=local.id, following_id=remote.id).first()
+    if f: s.delete(f)
+    s.query(ProcessedActivity).delete()
+    s.commit()
+    print('cleared')
+"
+
 elif [ "$1" = "check-pending" ]; then
   docker compose exec api python3 -c "
 from app.models import Follow, User, get_session
