@@ -1366,14 +1366,14 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     parsed = urlparse(inbox_url)
     path = parsed.path or "/"
     created = int(time.time())
-    signed_string = f"(request-target): post {path}\nhost: {parsed.netloc}\ndate: {date}\ndigest: SHA-256={digest}\n(request-created): {created}"
+    signed_string = f"(request-target): post {path}\nhost: {parsed.netloc}\ndate: {date}\ndigest: SHA-256={digest}\n(created): {created}"
 
     signature = sign_string(signed_string, get_private_key(sender, SECRET_KEY))
     signature_header = (
         f'keyId="{sender.actor_uri()}#main-key",'
         f'algorithm="hs2019",'
         f'created="{created}",'
-        f'headers="(request-target) host date digest (request-created)",'
+        f'headers="(request-target) host date digest (created)",'
         f'signature="{signature}"'
     )
 
