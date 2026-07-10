@@ -9,6 +9,7 @@ import Avatar from "@/components/Avatar";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { Suspense } from "react";
+import { useAuth } from "@/lib/auth";
 import ClickableCover from "@/components/ClickableCover";
 import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
 
@@ -17,6 +18,7 @@ function ExploreFallback() {
 }
 
 function ExploreContent() {
+  const { user } = useAuth();
   const router = useRouter();
   const [posts, setPosts] = useState<PostData[]>([]);
   const [novels, setNovels] = useState<NovelData[]>([]);
@@ -99,7 +101,7 @@ function ExploreContent() {
     <div className="explore-page-layout">
       <div className="explore-page-top">
         <h3 className="section-header hm-bottom-8"><Icon name="buildings" /> 지금 우리 서버는...</h3>
-        <form className="explore-search" onSubmit={handleSubmit}>
+        {user && <form className="explore-search" onSubmit={handleSubmit}>
           <span className="explore-search-icon" onClick={(ev) => { const f = (ev.target as HTMLElement).closest('form'); if (f) f.requestSubmit(); }}>
             <Icon name="search" size={14} />
           </span>
@@ -109,7 +111,7 @@ function ExploreContent() {
               <Icon name="x" size={14} />
             </span>
           )}
-        </form>
+        </form>}
         {!loading && !searched && novels.length > 0 && (
           <div className="explore-series-section">
             <h4 className="section-header explore-section-title-sm"><Icon name="book" /> 최신 시리즈</h4>
@@ -150,7 +152,7 @@ function ExploreContent() {
       ) : (
         <>
           {!loading && !searched && posts.length > 0 && posts.map((p) => <PostCard key={p.id} post={p} />)}
-          {searched && (
+          {user && searched && (
             <>
               {fetchedUrl && posts.length > 0 && (
                 <>
