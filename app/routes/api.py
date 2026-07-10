@@ -3368,31 +3368,52 @@ def _check_fetch_domain_allowed(url: str) -> str | None:
 
 @router.post("/fetch-actor")
 def api_fetch_actor(request: Request, url: str = Form(...)):
+    import sys
+    print("=== FETCH ACTOR called ===", flush=True)
     user = require_auth(request)
+    print("1. auth ok, user:", user.username if user else "none", flush=True)
     if not url.startswith("http"):
+        print("2. FAIL: url not http", url, flush=True)
         raise HTTPException(status_code=400, detail="Invalid URL")
     err = _check_fetch_domain_allowed(url)
     if err:
+        print("2b. FAIL: domain blocked", url, flush=True)
         raise HTTPException(status_code=403, detail=err)
+    print("2. url ok:", url, flush=True)
     from app.activitypub import _resolve_actor
-    _resolve_actor(url)
+    try:
+        _resolve_actor(url)
+        print("3. _resolve_actor done", flush=True)
+    except Exception as e:
+        print("3. FAIL: _resolve_actor raised:", type(e).__name__, str(e)[:200], flush=True)
+        raise HTTPException(status_code=400, detail="Cannot resolve actor")
     actor_id = None
     from urllib.parse import urlparse
     parsed = urlparse(url)
     path = parsed.path.rstrip("/")
     username_from_url = path.split("/@")[-1] if "/@" in path else path.split("/")[-1]
+    print("4. path:", path, "username_from_url:", username_from_url, "netloc:", parsed.netloc, flush=True)
     if username_from_url:
         remote_username = f"{username_from_url}@{parsed.netloc}"
+        print("5. remote_username:", remote_username, flush=True)
         with get_session() as s:
             u = s.query(User).filter_by(username=remote_username).first()
             if u:
                 actor_id = u.id
+                print("6. found user:", u.id, u.username, flush=True)
+            else:
+                print("6. user NOT found in DB:", remote_username, flush=True)
+    else:
+        print("5. no username_from_url", flush=True)
     if not actor_id:
+        print("7. FAIL: no actor_id", flush=True)
         raise HTTPException(status_code=400, detail="Cannot resolve actor")
     with get_session() as s:
         u = s.query(User).get(actor_id)
         if u:
+            print("8. success, returning user:", u.username, flush=True)
             return _user_json(u)
+    print("9. FAIL: user not found by id:", actor_id, flush=True)
     raise HTTPException(status_code=400, detail="Cannot resolve actor")
 
 
