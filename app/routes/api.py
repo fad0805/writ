@@ -3026,12 +3026,11 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
     query = q.strip().lstrip("@").lstrip("#")
     if not query:
         return {"posts": [], "novels": [], "users": []}
-    # Check if the query contains a blocked/allowed domain
+    # Check if the query contains a blocked/allowed domain (handles only, not URLs)
     blocked_domain = None
-    if "@" in query and "." in query:
+    if not query.startswith("http") and "@" in query and "." in query:
         parts = query.split("@")
         if len(parts) == 2 and parts[1]:
-            from urllib.parse import urlparse
             domain = parts[1].strip().lower()
             if domain:
                 from app.models import ServerSetting, FederationBlock, AllowedServer
