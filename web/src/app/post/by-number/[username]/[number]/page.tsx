@@ -3,6 +3,7 @@ import { useParams } from "next/navigation";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { api, PostData } from "@/lib/api";
 import PostCard from "@/components/PostCard";
+import Head from "next/head";
 
 function ThreadNode({ post, depth = 0 }: { post: PostData; depth?: number }) {
   return (
@@ -86,8 +87,14 @@ export default function PostByNumberPage() {
   if (loading) return <div className="empty-state">로딩 중...</div>;
   if (!post) return <div className="empty-state">게시글을 찾을 수 없습니다.</div>;
 
+  const username = Array.isArray(params.username) ? params.username[0] : params.username;
+  const number = Array.isArray(params.number) ? params.number[0] : params.number;
+
   return (
     <>
+      <Head>
+        <link rel="alternate" type="application/activity+json" href={`/@${username}/${number}`} />
+      </Head>
       {ancestors.map((a) => (
         <div key={a.id} className="thread-child"><PostCard post={a} hideContext /></div>
       ))}
