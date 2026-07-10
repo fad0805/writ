@@ -85,6 +85,8 @@ class User(Base):
     novels = relationship("Novel", back_populates="author", cascade="all, delete-orphan", lazy="selectin")
 
     def actor_uri(self):
+        if self.is_remote and self.remote_url:
+            return self.remote_url
         return f"{BASE_URL}/users/{self.username}"
 
     def followers_uri(self):
