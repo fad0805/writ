@@ -738,9 +738,11 @@ def init_db():
         from alembic.config import Config
         from alembic import command
         cfg = Config("alembic.ini")
+        cfg.set_main_option("sqlalchemy.url", str(engine.url))
         command.upgrade(cfg, "head")
-    except Exception:
-        pass
+    except Exception as exc:
+        import logging
+        logging.getLogger("writ.init").warning("Alembic migration skipped: %s", exc)
     # Create additional composite indexes for performance
     try:
         with engine.connect() as conn:
