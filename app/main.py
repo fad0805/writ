@@ -342,7 +342,7 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
                 date_dt = datetime.datetime.fromtimestamp(email.utils.mktime_tz(date_tuple), tz=datetime.timezone.utc)
                 now = datetime.datetime.now(datetime.timezone.utc)
                 diff = abs((now - date_dt).total_seconds())
-                if diff > 30:
+                if diff > 300:
                     return (False, None)
         except (ValueError, TypeError, OverflowError):
             return (False, None)
@@ -402,6 +402,14 @@ async def shared_inbox(request: Request):
     ok, remote_actor = _verify_http_signature(request, body, activity)
     if not ok:
         return JSONResponse({"status": "error", "message": "Invalid signature"}, status_code=401)
+    activity_id = activity.get("id", "")
+    if activity_id:
+        with get_session() as s:
+            already = s.query(ProcessedActivity).filter_by(id=activity_id).first()
+            if already:
+                return JSONResponse({"status": 200, "message": "Already processed"})
+            s.add(ProcessedActivity(id=activity_id))
+            s.commit()
     status_code, message = handle_inbox(activity)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)
 

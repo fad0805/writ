@@ -16,6 +16,7 @@ export default function SettingsPage() {
   const [isLocked, setIsLocked] = useState(false);
   const [isBot, setIsBot] = useState(false);
   const [followListVis, setFollowListVis] = useState("public");
+  const [enableReactions, setEnableReactions] = useState(true);
   const [followRequests, setFollowRequests] = useState<{ id: number; user: User }[]>([]);
   const [frLoading, setFrLoading] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -30,6 +31,7 @@ export default function SettingsPage() {
       setIsLocked(user.is_locked || false);
       setIsBot(user.is_bot || false);
       setFollowListVis(user.follow_list_visibility || "public");
+      setEnableReactions(user.enable_reactions !== false);
       setLoading(false);
     }).catch(() => router.push("/login"));
   }, [router]);
@@ -62,6 +64,7 @@ export default function SettingsPage() {
       form.append("is_locked", isLocked ? "true" : "");
       form.append("is_bot", isBot ? "true" : "");
       form.append("follow_list_visibility", followListVis);
+      form.append("enable_reactions", enableReactions ? "true" : "false");
       const res = await fetch("/api/settings/update", {
         method: "POST",
         credentials: "include",
@@ -101,6 +104,13 @@ export default function SettingsPage() {
             {" "}<Icon name="mute" /> 자동화된 계정 (봇)
           </label>
           <p className="form-help">봇 계정은 사용자가 거의 개입하지 않고 프로그램으로 자동 운영되는 계정입니다. 켜면 계정에 봇 표시가 추가됩니다.</p>
+        </div>
+        <div className="form-group">
+          <label>
+            <input type="checkbox" checked={enableReactions} onChange={(e) => setEnableReactions(e.target.checked)} />
+            {" "}리액션(이모지 반응) 허용
+          </label>
+          <p className="form-help">켜면 다른 사용자가 내 포스트에 이모지로 반응할 수 있습니다.</p>
         </div>
         <div className="form-group">
           <label>팔로워/팔로잉 목록 공개</label>

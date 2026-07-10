@@ -9,6 +9,7 @@ import ClickableCover from "./ClickableCover";
 import Icon from "./Icon";
 import Avatar from "./Avatar";
 import MiniPostCard from "./MiniPostCard";
+import EmojiPicker from "./EmojiPicker";
 import { useAuth } from "@/lib/auth";
 import ShareButton from "@/components/ShareButton";
 import { hashColor } from "@/lib/avatar";
@@ -18,12 +19,13 @@ const VIS_ICONS: Record<string, string> = {
   public: "globe", home: "home", followers: "lock", mention: "mail",
 };
 
-function formatRelative(iso: string): string {
-  const diff = new Date(iso).getTime() - Date.now();
+function formatRelative(iso: string, now: number = Date.now()): string {
+  const diff = new Date(iso).getTime() - now;
   const abs = Math.abs(diff);
-  if (abs < 3600000) return `${Math.round(abs / 60000)}분`;
-  if (abs < 86400000) return `${Math.round(abs / 3600000)}시간`;
-  return `${Math.round(abs / 86400000)}일`;
+  if (abs < 60000) return `${Math.floor(abs / 1000)}초`;
+  if (abs < 3600000) return `${Math.floor(abs / 60000)}분 ${Math.floor((abs % 60000) / 1000)}초`;
+  if (abs < 86400000) return `${Math.floor(abs / 3600000)}시간`;
+  return `${Math.floor(abs / 86400000)}일`;
 }
 
 function rewriteLinks(text: string): string {
@@ -46,6 +48,8 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   const [showReply, setShowReply] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const [showPollResults, setShowPollResults] = useState(false);
+  const [now, setNow] = useState(Date.now());
   const [reportReason, setReportReason] = useState("");
   const [reportError, setReportError] = useState("");
   const [reportDone, setReportDone] = useState(false);
@@ -58,10 +62,18 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   const [pinned, setPinned] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likes_count);
   const [boostsCount, setBoostsCount] = useState(post.boosts_count);
+  const [reactions, setReactions] = useState(post.reactions || {});
+  const [myReaction, setMyReaction] = useState(post.my_reaction || null);
 
   useEffect(() => {
     if (currentUser?.pinned_posts) setPinned(currentUser.pinned_posts.includes(post.id));
   }, [currentUser, post.id]);
+
+  useEffect(() => {
+    if (!post.poll_data) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [post.poll_data]);
 
   const toggleLike = async () => {
     try {
@@ -112,10 +124,21 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
   useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
 
-  const timeStr = post.created_at ? new Date(post.created_at).toLocaleString("ko-KR", {
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", hour12: false,
-  }).replace(/\. /g, "-").replace(/\.$/, "") : "";
+  const [nowTime, setNowTime] = useState(Date.now());
+  useEffect(() => { const id = setInterval(() => setNowTime(Date.now()), 10000); return () => clearInterval(id); }, []);
+  const timeStr = post.created_at ? (() => {
+    const t = new Date(post.created_at).getTime();
+    const diff = nowTime - t;
+    if (diff < 86400000) {
+      if (diff < 60000) return `${Math.floor(diff / 1000)}초 전`;
+      if (diff < 3600000) return `${Math.floor(diff / 60000)}분 전`;
+      return `${Math.floor(diff / 3600000)}시간 전`;
+    }
+    return new Date(post.created_at).toLocaleString("ko-KR", {
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hour12: false,
+    }).replace(/\. /g, "-").replace(/\.$/, "");
+  })() : "";
 
   const [quoteUrl, setQuoteUrl] = useState("");
   const contentHtml = (() => {
@@ -314,49 +337,60 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
         )}
         {!post.summary && (post as any).media_attachments?.length > 0 && _renderMedia()}
         {post.poll_data && (
-          <div className="poll-box" style={{ marginTop: 8, padding: 10, borderRadius: 8, background: "var(--bg-tertiary)" }}>
-            {post.poll_data.options.map((opt, i) => {
-              const total = post.poll_data!.options.reduce((s, o) => s + (o.votes_count || 0), 0);
-              const pct = total > 0 ? Math.round(((opt.votes_count || 0) / total) * 100) : 0;
-              const isSelected = post.my_vote === i;
-              const isExpired = post.poll_data!.expires_at && new Date(post.poll_data!.expires_at) < new Date();
-              const canVote = !isExpired && post.my_vote == null && !readonly && !post.is_mine;
-              return (
-                <div
-                  key={i}
-                  className={`poll-option${isSelected ? " selected" : ""}${canVote ? " votable" : ""}`}
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    if (!canVote) return;
-                    try {
-                      await api.vote(post.id, i);
-                      if (onUpdate) onUpdate();
-                      else window.dispatchEvent(new Event("postchange"));
-                    } catch (err: any) { alert(err.message); }
-                  }}
-                  style={{
-                    position: "relative", padding: "8px 10px", marginBottom: 4, borderRadius: 6,
-                    border: `1px solid ${isSelected ? "var(--accent)" : "var(--border)"}`,
-                    background: isSelected ? "color-mix(in srgb, var(--accent) 15%, transparent)" : "var(--bg-secondary)",
-                    cursor: canVote ? "pointer" : "default", overflow: "hidden",
-                    transition: "all 0.15s",
-                  }}
-                >
-                  <div style={{ position: "absolute", top: 0, left: 0, height: "100%", width: `${pct}%`, background: "color-mix(in srgb, var(--accent) 12%, transparent)", borderRadius: 6, transition: "width 0.3s" }} />
-                  <div style={{ position: "relative", zIndex: 1, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontWeight: isSelected ? 600 : 400, fontSize: 14 }}>{opt.text}</span>
-                    <span style={{ fontSize: 12, color: "var(--text-muted)", minWidth: 40, textAlign: "right" }}>{pct}%</span>
+          (() => {
+            const total = post.poll_data!.options.reduce((s, o) => s + (o.votes_count || 0), 0);
+            const isExpired = post.poll_data!.expires_at && new Date(post.poll_data!.expires_at).getTime() < now;
+            const showResults = showPollResults || post.my_vote != null || isExpired || readonly || post.is_mine;
+            return <div className="poll-box" style={{ marginTop: 8, padding: 10, borderRadius: 8, background: "var(--bg-tertiary)" }}>
+              {post.poll_data!.options.map((opt, i) => {
+                const pct = showResults && total > 0 ? Math.round(((opt.votes_count || 0) / total) * 100) : 0;
+                const isSelected = post.my_vote === i;
+                const canVote = !showResults && !isExpired && post.my_vote == null && !readonly && !post.is_mine;
+                return (
+                  <div
+                    key={i}
+                    className={`poll-option${isSelected ? " selected" : ""}${canVote ? " votable" : ""}`}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!canVote) return;
+                      try {
+                        await api.vote(post.id, i);
+                        if (onUpdate) onUpdate();
+                        else window.dispatchEvent(new Event("postchange"));
+                      } catch (err: any) { alert(err.message); }
+                    }}
+                    style={{
+                      position: "relative", padding: "8px 10px", marginBottom: 4, borderRadius: 6,
+                      border: `1px solid ${isSelected ? "var(--accent)" : "var(--border)"}`,
+                      background: isSelected ? "color-mix(in srgb, var(--accent) 15%, transparent)" : "var(--bg-secondary)",
+                      cursor: canVote ? "pointer" : "default", overflow: "hidden",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {showResults && <div style={{ position: "absolute", top: 0, left: 0, height: "100%", width: `${pct}%`, background: "color-mix(in srgb, var(--accent) 12%, transparent)", borderRadius: 6, transition: "width 0.3s" }} />}
+                    <div style={{ position: "relative", zIndex: 1, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontWeight: isSelected ? 600 : 400, fontSize: 14 }}>{opt.text}</span>
+                      {showResults && <span style={{ fontSize: 12, color: "var(--text-muted)", minWidth: 40, textAlign: "right" }}>{pct}%</span>}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-              <span>총 {post.poll_data.options.reduce((s, o) => s + (o.votes_count || 0), 0)}표</span>
-              {post.poll_data.expires_at ? (
-                new Date(post.poll_data.expires_at) < new Date() ? <span>마감됨</span> : <span>마감 {formatRelative(post.poll_data.expires_at)}</span>
-              ) : null}
-            </div>
-          </div>
+                );
+              })}
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
+                <span>총 {total}표</span>
+                <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {!showResults && post.my_vote == null && !isExpired && !readonly && !post.is_mine && (
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setShowPollResults(true); }} className="action-btn" style={{ fontSize: 11, padding: "2px 6px" }}>결과 보기</button>
+                  )}
+                  {showResults && post.my_vote == null && !isExpired && !readonly && !post.is_mine && (
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setShowPollResults(false); }} className="action-btn" style={{ fontSize: 11, padding: "2px 6px" }}>투표하기</button>
+                  )}
+                  {post.poll_data!.expires_at ? (
+                    new Date(post.poll_data!.expires_at).getTime() < now ? <span>종료</span> : <span>{formatRelative(post.poll_data!.expires_at, now)}</span>
+                  ) : null}
+                </span>
+              </div>
+            </div>;
+          })()
         )}
         {loadingQuote && <div className="empty-small loading-small">인용 불러오는 중...</div>}
         {quotedPost && <div className="my-8"><MiniPostCard post={quotedPost} /></div>}
@@ -402,6 +436,38 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
             </div>
           </div>
         )}
+        {reactions && Object.keys(reactions).length > 0 && currentUser?.enable_reactions !== false && post.author?.enable_reactions !== false && (
+          <div className="reactions-row" style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8, marginBottom: 4, padding: "0 8px" }} onClick={(e) => e.stopPropagation()}>
+            {Object.entries(reactions).map(([emoji, count]) => (
+              <span
+                key={emoji}
+                className={`reaction-badge${myReaction === emoji ? " active" : ""}`}
+                onClick={async () => {
+                  if (myReaction === emoji) {
+                    await api.unreact(post.id);
+                    const next = { ...reactions };
+                    if (next[emoji] <= 1) delete next[emoji];
+                    else next[emoji] -= 1;
+                    setReactions(next);
+                    setMyReaction(null);
+                    setLiked(false);
+                    setLikesCount(Math.max(0, likesCount - 1));
+                  } else {
+                    await api.react(post.id, emoji);
+                    setReactions({ ...reactions, [emoji]: (reactions[emoji] || 0) + 1 });
+                    setMyReaction(emoji);
+                    setLiked(true);
+                    setLikesCount(likesCount + 1);
+                  }
+                }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 12, fontSize: 13, cursor: "pointer", border: "1px solid var(--border)", background: myReaction === emoji ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-secondary)" }}
+              >
+                <span>{emoji}</span>
+                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{count}</span>
+              </span>
+            ))}
+          </div>
+        )}
         {!readonly && <div className="post-actions" onClick={(e) => e.stopPropagation()}>
           <button onClick={() => { setShowReply(!showReply); }} className="action-btn">
             <Icon name="reply" /> {post.replies_count}
@@ -411,11 +477,25 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
               <Icon name="refresh" /> {boostsCount}
             </button>
           </form>
-          <form className="inline-form" onSubmit={(e) => e.preventDefault()}>
-            <button type="button" onClick={toggleLike} className={`action-btn ${liked ? "liked" : ""}`}>
-              <Icon name={liked ? "star_filled" : "star"} /> {likesCount}
-            </button>
-          </form>
+          {currentUser?.enable_reactions !== false && post.author?.enable_reactions !== false ? (
+            <span onClick={(e) => e.stopPropagation()} className="relative-wrap" style={{ marginBottom: -2 }}>
+              <EmojiPicker onEmoji={async (emoji) => {
+                try {
+                  await api.react(post.id, emoji);
+                  setReactions({ ...reactions, [emoji]: (reactions[emoji] || 0) + 1 });
+                  setMyReaction(emoji);
+                  setLiked(true);
+                  setLikesCount(likesCount + 1);
+                } catch {}
+              }} />
+            </span>
+          ) : (
+            <form className="inline-form" onSubmit={(e) => e.preventDefault()}>
+              <button type="button" onClick={toggleLike} className={`action-btn ${liked ? "liked" : ""}`}>
+                <Icon name={myReaction && liked ? "star_filled" : liked ? "star_filled" : "star"} /> {likesCount}
+              </button>
+            </form>
+          )}
             <button onClick={(e) => { e.stopPropagation(); toggleBookmark(); }} className={`action-btn${bookmarked ? " bookmarked" : ""}`} style={{ color: bookmarked ? "#5b7db5" : undefined }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill={bookmarked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
           </button>
@@ -515,3 +595,5 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
     </>
   );
 }
+
+

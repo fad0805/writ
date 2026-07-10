@@ -54,6 +54,14 @@ def _post_json(p, session, user):
         vote = session.query(Vote).filter_by(user_id=user.id, post_id=p.id).first()
         if vote:
             my_vote = vote.option_index
+    my_reaction = None
+    if user and liked:
+        my_reaction = session.query(Like.reaction).filter_by(user_id=user.id, post_id=p.id).scalar()
+    reactions = {}
+    if p.likes:
+        for like in p.likes:
+            if like.reaction:
+                reactions[like.reaction] = reactions.get(like.reaction, 0) + 1
     return {
         "id": p.id,
         "number": p.number or "",
@@ -77,6 +85,8 @@ def _post_json(p, session, user):
         "media_attachments": (p.media_attachments or []) if hasattr(p, 'media_attachments') else [],
         "poll_data": p.poll_data,
         "my_vote": my_vote,
+        "reactions": reactions,
+        "my_reaction": my_reaction,
     }
 
 
@@ -109,6 +119,7 @@ def _user_json(u):
         "follow_list_visibility": getattr(u, 'follow_list_visibility', 'public') or 'public',
         "custom_fields": (u.custom_fields or []) if hasattr(u, 'custom_fields') else [],
         "profile_hashtags": (u.profile_hashtags or []) if hasattr(u, 'profile_hashtags') else [],
+        "enable_reactions": getattr(u, 'enable_reactions', True),
         "aliases": (u.aliases or []) if hasattr(u, 'aliases') else [],
         "moved_to": getattr(u, 'moved_to', '') or '',
     }
@@ -604,6 +615,21 @@ def _broadcast_federation(user, post, visibility):
         logger.warning("Failed to broadcast federation activity: %s", e)
 
 
+def _broadcast_update_actor(user):
+    """Deliver Update actor activity to remote followers (background thread)."""
+    try:
+        update = {
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": f"{user.actor_uri()}#updates/{uuid.uuid4()}",
+            "type": "Update",
+            "actor": user.actor_uri(),
+            "object": user.to_ap_actor(),
+        }
+        broadcast_to_followers(user, update)
+    except Exception as e:
+        logger.warning("Failed to broadcast Update actor: %s", e)
+
+
 def _broadcast_timeline(post_json, author_id, visibility, is_dm):
     """Deliver post to connected timeline streams (background thread)."""
     try:
@@ -861,6 +887,19 @@ def api_like_post(request: Request, post_id: int):
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
             s.commit()
             broadcast_refresh_notifs()
+        if post.author.is_remote and post.author.shared_inbox_url:
+            like_activity = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": f"{BASE_URL}/likes/{uuid.uuid4()}",
+                "type": "Like",
+                "actor": user.actor_uri(),
+                "object": post.ap_id,
+            }
+            inbox = post.author.shared_inbox_url
+            try:
+                _post_to_inbox(inbox, like_activity, user)
+            except Exception:
+                pass
     return {"ok": True}
 
 
@@ -879,6 +918,24 @@ def api_unlike_post(request: Request, post_id: int):
             ).delete()
             s.commit()
             broadcast_refresh_notifs()
+        if post.author.is_remote and post.author.shared_inbox_url:
+            undo = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": f"{BASE_URL}/likes/{uuid.uuid4()}#undo",
+                "type": "Undo",
+                "actor": user.actor_uri(),
+                "object": {
+                    "id": f"{BASE_URL}/likes/{uuid.uuid4()}",
+                    "type": "Like",
+                    "actor": user.actor_uri(),
+                    "object": post.ap_id,
+                },
+            }
+            inbox = post.author.shared_inbox_url
+            try:
+                _post_to_inbox(inbox, undo, user)
+            except Exception:
+                pass
     return {"ok": True}
 
 
@@ -903,6 +960,21 @@ def api_boost_post(request: Request, post_id: int):
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id))
             s.commit()
             broadcast_refresh_notifs()
+        if post.author.is_remote and post.author.shared_inbox_url:
+            announce = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": f"{BASE_URL}/boosts/{uuid.uuid4()}",
+                "type": "Announce",
+                "actor": user.actor_uri(),
+                "object": post.ap_id,
+                "to": ["https://www.w3.org/ns/activitystreams#Public"],
+                "cc": [post.author.actor_uri()],
+            }
+            inbox = post.author.shared_inbox_url
+            try:
+                _post_to_inbox(inbox, announce, user)
+            except Exception:
+                pass
     return {"ok": True}
 
 
@@ -969,6 +1041,103 @@ def api_unboost_post(request: Request, post_id: int):
                 post.bumped_at = None
             s.commit()
             broadcast_refresh_notifs()
+        if post.author.is_remote and post.author.shared_inbox_url:
+            undo = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": f"{BASE_URL}/boosts/{uuid.uuid4()}#undo",
+                "type": "Undo",
+                "actor": user.actor_uri(),
+                "object": {
+                    "id": f"{BASE_URL}/boosts/{uuid.uuid4()}",
+                    "type": "Announce",
+                    "actor": user.actor_uri(),
+                    "object": post.ap_id,
+                },
+            }
+            inbox = post.author.shared_inbox_url
+            try:
+                _post_to_inbox(inbox, undo, user)
+            except Exception:
+                pass
+    return {"ok": True}
+
+
+@router.post("/posts/{post_id}/react")
+def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
+    user = require_active_auth(request)
+    with get_session() as s:
+        settings = ServerSetting.get(s)
+        if not settings.enable_reactions:
+            raise HTTPException(status_code=400, detail="Reactions are disabled")
+        if not emoji or len(emoji) > 50:
+            raise HTTPException(status_code=400, detail="Invalid emoji")
+        post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        if not getattr(post.author, 'enable_reactions', True):
+            raise HTTPException(status_code=400, detail="User has disabled reactions")
+        existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
+        is_new = False
+        if existing:
+            existing.reaction = emoji
+        else:
+            s.add(Like(user_id=user.id, post_id=post_id, reaction=emoji))
+            if post.author_id != user.id:
+                s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
+            is_new = True
+        s.commit()
+        if post.author.is_remote and post.author.shared_inbox_url:
+            from app.activitypub import _post_to_inbox
+            like_activity = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": f"{BASE_URL}/likes/{uuid.uuid4()}",
+                "type": "Like",
+                "actor": user.actor_uri(),
+                "object": post.ap_id,
+                "_misskey_reaction": emoji,
+            }
+            if is_new or (existing and existing.reaction != emoji):
+                inbox = post.author.shared_inbox_url
+                try:
+                    _post_to_inbox(inbox, like_activity, user)
+                except Exception:
+                    pass
+    return {"ok": True}
+
+
+@router.post("/posts/{post_id}/unreact")
+def api_unreact_post(request: Request, post_id: int):
+    user = require_active_auth(request)
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
+        if existing:
+            s.delete(existing)
+            s.query(Notification).filter_by(
+                from_user_id=user.id, notification_type="like", post_id=post_id
+            ).delete()
+            s.commit()
+            broadcast_refresh_notifs()
+            if post.author.is_remote and post.author.shared_inbox_url:
+                from app.activitypub import _post_to_inbox
+                undo = {
+                    "@context": "https://www.w3.org/ns/activitystreams",
+                    "id": f"{BASE_URL}/likes/{uuid.uuid4()}#undo",
+                    "type": "Undo",
+                    "actor": user.actor_uri(),
+                    "object": {
+                        "id": f"{BASE_URL}/likes/{uuid.uuid4()}",
+                        "type": "Like",
+                        "actor": user.actor_uri(),
+                        "object": post.ap_id,
+                    },
+                }
+                try:
+                    _post_to_inbox(post.author.shared_inbox_url, undo, user)
+                except Exception:
+                    pass
     return {"ok": True}
 
 
@@ -994,13 +1163,17 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
             old_option = existing.option_index
             if old_option == option:
                 return {"ok": True}
-            options[old_option]["votes_count"] = max(0, options[old_option].get("votes_count", 0) - 1)
             existing.option_index = option
         else:
             s.add(Vote(user_id=user.id, post_id=post_id, option_index=option))
-        options[option]["votes_count"] = options[option].get("votes_count", 0) + 1
-        post.poll_data = {**post.poll_data, "options": options}
+        s.flush()
+        votes = s.query(Vote.option_index, func.count(Vote.id).label("cnt")).filter(Vote.post_id == post_id).group_by(Vote.option_index).all()
+        counts = {v.option_index: v.cnt for v in votes}
+        for i, opt in enumerate(options):
+            opt["votes_count"] = counts.get(i, 0)
+        s.query(Post).filter(Post.id == post_id).update({"poll_data": {**post.poll_data, "options": options}}, synchronize_session=False)
         s.commit()
+        s.expire_all()
     return {"ok": True}
 
 
@@ -1014,12 +1187,15 @@ def api_unvote_post(request: Request, post_id: int):
         existing = s.query(Vote).filter_by(user_id=user.id, post_id=post_id).first()
         if existing:
             options = post.poll_data.get("options", [])
-            idx = existing.option_index
-            if 0 <= idx < len(options):
-                options[idx]["votes_count"] = max(0, options[idx].get("votes_count", 0) - 1)
-                post.poll_data = {**post.poll_data, "options": options}
             s.delete(existing)
+            s.flush()
+            votes = s.query(Vote.option_index, func.count(Vote.id).label("cnt")).filter(Vote.post_id == post_id).group_by(Vote.option_index).all()
+            counts = {v.option_index: v.cnt for v in votes}
+            for i, opt in enumerate(options):
+                opt["votes_count"] = counts.get(i, 0)
+            s.query(Post).filter(Post.id == post_id).update({"poll_data": {**post.poll_data, "options": options}}, synchronize_session=False)
             s.commit()
+            s.expire_all()
     return {"ok": True}
 
 
@@ -1364,11 +1540,20 @@ def api_approve_follow(request: Request, username: str):
         ).join(User, Follow.follower_id == User.id).filter(User.username == username).first()
         if not target:
             raise HTTPException(status_code=404, detail="Follow request not found")
+        follower = s.query(User).get(target.follower_id)
+        follower_is_remote = follower and follower.is_remote
         target.accepted = True
         s.query(Notification).filter_by(
             from_user_id=target.follower_id, user_id=user.id, notification_type="follow_request"
         ).update({"notification_type": "follow"})
         s.commit()
+        if follower_is_remote and follower:
+            from app.activitypub import _send_accept
+            try:
+                follow_activity_id = f"{follower.actor_uri()}#follows/{user.id}"
+                _send_accept(follower.actor_uri(), follow_activity_id, user)
+            except Exception as e:
+                logger.warning("Failed to send Accept: %s", e)
     return {"ok": True}
 
 @router.post("/users/{username}/remove-follower")
@@ -1429,7 +1614,7 @@ def api_reject_follow(request: Request, username: str):
 def api_unfollow(request: Request, username: str):
     user = require_active_auth(request)
     with get_session() as s:
-        target = s.query(User).filter_by(username=username, is_remote=False).first()
+        target = s.query(User).filter_by(username=username).first()
         if not target:
             raise HTTPException(status_code=404, detail="User not found")
         existing = s.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
@@ -1441,6 +1626,24 @@ def api_unfollow(request: Request, username: str):
                 Notification.notification_type.in_(["follow", "follow_request"])
             ).delete(synchronize_session=False)
             s.commit()
+            if target.is_remote and target.inbox_uri():
+                follow_activity_id = f"{user.actor_uri()}#follows/{target.id}"
+                undo = {
+                    "@context": "https://www.w3.org/ns/activitystreams",
+                    "id": f"{user.actor_uri()}#follows/{target.id}/undo",
+                    "type": "Undo",
+                    "actor": user.actor_uri(),
+                    "object": {
+                        "id": follow_activity_id,
+                        "type": "Follow",
+                        "actor": user.actor_uri(),
+                        "object": target.actor_uri(),
+                    },
+                }
+                try:
+                    _post_to_inbox(target.inbox_uri(), undo, user)
+                except Exception as e:
+                    logger.warning("Failed to send Undo Follow: %s", e)
     return {"ok": True}
 
 
@@ -2247,7 +2450,8 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
                         is_locked: bool = Form(False),
                         show_badge: bool = Form(False),
                         is_bot: bool = Form(False),
-                        follow_list_visibility: str = Form("public")):
+                        follow_list_visibility: str = Form("public"),
+                        enable_reactions: bool = Form(True)):
     user = require_auth(request)
     valid_post = ("public", "home", "followers", "mention")
     if default_visibility not in valid_post:
@@ -2263,6 +2467,7 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
         db.is_locked = is_locked
         db.is_bot = is_bot
         db.follow_list_visibility = follow_list_visibility
+        db.enable_reactions = enable_reactions
         if user.role in ("admin", "moderator", "owner"):
             db.show_badge = show_badge
         s.commit()
@@ -2663,6 +2868,7 @@ def api_update_profile(request: Request, display_name: str = Form(""), summary: 
             pass
         s.commit()
     _cleanup_avatars()
+    threading.Thread(target=_broadcast_update_actor, args=(user,), daemon=True).start()
     return {"ok": True}
 
 
@@ -4784,7 +4990,7 @@ def api_server_info():
         admins = _resolve_admin_users(s, settings.admin_ids or "")
         admin_email = settings.admin_email or (admins[0].email if admins else "")
         return {
-            "name": settings.server_name,
+            "name": settings.server_name or "WRIT",
             "description": getattr(settings, 'server_description', '') or '',
             "admins": [
                 {"username": a.username, "email": admin_email or ""}
@@ -4793,6 +4999,7 @@ def api_server_info():
             "logo": settings.logo,
             "favicon": settings.favicon,
             "app_icon": settings.app_icon,
+            "enable_reactions": bool(settings.enable_reactions),
         }
 
 
@@ -4812,6 +5019,7 @@ def api_admin_get_settings(request: Request):
             "app_icon": settings.app_icon,
             "admin_ids": settings.admin_ids or "",
             "admin_email": settings.admin_email or "",
+            "enable_reactions": bool(settings.enable_reactions),
         }
 
 
@@ -4823,7 +5031,8 @@ def api_admin_update_settings(request: Request,
                                favicon: str = Form(""),
                                app_icon: str = Form(""),
                                admin_ids: str = Form(""),
-                               admin_email: str = Form("")):
+                               admin_email: str = Form(""),
+                               enable_reactions: bool = Form(False)):
     user = require_auth(request)
     if user.role not in ("admin", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -4860,6 +5069,7 @@ def api_admin_update_settings(request: Request,
             _save_pwa_icons(app_icon)
         settings.admin_ids = admin_ids
         settings.admin_email = admin_email
+        settings.enable_reactions = enable_reactions
         s.commit()
     log_admin_action(user.id, user.username, "update_settings", ip_address=request.client.host if request.client else "")
     return {"ok": True}

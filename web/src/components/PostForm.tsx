@@ -50,6 +50,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [showPoll, setShowPoll] = useState(false);
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [pollExpiresIn, setPollExpiresIn] = useState(24);
+  const pollLastRef = useRef<HTMLInputElement>(null);
   const [altModalIdx, setAltModalIdx] = useState<number | null>(null);
   const [seriesResults, setSeriesResults] = useState<{ id: number; title: string; cover_image: string }[]>([]);
   const [seriesIdx, setSeriesIdx] = useState(0);
@@ -656,6 +657,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           {pollOptions.map((opt, i) => (
             <div key={i} style={{ display: "flex", gap: 4, marginBottom: 4 }}>
               <input
+                ref={i === pollOptions.length - 1 ? pollLastRef : undefined}
                 type="text" placeholder={`선택지 ${i + 1}`}
                 value={opt} maxLength={50}
                 onChange={(e) => {
@@ -672,7 +674,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           ))}
           <div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center" }}>
             {pollOptions.length < 10 && (
-              <button type="button" className="action-btn" onClick={() => setPollOptions([...pollOptions, ""])} style={{ fontSize: 12 }}>+ 선택지 추가</button>
+              <button type="button" className="action-btn" onClick={() => { setPollOptions([...pollOptions, ""]); setTimeout(() => pollLastRef.current?.focus(), 0); }} style={{ fontSize: 12 }}>+ 선택지 추가</button>
             )}
             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>|</span>
             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>마감</span>

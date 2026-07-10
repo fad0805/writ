@@ -51,6 +51,7 @@ export interface User {
   moved_to?: string;
   pinned_posts?: number[];
   pinned_series?: number[];
+  enable_reactions?: boolean;
 }
 
 export interface PollOption {
@@ -87,6 +88,8 @@ export interface PostData {
   boosted_by?: User | null;
   poll_data?: PollData | null;
   my_vote?: number | null;
+  reactions?: Record<string, number>;
+  my_reaction?: string | null;
 }
 
 export interface ReplyContext {
@@ -188,6 +191,8 @@ export const api = {
   getFavorites: (limit = 10, offset = 0) => request<{ posts: PostData[]; has_more: boolean }>(`/api/favorites?limit=${limit}&offset=${offset}`),
   vote: (id: number, option: number) => formRequest<{ ok: boolean }>(`/api/posts/${id}/vote`, { option }),
   unvote: (id: number) => formRequest<{ ok: boolean }>(`/api/posts/${id}/unvote`, {}),
+  react: (id: number, emoji: string) => formRequest<{ ok: boolean }>(`/api/posts/${id}/react`, { emoji }),
+  unreact: (id: number) => formRequest<{ ok: boolean }>(`/api/posts/${id}/unreact`, {}),
 
   // Users
   getProfile: (username: string) =>

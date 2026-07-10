@@ -70,6 +70,7 @@ class User(Base):
     follow_list_visibility = Column(String(16), default="public")
     custom_fields = Column(JSON, default=list)
     profile_hashtags = Column(JSON, default=list)
+    enable_reactions = Column(Boolean, default=True)
     pinned_posts = Column(JSON, default=list)
     pinned_series = Column(JSON, default=list)
     aliases = Column(JSON, default=list)
@@ -263,6 +264,9 @@ class Post(Base):
                         content,
                     )
                     tags.append({"type": "Mention", "href": href, "name": name})
+        if self.tag_list:
+            for t in self.tag_list:
+                tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={t.name}", "name": f"#{t.name}"})
 
         content = re.sub(r'href="/', f'href="{BASE_URL}/', content)
 
@@ -335,7 +339,7 @@ class Post(Base):
         note = self.to_ap_note()
         return {
             "@context": "https://www.w3.org/ns/activitystreams",
-            "id": self.ap_id + "/activity",
+            "id": f"{BASE_URL}/activities/create/{self.id}",
             "type": "Create",
             "actor": self.author.actor_uri(),
             "published": self.created_at.isoformat() if self.created_at else "",
@@ -366,6 +370,7 @@ class Like(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     post_id = Column(Integer, ForeignKey("posts.id"), nullable=False, index=True)
     ap_id = Column(String(1024), unique=True)
+    reaction = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now)
 
     user = relationship("User", lazy="selectin")
@@ -683,6 +688,7 @@ class ServerSetting(Base):
     admin_ids = Column(String(512), default="")
     admin_email = Column(String(255), default="")
     federation_mode = Column(String(16), default="blacklist")  # whitelist or blacklist
+    enable_reactions = Column(Boolean, default=False)
 
     @classmethod
     def get(cls, session):

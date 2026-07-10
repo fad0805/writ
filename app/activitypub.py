@@ -293,6 +293,8 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
         return _handle_move(activity)
     elif atype == "Vote":
         return _handle_vote(activity)
+    elif atype == "EmojiReact":
+        return _handle_like(activity)
     else:
         return (202, f"Accepted {atype}")
 
@@ -889,6 +891,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
     actor_url = raw_actor if isinstance(raw_actor, str) else raw_actor[0]
     object_url = activity["object"] if isinstance(activity.get("object"), str) else ""
     activity_id = activity.get("id", "")
+    reaction = activity.get("_misskey_reaction", activity.get("reaction", ""))
 
     if not object_url:
         return (200, "OK")
@@ -904,6 +907,9 @@ def _handle_like(activity: dict) -> tuple[int, str]:
 
         existing = session.query(Like).filter_by(user_id=actor.id, post_id=post.id).first()
         if existing:
+            if reaction and existing.reaction != reaction:
+                existing.reaction = reaction
+                session.commit()
             return (200, "Already liked")
 
         like_ap_id = activity_id
@@ -914,6 +920,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             user_id=actor.id,
             post_id=post.id,
             ap_id=like_ap_id,
+            reaction=reaction if reaction else None,
         )
         session.add(like)
 
@@ -1061,9 +1068,9 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
 
     elif obj_type == "Like":
         actor_url = activity.get("actor", "")
-        object_url = obj.get("object", "") if isinstance(obj, dict) else ""
         if isinstance(actor_url, list):
             actor_url = actor_url[0]
+        object_url = obj.get("object", "") if isinstance(obj, dict) else ""
 
         actor = _resolve_actor(actor_url)
         if not actor:
