@@ -313,12 +313,10 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
     if body:
         digest_header = request.headers.get("Digest", "")
         if not digest_header:
-            import sys; print("[verify] no Digest header", flush=True)
             return (False, None)
         expected_b64 = "SHA-256=" + base64.b64encode(hashlib.sha256(body).digest()).decode()
         expected_hex = "SHA-256=" + hashlib.sha256(body).hexdigest()
         if digest_header not in (expected_b64, expected_hex):
-            import sys; print(f"[verify] Digest mismatch: got={digest_header} exp_b64={expected_b64} exp_hex={expected_hex}", flush=True)
             return (False, None)
 
     # Resolve the remote actor who signed
@@ -347,7 +345,6 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
         activity_actor = activity_actor[0]
     signer_uri = remote_actor.actor_uri() if not remote_actor.is_remote else remote_actor.remote_url
     if not activity_actor or signer_uri != activity_actor:
-        import sys; print(f"[verify] actor binding fail: signer={signer_uri} activity={str(activity_actor)[:80]}", flush=True)
         return (False, None)
 
     # Date freshness check — 5분 window to prevent replay
@@ -360,10 +357,8 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
                 now = datetime.datetime.now(datetime.timezone.utc)
                 diff = abs((now - date_dt).total_seconds())
                 if diff > 300:
-                    import sys; print(f"[verify] date drift too large: {diff}s for {date_header}", flush=True)
                     return (False, None)
         except (ValueError, TypeError, OverflowError):
-            import sys; print(f"[verify] date parse error for {date_header}", flush=True)
             return (False, None)
 
     # Build signed string (Fix 7 — use original Host header, not rewritten one)
@@ -396,15 +391,11 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
             val = request.headers.get(h, "")
             signed_lines.append(f"{h}: {val}")
     signed_string = "\n".join(signed_lines)
-    import sys; print(f"[verify] signed_string=|{signed_string[:200]}|", flush=True)
-    print(f"[verify] date=|{date}| host=|{host_header}| digest=|{digest_val[:50]}| ct=|{request.headers.get('content-type','')[:50]}| path=|{path}|", flush=True)
     ok = verify_signature(signed_string, sig_b64, remote_actor.public_key)
     if not ok:
-        print(f"[verify] signature verify FAILED with cached key, trying force refresh", flush=True)
         fresh = _resolve_actor(actor_url, force_refresh=True)
         if fresh and fresh.public_key:
             ok = verify_signature(signed_string, sig_b64, fresh.public_key)
-            print(f"[verify] signature verify after refresh: {ok}", flush=True)
             return (ok, fresh if ok else None)
     return (ok, remote_actor if ok else None)
 
@@ -442,24 +433,17 @@ async def shared_inbox(request: Request):
 
 @app.post("/users/{username}/inbox")
 async def user_inbox(request: Request, username: str):
-    import sys; print(f"[inbox] RECEIVED from {request.client.host if request.client else '?'}", flush=True)
     with get_session() as session:
         user = session.query(User).filter_by(username=username, is_remote=False).first()
         if not user:
-            print(f"[inbox] user not found: {username}", flush=True)
             raise HTTPException(status_code=404, detail="User not found")
-    print(f"[inbox] target user: {user.username} ({user.id})", flush=True)
 
     body = await request.body()
-    print(f"[inbox] body size: {len(body)} bytes", flush=True)
     if len(body) > 1024 * 1024:
-        print(f"[inbox] body too large", flush=True)
         raise HTTPException(status_code=413, detail="Request body too large")
     try:
         activity = json.loads(body)
-        print(f"[inbox] activity type: {activity.get('type')} actor: {str(activity.get('actor',''))[:80]}", flush=True)
     except json.JSONDecodeError:
-        print(f"[inbox] invalid JSON", flush=True)
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
     actor_url = activity.get("actor", "")
@@ -495,7 +479,7 @@ async def user_inbox(request: Request, username: str):
     all_audiences = to_list + cc_list
     user_uri = user.actor_uri()
     atype = activity.get("type")
-    if atype in ("Follow", "Delete", "Reject", "Accept"):
+    if atype in ("Follow", "Delete", "Reject", "Accept", "Undo"):
         pass
     elif atype == "Flag":
         pass
@@ -505,11 +489,8 @@ async def user_inbox(request: Request, username: str):
     # Verify HTTP Signature
     request.state.sign_as_user = user
     ok, remote_actor = _verify_http_signature(request, body, activity)
-    import sys; print(f"[inbox] verify ok={ok} remote={remote_actor.id if remote_actor else 'None'}", flush=True)
     if not ok:
-        print(f"[inbox] SIGNATURE VERIFICATION FAILED", flush=True)
         return JSONResponse({"status": "error", "message": "Invalid signature"}, status_code=401)
-    print(f"[inbox] signature OK, processing activity", flush=True)
 
     # Validate required fields per activity type
     if not atype:
@@ -542,17 +523,13 @@ async def user_inbox(request: Request, username: str):
                 return JSONResponse({"status": "error", "message": "Undo actor mismatch"}, status_code=403)
 
     import sys
-    print(f"[inbox] step: before ProcessedActivity", flush=True)
     # Record activity ID to prevent replay
     if activity_id:
         with get_session() as s:
             s.add(ProcessedActivity(id=activity_id))
             s.commit()
-        print(f"[inbox] step: ProcessedActivity done", flush=True)
 
-    print(f"[inbox] calling handle_inbox for {atype}", flush=True)
     status_code, message = handle_inbox(activity)
-    print(f"[inbox] handle_inbox result: {status_code} {message}", flush=True)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)
 
 

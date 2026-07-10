@@ -639,7 +639,6 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
 
 
 def _handle_follow(activity: dict) -> tuple[int, str]:
-    import sys; print(f"[handle_follow] start", flush=True)
     raw_actor = activity.get("actor")
     if not raw_actor:
         return (400, "Missing actor")
@@ -647,7 +646,6 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
     raw_object = activity.get("object", "")
     object_url = raw_object if isinstance(raw_object, str) else raw_object.get("id", "")
     activity_id = activity.get("id", "")
-    print(f"[handle_follow] actor={actor_url[:80]} object={object_url[:80]}", flush=True)
 
     local_username = _parse_username_from_url(object_url)
 
@@ -657,9 +655,7 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
     if not target:
         return (404, "Target user not found")
 
-    print(f"[handle_follow] resolving actor...", flush=True)
     follower = _resolve_actor(actor_url, sign_as=target)
-    print(f"[handle_follow] resolved: {follower.id if follower else 'None'}", flush=True)
     if not follower:
         return (404, "Follower not found")
 
@@ -689,7 +685,6 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
 
 def _send_accept(actor_url: str, activity_id: str, target: User, follower: User = None):
     inbox = follower.inbox_url if follower and follower.inbox_url else (actor_url.rstrip("/") + "/inbox")
-    import sys; print(f"[send_accept] inbox=|{inbox}| follower={follower.id if follower else None} inbox_url={follower.inbox_url if follower else 'N/A'}", flush=True)
     accept = {
         "@context": "https://www.w3.org/ns/activitystreams",
         "id": f"{target.actor_uri()}#accepts/{activity_id.split('/')[-1]}",
@@ -726,32 +721,26 @@ def _handle_reject(activity: dict) -> tuple[int, str]:
     rejecter_url = activity.get("actor", "")
     if isinstance(rejecter_url, list):
         rejecter_url = rejecter_url[0]
-    print(f"[reject] rejecter={rejecter_url[:80]}", flush=True)
 
     with get_session() as session:
         remote_user = session.query(User).filter_by(remote_url=rejecter_url).first()
         if not remote_user:
-            print(f"[reject] remote user not found for {rejecter_url[:80]}", flush=True)
             return (200, "OK")
-        print(f"[reject] remote_user id={remote_user.id} username={remote_user.username}", flush=True)
 
         follow_rel = session.query(Follow).filter_by(
             following_id=remote_user.id,
             accepted=False,
         ).first()
         if not follow_rel:
-            print(f"[reject] no pending follow for remote user {remote_user.id}", flush=True)
             return (200, "No pending follow request found")
 
         local_user = session.query(User).get(follow_rel.follower_id)
-        print(f"[reject] deleting follow: local={local_user.id} remote={remote_user.id}", flush=True)
         session.query(Notification).filter_by(
             from_user_id=remote_user.id, user_id=local_user.id,
             notification_type="follow_request",
         ).delete()
         session.delete(follow_rel)
         session.commit()
-        print(f"[reject] done", flush=True)
 
     from app.timeline_stream import broadcast_refresh_notifs
     broadcast_refresh_notifs()
@@ -1383,7 +1372,6 @@ def _deliver_sync(inbox_url: str, body: bytes, headers: dict) -> bool:
             if resp.is_success:
                 return True
             if resp.status_code in (400, 401, 403, 404, 405, 410, 422):
-                import sys; print(f"[deliver] Permanent failure: {inbox_url} HTTP {resp.status_code} body={resp.text[:200]}", flush=True)
                 return False
             print(f"[deliver] Retryable: {inbox_url} HTTP {resp.status_code} attempt {attempt+1}/3", flush=True)
         except Exception as e:
