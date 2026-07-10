@@ -313,21 +313,24 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
     if body:
         digest_header = request.headers.get("Digest", "")
         if not digest_header:
+            import sys; print("[verify] no Digest header", flush=True)
             return (False, None)
         expected_b64 = "SHA-256=" + base64.b64encode(hashlib.sha256(body).digest()).decode()
         expected_hex = "SHA-256=" + hashlib.sha256(body).hexdigest()
         if digest_header not in (expected_b64, expected_hex):
+            import sys; print(f"[verify] Digest mismatch: got={digest_header} exp_b64={expected_b64} exp_hex={expected_hex}", flush=True)
             return (False, None)
 
     # Resolve the remote actor who signed
     actor_url = key_id.split("#")[0] if "#" in key_id else key_id
     remote_actor = _resolve_actor(actor_url)
     if not remote_actor or not remote_actor.public_key:
-        # Retry with sign_as if available (from calling context)
         _sign_as = getattr(request.state, 'sign_as_user', None)
+        import sys; print(f"[verify] resolve failed, retry with sign_as={_sign_as is not None}", flush=True)
         if _sign_as:
             remote_actor = _resolve_actor(actor_url, sign_as=_sign_as)
     if not remote_actor or not remote_actor.public_key:
+        import sys; print(f"[verify] still no remote_actor for {actor_url}", flush=True)
         return (False, None)
 
     # Actor binding check (Fix 1) — verify the signer matches activity.actor
