@@ -333,7 +333,7 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
     if not activity_actor or signer_uri != activity_actor:
         return (False, None)
 
-    # Date freshness check — ±30s window to prevent replay
+    # Date freshness check — 5분 window to prevent replay
     date_header = request.headers.get("Date", "")
     if date_header:
         try:
@@ -639,10 +639,15 @@ def get_series_by_handle(request: Request, username: str, number: str):
 @app.get("/nodeinfo/2.0")
 def nodeinfo():
     with get_session() as session:
+        now = datetime.datetime.now(datetime.timezone.utc)
         user_count = session.query(User).filter_by(is_remote=False).count()
-        active_users = session.query(User).filter(
+        active_month = session.query(User).filter(
             User.is_remote == False,
-            User.id.in_(session.query(Post.author_id).filter(Post.created_at > (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30))))
+            User.id.in_(session.query(Post.author_id).filter(Post.created_at > (now - datetime.timedelta(days=30))))
+        ).count()
+        active_halfyear = session.query(User).filter(
+            User.is_remote == False,
+            User.id.in_(session.query(Post.author_id).filter(Post.created_at > (now - datetime.timedelta(days=180))))
         ).count()
         local_post_count = session.query(Post).filter(Post.author.has(is_remote=False)).count()
         from app.models import ServerSetting
@@ -662,7 +667,7 @@ def nodeinfo():
         "services": {"inbound": [], "outbound": []},
         "openRegistrations": open_reg,
         "usage": {
-            "users": {"total": user_count, "activeHalfyear": active_users, "activeMonth": active_users},
+            "users": {"total": user_count, "activeHalfyear": active_halfyear, "activeMonth": active_month},
             "localPosts": local_post_count,
         },
         "metadata": {

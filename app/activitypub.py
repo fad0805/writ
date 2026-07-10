@@ -94,6 +94,10 @@ _PRIVATE_SUBNETS = [
     ipaddress.ip_network("10.0.0.0/8"),
     ipaddress.ip_network("172.16.0.0/12"),
     ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("198.18.0.0/15"),
+    ipaddress.ip_network("0.0.0.0/8"),
     ipaddress.ip_network("::1/128"),
 ]
 
@@ -275,6 +279,8 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
         return _handle_follow(activity)
     elif atype == "Accept":
         return _handle_accept(activity)
+    elif atype == "Reject":
+        return _handle_reject(activity)
     elif atype == "Create":
         return _handle_create(activity)
     elif atype == "Like":
@@ -657,6 +663,53 @@ def _send_reject(actor_url: str, activity_id: str, target: User):
     }
     _post_to_inbox(actor_url, reject, target)
 
+
+def _handle_reject(activity: dict) -> tuple[int, str]:
+    obj = activity.get("object", {})
+    if isinstance(obj, dict):
+        follower_url = obj.get("actor", "")
+    elif isinstance(obj, str):
+        try:
+            resp = httpx.get(obj, headers={"Accept": "application/activity+json"}, timeout=10)
+            if resp.status_code == 200:
+                follow_activity = resp.json()
+                follower_url = follow_activity.get("actor", "")
+        except Exception:
+            pass
+    else:
+        follower_url = ""
+
+    if not follower_url:
+        return (200, "OK")
+
+    rejecter_url = activity.get("actor", "")
+    if isinstance(rejecter_url, list):
+        rejecter_url = rejecter_url[0]
+
+    local_username = _parse_username_from_url(rejecter_url)
+    if not local_username:
+        return (200, "OK")
+
+    with get_session() as session:
+        local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
+        if not local_user:
+            return (200, "OK")
+
+        remote_follower = _resolve_actor(follower_url)
+        if not remote_follower:
+            return (200, "OK")
+
+        follow_rel = session.query(Follow).filter_by(
+            following_id=local_user.id,
+            follower_id=remote_follower.id,
+            accepted=False,
+        ).first()
+        if not follow_rel:
+            return (200, "No pending follow request found")
+        session.delete(follow_rel)
+        session.commit()
+
+    return (200, "Rejected follow removed")
 
 def _handle_accept(activity: dict) -> tuple[int, str]:
     obj = activity.get("object", {})
