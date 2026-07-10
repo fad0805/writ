@@ -539,7 +539,9 @@ async def user_inbox(request: Request, username: str):
             s.add(ProcessedActivity(id=activity_id))
             s.commit()
 
+    import sys; print(f"[inbox] calling handle_inbox for {atype}", flush=True)
     status_code, message = handle_inbox(activity)
+    print(f"[inbox] handle_inbox result: {status_code} {message}", flush=True)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)
 
 
