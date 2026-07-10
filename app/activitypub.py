@@ -330,7 +330,7 @@ def _safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
     try:
         resp = client.get(url, headers=headers or {})
         if resp.status_code != 200:
-            import sys; print(f"  [safe_fetch] non-200: {resp.status_code} for {url}", flush=True)
+            import sys; print(f"  [safe_fetch] non-200: {resp.status_code} body: {resp.text[:200]}", flush=True)
             return None
         if len(resp.content) > max_size:
             import sys; print(f"  [safe_fetch] too large: {len(resp.content)} for {url}", flush=True)
