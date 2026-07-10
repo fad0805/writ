@@ -722,30 +722,36 @@ def _send_reject(inbox_url: str, activity_id: str, target: User, follower_actor_
 
 
 def _handle_reject(activity: dict) -> tuple[int, str]:
+    import sys
     rejecter_url = activity.get("actor", "")
     if isinstance(rejecter_url, list):
         rejecter_url = rejecter_url[0]
+    print(f"[reject] rejecter={rejecter_url[:80]}", flush=True)
 
     with get_session() as session:
         remote_user = session.query(User).filter_by(remote_url=rejecter_url).first()
         if not remote_user:
+            print(f"[reject] remote user not found for {rejecter_url[:80]}", flush=True)
             return (200, "OK")
+        print(f"[reject] remote_user id={remote_user.id} username={remote_user.username}", flush=True)
 
-        # Find any pending follow where OUR user follows the rejecter
         follow_rel = session.query(Follow).filter_by(
             following_id=remote_user.id,
             accepted=False,
         ).first()
         if not follow_rel:
+            print(f"[reject] no pending follow for remote user {remote_user.id}", flush=True)
             return (200, "No pending follow request found")
 
         local_user = session.query(User).get(follow_rel.follower_id)
+        print(f"[reject] deleting follow: local={local_user.id} remote={remote_user.id}", flush=True)
         session.query(Notification).filter_by(
             from_user_id=remote_user.id, user_id=local_user.id,
             notification_type="follow_request",
         ).delete()
         session.delete(follow_rel)
         session.commit()
+        print(f"[reject] done", flush=True)
 
     from app.timeline_stream import broadcast_refresh_notifs
     broadcast_refresh_notifs()
