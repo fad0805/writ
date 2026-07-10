@@ -675,12 +675,13 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
             session.commit()
 
     # Send Accept
-    _send_accept(actor_url, activity_id, target)
+    _send_accept(actor_url, activity_id, target, follower=follower)
 
     return (200, "Followed")
 
 
-def _send_accept(actor_url: str, activity_id: str, target: User):
+def _send_accept(actor_url: str, activity_id: str, target: User, follower: User = None):
+    inbox = follower.inbox_url if follower else actor_url
     accept = {
         "@context": "https://www.w3.org/ns/activitystreams",
         "id": f"{target.actor_uri()}#accepts/{activity_id.split('/')[-1]}",
@@ -693,7 +694,7 @@ def _send_accept(actor_url: str, activity_id: str, target: User):
             "object": target.actor_uri(),
         },
     }
-    _post_to_inbox(actor_url, accept, target)
+    _post_to_inbox(inbox, accept, target)
 
 
 def _send_reject(actor_url: str, activity_id: str, target: User):
