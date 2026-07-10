@@ -484,19 +484,25 @@ def _save_remote_avatar(avatar_url: str, local_username: str, old_url: str = "")
 
 
 def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User]:
+    import sys
+    print("  [_resolve_actor] url:", actor_url, flush=True)
     with get_session() as session:
         user = session.query(User).filter_by(remote_url=actor_url).first()
         if user and not force_refresh:
+            print("  [_resolve_actor] found existing:", user.username, flush=True)
             return user
 
     # Fetch remote actor
     try:
         resp = _safe_fetch(actor_url, timeout=10, headers={"Accept": "application/activity+json"})
         if not resp:
+            print("  [_resolve_actor] _safe_fetch returned None", flush=True)
             return None
         data = resp.json()
+        print("  [_resolve_actor] fetched, keys:", list(data.keys())[:10], flush=True)
     except Exception as e:
         logger.warning("Failed to fetch remote actor %s: %s", actor_url, e)
+        print("  [_resolve_actor] fetch exception:", type(e).__name__, str(e)[:200], flush=True)
         return None
 
     # Verify the response's id domain matches the requested URL's domain
@@ -507,10 +513,13 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User
         resp_domain = urlparse(resp_id).hostname or ""
         if req_domain and resp_domain and req_domain != resp_domain:
             logger.warning("Domain mismatch: requested %s, response claims %s", req_domain, resp_domain)
+            print("  [_resolve_actor] DOMAIN MISMATCH", req_domain, resp_domain, flush=True)
             return None
 
     preferred_username = data.get("preferredUsername", "")
+    print("  [_resolve_actor] preferred_username:", repr(preferred_username), flush=True)
     if not preferred_username:
+        print("  [_resolve_actor] NO preferredUsername", flush=True)
         return None
 
     parsed = urlparse(actor_url)
