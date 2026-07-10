@@ -47,6 +47,9 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [mediaUploading, setMediaUploading] = useState(false);
   const [mediaWarning, setMediaWarning] = useState("");
   const mediaInputRef = useRef<HTMLInputElement>(null);
+  const [showPoll, setShowPoll] = useState(false);
+  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
+  const [pollExpiresIn, setPollExpiresIn] = useState(24);
   const [altModalIdx, setAltModalIdx] = useState<number | null>(null);
   const [seriesResults, setSeriesResults] = useState<{ id: number; title: string; cover_image: string }[]>([]);
   const [seriesIdx, setSeriesIdx] = useState(0);
@@ -498,8 +501,9 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         const res = await fetch("/api/media/upload", { method: "POST", credentials: "include", body: formData });
         if (res.ok) { const d = await res.json(); uploaded.push({ url: d.url, type: d.type, alt: m.alt || "" }); }
       }
-      const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrl, media_attachments: JSON.stringify(uploaded), is_sensitive: postSensitive });
-      setContent(""); setSummary(""); setPostSensitive(false); setMediaItems([]);
+      const opts = showPoll ? pollOptions.filter(o => o.trim()).map(o => o.trim()) : [];
+      const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrl, media_attachments: JSON.stringify(uploaded), is_sensitive: postSensitive, poll_options: opts.length >= 2 ? JSON.stringify(opts) : "", poll_expires_in: pollExpiresIn });
+      setContent(""); setSummary(""); setPostSensitive(false); setMediaItems([]); setShowPoll(false); setPollOptions(["", ""]); setPollExpiresIn(24);
       if (onDone) onDone(result);
       else router.refresh();
     } catch (err: unknown) { alert(err instanceof Error ? err.message : "오류가 발생했습니다"); }
@@ -646,6 +650,43 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         </label>
         {(postSensitive || !!summary) && <span style={{ color: "var(--text-secondary)", fontSize: 12 }}>{summary ? "CW 설정 시 자동 민감 처리됩니다" : "이 포스트의 모든 미디어가 블러 처리됩니다"}</span>}
       </div>
+      {showPoll && (
+        <div style={{ marginBottom: 8, padding: 10, borderRadius: 8, background: "var(--bg-tertiary)" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, color: "var(--text-secondary)" }}>투표</div>
+          {pollOptions.map((opt, i) => (
+            <div key={i} style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+              <input
+                type="text" placeholder={`선택지 ${i + 1}`}
+                value={opt} maxLength={50}
+                onChange={(e) => {
+                  const next = [...pollOptions];
+                  next[i] = e.target.value;
+                  setPollOptions(next);
+                }}
+                style={{ flex: 1, padding: "4px 8px", fontSize: 14, borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-secondary)" }}
+              />
+              {pollOptions.length > 2 && (
+                <button type="button" onClick={() => setPollOptions(pollOptions.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", fontSize: 16 }}>×</button>
+              )}
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center" }}>
+            {pollOptions.length < 10 && (
+              <button type="button" className="action-btn" onClick={() => setPollOptions([...pollOptions, ""])} style={{ fontSize: 12 }}>+ 선택지 추가</button>
+            )}
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>|</span>
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>마감</span>
+            <select value={pollExpiresIn} onChange={(e) => setPollExpiresIn(Number(e.target.value))} style={{ fontSize: 12, padding: "2px 4px", borderRadius: 4, border: "1px solid var(--border)", background: "var(--bg-secondary)" }}>
+              <option value={1}>1시간</option>
+              <option value={6}>6시간</option>
+              <option value={12}>12시간</option>
+              <option value={24}>24시간</option>
+              <option value={72}>3일</option>
+              <option value={168}>7일</option>
+            </select>
+          </div>
+        </div>
+      )}
       <div className="reply-form-footer">
         <VisibilitySelector value={visibility} onChange={(v) => setVisibilityOverride(v)} includeMention />
         <div className="form-footer-right" style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: "auto" }}>
@@ -658,6 +699,9 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
             handleMediaFiles(files);
             e.target.value = "";
           }} />
+          <button type="button" className={`action-btn${showPoll ? " active" : ""}`} onClick={() => setShowPoll(!showPoll)} title="투표 추가" style={showPoll ? { color: "var(--accent)" } : undefined}>
+            <Icon name="chart" />
+          </button>
           <EmojiPicker onEmoji={(e) => setContent(content + e)} />
           <span className="char-count char-count-inline">{totalLen}/{MAX_LENGTH}</span>
           <button type="submit" disabled={submitting || !content.trim() || showSeriesSearch} className="btn btn-primary">

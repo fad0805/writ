@@ -208,6 +208,7 @@ class Post(Base):
     is_sensitive = Column(Boolean, default=False)
     original_visibility = Column(String(16), default="")
     media_attachments = Column(JSON, default=list)
+    poll_data = Column(JSON, nullable=True)
     tag_list = relationship("Tag", secondary=post_tags, lazy="selectin")
     created_at = Column(DateTime(timezone=True), default=now)
     bumped_at = Column(DateTime(timezone=True), nullable=True)
@@ -217,6 +218,7 @@ class Post(Base):
     replies = relationship("Post", back_populates="parent", lazy="selectin")
     likes = relationship("Like", back_populates="post", cascade="all, delete-orphan", lazy="selectin")
     boosts = relationship("Boost", back_populates="post", cascade="all, delete-orphan", lazy="selectin")
+    votes = relationship("Vote", back_populates="post", cascade="all, delete-orphan", lazy="selectin")
     novel = relationship("Novel", foreign_keys=[novel_id], lazy="selectin")
     episode = relationship("Episode", foreign_keys=[episode_id], lazy="selectin")
 
@@ -313,6 +315,20 @@ class Post(Base):
                 obj["attachment"] = attachments
         if self.in_reply_to_ap_id:
             obj["inReplyTo"] = self.in_reply_to_ap_id
+        if self.poll_data:
+            obj["type"] = "Question"
+            obj["oneOf"] = [{"name": o["text"], "replies": {"type": "Collection", "totalItems": o.get("votes_count", 0)}} for o in self.poll_data.get("options", [])]
+            voters = sum(o.get("votes_count", 0) for o in self.poll_data.get("options", []))
+            obj["votersCount"] = voters
+            expires_at = self.poll_data.get("expires_at")
+            if expires_at:
+                obj["endTime"] = expires_at
+                try:
+                    from datetime import datetime
+                    if datetime.fromisoformat(expires_at) < datetime.now(datetime.timezone.utc):
+                        obj["closed"] = expires_at
+                except Exception:
+                    pass
         return obj
 
     def to_ap_create(self):
@@ -327,6 +343,20 @@ class Post(Base):
             "cc": note.get("cc", []),
             "object": note,
         }
+
+
+class Vote(Base):
+    __tablename__ = "votes"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    post_id = Column(Integer, ForeignKey("posts.id"), nullable=False, index=True)
+    option_index = Column(Integer, nullable=False)
+    ap_id = Column(String(1024), unique=True, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+    user = relationship("User", lazy="selectin")
+    post = relationship("Post", back_populates="votes", lazy="selectin")
 
 
 class Like(Base):

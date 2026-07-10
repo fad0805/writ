@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from app.models import User, Post, Follow, Like, Boost, Notification, Report, RemoteMedia, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, get_session
+from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, RemoteMedia, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, get_session
 from app.config import BASE_URL, SECRET_KEY
 from app.crypto_utils import generate_keypair, sign_string, encrypt_key, get_private_key
 
@@ -291,6 +291,8 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
         return _handle_flag(activity)
     elif atype == "Move":
         return _handle_move(activity)
+    elif atype == "Vote":
+        return _handle_vote(activity)
     else:
         return (202, f"Accepted {atype}")
 
@@ -706,7 +708,8 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
 
 def _handle_create(activity: dict) -> tuple[int, str]:
     obj = activity.get("object", {})
-    if isinstance(obj, dict) and obj.get("type") == "Note":
+    obj_type = obj.get("type") if isinstance(obj, dict) else ""
+    if obj_type in ("Note", "Question"):
         raw_actor = activity.get("actor")
         if not raw_actor:
             return (400, "Missing actor")
@@ -753,6 +756,26 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             visibility = "mention"
         else:
             visibility = "home"
+
+        # Extract poll data from Question type
+        poll_data = None
+        if obj_type == "Question":
+            options = []
+            one_of = obj.get("oneOf") or obj.get("anyOf") or []
+            if isinstance(one_of, list):
+                for opt in one_of:
+                    if isinstance(opt, dict) and opt.get("name"):
+                        replies = opt.get("replies", {})
+                        votes_count = 0
+                        if isinstance(replies, dict):
+                            votes_count = replies.get("totalItems", 0)
+                        options.append({"text": opt["name"], "votes_count": votes_count})
+            if options:
+                expires_at = obj.get("endTime") or ""
+                poll_data = {
+                    "options": options,
+                    "expires_at": expires_at,
+                }
 
         with get_session() as session:
             existing = session.query(Post).filter_by(ap_id=post_id).first()
@@ -821,6 +844,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 in_reply_to_ap_id=in_reply_to,
                 in_reply_to_id=reply_to_post.id if reply_to_post else None,
                 media_attachments=media_list if media_list else None,
+                poll_data=poll_data,
             )
             session.add(post)
             session.flush()
@@ -903,6 +927,64 @@ def _handle_like(activity: dict) -> tuple[int, str]:
         session.commit()
 
     return (200, "Liked")
+
+
+def _handle_vote(activity: dict) -> tuple[int, str]:
+    raw_actor = activity.get("actor")
+    if not raw_actor:
+        return (400, "Missing actor")
+    actor_url = raw_actor if isinstance(raw_actor, str) else raw_actor[0]
+    object_url = activity.get("object", "")
+    if isinstance(object_url, dict):
+        object_url = object_url.get("id", "")
+    if not object_url:
+        return (200, "OK")
+
+    actor = _resolve_actor(actor_url)
+    if not actor:
+        return (404, "Actor not found")
+
+    with get_session() as session:
+        post = session.query(Post).filter_by(ap_id=object_url).first()
+        if not post or not post.poll_data:
+            return (200, "OK")
+
+        # Determine which option was voted for
+        option_name = activity.get("name", "")
+        options = post.poll_data.get("options", [])
+        option_idx = -1
+        if option_name:
+            for i, opt in enumerate(options):
+                if opt.get("text", "").strip().lower() == option_name.strip().lower():
+                    option_idx = i
+                    break
+        if option_idx < 0 or option_idx >= len(options):
+            return (200, "OK")
+
+        # Check if poll expired
+        expires_at = post.poll_data.get("expires_at")
+        if expires_at:
+            try:
+                if datetime.datetime.fromisoformat(expires_at) < datetime.datetime.now(datetime.timezone.utc):
+                    return (200, "Poll ended")
+            except (ValueError, TypeError):
+                pass
+
+        # Check for existing vote (change or dedup)
+        existing = session.query(Vote).filter_by(user_id=actor.id, post_id=post.id).first()
+        if existing:
+            if existing.option_index == option_idx:
+                return (200, "Already voted")
+            options[existing.option_index]["votes_count"] = max(0, options[existing.option_index].get("votes_count", 0) - 1)
+            existing.option_index = option_idx
+        else:
+            session.add(Vote(user_id=actor.id, post_id=post.id, option_index=option_idx))
+
+        options[option_idx]["votes_count"] = options[option_idx].get("votes_count", 0) + 1
+        post.poll_data = {**post.poll_data, "options": options}
+        session.commit()
+
+    return (200, "Voted")
 
 
 def _handle_announce(activity: dict) -> tuple[int, str]:

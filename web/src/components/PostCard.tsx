@@ -18,6 +18,14 @@ const VIS_ICONS: Record<string, string> = {
   public: "globe", home: "home", followers: "lock", mention: "mail",
 };
 
+function formatRelative(iso: string): string {
+  const diff = new Date(iso).getTime() - Date.now();
+  const abs = Math.abs(diff);
+  if (abs < 3600000) return `${Math.round(abs / 60000)}분`;
+  if (abs < 86400000) return `${Math.round(abs / 3600000)}시간`;
+  return `${Math.round(abs / 86400000)}일`;
+}
+
 function rewriteLinks(text: string): string {
   text = text.replace(
     /<a\s+href="https?:\/\/([^"/]+)\/@(\w+)"[^>]*>@?\w*<\/a>/gi,
@@ -305,6 +313,51 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
           <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
         )}
         {!post.summary && (post as any).media_attachments?.length > 0 && _renderMedia()}
+        {post.poll_data && (
+          <div className="poll-box" style={{ marginTop: 8, padding: 10, borderRadius: 8, background: "var(--bg-tertiary)" }}>
+            {post.poll_data.options.map((opt, i) => {
+              const total = post.poll_data!.options.reduce((s, o) => s + (o.votes_count || 0), 0);
+              const pct = total > 0 ? Math.round(((opt.votes_count || 0) / total) * 100) : 0;
+              const isSelected = post.my_vote === i;
+              const isExpired = post.poll_data!.expires_at && new Date(post.poll_data!.expires_at) < new Date();
+              const canVote = !isExpired && post.my_vote == null && !readonly && !post.is_mine;
+              return (
+                <div
+                  key={i}
+                  className={`poll-option${isSelected ? " selected" : ""}${canVote ? " votable" : ""}`}
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (!canVote) return;
+                    try {
+                      await api.vote(post.id, i);
+                      if (onUpdate) onUpdate();
+                      else window.dispatchEvent(new Event("postchange"));
+                    } catch (err: any) { alert(err.message); }
+                  }}
+                  style={{
+                    position: "relative", padding: "8px 10px", marginBottom: 4, borderRadius: 6,
+                    border: `1px solid ${isSelected ? "var(--accent)" : "var(--border)"}`,
+                    background: isSelected ? "color-mix(in srgb, var(--accent) 15%, transparent)" : "var(--bg-secondary)",
+                    cursor: canVote ? "pointer" : "default", overflow: "hidden",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  <div style={{ position: "absolute", top: 0, left: 0, height: "100%", width: `${pct}%`, background: "color-mix(in srgb, var(--accent) 12%, transparent)", borderRadius: 6, transition: "width 0.3s" }} />
+                  <div style={{ position: "relative", zIndex: 1, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontWeight: isSelected ? 600 : 400, fontSize: 14 }}>{opt.text}</span>
+                    <span style={{ fontSize: 12, color: "var(--text-muted)", minWidth: 40, textAlign: "right" }}>{pct}%</span>
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
+              <span>총 {post.poll_data.options.reduce((s, o) => s + (o.votes_count || 0), 0)}표</span>
+              {post.poll_data.expires_at ? (
+                new Date(post.poll_data.expires_at) < new Date() ? <span>마감됨</span> : <span>마감 {formatRelative(post.poll_data.expires_at)}</span>
+              ) : null}
+            </div>
+          </div>
+        )}
         {loadingQuote && <div className="empty-small loading-small">인용 불러오는 중...</div>}
         {quotedPost && <div className="my-8"><MiniPostCard post={quotedPost} /></div>}
         {quotedSeries && (

@@ -11,7 +11,7 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Novel, Episode, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PendingDelivery, get_session
+from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PendingDelivery, get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.log_utils import log_admin_action
 
@@ -49,6 +49,11 @@ def _post_json(p, session, user):
     bookmarked = session.query(Bookmark).filter_by(user_id=user.id, post_id=p.id).first() is not None if user else False
     latest_boost = session.query(Boost).filter_by(post_id=p.id).order_by(desc(Boost.created_at)).first()
     booster = session.query(User).get(latest_boost.user_id) if latest_boost else None
+    my_vote = None
+    if user and p.poll_data:
+        vote = session.query(Vote).filter_by(user_id=user.id, post_id=p.id).first()
+        if vote:
+            my_vote = vote.option_index
     return {
         "id": p.id,
         "number": p.number or "",
@@ -70,6 +75,8 @@ def _post_json(p, session, user):
         "reply_context": _reply_context(p),
         "boosted_by": _user_json(booster) if booster and booster.id != p.author_id else None,
         "media_attachments": (p.media_attachments or []) if hasattr(p, 'media_attachments') else [],
+        "poll_data": p.poll_data,
+        "my_vote": my_vote,
     }
 
 
@@ -616,6 +623,8 @@ def api_create_post(
     share_url: str = Form(""),
     media_attachments: str = Form("[]"),
     is_sensitive: bool = Form(False),
+    poll_options: str = Form(""),
+    poll_expires_in: int = Form(0),
 ):
     user = require_active_auth(request)
     if share_url:
@@ -623,7 +632,7 @@ def api_create_post(
             content = content + "\n\nepisode: " + share_url
         else:
             content = content + "\n\nseries: " + share_url
-    if not content.strip():
+    if not content.strip() and not poll_options:
         raise HTTPException(status_code=400, detail="Content cannot be empty")
     total_len = len(content) + len(summary)
     if total_len > MAX_POST_LENGTH:
@@ -669,6 +678,18 @@ def api_create_post(
                 post.media_attachments = media[:16]
         except (_json.JSONDecodeError, TypeError):
             pass
+        if poll_options:
+            try:
+                opts = _json.loads(poll_options)
+                if isinstance(opts, list) and 2 <= len(opts) <= 10 and all(isinstance(o, str) and o.strip() for o in opts):
+                    now = datetime.datetime.now(datetime.timezone.utc)
+                    expires_at = (now + datetime.timedelta(hours=poll_expires_in)).isoformat() if poll_expires_in > 0 else None
+                    post.poll_data = {
+                        "options": [{"text": o.strip(), "votes_count": 0} for o in opts],
+                        "expires_at": expires_at,
+                    }
+            except (_json.JSONDecodeError, TypeError):
+                pass
         s.add(post)
         s.flush()
         post.ap_id = f"{BASE_URL}/@{user.username}/{post.number}"
@@ -948,6 +969,57 @@ def api_unboost_post(request: Request, post_id: int):
                 post.bumped_at = None
             s.commit()
             broadcast_refresh_notifs()
+    return {"ok": True}
+
+
+@router.post("/posts/{post_id}/vote")
+def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
+    user = require_active_auth(request)
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
+        if not post or not post.poll_data:
+            raise HTTPException(status_code=404, detail="Post or poll not found")
+        options = post.poll_data.get("options", [])
+        if option < 0 or option >= len(options):
+            raise HTTPException(status_code=400, detail="Invalid option")
+        expires_at = post.poll_data.get("expires_at")
+        if expires_at:
+            try:
+                if datetime.datetime.fromisoformat(expires_at) < datetime.datetime.now(datetime.timezone.utc):
+                    raise HTTPException(status_code=400, detail="Poll has ended")
+            except (ValueError, TypeError):
+                pass
+        existing = s.query(Vote).filter_by(user_id=user.id, post_id=post_id).first()
+        if existing:
+            old_option = existing.option_index
+            if old_option == option:
+                return {"ok": True}
+            options[old_option]["votes_count"] = max(0, options[old_option].get("votes_count", 0) - 1)
+            existing.option_index = option
+        else:
+            s.add(Vote(user_id=user.id, post_id=post_id, option_index=option))
+        options[option]["votes_count"] = options[option].get("votes_count", 0) + 1
+        post.poll_data = {**post.poll_data, "options": options}
+        s.commit()
+    return {"ok": True}
+
+
+@router.post("/posts/{post_id}/unvote")
+def api_unvote_post(request: Request, post_id: int):
+    user = require_active_auth(request)
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
+        if not post or not post.poll_data:
+            raise HTTPException(status_code=404, detail="Post or poll not found")
+        existing = s.query(Vote).filter_by(user_id=user.id, post_id=post_id).first()
+        if existing:
+            options = post.poll_data.get("options", [])
+            idx = existing.option_index
+            if 0 <= idx < len(options):
+                options[idx]["votes_count"] = max(0, options[idx].get("votes_count", 0) - 1)
+                post.poll_data = {**post.poll_data, "options": options}
+            s.delete(existing)
+            s.commit()
     return {"ok": True}
 
 

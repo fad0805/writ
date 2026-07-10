@@ -53,6 +53,16 @@ export interface User {
   pinned_series?: number[];
 }
 
+export interface PollOption {
+  text: string;
+  votes_count: number;
+}
+
+export interface PollData {
+  options: PollOption[];
+  expires_at: string | null;
+}
+
 export interface PostData {
   id: number;
   number: string;
@@ -75,6 +85,8 @@ export interface PostData {
   replies?: PostData[];
   ancestors?: PostData[];
   boosted_by?: User | null;
+  poll_data?: PollData | null;
+  my_vote?: number | null;
 }
 
 export interface ReplyContext {
@@ -161,7 +173,7 @@ export const api = {
     request<PostData & { total_replies: number; has_more_replies: boolean }>(
       `/api/posts/${id}?reply_offset=${reply_offset}&reply_limit=${reply_limit}`
     ),
-  createPost: (data: { content: string; summary?: string; visibility?: string; parent_id?: number; share_url?: string; media_attachments?: string; is_sensitive?: boolean }) =>
+  createPost: (data: { content: string; summary?: string; visibility?: string; parent_id?: number; share_url?: string; media_attachments?: string; is_sensitive?: boolean; poll_options?: string; poll_expires_in?: number }) =>
     formRequest<PostData>("/api/posts", data),
   editPost: (id: number, data: { content: string; summary?: string }) =>
     formRequest<PostData>(`/api/posts/${id}/edit`, data),
@@ -174,6 +186,8 @@ export const api = {
   unbookmark: (id: number) => request<{ ok: boolean }>(`/api/posts/${id}/unbookmark`, { method: "POST" }),
   getBookmarks: (limit = 20, offset = 0) => request<{ posts: PostData[]; has_more: boolean }>(`/api/bookmarks?limit=${limit}&offset=${offset}`),
   getFavorites: (limit = 10, offset = 0) => request<{ posts: PostData[]; has_more: boolean }>(`/api/favorites?limit=${limit}&offset=${offset}`),
+  vote: (id: number, option: number) => formRequest<{ ok: boolean }>(`/api/posts/${id}/vote`, { option }),
+  unvote: (id: number) => formRequest<{ ok: boolean }>(`/api/posts/${id}/unvote`, {}),
 
   // Users
   getProfile: (username: string) =>
