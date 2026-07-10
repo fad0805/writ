@@ -68,6 +68,50 @@ with get_session() as s:
     print('body:', r.text[:300])
 "
 
+elif [ "$1" = "try-legacy" ]; then
+  docker compose exec api python3 -c "
+import httpx, time, datetime
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from app.models import User, get_session
+from app.config import SECRET_KEY
+from app.crypto_utils import get_private_key
+from urllib.parse import urlparse
+
+url = 'https://daydream.ink/@siarte/116895178885643677'
+parsed = urlparse(url)
+created = int(time.time())
+date = datetime.datetime.now(datetime.timezone.utc).strftime('%a, %d %b %Y %H:%M:%S GMT')
+
+with get_session() as s:
+    me = s.query(User).filter_by(username='siarte').first()
+    priv_pem = get_private_key(me, SECRET_KEY)
+    priv = serialization.load_pem_private_key(priv_pem.encode(), password=None)
+
+    # PSS 시도
+    ss = '(request-target): get ' + parsed.path + '\nhost: ' + parsed.netloc + '\ndate: ' + date + '\n(request-created): ' + str(created)
+    sig_pss = priv.sign(ss.encode(), padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.DIGEST_LENGTH), hashes.SHA256())
+    sig_pss_b64 = __import__('base64').b64encode(sig_pss).decode()
+    headers_pss = {
+        'Accept': 'application/activity+json',
+        'Signature': 'keyId=\"' + me.actor_uri() + '#main-key\",algorithm=\"hs2019\",created=\"' + str(created) + '\",headers=\"(request-target) host date (request-created)\",signature=\"' + sig_pss_b64 + '\"',
+        'Date': date, 'Host': parsed.netloc
+    }
+    r1 = httpx.get(url, headers=headers_pss)
+    print('PSS hs2019 ->', r1.status_code, r1.json().get('error','')[:100])
+
+    # PKCS1v15 + rsa-sha256 시도
+    sig_pkcs = priv.sign(ss.encode(), padding.PKCS1v15(), hashes.SHA256())
+    sig_pkcs_b64 = __import__('base64').b64encode(sig_pkcs).decode()
+    headers_pkcs = {
+        'Accept': 'application/activity+json',
+        'Signature': 'keyId=\"' + me.actor_uri() + '#main-key\",algorithm=\"rsa-sha256\",headers=\"(request-target) host date (request-created)\",signature=\"' + sig_pkcs_b64 + '\"',
+        'Date': date, 'Host': parsed.netloc
+    }
+    r2 = httpx.get(url, headers=headers_pkcs)
+    print('PKCS1v15 rsa-sha256 ->', r2.status_code, r2.json().get('error','')[:100])
+"
+
 elif [ "$1" = "network-check" ]; then
   docker compose exec api python3 -c "
 import httpx
