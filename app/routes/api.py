@@ -210,44 +210,49 @@ def api_me(request: Request):
 @router.post("/auth/login")
 def api_login(request: Request, username: str = Form(...), password: str = Form(...)):
     from app.routes.auth import hash_password, verify_password, create_session
-    client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
-    with get_session() as s:
-        q = s.query(User).filter(User.is_remote == False)
-        if "@" in username and "." in username:
-            db_user = q.filter(User.email == username).first()
-        else:
-            db_user = q.filter(User.username == username).first()
-        if not db_user:
-            log_admin_action(None, username, "login_failed", details="user_not_found", ip_address=client_ip)
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-        if getattr(db_user, 'is_frozen', False):
-            log_admin_action(db_user.id, db_user.username, "login_blocked", details="frozen", ip_address=client_ip)
-            raise HTTPException(status_code=403, detail="계정이 동결되었습니다.")
-        if getattr(db_user, 'is_suspended', False):
-            log_admin_action(db_user.id, db_user.username, "login_blocked", details="suspended", ip_address=client_ip)
-            raise HTTPException(status_code=403, detail="계정이 정지되었습니다.")
-        stored = db_user.password_hash
-        if ":" not in stored:
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-        salt, hval = stored.split(":", 1)
-        if not verify_password(password, salt, hval):
-            log_admin_action(db_user.id, db_user.username, "login_failed", details="wrong_password", ip_address=client_ip)
-            raise HTTPException(status_code=401, detail="비밀번호가 틀렸습니다.")
-        if not db_user.email_verified:
-            log_admin_action(db_user.id, db_user.username, "login_blocked", details="email_not_verified", ip_address=client_ip)
-            raise HTTPException(status_code=403, detail="이메일 인증이 필요합니다. 가입 시 등록한 이메일에서 인증을 완료해 주세요.")
-        token = create_session(db_user.id)
-        # Store IP
-        if client_ip:
-            ips = db_user.recent_ips or []
-            ips = [ip for ip in ips if ip != client_ip]  # remove duplicate
-            ips.insert(0, client_ip)
-            db_user.recent_ips = ips[:10]
-            s.commit()
-        log_admin_action(db_user.id, db_user.username, "login", ip_address=client_ip)
-        resp = JSONResponse(_user_json(db_user))
-        resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/")
-        return resp
+    try:
+        client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
+        with get_session() as s:
+            q = s.query(User).filter(User.is_remote == False)
+            if "@" in username and "." in username:
+                db_user = q.filter(User.email == username).first()
+            else:
+                db_user = q.filter(User.username == username).first()
+            if not db_user:
+                log_admin_action(None, username, "login_failed", details="user_not_found", ip_address=client_ip)
+                raise HTTPException(status_code=401, detail="Invalid credentials")
+            if getattr(db_user, 'is_frozen', False):
+                log_admin_action(db_user.id, db_user.username, "login_blocked", details="frozen", ip_address=client_ip)
+                raise HTTPException(status_code=403, detail="계정이 동결되었습니다.")
+            if getattr(db_user, 'is_suspended', False):
+                log_admin_action(db_user.id, db_user.username, "login_blocked", details="suspended", ip_address=client_ip)
+                raise HTTPException(status_code=403, detail="계정이 정지되었습니다.")
+            stored = db_user.password_hash
+            if ":" not in stored:
+                raise HTTPException(status_code=401, detail="Invalid credentials")
+            salt, hval = stored.split(":", 1)
+            if not verify_password(password, salt, hval):
+                log_admin_action(db_user.id, db_user.username, "login_failed", details="wrong_password", ip_address=client_ip)
+                raise HTTPException(status_code=401, detail="비밀번호가 틀렸습니다.")
+            if not db_user.email_verified:
+                log_admin_action(db_user.id, db_user.username, "login_blocked", details="email_not_verified", ip_address=client_ip)
+                raise HTTPException(status_code=403, detail="이메일 인증이 필요합니다. 가입 시 등록한 이메일에서 인증을 완료해 주세요.")
+            token = create_session(db_user.id)
+            if client_ip:
+                ips = db_user.recent_ips or []
+                ips = [ip for ip in ips if ip != client_ip]
+                ips.insert(0, client_ip)
+                db_user.recent_ips = ips[:10]
+                s.commit()
+            log_admin_action(db_user.id, db_user.username, "login", ip_address=client_ip)
+            resp = JSONResponse(_user_json(db_user))
+            resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/")
+            return resp
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Login error")
+        raise HTTPException(status_code=500, detail=f"Login error: {exc}")
 
 
 def _send_verification_email(u: User):
