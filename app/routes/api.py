@@ -3143,14 +3143,12 @@ def _fetch_and_save_ap_object(obj, user):
     from app.activitypub import _sanitize_html
     content = _sanitize_html(obj.get("content", ""))
     if not content:
-        logger.warning("fetch_save: empty content, obj keys=%s", list(obj.keys())[:10])
         return None
 
     attributed_to = obj.get("attributedTo", "")
     if isinstance(attributed_to, list):
         attributed_to = attributed_to[0] if attributed_to else ""
     if not attributed_to:
-        logger.warning("fetch_save: no attributedTo, obj keys=%s", list(obj.keys())[:10])
         return None
 
     from app.activitypub import _resolve_actor
@@ -3161,7 +3159,6 @@ def _fetch_and_save_ap_object(obj, user):
         if u:
             author_id = u.id
     if not author_id:
-        logger.warning("fetch_save: cannot resolve author for %s", attributed_to)
         # fallback: try parsing username from attributed_to URL
         try:
             from urllib.parse import urlparse
@@ -3292,7 +3289,6 @@ def _ap_fetch(url, user):
     """Fetch a remote URL with HTTP Signature, return parsed JSON."""
     from app.activitypub import _validate_url
     if not _validate_url(url):
-        logger.warning("_ap_fetch: URL validation failed for %s", url)
         return None
     from urllib.parse import urlparse
 
@@ -3302,29 +3298,17 @@ def _ap_fetch(url, user):
     if resp:
         try:
             return resp.json()
-        except Exception as e:
-            logger.warning("_ap_fetch: unsigned JSON parse failed for %s: %s", url, e)
+        except Exception:
             return None
-
-    logger.info("_ap_fetch: unsigned request failed for %s, trying signed", url)
 
     # Fall back to signed request
     import hashlib, time
     from app.crypto_utils import sign_string
-    try:
-        priv_key = get_private_key(user, SECRET_KEY)
-    except Exception as e:
-        logger.warning("_ap_fetch: failed to get private key for user %s: %s", user.username, e)
-        return None
     date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
     parsed = urlparse(url)
     path = parsed.path or "/"
     signed_string = f"(request-target): get {path}\nhost: {parsed.netloc}\ndate: {date}"
-    try:
-        signature = sign_string(signed_string, priv_key)
-    except Exception as e:
-        logger.warning("_ap_fetch: signing failed for %s: %s", url, e)
-        return None
+    signature = sign_string(signed_string, get_private_key(user, SECRET_KEY))
     signature_header = (
         f'keyId="{user.actor_uri()}#main-key",'
         f'algorithm="hs2019",'
@@ -3336,12 +3320,10 @@ def _ap_fetch(url, user):
                "Date": date, "Host": parsed.netloc}
     resp = _safe_httpx_get(url, headers=headers)
     if not resp:
-        logger.warning("_ap_fetch: signed request failed for %s (status: %s)", url, getattr(resp, 'status_code', 'N/A'))
         return None
     try:
         return resp.json()
-    except Exception as e:
-        logger.warning("_ap_fetch: signed JSON parse failed for %s: %s", url, e)
+    except Exception:
         return None
 
 

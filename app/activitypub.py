@@ -308,11 +308,10 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
 def _safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
     """HTTP GET with redirect validation and size limit."""
     if not _validate_url(url):
-        logger.warning("safe_fetch: URL validation failed for %s", url)
         return None
     domain = urlparse(url).hostname or ""
     if not _federation_allowed(domain):
-        logger.info("safe_fetch: federation blocked for domain: %s", domain)
+        logger.info("Federation blocked for domain: %s", domain)
         return None
     client = httpx.Client(follow_redirects=True, timeout=timeout)
     original_send = client.send
@@ -323,15 +322,10 @@ def _safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
     client.send = _validated_send
     try:
         resp = client.get(url, headers=headers or {})
-        if resp.status_code != 200:
-            logger.warning("safe_fetch: status %d for %s", resp.status_code, url)
-            return None
-        if len(resp.content) > max_size:
-            logger.warning("safe_fetch: too large %d for %s", len(resp.content), url)
+        if resp.status_code != 200 or len(resp.content) > max_size:
             return None
         return resp
-    except Exception as e:
-        logger.warning("safe_fetch: exception for %s: %s: %s", url, type(e).__name__, e)
+    except Exception:
         return None
     finally:
         client.close()
