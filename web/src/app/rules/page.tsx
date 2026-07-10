@@ -26,7 +26,7 @@ export default function RulesPage() {
     <div style={{ maxWidth: 720, margin: "0 auto", padding: "24px 16px" }}>
       <h1 style={{ marginBottom: 8 }}><Icon name="shield" /> 서버 규칙</h1>
       <p style={{ color: "var(--text-secondary)", marginBottom: 24, fontSize: 14 }}>
-        아래 규칙을 위반할 경우 신고 대상이 될 수 있습니다.
+        아래 규칙을 위반할 경우 제재 대상이 될 수 있습니다.
       </p>
       {rules.length === 0 ? (
         <p className="empty-state">등록된 규칙이 없습니다.</p>

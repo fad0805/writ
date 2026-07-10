@@ -13,6 +13,7 @@ export default function RegisterPage() {
   const [showPwConfirm, setShowPwConfirm] = useState(false);
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [agreeRules, setAgreeRules] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -21,6 +22,7 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!agreeRules) { setError("서버 규칙에 동의해 주세요."); return; }
     if (password !== passwordConfirm) { setError("비밀번호가 일치하지 않습니다."); return; }
     setLoading(true); setError("");
     try {
@@ -94,7 +96,11 @@ export default function RegisterPage() {
           {passwordConfirm && password !== passwordConfirm && <p className="form-help" style={{ color: "var(--danger)" }}>비밀번호가 일치하지 않습니다</p>}
         </div>
         {error && <p className="auth-error">{error}</p>}
-        <button type="submit" disabled={loading} className="btn btn-primary">{loading ? "..." : "가입"}</button>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer", marginBottom: 12 }}>
+          <input type="checkbox" checked={agreeRules} onChange={(e) => setAgreeRules(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
+          <Link href="/rules" style={{ color: "var(--accent)", textDecoration: "underline" }}>서버 규칙</Link>에 동의합니다
+        </label>
+        <button type="submit" disabled={loading || !agreeRules} className="btn btn-primary">{loading ? "..." : "가입"}</button>
       </form>
       <p className="auth-link">이미 계정이 있으신가요? <Link href="/login">로그인</Link></p>
     </div>
