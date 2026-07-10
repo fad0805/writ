@@ -258,6 +258,9 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
 def _send_verification_email(u: User):
     import secrets
     from app.config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
+    if not SMTP_SERVER:
+        u.email_verified = True
+        return
     token = secrets.token_urlsafe(32)
     u.verification_token = token
     verify_url = f"{BASE_URL}/verify-email?token={token}"
@@ -273,10 +276,21 @@ def _send_verification_email(u: User):
         msg["Subject"] = "[WRIT] 이메일 인증을 완료해 주세요"
         msg["From"] = SMTP_FROM or "noreply@writ.local"
         msg["To"] = u.email
-        with smtplib.SMTP(SMTP_SERVER or "localhost", SMTP_PORT or 25, timeout=10) as smtp:
-            if SMTP_USER:
-                smtp.login(SMTP_USER, SMTP_PASSWORD or "")
-            smtp.send_message(msg)
+        port = SMTP_PORT or 587
+        if port == 465:
+            with smtplib.SMTP_SSL(SMTP_SERVER, port, timeout=10) as smtp:
+                if SMTP_USER:
+                    smtp.login(SMTP_USER, SMTP_PASSWORD or "")
+                smtp.send_message(msg)
+        else:
+            with smtplib.SMTP(SMTP_SERVER, port, timeout=10) as smtp:
+                smtp.ehlo()
+                if smtp.has_extn("STARTTLS"):
+                    smtp.starttls()
+                    smtp.ehlo()
+                if SMTP_USER:
+                    smtp.login(SMTP_USER, SMTP_PASSWORD or "")
+                smtp.send_message(msg)
     except Exception as e:
         logger.exception("Failed to send verification email to %s", u.email)
 
@@ -339,15 +353,10 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
         user_id = user.id
 
         if not is_first:
-            from app.config import SMTP_SERVER
-            if SMTP_SERVER:
-                try:
-                    _send_verification_email(user)
-                except Exception:
-                    pass
-            else:
-                # SMTP 미설정시 자동 인증
-                user.email_verified = True
+            try:
+                _send_verification_email(user)
+            except Exception:
+                pass
         s.commit()
 
         log_admin_action(user_id, user.username, "register", ip_address=client_ip, details="first_user" if is_first else "email_required")
@@ -3891,15 +3900,28 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
                 from email.mime.text import MIMEText
                 import smtplib
                 from app.config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
+                if not SMTP_SERVER:
+                    return {"ok": True, "action": action}
                 action_names = {"warning": "경고", "freeze": "동결", "sensitive": "민감 처리", "limit": "제한", "suspend": "정지", "unsuspend": "정지 해제"}
                 msg = MIMEText(f"계정에 {action_names.get(action, action)} 조치가 적용되었습니다.\n서버 관리팀")
                 msg["Subject"] = f"[WRIT] 계정 {action_names.get(action, action)} 안내"
                 msg["From"] = SMTP_FROM or "noreply@writ.local"
                 msg["To"] = u.email
-                with smtplib.SMTP(SMTP_SERVER or "localhost", SMTP_PORT or 25, timeout=10) as smtp:
-                    if SMTP_USER:
-                        smtp.login(SMTP_USER, SMTP_PASSWORD or "")
-                    smtp.send_message(msg)
+                port = SMTP_PORT or 587
+                if port == 465:
+                    with smtplib.SMTP_SSL(SMTP_SERVER, port, timeout=10) as smtp:
+                        if SMTP_USER:
+                            smtp.login(SMTP_USER, SMTP_PASSWORD or "")
+                        smtp.send_message(msg)
+                else:
+                    with smtplib.SMTP(SMTP_SERVER, port, timeout=10) as smtp:
+                        smtp.ehlo()
+                        if smtp.has_extn("STARTTLS"):
+                            smtp.starttls()
+                            smtp.ehlo()
+                        if SMTP_USER:
+                            smtp.login(SMTP_USER, SMTP_PASSWORD or "")
+                        smtp.send_message(msg)
             except Exception as e:
                 logger.exception("Failed to send moderation email to %s", u.email)
     return {"ok": True, "action": action}
