@@ -83,6 +83,7 @@ logging.basicConfig(
 )
 logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+logging.getLogger("python_multipart.multipart").setLevel(logging.ERROR)
 
 
 def _delivery_worker():
