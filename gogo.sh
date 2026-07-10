@@ -168,6 +168,17 @@ print('Host 헤더(raw):', repr(req.headers.get('host')))
 print('path:', repr(req.url.path))
 "
 
+elif [ "$1" = "nginx-check" ]; then
+  echo "=== nginx 접속 로그 (최근 10줄) ==="
+  ls -la /var/log/nginx/*.access.log 2>/dev/null && tail -10 /var/log/nginx/*.access.log 2>/dev/null || echo "로그 파일 없음"
+  echo ""
+  echo "=== nginx 설정에서 /users/ 처리 확인 ==="
+  grep -rn "users\|proxy_pass\|inbox\|location" /etc/nginx/ 2>/dev/null | head -20
+  echo ""
+  echo "=== curl 로 인박스 테스트 ==="
+  curl -s -o /dev/null -w "인박스 POST -> %{http_code}\n" -X POST "https://writ.daydream.ink/users/siarte/inbox" -H "Content-Type: application/activity+json" -d '{"test":true}'
+  curl -s -o /dev/null -w "actor GET -> %{http_code}\n" -H "Accept: application/activity+json" "https://writ.daydream.ink/users/siarte"
+
 elif [ "$1" = "mastodon-test" ]; then
   echo "⚠️  daydream.ink 서버에서 docker compose exec web 로 실행:"
   echo ""
