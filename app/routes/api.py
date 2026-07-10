@@ -3381,7 +3381,7 @@ def api_fetch_actor(request: Request, url: str = Form(...)):
         raise HTTPException(status_code=403, detail=err)
     print("2. url ok:", url, flush=True)
     from app.activitypub import _resolve_actor
-    actor = _resolve_actor(url, force_refresh=True)
+    actor = _resolve_actor(url, force_refresh=True, sign_as=user)
     if not actor:
         print("3. FAIL: _resolve_actor returned None", flush=True)
         # Log details from the previous run if available

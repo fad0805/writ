@@ -483,7 +483,7 @@ def _save_remote_avatar(avatar_url: str, local_username: str, old_url: str = "")
     return _save_remote_image(avatar_url, "avatars", local_username, old_url)
 
 
-def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User]:
+def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optional[User] = None) -> Optional[User]:
     import sys
     print("  [_resolve_actor] url:", actor_url, flush=True)
     with get_session() as session:
@@ -492,18 +492,42 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False) -> Optional[User
             print("  [_resolve_actor] found existing:", user.username, flush=True)
             return user
 
-    # Fetch remote actor
+    # Fetch remote actor — try unsigned first, then signed if available
+    data = None
     try:
         resp = _safe_fetch(actor_url, timeout=10, headers={"Accept": "application/activity+json"})
-        if not resp:
-            print("  [_resolve_actor] _safe_fetch returned None", flush=True)
-            return None
-        data = resp.json()
-        print("  [_resolve_actor] fetched, keys:", list(data.keys())[:10], flush=True)
-    except Exception as e:
-        logger.warning("Failed to fetch remote actor %s: %s", actor_url, e)
-        print("  [_resolve_actor] fetch exception:", type(e).__name__, str(e)[:200], flush=True)
+        if resp:
+            data = resp.json()
+    except Exception:
+        pass
+
+    if data is None and sign_as:
+        # Fall back to signed request
+        try:
+            import datetime, time, hashlib
+            from app.crypto_utils import sign_string, get_private_key
+            from app.config import SECRET_KEY
+            from urllib.parse import urlparse
+            date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+            parsed = urlparse(actor_url)
+            created = int(time.time())
+            ss = f"(request-target): get {parsed.path}\nhost: {parsed.netloc}\ndate: {date}\n(created): {created}"
+            priv = get_private_key(sign_as, SECRET_KEY)
+            sig = sign_string(ss, priv)
+            sig_header = f'keyId="{sign_as.actor_uri()}#main-key",algorithm="hs2019",created="{created}",headers="(request-target) host date (created)",signature="{sig}"'
+            headers = {"Accept": "application/activity+json", "Signature": sig_header, "Date": date, "Host": parsed.netloc}
+            resp = _safe_fetch(actor_url, timeout=10, headers=headers)
+            if resp:
+                data = resp.json()
+                print("  [_resolve_actor] signed fetch ok", flush=True)
+        except Exception as e:
+            print("  [_resolve_actor] signed fetch failed:", type(e).__name__, str(e)[:100], flush=True)
+
+    if not data:
+        print("  [_resolve_actor] all fetch attempts failed", flush=True)
         return None
+
+    print("  [_resolve_actor] fetched, keys:", list(data.keys())[:10], flush=True)
 
     # Verify the response's id domain matches the requested URL's domain
     resp_id = data.get("id", "")
