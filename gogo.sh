@@ -168,6 +168,21 @@ print('Host 헤더(raw):', repr(req.headers.get('host')))
 print('path:', repr(req.url.path))
 "
 
+elif [ "$1" = "check-remote" ]; then
+  docker compose exec api python3 -c "
+from app.models import User, get_session
+with get_session() as s:
+    u = s.query(User).filter(User.username.like('%@%')).first()
+    if u:
+        print('username:', u.username)
+        print('inbox_url:', u.inbox_url)
+        print('remote_url:', u.remote_url)
+        print('actor_uri:', u.actor_uri())
+        print('shared_inbox:', u.shared_inbox_url)
+    else:
+        print('no remote users')
+"
+
 elif [ "$1" = "check-follow" ]; then
   docker compose exec api python3 -c "
 from app.models import Follow, User, get_session
