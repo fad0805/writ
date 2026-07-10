@@ -767,14 +767,14 @@ def _add_missing_columns():
     except Exception:
         return
     _add_cols("users", inspector, [
-        ("enable_reactions", "BOOLEAN DEFAULT 1"),
-        ("is_deactivated", "BOOLEAN DEFAULT 0"),
-        ("is_deceased", "BOOLEAN DEFAULT 0"),
-        ("is_sensitive", "BOOLEAN DEFAULT 0"),
-        ("show_badge", "BOOLEAN DEFAULT 0"),
-        ("is_bot", "BOOLEAN DEFAULT 0"),
-        ("is_limited", "BOOLEAN DEFAULT 0"),
-        ("is_locked", "BOOLEAN DEFAULT 0"),
+        ("enable_reactions", "BOOLEAN DEFAULT TRUE"),
+        ("is_deactivated", "BOOLEAN DEFAULT FALSE"),
+        ("is_deceased", "BOOLEAN DEFAULT FALSE"),
+        ("is_sensitive", "BOOLEAN DEFAULT FALSE"),
+        ("show_badge", "BOOLEAN DEFAULT FALSE"),
+        ("is_bot", "BOOLEAN DEFAULT FALSE"),
+        ("is_limited", "BOOLEAN DEFAULT FALSE"),
+        ("is_locked", "BOOLEAN DEFAULT FALSE"),
         ("display_handle", "VARCHAR(256) DEFAULT ''"),
         ("follow_list_visibility", "VARCHAR(16) DEFAULT 'public'"),
         ("episode_default_visibility", "VARCHAR(16) DEFAULT 'public'"),
@@ -788,11 +788,11 @@ def _add_missing_columns():
         ("aliases", "JSON DEFAULT '[]'"),
     ])
     _add_cols("posts", inspector, [
-        ("is_sensitive", "BOOLEAN DEFAULT 0"),
+        ("is_sensitive", "BOOLEAN DEFAULT FALSE"),
         ("original_visibility", "VARCHAR(16) DEFAULT ''"),
         ("media_attachments", "JSON DEFAULT '[]'"),
         ("poll_data", "JSON"),
-        ("is_dm", "BOOLEAN DEFAULT 0"),
+        ("is_dm", "BOOLEAN DEFAULT FALSE"),
         ("novel_id", "INTEGER"),
         ("episode_id", "INTEGER"),
         ("mentioned_user_ids", "JSON DEFAULT '[]'"),
@@ -800,7 +800,7 @@ def _add_missing_columns():
         ("bumped_at", "TIMESTAMP"),
     ])
     _add_cols("novels", inspector, [
-        ("is_sensitive", "BOOLEAN DEFAULT 0"),
+        ("is_sensitive", "BOOLEAN DEFAULT FALSE"),
     ])
     _add_cols("episodes", inspector, [
         ("summary", "TEXT DEFAULT ''"),
