@@ -168,6 +168,35 @@ print('Host 헤더(raw):', repr(req.headers.get('host')))
 print('path:', repr(req.url.path))
 "
 
+elif [ "$1" = "direct-fetch" ]; then
+  docker compose exec api python3 -c "
+import sys, traceback
+sys.path.insert(0, '.')
+from app.routes.api import _ap_fetch, _fetch_and_save_ap_object
+from app.models import User, get_session
+
+url = 'https://daydream.ink/@siarte/116895178885643677'
+with get_session() as s:
+    me = s.query(User).filter_by(username='siarte').first()
+
+# _ap_fetch로 데이터 가져오기
+try:
+    data = _ap_fetch(url, me)
+    if not data:
+        print('_ap_fetch returned None')
+    else:
+        obj = data.get('object', data)
+        print('_ap_fetch success, obj type:', obj.get('type'))
+        print('content exists:', bool(obj.get('content', '')))
+        print('attributedTo:', obj.get('attributedTo', 'N/A')[:80])
+        
+        # 저장 시도
+        result = _fetch_and_save_ap_object(obj, me)
+        print('save result:', result is not None)
+except Exception as e:
+    traceback.print_exc()
+"
+
 elif [ "$1" = "network-check" ]; then
   docker compose exec api python3 -c "
 import httpx
