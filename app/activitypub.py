@@ -492,19 +492,10 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             print("  [_resolve_actor] found existing:", user.username, flush=True)
             return user
 
-    # Fetch remote actor — try unsigned first, then signed if available
     data = None
-    try:
-        resp = _safe_fetch(actor_url, timeout=10, headers={"Accept": "application/activity+json"})
-        if resp:
-            data = resp.json()
-    except Exception:
-        pass
-
-    if data is None and sign_as:
-        # Fall back to signed request
+    if sign_as:
         try:
-            import datetime, time, hashlib
+            import datetime, time
             from app.crypto_utils import sign_string, get_private_key
             from app.config import SECRET_KEY
             from urllib.parse import urlparse
@@ -522,6 +513,15 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
                 print("  [_resolve_actor] signed fetch ok", flush=True)
         except Exception as e:
             print("  [_resolve_actor] signed fetch failed:", type(e).__name__, str(e)[:100], flush=True)
+
+    if data is None:
+        try:
+            resp = _safe_fetch(actor_url, timeout=10, headers={"Accept": "application/activity+json"})
+            if resp:
+                data = resp.json()
+                print("  [_resolve_actor] unsigned fetch ok", flush=True)
+        except Exception:
+            pass
 
     if not data:
         print("  [_resolve_actor] all fetch attempts failed", flush=True)
