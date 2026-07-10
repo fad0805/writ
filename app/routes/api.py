@@ -3381,12 +3381,12 @@ def api_fetch_actor(request: Request, url: str = Form(...)):
         raise HTTPException(status_code=403, detail=err)
     print("2. url ok:", url, flush=True)
     from app.activitypub import _resolve_actor
-    try:
-        _resolve_actor(url)
-        print("3. _resolve_actor done", flush=True)
-    except Exception as e:
-        print("3. FAIL: _resolve_actor raised:", type(e).__name__, str(e)[:200], flush=True)
+    actor = _resolve_actor(url)
+    if not actor:
+        print("3. FAIL: _resolve_actor returned None", flush=True)
+        # Log details from the previous run if available
         raise HTTPException(status_code=400, detail="Cannot resolve actor")
+    print("3. _resolve_actor ok, actor:", actor.id, actor.username, actor.remote_url[:60], flush=True)
     actor_id = None
     from urllib.parse import urlparse
     parsed = urlparse(url)
@@ -3402,12 +3402,20 @@ def api_fetch_actor(request: Request, url: str = Form(...)):
                 actor_id = u.id
                 print("6. found user:", u.id, u.username, flush=True)
             else:
-                print("6. user NOT found in DB:", remote_username, flush=True)
+                print("6. user NOT found in DB:", remote_username, "but actor was created as:", actor.username, flush=True)
     else:
         print("5. no username_from_url", flush=True)
     if not actor_id:
-        print("7. FAIL: no actor_id", flush=True)
-        raise HTTPException(status_code=400, detail="Cannot resolve actor")
+        # Fallback: use the actor returned by _resolve_actor
+        print("7. using actor from _resolve_actor:", actor.id, actor.username, flush=True)
+        actor_id = actor.id
+    if not actor_id:
+        # Last fallback: search by remote_url
+        with get_session() as s:
+            u = s.query(User).filter_by(remote_url=url).first()
+            if u:
+                print("7b. found by remote_url:", u.id, u.username, flush=True)
+                actor_id = u.id
     with get_session() as s:
         u = s.query(User).get(actor_id)
         if u:
