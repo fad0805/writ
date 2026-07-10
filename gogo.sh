@@ -186,6 +186,15 @@ with get_session() as s:
     if f2: print('accepted:', f2.accepted)
 "
 
+elif [ "$1" = "clear-pending" ]; then
+  docker compose exec api python3 -c "
+from app.models import PendingDelivery, get_session
+with get_session() as s:
+    n = s.query(PendingDelivery).delete()
+    s.commit()
+    print(f'cleared {n} pending deliveries')
+"
+
 elif [ "$1" = "clear-follow" ]; then
   docker compose exec api python3 -c "
 from app.models import Follow, User, ProcessedActivity, get_session
