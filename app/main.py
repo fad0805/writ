@@ -323,25 +323,30 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
 
     # Resolve the remote actor who signed
     actor_url = key_id.split("#")[0] if "#" in key_id else key_id
-    remote_actor = _resolve_actor(actor_url)
+    # First try: DB lookup without network
+    with get_session() as s:
+        remote_actor = s.query(User).filter_by(remote_url=actor_url).first()
+        if remote_actor and remote_actor.public_key:
+            pass  # found in DB
+        else:
+            # Try activity.actor
+            act_actor = activity.get("actor", "")
+            if isinstance(act_actor, list):
+                act_actor = act_actor[0]
+            if act_actor:
+                remote_actor = s.query(User).filter_by(remote_url=act_actor).first()
+        if not remote_actor or not remote_actor.public_key:
+            remote_actor = None  # force network fetch below
+
     if not remote_actor or not remote_actor.public_key:
-        # Try with sign_as
-        _sign_as = getattr(request.state, 'sign_as_user', None)
-        if _sign_as:
-            remote_actor = _resolve_actor(actor_url, sign_as=_sign_as)
-    # Fallback: try the activity's actor field (works for server-signed deliveries)
-    if not remote_actor or not remote_actor.public_key:
-        act_actor = activity.get("actor", "")
-        if isinstance(act_actor, list):
-            act_actor = act_actor[0]
-        if act_actor and act_actor != actor_url:
-            remote_actor = _resolve_actor(act_actor)
-            if not remote_actor or not remote_actor.public_key:
-                _sign_as = getattr(request.state, 'sign_as_user', None)
-                if _sign_as:
-                    remote_actor = _resolve_actor(act_actor, sign_as=_sign_as)
-    if not remote_actor or not remote_actor.public_key:
-        return (False, None)
+        # Fallback: network fetch
+        remote_actor = _resolve_actor(actor_url)
+        if not remote_actor or not remote_actor.public_key:
+            _sign_as = getattr(request.state, 'sign_as_user', None)
+            if _sign_as:
+                remote_actor = _resolve_actor(actor_url, sign_as=_sign_as)
+        if not remote_actor or not remote_actor.public_key:
+            return (False, None)
 
     # Actor binding check (Fix 1) — verify the signer matches activity.actor
     activity_actor = activity.get("actor")
