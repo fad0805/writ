@@ -726,35 +726,20 @@ def _handle_reject(activity: dict) -> tuple[int, str]:
     if isinstance(rejecter_url, list):
         rejecter_url = rejecter_url[0]
 
-    # Find the target user from the Reject's object
-    obj = activity.get("object", {})
-    if isinstance(obj, dict):
-        target_url = obj.get("object", "")
-
-    # Look up the local user who initiated the follow
     with get_session() as session:
-        if target_url:
-            local_username = _parse_username_from_url(target_url)
-            if local_username:
-                local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
-            else:
-                local_user = None
-        else:
-            local_user = None
-        if not local_user:
-            return (200, "OK")
-
-        # Find the remote user by actor URL
         remote_user = session.query(User).filter_by(remote_url=rejecter_url).first()
         if not remote_user:
             return (200, "OK")
 
+        # Find any pending follow where OUR user follows the rejecter
         follow_rel = session.query(Follow).filter_by(
-            follower_id=local_user.id,
             following_id=remote_user.id,
+            accepted=False,
         ).first()
         if not follow_rel:
             return (200, "No pending follow request found")
+
+        local_user = session.query(User).get(follow_rel.follower_id)
         session.query(Notification).filter_by(
             from_user_id=remote_user.id, user_id=local_user.id,
             notification_type="follow_request",
