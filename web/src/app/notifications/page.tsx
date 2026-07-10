@@ -129,14 +129,14 @@ export default function NotificationsPage() {
 
   const handleApprove = useCallback(async (username: string) => {
     try {
-      await fetch(`/api/users/${username}/approve-follow`, { method: "POST", credentials: "include" });
+      await fetch(`/api/users/${encodeURIComponent(username)}/approve-follow`, { method: "POST", credentials: "include" });
       setNotifs((prev) => prev.filter((n) => !(n.type === "follow_request" && n.from_user?.username === username)));
     } catch {}
   }, []);
 
   const handleReject = useCallback(async (username: string) => {
     try {
-      await fetch(`/api/users/${username}/reject-follow`, { method: "POST", credentials: "include" });
+      await fetch(`/api/users/${encodeURIComponent(username)}/reject-follow`, { method: "POST", credentials: "include" });
       setNotifs((prev) => prev.filter((n) => !(n.type === "follow_request" && n.from_user?.username === username)));
     } catch {}
   }, []);
