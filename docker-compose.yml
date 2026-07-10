@@ -11,6 +11,8 @@ services:
   api:
     build: .
     env_file: .env.production
+    extra_hosts:
+      - "mylittle.boutique:host-gateway"
     networks:
       - external_network
       - internal_network
