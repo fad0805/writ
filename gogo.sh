@@ -169,16 +169,19 @@ print('path:', repr(req.url.path))
 "
 
 elif [ "$1" = "api-test" ]; then
-  docker compose exec web python3 -c "
-import urllib.request, json
-req = urllib.request.Request('http://api:8000/users/siarte/inbox',
-    data=json.dumps({'test':True}).encode(),
-    headers={'Content-Type': 'application/activity+json'})
-try:
-    resp = urllib.request.urlopen(req)
-    print('status:', resp.status)
-except urllib.error.HTTPError as e:
-    print('status:', e.code, 'body:', e.read().decode()[:200])
+  docker compose exec web node -e "
+const http = require('http');
+const data = JSON.stringify({test:true});
+const req = http.request('http://api:8000/users/siarte/inbox', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/activity+json', 'Content-Length': Buffer.byteLength(data)}
+}, (res) => {
+  let body = '';
+  res.on('data', chunk => body += chunk);
+  res.on('end', () => console.log('status:', res.statusCode, 'body:', body.slice(0,200)));
+});
+req.write(data);
+req.end();
 "
 
 elif [ "$1" = "nginx-check" ]; then
