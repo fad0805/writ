@@ -649,15 +649,19 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
 
     local_username = _parse_username_from_url(object_url)
 
+    # Resolve follower BEFORE opening session to avoid nested transactions
+    with get_session() as s:
+        target = s.query(User).filter_by(username=local_username, is_remote=False).first()
+    if not target:
+        return (404, "Target user not found")
+
+    follower = _resolve_actor(actor_url, sign_as=target)
+    if not follower:
+        return (404, "Follower not found")
+
     with get_session() as session:
-        target = session.query(User).filter_by(username=local_username, is_remote=False).first()
-        if not target:
-            return (404, "Target user not found")
-
-        follower = _resolve_actor(actor_url, sign_as=target)
-        if not follower:
-            return (404, "Follower not found")
-
+        target = session.query(User).get(target.id)
+        follower = session.query(User).get(follower.id)
         accepted = not target.is_locked
         existing = session.query(Follow).filter_by(
             follower_id=follower.id, following_id=target.id
