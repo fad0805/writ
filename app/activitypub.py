@@ -496,6 +496,16 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
         if user and not force_refresh:
             print("  [_resolve_actor] found existing:", user.username, flush=True)
             return user
+        # Fallback: normalize /@username -> /users/username
+        if not user:
+            from urllib.parse import urlparse as _up
+            p = _up(actor_url)
+            if "/@" in p.path:
+                alt_url = f"{p.scheme}://{p.netloc}/users/{p.path.split('/@')[-1]}"
+                user = session.query(User).filter_by(remote_url=alt_url).first()
+                if user and not force_refresh:
+                    print("  [_resolve_actor] found via alt url:", user.username, flush=True)
+                    return user
 
     data = None
     if sign_as:
