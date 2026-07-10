@@ -25,7 +25,7 @@ export default function RegisterPage() {
     fetch("/api/v1/instance")
       .then(r => r.json())
       .then(data => {
-        const first = data.usage?.users?.total === 0;
+        const first = (data.stats?.user_count ?? 0) === 0;
         setIsFirstUser(first);
         if (first) setAgreeRules(true);
       })

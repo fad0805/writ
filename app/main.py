@@ -732,6 +732,9 @@ app.include_router(api_router)
 
 @app.get("/api/v1/instance")
 def api_instance():
+    with get_session() as session:
+        user_count = session.query(User).filter_by(is_remote=False).count()
+        post_count = session.query(Post).filter(Post.author.has(is_remote=False)).count()
     return JSONResponse({
         "uri": DOMAIN,
         "title": "SNS + Novel Blog",
@@ -741,8 +744,8 @@ def api_instance():
             "streaming_api": "",
         },
         "stats": {
-            "user_count": 0,
-            "status_count": 0,
+            "user_count": user_count,
+            "status_count": post_count,
             "domain_count": 0,
         },
         "thumbnail": "",
