@@ -168,6 +168,19 @@ print('Host 헤더(raw):', repr(req.headers.get('host')))
 print('path:', repr(req.url.path))
 "
 
+elif [ "$1" = "api-test" ]; then
+  docker compose exec web python3 -c "
+import urllib.request, json
+req = urllib.request.Request('http://api:8000/users/siarte/inbox',
+    data=json.dumps({'test':True}).encode(),
+    headers={'Content-Type': 'application/activity+json'})
+try:
+    resp = urllib.request.urlopen(req)
+    print('status:', resp.status)
+except urllib.error.HTTPError as e:
+    print('status:', e.code, 'body:', e.read().decode()[:200])
+"
+
 elif [ "$1" = "nginx-check" ]; then
   echo "=== nginx 접속 로그 (최근 10줄) ==="
   ls -la /var/log/nginx/*.access.log 2>/dev/null && tail -10 /var/log/nginx/*.access.log 2>/dev/null || echo "로그 파일 없음"
@@ -271,4 +284,5 @@ else
   echo "  exec          - 외부 URL 요청 테스트 (path 확인)"
   echo "  key-test      - 서명/키 검증"
   echo "  network-check - 네트워크 연결 확인"
+  echo "  api-test      - API 인박스 직접 테스트"
 fi
