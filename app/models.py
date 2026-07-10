@@ -734,6 +734,7 @@ class PendingDelivery(Base):
 
 def init_db():
     Base.metadata.create_all(engine)
+    # Alembic migration (logs if fails, non-fatal)
     try:
         from alembic.config import Config
         from alembic import command
@@ -743,6 +744,8 @@ def init_db():
     except Exception as exc:
         import logging
         logging.getLogger("writ.init").warning("Alembic migration skipped: %s", exc)
+    # Direct SQL fallback — add missing columns that Alembic may have skipped
+    _add_missing_columns()
     # Create additional composite indexes for performance
     try:
         with engine.connect() as conn:
@@ -754,6 +757,70 @@ def init_db():
             conn.commit()
     except Exception:
         pass
+
+
+def _add_missing_columns():
+    """Add columns that exist in SQLAlchemy models but are missing from DB tables."""
+    from sqlalchemy import inspect as sa_inspect
+    try:
+        inspector = sa_inspect(engine)
+    except Exception:
+        return
+    _add_cols("users", inspector, [
+        ("enable_reactions", "BOOLEAN DEFAULT 1"),
+        ("is_deactivated", "BOOLEAN DEFAULT 0"),
+        ("is_deceased", "BOOLEAN DEFAULT 0"),
+        ("is_sensitive", "BOOLEAN DEFAULT 0"),
+        ("show_badge", "BOOLEAN DEFAULT 0"),
+        ("is_bot", "BOOLEAN DEFAULT 0"),
+        ("is_limited", "BOOLEAN DEFAULT 0"),
+        ("is_locked", "BOOLEAN DEFAULT 0"),
+        ("display_handle", "VARCHAR(256) DEFAULT ''"),
+        ("follow_list_visibility", "VARCHAR(16) DEFAULT 'public'"),
+        ("episode_default_visibility", "VARCHAR(16) DEFAULT 'public'"),
+        ("session_token", "VARCHAR(256) DEFAULT ''"),
+        ("moderation_note", "TEXT DEFAULT ''"),
+        ("moved_to", "VARCHAR(512) DEFAULT ''"),
+        ("custom_fields", "JSON DEFAULT '[]'"),
+        ("profile_hashtags", "JSON DEFAULT '[]'"),
+        ("pinned_posts", "JSON DEFAULT '[]'"),
+        ("pinned_series", "JSON DEFAULT '[]'"),
+        ("aliases", "JSON DEFAULT '[]'"),
+    ])
+    _add_cols("posts", inspector, [
+        ("is_sensitive", "BOOLEAN DEFAULT 0"),
+        ("original_visibility", "VARCHAR(16) DEFAULT ''"),
+        ("media_attachments", "JSON DEFAULT '[]'"),
+        ("poll_data", "JSON"),
+        ("is_dm", "BOOLEAN DEFAULT 0"),
+        ("novel_id", "INTEGER"),
+        ("episode_id", "INTEGER"),
+        ("mentioned_user_ids", "JSON DEFAULT '[]'"),
+        ("in_reply_to_ap_id", "VARCHAR(1024) DEFAULT ''"),
+        ("bumped_at", "TIMESTAMP"),
+    ])
+    _add_cols("novels", inspector, [
+        ("is_sensitive", "BOOLEAN DEFAULT 0"),
+    ])
+    _add_cols("episodes", inspector, [
+        ("summary", "TEXT DEFAULT ''"),
+        ("comment", "TEXT DEFAULT ''"),
+    ])
+
+
+def _add_cols(table: str, inspector, cols: list[tuple[str, str]]):
+    try:
+        existing = {c["name"] for c in inspector.get_columns(table)}
+    except Exception:
+        return
+    for col_name, col_def in cols:
+        if col_name not in existing:
+            try:
+                with engine.connect() as conn:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}"))
+                    conn.commit()
+            except Exception:
+                pass
 
 
 def get_session():
