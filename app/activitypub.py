@@ -468,17 +468,18 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
     filename = f"{local_username}_{uuid.uuid4().hex[:8]}.{ext}"
     key = f"{prefix}/remote/{filename}"
     try:
-        resp = _safe_fetch(image_url)
-        if resp:
+        import httpx
+        r = httpx.get(image_url, timeout=10, follow_redirects=True)
+        if r.status_code == 200 and len(r.content) <= 10 * 1024 * 1024:
             storage = get_storage()
             ct = f"image/{ext}"
-            new_url = storage.save(key, resp.content, ct)
+            new_url = storage.save(key, r.content, ct)
             if old_url:
                 storage.delete(old_url)
             return new_url
     except Exception as e:
         logger.warning("Failed to save remote %s %s: %s", prefix, image_url, e)
-    return image_url  # 캐시 실패시 원본 URL 사용
+    return image_url
 
 
 def _save_remote_avatar(avatar_url: str, local_username: str, old_url: str = "") -> str:
