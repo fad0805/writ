@@ -1577,7 +1577,8 @@ def api_approve_follow(request: Request, username: str):
             from app.activitypub import _send_accept
             try:
                 follow_activity_id = f"{follower.actor_uri()}#follows/{user.id}"
-                _send_accept(follower.actor_uri(), follow_activity_id, user)
+                inbox = follower.inbox_url or follower.actor_uri()
+                _send_accept(inbox, follow_activity_id, user, follower=follower)
             except Exception as e:
                 logger.warning("Failed to send Accept: %s", e)
     return {"ok": True}
