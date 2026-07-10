@@ -681,6 +681,7 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
 
 def _send_accept(actor_url: str, activity_id: str, target: User, follower: User = None):
     inbox = follower.inbox_url if follower else actor_url
+    import sys; print(f"[send_accept] inbox=|{inbox}| follower={follower.id if follower else None} inbox_url={follower.inbox_url if follower else 'N/A'}", flush=True)
     accept = {
         "@context": "https://www.w3.org/ns/activitystreams",
         "id": f"{target.actor_uri()}#accepts/{activity_id.split('/')[-1]}",
