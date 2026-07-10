@@ -29,7 +29,7 @@ export default function AccountSettingsPage() {
         const res = await fetch("/api/settings/change-email", { method: "POST", credentials: "include", body: form });
         const d = await res.json().catch(() => ({}));
         if (!res.ok) { setErr(d.detail || "이메일 변경 실패"); setLoading(false); return; }
-        setMsg("이메일이 변경되었습니다.");
+        setMsg("이메일이 변경되었습니다. 인증 메일을 확인해 주세요.");
         setEmail("");
       }
       if (curPw && newPw) {
@@ -52,8 +52,10 @@ export default function AccountSettingsPage() {
     setErr(""); setMailSent(false);
     try {
       const res = await fetch("/api/settings/send-verification-email", { method: "POST", credentials: "include" });
+      const d = await res.json().catch(() => ({}));
+      if (d.already_verified) { await refresh(); return; }
       if (res.ok) setMailSent(true);
-      else { const d = await res.json().catch(() => ({})); setErr(d.detail || "메일 전송 실패"); }
+      else setErr(d.detail || "메일 전송 실패");
     } catch { setErr("메일 전송 실패"); }
   };
 

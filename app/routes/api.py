@@ -2519,6 +2519,7 @@ def api_settings_change_email(request: Request, email: str = Form(...)):
         db.email = email
         db.email_verified = False
         db.verification_token = ""
+        _send_verification_email(db)
         s.commit()
     log_admin_action(user.id, user.username, "change_email", details=f"{old_email} -> {email}", ip_address=request.client.host if request.client else "")
     return {"ok": True, "email_changed": True}
