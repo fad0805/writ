@@ -284,4 +284,5 @@ else
   echo "  exec          - 외부 URL 요청 테스트 (path 확인)"
   echo "  key-test      - 서명/키 검증"
   echo "  network-check - 네트워크 연결 확인"
+  echo "  api-test      - API 인박스 직접 테스트"
 fi
