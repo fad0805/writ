@@ -245,13 +245,14 @@ export const api = {
 
   // Auth actions
   login: async (username: string, password: string) => {
-    const form = new FormData();
-    form.append("username", username);
-    form.append("password", password);
+    const params = new URLSearchParams();
+    params.append("username", username);
+    params.append("password", password);
     const res = await fetch("/api/auth/login", {
       method: "POST",
       credentials: "include",
-      body: form,
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params,
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
