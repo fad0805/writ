@@ -17,52 +17,46 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-_COLUMNS: list[tuple[str, str, str]] = [
-    # users
-    ("users", "enable_reactions", "BOOLEAN"),
-    ("users", "is_deactivated", "BOOLEAN"),
-    ("users", "is_deceased", "BOOLEAN"),
-    ("users", "is_sensitive", "BOOLEAN"),
-    ("users", "show_badge", "BOOLEAN"),
-    ("users", "is_bot", "BOOLEAN"),
-    ("users", "is_limited", "BOOLEAN"),
-    ("users", "is_locked", "BOOLEAN"),
-    ("users", "display_handle", "VARCHAR(256)"),
-    ("users", "follow_list_visibility", "VARCHAR(16)"),
-    ("users", "episode_default_visibility", "VARCHAR(16)"),
-    ("users", "session_token", "VARCHAR(256)"),
-    ("users", "moderation_note", "TEXT"),
-    ("users", "moved_to", "VARCHAR(512)"),
-    ("users", "custom_fields", "JSON"),
-    ("users", "profile_hashtags", "JSON"),
-    ("users", "pinned_posts", "JSON"),
-    ("users", "pinned_series", "JSON"),
-    ("users", "aliases", "JSON"),
-    # posts
-    ("posts", "is_sensitive", "BOOLEAN"),
-    ("posts", "original_visibility", "VARCHAR(16)"),
-    ("posts", "media_attachments", "JSON"),
-    ("posts", "poll_data", "JSON"),
-    ("posts", "is_dm", "BOOLEAN"),
-    ("posts", "novel_id", "INTEGER"),
-    ("posts", "episode_id", "INTEGER"),
-    ("posts", "mentioned_user_ids", "JSON"),
-    ("posts", "in_reply_to_ap_id", "VARCHAR(1024)"),
-    ("posts", "bumped_at", "DATETIME"),
-    # novels
-    ("novels", "is_sensitive", "BOOLEAN"),
-    # episodes
-    ("episodes", "summary", "TEXT"),
-    ("episodes", "comment", "TEXT"),
-]
+def _add_col(table: str, col: sa.Column):
+    try:
+        op.add_column(table, col)
+    except Exception:
+        pass
 
 
 def upgrade() -> None:
-    for table, col, typ in _COLUMNS:
-        try:
-            op.add_column(table, sa.Column(col, sa.Text()))
-        except Exception:
-            pass
+    _add_col("users", sa.Column("enable_reactions", sa.Boolean(), default=True))
+    _add_col("users", sa.Column("is_deactivated", sa.Boolean(), default=False))
+    _add_col("users", sa.Column("is_deceased", sa.Boolean(), default=False))
+    _add_col("users", sa.Column("is_sensitive", sa.Boolean(), default=False))
+    _add_col("users", sa.Column("show_badge", sa.Boolean(), default=False))
+    _add_col("users", sa.Column("is_bot", sa.Boolean(), default=False))
+    _add_col("users", sa.Column("is_limited", sa.Boolean(), default=False))
+    _add_col("users", sa.Column("is_locked", sa.Boolean(), default=False))
+    _add_col("users", sa.Column("display_handle", sa.String(256), default=""))
+    _add_col("users", sa.Column("follow_list_visibility", sa.String(16), default="public"))
+    _add_col("users", sa.Column("episode_default_visibility", sa.String(16), default="public"))
+    _add_col("users", sa.Column("session_token", sa.String(256), default=""))
+    _add_col("users", sa.Column("moderation_note", sa.Text(), default=""))
+    _add_col("users", sa.Column("moved_to", sa.String(512), default=""))
+    _add_col("users", sa.Column("custom_fields", sa.JSON(), default=list))
+    _add_col("users", sa.Column("profile_hashtags", sa.JSON(), default=list))
+    _add_col("users", sa.Column("pinned_posts", sa.JSON(), default=list))
+    _add_col("users", sa.Column("pinned_series", sa.JSON(), default=list))
+    _add_col("users", sa.Column("aliases", sa.JSON(), default=list))
+    _add_col("posts", sa.Column("is_sensitive", sa.Boolean(), default=False))
+    _add_col("posts", sa.Column("original_visibility", sa.String(16), default=""))
+    _add_col("posts", sa.Column("media_attachments", sa.JSON(), default=list))
+    _add_col("posts", sa.Column("poll_data", sa.JSON(), nullable=True))
+    _add_col("posts", sa.Column("is_dm", sa.Boolean(), default=False))
+    _add_col("posts", sa.Column("novel_id", sa.Integer(), nullable=True))
+    _add_col("posts", sa.Column("episode_id", sa.Integer(), nullable=True))
+    _add_col("posts", sa.Column("mentioned_user_ids", sa.JSON(), default=list))
+    _add_col("posts", sa.Column("in_reply_to_ap_id", sa.String(1024), default=""))
+    _add_col("posts", sa.Column("bumped_at", sa.DateTime(), nullable=True))
+    _add_col("novels", sa.Column("is_sensitive", sa.Boolean(), default=False))
+    _add_col("episodes", sa.Column("summary", sa.Text(), default=""))
+    _add_col("episodes", sa.Column("comment", sa.Text(), default=""))
 
 
 def downgrade() -> None:
