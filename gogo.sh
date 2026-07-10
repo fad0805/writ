@@ -187,6 +187,17 @@ http.get(opts, res => {
 });
 "
 
+elif [ "$1" = "api-direct" ]; then
+  docker compose exec api python3 -c "
+import httpx
+r = httpx.get('http://localhost:8000/api/by-number/siarte/3bcfe670', headers={'Accept': 'application/activity+json'})
+print('status:', r.status_code)
+if r.status_code == 200:
+    d = r.json()
+    print('id:', d.get('id'))
+    print('type:', d.get('type'))
+"
+
 elif [ "$1" = "api-test" ]; then
   docker compose exec web node -e "
 const http = require('http');
