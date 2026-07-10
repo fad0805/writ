@@ -11,6 +11,8 @@ services:
   api:
     build: .
     env_file: .env.production
+    ports:
+      - "8000:8000"
     networks:
       - external_network
       - internal_network
