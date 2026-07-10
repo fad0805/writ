@@ -1531,7 +1531,7 @@ def api_follow(request: Request, username: str):
                 }
                 s.add(Follow(follower_id=user.id, following_id=target.id, accepted=False))
                 s.commit()
-                inbox = target.inbox_uri()
+                inbox = target.inbox_url or target.inbox_uri()
                 if inbox:
                     _post_to_inbox(inbox, follow_activity, user)
         return {"ok": True}
