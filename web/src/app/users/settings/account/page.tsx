@@ -5,6 +5,7 @@ import SettingsNav from "@/components/SettingsNav";
 
 export default function AccountSettingsPage() {
   const [email, setEmail] = useState("");
+  const [verifyNow, setVerifyNow] = useState(false);
   const [curPw, setCurPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [newPwConfirm, setNewPwConfirm] = useState("");
@@ -23,10 +24,13 @@ export default function AccountSettingsPage() {
         const form = new FormData();
         form.append("email", email);
         form.append("password", curPw || "");
+        form.append("verify_now", verifyNow ? "true" : "false");
         const res = await fetch("/api/settings/change-email", { method: "POST", credentials: "include", body: form });
         const d = await res.json().catch(() => ({}));
         if (!res.ok) { setErr(d.detail || "이메일 변경 실패"); setLoading(false); return; }
-        setEmail("");
+        if (d.verified) setMsg("이메일이 변경되었고 인증되었습니다.");
+        else setMsg("이메일이 변경되었습니다. 인증 메일을 확인해 주세요.");
+        setEmail(""); setVerifyNow(false);
       }
       if (curPw && newPw) {
         if (newPw !== newPwConfirm) { setErr("새 비밀번호가 일치하지 않습니다."); setLoading(false); return; }
@@ -55,6 +59,10 @@ export default function AccountSettingsPage() {
           <div className="form-group" style={{ marginBottom: 24 }}>
             <label>새 이메일 주소</label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="new@example.com" className="cw-input" />
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 13 }}>
+              <input type="checkbox" checked={verifyNow} onChange={(e) => setVerifyNow(e.target.checked)} style={{ accentColor: "var(--accent)", width: 15, height: 15, cursor: "pointer" }} />
+              <span>지금 인증 (인증 메일 없이 바로 변경)</span>
+            </div>
             <p className="form-help">변경할 이메일 주소를 입력하세요. 비워두면 변경되지 않습니다.</p>
           </div>
           <div className="form-group" style={{ marginBottom: 8 }}>

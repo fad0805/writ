@@ -2497,7 +2497,7 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
 
 
 @router.post("/settings/change-email")
-def api_settings_change_email(request: Request, email: str = Form(...)):
+def api_settings_change_email(request: Request, email: str = Form(...), verify_now: bool = Form(False)):
     user = require_auth(request)
     import re
     if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
@@ -2514,12 +2514,15 @@ def api_settings_change_email(request: Request, email: str = Form(...)):
         db = s.query(User).filter_by(id=user.id).first()
         old_email = db.email
         db.email = email
-        db.email_verified = False
         db.verification_token = ""
-        _send_verification_email(db)
+        if verify_now:
+            db.email_verified = True
+        else:
+            db.email_verified = False
+            _send_verification_email(db)
         s.commit()
-    log_admin_action(user.id, user.username, "change_email", details=f"{old_email} -> {email}", ip_address=request.client.host if request.client else "")
-    return {"ok": True, "email_changed": True}
+    log_admin_action(user.id, user.username, "change_email", details=f"{old_email} -> {email}{' (verified)' if verify_now else ' (email sent)'}", ip_address=request.client.host if request.client else "")
+    return {"ok": True, "email_changed": True, "verified": verify_now}
 
 
 MAX_VIDEO_SIZE = 26214400

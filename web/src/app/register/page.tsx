@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
@@ -17,8 +17,20 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const [isFirstUser, setIsFirstUser] = useState<boolean | null>(null);
   const router = useRouter();
   const { refresh } = useAuth();
+
+  useEffect(() => {
+    fetch("/api/v1/instance")
+      .then(r => r.json())
+      .then(data => {
+        const first = data.usage?.users?.total === 0;
+        setIsFirstUser(first);
+        if (first) setAgreeRules(true);
+      })
+      .catch(() => setIsFirstUser(false));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,11 +108,13 @@ export default function RegisterPage() {
           {passwordConfirm && password !== passwordConfirm && <p className="form-help" style={{ color: "var(--danger)" }}>비밀번호가 일치하지 않습니다</p>}
         </div>
         {error && <p className="auth-error">{error}</p>}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontSize: 14 }}>
-          <input type="checkbox" checked={agreeRules} onChange={(e) => setAgreeRules(e.target.checked)} style={{ accentColor: "var(--accent)", width: 16, height: 16, cursor: "pointer" }} />
-          <span><a href="/rules" target="_blank" rel="noreferrer" style={{ color: "var(--accent)", textDecoration: "underline" }}>서버 규칙</a>에 동의합니다</span>
-        </div>
-        <button type="submit" disabled={loading || !agreeRules} className="btn btn-primary">{loading ? "..." : "가입"}</button>
+        {isFirstUser === false && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontSize: 14 }}>
+            <input type="checkbox" checked={agreeRules} onChange={(e) => setAgreeRules(e.target.checked)} style={{ accentColor: "var(--accent)", width: 16, height: 16, cursor: "pointer" }} />
+            <span><a href="/rules" target="_blank" rel="noreferrer" style={{ color: "var(--accent)", textDecoration: "underline" }}>서버 규칙</a>에 동의합니다</span>
+          </div>
+        )}
+        <button type="submit" disabled={loading || (!agreeRules && isFirstUser !== true)} className="btn btn-primary">{loading ? "..." : "가입"}</button>
       </form>
       <p className="auth-link">이미 계정이 있으신가요? <Link href="/login">로그인</Link></p>
     </div>

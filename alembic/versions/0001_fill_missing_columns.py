@@ -18,10 +18,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def _add_col(table: str, col: sa.Column):
-    try:
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = [c["name"] for c in inspector.get_columns(table)]
+    if col.name not in columns:
         op.add_column(table, col)
-    except Exception:
-        pass
 
 
 def upgrade() -> None:

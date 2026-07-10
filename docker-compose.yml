@@ -12,6 +12,7 @@ services:
     build: .
     env_file: .env.production
     networks:
+      - external_network
       - internal_network
     volumes:
       - ./data:/app/data
