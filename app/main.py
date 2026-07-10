@@ -258,21 +258,7 @@ def _check_collection_access(username: str, request: Request) -> bool:
         user = s.query(User).filter_by(username=username).first()
         if not user:
             return False
-        if not user.is_locked:
-            return True
-        # For locked users, verify HTTP signature from a follower
-        body = b""
-        try:
-            ok, actor = _verify_http_signature(request, body, {})
-            if ok and actor:
-                follow = s.query(Follow).filter_by(
-                    follower_id=actor.id, following_id=user.id, accepted=True
-                ).first()
-                if follow:
-                    return True
-        except Exception:
-            pass
-        return False
+        return True
 
 
 @app.get("/users/{username}/outbox")
