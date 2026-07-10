@@ -722,6 +722,7 @@ def _send_reject(inbox_url: str, activity_id: str, target: User, follower_actor_
 
 
 def _handle_reject(activity: dict) -> tuple[int, str]:
+    import sys; print(f"[handle_reject] type={type(activity.get('object')).__name__} obj_keys={list(activity.get('object',{}).keys()) if isinstance(activity.get('object'), dict) else 'N/A'}", flush=True)
     obj = activity.get("object", {})
     if isinstance(obj, dict):
         follower_url = obj.get("actor", "")
