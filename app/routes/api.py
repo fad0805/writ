@@ -339,7 +339,15 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
         user_id = user.id
 
         if not is_first:
-            _send_verification_email(user)
+            from app.config import SMTP_SERVER
+            if SMTP_SERVER:
+                try:
+                    _send_verification_email(user)
+                except Exception:
+                    pass
+            else:
+                # SMTP 미설정시 자동 인증
+                user.email_verified = True
         s.commit()
 
         log_admin_action(user_id, user.username, "register", ip_address=client_ip, details="first_user" if is_first else "email_required")
