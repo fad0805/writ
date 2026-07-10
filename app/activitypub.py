@@ -106,6 +106,13 @@ def _validate_url(url: str) -> bool:
     """Reject URLs pointing to private/internal IPs (SSRF protection)."""
     parsed = urlparse(url)
     host = parsed.hostname or ""
+    # Allow configured allowed domains and own server
+    from app.config import DOMAIN, BASE_URL
+    _SSRF_ALLOWED = {s.strip() for s in os.environ.get("SSRF_ALLOWED_DOMAINS", "").split(",") if s.strip()}
+    own_domain = urlparse(BASE_URL).hostname or DOMAIN
+    _SSRF_ALLOWED.add(own_domain)
+    if host in _SSRF_ALLOWED:
+        return True
     # Block obviously private hostnames without DNS resolution
     if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
         return False
