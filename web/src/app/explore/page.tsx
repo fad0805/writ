@@ -40,6 +40,18 @@ function ExploreContent() {
 
   const doSearch = useCallback(async (q: string, author?: string) => {
     if (!q.trim()) { loadExplore(); return; }
+    const match = q.match(/^@?(\w+)@([\w.-]+)$/);
+    if (match) {
+      const form = new FormData(); form.append("url", `https://${match[2]}/users/${match[1]}`);
+      try {
+        const res = await fetch("/api/fetch-actor", { method: "POST", credentials: "include", body: form });
+        if (res.ok) {
+          const d = await res.json();
+          window.location.href = `/profile/${d.username}`;
+          return;
+        }
+      } catch {}
+    }
     setLoading(true); setSearched(true); setFetchedUrl(null); setBlockedDomain(null);
     try {
       const res = await api.search(q.trim(), author);
