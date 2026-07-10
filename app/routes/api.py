@@ -32,6 +32,12 @@ from app.utils.storage import LocalStorage
 
 logger = logging.getLogger("writ.api")
 
+RESERVED_HANDLES = frozenset({
+    "admin", "administrator", "root", "system", "moderator", "support",
+    "nodeinfo", "well-known", "api", "auth", "oauth", "inbox", "outbox",
+    "actor", "users", "accounts", "instance_actor", "login", "register", "writ",
+})
+
 router = APIRouter(prefix="/api")
 
 
@@ -257,13 +263,7 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
                  display_name: str = Form(""), email: str = Form(...)):
     from app.routes.auth import hash_password
     from app.crypto_utils import generate_keypair
-    import re
     import secrets
-    RESERVED_HANDLES = {
-        "admin", "administrator", "root", "system", "moderator", "support",
-        "nodeinfo", "well-known", "api", "auth", "oauth", "inbox", "outbox",
-        "actor", "users", "accounts", "instance_actor", "login", "register", "writ",
-    }
     display_handle = username
     username = username.lower()
     if username in RESERVED_HANDLES:
@@ -1442,18 +1442,16 @@ def api_direct_threads(request: Request):
             Post.is_deleted == False,
             Post.created_at >= three_months_ago,
         ).order_by(desc(Post.created_at)).limit(200).all()
-        uid_str = str(user.id)
         author_map = {}
-        oid_str = str(user.id)
         for p in posts:
-            mu = str(p.mentioned_user_ids or [])
+            mu = p.mentioned_user_ids or []
             other_id = None
             if p.author_id == user.id:
-                for tid in [int(x) for x in re.findall(r'\d+', mu) if x]:
-                    if tid != user.id:
+                for tid in mu:
+                    if isinstance(tid, int) and tid != user.id:
                         other_id = tid
                         break
-            elif oid_str in mu:
+            elif user.id in mu:
                 other_id = p.author_id
             if other_id and other_id not in author_map:
                 author = s.query(User).get(other_id)
@@ -1461,15 +1459,14 @@ def api_direct_threads(request: Request):
             if other_id:
                 author_map[other_id]["all_msgs"].append(p)
         result = []
-        import re as _re
         for aid, data in author_map.items():
             u = data["user"]
             if u and u.id != user.id:
                 sorted_msgs = sorted(data["all_msgs"], key=lambda x: x.created_at or datetime.datetime.min, reverse=True)
                 previews = []
                 for msg in sorted_msgs[:3]:
-                    text = _re.sub(r'<[^>]*>', '', msg.content or "")
-                    text = _re.sub(r'@\w+', '', text).strip()
+                    text = re.sub(r'<[^>]*>', '', msg.content or "")
+                    text = re.sub(r'@\w+', '', text).strip()
                     is_me = msg.author_id == user.id
                     previews.append({"text": text[:60], "is_me": is_me})
                 entry = _user_json(u)
@@ -4029,20 +4026,6 @@ def api_admin_unblock_domain(request: Request, domain: str):
         s.commit()
     log_admin_action(user.id, user.username, "unblock_domain", target_type="domain", target_username=domain, ip_address=request.client.host if request.client else "")
     return {"ok": True}
-
-
-def _is_federation_allowed(domain: str) -> bool:
-    if not domain:
-        return False
-    from app.models import ServerSetting, FederationBlock, AllowedServer
-    with get_session() as s:
-        mode = ServerSetting.get(s).federation_mode or "blacklist"
-        if mode == "whitelist":
-            allowed = s.query(AllowedServer).filter_by(domain=domain).first()
-            return allowed is not None
-        else:
-            blocked = s.query(FederationBlock).filter_by(domain=domain).first()
-            return blocked is None
 
 
 @router.get("/admin/federation-blocks")

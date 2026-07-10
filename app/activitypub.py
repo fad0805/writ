@@ -105,7 +105,7 @@ def _validate_url(url: str) -> bool:
     # Block obviously private hostnames without DNS resolution
     if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
         return False
-    if host.endswith(".local") or host.endswith(".localhost"):
+    if host.endswith(".localhost"):
         return False
     # Try to resolve and check against private subnets (IPv4 + IPv6)
     try:
@@ -312,13 +312,13 @@ def _safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
     client.send = _validated_send
     try:
         resp = client.get(url, headers=headers or {})
-        client.close()
         if resp.status_code != 200 or len(resp.content) > max_size:
             return None
         return resp
     except Exception:
-        client.close()
         return None
+    finally:
+        client.close()
 
 _REMOTE_MEDIA_MAX_SIZE = 10 * 1024 * 1024
 _REMOTE_MEDIA_EXPIRY_DAYS = 30
@@ -1313,7 +1313,6 @@ def _process_emoji_tags(tags: list, session):
             if resp.status_code != 200:
                 continue
             ext = "png"
-                # Try to guess ext from content type
             ct = resp.headers.get("content-type", "")
             if "jpeg" in ct or "jpg" in ct:
                 ext = "jpg"

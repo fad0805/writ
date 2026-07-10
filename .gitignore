@@ -19,6 +19,9 @@ static/uploads/*
 logs/
 TODO.md
 
+# Alembic
+alembic/versions/
+
 # Next.js
 web/node_modules/
 web/.next/

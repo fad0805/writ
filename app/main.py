@@ -1,8 +1,10 @@
 import datetime
+import email.utils
 import hashlib
 import json
 import logging
 import os
+import threading
 import time
 from collections import defaultdict
 from typing import AsyncGenerator
@@ -10,22 +12,21 @@ from typing import AsyncGenerator
 import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import StreamingResponse
-from app.eventbus import add_queue, remove_queue, add_ws, remove_ws
-from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
+from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from urllib.parse import urlparse
 from app.crypto_utils import verify_signature
-from app.config import BASE_URL, DOMAIN, CORS_ORIGINS
+from app.config import SECRET_KEY, BASE_URL, DOMAIN, CORS_ORIGINS
 from app.models import User, Follow, Post, Novel, ProcessedActivity, get_session, init_db
 from app.routes.auth import router as auth_router
-from app.routes.sns import router as sns_router
-from app.routes.admin import router as admin_router
 from app.routes.api import router as api_router
+from app.routes.admin import router as admin_router
 from app.activitypub import (
-    get_outbox, get_followers, get_following, handle_inbox
+    get_outbox, get_followers, get_following, handle_inbox,
+    _deliver_sync, _cleanup_expired_media, _cleanup_remote_data,
+    _resolve_actor,
 )
 
 _RATE_LIMIT_WINDOW = 60
@@ -68,12 +69,11 @@ def _check_daily_limit(key: str) -> bool:
     return True
 
 # ── logging configuration ──
-from datetime import datetime
 _log_handlers = [logging.StreamHandler()]
 _log_file_dir = "logs"
 if _log_file_dir:
     os.makedirs(_log_file_dir, exist_ok=True)
-    _log_date = datetime.now().strftime("%Y-%m-%d")
+    _log_date = datetime.datetime.now().strftime("%Y-%m-%d")
     _log_handlers.append(logging.FileHandler(os.path.join(_log_file_dir, f"{_log_date}.log")))
 logging.basicConfig(
     level=logging.INFO,
@@ -86,9 +86,8 @@ logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
 
 def _delivery_worker():
-    import time
-    from app.activitypub import _deliver_sync
     from app.models import PendingDelivery, get_session
+    from app.crypto_utils import sign_string, get_private_key
     while True:
         time.sleep(30)
         try:
@@ -105,12 +104,9 @@ def _delivery_worker():
                         body = json.dumps(activity, ensure_ascii=False).encode("utf-8")
                         digest = hashlib.sha256(body).hexdigest()
                         date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
-                        from urllib.parse import urlparse
                         parsed = urlparse(item.inbox_url)
                         path = parsed.path or "/"
                         signed_string = f"(request-target): post {path}\nhost: {parsed.netloc}\ndate: {date}\ndigest: SHA-256={digest}"
-                        from app.crypto_utils import sign_string, get_private_key
-                        from app.config import SECRET_KEY
                         signature = sign_string(signed_string, get_private_key(sender, SECRET_KEY))
                         signature_header = (
                             f'keyId="{sender.actor_uri()}#main-key",'
@@ -146,16 +142,14 @@ def _delivery_worker():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from app.routes.api import _cleanup_avatars
     init_db()
     try:
-        from app.routes.api import _cleanup_avatars
         _cleanup_avatars()
     except Exception:
         pass
-    import threading
     t = threading.Thread(target=_delivery_worker, daemon=True)
     t.start()
-    from app.activitypub import _cleanup_expired_media, _cleanup_remote_data
     _cleanup_expired_media()
     _cleanup_remote_data()
     yield
@@ -221,7 +215,6 @@ def webfinger(request: Request, resource: str = ""):
 
 @app.get('/favicon.ico', include_in_schema=False)
 def favicon():
-    from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/api/pwa/favicon", headers={"Cache-Control": "no-cache"})
 
 
@@ -241,15 +234,13 @@ def user_actor(request: Request, username: str):
                                 media_type="application/activity+json")
 
         # Browser request — redirect to web frontend
-        from fastapi.responses import RedirectResponse
-        return RedirectResponse(url=f"http://localhost:3000/users/{username}")
+        return RedirectResponse(url=f"{BASE_URL}/users/{username}")
     finally:
         session.close()
 
 
 def _check_collection_access(username: str, request: Request) -> bool:
     """Check if the requester can view this user's ActivityPub collections."""
-    from app.models import User, Follow, get_session
     with get_session() as s:
         user = s.query(User).filter_by(username=username).first()
         if not user:
@@ -259,7 +250,6 @@ def _check_collection_access(username: str, request: Request) -> bool:
         # For locked users, verify HTTP signature from a follower
         body = b""
         try:
-            import json
             ok, actor = _verify_http_signature(request, body, {})
             if ok and actor:
                 follow = s.query(Follow).filter_by(
@@ -330,7 +320,6 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
             return (False, None)
 
     # Resolve the remote actor who signed
-    from app.activitypub import _resolve_actor
     actor_url = key_id.split("#")[0] if "#" in key_id else key_id
     remote_actor = _resolve_actor(actor_url)
     if not remote_actor or not remote_actor.public_key:
@@ -345,15 +334,13 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
         return (False, None)
 
     # Date freshness check — ±30s window to prevent replay
-    import email.utils
-    from datetime import datetime, timezone
     date_header = request.headers.get("Date", "")
     if date_header:
         try:
             date_tuple = email.utils.parsedate_tz(date_header)
             if date_tuple:
-                date_dt = datetime.fromtimestamp(email.utils.mktime_tz(date_tuple), tz=timezone.utc)
-                now = datetime.now(timezone.utc)
+                date_dt = datetime.datetime.fromtimestamp(email.utils.mktime_tz(date_tuple), tz=datetime.timezone.utc)
+                now = datetime.datetime.now(datetime.timezone.utc)
                 diff = abs((now - date_dt).total_seconds())
                 if diff > 30:
                     return (False, None)
@@ -389,7 +376,6 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
     ok = verify_signature(signed_string, sig_b64, remote_actor.public_key)
     if not ok:
         # Retry with forced actor re-fetch (key rotation)
-        from app.activitypub import _resolve_actor
         fresh = _resolve_actor(actor_url, force_refresh=True)
         if fresh and fresh.public_key:
             ok = verify_signature(signed_string, sig_b64, fresh.public_key)
@@ -563,7 +549,7 @@ def get_user_by_handle(request: Request, username: str):
             return JSONResponse(content=user.to_ap_actor(),
                                 media_type="application/activity+json")
 
-        return RedirectResponse(url=f"http://localhost:3000/profile/{username}")
+        return RedirectResponse(url=f"{BASE_URL}/profile/{username}")
 
 
 @app.get("/likes/{like_uuid}")
@@ -727,7 +713,6 @@ def well_known_nodeinfo():
 
 
 app.include_router(auth_router)
-app.include_router(sns_router)
 app.include_router(admin_router)
 app.include_router(api_router)
 

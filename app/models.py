@@ -266,7 +266,6 @@ class Post(Base):
 
         html_url = f"{BASE_URL}/@{self.author.username}/{self.number}" if self.number else self.ap_id
         obj = {
-            "@context": "https://www.w3.org/ns/activitystreams",
             "id": self.ap_id,
             "url": html_url,
             "type": "Note",
@@ -699,6 +698,12 @@ class PendingDelivery(Base):
 
 def init_db():
     Base.metadata.create_all(engine)
+    try:
+        from alembic.config import Config
+        from alembic import command
+        command.stamp(Config("alembic.ini"), "head")
+    except Exception:
+        pass
     # Create additional composite indexes for performance
     try:
         with engine.connect() as conn:
