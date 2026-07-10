@@ -478,7 +478,7 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
             return new_url
     except Exception as e:
         logger.warning("Failed to save remote %s %s: %s", prefix, image_url, e)
-    return ""
+    return image_url  # 캐시 실패시 원본 URL 사용
 
 
 def _save_remote_avatar(avatar_url: str, local_username: str, old_url: str = "") -> str:
