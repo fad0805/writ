@@ -52,7 +52,7 @@ def sign_string(text: str, private_key_pem: str) -> str:
     )
     signature = private_key.sign(
         text.encode("utf-8"),
-        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.DIGEST_LENGTH),
+        padding.PKCS1v15(),
         hashes.SHA256(),
     )
     return base64.b64encode(signature).decode("utf-8")
@@ -65,11 +65,12 @@ def verify_signature(text: str, signature_b64: str, public_key_pem: str) -> bool
             backend=default_backend(),
         )
         signature = base64.b64decode(signature_b64)
+        # Try PKCS1v15 first (most common), fall back to PSS
         try:
             public_key.verify(
                 signature,
                 text.encode("utf-8"),
-                padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.DIGEST_LENGTH),
+                padding.PKCS1v15(),
                 hashes.SHA256(),
             )
             return True
@@ -77,7 +78,7 @@ def verify_signature(text: str, signature_b64: str, public_key_pem: str) -> bool
             public_key.verify(
                 signature,
                 text.encode("utf-8"),
-                padding.PKCS1v15(),
+                padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.DIGEST_LENGTH),
                 hashes.SHA256(),
             )
             return True
