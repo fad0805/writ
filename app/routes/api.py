@@ -3295,7 +3295,7 @@ def _ap_fetch(url, user):
     # Try unsigned first (many servers serve public posts without auth)
     headers = {"Accept": "application/activity+json"}
     resp = _safe_httpx_get(url, headers=headers)
-    if resp:
+    if resp and resp.status_code == 200:
         try:
             return resp.json()
         except Exception:
@@ -3320,13 +3320,13 @@ def _ap_fetch(url, user):
     headers = {"Accept": "application/activity+json", "Signature": signature_header,
                "Date": date, "Host": parsed.netloc}
     resp = _safe_httpx_get(url, headers=headers)
-    if not resp:
+    if resp and resp.status_code == 200:
+        try:
+            return resp.json()
+        except Exception:
+            return None
+    else:
         return None
-    try:
-        return resp.json()
-    except Exception:
-        return None
-
 
 @router.get("/notifications/unread-count")
 def api_unread_count(request: Request):
