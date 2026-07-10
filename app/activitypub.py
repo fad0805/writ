@@ -639,6 +639,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
 
 
 def _handle_follow(activity: dict) -> tuple[int, str]:
+    import sys; print(f"[handle_follow] start", flush=True)
     raw_actor = activity.get("actor")
     if not raw_actor:
         return (400, "Missing actor")
@@ -646,6 +647,7 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
     raw_object = activity.get("object", "")
     object_url = raw_object if isinstance(raw_object, str) else raw_object.get("id", "")
     activity_id = activity.get("id", "")
+    print(f"[handle_follow] actor={actor_url[:80]} object={object_url[:80]}", flush=True)
 
     local_username = _parse_username_from_url(object_url)
 
