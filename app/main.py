@@ -377,8 +377,8 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
         h = h.strip()
         if h == "(request-target)":
             signed_lines.append(f"(request-target): {method} {path}")
-        elif h == "(request-created)":
-            signed_lines.append(f"(request-created): {created_param}")
+        elif h in ("(request-created)", "(created)"):
+            signed_lines.append(f"{h}: {created_param}")
         elif h in signed_parts:
             signed_lines.append(f"{h}: {signed_parts[h]}")
         else:

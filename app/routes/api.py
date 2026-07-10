@@ -3308,13 +3308,13 @@ def _ap_fetch(url, user):
     parsed = urlparse(url)
     path = parsed.path or "/"
     created = int(time.time())
-    signed_string = f"(request-target): get {path}\nhost: {parsed.netloc}\ndate: {date}\n(request-created): {created}"
+    signed_string = f"(request-target): get {path}\nhost: {parsed.netloc}\ndate: {date}\n(created): {created}"
     signature = sign_string(signed_string, get_private_key(user, SECRET_KEY))
     signature_header = (
         f'keyId="{user.actor_uri()}#main-key",'
         f'algorithm="hs2019",'
         f'created="{created}",'
-        f'headers="(request-target) host date (request-created)",'
+        f'headers="(request-target) host date (created)",'
         f'signature="{signature}"'
     )
     headers = {"Accept": "application/activity+json", "Signature": signature_header,
