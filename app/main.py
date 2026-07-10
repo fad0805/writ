@@ -314,8 +314,9 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
         digest_header = request.headers.get("Digest", "")
         if not digest_header:
             return (False, None)
-        expected = "SHA-256=" + hashlib.sha256(body).hexdigest()
-        if digest_header != expected:
+        expected_b64 = "SHA-256=" + base64.b64encode(hashlib.sha256(body).digest()).decode()
+        expected_hex = "SHA-256=" + hashlib.sha256(body).hexdigest()
+        if digest_header not in (expected_b64, expected_hex):
             return (False, None)
 
     # Resolve the remote actor who signed
