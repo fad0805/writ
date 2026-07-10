@@ -657,7 +657,9 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
     if not target:
         return (404, "Target user not found")
 
+    print(f"[handle_follow] resolving actor...", flush=True)
     follower = _resolve_actor(actor_url, sign_as=target)
+    print(f"[handle_follow] resolved: {follower.id if follower else 'None'}", flush=True)
     if not follower:
         return (404, "Follower not found")
 
