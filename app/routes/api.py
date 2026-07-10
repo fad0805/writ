@@ -1631,7 +1631,8 @@ def api_reject_follow(request: Request, username: str):
             from app.activitypub import _send_reject
             try:
                 follow_activity_id = f"{follower.actor_uri()}#follows/{user.id}"
-                _send_reject(follower.actor_uri(), follow_activity_id, user)
+                inbox = follower.inbox_url or follower.actor_uri()
+                _send_reject(inbox, follow_activity_id, user, follower_actor_url=follower.actor_uri())
             except Exception as e:
                 logger.warning("Failed to send Reject: %s", e)
     return {"ok": True}
