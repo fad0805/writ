@@ -384,7 +384,8 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
             val = request.headers.get(h, "")
             signed_lines.append(f"{h}: {val}")
     signed_string = "\n".join(signed_lines)
-    import sys; print(f"[verify] building signed_string with {len(headers_str.split())} headers: {headers_str[:80]}", flush=True)
+    import sys; print(f"[verify] signed_string=|{signed_string[:200]}|", flush=True)
+    print(f"[verify] date=|{date}| host=|{host_header}| digest=|{digest_val[:50]}| ct=|{request.headers.get('content-type','')[:50]}| path=|{path}|", flush=True)
     ok = verify_signature(signed_string, sig_b64, remote_actor.public_key)
     if not ok:
         print(f"[verify] signature verify FAILED with cached key, trying force refresh", flush=True)
