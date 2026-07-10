@@ -743,10 +743,6 @@ def _handle_reject(activity: dict) -> tuple[int, str]:
     if isinstance(rejecter_url, list):
         rejecter_url = rejecter_url[0]
 
-    remote_actor = _resolve_actor(rejecter_url)
-    if not remote_actor:
-        return (200, "OK")
-
     local_username = _parse_username_from_url(follower_url)
     if not local_username:
         return (200, "OK")
@@ -755,6 +751,10 @@ def _handle_reject(activity: dict) -> tuple[int, str]:
         local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
         if not local_user:
             return (200, "OK")
+
+    remote_actor = _resolve_actor(rejecter_url, sign_as=local_user)
+    if not remote_actor:
+        return (200, "OK")
 
         follow_rel = session.query(Follow).filter_by(
             follower_id=local_user.id,
