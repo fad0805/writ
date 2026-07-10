@@ -168,6 +168,19 @@ print('Host 헤더(raw):', repr(req.headers.get('host')))
 print('path:', repr(req.url.path))
 "
 
+elif [ "$1" = "check-follow" ]; then
+  docker compose exec api python3 -c "
+from app.models import Follow, User, get_session
+with get_session() as s:
+    u = s.query(User).filter_by(username='siarte').first()
+    if not u: print('user not found'); exit()
+    follows = s.query(Follow).filter_by(following_id=u.id).all()
+    if not follows: print('no follows'); exit()
+    for f in follows:
+        follower = s.query(User).get(f.follower_id)
+        print(f'follower: {follower.username} ({follower.id}) accepted={f.accepted}')
+"
+
 elif [ "$1" = "check-baseurl" ]; then
   docker compose exec api python3 -c "
 from app.config import BASE_URL, SCHEME, DOMAIN
