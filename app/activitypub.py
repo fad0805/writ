@@ -167,7 +167,7 @@ def get_outbox(username: str, page: Optional[int] = None):
             Post.author_id == user.id,
             Post.is_deleted == False,
             Post.novel_id.is_(None),
-            Post.visibility == "public",
+            Post.visibility.in_(["public", "unlisted", "home"]),
         ).order_by(Post.created_at.desc())
 
         total = query.count()
