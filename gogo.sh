@@ -247,6 +247,13 @@ print('SCHEME:', SCHEME)
 print('DOMAIN:', DOMAIN)
 "
 
+elif [ "$1" = "check-code" ]; then
+  docker compose exec api python3 -c "
+import sys; sys.path.insert(0,'.'); from app.main import app
+import inspect; src = inspect.getsource(app.routes[3].endpoint)
+print('ok' if 'Reject' in src else 'FAIL: rebuild needed')
+"
+
 elif [ "$1" = "post-test" ]; then
   docker compose exec web node -e "
 const http = require('http');
