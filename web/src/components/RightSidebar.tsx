@@ -56,7 +56,7 @@ export default function RightSidebar() {
 
   const handleApprove = useCallback(async (username: string) => {
     try {
-      await fetch(`/api/users/${username}/approve-follow`, { method: "POST", credentials: "include" });
+      await fetch(`/api/users/${encodeURIComponent(username)}/approve-follow`, { method: "POST", credentials: "include" });
       setNotifs((prev) => prev.filter((n) => !(n.type === "follow_request" && n.from_user?.username === username)));
       window.dispatchEvent(new Event("notifchange"));
     } catch {}
@@ -64,7 +64,7 @@ export default function RightSidebar() {
 
   const handleReject = useCallback(async (username: string) => {
     try {
-      await fetch(`/api/users/${username}/reject-follow`, { method: "POST", credentials: "include" });
+      await fetch(`/api/users/${encodeURIComponent(username)}/reject-follow`, { method: "POST", credentials: "include" });
       setNotifs((prev) => prev.filter((n) => !(n.type === "follow_request" && n.from_user?.username === username)));
       window.dispatchEvent(new Event("notifchange"));
     } catch {}

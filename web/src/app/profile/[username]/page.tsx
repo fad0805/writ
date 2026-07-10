@@ -184,8 +184,8 @@ export default function ProfilePage() {
                 )}
                 {hasPendingFollower && (
                   <>
-                    <button onClick={async () => { await fetch(`/api/users/${profile.username}/approve-follow`, { method: "POST", credentials: "include" }); setHasPendingFollower(false); setApprovedFollower(true); }} className="btn btn-primary btn-small btn-follow">팔로우 수락</button>
-                    <button onClick={async () => { await fetch(`/api/users/${profile.username}/reject-follow`, { method: "POST", credentials: "include" }); setHasPendingFollower(false); setApprovedFollower(false); }} className="btn btn-small btn-follow text-muted">거절</button>
+                    <button onClick={async () => { await fetch(`/api/users/${encodeURIComponent(profile.username)}/approve-follow`, { method: "POST", credentials: "include" }); setHasPendingFollower(false); setApprovedFollower(true); }} className="btn btn-primary btn-small btn-follow">팔로우 수락</button>
+                    <button onClick={async () => { await fetch(`/api/users/${encodeURIComponent(profile.username)}/reject-follow`, { method: "POST", credentials: "include" }); setHasPendingFollower(false); setApprovedFollower(false); }} className="btn btn-small btn-follow text-muted">거절</button>
                   </>
                 )}
                 {!isMine && (

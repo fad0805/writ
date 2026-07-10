@@ -148,11 +148,11 @@ export default function SettingsPage() {
               <span style={{ fontSize: "0.8em", color: "var(--text-muted)", marginLeft: 4 }}>@{fr.user.display_handle || fr.user.username}</span>
             </div>
             <button onClick={async () => {
-              await fetch(`/api/users/${fr.user.username}/approve-follow`, { method: "POST", credentials: "include" });
+              await fetch(`/api/users/${encodeURIComponent(fr.user.username)}/approve-follow`, { method: "POST", credentials: "include" });
               setFollowRequests(prev => prev.filter(x => x.id !== fr.id));
             }} className="btn btn-primary btn-small">수락</button>
             <button onClick={async () => {
-              await fetch(`/api/users/${fr.user.username}/reject-follow`, { method: "POST", credentials: "include" });
+              await fetch(`/api/users/${encodeURIComponent(fr.user.username)}/reject-follow`, { method: "POST", credentials: "include" });
               setFollowRequests(prev => prev.filter(x => x.id !== fr.id));
             }} className="btn btn-small btn-outline">거절</button>
           </div>
