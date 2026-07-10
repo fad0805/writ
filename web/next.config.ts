@@ -10,6 +10,26 @@ const nextConfig: NextConfig = {
         destination: `${API_HOST}/api/:path*`,
       },
       {
+        source: "/.well-known/:path*",
+        destination: `${API_HOST}/.well-known/:path*`,
+      },
+      {
+        source: "/nodeinfo/:path*",
+        destination: `${API_HOST}/nodeinfo/:path*`,
+      },
+      {
+        source: "/inbox",
+        destination: `${API_HOST}/inbox`,
+      },
+      {
+        source: "/users/:path*",
+        destination: `${API_HOST}/users/:path*`,
+      },
+      {
+        source: "/activities/:path*",
+        destination: `${API_HOST}/activities/:path*`,
+      },
+      {
         source: "/favicon.ico",
         destination: `${API_HOST}/api/pwa/favicon`,
       },
