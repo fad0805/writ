@@ -653,23 +653,22 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
         target = session.query(User).filter_by(username=local_username, is_remote=False).first()
         if not target:
             return (404, "Target user not found")
-        if target.is_locked:
-            return (403, "Account is locked")
 
         follower = _resolve_actor(actor_url, sign_as=target)
         if not follower:
             return (404, "Follower not found")
 
+        accepted = not target.is_locked
         existing = session.query(Follow).filter_by(
             follower_id=follower.id, following_id=target.id
         ).first()
         if not existing:
-            follow = Follow(follower_id=follower.id, following_id=target.id, accepted=True)
+            follow = Follow(follower_id=follower.id, following_id=target.id, accepted=accepted)
             session.add(follow)
             notification = Notification(
                 user_id=target.id,
                 from_user_id=follower.id,
-                notification_type="follow",
+                notification_type="follow_request" if not accepted else "follow",
             )
             session.add(notification)
             session.commit()
