@@ -656,7 +656,7 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
         if target.is_locked:
             return (403, "Account is locked")
 
-        follower = _resolve_actor(actor_url)
+        follower = _resolve_actor(actor_url, sign_as=target)
         if not follower:
             return (404, "Follower not found")
 
