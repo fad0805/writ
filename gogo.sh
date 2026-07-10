@@ -112,6 +112,31 @@ with get_session() as s:
     print('PKCS1v15 rsa-sha256 ->', r2.status_code, r2.json().get('error','')[:100])
 "
 
+elif [ "$1" = "debug-path" ]; then
+  docker compose exec api python3 -c "
+import httpx
+from app.models import User, get_session
+
+with get_session() as s:
+    me = s.query(User).filter_by(username='siarte').first()
+    local_pub = me.public_key
+
+print('=== 로컬 공개키 (처음 120자) ===')
+print(local_pub[:120])
+
+r_key = httpx.get('https://writ.daydream.ink/users/siarte', headers={'Accept': 'application/activity+json'})
+if r_key.status_code == 200:
+    remote_pub = r_key.json().get('publicKey', {}).get('publicKeyPem', '')
+    print()
+    print('=== daydream.ink가 조회한 공개키 (처음 120자) ===')
+    print(remote_pub[:120])
+    print()
+    print('일치:', local_pub == remote_pub)
+    print('로컬 길이:', len(local_pub), '리모트 길이:', len(remote_pub))
+else:
+    print('공개키 조회 실패:', r_key.status_code, r_key.text[:200])
+"
+
 elif [ "$1" = "network-check" ]; then
   docker compose exec api python3 -c "
 import httpx
