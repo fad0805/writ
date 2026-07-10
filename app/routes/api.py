@@ -2970,15 +2970,24 @@ def api_fetch_episode(request: Request, url: str = Form(...)):
 
 @router.get("/by-number/{username}/{number}")
 def api_by_number(request: Request, username: str, number: str):
-    user = get_current_user(request)
-    if not user:
-        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    accept = request.headers.get("accept", "")
     with get_session() as s:
         author = s.query(User).filter_by(username=username).first()
         if not author:
             raise HTTPException(status_code=404, detail="User not found")
         post = s.query(Post).filter_by(author_id=author.id, number=number).first()
-        if not post or not _can_view(post, user, s):
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        # ActivityPub 요청 → AP JSON 반환
+        if "application/activity+json" in accept or "application/ld+json" in accept:
+            if post.visibility not in ("public", "unlisted"):
+                raise HTTPException(status_code=403, detail="Not authorized")
+            return JSONResponse(content=post.to_ap_note(), media_type="application/activity+json")
+        # 일반 요청 → 로그인 필요
+        user = get_current_user(request)
+        if not user:
+            return JSONResponse({"error": "Not authenticated"}, status_code=401)
+        if not _can_view(post, user, s):
             raise HTTPException(status_code=404, detail="Post not found")
         return _post_json(post, s, user)
 
