@@ -1,6 +1,7 @@
 FROM node:20-alpine AS builder
 
-ARG API_HOST
+ARG API_HOST=http://api:8000
+ENV API_HOST=${API_HOST}
 
 WORKDIR /app
 
@@ -8,12 +9,13 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
-RUN API_HOST=${API_HOST} npm run build
+RUN npm run build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV API_HOST=http://api:8000
 
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
