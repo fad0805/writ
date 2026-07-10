@@ -532,7 +532,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
         print("  [_resolve_actor] all fetch attempts failed", flush=True)
         return None
 
-    print("  [_resolve_actor] fetched, keys:", list(data.keys())[:10], flush=True)
+    print("  [_resolve_actor] fetched, keys:", list(data.keys()), flush=True)
 
     # Verify the response's id domain matches the requested URL's domain
     resp_id = data.get("id", "")
