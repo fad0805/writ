@@ -257,9 +257,12 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
 
 def _send_verification_email(u: User):
     import secrets
-    from app.config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
+    from app.config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, APP_ENV
     if not SMTP_SERVER:
-        u.email_verified = True
+        if APP_ENV == "development":
+            u.email_verified = True
+            return
+        logger.warning("SMTP not configured — email %s left unverified", u.email)
         return
     token = secrets.token_urlsafe(32)
     u.verification_token = token

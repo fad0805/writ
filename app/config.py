@@ -3,7 +3,8 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 # Load environment files
-_app_env = os.environ.get("APP_ENV")
+_app_env = os.environ.get("APP_ENV", "development")
+APP_ENV = _app_env
 load_dotenv(f".env.{_app_env}")
 
 # Server configuration
