@@ -3386,31 +3386,56 @@ def api_fetch_actor(request: Request, url: str = Form(...)):
         raise HTTPException(status_code=403, detail=err)
     print("2. url ok:", url, flush=True)
     from app.activitypub import _resolve_actor, _safe_fetch
+    from app.activitypub import _safe_fetch
     actor = _resolve_actor(url, force_refresh=True, sign_as=user)
     if not actor:
         raise HTTPException(status_code=400, detail="Cannot resolve actor")
-    # Fetch recent posts from outbox
+
+    # Fetch recent posts from outbox (re-fetch actor to get outbox URL)
+    outbox_url = None
     try:
-        with get_session() as s:
-            actor_data = s.query(User).get(actor.id)
-            # Get fresh actor data from remote
-            import httpx
-            r = httpx.get(url, headers={"Accept": "application/activity+json"})
-            if r.status_code == 200:
-                ap_data = r.json()
-                outbox_url = ap_data.get("outbox", "")
-                if outbox_url:
-                    resp = _safe_fetch(f"{outbox_url}?page=1", timeout=10)
-                    if resp:
-                        outbox_data = resp.json()
-                        for item in outbox_data.get("orderedItems", []):
-                            try:
-                                obj = item.get("object", item)
-                                _fetch_and_save_ap_object(obj, actor)
-                            except Exception:
-                                pass
+        import datetime, time
+        from app.crypto_utils import sign_string, get_private_key
+        from urllib.parse import urlparse
+        date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+        parsed = urlparse(url)
+        created = int(time.time())
+        ss = f"(request-target): get {parsed.path}\nhost: {parsed.netloc}\ndate: {date}\n(created): {created}"
+        priv = get_private_key(user, SECRET_KEY)
+        sig = sign_string(ss, priv)
+        sig_header = f'keyId="{user.actor_uri()}#main-key",algorithm="hs2019",created="{created}",headers="(request-target) host date (created)",signature="{sig}"'
+        headers = {"Accept": "application/activity+json", "Signature": sig_header, "Date": date, "Host": parsed.netloc}
+        r = _safe_httpx_get(url, headers=headers)
+        if r:
+            ap_data = r.json()
+            outbox_url = ap_data.get("outbox", "")
     except Exception:
         pass
+
+    if outbox_url:
+        try:
+            import datetime, time
+            parsed2 = urlparse(outbox_url)
+            date2 = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+            created2 = int(time.time())
+            path2 = parsed2.path or "/"
+            if parsed2.query:
+                path2 += f"?{parsed2.query}"
+            ss2 = f"(request-target): get {path2}\nhost: {parsed2.netloc}\ndate: {date2}\n(created): {created2}"
+            sig2 = sign_string(ss2, priv)
+            sig_header2 = f'keyId="{user.actor_uri()}#main-key",algorithm="hs2019",created="{created2}",headers="(request-target) host date (created)",signature="{sig2}"'
+            headers2 = {"Accept": "application/activity+json", "Signature": sig_header2, "Date": date2, "Host": parsed2.netloc}
+            resp = _safe_httpx_get(f"{outbox_url}?page=1", headers=headers2)
+            if resp:
+                outbox_data = resp.json()
+                for item in outbox_data.get("orderedItems", []):
+                    try:
+                        obj = item.get("object", item)
+                        _fetch_and_save_ap_object(obj, actor)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
     return _user_json(actor)
 
 
