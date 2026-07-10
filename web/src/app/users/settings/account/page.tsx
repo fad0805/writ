@@ -2,10 +2,11 @@
 import { useState } from "react";
 import Icon from "@/components/Icon";
 import SettingsNav from "@/components/SettingsNav";
+import { useAuth } from "@/lib/auth";
 
 export default function AccountSettingsPage() {
+  const { user, refresh } = useAuth();
   const [email, setEmail] = useState("");
-  const [verifyNow, setVerifyNow] = useState(false);
   const [curPw, setCurPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [newPwConfirm, setNewPwConfirm] = useState("");
@@ -15,22 +16,21 @@ export default function AccountSettingsPage() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+  const [mailSent, setMailSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true); setMsg(""); setErr("");
+    setLoading(true); setMsg(""); setErr(""); setMailSent(false);
     try {
       if (email) {
         const form = new FormData();
         form.append("email", email);
         form.append("password", curPw || "");
-        form.append("verify_now", verifyNow ? "true" : "false");
         const res = await fetch("/api/settings/change-email", { method: "POST", credentials: "include", body: form });
         const d = await res.json().catch(() => ({}));
         if (!res.ok) { setErr(d.detail || "이메일 변경 실패"); setLoading(false); return; }
-        if (d.verified) setMsg("이메일이 변경되었고 인증되었습니다.");
-        else setMsg("이메일이 변경되었습니다. 인증 메일을 확인해 주세요.");
-        setEmail(""); setVerifyNow(false);
+        setMsg("이메일이 변경되었습니다.");
+        setEmail("");
       }
       if (curPw && newPw) {
         if (newPw !== newPwConfirm) { setErr("새 비밀번호가 일치하지 않습니다."); setLoading(false); return; }
@@ -43,8 +43,18 @@ export default function AccountSettingsPage() {
         setCurPw(""); setNewPw(""); setNewPwConfirm("");
       }
       setMsg("저장되었습니다.");
+      await refresh();
     } catch { setErr("오류 발생"); }
     setLoading(false);
+  };
+
+  const sendVerification = async () => {
+    setErr(""); setMailSent(false);
+    try {
+      const res = await fetch("/api/settings/send-verification-email", { method: "POST", credentials: "include" });
+      if (res.ok) setMailSent(true);
+      else { const d = await res.json().catch(() => ({})); setErr(d.detail || "메일 전송 실패"); }
+    } catch { setErr("메일 전송 실패"); }
   };
 
   return (
@@ -59,11 +69,19 @@ export default function AccountSettingsPage() {
           <div className="form-group" style={{ marginBottom: 24 }}>
             <label>새 이메일 주소</label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="new@example.com" className="cw-input" />
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 13 }}>
-              <input type="checkbox" checked={verifyNow} onChange={(e) => setVerifyNow(e.target.checked)} style={{ accentColor: "var(--accent)", width: 15, height: 15, cursor: "pointer" }} />
-              <span>지금 인증 (인증 메일 없이 바로 변경)</span>
-            </div>
             <p className="form-help">변경할 이메일 주소를 입력하세요. 비워두면 변경되지 않습니다.</p>
+          </div>
+          <div className="form-group" style={{ marginBottom: 8 }}>
+            <label>이메일 인증 상태</label>
+            {user?.email_verified ? (
+              <p style={{ fontSize: 13, color: "var(--success)", margin: 0 }}>✓ 이메일 인증됨</p>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13, color: "var(--danger)" }}>이메일 미인증</span>
+                <button type="button" onClick={sendVerification} className="btn btn-small btn-outline text-xs" style={{ fontSize: 12, padding: "2px 8px" }}>인증 메일 보내기</button>
+                {mailSent && <span style={{ fontSize: 13, color: "var(--success)" }}>인증 메일을 보냈습니다. 확인해 주세요.</span>}
+              </div>
+            )}
           </div>
           <div className="form-group" style={{ marginBottom: 8 }}>
             <label>현재 비밀번호</label>
