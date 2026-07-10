@@ -329,10 +329,15 @@ def _safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
     client.send = _validated_send
     try:
         resp = client.get(url, headers=headers or {})
-        if resp.status_code != 200 or len(resp.content) > max_size:
+        if resp.status_code != 200:
+            import sys; print(f"  [safe_fetch] non-200: {resp.status_code} for {url}", flush=True)
+            return None
+        if len(resp.content) > max_size:
+            import sys; print(f"  [safe_fetch] too large: {len(resp.content)} for {url}", flush=True)
             return None
         return resp
-    except Exception:
+    except Exception as e:
+        import sys; print(f"  [safe_fetch] exception: {type(e).__name__}: {e}", flush=True)
         return None
     finally:
         client.close()
