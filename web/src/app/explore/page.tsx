@@ -97,7 +97,7 @@ function ExploreContent() {
     // @username@domain 형식 → 원격 유저 검색
     const match = q.match(/^@?(\w+)@([\w.-]+)$/);
     if (match) {
-      const form = new FormData(); form.append("url", `https://${match[2]}/@${match[1]}`);
+      const form = new FormData(); form.append("url", `https://${match[2]}/users/${match[1]}`);
       try {
         const res = await fetch("/api/fetch-actor", { method: "POST", credentials: "include", body: form });
         if (res.ok) {
@@ -106,7 +106,8 @@ function ExploreContent() {
           return;
         }
       } catch {}
-      alert("사용자를 찾을 수 없습니다");
+      setInputValue(q);
+      doSearch(q);
       return;
     }
     doSearch(q);
