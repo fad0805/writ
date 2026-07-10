@@ -42,9 +42,9 @@ def _federation_allowed(domain: str) -> bool:
             return True
 
 
-_SAFE_TAGS = {"p", "br", "a", "strong", "em", "b", "i", "u", "s", "ul", "ol", "li", "blockquote", "code", "pre", "span"}
+_SAFE_TAGS = {"p", "br", "a", "strong", "em", "b", "i", "u", "s", "ul", "ol", "li", "blockquote", "code", "pre", "span", "img"}
 _SAFE_SCHEMES = {"http", "https", "mailto"}
-_SAFE_ATTRS = {"a": {"href", "rel", "class"}, "span": {"class"}, "code": {"class"}, "pre": {"class"}}
+_SAFE_ATTRS = {"a": {"href", "rel", "class"}, "span": {"class"}, "code": {"class"}, "pre": {"class"}, "img": {"src", "alt", "class", "title"}}
 
 
 def _sanitize_html(html: str) -> str:
