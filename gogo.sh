@@ -168,6 +168,17 @@ print('Host 헤더(raw):', repr(req.headers.get('host')))
 print('path:', repr(req.url.path))
 "
 
+elif [ "$1" = "post-test" ]; then
+  docker compose exec web node -e "
+const http = require('http');
+const opts = {hostname:'localhost', port:3000, path:'/@siarte/3bcfe670', headers:{'Accept':'application/activity+json'}};
+http.get(opts, res => {
+  let body = '';
+  res.on('data', c => body += c);
+  res.on('end', () => console.log('status:', res.statusCode, 'type:', res.headers['content-type'], 'body:', body.slice(0,200)));
+});
+"
+
 elif [ "$1" = "api-test" ]; then
   docker compose exec web node -e "
 const http = require('http');
