@@ -43,6 +43,31 @@ with get_session() as s:
     print('sig-header:', 'keyId=\"' + me.actor_uri() + '#main-key\",algorithm=\"hs2019\",created=\"' + str(created) + '\",headers=\"(request-target) host date (request-created)\",signature=\"' + sig + '\"')
 "
 
+elif [ "$1" = "actual-test" ]; then
+  docker compose exec api python3 -c "
+import httpx, time, datetime
+from app.crypto_utils import sign_string, get_private_key
+from app.models import User, get_session
+from app.config import SECRET_KEY
+from urllib.parse import urlparse
+
+url = 'https://daydream.ink/@siarte/116895178885643677'
+parsed = urlparse(url)
+created = int(time.time())
+date = datetime.datetime.now(datetime.timezone.utc).strftime('%a, %d %b %Y %H:%M:%S GMT')
+
+with get_session() as s:
+    me = s.query(User).filter_by(username='siarte').first()
+    priv = get_private_key(me, SECRET_KEY)
+    ss = '(request-target): get ' + parsed.path + '\nhost: ' + parsed.netloc + '\ndate: ' + date + '\n(request-created): ' + str(created)
+    sig = sign_string(ss, priv)
+    sig_header = 'keyId=\"' + me.actor_uri() + '#main-key\",algorithm=\"hs2019\",created=\"' + str(created) + '\",headers=\"(request-target) host date (request-created)\",signature=\"' + sig + '\"'
+    headers = {'Accept': 'application/activity+json', 'Signature': sig_header, 'Date': date, 'Host': parsed.netloc}
+    r = httpx.get(url, headers=headers)
+    print('status:', r.status_code)
+    print('body:', r.text[:300])
+"
+
 elif [ "$1" = "network-check" ]; then
   docker compose exec api python3 -c "
 import httpx
