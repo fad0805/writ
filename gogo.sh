@@ -168,6 +168,27 @@ print('Host 헤더(raw):', repr(req.headers.get('host')))
 print('path:', repr(req.url.path))
 "
 
+elif [ "$1" = "webfinger-test" ]; then
+  docker compose exec api python3 -c "
+import httpx
+r = httpx.get('https://writ.daydream.ink/.well-known/webfinger?resource=acct:siarte@writ.daydream.ink')
+print('WebFinger:', r.status_code)
+if r.status_code != 200: print(r.text[:300]); exit()
+data = r.json()
+for link in data.get('links', []):
+    if link.get('type') == 'application/activity+json':
+        actor_url = link['href']
+        print('Actor URL:', actor_url)
+        r2 = httpx.get(actor_url, headers={'Accept': 'application/activity+json'})
+        print('Actor fetch:', r2.status_code)
+        if r2.status_code == 200:
+            print('type:', r2.json().get('type'))
+            print('pubkey len:', len(r2.json().get('publicKey',{}).get('publicKeyPem','')))
+        else:
+            print('body:', r2.text[:200])
+        break
+"
+
 elif [ "$1" = "direct-fetch" ]; then
   docker compose exec api python3 -c "
 import sys, traceback
