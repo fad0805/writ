@@ -330,14 +330,11 @@ def _safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
     try:
         resp = client.get(url, headers=headers or {})
         if resp.status_code != 200:
-            import sys; print(f"  [safe_fetch] non-200: {resp.status_code} body: {resp.text[:200]}", flush=True)
             return None
         if len(resp.content) > max_size:
-            import sys; print(f"  [safe_fetch] too large: {len(resp.content)} for {url}", flush=True)
             return None
         return resp
     except Exception as e:
-        import sys; print(f"  [safe_fetch] exception: {type(e).__name__}: {e}", flush=True)
         return None
     finally:
         client.close()
@@ -490,11 +487,9 @@ def _save_remote_avatar(avatar_url: str, local_username: str, old_url: str = "")
 
 def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optional[User] = None) -> Optional[User]:
     import sys
-    print("  [_resolve_actor] url:", actor_url, flush=True)
     with get_session() as session:
         user = session.query(User).filter_by(remote_url=actor_url).first()
         if user and not force_refresh:
-            print("  [_resolve_actor] found existing:", user.username, flush=True)
             return user
         # Fallback: normalize /@username -> /users/username
         if not user:
@@ -504,7 +499,6 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
                 alt_url = f"{p.scheme}://{p.netloc}/users/{p.path.split('/@')[-1]}"
                 user = session.query(User).filter_by(remote_url=alt_url).first()
                 if user and not force_refresh:
-                    print("  [_resolve_actor] found via alt url:", user.username, flush=True)
                     return user
 
     data = None
@@ -525,24 +519,20 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             resp = _safe_fetch(actor_url, timeout=10, headers=headers)
             if resp:
                 data = resp.json()
-                print("  [_resolve_actor] signed fetch ok", flush=True)
-        except Exception as e:
-            print("  [_resolve_actor] signed fetch failed:", type(e).__name__, str(e)[:100], flush=True)
+        except Exception:
+            pass
 
     if data is None:
         try:
             resp = _safe_fetch(actor_url, timeout=10, headers={"Accept": "application/activity+json"})
             if resp:
                 data = resp.json()
-                print("  [_resolve_actor] unsigned fetch ok", flush=True)
         except Exception:
             pass
 
     if not data:
-        print("  [_resolve_actor] all fetch attempts failed", flush=True)
         return None
 
-    print("  [_resolve_actor] fetched, keys:", list(data.keys()), flush=True)
 
     # Verify the response's id domain matches the requested URL's domain
     resp_id = data.get("id", "")
@@ -552,13 +542,10 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
         resp_domain = urlparse(resp_id).hostname or ""
         if req_domain and resp_domain and req_domain != resp_domain:
             logger.warning("Domain mismatch: requested %s, response claims %s", req_domain, resp_domain)
-            print("  [_resolve_actor] DOMAIN MISMATCH", req_domain, resp_domain, flush=True)
             return None
 
     preferred_username = data.get("preferredUsername", "")
-    print("  [_resolve_actor] preferred_username:", repr(preferred_username), flush=True)
     if not preferred_username:
-        print("  [_resolve_actor] NO preferredUsername", flush=True)
         return None
 
     parsed = urlparse(actor_url)
@@ -572,7 +559,6 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
         avatar_url = icon.get("url", "")
     elif isinstance(icon, list):
         avatar_url = icon[0].get("url", "") if icon else ""
-    import sys; print("  [_resolve_actor] avatar_url:", repr(avatar_url[:100]) if avatar_url else "EMPTY", flush=True)
 
     header_url = ""
     image_field = data.get("image", {})
@@ -580,7 +566,6 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
         header_url = image_field.get("url", "")
     elif isinstance(image_field, list):
         header_url = image_field[0].get("url", "") if image_field else ""
-    print("  [_resolve_actor] header_url:", repr(header_url[:100]) if header_url else "EMPTY", flush=True)
 
     public_key_pem = ""
     if "publicKey" in data:
