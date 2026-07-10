@@ -157,6 +157,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="WRIT, the sns for writers", version="1.0.0", lifespan=lifespan)
 
+_request_logger = logging.getLogger("writ.request")
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    import time
+    start = time.time()
+    response = await call_next(request)
+    elapsed = time.time() - start
+    _request_logger.info("%s %s -> %s (%.0fms)", request.method, request.url.path, response.status_code, elapsed * 1000)
+    return response
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
