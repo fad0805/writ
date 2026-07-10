@@ -323,6 +323,11 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
     actor_url = key_id.split("#")[0] if "#" in key_id else key_id
     remote_actor = _resolve_actor(actor_url)
     if not remote_actor or not remote_actor.public_key:
+        # Retry with sign_as if available (from calling context)
+        _sign_as = getattr(request.state, 'sign_as_user', None)
+        if _sign_as:
+            remote_actor = _resolve_actor(actor_url, sign_as=_sign_as)
+    if not remote_actor or not remote_actor.public_key:
         return (False, None)
 
     # Actor binding check (Fix 1) — verify the signer matches activity.actor
@@ -470,6 +475,7 @@ async def user_inbox(request: Request, username: str):
         return JSONResponse({"status": "error", "message": "Not addressed to this user"}, status_code=403)
 
     # Verify HTTP Signature
+    request.state.sign_as_user = user
     ok, remote_actor = _verify_http_signature(request, body, activity)
     if not ok:
         return JSONResponse({"status": "error", "message": "Invalid signature"}, status_code=401)
