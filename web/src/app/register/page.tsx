@@ -96,10 +96,10 @@ export default function RegisterPage() {
           {passwordConfirm && password !== passwordConfirm && <p className="form-help" style={{ color: "var(--danger)" }}>비밀번호가 일치하지 않습니다</p>}
         </div>
         {error && <p className="auth-error">{error}</p>}
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer", marginBottom: 12 }}>
-          <input type="checkbox" checked={agreeRules} onChange={(e) => setAgreeRules(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
-          <Link href="/rules" style={{ color: "var(--accent)", textDecoration: "underline" }}>서버 규칙</Link>에 동의합니다
-        </label>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontSize: 14 }}>
+          <input type="checkbox" checked={agreeRules} onChange={(e) => setAgreeRules(e.target.checked)} style={{ accentColor: "var(--accent)", width: 16, height: 16, cursor: "pointer" }} />
+          <span><a href="/rules" target="_blank" rel="noreferrer" style={{ color: "var(--accent)", textDecoration: "underline" }}>서버 규칙</a>에 동의합니다</span>
+        </div>
         <button type="submit" disabled={loading || !agreeRules} className="btn btn-primary">{loading ? "..." : "가입"}</button>
       </form>
       <p className="auth-link">이미 계정이 있으신가요? <Link href="/login">로그인</Link></p>
