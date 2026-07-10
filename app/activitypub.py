@@ -1385,13 +1385,13 @@ def _deliver_sync(inbox_url: str, body: bytes, headers: dict) -> bool:
             if resp.is_success:
                 return True
             if resp.status_code in (400, 401, 403, 404, 405, 410, 422):
-                logger.warning("Permanent failure delivering to %s: HTTP %d body=%s", inbox_url, resp.status_code, resp.text[:200])
+                import sys; print(f"[deliver] Permanent failure: {inbox_url} HTTP {resp.status_code} body={resp.text[:200]}", flush=True)
                 return False
-            logger.warning("Delivery to %s returned HTTP %d (attempt %d/3)", inbox_url, resp.status_code, attempt + 1)
+            print(f"[deliver] Retryable: {inbox_url} HTTP {resp.status_code} attempt {attempt+1}/3", flush=True)
         except Exception as e:
             if attempt < 2:
                 time.sleep(2 ** attempt)
-            logger.warning("Delivery attempt %d/3 failed for %s: %s", attempt + 1, inbox_url, e)
+            print(f"[deliver] Exception: {inbox_url} {type(e).__name__}: {e}", flush=True)
     return False
 
 
