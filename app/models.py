@@ -270,10 +270,10 @@ class Post(Base):
 
         content = re.sub(r'href="/', f'href="{BASE_URL}/', content)
 
-        html_url = f"{BASE_URL}/@{self.author.username}/{self.number}" if self.number else self.ap_id
+        obj_id = f"{BASE_URL}/@{self.author.username}/{self.number}" if self.number else self.ap_id
         obj = {
-            "id": self.ap_id,
-            "url": html_url,
+            "id": obj_id,
+            "url": obj_id,
             "type": "Note",
             "published": self.created_at.isoformat() if self.created_at else "",
             "attributedTo": self.author.actor_uri(),
