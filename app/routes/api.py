@@ -3385,10 +3385,32 @@ def api_fetch_actor(request: Request, url: str = Form(...)):
         print("2b. FAIL: domain blocked", url, flush=True)
         raise HTTPException(status_code=403, detail=err)
     print("2. url ok:", url, flush=True)
-    from app.activitypub import _resolve_actor
+    from app.activitypub import _resolve_actor, _safe_fetch
     actor = _resolve_actor(url, force_refresh=True, sign_as=user)
     if not actor:
         raise HTTPException(status_code=400, detail="Cannot resolve actor")
+    # Fetch recent posts from outbox
+    try:
+        with get_session() as s:
+            actor_data = s.query(User).get(actor.id)
+            # Get fresh actor data from remote
+            import httpx
+            r = httpx.get(url, headers={"Accept": "application/activity+json"})
+            if r.status_code == 200:
+                ap_data = r.json()
+                outbox_url = ap_data.get("outbox", "")
+                if outbox_url:
+                    resp = _safe_fetch(f"{outbox_url}?page=1", timeout=10)
+                    if resp:
+                        outbox_data = resp.json()
+                        for item in outbox_data.get("orderedItems", []):
+                            try:
+                                obj = item.get("object", item)
+                                _fetch_and_save_ap_object(obj, actor)
+                            except Exception:
+                                pass
+    except Exception:
+        pass
     return _user_json(actor)
 
 
