@@ -572,6 +572,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
         avatar_url = icon.get("url", "")
     elif isinstance(icon, list):
         avatar_url = icon[0].get("url", "") if icon else ""
+    import sys; print("  [_resolve_actor] avatar_url:", repr(avatar_url[:100]) if avatar_url else "EMPTY", flush=True)
 
     header_url = ""
     image_field = data.get("image", {})
@@ -579,6 +580,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
         header_url = image_field.get("url", "")
     elif isinstance(image_field, list):
         header_url = image_field[0].get("url", "") if image_field else ""
+    print("  [_resolve_actor] header_url:", repr(header_url[:100]) if header_url else "EMPTY", flush=True)
 
     public_key_pem = ""
     if "publicKey" in data:
