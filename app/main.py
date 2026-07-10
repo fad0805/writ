@@ -1,3 +1,4 @@
+import base64
 import datetime
 import email.utils
 import hashlib
@@ -103,7 +104,7 @@ def _delivery_worker():
                             continue
                         activity = json.loads(item.activity_json)
                         body = json.dumps(activity, ensure_ascii=False).encode("utf-8")
-                        digest = hashlib.sha256(body).hexdigest()
+                        digest = base64.b64encode(hashlib.sha256(body).digest()).decode()
                         date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
                         parsed = urlparse(item.inbox_url)
                         path = parsed.path or "/"

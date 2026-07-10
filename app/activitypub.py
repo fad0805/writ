@@ -1399,7 +1399,8 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     if not _validate_url(inbox_url):
         return
     body = json.dumps(activity, ensure_ascii=False).encode("utf-8")
-    digest = hashlib.sha256(body).hexdigest()
+    import base64 as _b64
+    digest = _b64.b64encode(hashlib.sha256(body).digest()).decode()
     date = datetime.datetime.now(datetime.timezone.utc).strftime(
         "%a, %d %b %Y %H:%M:%S GMT"
     )
