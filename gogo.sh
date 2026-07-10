@@ -168,6 +168,14 @@ print('Host 헤더(raw):', repr(req.headers.get('host')))
 print('path:', repr(req.url.path))
 "
 
+elif [ "$1" = "check-baseurl" ]; then
+  docker compose exec api python3 -c "
+from app.config import BASE_URL, SCHEME, DOMAIN
+print('BASE_URL:', BASE_URL)
+print('SCHEME:', SCHEME)
+print('DOMAIN:', DOMAIN)
+"
+
 elif [ "$1" = "post-test" ]; then
   docker compose exec web node -e "
 const http = require('http');
