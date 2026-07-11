@@ -849,6 +849,8 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
             raise HTTPException(status_code=404, detail="Post not found")
         if post.author_id != user.id:
             raise HTTPException(status_code=403, detail="Cannot edit this post")
+        if post.summary and post.summary.startswith("[관리자 강제] ") and not summary.startswith("[관리자 강제] "):
+            raise HTTPException(status_code=403, detail="관리자가 강제한 CW는 수정할 수 없습니다")
         post.content = content
         post.summary = summary
         s.commit()
@@ -4593,6 +4595,22 @@ def api_admin_set_post_cw(request: Request, post_id: int, summary: str = Form(""
         author_username = post.author.username
     log_admin_action(user.id, user.username, "set_post_cw", target_type="post", target_id=post_id, target_username=f"@{author_username}", details=summary, ip_address=request.client.host if request.client else "")
     return {"ok": True, "summary": summary}
+
+
+@router.post("/admin/posts/{post_id}/remove-cw")
+def api_admin_remove_post_cw(request: Request, post_id: int):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        post.summary = ""
+        s.commit()
+        author_username = post.author.username
+    log_admin_action(user.id, user.username, "remove_post_cw", target_type="post", target_id=post_id, target_username=f"@{author_username}", ip_address=request.client.host if request.client else "")
+    return {"ok": True}
 
 
 @router.get("/admin/blocked-domains")

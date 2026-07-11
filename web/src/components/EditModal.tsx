@@ -12,10 +12,12 @@ export default function EditModal({ post, onClose, onDone }: { post: PostData; o
   const [content, setContent] = useState(() => post.content.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, ""));
   const [summary, setSummary] = useState(post.summary);
   const [submitting, setSubmitting] = useState(false);
+  const forceCw = post.summary?.startsWith("[관리자 강제] ");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim() || submitting) return;
+    if (forceCw) { alert("관리자가 강제한 CW는 수정할 수 없습니다"); return; }
     setSubmitting(true);
     try {
       await api.editPost(post.id, { content, summary });
@@ -46,8 +48,10 @@ export default function EditModal({ post, onClose, onDone }: { post: PostData; o
             type="text"
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
-            placeholder="CW (선택사항)"
+            placeholder={forceCw ? "관리자가 강제한 CW입니다" : "CW (선택사항)"}
             className="cw-input"
+            disabled={forceCw}
+            style={forceCw ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
           />
           <div className="edit-modal-footer edit-modal-footer-flex">
             <EmojiPicker onEmoji={(e) => setContent(content + e)} />
