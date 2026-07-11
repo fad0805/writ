@@ -33,7 +33,7 @@ class User(Base):
     username = Column(String(64), unique=True, nullable=False, index=True)
     display_name = Column(String(128), default="")
     summary = Column(Text, default="")
-    email = Column(String(255), default="")
+    email = Column(String(255), unique=True, default="")
     email_verified = Column(Boolean, default=False)
     verification_token = Column(String(128), default="")
     recent_ips = Column(JSON, default=list)
