@@ -1241,6 +1241,16 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     notification_type="reply",
                     post_id=post.id,
                 ))
+            for _mu_id in mentioned_ids:
+                if _mu_id != actor.id:
+                    existing_notif = session.query(Notification).filter_by(
+                        user_id=_mu_id, notification_type="mention", post_id=post.id
+                    ).first()
+                    if not existing_notif:
+                        session.add(Notification(
+                            user_id=_mu_id, from_user_id=actor.id,
+                            notification_type="mention", post_id=post.id,
+                        ))
 
             # Notify local followers who enabled post notifications (skip self)
             followers = session.query(Follow).filter(
@@ -1257,6 +1267,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     ))
 
             session.commit()
+            from app.timeline_stream import broadcast_refresh_notifs
+            broadcast_refresh_notifs()
             try:
                 from app.eventbus import broadcast
                 broadcast("new_post", {"post_id": post.id, "author_id": actor.id})

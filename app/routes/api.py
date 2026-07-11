@@ -958,6 +958,8 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
                 metadata_json=json.dumps(meta),
             ))
         s.commit()
+        from app.timeline_stream import broadcast_refresh_notifs
+        broadcast_refresh_notifs()
 
         if forward_to_remote and target_obj and hasattr(target_obj, 'author') and target_obj.author and target_obj.author.is_remote:
             try:
