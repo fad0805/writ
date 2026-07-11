@@ -474,6 +474,30 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     raw_total = len(posts)
     # Remove leftover mention+DMs (post-filter to avoid SQL complexity)
     posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm)]
+    # Filter replies: only show if all thread participants are followed (or post is mine)
+    # Only for home/social timelines, not local/federated
+    if user and tl_type in ("home", "social"):
+        following_ids = {f.following_id for f in session.query(Follow).filter_by(
+            follower_id=user.id, accepted=True
+        ).all()}
+        following_ids.add(user.id)
+        reply_filtered = []
+        for p in posts:
+            if p.in_reply_to_id and p.author_id != user.id:
+                participants = set()
+                cur = p
+                depth = 0
+                while cur and cur.in_reply_to_id and depth < 20:
+                    parent = cur.parent if hasattr(cur, 'parent') else None
+                    if not parent:
+                        break
+                    participants.add(parent.author_id)
+                    cur = parent
+                    depth += 1
+                if not participants <= following_ids:
+                    continue
+            reply_filtered.append(p)
+        posts = reply_filtered
     # Apply user mutes, blocks, and keyword mutes
     if user:
         muted_user_ids = {m.target_user_id for m in session.query(UserMute).filter_by(user_id=user.id).all()}
