@@ -950,6 +950,7 @@ def api_like_post(request: Request, post_id: int):
             s.commit()
             broadcast_refresh_notifs()
         if post.author.is_remote and post.author.shared_inbox_url:
+            import sys; print(f"[like] sending to {post.author.shared_inbox_url} for post {post.ap_id}", flush=True)
             like_activity = {
                 "@context": "https://www.w3.org/ns/activitystreams",
                 "id": f"{BASE_URL}/likes/{uuid.uuid4()}",
