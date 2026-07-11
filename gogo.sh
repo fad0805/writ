@@ -256,6 +256,23 @@ print('SCHEME:', SCHEME)
 print('DOMAIN:', DOMAIN)
 "
 
+elif [ "$1" = "check-mention" ]; then
+  docker compose exec api python3 -c "
+import httpx
+# daydream.ink의 공개글 하나 가져와서 멘션 구조 확인
+url = 'https://daydream.ink/@siarte/116895178885643677'
+r = httpx.get(url, headers={'Accept': 'application/activity+json'})
+if r.status_code == 200:
+    d = r.json()
+    obj = d.get('object', d)
+    print('type:', obj.get('type'))
+    print('tag:', json.dumps(obj.get('tag', []), indent=2, ensure_ascii=False)[:500])
+    print('to:', obj.get('to'))
+    import json
+else:
+    print('status:', r.status_code, r.text[:200])
+"
+
 elif [ "$1" = "check-code" ]; then
   docker compose exec api python3 -c "
 import sys; sys.path.insert(0,'.'); from app.main import app
