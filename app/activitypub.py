@@ -1134,7 +1134,9 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     else:
                         session.add(Vote(user_id=actor.id, post_id=poll_post.id, option_index=option_idx))
                     options[option_idx]["votes_count"] = options[option_idx].get("votes_count", 0) + 1
+                    print(f"[create] before reassign: options[1]={options[1]['votes_count'] if len(options)>1 else 'N/A'}", flush=True)
                     poll_post.poll_data = {**poll_post.poll_data, "options": options}
+                    print(f"[create] after reassign: poll_data={poll_post.poll_data}", flush=True)
                     import sys; print(f"[create] committing...", flush=True)
                     session.commit()
                     print(f"[create] commit done", flush=True)
