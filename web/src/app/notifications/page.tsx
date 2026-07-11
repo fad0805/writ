@@ -48,16 +48,11 @@ export default function NotificationsPage() {
   if (authLoading || !user) return <div className="empty-state">{authLoading ? "로딩 중..." : "로그인이 필요합니다"}</div>;
   const [notifs, setNotifs] = useState<NotificationData[]>([]);
   const [directGroups, setDirectGroups] = useState<DirectUserData[]>([]);
-  const [filter, setFilter] = useState(() => {
-    try {
-      const saved = sessionStorage.getItem("notif_filter");
-      if (saved) {
-        sessionStorage.removeItem("notif_filter");
-        return saved;
-      }
-    } catch {}
-    return "";
-  });
+  const [filter, setFilter] = useState("");
+
+  useEffect(() => {
+    try { const s = sessionStorage.getItem("notif_filter"); if (s) { sessionStorage.removeItem("notif_filter"); setFilter(s); } } catch {}
+  }, []);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
