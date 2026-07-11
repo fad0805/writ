@@ -14,6 +14,18 @@ export const metadata: Metadata = {
   manifest: "/api/pwa/manifest",
   appleWebApp: { capable: true, title: "WRIT", statusBarStyle: "black-translucent" },
   other: { "mobile-web-app-capable": "yes" },
+  openGraph: {
+    title: "WRIT",
+    description: "SNS for writers",
+    type: "website",
+    images: [{ url: "/icons/icon-512.png" }],
+  },
+  twitter: {
+    card: "summary",
+    title: "WRIT",
+    description: "SNS for writers",
+    images: ["/icons/icon-512.png"],
+  },
 };
 
 export const viewport = {
