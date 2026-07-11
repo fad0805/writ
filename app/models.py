@@ -290,15 +290,19 @@ class Post(Base):
                     )
                     tags.append({"type": "Mention", "href": actor_href, "name": tag_name})
 
-        # Wrap remaining @user@domain patterns as mentions (for users not in DB)
+        # Wrap remaining @user@domain patterns as mentions + tag array entries
+        def _wrap_unknown_mention(m):
+            handle = m.group(1)
+            tags.append({"type": "Mention", "href": f"{BASE_URL}/@{handle}", "name": f"@{handle}"})
+            return (
+                f'<span class="h-card" translate="no">'
+                f'<a href="{BASE_URL}/@{handle}" class="u-url mention">'
+                f'@<span>{handle.split("@")[0]}</span>'
+                f'</a></span>'
+            )
         content = re.sub(
             r'(?:^|(?<=>)|(?<=\s))@(\w+(?:@[\w.-]+)?)(?=\s|$|<|\.)',
-            lambda m: (
-                f'<span class="h-card" translate="no">'
-                f'<a href="{BASE_URL}/@{m.group(1)}" class="u-url mention">'
-                f'@<span>{m.group(1).split("@")[0]}</span>'
-                f'</a></span>'
-            ),
+            _wrap_unknown_mention,
             content,
         )
 
