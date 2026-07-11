@@ -264,8 +264,10 @@ class Post(Base):
             with get_session() as s:
                 users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
                 for u in users:
-                    # Use profile_url (web URL) for mention HTML if available, otherwise actor_uri
-                    href = getattr(u, 'profile_url', '') or u.actor_uri()
+                    # Actor URI (for Mention tag, Mastodon expects /users/username format)
+                    actor_href = u.actor_uri()
+                    # Web URL (for HTML display, profile_url is /@username format)
+                    web_href = getattr(u, 'profile_url', '') or actor_href
                     # Determine display name: local = user, remote = user@domain
                     if u.is_remote and u.remote_url:
                         if "@" in u.username:
@@ -283,7 +285,7 @@ class Post(Base):
                     # Mastodon-compatible h-card mention HTML
                     mention_html = (
                         f'<span class="h-card" translate="no">'
-                        f'<a href="{href}" class="u-url mention">'
+                        f'<a href="{web_href}" class="u-url mention">'
                         f'@<span>{display_name}</span>'
                         f'</a></span>'
                     )
@@ -293,7 +295,7 @@ class Post(Base):
                         mention_html,
                         content,
                     )
-                    tags.append({"type": "Mention", "href": href, "name": tag_name})
+                    tags.append({"type": "Mention", "href": actor_href, "name": tag_name})
         if self.tag_list:
             for t in self.tag_list:
                 tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={t.name}", "name": f"#{t.name}"})
