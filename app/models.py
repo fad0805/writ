@@ -285,8 +285,6 @@ class Post(Base):
                         mention_html,
                         content,
                     )
-                    # AP tag name must be WebFinger address (user@domain)
-                    tag_name = acct_name
                     tags.append({"type": "Mention", "href": href, "name": tag_name})
         if self.tag_list:
             for t in self.tag_list:

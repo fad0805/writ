@@ -661,6 +661,18 @@ def _broadcast_federation(user, post, visibility):
                     _post_to_inbox(mu.inbox_uri(), create_activity, user)
         else:
             broadcast_to_followers(user, create_activity)
+            if post.mentioned_user_ids:
+                with get_session() as ap_s:
+                    follower_ids = {f.following_id for f in ap_s.query(Follow).filter(
+                        Follow.following_id == user.id,
+                        Follow.follower.has(is_remote=True),
+                    ).all()}
+                    mu_users = ap_s.query(User).filter(
+                        User.id.in_(post.mentioned_user_ids), User.is_remote == True
+                    ).all()
+                    for mu in mu_users:
+                        if mu.id not in follower_ids:
+                            _post_to_inbox(mu.inbox_uri(), create_activity, user)
     except Exception as e:
         logger.warning("Failed to broadcast federation activity: %s", e)
 
