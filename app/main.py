@@ -459,7 +459,7 @@ async def user_inbox(request: Request, username: str):
     all_audiences = to_list + cc_list
     user_uri = user.actor_uri()
     atype = activity.get("type")
-    if atype in ("Follow", "Delete", "Reject", "Accept", "Undo"):
+    if atype in ("Follow", "Delete", "Reject", "Accept", "Undo", "Vote"):
         pass
     elif atype == "Flag":
         pass
