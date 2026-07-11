@@ -509,7 +509,7 @@ with get_session() as s:
 elif [ "$1" = "flag-test-signed" ]; then
   docker compose exec -T api python3 << 'PYEOF'
 import httpx, json, time, datetime, hashlib, base64
-from app.crypto_utils import sign_string, get_private_key
+from app.crypto_utils import sign_string, get_private_key, verify_signature
 from app.models import User, get_session
 from app.config import SECRET_KEY
 from urllib.parse import urlparse
@@ -528,6 +528,14 @@ with get_session() as s:
     sig = sign_string(ss, priv)
     sig_header = f'keyId="{me.actor_uri()}#main-key",algorithm="hs2019",created="{created}",headers="(request-target) host date digest (created)",signature="{sig}"'
     headers = {"Content-Type":"application/activity+json","Signature":sig_header,"Date":date,"Digest":f"SHA-256={digest}","Host":parsed.netloc}
+    
+    print("=== DEBUG ===")
+    print("keyId:", me.actor_uri() + "#main-key")
+    print("actor:", me.actor_uri())
+    print("signed_string:", repr(ss))
+    print("digest:", digest)
+    print("self-verify:", verify_signature(ss, sig, me.public_key))
+    
     r = httpx.post(url, content=body, headers=headers, timeout=10)
     print("status:", r.status_code, "body:", r.text[:200])
 PYEOF
