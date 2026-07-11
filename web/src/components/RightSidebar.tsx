@@ -20,22 +20,23 @@ export default function RightSidebar() {
   const [serverInfo, setServerInfo] = useState<{ name: string; description?: string; admins: { username: string; email: string }[] } | null>(null);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const playNotifSound = useCallback(() => {
+  const playNotifSound = useCallback(async () => {
     try {
       if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       const ctx = audioCtxRef.current;
-      if (ctx.state === "suspended") ctx.resume();
+      if (ctx.state === "suspended") await ctx.resume();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.type = "sine";
-      osc.frequency.setValueAtTime(880, ctx.currentTime);
-      osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.08);
-      gain.gain.setValueAtTime(0.15, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.25);
+      const t = ctx.currentTime;
+      osc.frequency.setValueAtTime(880, t);
+      osc.frequency.setValueAtTime(1100, t + 0.08);
+      gain.gain.setValueAtTime(0.15, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.25);
+      osc.start(t);
+      osc.stop(t + 0.25);
     } catch {}
   }, []);
 
