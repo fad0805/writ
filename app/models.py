@@ -289,6 +289,8 @@ class Post(Base):
                         content,
                     )
                     tags.append({"type": "Mention", "href": actor_href, "name": tag_name})
+        # Strip remaining @user@domain patterns (non-existent users) so Mastodon doesn't auto-link them
+        content = re.sub(r'@(\w+@[\w.-]+)', lambda m: '@\u200b' + m.group(1), content)
         if self.tag_list:
             for t in self.tag_list:
                 tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={t.name}", "name": f"#{t.name}"})

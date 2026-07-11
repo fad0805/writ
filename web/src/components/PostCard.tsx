@@ -2,7 +2,7 @@
 import { PostData, NovelData, User, EpisodeData, api } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import EditModal from "./EditModal";
 import ReplyModal from "./ReplyModal";
 import ClickableCover from "./ClickableCover";
@@ -28,13 +28,17 @@ function formatRelative(iso: string, now: number = Date.now()): string {
   return `${Math.floor(abs / 86400000)}일`;
 }
 
-function rewriteLinks(text: string): string {
+function rewriteLinks(text: string, validMentions?: Set<string>): string {
   text = text.replace(
     /<a\s+href="https?:\/\/([^"/]+)\/@(\w+)"[^>]*>@?\w*<\/a>/gi,
     (_m: string, domain: string, user: string) =>
       `<a href="/@${user}@${domain}" class="mention-link">@${user}@${domain}</a>`
   );
   text = text.replace(/(^|>|\s)@(\w+(?:@[\w.-]+)?)/g, (_m, before, handle) => {
+    const hasDomain = handle.includes("@");
+    if (hasDomain && !validMentions?.has(handle)) {
+      return `${before}@${handle}`;
+    }
     return `${before}<a href="/@${handle}" class="mention-link">@${handle}</a>`;
   });
   return text.replace(/(^|>|\s)#([\w_가-힣]+)/g, (_m, before, tag) => {
@@ -146,13 +150,14 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   })() : "";
 
   const [quoteUrl, setQuoteUrl] = useState("");
+  const validMentions = useMemo(() => new Set(post.mentioned_handles || []), [post.mentioned_handles]);
   const contentHtml = (() => {
     let html = post.content;
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     html = html.replace(/\n/g, '<br>');
     html = renderCustomEmojis(html, emojiMap);
-    html = rewriteLinks(html);
+    html = rewriteLinks(html, validMentions);
     if (quoteUrl) {
       const escUrl = quoteUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const hasPrefix = new RegExp(`(series:|episode:)\\s*${escUrl}`, 'i').test(html);
@@ -325,7 +330,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
               html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
               html = html.replace(/\n/g, '<br>');
               html = renderCustomEmojis(html, emojiMap);
-              html = rewriteLinks(html);
+              html = rewriteLinks(html, validMentions);
               if ((post.reply_context.content || "").length > 90) html += "...";
               return html;
             })() }} />

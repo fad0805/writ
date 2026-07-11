@@ -1,17 +1,21 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { PostData } from "@/lib/api";
 import Link from "next/link";
 import Icon from "./Icon";
 import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
 
-function rewriteLinks(text: string): string {
+function rewriteLinks(text: string, validMentions?: Set<string>): string {
   text = text.replace(
     /<a\s+href="https?:\/\/([^"/]+)\/@(\w+)"[^>]*>@?\w*<\/a>/gi,
     (_m: string, domain: string, user: string) =>
       `<a href="/@${user}@${domain}" class="mention-link">@${user}@${domain}</a>`
   );
   text = text.replace(/(^|>|\s)@(\w+(?:@[\w.-]+)?)/g, (_m, before, handle) => {
+    const hasDomain = handle.includes("@");
+    if (hasDomain && !validMentions?.has(handle)) {
+      return `${before}@${handle}`;
+    }
     return `${before}<a href="/@${handle}" class="mention-link">@${handle}</a>`;
   });
   return text.replace(/(^|>|\s)#([\w_가-힣]+)/g, (_m, before, tag) => {
@@ -47,6 +51,7 @@ export default function MiniPostCard({ post, notifType }: { post: PostData; noti
   const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
   useEffect(() => { setIsDark(document.body.classList.contains("dark-theme")); }, []);
   useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
+  const validMentions = useMemo(() => new Set(post.mentioned_handles || []), [post.mentioned_handles]);
   const bg = notifType
     ? (isDark ? DARK_BG[notifType] : LIGHT_BG[notifType]) || "var(--bg-tertiary)"
     : "var(--bg-tertiary)";
@@ -57,7 +62,7 @@ export default function MiniPostCard({ post, notifType }: { post: PostData; noti
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     html = html.replace(/\n/g, '<br>');
     html = renderCustomEmojis(html, emojiMap);
-    return rewriteLinks(html);
+    return rewriteLinks(html, validMentions);
   })();
   return (
     <Link

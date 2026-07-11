@@ -88,6 +88,8 @@ def _post_json(p, session, user):
         "my_vote": my_vote,
         "reactions": reactions,
         "my_reaction": my_reaction,
+        "mentioned_user_ids": p.mentioned_user_ids or [],
+        "mentioned_handles": [u.username for u in (session.query(User).filter(User.id.in_(p.mentioned_user_ids or [])).all())] if p.mentioned_user_ids else [],
     }
 
 

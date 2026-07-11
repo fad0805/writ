@@ -90,6 +90,7 @@ export interface PostData {
   my_vote?: number | null;
   reactions?: Record<string, number>;
   my_reaction?: string | null;
+  mentioned_handles?: string[];
 }
 
 export interface ReplyContext {
