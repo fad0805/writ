@@ -1126,7 +1126,7 @@ def api_unboost_post(request: Request, post_id: int):
                 post.bumped_at = None
             s.commit()
             broadcast_refresh_notifs()
-        if post.author.is_remote and post.author.shared_inbox_url:
+        if post.author and post.author.is_remote and post.author.shared_inbox_url:
             undo = {
                 "@context": "https://www.w3.org/ns/activitystreams",
                 "id": f"{BASE_URL}/boosts/{uuid.uuid4()}#undo",
