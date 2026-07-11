@@ -506,6 +506,32 @@ with get_session() as s:
     print(f'deleted {deleted} notifications for deleted posts')
 "
 
+elif [ "$1" = "flag-test-signed" ]; then
+  docker compose exec api python3 << 'PYEOF'
+import httpx, json, time, datetime, hashlib, base64
+from app.crypto_utils import sign_string, get_private_key
+from app.models import User, get_session
+from app.config import SECRET_KEY
+from urllib.parse import urlparse
+
+flag = {"@context":"https://www.w3.org/ns/activitystreams","id":"https://test.local/flag/1","type":"Flag","actor":"https://writ.daydream.ink/users/siarte","object":["https://writ.daydream.ink/users/siarte"],"content":"test"}
+body = json.dumps(flag, ensure_ascii=False).encode()
+url = "http://localhost:8000/inbox"
+with get_session() as s:
+    me = s.query(User).filter_by(username="siarte").first()
+    priv = get_private_key(me, SECRET_KEY)
+    parsed = urlparse(url)
+    date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+    digest = base64.b64encode(hashlib.sha256(body).digest()).decode()
+    created = int(time.time())
+    ss = f"(request-target): post {parsed.path}\nhost: {parsed.netloc}\ndate: {date}\ndigest: SHA-256={digest}\n(created): {created}"
+    sig = sign_string(ss, priv)
+    sig_header = f'keyId="{me.actor_uri()}#main-key",algorithm="hs2019",created="{created}",headers="(request-target) host date digest (created)",signature="{sig}"'
+    headers = {"Content-Type":"application/activity+json","Signature":sig_header,"Date":date,"Digest":f"SHA-256={digest}","Host":parsed.netloc}
+    r = httpx.post(url, content=body, headers=headers, timeout=10)
+    print("status:", r.status_code, "body:", r.text[:200])
+PYEOF
+
 elif [ "$1" = "test-api-direct" ]; then
   docker compose exec api python3 -c "
 import httpx
