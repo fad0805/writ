@@ -275,6 +275,7 @@ class Post(Base):
 
         obj_id = f"{BASE_URL}/@{self.author.username}/{self.number}" if self.number else self.ap_id
         obj = {
+            "@context": "https://www.w3.org/ns/activitystreams",
             "id": obj_id,
             "url": obj_id,
             "type": "Note",
@@ -311,9 +312,14 @@ class Post(Base):
                     mtype = m.get("type", "image")
                     if url:
                         ext = url.rsplit(".", 1)[-1].lower() if "." in url else "png"
-                        ct = f"image/{ext}" if mtype == "image" else "video/webm"
+                        if mtype == "video" or ext in ("mp4", "webm", "mov"):
+                            ap_type = "Video"
+                            ct = "video/webm"
+                        else:
+                            ap_type = "Image"
+                            ct = f"image/{ext}"
                         attachments.append({
-                            "type": "Document",
+                            "type": ap_type,
                             "mediaType": ct,
                             "url": url,
                             "name": "",
