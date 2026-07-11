@@ -733,7 +733,9 @@ def _handle_reject(activity: dict) -> tuple[int, str]:
 
         local_user = None
         if follower_url:
-            local_user = session.query(User).filter_by(remote_url=follower_url).first()
+            local_username = _parse_username_from_url(follower_url)
+            if local_username:
+                local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
 
         query_filter = {
             "following_id": remote_user.id,
@@ -764,7 +766,6 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
     if isinstance(obj, dict):
         follower_url = obj.get("actor", "")
     elif isinstance(obj, str):
-        # Object is just a URI — try to fetch the Follow activity
         try:
             resp = httpx.get(obj, headers={"Accept": "application/activity+json"}, timeout=10)
             if resp.status_code == 200:
@@ -782,7 +783,7 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
     if isinstance(accepter_url, list):
         accepter_url = accepter_url[0]
 
-    local_username = _parse_username_from_url(accepter_url)
+    local_username = _parse_username_from_url(follower_url)
     if not local_username:
         return (200, "OK")
 
@@ -791,13 +792,13 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
         if not local_user:
             return (200, "OK")
 
-        remote_follower = _resolve_actor(follower_url)
-        if not remote_follower:
+        remote_accepter = _resolve_actor(accepter_url)
+        if not remote_accepter:
             return (200, "OK")
 
         follow_rel = session.query(Follow).filter_by(
-            following_id=local_user.id,
-            follower_id=remote_follower.id,
+            follower_id=local_user.id,
+            following_id=remote_accepter.id,
             accepted=False,
         ).first()
         if not follow_rel:
