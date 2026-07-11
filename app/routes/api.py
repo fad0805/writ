@@ -81,7 +81,7 @@ def _post_json(p, session, user):
         "is_dm": p.is_dm or False,
         "is_sensitive": getattr(p, 'is_sensitive', False) or False,
         "ap_id": p.ap_id or "",
-        "reply_context": _reply_context(p),
+        "reply_context": _reply_context(p, session, user),
         "boosted_by": _user_json(booster) if booster and booster.id != p.author_id else None,
         "media_attachments": (p.media_attachments or []) if hasattr(p, 'media_attachments') else [],
         "poll_data": p.poll_data,
@@ -126,8 +126,16 @@ def _user_json(u):
     }
 
 
-def _reply_context(p):
+def _reply_context(p, session=None, user=None):
     parent = p.parent if hasattr(p, 'parent') else None
+    if not parent and p.in_reply_to_ap_id and session:
+        try:
+            parent = session.query(Post).filter_by(ap_id=p.in_reply_to_ap_id).first()
+            if not parent and user:
+                from app.activitypub import _fetch_remote_post
+                parent = _fetch_remote_post(p.in_reply_to_ap_id, user, session)
+        except Exception:
+            pass
     if not parent:
         return None
     return {
@@ -1926,13 +1934,23 @@ def api_direct_threads(request: Request):
 def _generate_poll_end_notifications(user_id: int, session):
     import datetime as _dt
     now = _dt.datetime.now(_dt.timezone.utc)
+    candidates = []
     voted_posts = (
         session.query(Post)
         .join(Vote, Vote.post_id == Post.id)
         .filter(Vote.user_id == user_id, Post.poll_data.isnot(None), Post.is_deleted == False)
         .all()
     )
-    for post in voted_posts:
+    candidates.extend(voted_posts)
+    authored_posts = (
+        session.query(Post)
+        .filter(Post.author_id == user_id, Post.poll_data.isnot(None), Post.is_deleted == False)
+        .all()
+    )
+    for p in authored_posts:
+        if p not in candidates:
+            candidates.append(p)
+    for post in candidates:
         expires_at = post.poll_data.get("expires_at") if post.poll_data else None
         if not expires_at:
             continue
