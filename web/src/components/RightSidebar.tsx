@@ -183,6 +183,25 @@ export default function RightSidebar() {
                   </Link>
                 );
               }
+              if (n.metadata?.type === "report") {
+                const targetName = n.metadata?.target_type || "콘텐츠";
+                return (
+                  <Link key={n.id} href="/admin/reports" className="mini-post-link" style={{ background: "var(--bg-tertiary)", cursor: "pointer" }}>
+                    <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "var(--danger)" }}>
+                      <Icon name="flag" size={14} />
+                    </div>
+                    <div className="mini-post-content">
+                      <div className="mini-post-author">
+                        {n.from_user?.display_name || "알 수 없음"}
+                        <span className="mini-post-handle">@{n.from_user?.username}</span>
+                      </div>
+                      <div className="text-sm" style={{ color: "var(--text-muted)" }}>
+                        님이 {targetName}을(를) 신고했습니다
+                      </div>
+                    </div>
+                  </Link>
+                );
+              }
               if (n.metadata?.type === "migrate_request") {
                 const fromName = n.from_user?.display_name || n.from_user?.username || "알 수 없음";
                 return (
