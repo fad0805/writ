@@ -1242,7 +1242,10 @@ def _handle_like(activity: dict) -> tuple[int, str]:
     if not object_url:
         return (200, "OK")
 
-    actor = _resolve_actor(actor_url)
+    with get_session() as session:
+        post = session.query(Post).filter_by(ap_id=object_url).first()
+        _sign_as = session.query(User).get(post.author_id) if post else None
+    actor = _resolve_actor(actor_url, sign_as=_sign_as)
     if not actor:
         return (404, "Actor not found")
 
@@ -1351,7 +1354,10 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
     if not object_url:
         return (200, "OK")
 
-    actor = _resolve_actor(actor_url)
+    with get_session() as session:
+        post = session.query(Post).filter_by(ap_id=object_url).first()
+        _sign_as = session.query(User).get(post.author_id) if post else None
+    actor = _resolve_actor(actor_url, sign_as=_sign_as)
     if not actor:
         return (404, "Actor not found")
 
@@ -1418,7 +1424,13 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
             actor_url = actor_url[0]
         object_url = obj.get("object", "") if isinstance(obj, dict) else ""
 
-        actor = _resolve_actor(actor_url)
+        with get_session() as session:
+            post = session.query(Post).filter_by(ap_id=object_url).first()
+            if post:
+                _sign_as = session.query(User).get(post.author_id)
+            else:
+                _sign_as = None
+        actor = _resolve_actor(actor_url, sign_as=_sign_as)
         if not actor:
             return (200, "OK")
 
@@ -1441,7 +1453,13 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
         if isinstance(actor_url, list):
             actor_url = actor_url[0]
 
-        actor = _resolve_actor(actor_url)
+        with get_session() as session:
+            post = session.query(Post).filter_by(ap_id=object_url).first()
+            if post:
+                _sign_as = session.query(User).get(post.author_id)
+            else:
+                _sign_as = None
+        actor = _resolve_actor(actor_url, sign_as=_sign_as)
         if not actor:
             return (200, "OK")
 
