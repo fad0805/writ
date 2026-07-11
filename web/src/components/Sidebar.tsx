@@ -57,6 +57,9 @@ export default function Sidebar() {
     return () => { clearInterval(interval); window.removeEventListener("notificationsread", handler); window.removeEventListener("profilechange", profileHandler); window.removeEventListener("notifchange", notifChangeHandler); window.removeEventListener("serverchange", serverHandler); };
   }, [user, refresh]);
   useEffect(() => {
+    document.title = unreadNotifs > 0 ? `(${unreadNotifs}) WRIT` : "WRIT";
+  }, [unreadNotifs]);
+  useEffect(() => {
     setIsDark(document.body.classList.contains("dark-theme"));
     const handler = () => setIsDark(document.body.classList.contains("dark-theme"));
     window.addEventListener("themechange", handler);
