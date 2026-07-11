@@ -1749,6 +1749,8 @@ def _process_emoji_tags(tags: list, session):
     """Parse Emoji tags from an ActivityPub object, download and save custom emojis."""
     if not tags or not isinstance(tags, list):
         return
+    from app.utils.storage import get_storage
+    _storage = get_storage()
     EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "web", "public", "emojis")
     os.makedirs(EMOJI_DIR, exist_ok=True)
     for tag in tags:
@@ -1818,8 +1820,7 @@ def _process_emoji_tags(tags: list, session):
                 continue
 
             if ext == "gif":
-                with open(file_path, "wb") as f:
-                    f.write(resp.content)
+                data = resp.content
             else:
                 file_name = f"{uuid.uuid4().hex}.webp"
                 file_path = os.path.join(EMOJI_DIR, file_name)
@@ -1828,10 +1829,18 @@ def _process_emoji_tags(tags: list, session):
                     img = img.convert("RGBA")
                 else:
                     img = img.convert("RGB")
-                # Halve dimensions if original is > 66px (so halved size >= 33)
                 if img.width > 66 or img.height > 66:
                     img = img.resize((img.width // 2, img.height // 2), Image.LANCZOS)
-                img.save(file_path, format="WEBP", quality=100)
+                buf = io.BytesIO()
+                img.save(buf, format="WEBP", quality=100)
+                data = buf.getvalue()
+            # Save via storage backend (S3 or local)
+            try:
+                _storage.save(f"emojis/{file_name}", data, f"image/{ext}")
+            except Exception:
+                os.makedirs(EMOJI_DIR, exist_ok=True)
+                with open(file_path, "wb") as f:
+                    f.write(data)
             emoji = CustomEmoji(
                 keyword=keyword,
                 file_name=file_name,
