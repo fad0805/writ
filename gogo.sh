@@ -230,6 +230,22 @@ else:
     print('status:', r.status_code, r.text[:200])
 "
 
+elif [ "$1" = "check-thread" ]; then
+  docker compose exec api python3 -c "
+from app.models import Post, get_session
+with get_session() as s:
+    p = s.query(Post).filter(Post.ap_id.like('%116901658252254236')).first()
+    if p:
+        print('found:', p.id, p.number, 'in_reply_to:', p.in_reply_to_ap_id)
+        # Also check replies
+        replies = s.query(Post).filter(Post.in_reply_to_ap_id == p.ap_id).all()
+        print('replies count:', len(replies))
+        for r in replies:
+            print('  reply:', r.id, r.ap_id[:80])
+    else:
+        print('not found in DB')
+"
+
 elif [ "$1" = "check-db" ]; then
   docker compose exec api python3 -c "
 from app.models import Post, Vote, get_session
