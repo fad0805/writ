@@ -186,6 +186,21 @@ with get_session() as s:
     if f2: print('accepted:', f2.accepted)
 "
 
+elif [ "$1" = "planet-poll" ]; then
+  docker compose exec api python3 -c "
+import httpx, json
+r = httpx.get('https://planet.moe/@siarte/116901379728907920', headers={'Accept':'application/activity+json'})
+if r.status_code == 200:
+    d = r.json()
+    obj = d.get('object', d)
+    print('type:', obj.get('type'))
+    print('options:', json.dumps(obj.get('oneOf'), indent=2, ensure_ascii=False)[:500])
+    print('to:', obj.get('to'))
+    print('cc:', obj.get('cc'))
+else:
+    print(r.status_code, r.text[:200])
+"
+
 elif [ "$1" = "mastodon-poll" ]; then
   id="${2:-116901218746967775}"
   docker compose exec api python3 -c "
