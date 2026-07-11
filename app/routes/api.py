@@ -437,7 +437,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 Post.id.in_(boosted_ids),
             ),
             Post.is_deleted == False,
-            Post.visibility != "mention",
+            or_(Post.visibility != "mention", Post.author_id == user.id),
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     elif tl_type == "social":
         following_ids = [f.following_id for f in session.query(Follow).filter_by(
@@ -453,7 +453,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 and_(Post.author_id.in_(local_ids), Post.visibility == "public"),
             ),
             Post.is_deleted == False,
-            Post.visibility != "mention",
+            or_(Post.visibility != "mention", Post.author_id == user.id),
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     elif tl_type == "local":
         local_ids = [u.id for u in session.query(User).filter_by(is_remote=False).all()]
@@ -472,8 +472,8 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             Post.is_deleted == False,
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     raw_total = len(posts)
-    # Remove leftover mention+DMs (post-filter to avoid SQL complexity)
-    posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm)]
+    # Remove DMs from other users (self-DMs are kept)
+    posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm and p.author_id != user.id)]
     # Filter replies: only show if all thread participants are followed (or post is mine)
     # Only for home/social timelines, not local/federated
     if user and tl_type in ("home", "social"):
@@ -485,20 +485,14 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         for p in posts:
             if p.author_id != user.id and (p.in_reply_to_id or p.in_reply_to_ap_id):
                 participants = set()
+                # Walk local parent chain only (no HTTP fetches)
                 cur = p
                 depth = 0
-                while cur and (cur.in_reply_to_id or cur.in_reply_to_ap_id) and depth < 20:
-                    parent = cur.parent if hasattr(cur, 'parent') else None
+                while cur and depth < 20:
+                    parent = getattr(cur, 'parent', None)
                     if not parent:
-                        if cur.in_reply_to_ap_id:
-                            from app.activitypub import _fetch_remote_post
-                            parent = _fetch_remote_post(cur.in_reply_to_ap_id, user, session)
-                            if parent:
-                                cur.in_reply_to_id = parent.id
-                        if not parent:
-                            break
-                    if parent:
-                        participants.add(parent.author_id)
+                        break
+                    participants.add(parent.author_id)
                     cur = parent
                     depth += 1
                 if participants and not participants <= following_ids:
@@ -1764,26 +1758,36 @@ def api_following(request: Request, username: str):
 @router.get("/direct/conversation/{other_id}")
 def api_direct_conversation(request: Request, other_id: int):
     user = require_auth(request)
-    if other_id == user.id:
-        raise HTTPException(status_code=400, detail="Cannot chat with yourself")
+    is_self = (other_id == user.id)
     with get_session() as s:
-        other = s.query(User).get(other_id)
-        if not other:
-            raise HTTPException(status_code=404, detail="User not found")
-        conv_posts = s.query(Post).options(selectinload(Post.author)).filter(
-            Post.visibility == "mention",
-            Post.is_deleted == False,
-            or_(
-                and_(
-                    Post.author_id == user.id,
-                    Post.mentioned_user_ids.contains(other_id),
+        if is_self:
+            other = user
+        else:
+            other = s.query(User).get(other_id)
+            if not other:
+                raise HTTPException(status_code=404, detail="User not found")
+        if is_self:
+            conv_posts = s.query(Post).options(selectinload(Post.author)).filter(
+                Post.visibility == "mention",
+                Post.is_deleted == False,
+                Post.author_id == user.id,
+                Post.mentioned_user_ids.contains(user.id),
+            ).order_by(Post.created_at).all()
+        else:
+            conv_posts = s.query(Post).options(selectinload(Post.author)).filter(
+                Post.visibility == "mention",
+                Post.is_deleted == False,
+                or_(
+                    and_(
+                        Post.author_id == user.id,
+                        Post.mentioned_user_ids.contains(other_id),
+                    ),
+                    and_(
+                        Post.author_id == other_id,
+                        Post.mentioned_user_ids.contains(user.id),
+                    ),
                 ),
-                and_(
-                    Post.author_id == other_id,
-                    Post.mentioned_user_ids.contains(user.id),
-                ),
-            ),
-        ).order_by(Post.created_at).all()
+            ).order_by(Post.created_at).all()
         result = {
             "other_user": _user_json(other),
             "messages": [_post_json(p, s, user) for p in conv_posts],
@@ -1796,10 +1800,15 @@ def api_direct_threads(request: Request):
     user = require_auth(request)
     three_months_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=90)
     with get_session() as s:
+        from sqlalchemy import cast, String as SAString
         posts = s.query(Post).filter(
             Post.visibility == "mention",
             Post.is_deleted == False,
             Post.created_at >= three_months_ago,
+            or_(
+                Post.author_id == user.id,
+                cast(Post.mentioned_user_ids, SAString).contains(str(user.id)),
+            ),
         ).order_by(desc(Post.created_at)).limit(200).all()
         author_map = {}
         for p in posts:
@@ -1807,31 +1816,37 @@ def api_direct_threads(request: Request):
             other_id = None
             if p.author_id == user.id:
                 for tid in mu:
-                    if isinstance(tid, int) and tid != user.id:
-                        other_id = tid
-                        break
+                    if isinstance(tid, int):
+                        if tid == user.id and (p.author_id == user.id):
+                            other_id = user.id
+                            break
+                        elif tid != user.id:
+                            other_id = tid
+                            break
             elif user.id in mu:
                 other_id = p.author_id
-            if other_id and other_id not in author_map:
-                author = s.query(User).get(other_id)
-                author_map[other_id] = {"user": author, "all_msgs": []}
-            if other_id:
+            if other_id is not None and other_id not in author_map:
+                if other_id == user.id:
+                    author_map[other_id] = {"user": user, "all_msgs": []}
+                else:
+                    author = s.query(User).get(other_id)
+                    author_map[other_id] = {"user": author, "all_msgs": []}
+            if other_id is not None:
                 author_map[other_id]["all_msgs"].append(p)
         result = []
         for aid, data in author_map.items():
             u = data["user"]
-            if u and u.id != user.id:
-                sorted_msgs = sorted(data["all_msgs"], key=lambda x: x.created_at or datetime.datetime.min, reverse=True)
-                previews = []
-                for msg in sorted_msgs[:3]:
-                    text = re.sub(r'<[^>]*>', '', msg.content or "")
-                    text = re.sub(r'@\w+', '', text).strip()
-                    is_me = msg.author_id == user.id
-                    previews.append({"text": text[:60], "is_me": is_me})
-                entry = _user_json(u)
-                entry["latest_previews"] = previews
-                entry["latest_time"] = _fmt_dt(sorted_msgs[0].created_at)
-                result.append(entry)
+            sorted_msgs = sorted(data["all_msgs"], key=lambda x: x.created_at or datetime.datetime.min, reverse=True)
+            previews = []
+            for msg in sorted_msgs[:3]:
+                text = re.sub(r'<[^>]*>', '', msg.content or "")
+                text = re.sub(r'@\w+', '', text).strip()
+                is_me = msg.author_id == user.id
+                previews.append({"text": text[:60], "is_me": is_me})
+            entry = _user_json(u)
+            entry["latest_previews"] = previews
+            entry["latest_time"] = _fmt_dt(sorted_msgs[0].created_at)
+            result.append(entry)
     return {"users": result}
 
 
