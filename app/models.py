@@ -299,10 +299,11 @@ class Post(Base):
         def _wrap_unknown_mention(m):
             handle = m.group(1)
             actor_uri = _actor_uri_for_handle(handle)
+            web_uri = f"{BASE_URL}/@{handle}"
             tags.append({"type": "Mention", "href": actor_uri, "name": f"@{handle}"})
             return (
                 f'<span class="h-card" translate="no">'
-                f'<a href="{actor_uri}" class="u-url mention" rel="mention">'
+                f'<a href="{web_uri}" class="u-url mention" rel="mention">'
                 f'@<span>{handle.split("@")[0]}</span>'
                 f'</a></span>'
             )
