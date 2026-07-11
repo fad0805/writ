@@ -3652,12 +3652,24 @@ def api_fetch_post(request: Request, url: str = Form(...)):
     emojis = []
     with get_session() as es:
         for e in es.query(CustomEmoji).order_by(CustomEmoji.keyword).all():
-            emojis.append({"keyword": e.keyword, "file_name": e.file_name, "url": f"/emojis/{e.file_name}", "aliases": e.aliases or []})
+            emojis.append({"keyword": e.keyword, "file_name": e.file_name, "url": _emoji_url(e.file_name), "aliases": e.aliases or []})
     result["_emojis"] = emojis
     return result
 
 
 EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "emojis")
+
+def _emoji_url(file_name: str) -> str:
+    """Return the correct emoji URL (local or S3)."""
+    from app.config import S3_ENABLED
+    if S3_ENABLED:
+        from app.utils.storage import get_storage
+        try:
+            storage = get_storage()
+            return storage.url(f"emojis/{file_name}")
+        except Exception:
+            pass
+    return f"/emojis/{file_name}"
 
 
 @router.get("/emojis")
@@ -3671,7 +3683,7 @@ def api_list_emojis():
                 "file_name": e.file_name,
                 "category": e.category or "",
                 "aliases": e.aliases or [],
-                "url": f"/emojis/{e.file_name}",
+                "url": _emoji_url(e.file_name),
                 "source_url": e.source_url or "",
                 "domain": e.domain or "",
             }
