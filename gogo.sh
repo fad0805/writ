@@ -570,6 +570,17 @@ r = httpx.post('http://localhost:3000/users/siarte/inbox',
 print('status:', r.status_code, 'body:', r.text[:200])
 "
 
+elif [ "$1" = "check-reports" ]; then
+  docker compose exec api python3 -c "
+from app.models import Report, get_session
+with get_session() as s:
+    reports = s.query(Report).order_by(Report.created_at.desc()).limit(10).all()
+    if not reports:
+        print('no reports found')
+    for r in reports:
+        print(f'  #{r.id} type={r.target_type} id={r.target_id} reporter={r.reporter_id} status={r.status} reason={r.reason[:50]}')
+"
+
 elif [ "$1" = "check-actor" ]; then
   actor_url="${2:-https://daydream.ink/actor}"
   docker compose exec api python3 -c "
