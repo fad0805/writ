@@ -37,11 +37,16 @@ def _federation_allowed(domain: str) -> bool:
             domain = domain.lower().strip()
             if mode == "whitelist":
                 allowed = s.query(AllowedServer).filter_by(domain=domain).first()
-                return allowed is not None
+                result = allowed is not None
+                print(f"[FED] domain={domain} mode=whitelist found={allowed is not None} result={result}", flush=True)
+                return result
             else:
                 blocked = s.query(FederationBlock).filter_by(domain=domain).first()
-                return blocked is None
-        except Exception:
+                result = blocked is None
+                print(f"[FED] domain={domain} mode=blacklist blocked={blocked is not None} result={result}", flush=True)
+                return result
+        except Exception as e:
+            print(f"[FED] exception: {e}", flush=True)
             return True
 
 
@@ -303,6 +308,8 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
         if not _federation_allowed(actor_domain):
             logger.info("Rejected inbox activity from blocked domain: %s", actor_domain)
             return (403, "Domain not allowed")
+
+    print(f"[INBOX] atype={atype} actor_domain={urlparse(actor).hostname if actor else 'none'}", flush=True)
 
     if atype == "Follow":
         return _handle_follow(activity)
