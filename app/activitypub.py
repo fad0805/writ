@@ -1079,15 +1079,22 @@ def _handle_create(activity: dict) -> tuple[int, str]:
 
             reply_to_post = None
             if in_reply_to:
+                print(f"[create] query by ap_id", flush=True)
                 reply_to_post = session.query(Post).filter_by(ap_id=in_reply_to).first()
+                print(f"[create] ap_id result={reply_to_post is not None}", flush=True)
                 if not reply_to_post:
                     alt_url = in_reply_to.replace("https://", "http://") if "https://" in in_reply_to else in_reply_to.replace("http://", "https://")
+                    print(f"[create] query by alt_url", flush=True)
                     reply_to_post = session.query(Post).filter_by(ap_id=alt_url).first()
+                    print(f"[create] alt_url result={reply_to_post is not None}", flush=True)
                 if not reply_to_post:
+                    post_num = in_reply_to.split('/')[-1]
+                    print(f"[create] query by number={post_num}", flush=True)
                     try:
-                        reply_to_post = session.query(Post).filter(Post.ap_id.like(f"%{in_reply_to.split('/')[-1]}")).first()
-                    except Exception:
-                        pass
+                        reply_to_post = session.query(Post).filter(Post.ap_id.like(f"%{post_num}")).first()
+                    except Exception as e:
+                        print(f"[create] number query error: {e}", flush=True)
+                    print(f"[create] number result={reply_to_post is not None}", flush=True)
 
             # Mastodon poll votes: Create(Note) with name + inReplyTo + no content
             vote_name = obj.get("name", "") if not raw_content.strip() else ""
