@@ -950,6 +950,8 @@ def api_like_post(request: Request, post_id: int):
                 "type": "Like",
                 "actor": user.actor_uri(),
                 "object": post.ap_id,
+                "to": [post.author.actor_uri()],
+                "cc": [],
             }
             inbox = post.author.shared_inbox_url
             try:
