@@ -3794,12 +3794,17 @@ def api_delete_emoji(request: Request, emoji_id: int):
         emoji = s.query(CustomEmoji).get(emoji_id)
         if not emoji:
             raise HTTPException(status_code=404, detail="Emoji not found")
+        from app.utils.storage import get_storage
+        try:
+            get_storage().delete(f"emojis/{emoji.file_name}")
+        except Exception:
+            pass
         file_path = os.path.join(EMOJI_DIR, emoji.file_name)
-        if os.path.exists(file_path):
+        if os.path.isfile(file_path):
             os.remove(file_path)
         s.delete(emoji)
         s.commit()
-        return {"ok": True}
+    return {"ok": True}
 
 
 @router.get("/admin/stats")
