@@ -2,23 +2,13 @@
 import { useEffect, useRef } from "react";
 
 export default function NotifSound() {
-  const readyRef = useRef(false);
-  const ctxRef = useRef<AudioContext | null>(null);
-  const bufRef = useRef<AudioBuffer | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    const init = async () => {
-      if (readyRef.current) return;
-      try {
-        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        if (ctx.state === "suspended") await ctx.resume();
-        const resp = await fetch("/alert.wav");
-        const ab = await resp.arrayBuffer();
-        const decoded = await ctx.decodeAudioData(ab);
-        ctxRef.current = ctx;
-        bufRef.current = decoded;
-        readyRef.current = true;
-      } catch {}
+    const init = () => {
+      if (audioRef.current) return;
+      audioRef.current = new Audio("/alert.wav");
+      audioRef.current.volume = 0.5;
     };
 
     const unlock = () => {
@@ -31,14 +21,14 @@ export default function NotifSound() {
 
     const es = new EventSource("/api/notifications/stream");
     es.onmessage = () => {
-      if (!readyRef.current || !ctxRef.current || !bufRef.current) return;
       try {
-        const ctx = ctxRef.current;
-        if (ctx.state === "suspended") ctx.resume();
-        const src = ctx.createBufferSource();
-        src.buffer = bufRef.current;
-        src.connect(ctx.destination);
-        src.start();
+        if (audioRef.current) {
+          audioRef.current.currentTime = 0;
+          audioRef.current.play().catch(() => {});
+        }
+        if (document.hidden && Notification.permission === "granted") {
+          new Notification("WRIT", { body: "새 알림이 있습니다", icon: "/icons/icon-192.png", silent: true });
+        }
       } catch {}
     };
     es.onerror = () => {};
