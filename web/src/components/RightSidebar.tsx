@@ -19,12 +19,23 @@ export default function RightSidebar() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [serverInfo, setServerInfo] = useState<{ name: string; description?: string; admins: { username: string; email: string }[] } | null>(null);
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const playNotifSound = useCallback(() => {
+  const audioRef = useRef<{ ctx: AudioContext; buf: AudioBuffer | null } | null>(null);
+  const playNotifSound = useCallback(async () => {
     try {
-      if (!audioRef.current) audioRef.current = new Audio("/alert.wav");
-      audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(() => {});
+      if (!audioRef.current) {
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const resp = await fetch("/alert.wav");
+        const buf = await resp.arrayBuffer();
+        const decoded = await ctx.decodeAudioData(buf);
+        audioRef.current = { ctx, buf: decoded };
+      }
+      const { ctx, buf } = audioRef.current;
+      if (!buf) return;
+      if (ctx.state === "suspended") await ctx.resume();
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start();
     } catch {}
   }, []);
 
