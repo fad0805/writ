@@ -1135,7 +1135,9 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         session.add(Vote(user_id=actor.id, post_id=poll_post.id, option_index=option_idx))
                     options[option_idx]["votes_count"] = options[option_idx].get("votes_count", 0) + 1
                     poll_post.poll_data = {**poll_post.poll_data, "options": options}
+                    import sys; print(f"[create] committing...", flush=True)
                     session.commit()
+                    print(f"[create] commit done", flush=True)
                     from app.timeline_stream import broadcast_post, broadcast_refresh_notifs
                     broadcast_refresh_notifs()
                     broadcast_post({
