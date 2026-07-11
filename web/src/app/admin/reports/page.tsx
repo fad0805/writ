@@ -103,7 +103,9 @@ export default function AdminReportsPage() {
                 </span>
                 <span style={{ marginLeft: 6 }}>
                   {r.target
-                    ? (r.target.content ? r.target.content.slice(0, 60) : r.target.title || `#${r.target_id}`)
+                    ? (r.target.content
+                      ? <span dangerouslySetInnerHTML={{ __html: r.target.content.length > 60 ? r.target.content.slice(0, 60) + "..." : r.target.content }} />
+                      : r.target.title || `#${r.target_id}`)
                     : `#${r.target_id}`}
                 </span>
               </div>
