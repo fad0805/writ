@@ -9,7 +9,7 @@ export default function EditModal({ post, onClose, onDone }: { post: PostData; o
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
-  const [content, setContent] = useState(post.content);
+  const [content, setContent] = useState(() => post.content.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, ""));
   const [summary, setSummary] = useState(post.summary);
   const [submitting, setSubmitting] = useState(false);
 
