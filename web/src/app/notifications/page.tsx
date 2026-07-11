@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { api, NotificationData, User } from "@/lib/api";
@@ -57,6 +57,7 @@ export default function NotificationsPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(20);
+  const isFirstRender = useRef(true);
 
   if (authLoading || !user) return <div className="empty-state">{authLoading ? "로딩 중..." : "로그인이 필요합니다"}</div>;
 
@@ -68,6 +69,7 @@ export default function NotificationsPage() {
         const data = await res.json();
         setDirectGroups(data.users || []);
         setNotifs([]);
+        setHasMore(false);
       } else {
         const data = await api.getNotifications(filter || undefined, 20, 0);
         setNotifs(data.notifications);
@@ -80,7 +82,7 @@ export default function NotificationsPage() {
   }, [filter]);
 
   const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore) return;
+    if (loading || loadingMore || !hasMore) return;
     setLoadingMore(true);
     try {
       const data = await api.getNotifications(filter || undefined, 10, offset);
@@ -89,10 +91,15 @@ export default function NotificationsPage() {
       setOffset((prev) => prev + 10);
     } catch {}
     setLoadingMore(false);
-  }, [filter, offset, hasMore, loadingMore]);
+  }, [filter, offset, hasMore, loadingMore, loading]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { window.dispatchEvent(new Event("notificationsread")); }, []);
+  useEffect(() => {
+    if (!loading && !authLoading && user && isFirstRender.current) {
+      window.dispatchEvent(new Event("notificationsread"));
+      isFirstRender.current = false;
+    }
+  }, [loading, authLoading, user]);
 
   const actionNames: Record<string, string> = {
     warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지", unsuspend: "정지 해제",
