@@ -310,8 +310,9 @@ class Post(Base):
         }
         followers_uri = self.author.followers_uri()
         public_uri = "https://www.w3.org/ns/activitystreams#Public"
-        is_poll = bool(self.poll_data)
-        if self.visibility == "public" or is_poll:
+        if self.visibility in ("public", "home") and self.poll_data:
+            obj["to"] = [followers_uri, public_uri]
+        elif self.visibility == "public":
             obj["to"] = [followers_uri, public_uri]
         elif self.visibility == "home":
             obj["to"] = [followers_uri]
