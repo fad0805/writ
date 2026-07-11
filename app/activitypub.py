@@ -1234,23 +1234,22 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             session.flush()
 
             # Notify local users mentioned or replied to
+            _notified = set()
             if reply_to_post and reply_to_post.author_id != actor.id:
+                _notified.add(reply_to_post.author_id)
                 session.add(Notification(
                     user_id=reply_to_post.author_id,
                     from_user_id=actor.id,
-                    notification_type="reply",
+                    notification_type="mention",
                     post_id=post.id,
                 ))
             for _mu_id in mentioned_ids:
-                if _mu_id != actor.id:
-                    existing_notif = session.query(Notification).filter_by(
-                        user_id=_mu_id, notification_type="mention", post_id=post.id
-                    ).first()
-                    if not existing_notif:
-                        session.add(Notification(
-                            user_id=_mu_id, from_user_id=actor.id,
-                            notification_type="mention", post_id=post.id,
-                        ))
+                if _mu_id != actor.id and _mu_id not in _notified:
+                    _notified.add(_mu_id)
+                    session.add(Notification(
+                        user_id=_mu_id, from_user_id=actor.id,
+                        notification_type="mention", post_id=post.id,
+                    ))
 
             # Notify local followers who enabled post notifications (skip self)
             followers = session.query(Follow).filter(
