@@ -1135,7 +1135,12 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         session.add(Vote(user_id=actor.id, post_id=poll_post.id, option_index=option_idx))
                     options[option_idx]["votes_count"] = options[option_idx].get("votes_count", 0) + 1
                     poll_post.poll_data = {**poll_post.poll_data, "options": options}
-                    session.commit()
+                    import sys; print(f"[create] before commit", flush=True)
+                    try:
+                        session.commit()
+                        print(f"[create] commit ok", flush=True)
+                    except Exception as e:
+                        print(f"[create] commit error: {e}", flush=True)
                     return (200, "Voted")
 
             # Parse mentioned users from content
