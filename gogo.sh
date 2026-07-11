@@ -507,7 +507,7 @@ with get_session() as s:
 "
 
 elif [ "$1" = "flag-test-signed" ]; then
-  docker compose exec api python3 << 'PYEOF'
+  docker compose exec -T api python3 << 'PYEOF'
 import httpx, json, time, datetime, hashlib, base64
 from app.crypto_utils import sign_string, get_private_key
 from app.models import User, get_session
