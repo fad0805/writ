@@ -258,17 +258,19 @@ print('DOMAIN:', DOMAIN)
 
 elif [ "$1" = "check-mention" ]; then
   docker compose exec api python3 -c "
-import httpx, json
+import httpx, json, re
 url = 'https://writ.daydream.ink/@siarte/3bcfe670'
+if len('$2') > 1: url = 'https://writ.daydream.ink/@siarte/' + '$2'
 r = httpx.get(url, headers={'Accept': 'application/activity+json'})
 if r.status_code == 200:
     d = r.json()
     obj = d.get('object', d)
-    print('=== WRIT 멘션 구조 ===')
-    print('type:', obj.get('type'))
-    print('tag:', json.dumps(obj.get('tag', []), indent=2, ensure_ascii=False)[:500])
-    print('to:', obj.get('to'))
-    print('cc:', obj.get('cc'))
+    print('=== 멘션 tag ===')
+    print(json.dumps(obj.get('tag', []), indent=2, ensure_ascii=False)[:500])
+    print('to:', obj.get('to'), 'cc:', obj.get('cc'))
+    print('--- content <a> 태그 ---')
+    for m in re.finditer(r'<a[^>]*class=\"u-url mention\"[^>]*>.*?</a>', obj.get('content','')):
+        print(m.group()[:300])
 else:
     print('status:', r.status_code, r.text[:200])
 "
