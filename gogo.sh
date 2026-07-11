@@ -186,6 +186,20 @@ with get_session() as s:
     if f2: print('accepted:', f2.accepted)
 "
 
+elif [ "$1" = "check-poll" ]; then
+  id="${2:-659dac71}"
+  docker compose exec api python3 -c "
+import httpx, json
+r = httpx.get(f'https://writ.daydream.ink/@siarte/$id', headers={'Accept':'application/activity+json'})
+d = r.json()
+obj = d.get('object', d)
+print('type:', obj.get('type'))
+print('endTime:', obj.get('endTime'))
+print('votersCount:', obj.get('votersCount'))
+print('options:', json.dumps(obj.get('oneOf'), indent=2, ensure_ascii=False)[:300])
+print('to:', obj.get('to'))
+"
+
 elif [ "$1" = "clear-pending" ]; then
   docker compose exec api python3 -c "
 from app.models import PendingDelivery, get_session
