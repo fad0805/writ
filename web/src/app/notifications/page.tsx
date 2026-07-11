@@ -42,13 +42,13 @@ const NOTIF_ICONS: Record<string, string> = {
 export default function NotificationsPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  useEffect(() => {
-    if (!authLoading && !user) router.replace("/login");
-  }, [user, authLoading, router]);
-  if (authLoading || !user) return <div className="empty-state">{authLoading ? "로딩 중..." : "로그인이 필요합니다"}</div>;
   const [notifs, setNotifs] = useState<NotificationData[]>([]);
   const [directGroups, setDirectGroups] = useState<DirectUserData[]>([]);
   const [filter, setFilter] = useState("");
+
+  useEffect(() => {
+    if (!authLoading && !user) router.replace("/login");
+  }, [user, authLoading, router]);
 
   useEffect(() => {
     try { const s = sessionStorage.getItem("notif_filter"); if (s) { sessionStorage.removeItem("notif_filter"); setFilter(s); } } catch {}
@@ -57,6 +57,8 @@ export default function NotificationsPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(20);
+
+  if (authLoading || !user) return <div className="empty-state">{authLoading ? "로딩 중..." : "로그인이 필요합니다"}</div>;
 
   const load = useCallback(async () => {
     setLoading(true);
