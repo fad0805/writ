@@ -647,6 +647,16 @@ def api_get_post(request: Request, post_id: int):
         while cur:
             ancestors.insert(0, _post_json(cur, s, user))
             cur = cur.parent
+        if not ancestors and post.in_reply_to_ap_id and user:
+            try:
+                parent = s.query(Post).filter_by(ap_id=post.in_reply_to_ap_id).first()
+                if not parent:
+                    from app.activitypub import _fetch_remote_post
+                    parent = _fetch_remote_post(post.in_reply_to_ap_id, user, s)
+                if parent:
+                    ancestors = [_post_json(parent, s, user)]
+            except Exception:
+                pass
         result["ancestors"] = ancestors
     return result
 
