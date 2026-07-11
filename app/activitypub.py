@@ -1283,6 +1283,8 @@ def _handle_like(activity: dict) -> tuple[int, str]:
 
 
 def _handle_vote(activity: dict) -> tuple[int, str]:
+    import sys
+    print(f"[vote] start", flush=True)
     raw_actor = activity.get("actor")
     if not raw_actor:
         return (400, "Missing actor")
