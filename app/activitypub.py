@@ -836,38 +836,52 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     """Fetch a remote AP object and save it as a Post. Returns the Post or None."""
     if _depth > 3 or not url:
         return None
+
     from urllib.parse import urlparse as _urlparse
     parsed = _urlparse(url)
-    date_str = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
-    path_with_query = parsed.path or "/"
-    if parsed.query:
-        path_with_query += f"?{parsed.query}"
-    signed_string = (
-        f"(request-target): get {path_with_query}\n"
-        f"host: {parsed.netloc}\n"
-        f"date: {date_str}"
-    )
-    try:
-        sig = sign_string(signed_string, get_private_key(signer, SECRET_KEY))
-    except Exception:
-        return None
-    sig_header = (
-        f'keyId="{signer.actor_uri()}#main-key",'
-        f'headers="(request-target) host date",'
-        f'signature="{sig}"'
-    )
-    headers = {
-        "Accept": "application/activity+json",
-        "Signature": sig_header,
-        "Date": date_str,
-        "Host": parsed.netloc,
-    }
+    headers = {"Accept": "application/activity+json"}
+
+    if signer:
+        try:
+            date_str = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
+            path_with_query = parsed.path or "/"
+            if parsed.query:
+                path_with_query += f"?{parsed.query}"
+            signed_string = (
+                f"(request-target): get {path_with_query}\n"
+                f"host: {parsed.netloc}\n"
+                f"date: {date_str}"
+            )
+            sig = sign_string(signed_string, get_private_key(signer, SECRET_KEY))
+            sig_header = (
+                f'keyId="{signer.actor_uri()}#main-key",'
+                f'headers="(request-target) host date",'
+                f'signature="{sig}"'
+            )
+            headers["Signature"] = sig_header
+            headers["Date"] = date_str
+            headers["Host"] = parsed.netloc
+        except Exception:
+            pass
+
+    headers["Accept"] = "application/activity+json"
+    data = None
     try:
         resp = httpx.get(url, headers=headers, timeout=15, follow_redirects=True)
-        if resp.status_code != 200:
-            return None
-        data = resp.json()
+        if resp.status_code == 200:
+            data = resp.json()
     except Exception:
+        pass
+
+    if data is None and signer:
+        try:
+            resp = httpx.get(url, headers={"Accept": "application/activity+json"}, timeout=15, follow_redirects=True)
+            if resp.status_code == 200:
+                data = resp.json()
+        except Exception:
+            pass
+
+    if data is None:
         return None
 
     obj = data.get("object", data) if isinstance(data, dict) else {}
