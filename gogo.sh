@@ -230,6 +230,20 @@ else:
     print('status:', r.status_code, r.text[:200])
 "
 
+elif [ "$1" = "check-db" ]; then
+  docker compose exec api python3 -c "
+from app.models import Post, Vote, get_session
+with get_session() as s:
+    p = s.query(Post).filter(Post.poll_data.isnot(None)).order_by(Post.id.desc()).first()
+    if p:
+        print('number:', p.number, 'ap_id:', p.ap_id)
+        print('poll_data:', p.poll_data)
+        votes = s.query(Vote).filter_by(post_id=p.id).all()
+        print('votes:', [(v.user_id, v.option_index) for v in votes])
+    else:
+        print('no polls found')
+"
+
 elif [ "$1" = "check-poll" ]; then
   id="${2:-659dac71}"
   docker compose exec api python3 -c "
