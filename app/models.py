@@ -264,23 +264,23 @@ class Post(Base):
             with get_session() as s:
                 users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
                 for u in users:
-                    href = u.actor_uri()
-                    if u.is_remote and u.remote_url:
-                        if "@" in u.username:
-                            display_name = u.username
-                        else:
-                            user_domain = _urlparse(u.remote_url).hostname or ""
-                            display_name = f"{u.username}@{user_domain}"
-                    else:
-                        display_name = u.username
+                    # Web profile URL (Mastodon expects /@username format in <a href>)
+                    web_href = getattr(u, 'profile_url', '') or u.actor_uri()
+                    # Actor URI (for Mention tag)
+                    actor_href = u.actor_uri()
+                    # Display name: just username (Mastodon expects @<span>username</span>)
+                    short_username = u.username.split("@")[0] if u.is_remote else u.username
+                    # tag name must be @user@domain for remote, @user for local
                     if u.is_remote:
-                        tag_name = f"@{display_name}"
+                        tag_name = f"@{u.username}"  # username already has @domain
                     else:
                         tag_name = f"@{u.username}@{DOMAIN}"
+                    # Mastodon h-card mention format
                     mention_html = (
-                        f'<a href="{href}" class="u-url mention">'
-                        f'@{display_name}'
-                        f'</a>'
+                        f'<span class="h-card" translate="no">'
+                        f'<a href="{web_href}" class="u-url mention">'
+                        f'@<span>{short_username}</span>'
+                        f'</a></span>'
                     )
                     short_name = f"@{u.username}"
                     content = re.sub(
@@ -288,7 +288,7 @@ class Post(Base):
                         mention_html,
                         content,
                     )
-                    tags.append({"type": "Mention", "href": href, "name": tag_name})
+                    tags.append({"type": "Mention", "href": actor_href, "name": tag_name})
         if self.tag_list:
             for t in self.tag_list:
                 tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={t.name}", "name": f"#{t.name}"})
