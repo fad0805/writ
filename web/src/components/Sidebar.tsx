@@ -7,9 +7,12 @@ import Icon from "./Icon";
 import Avatar from "./Avatar";
 
 function NavItem({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
+  const handleClick = (e: React.MouseEvent) => {
+    if (active) e.preventDefault();
+  };
   return (
     <li>
-      <Link href={href} className={active ? "active" : ""}>
+      <Link href={href} className={active ? "active" : ""} onClick={handleClick}>
         <span className="nav-item-inner">{children}</span>
       </Link>
     </li>
