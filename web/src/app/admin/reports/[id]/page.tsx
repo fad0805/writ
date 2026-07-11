@@ -172,9 +172,11 @@ export default function ReportDetailPage() {
             <div style={{ marginTop: 8, padding: 12, background: "var(--bg-tertiary)", borderRadius: 8 }}>
               {target.title && <div style={{ fontWeight: 600, marginBottom: 4 }}>{target.title}</div>}
               {target.content && (
-                <div style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 4, whiteSpace: "pre-wrap", maxHeight: 120, overflow: "auto" }}>
-                  {target.content.length > 300 ? target.content.slice(0, 300) + "..." : target.content}
-                </div>
+                <div style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 4, maxHeight: 120, overflow: "auto", lineHeight: 1.5 }}
+                  dangerouslySetInnerHTML={{
+                    __html: target.content.length > 300 ? target.content.slice(0, 300) + "..." : target.content
+                  }}
+                />
               )}
               {target.description && (
                 <div style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 4 }}>{target.description}</div>
