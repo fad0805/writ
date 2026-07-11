@@ -506,6 +506,22 @@ with get_session() as s:
     print(f'deleted {deleted} notifications for deleted posts')
 "
 
+elif [ "$1" = "test-api-direct" ]; then
+  docker compose exec api python3 -c "
+import httpx
+r = httpx.post('http://localhost:8000/users/siarte/inbox',
+  json={'type':'Flag','actor':'https://daydream.ink/actor','object':['https://writ.daydream.ink/users/siarte']})
+print('status:', r.status_code, 'body:', r.text[:200])
+"
+
+elif [ "$1" = "test-web-proxy" ]; then
+  docker compose exec web python3 -c "
+import httpx
+r = httpx.post('http://localhost:3000/users/siarte/inbox',
+  json={'type':'Flag','actor':'https://daydream.ink/actor','object':['https://writ.daydream.ink/users/siarte']})
+print('status:', r.status_code, 'body:', r.text[:200])
+"
+
 elif [ "$1" = "check-actor" ]; then
   actor_url="${2:-https://daydream.ink/actor}"
   docker compose exec api python3 -c "
