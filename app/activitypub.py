@@ -91,13 +91,19 @@ def _sanitize_html(html: str) -> str:
 
 def _normalize_mentions(html: str) -> str:
     """Convert Mastodon-style mention HTML to plain @username text."""
+    def _strip_mention(m):
+        text = re.sub(r'<[^>]+>', '', m.group(0))
+        match = re.search(r'@(\w+)', text)
+        return '@' + match.group(1) if match else text
+    # <span class="h-card"> wrapping (optional) + <a with u-url mention class
     html = re.sub(
-        r'<span[^>]*class="[^"]*\bh-card\b[^"]*"[^>]*>\s*<a[^>]*class="[^"]*\bu-url mention\b[^"]*"[^>]*>@?<span[^>]*>@?(\w+)</span></a>\s*</span>',
-        r'@\1', html, flags=re.IGNORECASE
+        r'<span[^>]*class="[^"]*\bh-card\b[^"]*"[^>]*>\s*<a[^>]*class="[^"]*\bu-url mention\b[^"]*"[^>]*>.*?</a>\s*</span>',
+        _strip_mention, html, flags=re.IGNORECASE | re.DOTALL
     )
+    # <a with u-url mention class (without wrapper)
     html = re.sub(
-        r'<a[^>]*class="[^"]*\bu-url mention\b[^"]*"[^>]*>@?(\w+)</a>',
-        r'@\1', html, flags=re.IGNORECASE
+        r'<a[^>]*class="[^"]*\bu-url mention\b[^"]*"[^>]*>.*?</a>',
+        _strip_mention, html, flags=re.IGNORECASE | re.DOTALL
     )
     return html
 
