@@ -317,6 +317,13 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
             remote_actor = None  # force network fetch below
 
     if not remote_actor or not remote_actor.public_key:
+        try:
+            fresh = _resolve_actor(actor_url, force_refresh=True)
+            if fresh and fresh.public_key:
+                remote_actor = fresh
+        except Exception:
+            pass
+    if not remote_actor or not remote_actor.public_key:
         return (False, None)
 
     # Actor binding check (Fix 1) — verify the signer matches activity.actor
