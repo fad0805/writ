@@ -44,7 +44,7 @@ router = APIRouter(prefix="/api")
 
 # ── helpers ──
 
-def _post_json(p, session, user):
+def _post_json(p, session, user, tl_type=None):
     liked = session.query(Like).filter_by(user_id=user.id, post_id=p.id).first() is not None if user else False
     boosted = session.query(Boost).filter_by(user_id=user.id, post_id=p.id).first() is not None if user else False
     bookmarked = session.query(Bookmark).filter_by(user_id=user.id, post_id=p.id).first() is not None if user else False
@@ -81,7 +81,7 @@ def _post_json(p, session, user):
         "is_dm": p.is_dm or False,
         "is_sensitive": getattr(p, 'is_sensitive', False) or False,
         "ap_id": p.ap_id or "",
-        "reply_context": _reply_context(p, session, user),
+        "reply_context": _reply_context(p, session, user, tl_type),
         "boosted_by": _user_json(booster) if booster and booster.id != p.author_id else None,
         "media_attachments": (p.media_attachments or []) if hasattr(p, 'media_attachments') else [],
         "poll_data": p.poll_data,
@@ -128,7 +128,7 @@ def _user_json(u):
     }
 
 
-def _reply_context(p, session=None, user=None):
+def _reply_context(p, session=None, user=None, tl_type=None):
     parent = p.parent if hasattr(p, 'parent') else None
     if not parent and p.in_reply_to_ap_id and session:
         try:
@@ -136,6 +136,14 @@ def _reply_context(p, session=None, user=None):
         except Exception:
             pass
     if not parent:
+        return None
+    if tl_type == "home" and user and parent.author_id != user.id:
+        followed = session.query(Follow).filter_by(
+            follower_id=user.id, following_id=parent.author_id, accepted=True
+        ).first()
+        if not followed:
+            return None
+    if tl_type == "local" and parent.author.is_remote:
         return None
     return {
         "id": parent.id,
@@ -562,7 +570,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             filtered.append(p)
         posts = filtered
     has_more = raw_total > limit
-    return [_post_json(p, session, user) for p in posts[:limit]], has_more
+    return [_post_json(p, session, user, tl_type) for p in posts[:limit]], has_more
 
 
 @router.get("/timeline/stream")
