@@ -10,7 +10,7 @@ export default function NotifSound() {
       try {
         if (!audioRef.current) {
           const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-          const resp = await fetch("/alert.wav");
+          const resp = await fetch("/alert.aiff");
           const buf = await resp.arrayBuffer();
           const decoded = await ctx.decodeAudioData(buf);
           audioRef.current = { ctx, buf: decoded };
