@@ -951,9 +951,14 @@ def api_like_post(request: Request, post_id: int):
             s.commit()
             broadcast_refresh_notifs()
         if post.author.is_remote and post.author.shared_inbox_url:
+            like_id = f"{BASE_URL}/likes/{uuid.uuid4()}"
+            like_rec = existing or s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
+            if like_rec:
+                like_rec.ap_id = like_id
+                s.commit()
             like_activity = {
                 "@context": "https://www.w3.org/ns/activitystreams",
-                "id": f"{BASE_URL}/likes/{uuid.uuid4()}",
+                "id": like_id,
                 "type": "Like",
                 "actor": user.actor_uri(),
                 "object": post.ap_id,
@@ -961,12 +966,10 @@ def api_like_post(request: Request, post_id: int):
                 "cc": [],
             }
             inbox = post.author.shared_inbox_url
-            import sys; print(f"[unboost] sending to {inbox}", flush=True)
             try:
-                _post_to_inbox(inbox, undo, user)
-                print(f"[unboost] done", flush=True)
-            except Exception as e:
-                print(f"[unboost] error: {e}", flush=True)
+                _post_to_inbox(inbox, like_activity, user)
+            except Exception:
+                pass
     return {"ok": True}
 
 
@@ -978,6 +981,7 @@ def api_unlike_post(request: Request, post_id: int):
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
         existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
+        like_id = existing.ap_id if existing and existing.ap_id else ""
         if existing:
             s.delete(existing)
             s.query(Notification).filter_by(
@@ -992,7 +996,7 @@ def api_unlike_post(request: Request, post_id: int):
                 "type": "Undo",
                 "actor": user.actor_uri(),
                 "object": {
-                    "id": f"{BASE_URL}/likes/{uuid.uuid4()}",
+                    "id": like_id or f"{BASE_URL}/likes/{uuid.uuid4()}",
                     "type": "Like",
                     "actor": user.actor_uri(),
                     "object": post.ap_id,
@@ -1028,9 +1032,15 @@ def api_boost_post(request: Request, post_id: int):
             s.commit()
             broadcast_refresh_notifs()
         if post.author.is_remote and post.author.shared_inbox_url:
+            announce_id = f"{BASE_URL}/boosts/{uuid.uuid4()}"
+            # Store the activity ID so Unboosts can reference it
+            boost_rec = existing or s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
+            if boost_rec:
+                boost_rec.ap_id = announce_id
+                s.commit()
             announce = {
                 "@context": "https://www.w3.org/ns/activitystreams",
-                "id": f"{BASE_URL}/boosts/{uuid.uuid4()}",
+                "id": announce_id,
                 "type": "Announce",
                 "actor": user.actor_uri(),
                 "object": post.ap_id,
@@ -1098,6 +1108,7 @@ def api_unboost_post(request: Request, post_id: int):
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
         existing = s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
+        announce_id = existing.ap_id if existing and existing.ap_id else ""
         if existing:
             s.delete(existing)
             s.query(Notification).filter_by(
@@ -1115,7 +1126,7 @@ def api_unboost_post(request: Request, post_id: int):
                 "type": "Undo",
                 "actor": user.actor_uri(),
                 "object": {
-                    "id": f"{BASE_URL}/boosts/{uuid.uuid4()}",
+                    "id": announce_id or f"{BASE_URL}/boosts/{uuid.uuid4()}",
                     "type": "Announce",
                     "actor": user.actor_uri(),
                     "object": post.ap_id,
