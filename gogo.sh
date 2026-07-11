@@ -559,28 +559,25 @@ for m in re.finditer(r'<a[^>]*>', obj.get('content','')):
     print('link:', m.group()[:200])
 "
 
-elif [ "$1" = "check-inbox-test" ]; then
-  id="${2:-94c2a2b5}"
+elif [ "$1" = "flag-test" ]; then
+  inbox_url="${2:-https://writ.daydream.ink/inbox}"
   docker compose exec api python3 -c "
 import httpx, json, sys
 from app.crypto_utils import sign_string, get_private_key
 from app.models import User, get_session
-from app.config import BASE_URL, SECRET_KEY
+from app.config import SECRET_KEY
 from urllib.parse import urlparse
 
-# Build Flag
 flag = {
     '@context': 'https://www.w3.org/ns/activitystreams',
     'id': 'https://test.local/flag/1',
     'type': 'Flag',
     'actor': 'https://writ.daydream.ink/users/siarte',
-    'object': ['https://writ.daydream.ink/users/siarte', 'https://writ.daydream.ink/@siarte/$id'],
+    'object': ['https://writ.daydream.ink/users/siarte'],
     'content': 'test report',
 }
 body = json.dumps(flag, ensure_ascii=False).encode()
-inbox_url = f'{BASE_URL}/inbox'
-
-# Sign as siarte
+inbox_url = '$inbox_url'
 with get_session() as s:
     me = s.query(User).filter_by(username='siarte').first()
     priv = get_private_key(me, SECRET_KEY)
@@ -589,7 +586,7 @@ with get_session() as s:
     date = datetime.datetime.now(datetime.timezone.utc).strftime('%a, %d %b %Y %H:%M:%S GMT')
     digest = base64.b64encode(hashlib.sha256(body).digest()).decode()
     created = int(time.time())
-    ss = f'(request-target): post {parsed.path}\\nhost: {parsed.netloc}\\ndate: {date}\\ndigest: SHA-256={digest}\\n(created): {created}'
+    ss = f'(request-target): post {parsed.path}\nhost: {parsed.netloc}\ndate: {date}\ndigest: SHA-256={digest}\n(created): {created}'
     sig = sign_string(ss, priv)
     sig_header = f'keyId=\"{me.actor_uri()}#main-key\",algorithm=\"hs2019\",created=\"{created}\",headers=\"(request-target) host date digest (created)\",signature=\"{sig}\"'
     headers = {
@@ -600,6 +597,7 @@ with get_session() as s:
         'Host': parsed.netloc,
     }
     r = httpx.post(inbox_url, content=body, headers=headers, timeout=10)
+    print('inbox:', inbox_url)
     print('status:', r.status_code)
     print('body:', r.text[:200])
 "
