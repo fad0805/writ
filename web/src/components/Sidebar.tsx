@@ -57,7 +57,26 @@ export default function Sidebar() {
     return () => { clearInterval(interval); window.removeEventListener("notificationsread", handler); window.removeEventListener("profilechange", profileHandler); window.removeEventListener("notifchange", notifChangeHandler); window.removeEventListener("serverchange", serverHandler); };
   }, [user, refresh]);
   useEffect(() => {
-    document.title = unreadNotifs > 0 ? `(${unreadNotifs}) WRIT` : "WRIT";
+    const link = document.querySelector<HTMLLinkElement>("link[rel~=icon]");
+    if (!link) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = link.href;
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, 32, 32);
+      if (unreadNotifs > 0) {
+        ctx.beginPath();
+        ctx.arc(28, 4, 5, 0, 2 * Math.PI);
+        ctx.fillStyle = "#e74c3c";
+        ctx.fill();
+      }
+      link.href = canvas.toDataURL();
+    };
   }, [unreadNotifs]);
   useEffect(() => {
     setIsDark(document.body.classList.contains("dark-theme"));
