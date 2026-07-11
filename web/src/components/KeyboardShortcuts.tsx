@@ -55,8 +55,7 @@ export default function KeyboardShortcuts() {
       return;
     }
 
-      if (e.key === "n" && !isEditing) {
-        if (!user) return;
+      if (e.key === "n" && !isEditing && user) {
         e.preventDefault();
         const ta = document.querySelector<HTMLTextAreaElement>(".post-form textarea, .textarea-ta");
         if (ta) { ta.focus(); ta.scrollIntoView({ behavior: "smooth", block: "center" }); }
@@ -77,7 +76,7 @@ export default function KeyboardShortcuts() {
       window.dispatchEvent(new Event("themechange"));
       return;
     }
-  }, [router]);
+  }, [router, user]);
 
   useEffect(() => {
     document.addEventListener("keydown", handleKey);
