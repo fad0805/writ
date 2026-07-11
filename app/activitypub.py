@@ -910,7 +910,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 reply_to_post = session.query(Post).filter_by(ap_id=in_reply_to).first()
 
             # Parse mentioned users from content
-            mentioned_names = set(re.findall(r'@(\w+)', content or ""))
+            mentioned_names = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content or ""))
             # Also parse mentions from AP tag array
             for tag in (obj.get("tag", []) or []):
                 if isinstance(tag, dict) and tag.get("type") == "Mention":

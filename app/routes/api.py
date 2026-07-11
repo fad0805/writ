@@ -166,7 +166,7 @@ def _can_view(post, viewer, session):
 
 
 def _parse_mentions(content):
-    mentioned = set(re.findall(r'@(\w+)', content))
+    mentioned = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content))
     if not mentioned:
         return []
     with get_session() as s:
@@ -772,7 +772,7 @@ def api_create_post(
         if parent_id:
             parent = s.query(Post).filter_by(id=parent_id).first()
             if parent:
-                pass
+                post.in_reply_to_ap_id = parent.ap_id or ""
         s.commit()
 
         # notify mentioned users
@@ -3272,7 +3272,7 @@ def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
             return _post_json(existing, s, user)
 
         import re
-        mentioned_names = set(re.findall(r'@(\w+)', content or ""))
+        mentioned_names = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content or ""))
         mentioned_ids = []
         if mentioned_names:
             mentioned = s.query(User).filter(User.username.in_(mentioned_names)).all()
