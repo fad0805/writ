@@ -187,10 +187,10 @@ with get_session() as s:
 "
 
 elif [ "$1" = "mastodon-poll" ]; then
+  id="${2:-116901218746967775}"
   docker compose exec api python3 -c "
 import httpx, json
-# daydream.ink의 투표 게시글 확인
-url = 'https://daydream.ink/@siarte/116901218746967775'
+url = 'https://daydream.ink/users/siarte/statuses/$id'
 r = httpx.get(url, headers={'Accept': 'application/activity+json'})
 if r.status_code == 200:
     d = r.json()
