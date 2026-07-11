@@ -968,10 +968,8 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
 
 def _handle_create(activity: dict) -> tuple[int, str]:
     import sys, json
-    print(f"[create] FULL: {json.dumps(activity, indent=2, ensure_ascii=False)[:2000]}", flush=True)
     obj = activity.get("object", {})
     obj_type = obj.get("type") if isinstance(obj, dict) else ""
-    print(f"[create] obj_type={obj_type} keys={list(obj.keys()) if isinstance(obj,dict) else 'N/A'}", flush=True)
     if obj_type in ("Note", "Question"):
         raw_actor = activity.get("actor")
         if not raw_actor:
@@ -985,13 +983,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 _poll = __s.query(Post).filter_by(ap_id=in_reply_to_url).first()
                 if _poll:
                     _sign_as = __s.query(User).get(_poll.author_id)
-        import sys; print(f"[create] resolving actor...", flush=True)
         actor = _resolve_actor(actor_url, sign_as=_sign_as)
-        print(f"[create] actor resolved: {actor.id if actor else 'None'}", flush=True)
         if not actor:
             return (404, "Actor not found")
 
-        import sys; print(f"[create] step: actor check passed", flush=True)
 
         # Verify attributedTo matches activity actor
         obj_attributed = obj.get("attributedTo", "")
@@ -1054,16 +1049,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     "expires_at": expires_at,
                 }
 
-        import sys; print(f"[create] step: before session", flush=True)
         with get_session() as session:
-            print(f"[create] step: inside session", flush=True)
             import sys; sys.stdout.flush()
-            print(f"[create] querying ap_id={post_id[:80]}", flush=True)
             existing = session.query(Post).filter_by(ap_id=post_id).first()
-            print(f"[create] existing={existing is not None}", flush=True)
-            import sys;             print(f"[create] checking in_reply_to={in_reply_to[:60] if in_reply_to else 'None'}", flush=True)
             import sys; sys.stdout.flush()
-            print(f"[create] existing returned, in_reply_to={bool(in_reply_to)}", flush=True)
             if existing:
                 # If the existing post is a poll and incoming has updated votes, update it
                 if existing.poll_data and poll_data:
@@ -1079,28 +1068,19 @@ def _handle_create(activity: dict) -> tuple[int, str]:
 
             reply_to_post = None
             if in_reply_to:
-                print(f"[create] query by ap_id", flush=True)
                 reply_to_post = session.query(Post).filter_by(ap_id=in_reply_to).first()
-                print(f"[create] ap_id result={reply_to_post is not None}", flush=True)
                 if not reply_to_post:
                     alt_url = in_reply_to.replace("https://", "http://") if "https://" in in_reply_to else in_reply_to.replace("http://", "https://")
-                    print(f"[create] query by alt_url", flush=True)
                     reply_to_post = session.query(Post).filter_by(ap_id=alt_url).first()
-                    print(f"[create] alt_url result={reply_to_post is not None}", flush=True)
                 if not reply_to_post:
                     post_num = in_reply_to.split('/')[-1]
-                    print(f"[create] query by number={post_num}", flush=True)
                     try:
                         reply_to_post = session.query(Post).filter(Post.ap_id.like(f"%{post_num}")).first()
-                    except Exception as e:
-                        print(f"[create] number query error: {e}", flush=True)
-                    print(f"[create] number result={reply_to_post is not None}", flush=True)
+                    except Exception:
+                        pass
 
-            print(f"[create] vote_name stage", flush=True)
             # Mastodon poll votes: Create(Note) with name + inReplyTo + no content
             vote_name = obj.get("name", "") if not raw_content.strip() else ""
-            print(f"[create] vote_name={vote_name!r} raw_content_len={len(raw_content)}", flush=True)
-            print(f"[create] has_poll={bool(reply_to_post and reply_to_post.poll_data)}", flush=True)
             if vote_name and reply_to_post and reply_to_post.poll_data:
                 poll_post = reply_to_post
                 options = poll_post.poll_data.get("options", [])
@@ -1109,23 +1089,17 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     if opt.get("text", "").strip().lower() == vote_name.strip().lower():
                         option_idx = i
                         break
-                print(f"[create] option_idx={option_idx}", flush=True)
                 if option_idx >= 0:
-                    print(f"[create] checking expiry", flush=True)
                     expires_at = poll_post.poll_data.get("expires_at")
                     if expires_at:
                         try:
                             exp = datetime.datetime.fromisoformat(expires_at)
                             now = datetime.datetime.now(datetime.timezone.utc)
-                            print(f"[create] expires_at={expires_at} expired={exp < now}", flush=True)
                             if exp < now:
                                 return (200, "Poll ended")
                         except (ValueError, TypeError) as ex:
-                            print(f"[create] expiry error: {ex}", flush=True)
                             pass
-                    print(f"[create] querying existing vote", flush=True)
                     existing_vote = session.query(Vote).filter_by(user_id=actor.id, post_id=poll_post.id).first()
-                    print(f"[create] existing_vote={existing_vote is not None}", flush=True)
                     if existing_vote:
                         if existing_vote.option_index == option_idx:
                             return (200, "Already voted")
@@ -1137,10 +1111,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     new_options = copy.deepcopy(options)
                     new_options[option_idx]["votes_count"] = new_options[option_idx].get("votes_count", 0) + 1
                     poll_post.poll_data = {**poll_post.poll_data, "options": new_options}
-                    print(f"[create] after reassign: poll_data={poll_post.poll_data}", flush=True)
-                    import sys; print(f"[create] committing...", flush=True)
                     session.commit()
-                    print(f"[create] commit done", flush=True)
                     from app.timeline_stream import broadcast_post, broadcast_refresh_notifs
                     broadcast_refresh_notifs()
                     broadcast_post({
