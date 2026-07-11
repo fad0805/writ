@@ -278,7 +278,7 @@ class Post(Base):
                     mention_html = (
                         f'<span class="h-card" translate="no">'
                         f'<a href="{web_href}" class="u-url mention" rel="mention">'
-                        f'@{short_username}'
+                        f'@<span>{short_username}</span>'
                         f'</a></span>'
                     )
                     short_name = f"@{u.username}"
@@ -303,7 +303,7 @@ class Post(Base):
             return (
                 f'<span class="h-card" translate="no">'
                 f'<a href="{actor_uri}" class="u-url mention" rel="mention">'
-                f'@{handle.split("@")[0]}'
+                f'@<span>{handle.split("@")[0]}</span>'
                 f'</a></span>'
             )
         content = re.sub(
@@ -311,6 +311,9 @@ class Post(Base):
             _wrap_unknown_mention,
             content,
         )
+
+        if content and not content.startswith("<p>"):
+            content = f"<p>{content}</p>"
 
         if self.tag_list:
             for t in self.tag_list:
