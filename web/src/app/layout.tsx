@@ -57,9 +57,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 for (var r of regs) r.unregister();
               });
             }
-            if (localStorage.getItem('theme') === 'dark') {
-              document.body.classList.add('dark-theme');
-            }
             window.__toggleTheme = function() {
               document.body.classList.toggle('dark-theme');
               localStorage.setItem('theme', document.body.classList.contains('dark-theme') ? 'dark' : 'light');

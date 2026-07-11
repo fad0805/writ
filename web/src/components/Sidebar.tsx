@@ -40,6 +40,12 @@ export default function Sidebar() {
 
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => {
+    if (localStorage.getItem("theme") === "dark" && !document.body.classList.contains("dark-theme")) {
+      document.body.classList.add("dark-theme");
+      setIsDark(true);
+    }
+  }, []);
+  useEffect(() => {
     if (!user) return;
     const check = () => {
       fetch("/api/notifications/unread-count", { credentials: "include" })
