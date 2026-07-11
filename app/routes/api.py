@@ -1208,6 +1208,7 @@ def api_unreact_post(request: Request, post_id: int):
 @router.post("/posts/{post_id}/vote")
 def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
     user = require_active_auth(request)
+    remote_vote_data = None
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post or not post.poll_data:
@@ -1236,31 +1237,33 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
         for i, opt in enumerate(options):
             opt["votes_count"] = counts.get(i, 0)
         s.query(Post).filter(Post.id == post_id).update({"poll_data": {**post.poll_data, "options": options}}, synchronize_session=False)
+        if post.ap_id and post.author and post.author.is_remote:
+            inbox = post.author.shared_inbox_url or post.author.inbox_url
+            if inbox:
+                remote_vote_data = (post.ap_id, post.author.actor_uri(), inbox, options[option]["text"])
         s.commit()
-        s.expire_all()
-    if post.ap_id and post.author and post.author.is_remote:
-        from app.activitypub import _post_to_inbox
+    if remote_vote_data:
+        from uuid import uuid4
+        ap_id, author_uri, inbox, option_text = remote_vote_data
         vote_activity = {
             "@context": "https://www.w3.org/ns/activitystreams",
-            "id": f"{BASE_URL}/votes/{uuid.uuid4()}/activity",
+            "id": f"{BASE_URL}/votes/{uuid4()}/activity",
             "type": "Create",
             "actor": user.actor_uri(),
             "object": {
-                "id": f"{BASE_URL}/votes/{uuid.uuid4()}",
+                "id": f"{BASE_URL}/votes/{uuid4()}",
                 "type": "Note",
-                "name": options[option]["text"],
+                "name": option_text,
                 "attributedTo": user.actor_uri(),
-                "to": [post.author.actor_uri()],
-                "inReplyTo": post.ap_id,
+                "to": [author_uri],
+                "inReplyTo": ap_id,
             },
-            "to": [post.author.actor_uri()],
+            "to": [author_uri],
         }
-        inbox = post.author.shared_inbox_url or post.author.inbox_url
-        if inbox:
-            try:
-                _post_to_inbox(inbox, vote_activity, user)
-            except Exception:
-                pass
+        try:
+            _post_to_inbox(inbox, vote_activity, user)
+        except Exception:
+            pass
     return {"ok": True}
 
 
