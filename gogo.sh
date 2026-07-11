@@ -186,6 +186,35 @@ with get_session() as s:
     if f2: print('accepted:', f2.accepted)
 "
 
+elif [ "$1" = "mastodon-poll" ]; then
+  docker compose exec api python3 -c "
+import httpx, json
+# daydream.ink의 투표 게시글 확인
+url = 'https://daydream.ink/@siarte/116901218746967775'
+r = httpx.get(url, headers={'Accept': 'application/activity+json'})
+if r.status_code == 200:
+    d = r.json()
+    obj = d.get('object', d)
+    print('=== 마스토돈 투표 구조 ===')
+    print('type:', obj.get('type'))
+    print('endTime:', obj.get('endTime'))
+    print('options:', json.dumps(obj.get('oneOf'), indent=2, ensure_ascii=False)[:500])
+    print('to:', obj.get('to'))
+    print('cc:', obj.get('cc'))
+    print()
+    # WRIT 투표와 비교
+    r2 = httpx.get('https://writ.daydream.ink/@siarte/72871480', headers={'Accept':'application/activity+json'})
+    if r2.status_code == 200:
+        d2 = r2.json()
+        obj2 = d2.get('object', d2)
+        print('=== WRIT 투표 ===')
+        print('options:', json.dumps(obj2.get('oneOf'), indent=2, ensure_ascii=False)[:500])
+        print('to:', obj2.get('to'))
+        print('cc:', obj2.get('cc'))
+else:
+    print('status:', r.status_code, r.text[:200])
+"
+
 elif [ "$1" = "check-poll" ]; then
   id="${2:-659dac71}"
   docker compose exec api python3 -c "
@@ -198,6 +227,7 @@ print('endTime:', obj.get('endTime'))
 print('votersCount:', obj.get('votersCount'))
 print('options:', json.dumps(obj.get('oneOf'), indent=2, ensure_ascii=False)[:300])
 print('to:', obj.get('to'))
+print('cc:', obj.get('cc'))
 "
 
 elif [ "$1" = "clear-pending" ]; then

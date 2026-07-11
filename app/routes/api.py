@@ -721,7 +721,7 @@ def api_create_post(
     media_attachments: str = Form("[]"),
     is_sensitive: bool = Form(False),
     poll_options: str = Form(""),
-    poll_expires_in: int = Form(0),
+    poll_expires_in: int = Form(60),
 ):
     user = require_active_auth(request)
     if share_url:
