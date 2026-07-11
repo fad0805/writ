@@ -264,8 +264,7 @@ class Post(Base):
             with get_session() as s:
                 users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
                 for u in users:
-                    # Web profile URL (Mastodon expects /@username format in <a href>)
-                    web_href = getattr(u, 'profile_url', '') or u.actor_uri()
+                    web_href = getattr(u, 'profile_url', '') or f"{BASE_URL}/@{u.username}"
                     # Actor URI (for Mention tag)
                     actor_href = u.actor_uri()
                     # Display name: just username (Mastodon expects @<span>username</span>)
