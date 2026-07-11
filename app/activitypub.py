@@ -1644,6 +1644,11 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
                     reporter = u
                     break
         if not reporter:
+            try:
+                reporter = _resolve_actor(actor_url)
+            except Exception:
+                reporter = None
+        if not reporter:
             return (202, "Accepted (unknown reporter)")
         objects = activity.get("object", [])
         if isinstance(objects, str):
@@ -1654,6 +1659,20 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
             if post:
                 report = Report(
                     reporter_id=reporter.id, target_type="post", target_id=post.id,
+                    reason=content or "Reported via federation", forward_to_remote=False,
+                )
+                s.add(report)
+                continue
+            user = s.query(User).filter(User.remote_url == obj_url).first()
+            if not user:
+                if BASE_URL in obj_url:
+                    for _u in s.query(User).filter_by(is_remote=False).all():
+                        if _u.actor_uri() == obj_url:
+                            user = _u
+                            break
+            if user and not user.is_remote:
+                report = Report(
+                    reporter_id=reporter.id, target_type="post", target_id=0,
                     reason=content or "Reported via federation", forward_to_remote=False,
                 )
                 s.add(report)
