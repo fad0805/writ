@@ -4430,6 +4430,7 @@ def api_admin_get_report(request: Request, report_id: int):
                 item["target"] = {
                     "id": post.id,
                     "content": post.content,
+                    "summary": post.summary or "",
                     "author": {"id": post.author.id, "username": post.author.username, "display_name": post.author.display_name, "is_remote": post.author.is_remote},
                     "is_deleted": post.is_deleted,
                     "author_id": post.author_id,

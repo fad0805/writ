@@ -9,6 +9,7 @@ import Link from "next/link";
 interface TargetInfo {
   id: number;
   content?: string;
+  summary?: string;
   title?: string;
   description?: string;
   novel_id?: number;
@@ -101,14 +102,20 @@ export default function ReportDetailPage() {
     } catch { alert("오류"); }
   };
 
-  const handleSetCw = async () => {
-    const form = new FormData();
-    form.append("summary", "");
-    try {
+  const handleToggleCw = async () => {
+    if (target?.summary) {
+      await fetch(`/api/admin/posts/${report!.target_id}/remove-cw`, { method: "POST", credentials: "include" });
+      setMsg("CW가 해제되었습니다.");
+      load();
+    } else {
+      const cwText = prompt("CW 내용을 입력하세요:", "규칙 위반 게시글");
+      if (cwText === null) return;
+      const form = new FormData();
+      form.append("summary", cwText || "규칙 위반 게시글");
       const res = await fetch(`/api/admin/posts/${report!.target_id}/set-cw`, { method: "POST", credentials: "include", body: form });
       if (res.ok) { setMsg("CW가 설정되었습니다."); load(); }
       else { alert("실패"); }
-    } catch { alert("오류"); }
+    }
   };
 
   if (authLoading || loading) return <div className="empty-state">로딩 중...</div>;
@@ -227,8 +234,8 @@ export default function ReportDetailPage() {
               </button>
             )}
             {report.target_type === "post" && target?.content !== undefined && (
-              <button className="btn btn-outline" onClick={handleSetCw}>
-                <Icon name="eye" /> CW 설정
+              <button className="btn btn-outline" onClick={handleToggleCw}>
+                <Icon name="eye" /> {target?.summary ? "CW 해제" : "CW 설정"}
               </button>
             )}
             {target?.author?.is_remote && (
