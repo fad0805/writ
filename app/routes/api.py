@@ -131,9 +131,6 @@ def _reply_context(p, session=None, user=None):
     if not parent and p.in_reply_to_ap_id and session:
         try:
             parent = session.query(Post).filter_by(ap_id=p.in_reply_to_ap_id).first()
-            if not parent and user:
-                from app.activitypub import _fetch_remote_post
-                parent = _fetch_remote_post(p.in_reply_to_ap_id, user, session)
         except Exception:
             pass
     if not parent:
