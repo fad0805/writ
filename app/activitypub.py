@@ -602,6 +602,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             existing.inbox_url = data.get("inbox", existing.inbox_url)
             existing.shared_inbox_url = data.get("endpoints", {}).get("sharedInbox", existing.shared_inbox_url)
             existing.is_locked = data.get("manuallyApprovesFollowers", existing.is_locked)
+            existing.profile_url = data.get("url", existing.profile_url or "")
             if avatar_url:
                 existing.profile_image = _save_remote_avatar(avatar_url, base_username_clean, existing.profile_image)
             if header_url:
@@ -617,6 +618,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             by_username.public_key = public_key_pem or by_username.public_key
             by_username.display_name = data.get("name", by_username.display_name)
             by_username.summary = data.get("summary", by_username.summary)
+            by_username.profile_url = data.get("url", by_username.profile_url or "")
             if avatar_url:
                 by_username.profile_image = _save_remote_avatar(avatar_url, base_username_clean, by_username.profile_image)
             if header_url:
@@ -644,6 +646,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             public_key=public_key_pem or pub,
             is_remote=True,
             remote_url=actor_url,
+            profile_url=data.get("url", ""),
             inbox_url=data.get("inbox", ""),
             shared_inbox_url=data.get("endpoints", {}).get("sharedInbox", ""),
             profile_image=profile_image,

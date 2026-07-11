@@ -58,6 +58,7 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     role = Column(String(16), default="user")
     remote_url = Column(String(512), default="")
+    profile_url = Column(String(512), default="")
     shared_inbox_url = Column(String(512), default="")
     profile_image = Column(String(512), default="")
     header_image = Column(String(512), default="")
@@ -115,7 +116,7 @@ class User(Base):
             "preferredUsername": self.username,
             "name": self.display_name or self.username,
             "summary": self.summary or "",
-            "url": self.actor_uri(),
+            "url": f"{BASE_URL}/@{self.username}",
             "inbox": self.inbox_uri(),
             "outbox": self.outbox_uri(),
             "followers": self.followers_uri(),
@@ -262,7 +263,8 @@ class Post(Base):
             with get_session() as s:
                 users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
                 for u in users:
-                    href = u.actor_uri()
+                    # Use profile_url (web URL) for mention HTML if available, otherwise actor_uri
+                    href = getattr(u, 'profile_url', '') or u.actor_uri()
                     # Determine display name: local = user, remote = user@domain
                     if u.is_remote and u.remote_url:
                         # username already stored as "user@domain" for remote users
