@@ -362,7 +362,16 @@ class Post(Base):
             obj["inReplyTo"] = self.in_reply_to_ap_id
         if self.poll_data:
             obj["type"] = "Question"
-            obj["oneOf"] = [{"name": o["text"], "replies": {"type": "Collection", "totalItems": o.get("votes_count", 0)}} for o in self.poll_data.get("options", [])]
+            poll_id = self.ap_id or f"{BASE_URL}/@{self.author.username}/{self.number}"
+            obj["oneOf"] = [
+                {
+                    "type": "Note",
+                    "id": f"{poll_id}/options/{i}",
+                    "name": o["text"],
+                    "replies": {"type": "Collection", "totalItems": o.get("votes_count", 0)},
+                }
+                for i, o in enumerate(self.poll_data.get("options", []))
+            ]
             voters = sum(o.get("votes_count", 0) for o in self.poll_data.get("options", []))
             obj["votersCount"] = voters
             expires_at = self.poll_data.get("expires_at")

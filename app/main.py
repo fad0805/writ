@@ -426,6 +426,7 @@ async def user_inbox(request: Request, username: str):
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
+    import sys; print(f"[inbox] type={activity.get('type')}", flush=True)
     actor_url = activity.get("actor", "")
     if isinstance(actor_url, list):
         actor_url = actor_url[0]
