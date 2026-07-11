@@ -889,6 +889,17 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
     target_type = target_type.strip().lower()
     if target_type not in ("post", "novel", "episode"):
         raise HTTPException(status_code=400, detail="Invalid target_type")
+    if forward_to_remote:
+        import datetime as _dt
+        _cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(minutes=1)
+        with get_session() as _s:
+            _recent = _s.query(Report).filter(
+                Report.reporter_id == user.id,
+                Report.forward_to_remote == True,
+                Report.created_at >= _cutoff,
+            ).count()
+            if _recent >= 3:
+                raise HTTPException(status_code=429, detail="원격 신고는 1분에 3회까지 가능합니다")
     parsed_rule_ids = []
     if rule_ids and rule_ids.strip():
         try:
