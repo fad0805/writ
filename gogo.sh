@@ -506,6 +506,24 @@ with get_session() as s:
     print(f'deleted {deleted} notifications for deleted posts')
 "
 
+elif [ "$1" = "check-actor" ]; then
+  actor_url="${2:-https://daydream.ink/actor}"
+  docker compose exec api python3 -c "
+import httpx
+url = '$actor_url'
+r = httpx.get(url, headers={'Accept': 'application/activity+json'}, timeout=10)
+print('status:', r.status_code)
+if r.status_code == 200:
+    d = r.json()
+    print('type:', d.get('type'))
+    print('preferredUsername:', d.get('preferredUsername'))
+    pubkey = d.get('publicKey', {}).get('publicKeyPem', '')[:80] if isinstance(d.get('publicKey'), dict) else 'N/A'
+    print('publicKey:', pubkey + '...')
+    print('inbox:', d.get('inbox'))
+else:
+    print('body:', r.text[:300])
+"
+
 elif [ "$1" = "check-outbox" ]; then
   id="${2:-7c930c98}"
   docker compose exec api python3 -c "
@@ -523,6 +541,51 @@ print('cc:', obj.get('cc'))
 print()
 for m in re.finditer(r'<a[^>]*>', obj.get('content','')):
     print('link:', m.group()[:200])
+"
+
+elif [ "$1" = "check-inbox-test" ]; then
+  id="${2:-94c2a2b5}"
+  docker compose exec api python3 -c "
+import httpx, json, sys
+from app.crypto_utils import sign_string, get_private_key
+from app.models import User, get_session
+from app.config import BASE_URL, SECRET_KEY
+from urllib.parse import urlparse
+
+# Build Flag
+flag = {
+    '@context': 'https://www.w3.org/ns/activitystreams',
+    'id': 'https://test.local/flag/1',
+    'type': 'Flag',
+    'actor': 'https://writ.daydream.ink/users/siarte',
+    'object': ['https://writ.daydream.ink/users/siarte', 'https://writ.daydream.ink/@siarte/$id'],
+    'content': 'test report',
+}
+body = json.dumps(flag, ensure_ascii=False).encode()
+inbox_url = f'{BASE_URL}/inbox'
+
+# Sign as siarte
+with get_session() as s:
+    me = s.query(User).filter_by(username='siarte').first()
+    priv = get_private_key(me, SECRET_KEY)
+    import datetime, time, hashlib, base64
+    parsed = urlparse(inbox_url)
+    date = datetime.datetime.now(datetime.timezone.utc).strftime('%a, %d %b %Y %H:%M:%S GMT')
+    digest = base64.b64encode(hashlib.sha256(body).digest()).decode()
+    created = int(time.time())
+    ss = f'(request-target): post {parsed.path}\\nhost: {parsed.netloc}\\ndate: {date}\\ndigest: SHA-256={digest}\\n(created): {created}'
+    sig = sign_string(ss, priv)
+    sig_header = f'keyId=\"{me.actor_uri()}#main-key\",algorithm=\"hs2019\",created=\"{created}\",headers=\"(request-target) host date digest (created)\",signature=\"{sig}\"'
+    headers = {
+        'Content-Type': 'application/activity+json',
+        'Signature': sig_header,
+        'Date': date,
+        'Digest': f'SHA-256={digest}',
+        'Host': parsed.netloc,
+    }
+    r = httpx.post(inbox_url, content=body, headers=headers, timeout=10)
+    print('status:', r.status_code)
+    print('body:', r.text[:200])
 "
 
 elif [ "$1" = "check-inbox" ]; then
