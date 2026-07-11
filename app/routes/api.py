@@ -938,34 +938,38 @@ def api_list_rules():
 @router.post("/posts/{post_id}/like")
 def api_like_post(request: Request, post_id: int):
     user = require_active_auth(request)
-    with get_session() as s:
-        post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
-        if not post:
-            raise HTTPException(status_code=404, detail="Post not found")
-        existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
-        if not existing:
-            s.add(Like(user_id=user.id, post_id=post_id))
-            if post.author_id != user.id:
-                s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
-            s.commit()
-            broadcast_refresh_notifs()
-        if post.author.is_remote and post.author.shared_inbox_url:
-            import sys; print(f"[like] sending to {post.author.shared_inbox_url} for post {post.ap_id}", flush=True)
-            like_activity = {
-                "@context": "https://www.w3.org/ns/activitystreams",
-                "id": f"{BASE_URL}/likes/{uuid.uuid4()}",
-                "type": "Like",
-                "actor": user.actor_uri(),
-                "object": post.ap_id,
-                "to": [post.author.actor_uri()],
-                "cc": [],
-            }
-            inbox = post.author.shared_inbox_url
-            try:
-                _post_to_inbox(inbox, like_activity, user)
-            except Exception:
-                pass
-    return {"ok": True}
+    try:
+        with get_session() as s:
+            post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
+            if not post:
+                raise HTTPException(status_code=404, detail="Post not found")
+            existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
+            if not existing:
+                s.add(Like(user_id=user.id, post_id=post_id))
+                if post.author_id != user.id:
+                    s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
+                s.commit()
+                broadcast_refresh_notifs()
+            if post.author.is_remote and post.author.shared_inbox_url:
+                import sys; print(f"[like] sending to {post.author.shared_inbox_url} for post {post.ap_id}", flush=True)
+                like_activity = {
+                    "@context": "https://www.w3.org/ns/activitystreams",
+                    "id": f"{BASE_URL}/likes/{uuid.uuid4()}",
+                    "type": "Like",
+                    "actor": user.actor_uri(),
+                    "object": post.ap_id,
+                    "to": [post.author.actor_uri()],
+                    "cc": [],
+                }
+                inbox = post.author.shared_inbox_url
+                try:
+                    _post_to_inbox(inbox, like_activity, user)
+                except Exception:
+                    pass
+        return {"ok": True}
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/posts/{post_id}/unlike")
