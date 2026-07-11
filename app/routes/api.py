@@ -167,11 +167,20 @@ def _can_view(post, viewer, session):
 
 def _parse_mentions(content):
     mentioned = set(re.findall(r'@(\w+)', content))
-    if not mentioned:
+    remote_mentions = set(re.findall(r'@(\w+)@([\w.-]+)', content))
+    if not mentioned and not remote_mentions:
         return []
+    ids = []
     with get_session() as s:
-        users = s.query(User).filter(User.username.in_(mentioned)).all()
-        return [u.id for u in users]
+        if mentioned:
+            users = s.query(User).filter(User.username.in_(mentioned)).all()
+            ids.extend(u.id for u in users)
+        for username, domain in remote_mentions:
+            remote_username = f"{username}@{domain}"
+            u = s.query(User).filter_by(username=remote_username).first()
+            if u:
+                ids.append(u.id)
+    return ids
 
 
 def _sync_post_tags(post, s):

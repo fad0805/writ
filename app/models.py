@@ -247,6 +247,7 @@ class Post(Base):
             return 0
 
     def to_ap_note(self):
+        from urllib.parse import urlparse
         content = self.content
 
         content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', content)
@@ -260,12 +261,13 @@ class Post(Base):
                 for u in users:
                     name = f"@{u.username}"
                     href = u.actor_uri()
+                    mention_name = f"@{u.remote_url.split('/')[-1]}@{urlparse(u.remote_url).hostname}" if u.is_remote and u.remote_url else name
                     content = re.sub(
                         re.escape(name) + r'(?![^\s<]*(?:</a>|">))',
-                        f'<a href="{href}" class="mention">{name}</a>',
+                        f'<a href="{href}" class="u-url mention">{mention_name}</a>',
                         content,
                     )
-                    tags.append({"type": "Mention", "href": href, "name": name})
+                    tags.append({"type": "Mention", "href": href, "name": mention_name})
         if self.tag_list:
             for t in self.tag_list:
                 tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={t.name}", "name": f"#{t.name}"})
