@@ -1133,9 +1133,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         existing_vote.option_index = option_idx
                     else:
                         session.add(Vote(user_id=actor.id, post_id=poll_post.id, option_index=option_idx))
-                    options[option_idx]["votes_count"] = options[option_idx].get("votes_count", 0) + 1
-                    print(f"[create] before reassign: options[1]={options[1]['votes_count'] if len(options)>1 else 'N/A'}", flush=True)
-                    poll_post.poll_data = {**poll_post.poll_data, "options": options}
+                    import copy
+                    new_options = copy.deepcopy(options)
+                    new_options[option_idx]["votes_count"] = new_options[option_idx].get("votes_count", 0) + 1
+                    poll_post.poll_data = {**poll_post.poll_data, "options": new_options}
                     print(f"[create] after reassign: poll_data={poll_post.poll_data}", flush=True)
                     import sys; print(f"[create] committing...", flush=True)
                     session.commit()
