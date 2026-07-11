@@ -829,6 +829,140 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
     return (200, "Accepted follow")
 
 
+def _fetch_remote_post(url: str, signer: User, session, _depth=0):
+    """Fetch a remote AP object and save it as a Post. Returns the Post or None."""
+    if _depth > 3 or not url:
+        return None
+    from urllib.parse import urlparse as _urlparse
+    parsed = _urlparse(url)
+    date_str = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
+    path_with_query = parsed.path or "/"
+    if parsed.query:
+        path_with_query += f"?{parsed.query}"
+    signed_string = (
+        f"(request-target): get {path_with_query}\n"
+        f"host: {parsed.netloc}\n"
+        f"date: {date_str}"
+    )
+    try:
+        sig = sign_string(signed_string, get_private_key(signer, SECRET_KEY))
+    except Exception:
+        return None
+    sig_header = (
+        f'keyId="{signer.actor_uri()}#main-key",'
+        f'headers="(request-target) host date",'
+        f'signature="{sig}"'
+    )
+    headers = {
+        "Accept": "application/activity+json",
+        "Signature": sig_header,
+        "Date": date_str,
+        "Host": parsed.netloc,
+    }
+    try:
+        resp = httpx.get(url, headers=headers, timeout=15, follow_redirects=True)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+    except Exception:
+        return None
+
+    obj = data.get("object", data) if isinstance(data, dict) else {}
+    if not isinstance(obj, dict):
+        return None
+    obj_type = obj.get("type", "")
+    if obj_type not in ("Note", "Question"):
+        return None
+
+    ap_id = obj.get("id", url)
+    existing = session.query(Post).filter_by(ap_id=ap_id).first()
+    if existing and not existing.is_deleted:
+        return existing
+
+    attributed_to = obj.get("attributedTo", "")
+    if isinstance(attributed_to, list):
+        attributed_to = attributed_to[0] if attributed_to else ""
+    if isinstance(attributed_to, dict):
+        attributed_to = attributed_to.get("id", "")
+    if not attributed_to:
+        return None
+
+    _resolve_actor(attributed_to)
+    author = session.query(User).filter_by(remote_url=attributed_to).first()
+    if not author:
+        return None
+
+    raw_content = obj.get("content", "") or ""
+    if len(raw_content) > 65536:
+        raw_content = raw_content[:65536]
+    content = _normalize_mentions(_sanitize_html(raw_content))
+    summary = obj.get("summary", "")
+
+    to = obj.get("to", [])
+    if isinstance(to, str): to = [to]
+    cc = obj.get("cc", [])
+    if isinstance(cc, str): cc = [cc]
+    all_auds = to + cc
+    pub = "https://www.w3.org/ns/activitystreams#Public"
+    if pub in to:
+        vis = "public"
+    elif pub in cc:
+        vis = "home"
+    elif any(a.endswith("/followers") for a in all_auds):
+        vis = "followers"
+    elif all(a.startswith("http") for a in all_auds if a):
+        vis = "mention"
+    else:
+        vis = "home"
+
+    in_reply_to_ap = obj.get("inReplyTo", "")
+    if isinstance(in_reply_to_ap, dict):
+        in_reply_to_ap = in_reply_to_ap.get("id", "")
+
+    in_reply_to_id = None
+    if in_reply_to_ap:
+        parent = session.query(Post).filter_by(ap_id=in_reply_to_ap).first()
+        if parent:
+            in_reply_to_id = parent.id
+        else:
+            parent = _fetch_remote_post(in_reply_to_ap, signer, session, _depth + 1)
+            if parent:
+                in_reply_to_id = parent.id
+
+    mentioned_names = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content or ""))
+    mentioned_ids = []
+    if mentioned_names:
+        users = session.query(User).filter(User.username.in_(mentioned_names)).all()
+        mentioned_ids = [u.id for u in users]
+
+    _process_emoji_tags(obj.get("tag", []), session)
+    session.flush()
+
+    post = Post(
+        author_id=author.id,
+        content=content,
+        summary=summary,
+        visibility=vis,
+        ap_id=ap_id,
+        in_reply_to_ap_id=in_reply_to_ap,
+        in_reply_to_id=in_reply_to_id,
+        mentioned_user_ids=mentioned_ids,
+    )
+    published = obj.get("published", "")
+    if published:
+        try:
+            post.created_at = datetime.datetime.fromisoformat(published.replace("Z", "+00:00"))
+        except Exception:
+            pass
+    session.add(post)
+    try:
+        session.flush()
+    except Exception:
+        session.rollback()
+        return session.query(Post).filter_by(ap_id=ap_id).first()
+    return post
+
+
 def _handle_create(activity: dict) -> tuple[int, str]:
     obj = activity.get("object", {})
     obj_type = obj.get("type") if isinstance(obj, dict) else ""
@@ -908,6 +1042,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             reply_to_post = None
             if in_reply_to:
                 reply_to_post = session.query(Post).filter_by(ap_id=in_reply_to).first()
+                if not reply_to_post:
+                    reply_to_post = _fetch_remote_post(in_reply_to, actor, session)
 
             # Parse mentioned users from content
             mentioned_names = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content or ""))
@@ -1245,6 +1381,10 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
             if not post:
                 return (200, "OK")
             session.query(Like).filter_by(user_id=actor.id, post_id=post.id).delete()
+            session.query(Notification).filter_by(
+                user_id=post.author_id, from_user_id=actor.id,
+                notification_type="like", post_id=post.id,
+            ).delete()
             session.commit()
 
         return (200, "Unliked")
@@ -1264,6 +1404,10 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
             if not post:
                 return (200, "OK")
             session.query(Boost).filter_by(user_id=actor.id, post_id=post.id).delete()
+            session.query(Notification).filter_by(
+                user_id=post.author_id, from_user_id=actor.id,
+                notification_type="boost", post_id=post.id,
+            ).delete()
             session.commit()
 
         return (200, "Unboosted")

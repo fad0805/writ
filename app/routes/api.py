@@ -483,18 +483,25 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         following_ids.add(user.id)
         reply_filtered = []
         for p in posts:
-            if p.in_reply_to_id and p.author_id != user.id:
+            if p.author_id != user.id and (p.in_reply_to_id or p.in_reply_to_ap_id):
                 participants = set()
                 cur = p
                 depth = 0
-                while cur and cur.in_reply_to_id and depth < 20:
+                while cur and (cur.in_reply_to_id or cur.in_reply_to_ap_id) and depth < 20:
                     parent = cur.parent if hasattr(cur, 'parent') else None
                     if not parent:
-                        break
-                    participants.add(parent.author_id)
+                        if cur.in_reply_to_ap_id:
+                            from app.activitypub import _fetch_remote_post
+                            parent = _fetch_remote_post(cur.in_reply_to_ap_id, user, session)
+                            if parent:
+                                cur.in_reply_to_id = parent.id
+                        if not parent:
+                            break
+                    if parent:
+                        participants.add(parent.author_id)
                     cur = parent
                     depth += 1
-                if not participants <= following_ids:
+                if participants and not participants <= following_ids:
                     continue
             reply_filtered.append(p)
         posts = reply_filtered

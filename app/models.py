@@ -258,30 +258,34 @@ class Post(Base):
         tags = []
         if self.mentioned_user_ids:
             from app.config import DOMAIN
+            from urllib.parse import urlparse as _urlparse
             with get_session() as s:
                 users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
                 for u in users:
-                    # Always use @user@domain format for AP/Mastodon compatibility
-                    if u.is_remote:
-                        name = f"@{u.username}"
-                    else:
-                        name = f"@{u.username}@{DOMAIN}"
                     href = u.actor_uri()
-                    # Match both @user and @user@domain in content
-                    short_name = f"@{u.username}"
-                    if short_name != name:
-                        content = re.sub(
-                            re.escape(short_name) + r'(?:@[\w.-]+)?(?![^\s<]*(?:</a>|">))',
-                            f'<a href="{href}" class="mention">{name}</a>',
-                            content,
-                        )
+                    # Determine display name: @user@domain (Mastodon pretty_acct format)
+                    if u.is_remote and u.remote_url:
+                        user_domain = _urlparse(u.remote_url).hostname or ""
+                        acct_name = f"@{u.username}@{user_domain}"
                     else:
-                        content = re.sub(
-                            re.escape(name) + r'(?![^\s<]*(?:</a>|">))',
-                            f'<a href="{href}" class="mention">{name}</a>',
-                            content,
-                        )
-                    tags.append({"type": "Mention", "href": href, "name": name})
+                        acct_name = f"@{u.username}@{DOMAIN}"
+                    # Mastodon-compatible h-card mention HTML
+                    mention_html = (
+                        f'<span class="h-card" translate="no">'
+                        f'<a href="{href}" class="u-url mention">'
+                        f'@<span>{acct_name}</span>'
+                        f'</a></span>'
+                    )
+                    # Match @user or @user@domain in content
+                    short_name = f"@{u.username}"
+                    content = re.sub(
+                        re.escape(short_name) + r'(?:@[\w.-]+)?(?![^\s<]*(?:</a>|">))',
+                        mention_html,
+                        content,
+                    )
+                    # AP tag name must be WebFinger address (user@domain)
+                    tag_name = acct_name
+                    tags.append({"type": "Mention", "href": href, "name": tag_name})
         if self.tag_list:
             for t in self.tag_list:
                 tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={t.name}", "name": f"#{t.name}"})
