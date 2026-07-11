@@ -1137,19 +1137,43 @@ def _handle_create(activity: dict) -> tuple[int, str]:
 
             # Parse mentioned users from content
             mentioned_names = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content or ""))
+            mentioned_hrefs = set()
             # Also parse mentions from AP tag array
             for tag in (obj.get("tag", []) or []):
                 if isinstance(tag, dict) and tag.get("type") == "Mention":
                     href = tag.get("href", "")
                     name = tag.get("name", "")
+                    if href:
+                        mentioned_hrefs.add(href.rstrip("/"))
                     if name and name.startswith("@"):
                         mentioned_names.add(name.lstrip("@"))
+            # Also check `to` / `cc` for local user actor URIs (DMs from Mastodon)
+            for _aud in all_audiences:
+                _a = _aud.rstrip("/")
+                if _a and _a.startswith("http"):
+                    mentioned_hrefs.add(_a)
             mentioned_ids = []
+            _seen_ids = set()
             if mentioned_names:
                 mentioned = session.query(User).filter(
                     User.username.in_(mentioned_names)
                 ).all()
-                mentioned_ids = [u.id for u in mentioned]
+                for u in mentioned:
+                    if u.id not in _seen_ids:
+                        mentioned_ids.append(u.id)
+                        _seen_ids.add(u.id)
+            if mentioned_hrefs:
+                for _href in mentioned_hrefs:
+                    u = session.query(User).filter(User.remote_url == _href).first()
+                    if u and u.id not in _seen_ids:
+                        mentioned_ids.append(u.id)
+                        _seen_ids.add(u.id)
+                    if u is None and BASE_URL in _href:
+                        for _u in session.query(User).filter_by(is_remote=False).all():
+                            if _u.actor_uri() == _href and _u.id not in _seen_ids:
+                                mentioned_ids.append(_u.id)
+                                _seen_ids.add(_u.id)
+                                break
 
             # Check if actor's domain is server-muted
             actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""

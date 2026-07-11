@@ -450,7 +450,6 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 Post.id.in_(boosted_ids),
             ),
             Post.is_deleted == False,
-            or_(Post.visibility != "mention", Post.author_id == user.id),
             or_(Post.visibility != "home", Post.author_id.in_(following_ids)),
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     elif tl_type == "social":
@@ -467,7 +466,6 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 and_(Post.author_id.in_(local_ids), Post.visibility == "public"),
             ),
             Post.is_deleted == False,
-            or_(Post.visibility != "mention", Post.author_id == user.id),
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     elif tl_type == "local":
         local_ids = [u.id for u in session.query(User).filter_by(is_remote=False).all()]
@@ -486,8 +484,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             Post.is_deleted == False,
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     raw_total = len(posts)
-    # Remove DMs from other users (self-DMs are kept)
-    posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm and p.author_id != user.id)]
+    posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm and p.author_id != user.id and user.id not in (p.mentioned_user_ids or []))]
     # Filter replies: only show if all thread participants are followed (or post is mine)
     # Only for home/social timelines, not local/federated
     if user and tl_type in ("home", "social"):
