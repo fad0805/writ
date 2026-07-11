@@ -291,12 +291,19 @@ class Post(Base):
                     tags.append({"type": "Mention", "href": actor_href, "name": tag_name})
 
         # Wrap remaining @user@domain patterns as mentions + tag array entries
+        def _actor_uri_for_handle(handle: str) -> str:
+            if "@" in handle:
+                name, domain = handle.split("@", 1)
+                domain_uri = f"https://{domain}" if domain != urlparse(BASE_URL).hostname else BASE_URL
+                return f"{domain_uri}/users/{name}"
+            return f"{BASE_URL}/users/{handle}"
         def _wrap_unknown_mention(m):
             handle = m.group(1)
-            tags.append({"type": "Mention", "href": f"{BASE_URL}/@{handle}", "name": f"@{handle}"})
+            actor_uri = _actor_uri_for_handle(handle)
+            tags.append({"type": "Mention", "href": actor_uri, "name": f"@{handle}"})
             return (
                 f'<span class="h-card" translate="no">'
-                f'<a href="{BASE_URL}/@{handle}" class="u-url mention">'
+                f'<a href="{actor_uri}" class="u-url mention">'
                 f'@<span>{handle.split("@")[0]}</span>'
                 f'</a></span>'
             )
