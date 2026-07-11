@@ -66,6 +66,10 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   const [pinned, setPinned] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likes_count);
   const [boostsCount, setBoostsCount] = useState(post.boosts_count);
+  const [serverLogo, setServerLogo] = useState("");
+  useEffect(() => {
+    fetch("/api/server-info").then(r=>r.json()).then(d=>setServerLogo(d.logo||"")).catch(()=>{});
+  }, []);
   const [reactions, setReactions] = useState(post.reactions || {});
   const [myReaction, setMyReaction] = useState(post.my_reaction || null);
 
@@ -413,7 +417,8 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
               {quotedSeries.novel.cover_image ? (
                 <ClickableCover src={quotedSeries.novel.cover_image} isSensitive={(quotedSeries.novel as any).is_sensitive} className="cover-img" />
               ) : (
-                <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(quotedSeries.novel.title) }}>
+                serverLogo ? <img src={serverLogo} alt="" className="cover-img" style={{width:64,height:64,objectFit:"contain",padding:8,background:"var(--bg-tertiary)"}} />
+                : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(quotedSeries.novel.title) }}>
                   {quotedSeries.novel.title[0]}
                 </div>
               )}
@@ -432,7 +437,8 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
               {quotedEpisode.novel.cover_image ? (
                 <ClickableCover src={quotedEpisode.novel.cover_image} isSensitive={(quotedEpisode.novel as any).is_sensitive} className="cover-img" />
               ) : (
-                <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(quotedEpisode.novel.title) }}>
+                serverLogo ? <img src={serverLogo} alt="" className="cover-img" style={{width:64,height:64,objectFit:"contain",padding:8,background:"var(--bg-tertiary)"}} />
+                : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(quotedEpisode.novel.title) }}>
                   {quotedEpisode.novel.title[0]}
                 </div>
               )}
