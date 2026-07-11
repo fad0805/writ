@@ -263,17 +263,19 @@ class Post(Base):
                 users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
                 for u in users:
                     href = u.actor_uri()
-                    # Determine display name: @user@domain (Mastodon pretty_acct format)
+                    # Determine display name: local = user, remote = user@domain
                     if u.is_remote and u.remote_url:
                         user_domain = _urlparse(u.remote_url).hostname or ""
-                        acct_name = f"@{u.username}@{user_domain}"
+                        display_name = f"{u.username}@{user_domain}"
                     else:
-                        acct_name = f"@{u.username}@{DOMAIN}"
+                        display_name = u.username
+                    # AP tag name must be WebFinger address (@user@domain)
+                    tag_name = f"@{display_name}"
                     # Mastodon-compatible h-card mention HTML
                     mention_html = (
                         f'<span class="h-card" translate="no">'
                         f'<a href="{href}" class="u-url mention">'
-                        f'@<span>{acct_name}</span>'
+                        f'@<span>{display_name}</span>'
                         f'</a></span>'
                     )
                     # Match @user or @user@domain in content
