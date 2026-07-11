@@ -1296,7 +1296,10 @@ def _handle_vote(activity: dict) -> tuple[int, str]:
     if not object_url:
         return (200, "OK")
 
-    actor = _resolve_actor(actor_url)
+    with get_session() as session:
+        post = session.query(Post).filter_by(ap_id=object_url).first()
+        _sign_as = session.query(User).get(post.author_id) if post else None
+    actor = _resolve_actor(actor_url, sign_as=_sign_as)
     if not actor:
         return (404, "Actor not found")
 
