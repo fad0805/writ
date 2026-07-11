@@ -5039,6 +5039,7 @@ def api_admin_remote_server_purge(domain: str, request: Request):
             s.query(Like).filter(Like.user_id.in_(user_ids)).delete(synchronize_session=False)
             s.query(Boost).filter(Boost.user_id.in_(user_ids)).delete(synchronize_session=False)
             s.query(Bookmark).filter(Bookmark.user_id.in_(user_ids)).delete(synchronize_session=False)
+            s.query(Vote).filter(Vote.user_id.in_(user_ids)).delete(synchronize_session=False)
             # Delete posts (FK: in_reply_to_id)
             for p in s.query(Post).filter(Post.author_id.in_(user_ids)).all():
                 s.query(Post).filter(Post.in_reply_to_id == p.id).update({"in_reply_to_id": None})
