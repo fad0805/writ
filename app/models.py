@@ -290,6 +290,18 @@ class Post(Base):
                     )
                     tags.append({"type": "Mention", "href": actor_href, "name": tag_name})
 
+        # Wrap remaining @user@domain patterns as mentions (for users not in DB)
+        content = re.sub(
+            r'(?:^|(?<=>)|(?<=\s))@(\w+(?:@[\w.-]+)?)(?=\s|$|<|\.)',
+            lambda m: (
+                f'<span class="h-card" translate="no">'
+                f'<a href="{BASE_URL}/@{m.group(1)}" class="u-url mention">'
+                f'@<span>{m.group(1).split("@")[0]}</span>'
+                f'</a></span>'
+            ),
+            content,
+        )
+
         if self.tag_list:
             for t in self.tag_list:
                 tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={t.name}", "name": f"#{t.name}"})
