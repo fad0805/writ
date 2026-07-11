@@ -11,7 +11,7 @@ const CATEGORIES: { name: string; emojis: string[] }[] = [
   { name: "기타", emojis: ["💯","💠","🌈","⭐","🌟","✨","⚡","🔥","💥","💦","💨","☄️","🌊","🍕","🍔","🍟","🌭","🍿","🧁","🍩","🍪","🍫","🍬","🍭","🍮","🍯","🍰","🎂","🍨","🍧","🍦"] },
 ];
 
-export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: string) => void; dropUp?: boolean }) {
+export default function EmojiPicker({ onEmoji, dropUp, alignRight }: { onEmoji: (emoji: string) => void; dropUp?: boolean; alignRight?: boolean }) {
   const [open, setOpen] = useState(false);
   const [customEmojis, setCustomEmojis] = useState<CustomEmoji[]>([]);
   const [search, setSearch] = useState("");
@@ -55,6 +55,7 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
         <div className="emoji-picker-dropdown" style={{
           [dropUp ? "bottom" : "top"]: "100%",
           [dropUp ? "marginBottom" : "marginTop"]: 4,
+          [alignRight ? "right" : "left"]: 0,
         }}>
           <input ref={searchRef} type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="이모지 검색..." className="cw-input emoji-picker-search" />
           {search && searchResults.length > 0 && (
