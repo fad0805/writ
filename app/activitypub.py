@@ -1044,6 +1044,16 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         with get_session() as session:
             existing = session.query(Post).filter_by(ap_id=post_id).first()
             if existing:
+                # If the existing post is a poll and incoming has updated votes, update it
+                if existing.poll_data and poll_data:
+                    for new_opt in poll_data.get("options", []):
+                        for old_opt in existing.poll_data.get("options", []):
+                            if old_opt.get("text") == new_opt.get("text"):
+                                old_opt["votes_count"] = new_opt.get("votes_count", 0)
+                                break
+                    existing.poll_data["expires_at"] = poll_data.get("expires_at", existing.poll_data.get("expires_at", ""))
+                    session.commit()
+                    return (200, "Poll votes updated")
                 return (200, "Already exists")
 
             reply_to_post = None
