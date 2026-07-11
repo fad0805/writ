@@ -1096,8 +1096,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         print(f"[create] number query error: {e}", flush=True)
                     print(f"[create] number result={reply_to_post is not None}", flush=True)
 
+            print(f"[create] vote_name stage", flush=True)
             # Mastodon poll votes: Create(Note) with name + inReplyTo + no content
             vote_name = obj.get("name", "") if not raw_content.strip() else ""
+            print(f"[create] vote_name={vote_name!r} raw_content_len={len(raw_content)}", flush=True)
             if vote_name and reply_to_post and reply_to_post.poll_data:
                 poll_post = reply_to_post
                 options = poll_post.poll_data.get("options", [])
