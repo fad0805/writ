@@ -257,16 +257,30 @@ class Post(Base):
 
         tags = []
         if self.mentioned_user_ids:
+            from app.config import DOMAIN
             with get_session() as s:
                 users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
                 for u in users:
-                    name = f"@{u.username}"
+                    # Always use @user@domain format for AP/Mastodon compatibility
+                    if u.is_remote:
+                        name = f"@{u.username}"
+                    else:
+                        name = f"@{u.username}@{DOMAIN}"
                     href = u.actor_uri()
-                    content = re.sub(
-                        re.escape(name) + r'(?![^\s<]*(?:</a>|">))',
-                        f'<a href="{href}" class="mention">{name}</a>',
-                        content,
-                    )
+                    # Match both @user and @user@domain in content
+                    short_name = f"@{u.username}"
+                    if short_name != name:
+                        content = re.sub(
+                            re.escape(short_name) + r'(?:@[\w.-]+)?(?![^\s<]*(?:</a>|">))',
+                            f'<a href="{href}" class="mention">{name}</a>',
+                            content,
+                        )
+                    else:
+                        content = re.sub(
+                            re.escape(name) + r'(?![^\s<]*(?:</a>|">))',
+                            f'<a href="{href}" class="mention">{name}</a>',
+                            content,
+                        )
                     tags.append({"type": "Mention", "href": href, "name": name})
         if self.tag_list:
             for t in self.tag_list:
