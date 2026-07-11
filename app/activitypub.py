@@ -1657,6 +1657,44 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
                 logger.warning("FLAG _resolve_actor failed: %s", e)
                 reporter = None
         if not reporter:
+            try:
+                import httpx as _httpx, json as _json
+                _r = _httpx.get(actor_url, headers={"Accept": "application/activity+json"}, timeout=10, follow_redirects=True)
+                if _r.status_code == 200:
+                    _d = _r.json()
+                    _pref = _d.get("preferredUsername", "")
+                    if _pref:
+                        from app.crypto_utils import generate_keypair
+                        _domain = urlparse(actor_url).netloc
+                        _username = f"{_pref}@{_domain}"
+                        _pubkey = _d.get("publicKey", {}).get("publicKeyPem", "") if isinstance(_d.get("publicKey"), dict) else ""
+                        _privkey = generate_keypair()[0]
+                        _existing = s.query(User).filter_by(remote_url=actor_url).first()
+                        if _existing:
+                            _existing.public_key = _pubkey or _existing.public_key
+                            reporter = _existing
+                        else:
+                            _by = s.query(User).filter_by(username=_username).first()
+                            if _by:
+                                _by.remote_url = actor_url
+                                _by.public_key = _pubkey or _by.public_key
+                                reporter = _by
+                            else:
+                                reporter = User(
+                                    username=_username, remote_url=actor_url,
+                                    public_key=_pubkey, private_key=_privkey,
+                                    password_hash="", is_remote=True,
+                                    inbox_url=_d.get("inbox", ""),
+                                    shared_inbox_url=_d.get("endpoints", {}).get("sharedInbox", "") if isinstance(_d.get("endpoints"), dict) else "",
+                                    display_name=_d.get("name", _pref), summary=_d.get("summary", ""),
+                                    profile_url=_d.get("url", actor_url),
+                                )
+                                s.add(reporter)
+                        s.flush()
+                        logger.info("FLAG reporter created via direct fetch: %s", reporter.id)
+            except Exception as e:
+                logger.warning("FLAG direct fetch failed: %s", e)
+        if not reporter:
             return (202, "Accepted (unknown reporter)")
         objects = activity.get("object", [])
         if isinstance(objects, str):
