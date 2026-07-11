@@ -1640,6 +1640,18 @@ def _send_delete_post(post: Post, sender: User):
             logger.warning("Failed to send Delete to parent author: %s", e)
 
 
+def _notify_admins(session, reporter, target_type, target_id, reason):
+    import json as _json
+    _admins = session.query(User).filter(User.role.in_(["admin", "moderator", "owner"])).all()
+    for _a in _admins:
+        if _a.id == reporter.id:
+            continue
+        session.add(Notification(
+            user_id=_a.id, from_user_id=reporter.id,
+            notification_type="moderation",
+            metadata_json=_json.dumps({"type": "report", "target_type": target_type, "target_id": target_id, "target_label": "", "reason": (reason or "")[:200]}),
+        ))
+
 def _handle_flag(activity: dict) -> tuple[int, str]:
     logger.info("=== FLAG called ===")
     with get_session() as s:
@@ -1718,6 +1730,7 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
                     reason=content or "Reported via federation", forward_to_remote=False,
                 )
                 s.add(report)
+                _notify_admins(s, reporter, "post", post.id, content)
                 continue
             user = s.query(User).filter(User.remote_url == obj_url).first()
             if not user:
@@ -1733,6 +1746,7 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
                     reason=content or "Reported via federation", forward_to_remote=False,
                 )
                 s.add(report)
+                _notify_admins(s, reporter, "user", user.id, content)
             else:
                 logger.info("FLAG no match for obj: %s", obj_url)
         s.commit()
