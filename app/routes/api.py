@@ -961,10 +961,12 @@ def api_like_post(request: Request, post_id: int):
                 "cc": [],
             }
             inbox = post.author.shared_inbox_url
+            import sys; print(f"[unboost] sending to {inbox}", flush=True)
             try:
-                _post_to_inbox(inbox, like_activity, user)
-            except Exception:
-                pass
+                _post_to_inbox(inbox, undo, user)
+                print(f"[unboost] done", flush=True)
+            except Exception as e:
+                print(f"[unboost] error: {e}", flush=True)
     return {"ok": True}
 
 
