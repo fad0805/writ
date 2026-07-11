@@ -4417,7 +4417,7 @@ def api_admin_get_report(request: Request, report_id: int):
                 item["target"] = {
                     "id": post.id,
                     "content": post.content,
-                    "author": {"id": post.author.id, "username": post.author.username, "display_name": post.author.display_name},
+                    "author": {"id": post.author.id, "username": post.author.username, "display_name": post.author.display_name, "is_remote": post.author.is_remote},
                     "is_deleted": post.is_deleted,
                     "author_id": post.author_id,
                 }
@@ -4428,7 +4428,7 @@ def api_admin_get_report(request: Request, report_id: int):
                     "id": novel.id,
                     "title": novel.title,
                     "description": novel.description,
-                    "author": {"id": novel.author.id, "username": novel.author.username, "display_name": novel.author.display_name},
+                    "author": {"id": novel.author.id, "username": novel.author.username, "display_name": novel.author.display_name, "is_remote": novel.author.is_remote},
                     "author_id": novel.author_id,
                 }
         elif r.target_type == "episode":
@@ -4440,7 +4440,7 @@ def api_admin_get_report(request: Request, report_id: int):
                     "content": ep.content[:500],
                     "novel_id": ep.novel_id,
                     "novel_title": ep.novel.title,
-                    "author": {"id": ep.novel.author.id, "username": ep.novel.author.username, "display_name": ep.novel.author.display_name},
+                    "author": {"id": ep.novel.author.id, "username": ep.novel.author.username, "display_name": ep.novel.author.display_name, "is_remote": ep.novel.author.is_remote},
                     "author_id": ep.novel.author_id,
                 }
         if r.resolved_by_id:
@@ -4483,6 +4483,27 @@ def api_admin_dismiss_report(request: Request, report_id: int):
     log_admin_action(user.id, user.username, "dismiss_report", target_type="report", target_id=report_id, details=f"target:{r_type}:{r_id}", ip_address=request.client.host if request.client else "")
     return {"ok": True}
 
+
+@router.post("/admin/reports/{report_id}/forward")
+def api_admin_forward_report(request: Request, report_id: int):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        report = s.query(Report).get(report_id)
+        if not report:
+            raise HTTPException(status_code=404, detail="Report not found")
+        target_obj = None
+        if report.target_type == "post":
+            target_obj = s.query(Post).get(report.target_id)
+        if not target_obj or not hasattr(target_obj, 'author') or not target_obj.author or not target_obj.author.is_remote:
+            raise HTTPException(status_code=400, detail="Target not remote")
+        from app.activitypub import _send_flag
+        try:
+            _send_flag(user, report.target_type, target_obj, report.reason[:200], report.rule_ids or [])
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to forward: {e}")
+    return {"ok": True}
 
 @router.get("/admin/rules")
 def api_admin_list_rules(request: Request):

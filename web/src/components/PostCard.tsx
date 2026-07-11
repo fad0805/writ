@@ -572,12 +572,10 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
                   style={{ width: "100%", minHeight: 80, resize: "vertical", marginBottom: 8 }}
                 />
                 {reportError && <p style={{ color: "var(--error)", fontSize: 14, marginBottom: 8 }}>{reportError}</p>}
-                {post.author?.is_remote && (
-                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 8, color: "var(--text-secondary)", cursor: "pointer" }}>
-                    <input type="checkbox" checked={reportForward} onChange={(e) => setReportForward(e.target.checked)} />
-                    원격 서버로 신고 전송
-                  </label>
-                )}
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 8, color: "var(--text-secondary)", cursor: "pointer" }}>
+                  <input type="checkbox" checked={reportForward} onChange={(e) => setReportForward(e.target.checked)} />
+                  원격 서버로 신고 전송
+                </label>
                 <button onClick={handleReport} className="btn" style={{ width: "100%" }}>신고 제출</button>
               </>
             )}

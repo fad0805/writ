@@ -13,7 +13,7 @@ interface TargetInfo {
   description?: string;
   novel_id?: number;
   novel_title?: string;
-  author: { id: number; username: string; display_name: string };
+  author: { id: number; username: string; display_name: string; is_remote?: boolean };
   author_id: number;
   is_deleted?: boolean;
 }
@@ -229,6 +229,15 @@ export default function ReportDetailPage() {
             {report.target_type === "post" && target?.content !== undefined && (
               <button className="btn btn-outline" onClick={handleSetCw}>
                 <Icon name="eye" /> CW 설정
+              </button>
+            )}
+            {target?.author?.is_remote && (
+              <button className="btn btn-outline" onClick={async () => {
+                const res = await fetch(`/api/admin/reports/${report.id}/forward`, { method: "POST", credentials: "include" });
+                if (res.ok) setMsg("원격 서버로 전달되었습니다.");
+                else setMsg("전달 실패");
+              }}>
+                원격 서버로 전달
               </button>
             )}
           </div>
