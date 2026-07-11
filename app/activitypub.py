@@ -1061,7 +1061,9 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             print(f"[create] querying ap_id={post_id[:80]}", flush=True)
             existing = session.query(Post).filter_by(ap_id=post_id).first()
             print(f"[create] existing={existing is not None}", flush=True)
-            import sys; print(f"[create] checking in_reply_to={in_reply_to[:60] if in_reply_to else 'None'}", flush=True)
+            import sys;             print(f"[create] checking in_reply_to={in_reply_to[:60] if in_reply_to else 'None'}", flush=True)
+            import sys; sys.stdout.flush()
+            print(f"[create] existing returned, in_reply_to={bool(in_reply_to)}", flush=True)
             if existing:
                 # If the existing post is a poll and incoming has updated votes, update it
                 if existing.poll_data and poll_data:
@@ -1077,14 +1079,15 @@ def _handle_create(activity: dict) -> tuple[int, str]:
 
             reply_to_post = None
             if in_reply_to:
-                from app.config import BASE_URL as _BASE_URL
                 reply_to_post = session.query(Post).filter_by(ap_id=in_reply_to).first()
                 if not reply_to_post:
                     alt_url = in_reply_to.replace("https://", "http://") if "https://" in in_reply_to else in_reply_to.replace("http://", "https://")
                     reply_to_post = session.query(Post).filter_by(ap_id=alt_url).first()
-                # Only fetch remote if not our own server
-                if not reply_to_post and _BASE_URL.split("://")[1] not in in_reply_to:
-                    reply_to_post = _fetch_remote_post(in_reply_to, actor, session)
+                if not reply_to_post:
+                    try:
+                        reply_to_post = session.query(Post).filter(Post.ap_id.like(f"%{in_reply_to.split('/')[-1]}")).first()
+                    except Exception:
+                        pass
 
             # Mastodon poll votes: Create(Note) with name + inReplyTo + no content
             vote_name = obj.get("name", "") if not raw_content.strip() else ""
