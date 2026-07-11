@@ -2878,7 +2878,7 @@ def api_export_account(request: Request, export_type: str):
             for f in follows:
                 target = s.query(User).get(f.following_id)
                 if target:
-                    handle = f"{target.username}@{_domain_from_actor(target)}" if target.is_remote else target.username
+                    handle = target.username
                     w.writerow([handle, "true", "false"])
         elif export_type == "mutes":
             w.writerow(["Account address"])
@@ -2886,7 +2886,7 @@ def api_export_account(request: Request, export_type: str):
             for m in mutes:
                 target = s.query(User).get(m.target_user_id)
                 if target:
-                    handle = f"{target.username}@{_domain_from_actor(target)}" if target.is_remote else target.username
+                    handle = target.username
                     w.writerow([handle])
         elif export_type == "blocks":
             w.writerow(["Account address"])
@@ -2894,7 +2894,7 @@ def api_export_account(request: Request, export_type: str):
             for b in blocks:
                 target = s.query(User).get(b.target_user_id)
                 if target:
-                    handle = f"{target.username}@{_domain_from_actor(target)}" if target.is_remote else target.username
+                    handle = target.username
                     w.writerow([handle])
         elif export_type == "bookmarks":
             w.writerow(["Post URL", "Created at"])

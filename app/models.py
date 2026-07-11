@@ -265,8 +265,12 @@ class Post(Base):
                     href = u.actor_uri()
                     # Determine display name: local = user, remote = user@domain
                     if u.is_remote and u.remote_url:
-                        user_domain = _urlparse(u.remote_url).hostname or ""
-                        display_name = f"{u.username}@{user_domain}"
+                        # username already stored as "user@domain" for remote users
+                        if "@" in u.username:
+                            display_name = u.username
+                        else:
+                            user_domain = _urlparse(u.remote_url).hostname or ""
+                            display_name = f"{u.username}@{user_domain}"
                     else:
                         display_name = u.username
                     # AP tag name must be WebFinger address (@user@domain)
