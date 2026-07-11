@@ -340,17 +340,14 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
                     _pubkey = _data.get("publicKey", {}).get("publicKeyPem", "") if isinstance(_data, dict) else ""
                     print(f"[SIG] pubkey_len={len(_pubkey)}", flush=True)
                     if _pubkey:
-                        remote_actor = _resolve_actor(actor_url, force_refresh=True)
-                        print(f"[SIG] resolve_actor={'ok' if remote_actor else 'fail'}", flush=True)
-                        if not remote_actor:
-                            class _Actor:
-                                public_key = _pubkey
-                                remote_url = actor_url
-                                is_remote = True
-                                @staticmethod
-                                def actor_uri(): return actor_url
-                            remote_actor = _Actor()
-                            print(f"[SIG] using fallback _Actor", flush=True)
+                        class _Actor:
+                            public_key = _pubkey
+                            remote_url = actor_url
+                            is_remote = True
+                            @staticmethod
+                            def actor_uri(): return actor_url
+                        remote_actor = _Actor()
+                        print(f"[SIG] using inline _Actor (pubkey_len={len(_pubkey)})", flush=True)
         except Exception:
             pass
     if not remote_actor or not remote_actor.public_key:
