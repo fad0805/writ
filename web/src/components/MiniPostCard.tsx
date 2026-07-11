@@ -22,14 +22,16 @@ function rewriteLinks(text: string): string {
 const LIGHT_BG: Record<string, string> = {
   boost: "rgba(104, 159, 56, 0.1)",
   like: "rgba(241, 196, 15, 0.12)",
+  poll_ended: "rgba(124, 77, 255, 0.1)",
 };
 const DARK_BG: Record<string, string> = {
   boost: "rgba(104, 159, 56, 0.15)",
   like: "rgba(241, 196, 15, 0.15)",
+  poll_ended: "rgba(124, 77, 255, 0.15)",
 };
 const TYPE_ICONS: Record<string, string> = {
   follow: "user_solid", like: "star_filled", boost: "refresh",
-  reply: "mention", mention: "mention",
+  reply: "mention", mention: "mention", poll_ended: "chart",
 };
 const TYPE_COLORS: Record<string, string> = {
   boost: "var(--accent)",
@@ -37,6 +39,7 @@ const TYPE_COLORS: Record<string, string> = {
   follow: "var(--text-muted)",
   reply: "var(--text-dim)",
   mention: "var(--text-dim)",
+  poll_ended: "#7c4dff",
 };
 
 export default function MiniPostCard({ post, notifType }: { post: PostData; notifType?: string }) {
