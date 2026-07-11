@@ -1530,7 +1530,7 @@ def api_follow(request: Request, username: str):
                     "actor": user.actor_uri(),
                     "object": remote_obj,
                 }
-                s.add(Follow(follower_id=user.id, following_id=target.id, accepted=False))
+                s.add(Follow(follower_id=user.id, following_id=target.id, accepted=False, activity_id=follow_activity["id"]))
                 s.commit()
                 inbox = target.inbox_url or target.inbox_uri()
                 if inbox:
@@ -1576,7 +1576,7 @@ def api_approve_follow(request: Request, username: str):
         if follower_is_remote and follower:
             from app.activitypub import _send_accept
             try:
-                follow_activity_id = f"{follower.actor_uri()}#follows/{user.id}"
+                follow_activity_id = target.activity_id or f"{follower.actor_uri()}#follows/{user.id}"
                 inbox = follower.inbox_url or (follower.actor_uri().rstrip("/") + "/inbox")
                 _send_accept(inbox, follow_activity_id, user, follower=follower)
             except Exception as e:

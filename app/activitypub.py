@@ -667,7 +667,7 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
             follower_id=follower.id, following_id=target.id
         ).first()
         if not existing:
-            follow = Follow(follower_id=follower.id, following_id=target.id, accepted=accepted)
+            follow = Follow(follower_id=follower.id, following_id=target.id, accepted=accepted, activity_id=activity_id)
             session.add(follow)
             notification = Notification(
                 user_id=target.id,
@@ -677,8 +677,9 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
             session.add(notification)
             session.commit()
 
-    # Send Accept
-    _send_accept(actor_url, activity_id, target, follower=follower)
+    # Send Accept only if auto-approved (not locked)
+    if accepted:
+        _send_accept(actor_url, activity_id, target, follower=follower)
 
     return (200, "Followed")
 
