@@ -962,9 +962,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     post_id=post.id,
                 ))
 
-            # Notify local followers (skip self)
+            # Notify local followers who enabled post notifications (skip self)
             followers = session.query(Follow).filter(
                 Follow.following_id == actor.id,
+                Follow.notify_on_post == True,
             ).all()
             for f in followers:
                 if not f.follower.is_remote and f.follower.id != actor.id:

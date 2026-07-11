@@ -158,6 +158,7 @@ class Follow(Base):
     following_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     accepted = Column(Boolean, default=True)
     activity_id = Column(String(1024), default="")
+    notify_on_post = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now)
 
     follower = relationship("User", foreign_keys=[follower_id], lazy="selectin")

@@ -1448,6 +1448,13 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         is_follow_pending = s.query(Follow).filter_by(
             follower_id=user.id, following_id=profile.id, accepted=False
         ).first() is not None if user else False
+        notify_on_post = False
+        if is_following and user:
+            follow_rel = s.query(Follow).filter_by(
+                follower_id=user.id, following_id=profile.id, accepted=True
+            ).first()
+            if follow_rel:
+                notify_on_post = follow_rel.notify_on_post
         has_pending_follower = s.query(Follow).filter_by(
             follower_id=profile.id, following_id=user.id, accepted=False
         ).first() is not None if user else False
@@ -1472,6 +1479,7 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             "following_count": following_count if show_follows else 0,
             "is_following": is_following,
             "is_follow_pending": is_follow_pending,
+            "notify_on_post": notify_on_post,
             "has_pending_follower": has_pending_follower,
             "is_follower": is_follower,
             "is_mine": profile.id == user.id if user else False,
@@ -1673,6 +1681,21 @@ def api_unfollow(request: Request, username: str):
                 except Exception as e:
                     logger.warning("Failed to send Undo Follow: %s", e)
     return {"ok": True}
+
+
+@router.post("/users/{username}/toggle-notify")
+def api_toggle_notify(request: Request, username: str):
+    user = require_active_auth(request)
+    with get_session() as s:
+        target = s.query(User).filter_by(username=username).first()
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found")
+        follow = s.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
+        if not follow:
+            raise HTTPException(status_code=404, detail="Not following this user")
+        follow.notify_on_post = not follow.notify_on_post
+        s.commit()
+        return {"ok": True, "notify_on_post": follow.notify_on_post}
 
 
 @router.get("/users/{username}/followers")

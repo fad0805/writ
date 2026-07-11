@@ -206,12 +206,14 @@ export const api = {
       following_count: number;
       is_following: boolean;
       is_follow_pending: boolean;
+      notify_on_post: boolean;
       has_pending_follower: boolean;
       is_follower: boolean;
       is_mine: boolean;
     }>(`/api/users/${username}`),
   follow: (username: string) => request<{ ok: boolean }>(`/api/users/${username}/follow`, { method: "POST" }),
   unfollow: (username: string) => request<{ ok: boolean }>(`/api/users/${username}/unfollow`, { method: "POST" }),
+  toggleNotify: (username: string) => request<{ ok: boolean; notify_on_post: boolean }>(`/api/users/${username}/toggle-notify`, { method: "POST" }),
   getFollowers: (username: string) => request<{ users: User[] }>(`/api/users/${username}/followers`),
   getFollowing: (username: string) => request<{ users: User[] }>(`/api/users/${username}/following`),
 
