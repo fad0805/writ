@@ -89,6 +89,19 @@ def _sanitize_html(html: str) -> str:
     return html
 
 
+def _normalize_mentions(html: str) -> str:
+    """Convert Mastodon-style mention HTML to plain @username text."""
+    html = re.sub(
+        r'<span[^>]*class="[^"]*\bh-card\b[^"]*"[^>]*>\s*<a[^>]*class="[^"]*\bu-url mention\b[^"]*"[^>]*>@?<span[^>]*>@?(\w+)</span></a>\s*</span>',
+        r'@\1', html, flags=re.IGNORECASE
+    )
+    html = re.sub(
+        r'<a[^>]*class="[^"]*\bu-url mention\b[^"]*"[^>]*>@?(\w+)</a>',
+        r'@\1', html, flags=re.IGNORECASE
+    )
+    return html
+
+
 _PRIVATE_SUBNETS = [
     ipaddress.ip_network("127.0.0.0/8"),
     ipaddress.ip_network("10.0.0.0/8"),
@@ -836,7 +849,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if len(raw_content) > 65536:
             raw_content = raw_content[:65536]
         post_id = obj.get("id", "")
-        content = _sanitize_html(raw_content)
+        content = _normalize_mentions(_sanitize_html(raw_content))
         summary = obj.get("summary", "")
         in_reply_to = obj.get("inReplyTo", "")
 
