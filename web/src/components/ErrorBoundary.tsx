@@ -1,0 +1,17 @@
+"use client";
+import { Component, ReactNode } from "react";
+
+export default class ErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNode }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError)
+      return this.props.fallback || (
+        <div className="empty-state" style={{ padding: 40, textAlign: "center" }}>
+          <p>페이지를 불러오는 중 오류가 발생했습니다.</p>
+          <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => { this.setState({ hasError: false }); window.location.reload(); }}>다시 시도</button>
+        </div>
+      );
+    return this.props.children;
+  }
+}
