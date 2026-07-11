@@ -258,17 +258,17 @@ print('DOMAIN:', DOMAIN)
 
 elif [ "$1" = "check-mention" ]; then
   docker compose exec api python3 -c "
-import httpx
-# daydream.ink의 공개글 하나 가져와서 멘션 구조 확인
-url = 'https://daydream.ink/@siarte/116895178885643677'
+import httpx, json
+url = 'https://writ.daydream.ink/@siarte/3bcfe670'
 r = httpx.get(url, headers={'Accept': 'application/activity+json'})
 if r.status_code == 200:
     d = r.json()
     obj = d.get('object', d)
+    print('=== WRIT 멘션 구조 ===')
     print('type:', obj.get('type'))
     print('tag:', json.dumps(obj.get('tag', []), indent=2, ensure_ascii=False)[:500])
     print('to:', obj.get('to'))
-    import json
+    print('cc:', obj.get('cc'))
 else:
     print('status:', r.status_code, r.text[:200])
 "
