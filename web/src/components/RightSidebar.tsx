@@ -19,6 +19,23 @@ export default function RightSidebar() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [serverInfo, setServerInfo] = useState<{ name: string; description?: string; admins: { username: string; email: string }[] } | null>(null);
 
+  const playNotifSound = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.25);
+    } catch {}
+  }, []);
+
   useEffect(() => {
     if (!user) return;
     api.getMyNovels().then((d) => setNovels(d.novels)).catch(() => {});
@@ -26,6 +43,7 @@ export default function RightSidebar() {
     const es = new EventSource("/api/notifications/stream");
     es.onmessage = (event) => {
       if (event.data === "refresh") {
+        playNotifSound();
         api.getNotifications(undefined, 10, 0, false).then((d) => {
           setNotifs(d.notifications);
           window.dispatchEvent(new Event("notifchange"));
@@ -34,7 +52,7 @@ export default function RightSidebar() {
     };
     es.onerror = () => {};
     return () => { es.close(); };
-  }, [user, refreshKey]);
+  }, [user, refreshKey, playNotifSound]);
 
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
   useEffect(() => { fetch("/api/server-info").then((r) => r.json()).then(setServerInfo).catch(() => {}); }, [serverRefreshKey]);
