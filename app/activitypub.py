@@ -1631,12 +1631,12 @@ def _send_delete_post(post: Post, sender: User):
 
 
 def _handle_flag(activity: dict) -> tuple[int, str]:
-    print("[flag] _handle_flag called", flush=True)
+    logger.info("=== FLAG called ===")
     with get_session() as s:
         actor_url = activity.get("actor")
         if isinstance(actor_url, list):
             actor_url = actor_url[0]
-        print(f"[flag] actor_url={actor_url}", flush=True)
+        logger.info("FLAG actor_url=%s", actor_url)
         if not actor_url:
             return (400, "Missing actor")
         reporter = s.query(User).filter_by(remote_url=actor_url).first()
@@ -1645,26 +1645,26 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
                 if u.actor_uri() == actor_url:
                     reporter = u
                     break
-        print(f"[flag] reporter found: {reporter is not None}", flush=True)
+        logger.info("FLAG reporter found: %s", reporter is not None)
         if not reporter:
             try:
                 reporter = _resolve_actor(actor_url)
-                print(f"[flag] _resolve_actor: {reporter is not None}", flush=True)
+                logger.info("FLAG _resolve_actor: %s", reporter is not None)
             except Exception as e:
-                print(f"[flag] _resolve_actor failed: {e}", flush=True)
+                logger.warning("FLAG _resolve_actor failed: %s", e)
                 reporter = None
         if not reporter:
             return (202, "Accepted (unknown reporter)")
         objects = activity.get("object", [])
         if isinstance(objects, str):
             objects = [objects]
-        print(f"[flag] objects={objects}", flush=True)
+        logger.info("FLAG objects=%s", objects)
         content = activity.get("content", "")
         for obj_url in objects:
-            print(f"[flag] processing obj: {obj_url}", flush=True)
+            logger.info("FLAG processing obj: %s", obj_url)
             post = s.query(Post).filter_by(ap_id=obj_url).first()
             if post:
-                print(f"[flag] found post id={post.id}", flush=True)
+                logger.info("FLAG found post id=%s", post.id)
                 report = Report(
                     reporter_id=reporter.id, target_type="post", target_id=post.id,
                     reason=content or "Reported via federation", forward_to_remote=False,
@@ -1679,16 +1679,16 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
                             user = _u
                             break
             if user and not user.is_remote:
-                print(f"[flag] found local user {user.username}", flush=True)
+                logger.info("FLAG found local user %s", user.username)
                 report = Report(
                     reporter_id=reporter.id, target_type="user", target_id=user.id,
                     reason=content or "Reported via federation", forward_to_remote=False,
                 )
                 s.add(report)
             else:
-                print(f"[flag] no match for obj: {obj_url}", flush=True)
+                logger.info("FLAG no match for obj: %s", obj_url)
         s.commit()
-        print(f"[flag] done, committed", flush=True)
+        logger.info("FLAG done, committed")
     return (200, "Flagged")
 
 
