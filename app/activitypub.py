@@ -1136,14 +1136,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     options[option_idx]["votes_count"] = options[option_idx].get("votes_count", 0) + 1
                     poll_post.poll_data = {**poll_post.poll_data, "options": options}
                     session.commit()
-                    # Broadcast updated poll to connected clients
-                    try:
-                        from app.timeline_stream import broadcast_post
-                        from app.routes.api import _post_json
-                        post_json = _post_json(poll_post, session, None)
-                        broadcast_post(post_json, poll_post.author_id, poll_post.visibility or "public", False)
-                    except Exception:
-                        pass
                     return (200, "Voted")
 
             # Parse mentioned users from content
