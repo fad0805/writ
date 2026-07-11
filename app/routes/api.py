@@ -937,6 +937,7 @@ def api_list_rules():
 
 @router.post("/posts/{post_id}/like")
 def api_like_post(request: Request, post_id: int):
+    import sys; sys.stderr.write(f"[like] called for post {post_id}\n"); sys.stderr.flush()
     user = require_active_auth(request)
     try:
         with get_session() as s:
