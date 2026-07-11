@@ -1750,6 +1750,8 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
             else:
                 logger.info("FLAG no match for obj: %s", obj_url)
         s.commit()
+        from app.timeline_stream import broadcast_refresh_notifs
+        broadcast_refresh_notifs()
         logger.info("FLAG done, committed")
     return (200, "Flagged")
 
