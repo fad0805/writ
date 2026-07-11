@@ -10,7 +10,6 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from app.logging_config import logger
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PendingDelivery, get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.log_utils import log_admin_action
@@ -29,6 +28,8 @@ from app.crypto_utils import encrypt_key, get_private_key
 from app.eventbus import broadcast
 from app.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream
 from app.utils.storage import LocalStorage
+
+logger = logging.getLogger("writ.api")
 
 RESERVED_HANDLES = frozenset({
     "admin", "administrator", "root", "system", "moderator", "support",
@@ -769,7 +770,7 @@ def api_create_post(
                 opts = _json.loads(poll_options)
                 if isinstance(opts, list) and 2 <= len(opts) <= 10 and all(isinstance(o, str) and o.strip() for o in opts):
                     now = datetime.datetime.now(datetime.timezone.utc)
-                    expires_at = (now + datetime.timedelta(hours=poll_expires_in)).isoformat() if poll_expires_in > 0 else None
+                    expires_at = (now + datetime.timedelta(minutes=poll_expires_in)).isoformat() if poll_expires_in > 0 else None
                     post.poll_data = {
                         "options": [{"text": o.strip(), "votes_count": 0} for o in opts],
                         "expires_at": expires_at,

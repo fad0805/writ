@@ -274,7 +274,10 @@ class Post(Base):
                     else:
                         display_name = u.username
                     # AP tag name must be WebFinger address (@user@domain)
-                    tag_name = f"@{display_name}"
+                    if u.is_remote:
+                        tag_name = f"@{display_name}"
+                    else:
+                        tag_name = f"@{u.username}@{DOMAIN}"
                     # Mastodon-compatible h-card mention HTML
                     mention_html = (
                         f'<span class="h-card" translate="no">'
@@ -326,7 +329,10 @@ class Post(Base):
                 for _mu in _musers:
                     _mu_uri = _mu.actor_uri()
                     if _mu_uri not in obj["to"] and _mu_uri not in obj["cc"]:
-                        obj["cc"].append(_mu_uri)
+                        if self.is_dm:
+                            obj["to"].append(_mu_uri)
+                        else:
+                            obj["cc"].append(_mu_uri)
         is_sensitive = self.is_sensitive or getattr(self.author, 'is_sensitive', False) or False
         if self.summary:
             obj["summary"] = self.summary

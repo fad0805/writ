@@ -1003,6 +1003,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         all_audiences = to + cc
         public_uri = "https://www.w3.org/ns/activitystreams#Public"
 
+        is_incoming_dm = False
         if public_uri in to:
             visibility = "public"
         elif public_uri in cc:
@@ -1011,6 +1012,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             visibility = "followers"
         elif all_audiences and all(aud.startswith("http") for aud in all_audiences if aud):
             visibility = "mention"
+            is_incoming_dm = True
         else:
             visibility = "home"
 
@@ -1144,6 +1146,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 in_reply_to_id=reply_to_post.id if reply_to_post else None,
                 media_attachments=media_list if media_list else None,
                 poll_data=poll_data,
+                is_dm=is_incoming_dm,
             )
             session.add(post)
             session.flush()
@@ -1207,7 +1210,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     "boosted": False,
                     "bookmarked": False,
                     "is_mine": False,
-                    "is_dm": False,
+                    "is_dm": is_incoming_dm,
                     "is_sensitive": getattr(post, 'is_sensitive', False) or False,
                     "ap_id": post.ap_id or "",
                     "media_attachments": post.media_attachments or [],
@@ -1216,7 +1219,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     "reactions": {},
                     "my_reaction": None,
                 }
-                broadcast_post(post_json, actor.id, visibility, False)
+                broadcast_post(post_json, actor.id, visibility, is_incoming_dm)
             except Exception as e:
                 logger.warning("timeline broadcast failed: %s", e)
 

@@ -49,7 +49,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const [showPoll, setShowPoll] = useState(false);
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
-  const [pollExpiresIn, setPollExpiresIn] = useState(24);
+  const [pollExpiresIn, setPollExpiresIn] = useState(1440);
   const pollLastRef = useRef<HTMLInputElement>(null);
   const [altModalIdx, setAltModalIdx] = useState<number | null>(null);
   const [seriesResults, setSeriesResults] = useState<{ id: number; title: string; cover_image: string }[]>([]);
@@ -685,12 +685,14 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>|</span>
             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>마감</span>
             <select value={pollExpiresIn} onChange={(e) => setPollExpiresIn(Number(e.target.value))} style={{ fontSize: 12, padding: "2px 4px", borderRadius: 4, border: "1px solid var(--border)", background: "var(--bg-secondary)" }}>
-              <option value={1}>1시간</option>
-              <option value={6}>6시간</option>
-              <option value={12}>12시간</option>
-              <option value={24}>24시간</option>
-              <option value={72}>3일</option>
-              <option value={168}>7일</option>
+              <option value={5}>5분</option>
+              <option value={30}>30분</option>
+              <option value={60}>1시간</option>
+              <option value={360}>6시간</option>
+              <option value={720}>12시간</option>
+              <option value={1440}>24시간</option>
+              <option value={4320}>3일</option>
+              <option value={10080}>7일</option>
             </select>
           </div>
         </div>
