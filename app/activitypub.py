@@ -25,6 +25,9 @@ logger = logging.getLogger("writ.activitypub")
 def _federation_allowed(domain: str) -> bool:
     if not domain:
         return False
+    from app.config import DOMAIN
+    if domain.lower().strip() == DOMAIN.lower().strip():
+        return True
     with get_session() as s:
         try:
             settings = s.query(ServerSetting).first()
