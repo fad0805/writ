@@ -3196,10 +3196,27 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
 
 
 
-def _fetch_and_save_ap_object(obj, user):
-    """Fetch a remote AP object, resolve its author, save to DB, return post."""
-    from app.activitypub import _sanitize_html
-    content = _sanitize_html(obj.get("content", ""))
+def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
+    """Fetch a remote AP object, resolve its author, save to DB, return post.
+    Also recursively fetches parent posts (thread ancestors) up to depth 5."""
+    if _depth > 5:
+        return None
+    if _visited is None:
+        _visited = set()
+
+    # First, recursively fetch parent posts if this is a reply
+    in_reply_to = obj.get("inReplyTo", "")
+    if isinstance(in_reply_to, dict):
+        in_reply_to = in_reply_to.get("id", "")
+    if in_reply_to and in_reply_to not in _visited:
+        _visited.add(in_reply_to)
+        parent_data = _ap_fetch(in_reply_to, user)
+        if parent_data:
+            parent_obj = parent_data.get("object", parent_data)
+            _fetch_and_save_ap_object(parent_obj, user, _visited, _depth + 1)
+
+    from app.activitypub import _sanitize_html, _normalize_mentions
+    content = _normalize_mentions(_sanitize_html(obj.get("content", "")))
     if not content:
         return None
 
@@ -3501,27 +3518,6 @@ def api_fetch_post(request: Request, url: str = Form(...)):
     obj_type = data.get("type", obj.get("type", ""))
     if obj_type not in ("Note", "Article"):
         raise HTTPException(status_code=400, detail=f"Not a Note/Article (type={obj_type})")
-
-    # Recursively fetch ancestors
-    visited = set()
-    def fetch_thread(current_obj, depth=0):
-        if depth > 5:
-            return
-        in_reply_to = current_obj.get("inReplyTo", "")
-        if isinstance(in_reply_to, dict):
-            in_reply_to = in_reply_to.get("id", "")
-        if in_reply_to and in_reply_to not in visited:
-            visited.add(in_reply_to)
-            parent_data = _ap_fetch(in_reply_to, user)
-            if parent_data:
-                parent_obj = parent_data.get("object", parent_data)
-                fetch_thread(parent_obj, depth + 1)
-                try:
-                    _fetch_and_save_ap_object(parent_obj, user)
-                except Exception as e:
-                    logger.warning("Failed to save parent post: %s", e)
-
-    fetch_thread(obj)
 
     result = _fetch_and_save_ap_object(obj, user)
     if not result:

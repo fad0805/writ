@@ -1478,6 +1478,8 @@ def _process_emoji_tags(tags: list, session):
     """Parse Emoji tags from an ActivityPub object, download and save custom emojis."""
     if not tags or not isinstance(tags, list):
         return
+    EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "web", "public", "emojis")
+    os.makedirs(EMOJI_DIR, exist_ok=True)
     for tag in tags:
         if not isinstance(tag, dict) or tag.get("type") != "Emoji":
             continue
@@ -1488,12 +1490,14 @@ def _process_emoji_tags(tags: list, session):
         if not keyword or not re.match(r'^[a-z0-9_]+$', keyword):
             continue
         icon = tag.get("icon", {})
+        # icon can be a single object or a list per ActivityStreams spec
+        if isinstance(icon, list):
+            icon = icon[0] if icon else {}
+        img_url = ""
         if isinstance(icon, dict):
-            img_url = icon.get("url", "")
+            img_url = icon.get("url", "") or icon.get("href", "")
         elif isinstance(icon, str):
             img_url = icon
-        else:
-            img_url = ""
         if not img_url:
             continue
         if not img_url.startswith("http"):
@@ -1508,7 +1512,6 @@ def _process_emoji_tags(tags: list, session):
         if existing:
             continue
 
-        EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "web", "public", "emojis")
         if not _validate_url(img_url):
             continue
         from PIL import Image
