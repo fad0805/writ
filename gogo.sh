@@ -570,6 +570,17 @@ r = httpx.post('http://localhost:3000/users/siarte/inbox',
 print('status:', r.status_code, 'body:', r.text[:200])
 "
 
+elif [ "$1" = "check-notifs" ]; then
+  docker compose exec api python3 -c "
+from app.models import Notification, get_session
+with get_session() as s:
+    notifs = s.query(Notification).order_by(Notification.created_at.desc()).limit(5).all()
+    if not notifs:
+        print('no notifications found')
+    for n in notifs:
+        print(f'  #{n.id} type={n.notification_type} user={n.user_id} from={n.from_user_id} meta={n.metadata_json[:100] if n.metadata_json else \"\"}')
+"
+
 elif [ "$1" = "check-reports" ]; then
   docker compose exec api python3 -c "
 from app.models import Report, get_session
