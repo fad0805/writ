@@ -53,7 +53,7 @@ export default function PostByNumberPage() {
       setReplies(full.replies || []);
       setTotalReplies(full.total_replies);
       setHasMore(full.has_more_replies);
-    } catch {}
+    } catch { setPost(null); }
     setLoading(false);
   };
 
