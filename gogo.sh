@@ -540,6 +540,20 @@ with get_session() as s:
     print("status:", r.status_code, "body:", r.text[:200])
 PYEOF
 
+elif [ "$1" = "whitelist-add" ]; then
+  domain="${2:-daydream.ink}"
+  docker compose exec -T api python3 -c "
+from app.models import AllowedServer, get_session
+with get_session() as s:
+    exists = s.query(AllowedServer).filter_by(domain='$domain').first()
+    if exists:
+        print('$domain already in whitelist')
+    else:
+        s.add(AllowedServer(domain='$domain'))
+        s.commit()
+        print('added $domain to whitelist')
+"
+
 elif [ "$1" = "test-api-direct" ]; then
   docker compose exec api python3 -c "
 import httpx
