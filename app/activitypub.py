@@ -985,7 +985,9 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 _poll = __s.query(Post).filter_by(ap_id=in_reply_to_url).first()
                 if _poll:
                     _sign_as = __s.query(User).get(_poll.author_id)
+        import sys; print(f"[create] resolving actor...", flush=True)
         actor = _resolve_actor(actor_url, sign_as=_sign_as)
+        print(f"[create] actor resolved: {actor.id if actor else 'None'}", flush=True)
         if not actor:
             return (404, "Actor not found")
 
