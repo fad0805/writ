@@ -4513,8 +4513,11 @@ def api_admin_forward_report(request: Request, report_id: int):
         if not target_obj or not hasattr(target_obj, 'author') or not target_obj.author or not target_obj.author.is_remote:
             raise HTTPException(status_code=400, detail="Target not remote")
         from app.activitypub import _send_flag
+        reporter = s.query(User).get(report.reporter_id)
+        if not reporter:
+            raise HTTPException(status_code=400, detail="Reporter not found")
         try:
-            _send_flag(user, report.target_type, target_obj, report.reason[:200], report.rule_ids or [])
+            _send_flag(reporter, report.target_type, target_obj, report.reason[:200], report.rule_ids or [])
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to forward: {e}")
     return {"ok": True}

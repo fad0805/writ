@@ -1753,6 +1753,9 @@ def _send_flag(reporter: User, target_type: str, target_obj, reason: str, rule_i
     inbox = author.inbox_url or (author.actor_uri().rstrip("/") + "/inbox")
     if inbox:
         _post_to_inbox(inbox, flag, reporter)
+    else:
+        logger.warning("_send_flag: no inbox for %s", author.actor_uri())
+        raise ValueError(f"No inbox for {author.actor_uri()}")
 
 
 def _deliver_sync(inbox_url: str, body: bytes, headers: dict) -> bool:
