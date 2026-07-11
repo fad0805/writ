@@ -277,8 +277,8 @@ class Post(Base):
                         tag_name = f"@{u.username}@{DOMAIN}"
                     mention_html = (
                         f'<span class="h-card" translate="no">'
-                        f'<a href="{web_href}" class="u-url mention">'
-                        f'{tag_name}'
+                        f'<a href="{web_href}" class="u-url mention" rel="mention">'
+                        f'@{short_username}'
                         f'</a></span>'
                     )
                     short_name = f"@{u.username}"
@@ -302,8 +302,8 @@ class Post(Base):
             tags.append({"type": "Mention", "href": actor_uri, "name": f"@{handle}"})
             return (
                 f'<span class="h-card" translate="no">'
-                f'<a href="{actor_uri}" class="u-url mention">'
-                f'@{handle}'
+                f'<a href="{actor_uri}" class="u-url mention" rel="mention">'
+                f'@{handle.split("@")[0]}'
                 f'</a></span>'
             )
         content = re.sub(
