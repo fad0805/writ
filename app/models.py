@@ -278,7 +278,7 @@ class Post(Base):
                     mention_html = (
                         f'<span class="h-card" translate="no">'
                         f'<a href="{web_href}" class="u-url mention">'
-                        f'@{short_username}'
+                        f'{tag_name}'
                         f'</a></span>'
                     )
                     short_name = f"@{u.username}"
@@ -303,7 +303,7 @@ class Post(Base):
             return (
                 f'<span class="h-card" translate="no">'
                 f'<a href="{actor_uri}" class="u-url mention">'
-                f'@{handle.split("@")[0]}'
+                f'@{handle}'
                 f'</a></span>'
             )
         content = re.sub(
