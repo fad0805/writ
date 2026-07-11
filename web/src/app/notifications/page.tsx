@@ -107,7 +107,10 @@ export default function NotificationsPage() {
     if (t === "reply" || t === "mention") return "님이 회원님을 언급했습니다";
     if (t === "post") return "님이 새 글을 작성했습니다";
     if (t === "vote") return "님이 회원님의 투표에 참여했습니다";
-    if (t === "poll_ended") return "회원님이 참여한 투표가 마감되었습니다";
+    if (t === "poll_ended") {
+      if (meta?.is_author) return "내 투표가 종료되었습니다";
+      return "참여한 투표가 종료되었습니다";
+    }
     if (t === "new_episode") {
       if (meta) return `님이 시리즈 "${meta.novel_title}"에 새 에피소드를 작성했습니다`;
       return "님이 새 에피소드를 작성했습니다";

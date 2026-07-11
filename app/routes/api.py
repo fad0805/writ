@@ -1965,11 +1965,13 @@ def _generate_poll_end_notifications(user_id: int, session):
             .first()
         )
         if not existing:
+            import json as _json
             session.add(Notification(
                 user_id=user_id,
                 from_user_id=post.author_id,
                 notification_type="poll_ended",
                 post_id=post.id,
+                metadata_json=_json.dumps({"is_author": post.author_id == user_id}),
             ))
     session.commit()
 

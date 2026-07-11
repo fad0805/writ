@@ -129,10 +129,11 @@ export default function RightSidebar() {
             if (n.type === "poll_ended") {
               const pollPost = n.post as unknown as PostData | undefined;
               const pollText = pollPost?.poll_data?.options?.map((o: PollOption) => o.text || "").join(" / ") || "";
+              const msg = n.metadata?.is_author ? "내 투표가 종료되었습니다" : "참여한 투표가 종료되었습니다";
               return (
                 <div key={n.id}>
                   <div className="mini-post-author" style={{ padding: "0 12px", marginTop: 4, fontSize: "0.85em" }}>
-                    <span className="text-muted">투표가 종료되었습니다</span>
+                    <span className="text-muted">{msg}</span>
                     {pollText && <span className="text-muted" style={{ marginLeft: 4 }}>— {pollText}</span>}
                   </div>
                   {pollPost && <MiniPostCard post={pollPost} notifType={n.type} />}
