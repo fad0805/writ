@@ -90,6 +90,7 @@ def _post_json(p, session, user, tl_type=None):
         "my_reaction": my_reaction,
         "mentioned_user_ids": p.mentioned_user_ids or [],
         "mentioned_handles": [u.username for u in (session.query(User).filter(User.id.in_(p.mentioned_user_ids or [])).all())] if p.mentioned_user_ids else [],
+        "link_preview": p.link_preview or None,
     }
 
 
@@ -746,6 +747,7 @@ def api_create_post(
     is_sensitive: bool = Form(False),
     poll_options: str = Form(""),
     poll_expires_in: int = Form(60),
+    link_preview: str = Form(""),
 ):
     user = require_active_auth(request)
     if share_url:
@@ -793,6 +795,11 @@ def api_create_post(
             is_sensitive=is_sensitive or author_is_sensitive,
         )
         import json as _json
+        if link_preview:
+            try:
+                post.link_preview = _json.loads(link_preview)
+            except (_json.JSONDecodeError, TypeError):
+                pass
         try:
             media = _json.loads(media_attachments)
             if isinstance(media, list):
@@ -5381,6 +5388,33 @@ def _resolve_admin_users(s, admin_ids_str: str):
     if not handles:
         return []
     return s.query(User).filter(User.username.in_(handles)).all()
+
+
+@router.post("/link-preview")
+def api_link_preview(url: str = Form(...)):
+    import httpx, re as _re
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    domain = parsed.netloc
+    result = {"url": url, "title": domain, "description": "", "image": ""}
+    try:
+        resp = httpx.get(url, headers={"User-Agent": "WRIT/1.0"}, timeout=10, follow_redirects=True)
+        if resp.status_code == 200:
+            html = resp.text
+            def _og(n):
+                m = _re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', html, _re.I)
+                if not m:
+                    m = _re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', html, _re.I)
+                return m.group(1) if m else ""
+            og_title = _og("title") or _re.search(r'<title>([^<]*)</title>', html, _re.I)
+            result["title"] = (_og("title") or (og_title.group(1) if og_title else domain))[:200]
+            result["description"] = (_og("description") or "")[:400]
+            result["image"] = _og("image") or ""
+            if result["image"] and result["image"].startswith("/"):
+                result["image"] = f"{parsed.scheme}://{parsed.netloc}{result['image']}"
+    except Exception:
+        pass
+    return result
 
 
 @router.get("/server-info")

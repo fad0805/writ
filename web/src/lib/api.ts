@@ -91,6 +91,7 @@ export interface PostData {
   reactions?: Record<string, number>;
   my_reaction?: string | null;
   mentioned_handles?: string[];
+  link_preview?: { url: string; title: string; description: string; image: string } | null;
 }
 
 export interface ReplyContext {
@@ -177,7 +178,7 @@ export const api = {
     request<PostData & { total_replies: number; has_more_replies: boolean }>(
       `/api/posts/${id}?reply_offset=${reply_offset}&reply_limit=${reply_limit}`
     ),
-  createPost: (data: { content: string; summary?: string; visibility?: string; parent_id?: number; share_url?: string; media_attachments?: string; is_sensitive?: boolean; poll_options?: string; poll_expires_in?: number }) =>
+  createPost: (data: { content: string; summary?: string; visibility?: string; parent_id?: number; share_url?: string; media_attachments?: string; is_sensitive?: boolean; poll_options?: string; poll_expires_in?: number; link_preview?: string }) =>
     formRequest<PostData>("/api/posts", data),
   editPost: (id: number, data: { content: string; summary?: string }) =>
     formRequest<PostData>(`/api/posts/${id}/edit`, data),
@@ -308,4 +309,6 @@ export const api = {
     }
     return res.json();
   },
+  fetchLinkPreview: (url: string) =>
+    formRequest<{ url: string; title: string; description: string; image: string }>("/api/link-preview", { url }),
 };

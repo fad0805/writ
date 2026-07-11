@@ -129,6 +129,17 @@ async def lifespan(app: FastAPI):
     from app.routes.api import _cleanup_avatars
     init_db()
     try:
+        from app.models import get_session, Post
+        import sqlalchemy as _sa
+        with get_session() as s:
+            inspector = _sa.inspect(s.bind)
+            cols = [c["name"] for c in inspector.get_columns("posts")]
+            if "link_preview" not in cols:
+                s.execute(_sa.text("ALTER TABLE posts ADD COLUMN link_preview JSON"))
+                s.commit()
+    except Exception:
+        pass
+    try:
         _cleanup_avatars()
     except Exception:
         pass

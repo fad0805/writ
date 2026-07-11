@@ -215,6 +215,7 @@ class Post(Base):
     original_visibility = Column(String(16), default="")
     media_attachments = Column(JSON, default=list)
     poll_data = Column(JSON, nullable=True)
+    link_preview = Column(JSON, nullable=True)
     tag_list = relationship("Tag", secondary=post_tags, lazy="selectin")
     created_at = Column(DateTime(timezone=True), default=now)
     bumped_at = Column(DateTime(timezone=True), nullable=True)
