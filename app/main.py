@@ -318,9 +318,21 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
 
     if not remote_actor or not remote_actor.public_key:
         try:
-            fresh = _resolve_actor(actor_url, force_refresh=True)
-            if fresh and fresh.public_key:
-                remote_actor = fresh
+            import httpx as _httpx
+            _resp = _httpx.get(actor_url, headers={"Accept": "application/activity+json"}, timeout=10, follow_redirects=True)
+            if _resp.status_code == 200:
+                _data = _resp.json()
+                _pubkey = _data.get("publicKey", {}).get("publicKeyPem", "") if isinstance(_data, dict) else ""
+                if _pubkey:
+                    remote_actor = _resolve_actor(actor_url, force_refresh=True)
+                    if not remote_actor:
+                        class _Actor:
+                            public_key = _pubkey
+                            remote_url = actor_url
+                            is_remote = True
+                            @staticmethod
+                            def actor_uri(): return actor_url
+                        remote_actor = _Actor()
         except Exception:
             pass
     if not remote_actor or not remote_actor.public_key:
