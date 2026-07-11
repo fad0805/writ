@@ -991,6 +991,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if not actor:
             return (404, "Actor not found")
 
+        import sys; print(f"[create] step: actor check passed", flush=True)
+
         # Verify attributedTo matches activity actor
         obj_attributed = obj.get("attributedTo", "")
         if isinstance(obj_attributed, list):
@@ -1052,7 +1054,9 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     "expires_at": expires_at,
                 }
 
+        import sys; print(f"[create] step: before session", flush=True)
         with get_session() as session:
+            print(f"[create] step: inside session", flush=True)
             existing = session.query(Post).filter_by(ap_id=post_id).first()
             if existing:
                 # If the existing post is a poll and incoming has updated votes, update it
