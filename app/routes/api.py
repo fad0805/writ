@@ -4519,6 +4519,7 @@ def api_admin_forward_report(request: Request, report_id: int):
         try:
             _send_flag(reporter, report.target_type, target_obj, report.reason[:200], report.rule_ids or [])
         except Exception as e:
+            logger.error("Failed to forward report %s: %s", report_id, e)
             raise HTTPException(status_code=500, detail=f"Failed to forward: {e}")
     return {"ok": True}
 
