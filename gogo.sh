@@ -186,36 +186,19 @@ with get_session() as s:
     if f2: print('accepted:', f2.accepted)
 "
 
-elif [ "$1" = "purge" ]; then
-  if [ -z "$2" ]; then echo "도메인 입력: bash gogo.sh purge daydream.ink"; exit 1; fi
+elif [ "$1" = "check-poll" ]; then
+  id="${2:-659dac71}"
   docker compose exec api python3 -c "
-from app.models import User, Follow, Notification, Like, Boost, Bookmark, Post, AdminLog, ProcessedActivity, get_session
-from sqlalchemy import or_
-domain = '$2'
-with get_session() as s:
-    users = s.query(User).filter(User.remote_url.like(f'https://{domain}/%')).all()
-    ids = [u.id for u in users]
-    print(f'found {len(ids)} users from {domain}')
-    if not ids:
-        users2 = s.query(User).filter(User.username.like(f'%@{domain}')).all()
-        ids = [u.id for u in users2]
-        print(f'found {len(ids)} users by username')
-    if ids:
-        s.query(Follow).filter(or_(Follow.follower_id.in_(ids), Follow.following_id.in_(ids))).delete(synchronize_session=False)
-        s.query(Notification).filter(or_(Notification.from_user_id.in_(ids), Notification.user_id.in_(ids))).delete(synchronize_session=False)
-        s.query(Like).filter(Like.user_id.in_(ids)).delete(synchronize_session=False)
-        s.query(Boost).filter(Boost.user_id.in_(ids)).delete(synchronize_session=False)
-        s.query(Bookmark).filter(Bookmark.user_id.in_(ids)).delete(synchronize_session=False)
-        s.query(Post).filter(Post.author_id.in_(ids)).delete(synchronize_session=False)
-        s.query(User).filter(User.id.in_(ids)).delete(synchronize_session=False)
-        print(f'deleted {len(ids)} users and related data')
-    s.query(AdminLog).filter(AdminLog.target_username.like(f'%@{domain}')).delete(synchronize_session=False)
-    s.query(ProcessedActivity).filter(ProcessedActivity.id.like(f'%{domain}%')).delete(synchronize_session=False)
-    s.commit()
-    print('done')
-" 2>&1
-
-elif [ "$1" = "clear-pending" ]; then
+import httpx, json
+r = httpx.get(f'https://writ.daydream.ink/@siarte/$id', headers={'Accept':'application/activity+json'})
+d = r.json()
+obj = d.get('object', d)
+print('type:', obj.get('type'))
+print('endTime:', obj.get('endTime'))
+print('votersCount:', obj.get('votersCount'))
+print('options:', json.dumps(obj.get('oneOf'), indent=2, ensure_ascii=False)[:300])
+print('to:', obj.get('to'))
+"
 
 elif [ "$1" = "clear-pending" ]; then
   docker compose exec api python3 -c "
