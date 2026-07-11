@@ -446,6 +446,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             ),
             Post.is_deleted == False,
             or_(Post.visibility != "mention", Post.author_id == user.id),
+            or_(Post.visibility != "home", Post.author_id.in_(following_ids)),
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     elif tl_type == "social":
         following_ids = [f.following_id for f in session.query(Follow).filter_by(
