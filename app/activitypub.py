@@ -1045,6 +1045,38 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 if not reply_to_post:
                     reply_to_post = _fetch_remote_post(in_reply_to, actor, session)
 
+            # Mastodon poll votes: Create(Note) with name + inReplyTo + no content
+            vote_name = obj.get("name", "") if not raw_content.strip() else ""
+            if vote_name and reply_to_post and reply_to_post.poll_data:
+                poll_post = reply_to_post
+                options = poll_post.poll_data.get("options", [])
+                option_idx = -1
+                for i, opt in enumerate(options):
+                    if opt.get("text", "").strip().lower() == vote_name.strip().lower():
+                        option_idx = i
+                        break
+                if option_idx >= 0:
+                    # Check poll expiry
+                    expires_at = poll_post.poll_data.get("expires_at")
+                    if expires_at:
+                        try:
+                            if datetime.datetime.fromisoformat(expires_at) < datetime.datetime.now(datetime.timezone.utc):
+                                return (200, "Poll ended")
+                        except (ValueError, TypeError):
+                            pass
+                    existing_vote = session.query(Vote).filter_by(user_id=actor.id, post_id=poll_post.id).first()
+                    if existing_vote:
+                        if existing_vote.option_index == option_idx:
+                            return (200, "Already voted")
+                        options[existing_vote.option_index]["votes_count"] = max(0, options[existing_vote.option_index].get("votes_count", 0) - 1)
+                        existing_vote.option_index = option_idx
+                    else:
+                        session.add(Vote(user_id=actor.id, post_id=poll_post.id, option_index=option_idx))
+                    options[option_idx]["votes_count"] = options[option_idx].get("votes_count", 0) + 1
+                    poll_post.poll_data = {**poll_post.poll_data, "options": options}
+                    session.commit()
+                    return (200, "Voted")
+
             # Parse mentioned users from content
             mentioned_names = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content or ""))
             # Also parse mentions from AP tag array

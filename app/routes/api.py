@@ -1226,6 +1226,29 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
         s.query(Post).filter(Post.id == post_id).update({"poll_data": {**post.poll_data, "options": options}}, synchronize_session=False)
         s.commit()
         s.expire_all()
+    if post.ap_id and post.author and post.author.is_remote:
+        from app.activitypub import _post_to_inbox
+        vote_activity = {
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": f"{BASE_URL}/votes/{uuid.uuid4()}/activity",
+            "type": "Create",
+            "actor": user.actor_uri(),
+            "object": {
+                "id": f"{BASE_URL}/votes/{uuid.uuid4()}",
+                "type": "Note",
+                "name": options[option]["text"],
+                "attributedTo": user.actor_uri(),
+                "to": [post.author.actor_uri()],
+                "inReplyTo": post.ap_id,
+            },
+            "to": [post.author.actor_uri()],
+        }
+        inbox = post.author.shared_inbox_url or post.author.inbox_url
+        if inbox:
+            try:
+                _post_to_inbox(inbox, vote_activity, user)
+            except Exception:
+                pass
     return {"ok": True}
 
 
