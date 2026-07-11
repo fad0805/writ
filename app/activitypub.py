@@ -977,7 +977,15 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if not raw_actor:
             return (400, "Missing actor")
         actor_url = raw_actor if isinstance(raw_actor, str) else raw_actor[0]
-        actor = _resolve_actor(actor_url)
+        # Try with sign_as from the poll author (for vote on our poll)
+        in_reply_to_url = obj.get("inReplyTo", "") if isinstance(obj, dict) else ""
+        _sign_as = None
+        if in_reply_to_url:
+            with get_session() as __s:
+                _poll = __s.query(Post).filter_by(ap_id=in_reply_to_url).first()
+                if _poll:
+                    _sign_as = __s.query(User).get(_poll.author_id)
+        actor = _resolve_actor(actor_url, sign_as=_sign_as)
         if not actor:
             return (404, "Actor not found")
 
