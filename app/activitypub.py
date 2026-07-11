@@ -1271,6 +1271,16 @@ def _send_delete_post(post: Post, sender: User):
         broadcast_to_followers(sender, delete)
     except Exception as e:
         logger.warning("Failed to broadcast Delete: %s", e)
+    # Also send Delete directly to parent author's inbox for remote replies
+    if post.in_reply_to_ap_id:
+        try:
+            with get_session() as s:
+                parent = s.query(Post).filter_by(ap_id=post.in_reply_to_ap_id).first()
+                if parent and parent.author and parent.author.is_remote:
+                    inbox = parent.author.shared_inbox_url or parent.author.inbox_uri()
+                    _post_to_inbox(inbox, delete, sender)
+        except Exception as e:
+            logger.warning("Failed to send Delete to parent author: %s", e)
 
 
 def _handle_flag(activity: dict) -> tuple[int, str]:

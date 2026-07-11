@@ -244,7 +244,7 @@ class Post(Base):
     @property
     def replies_count(self):
         try:
-            return len(self.replies) if self.replies is not None else 0
+            return sum(1 for r in self.replies if not r.is_deleted) if self.replies is not None else 0
         except Exception:
             return 0
 
