@@ -236,7 +236,7 @@ export default function TimelinePage() {
           <p className="empty-state">표시할 글이 없습니다.</p>
         ) : (
           <InfiniteScroll hasMore={hasMore} loadingMore={loadingMore} loadMore={loadMore}>
-            {posts.map((p, i) => <div key={p.id} ref={(el) => { cardRefs.current[i] = el; }}><PostCard post={p} onUpdate={load} selected={i === selectedIdx} /></div>)}
+            {posts.map((p, i) => <div key={p.id} ref={(el) => { cardRefs.current[i] = el; }}><PostCard post={p} onDelete={() => setPosts((prev) => prev.filter((x) => x.id !== p.id))} onUpdate={load} selected={i === selectedIdx} /></div>)}
           </InfiniteScroll>
         )}
       </div>
