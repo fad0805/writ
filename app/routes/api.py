@@ -24,7 +24,7 @@ def _fmt_dt(dt: datetime.datetime | None) -> str | None:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=datetime.timezone.utc)
     return dt.astimezone(KST).isoformat()
-from app.activitypub import broadcast_to_followers, _post_to_inbox, _process_emoji_tags
+from app.activitypub import broadcast_to_followers, _post_to_inbox, _process_emoji_tags, _federation_allowed
 from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY
 from app.crypto_utils import encrypt_key, get_private_key
 from app.eventbus import broadcast
@@ -691,6 +691,9 @@ def _broadcast_federation(user, post, visibility):
                 ).all()
                 for mu in mu_users:
                     inbox = mu.inbox_url or mu.inbox_uri()
+                    domain = mu.actor_uri().split("/")[2] if "//" in mu.actor_uri() else ""
+                    if domain and not _federation_allowed(domain):
+                        continue
                     _post_to_inbox(inbox, create_activity, user)
         else:
             broadcast_to_followers(user, create_activity)
@@ -706,6 +709,9 @@ def _broadcast_federation(user, post, visibility):
                     for mu in mu_users:
                         if mu.id not in follower_ids:
                             inbox = mu.inbox_url or mu.inbox_uri()
+                            domain = mu.actor_uri().split("/")[2] if "//" in mu.actor_uri() else ""
+                            if domain and not _federation_allowed(domain):
+                                continue
                             _post_to_inbox(inbox, create_activity, user)
     except Exception as e:
         logger.warning("Failed to broadcast federation activity: %s", e)
