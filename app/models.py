@@ -312,6 +312,13 @@ class Post(Base):
             obj["to"] = [followers_uri]
         elif self.visibility == "mention":
             obj["to"] = []
+        if self.mentioned_user_ids:
+            with get_session() as _ms:
+                _musers = _ms.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
+                for _mu in _musers:
+                    _mu_uri = _mu.actor_uri()
+                    if _mu_uri not in obj["to"] and _mu_uri not in obj["cc"]:
+                        obj["cc"].append(_mu_uri)
         is_sensitive = self.is_sensitive or getattr(self.author, 'is_sensitive', False) or False
         if self.summary:
             obj["summary"] = self.summary
