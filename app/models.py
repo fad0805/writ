@@ -278,10 +278,9 @@ class Post(Base):
                     else:
                         tag_name = f"@{u.username}@{DOMAIN}"
                     mention_html = (
-                        f'<span class="h-card" translate="no">'
                         f'<a href="{href}" class="u-url mention">'
-                        f'@<span>{display_name}</span>'
-                        f'</a></span>'
+                        f'@{display_name}'
+                        f'</a>'
                     )
                     short_name = f"@{u.username}"
                     content = re.sub(
