@@ -492,6 +492,20 @@ except Exception as e:
     traceback.print_exc()
 "
 
+elif [ "$1" = "clear-notifs" ]; then
+  docker compose exec api python3 -c "
+from app.models import Notification, Post, get_session
+with get_session() as s:
+    deleted = 0
+    for n in s.query(Notification).filter(Notification.post_id.isnot(None)).all():
+        p = s.query(Post).get(n.post_id)
+        if p and p.is_deleted:
+            s.delete(n)
+            deleted += 1
+    s.commit()
+    print(f'deleted {deleted} notifications for deleted posts')
+"
+
 elif [ "$1" = "network-check" ]; then
   docker compose exec api python3 -c "
 import httpx
