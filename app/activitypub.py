@@ -1058,8 +1058,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         with get_session() as session:
             print(f"[create] step: inside session", flush=True)
             import sys; sys.stdout.flush()
+            print(f"[create] querying ap_id={post_id[:80]}", flush=True)
             existing = session.query(Post).filter_by(ap_id=post_id).first()
             print(f"[create] existing={existing is not None}", flush=True)
+            import sys; print(f"[create] checking in_reply_to={in_reply_to[:60] if in_reply_to else 'None'}", flush=True)
             if existing:
                 # If the existing post is a poll and incoming has updated votes, update it
                 if existing.poll_data and poll_data:
