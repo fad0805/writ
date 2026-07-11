@@ -1111,15 +1111,21 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         break
                 print(f"[create] option_idx={option_idx}", flush=True)
                 if option_idx >= 0:
-                    # Check poll expiry
+                    print(f"[create] checking expiry", flush=True)
                     expires_at = poll_post.poll_data.get("expires_at")
                     if expires_at:
                         try:
-                            if datetime.datetime.fromisoformat(expires_at) < datetime.datetime.now(datetime.timezone.utc):
+                            exp = datetime.datetime.fromisoformat(expires_at)
+                            now = datetime.datetime.now(datetime.timezone.utc)
+                            print(f"[create] expires_at={expires_at} expired={exp < now}", flush=True)
+                            if exp < now:
                                 return (200, "Poll ended")
-                        except (ValueError, TypeError):
+                        except (ValueError, TypeError) as ex:
+                            print(f"[create] expiry error: {ex}", flush=True)
                             pass
+                    print(f"[create] querying existing vote", flush=True)
                     existing_vote = session.query(Vote).filter_by(user_id=actor.id, post_id=poll_post.id).first()
+                    print(f"[create] existing_vote={existing_vote is not None}", flush=True)
                     if existing_vote:
                         if existing_vote.option_index == option_idx:
                             return (200, "Already voted")
