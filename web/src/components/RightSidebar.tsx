@@ -1,6 +1,6 @@
 "use client";
 import { useAuth } from "@/lib/auth";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { api, NovelData, NotificationData, PostData, PollOption } from "@/lib/api";
 import Icon from "./Icon";
 import Link from "next/link";
@@ -19,25 +19,6 @@ export default function RightSidebar() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [serverInfo, setServerInfo] = useState<{ name: string; description?: string; admins: { username: string; email: string }[] } | null>(null);
 
-  const audioRef = useRef<{ ctx: AudioContext; buf: AudioBuffer | null } | null>(null);
-  const playNotifSound = useCallback(async () => {
-    try {
-      if (!audioRef.current) {
-        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const resp = await fetch("/alert.wav");
-        const buf = await resp.arrayBuffer();
-        const decoded = await ctx.decodeAudioData(buf);
-        audioRef.current = { ctx, buf: decoded };
-      }
-      const { ctx, buf } = audioRef.current;
-      if (!buf) return;
-      if (ctx.state === "suspended") await ctx.resume();
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      src.connect(ctx.destination);
-      src.start();
-    } catch {}
-  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -46,7 +27,6 @@ export default function RightSidebar() {
     const es = new EventSource("/api/notifications/stream");
     es.onmessage = (event) => {
       if (event.data === "refresh") {
-        playNotifSound();
         api.getNotifications(undefined, 10, 0, false).then((d) => {
           setNotifs(d.notifications);
           window.dispatchEvent(new Event("notifchange"));
@@ -55,7 +35,7 @@ export default function RightSidebar() {
     };
     es.onerror = () => {};
     return () => { es.close(); };
-  }, [user, refreshKey, playNotifSound]);
+  }, [user, refreshKey]);
 
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
   useEffect(() => { fetch("/api/server-info").then((r) => r.json()).then(setServerInfo).catch(() => {}); }, [serverRefreshKey]);

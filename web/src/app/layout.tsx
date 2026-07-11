@@ -4,6 +4,7 @@ import { AuthProvider } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import RightSidebar from "@/components/RightSidebar";
 import KeyboardShortcuts from "@/components/KeyboardShortcuts";
+import NotifSound from "@/components/NotifSound";
 import DeactivatedRedirect from "@/components/DeactivatedRedirect";
 
 export const metadata: Metadata = {
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <RightSidebar />
           </div>
           <KeyboardShortcuts />
+          <NotifSound />
           <DeactivatedRedirect />
         </AuthProvider>
         <script dangerouslySetInnerHTML={{
