@@ -114,6 +114,29 @@ export default function RightSidebar() {
               </div>
             );
 
+            if (n.type === "vote") {
+              return (
+                <div key={n.id}>
+                  <div className="mini-post-author" style={{ padding: "0 12px", marginTop: 4, fontSize: "0.85em" }}>
+                    <strong>{n.from_user?.display_name || "알 수 없음"}</strong>
+                    <span className="text-muted" style={{ marginLeft: 4 }}>님이 투표에 참여했습니다</span>
+                  </div>
+                  {n.post && <MiniPostCard post={n.post} notifType={n.type} />}
+                </div>
+              );
+            }
+
+            if (n.type === "poll_ended") {
+              return (
+                <div key={n.id}>
+                  <div className="mini-post-author" style={{ padding: "0 12px", marginTop: 4, fontSize: "0.85em" }}>
+                    <span className="text-muted">투표가 마감되었습니다</span>
+                  </div>
+                  {n.post && <MiniPostCard post={n.post} notifType={n.type} />}
+                </div>
+              );
+            }
+
             if (n.type === "follow" || n.type === "follow_request") {
               return (
                 <Link key={n.id} href={`/@${n.from_user?.username || ""}`} className="mini-post-link" style={{ background: "var(--bg-tertiary)", cursor: "pointer" }}>

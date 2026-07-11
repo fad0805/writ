@@ -189,7 +189,7 @@ export const api = {
   unbookmark: (id: number) => request<{ ok: boolean }>(`/api/posts/${id}/unbookmark`, { method: "POST" }),
   getBookmarks: (limit = 20, offset = 0) => request<{ posts: PostData[]; has_more: boolean }>(`/api/bookmarks?limit=${limit}&offset=${offset}`),
   getFavorites: (limit = 10, offset = 0) => request<{ posts: PostData[]; has_more: boolean }>(`/api/favorites?limit=${limit}&offset=${offset}`),
-  vote: (id: number, option: number) => formRequest<{ ok: boolean }>(`/api/posts/${id}/vote`, { option }),
+  vote: (id: number, option: number) => formRequest<{ ok: boolean; post?: PostData }>(`/api/posts/${id}/vote`, { option }),
   unvote: (id: number) => formRequest<{ ok: boolean }>(`/api/posts/${id}/unvote`, {}),
   react: (id: number, emoji: string) => formRequest<{ ok: boolean }>(`/api/posts/${id}/react`, { emoji }),
   unreact: (id: number) => formRequest<{ ok: boolean }>(`/api/posts/${id}/unreact`, {}),
@@ -206,12 +206,14 @@ export const api = {
       following_count: number;
       is_following: boolean;
       is_follow_pending: boolean;
+      notify_on_post: boolean;
       has_pending_follower: boolean;
       is_follower: boolean;
       is_mine: boolean;
     }>(`/api/users/${username}`),
   follow: (username: string) => request<{ ok: boolean }>(`/api/users/${username}/follow`, { method: "POST" }),
   unfollow: (username: string) => request<{ ok: boolean }>(`/api/users/${username}/unfollow`, { method: "POST" }),
+  toggleNotify: (username: string) => request<{ ok: boolean; notify_on_post: boolean }>(`/api/users/${username}/toggle-notify`, { method: "POST" }),
   getFollowers: (username: string) => request<{ users: User[] }>(`/api/users/${username}/followers`),
   getFollowing: (username: string) => request<{ users: User[] }>(`/api/users/${username}/following`),
 

@@ -58,6 +58,7 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     role = Column(String(16), default="user")
     remote_url = Column(String(512), default="")
+    profile_url = Column(String(512), default="")
     shared_inbox_url = Column(String(512), default="")
     profile_image = Column(String(512), default="")
     header_image = Column(String(512), default="")
@@ -115,7 +116,7 @@ class User(Base):
             "preferredUsername": self.username,
             "name": self.display_name or self.username,
             "summary": self.summary or "",
-            "url": self.actor_uri(),
+            "url": f"{BASE_URL}/@{self.username}",
             "inbox": self.inbox_uri(),
             "outbox": self.outbox_uri(),
             "followers": self.followers_uri(),
@@ -157,6 +158,8 @@ class Follow(Base):
     follower_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     following_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     accepted = Column(Boolean, default=True)
+    activity_id = Column(String(1024), default="")
+    notify_on_post = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now)
 
     follower = relationship("User", foreign_keys=[follower_id], lazy="selectin")
@@ -242,7 +245,7 @@ class Post(Base):
     @property
     def replies_count(self):
         try:
-            return len(self.replies) if self.replies is not None else 0
+            return sum(1 for r in self.replies if not r.is_deleted) if self.replies is not None else 0
         except Exception:
             return 0
 
@@ -256,18 +259,41 @@ class Post(Base):
 
         tags = []
         if self.mentioned_user_ids:
+            from app.config import DOMAIN
+            from urllib.parse import urlparse as _urlparse
             with get_session() as s:
                 users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
                 for u in users:
-                    name = f"@{u.username}"
-                    href = u.actor_uri()
-                    mention_name = f"@{u.remote_url.split('/')[-1]}@{urlparse(u.remote_url).hostname}" if u.is_remote and u.remote_url else name
+                    # Use profile_url (web URL) for mention HTML if available, otherwise actor_uri
+                    href = getattr(u, 'profile_url', '') or u.actor_uri()
+                    # Determine display name: local = user, remote = user@domain
+                    if u.is_remote and u.remote_url:
+                        if "@" in u.username:
+                            display_name = u.username
+                        else:
+                            user_domain = _urlparse(u.remote_url).hostname or ""
+                            display_name = f"{u.username}@{user_domain}"
+                    else:
+                        display_name = u.username
+                    # AP tag name must be WebFinger address (@user@domain)
+                    if u.is_remote:
+                        tag_name = f"@{display_name}"
+                    else:
+                        tag_name = f"@{u.username}@{DOMAIN}"
+                    # Mastodon-compatible h-card mention HTML
+                    mention_html = (
+                        f'<span class="h-card" translate="no">'
+                        f'<a href="{href}" class="u-url mention">'
+                        f'@<span>{display_name}</span>'
+                        f'</a></span>'
+                    )
+                    short_name = f"@{u.username}"
                     content = re.sub(
-                        re.escape(name) + r'(?![^\s<]*(?:</a>|">))',
-                        f'<a href="{href}" class="u-url mention">{mention_name}</a>',
+                        re.escape(short_name) + r'(?:@[\w.-]+)?(?![^\s<]*(?:</a>|">))',
+                        mention_html,
                         content,
                     )
-                    tags.append({"type": "Mention", "href": href, "name": mention_name})
+                    tags.append({"type": "Mention", "href": href, "name": tag_name})
         if self.tag_list:
             for t in self.tag_list:
                 tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={t.name}", "name": f"#{t.name}"})
@@ -276,6 +302,7 @@ class Post(Base):
 
         obj_id = f"{BASE_URL}/@{self.author.username}/{self.number}" if self.number else self.ap_id
         obj = {
+            "@context": "https://www.w3.org/ns/activitystreams",
             "id": obj_id,
             "url": obj_id,
             "type": "Note",
@@ -297,6 +324,16 @@ class Post(Base):
             obj["to"] = [followers_uri]
         elif self.visibility == "mention":
             obj["to"] = []
+        if self.mentioned_user_ids:
+            with get_session() as _ms:
+                _musers = _ms.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
+                for _mu in _musers:
+                    _mu_uri = _mu.actor_uri()
+                    if _mu_uri not in obj["to"] and _mu_uri not in obj["cc"]:
+                        if self.is_dm:
+                            obj["to"].append(_mu_uri)
+                        else:
+                            obj["cc"].append(_mu_uri)
         is_sensitive = self.is_sensitive or getattr(self.author, 'is_sensitive', False) or False
         if self.summary:
             obj["summary"] = self.summary
@@ -312,9 +349,14 @@ class Post(Base):
                     mtype = m.get("type", "image")
                     if url:
                         ext = url.rsplit(".", 1)[-1].lower() if "." in url else "png"
-                        ct = f"image/{ext}" if mtype == "image" else "video/webm"
+                        if mtype == "video" or ext in ("mp4", "webm", "mov"):
+                            ap_type = "Video"
+                            ct = "video/webm"
+                        else:
+                            ap_type = "Image"
+                            ct = f"image/{ext}"
                         attachments.append({
-                            "type": "Document",
+                            "type": ap_type,
                             "mediaType": ct,
                             "url": url,
                             "name": "",

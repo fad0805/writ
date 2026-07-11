@@ -166,21 +166,12 @@ def _can_view(post, viewer, session):
 
 
 def _parse_mentions(content):
-    mentioned = set(re.findall(r'@(\w+)', content))
-    remote_mentions = set(re.findall(r'@(\w+)@([\w.-]+)', content))
-    if not mentioned and not remote_mentions:
+    mentioned = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content))
+    if not mentioned:
         return []
-    ids = []
     with get_session() as s:
-        if mentioned:
-            users = s.query(User).filter(User.username.in_(mentioned)).all()
-            ids.extend(u.id for u in users)
-        for username, domain in remote_mentions:
-            remote_username = f"{username}@{domain}"
-            u = s.query(User).filter_by(username=remote_username).first()
-            if u:
-                ids.append(u.id)
-    return ids
+        users = s.query(User).filter(User.username.in_(mentioned)).all()
+        return [u.id for u in users]
 
 
 def _sync_post_tags(post, s):
@@ -446,7 +437,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 Post.id.in_(boosted_ids),
             ),
             Post.is_deleted == False,
-            Post.visibility != "mention",
+            or_(Post.visibility != "mention", Post.author_id == user.id),
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     elif tl_type == "social":
         following_ids = [f.following_id for f in session.query(Follow).filter_by(
@@ -462,7 +453,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 and_(Post.author_id.in_(local_ids), Post.visibility == "public"),
             ),
             Post.is_deleted == False,
-            Post.visibility != "mention",
+            or_(Post.visibility != "mention", Post.author_id == user.id),
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     elif tl_type == "local":
         local_ids = [u.id for u in session.query(User).filter_by(is_remote=False).all()]
@@ -481,8 +472,33 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             Post.is_deleted == False,
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     raw_total = len(posts)
-    # Remove leftover mention+DMs (post-filter to avoid SQL complexity)
-    posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm)]
+    # Remove DMs from other users (self-DMs are kept)
+    posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm and p.author_id != user.id)]
+    # Filter replies: only show if all thread participants are followed (or post is mine)
+    # Only for home/social timelines, not local/federated
+    if user and tl_type in ("home", "social"):
+        following_ids = {f.following_id for f in session.query(Follow).filter_by(
+            follower_id=user.id, accepted=True
+        ).all()}
+        following_ids.add(user.id)
+        reply_filtered = []
+        for p in posts:
+            if p.author_id != user.id and (p.in_reply_to_id or p.in_reply_to_ap_id):
+                participants = set()
+                # Walk local parent chain only (no HTTP fetches)
+                cur = p
+                depth = 0
+                while cur and depth < 20:
+                    parent = getattr(cur, 'parent', None)
+                    if not parent:
+                        break
+                    participants.add(parent.author_id)
+                    cur = parent
+                    depth += 1
+                if participants and not participants <= following_ids:
+                    continue
+            reply_filtered.append(p)
+        posts = reply_filtered
     # Apply user mutes, blocks, and keyword mutes
     if user:
         muted_user_ids = {m.target_user_id for m in session.query(UserMute).filter_by(user_id=user.id).all()}
@@ -645,6 +661,18 @@ def _broadcast_federation(user, post, visibility):
                     _post_to_inbox(mu.inbox_uri(), create_activity, user)
         else:
             broadcast_to_followers(user, create_activity)
+            if post.mentioned_user_ids:
+                with get_session() as ap_s:
+                    follower_ids = {f.following_id for f in ap_s.query(Follow).filter(
+                        Follow.following_id == user.id,
+                        Follow.follower.has(is_remote=True),
+                    ).all()}
+                    mu_users = ap_s.query(User).filter(
+                        User.id.in_(post.mentioned_user_ids), User.is_remote == True
+                    ).all()
+                    for mu in mu_users:
+                        if mu.id not in follower_ids:
+                            _post_to_inbox(mu.inbox_uri(), create_activity, user)
     except Exception as e:
         logger.warning("Failed to broadcast federation activity: %s", e)
 
@@ -743,7 +771,7 @@ def api_create_post(
                 opts = _json.loads(poll_options)
                 if isinstance(opts, list) and 2 <= len(opts) <= 10 and all(isinstance(o, str) and o.strip() for o in opts):
                     now = datetime.datetime.now(datetime.timezone.utc)
-                    expires_at = (now + datetime.timedelta(hours=poll_expires_in)).isoformat() if poll_expires_in > 0 else None
+                    expires_at = (now + datetime.timedelta(minutes=poll_expires_in)).isoformat() if poll_expires_in > 0 else None
                     post.poll_data = {
                         "options": [{"text": o.strip(), "votes_count": 0} for o in opts],
                         "expires_at": expires_at,
@@ -757,7 +785,7 @@ def api_create_post(
         if parent_id:
             parent = s.query(Post).filter_by(id=parent_id).first()
             if parent:
-                pass
+                post.in_reply_to_ap_id = parent.ap_id or ""
         s.commit()
 
         # notify mentioned users
@@ -928,6 +956,8 @@ def api_like_post(request: Request, post_id: int):
                 "type": "Like",
                 "actor": user.actor_uri(),
                 "object": post.ap_id,
+                "to": [post.author.actor_uri()],
+                "cc": [],
             }
             inbox = post.author.shared_inbox_url
             try:
@@ -1178,6 +1208,7 @@ def api_unreact_post(request: Request, post_id: int):
 @router.post("/posts/{post_id}/vote")
 def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
     user = require_active_auth(request)
+    remote_vote_data = None
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post or not post.poll_data:
@@ -1206,9 +1237,37 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
         for i, opt in enumerate(options):
             opt["votes_count"] = counts.get(i, 0)
         s.query(Post).filter(Post.id == post_id).update({"poll_data": {**post.poll_data, "options": options}}, synchronize_session=False)
+        s.flush()
+        s.refresh(post)
+        post_json = _post_json(post, s, user)
+        if post.ap_id and post.author and post.author.is_remote:
+            inbox = post.author.shared_inbox_url or post.author.inbox_url
+            if inbox:
+                remote_vote_data = (post.ap_id, post.author.actor_uri(), inbox, options[option]["text"])
         s.commit()
-        s.expire_all()
-    return {"ok": True}
+    if remote_vote_data:
+        from uuid import uuid4
+        ap_id, author_uri, inbox, option_text = remote_vote_data
+        vote_activity = {
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": f"{BASE_URL}/votes/{uuid4()}/activity",
+            "type": "Create",
+            "actor": user.actor_uri(),
+            "object": {
+                "id": f"{BASE_URL}/votes/{uuid4()}",
+                "type": "Note",
+                "name": option_text,
+                "attributedTo": user.actor_uri(),
+                "to": [author_uri],
+                "inReplyTo": ap_id,
+            },
+            "to": [author_uri],
+        }
+        try:
+            _post_to_inbox(inbox, vote_activity, user)
+        except Exception:
+            pass
+    return {"ok": True, "post": post_json}
 
 
 @router.post("/posts/{post_id}/unvote")
@@ -1457,6 +1516,13 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         is_follow_pending = s.query(Follow).filter_by(
             follower_id=user.id, following_id=profile.id, accepted=False
         ).first() is not None if user else False
+        notify_on_post = False
+        if is_following and user:
+            follow_rel = s.query(Follow).filter_by(
+                follower_id=user.id, following_id=profile.id, accepted=True
+            ).first()
+            if follow_rel:
+                notify_on_post = follow_rel.notify_on_post
         has_pending_follower = s.query(Follow).filter_by(
             follower_id=profile.id, following_id=user.id, accepted=False
         ).first() is not None if user else False
@@ -1481,6 +1547,7 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             "following_count": following_count if show_follows else 0,
             "is_following": is_following,
             "is_follow_pending": is_follow_pending,
+            "notify_on_post": notify_on_post,
             "has_pending_follower": has_pending_follower,
             "is_follower": is_follower,
             "is_mine": profile.id == user.id if user else False,
@@ -1539,7 +1606,7 @@ def api_follow(request: Request, username: str):
                     "actor": user.actor_uri(),
                     "object": remote_obj,
                 }
-                s.add(Follow(follower_id=user.id, following_id=target.id, accepted=False))
+                s.add(Follow(follower_id=user.id, following_id=target.id, accepted=False, activity_id=follow_activity["id"]))
                 s.commit()
                 inbox = target.inbox_url or target.inbox_uri()
                 if inbox:
@@ -1585,7 +1652,7 @@ def api_approve_follow(request: Request, username: str):
         if follower_is_remote and follower:
             from app.activitypub import _send_accept
             try:
-                follow_activity_id = f"{follower.actor_uri()}#follows/{user.id}"
+                follow_activity_id = target.activity_id or f"{follower.actor_uri()}#follows/{user.id}"
                 inbox = follower.inbox_url or (follower.actor_uri().rstrip("/") + "/inbox")
                 _send_accept(inbox, follow_activity_id, user, follower=follower)
             except Exception as e:
@@ -1684,6 +1751,21 @@ def api_unfollow(request: Request, username: str):
     return {"ok": True}
 
 
+@router.post("/users/{username}/toggle-notify")
+def api_toggle_notify(request: Request, username: str):
+    user = require_active_auth(request)
+    with get_session() as s:
+        target = s.query(User).filter_by(username=username).first()
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found")
+        follow = s.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
+        if not follow:
+            raise HTTPException(status_code=404, detail="Not following this user")
+        follow.notify_on_post = not follow.notify_on_post
+        s.commit()
+        return {"ok": True, "notify_on_post": follow.notify_on_post}
+
+
 @router.get("/users/{username}/followers")
 def api_followers(request: Request, username: str):
     user = get_current_user(request)
@@ -1717,26 +1799,36 @@ def api_following(request: Request, username: str):
 @router.get("/direct/conversation/{other_id}")
 def api_direct_conversation(request: Request, other_id: int):
     user = require_auth(request)
-    if other_id == user.id:
-        raise HTTPException(status_code=400, detail="Cannot chat with yourself")
+    is_self = (other_id == user.id)
     with get_session() as s:
-        other = s.query(User).get(other_id)
-        if not other:
-            raise HTTPException(status_code=404, detail="User not found")
-        conv_posts = s.query(Post).options(selectinload(Post.author)).filter(
-            Post.visibility == "mention",
-            Post.is_deleted == False,
-            or_(
-                and_(
-                    Post.author_id == user.id,
-                    Post.mentioned_user_ids.contains(other_id),
+        if is_self:
+            other = user
+        else:
+            other = s.query(User).get(other_id)
+            if not other:
+                raise HTTPException(status_code=404, detail="User not found")
+        if is_self:
+            conv_posts = s.query(Post).options(selectinload(Post.author)).filter(
+                Post.visibility == "mention",
+                Post.is_deleted == False,
+                Post.author_id == user.id,
+                Post.mentioned_user_ids.contains(user.id),
+            ).order_by(Post.created_at).all()
+        else:
+            conv_posts = s.query(Post).options(selectinload(Post.author)).filter(
+                Post.visibility == "mention",
+                Post.is_deleted == False,
+                or_(
+                    and_(
+                        Post.author_id == user.id,
+                        Post.mentioned_user_ids.contains(other_id),
+                    ),
+                    and_(
+                        Post.author_id == other_id,
+                        Post.mentioned_user_ids.contains(user.id),
+                    ),
                 ),
-                and_(
-                    Post.author_id == other_id,
-                    Post.mentioned_user_ids.contains(user.id),
-                ),
-            ),
-        ).order_by(Post.created_at).all()
+            ).order_by(Post.created_at).all()
         result = {
             "other_user": _user_json(other),
             "messages": [_post_json(p, s, user) for p in conv_posts],
@@ -1749,10 +1841,15 @@ def api_direct_threads(request: Request):
     user = require_auth(request)
     three_months_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=90)
     with get_session() as s:
+        from sqlalchemy import cast, String as SAString
         posts = s.query(Post).filter(
             Post.visibility == "mention",
             Post.is_deleted == False,
             Post.created_at >= three_months_ago,
+            or_(
+                Post.author_id == user.id,
+                cast(Post.mentioned_user_ids, SAString).contains(str(user.id)),
+            ),
         ).order_by(desc(Post.created_at)).limit(200).all()
         author_map = {}
         for p in posts:
@@ -1760,41 +1857,86 @@ def api_direct_threads(request: Request):
             other_id = None
             if p.author_id == user.id:
                 for tid in mu:
-                    if isinstance(tid, int) and tid != user.id:
-                        other_id = tid
-                        break
+                    if isinstance(tid, int):
+                        if tid == user.id and (p.author_id == user.id):
+                            other_id = user.id
+                            break
+                        elif tid != user.id:
+                            other_id = tid
+                            break
             elif user.id in mu:
                 other_id = p.author_id
-            if other_id and other_id not in author_map:
-                author = s.query(User).get(other_id)
-                author_map[other_id] = {"user": author, "all_msgs": []}
-            if other_id:
+            if other_id is not None and other_id not in author_map:
+                if other_id == user.id:
+                    author_map[other_id] = {"user": user, "all_msgs": []}
+                else:
+                    author = s.query(User).get(other_id)
+                    author_map[other_id] = {"user": author, "all_msgs": []}
+            if other_id is not None:
                 author_map[other_id]["all_msgs"].append(p)
         result = []
         for aid, data in author_map.items():
             u = data["user"]
-            if u and u.id != user.id:
-                sorted_msgs = sorted(data["all_msgs"], key=lambda x: x.created_at or datetime.datetime.min, reverse=True)
-                previews = []
-                for msg in sorted_msgs[:3]:
-                    text = re.sub(r'<[^>]*>', '', msg.content or "")
-                    text = re.sub(r'@\w+', '', text).strip()
-                    is_me = msg.author_id == user.id
-                    previews.append({"text": text[:60], "is_me": is_me})
-                entry = _user_json(u)
-                entry["latest_previews"] = previews
-                entry["latest_time"] = _fmt_dt(sorted_msgs[0].created_at)
-                result.append(entry)
+            sorted_msgs = sorted(data["all_msgs"], key=lambda x: x.created_at or datetime.datetime.min, reverse=True)
+            previews = []
+            for msg in sorted_msgs[:3]:
+                text = re.sub(r'<[^>]*>', '', msg.content or "")
+                text = re.sub(r'@\w+', '', text).strip()
+                is_me = msg.author_id == user.id
+                previews.append({"text": text[:60], "is_me": is_me})
+            entry = _user_json(u)
+            entry["latest_previews"] = previews
+            entry["latest_time"] = _fmt_dt(sorted_msgs[0].created_at)
+            result.append(entry)
     return {"users": result}
+
+
+def _generate_poll_end_notifications(user_id: int, session):
+    import datetime as _dt
+    now = _dt.datetime.now(_dt.timezone.utc)
+    voted_posts = (
+        session.query(Post)
+        .join(Vote, Vote.post_id == Post.id)
+        .filter(Vote.user_id == user_id, Post.poll_data.isnot(None), Post.is_deleted == False)
+        .all()
+    )
+    for post in voted_posts:
+        expires_at = post.poll_data.get("expires_at") if post.poll_data else None
+        if not expires_at:
+            continue
+        try:
+            exp = _dt.datetime.fromisoformat(expires_at)
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=_dt.timezone.utc)
+            if exp > now:
+                continue
+        except (ValueError, TypeError):
+            continue
+        existing = (
+            session.query(Notification)
+            .filter_by(user_id=user_id, notification_type="poll_ended", post_id=post.id)
+            .first()
+        )
+        if not existing:
+            session.add(Notification(
+                user_id=user_id,
+                from_user_id=post.author_id,
+                notification_type="poll_ended",
+                post_id=post.id,
+            ))
+    session.commit()
 
 
 @router.get("/notifications")
 def api_notifications(request: Request, filter_type: str = Query(""), limit: int = Query(20), offset: int = Query(0), mark_read: bool = Query(True)):
     user = require_auth(request)
     with get_session() as s:
+        _generate_poll_end_notifications(user.id, s)
         q = s.query(Notification).filter_by(user_id=user.id)
         if filter_type == "follow":
             q = q.filter(Notification.notification_type.in_(["follow", "follow_request"]))
+        elif filter_type == "vote":
+            q = q.filter(Notification.notification_type.in_(["vote", "poll_ended"]))
         elif filter_type:
             q = q.filter_by(notification_type=filter_type)
         q = q.order_by(desc(Notification.created_at))
@@ -2778,7 +2920,7 @@ def api_export_account(request: Request, export_type: str):
             for f in follows:
                 target = s.query(User).get(f.following_id)
                 if target:
-                    handle = f"{target.username}@{_domain_from_actor(target)}" if target.is_remote else target.username
+                    handle = target.username
                     w.writerow([handle, "true", "false"])
         elif export_type == "mutes":
             w.writerow(["Account address"])
@@ -2786,7 +2928,7 @@ def api_export_account(request: Request, export_type: str):
             for m in mutes:
                 target = s.query(User).get(m.target_user_id)
                 if target:
-                    handle = f"{target.username}@{_domain_from_actor(target)}" if target.is_remote else target.username
+                    handle = target.username
                     w.writerow([handle])
         elif export_type == "blocks":
             w.writerow(["Account address"])
@@ -2794,7 +2936,7 @@ def api_export_account(request: Request, export_type: str):
             for b in blocks:
                 target = s.query(User).get(b.target_user_id)
                 if target:
-                    handle = f"{target.username}@{_domain_from_actor(target)}" if target.is_remote else target.username
+                    handle = target.username
                     w.writerow([handle])
         elif export_type == "bookmarks":
             w.writerow(["Post URL", "Created at"])
@@ -3158,10 +3300,27 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
 
 
 
-def _fetch_and_save_ap_object(obj, user):
-    """Fetch a remote AP object, resolve its author, save to DB, return post."""
-    from app.activitypub import _sanitize_html
-    content = _sanitize_html(obj.get("content", ""))
+def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
+    """Fetch a remote AP object, resolve its author, save to DB, return post.
+    Also recursively fetches parent posts (thread ancestors) up to depth 5."""
+    if _depth > 5:
+        return None
+    if _visited is None:
+        _visited = set()
+
+    # First, recursively fetch parent posts if this is a reply
+    in_reply_to = obj.get("inReplyTo", "")
+    if isinstance(in_reply_to, dict):
+        in_reply_to = in_reply_to.get("id", "")
+    if in_reply_to and in_reply_to not in _visited:
+        _visited.add(in_reply_to)
+        parent_data = _ap_fetch(in_reply_to, user)
+        if parent_data:
+            parent_obj = parent_data.get("object", parent_data)
+            _fetch_and_save_ap_object(parent_obj, user, _visited, _depth + 1)
+
+    from app.activitypub import _sanitize_html, _normalize_mentions
+    content = _normalize_mentions(_sanitize_html(obj.get("content", "")))
     if not content:
         return None
 
@@ -3217,7 +3376,7 @@ def _fetch_and_save_ap_object(obj, user):
             return _post_json(existing, s, user)
 
         import re
-        mentioned_names = set(re.findall(r'@(\w+)', content or ""))
+        mentioned_names = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content or ""))
         mentioned_ids = []
         if mentioned_names:
             mentioned = s.query(User).filter(User.username.in_(mentioned_names)).all()
@@ -3463,27 +3622,6 @@ def api_fetch_post(request: Request, url: str = Form(...)):
     obj_type = data.get("type", obj.get("type", ""))
     if obj_type not in ("Note", "Article"):
         raise HTTPException(status_code=400, detail=f"Not a Note/Article (type={obj_type})")
-
-    # Recursively fetch ancestors
-    visited = set()
-    def fetch_thread(current_obj, depth=0):
-        if depth > 5:
-            return
-        in_reply_to = current_obj.get("inReplyTo", "")
-        if isinstance(in_reply_to, dict):
-            in_reply_to = in_reply_to.get("id", "")
-        if in_reply_to and in_reply_to not in visited:
-            visited.add(in_reply_to)
-            parent_data = _ap_fetch(in_reply_to, user)
-            if parent_data:
-                parent_obj = parent_data.get("object", parent_data)
-                fetch_thread(parent_obj, depth + 1)
-                try:
-                    _fetch_and_save_ap_object(parent_obj, user)
-                except Exception as e:
-                    logger.warning("Failed to save parent post: %s", e)
-
-    fetch_thread(obj)
 
     result = _fetch_and_save_ap_object(obj, user)
     if not result:

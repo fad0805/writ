@@ -3,7 +3,6 @@ import datetime
 import email.utils
 import hashlib
 import json
-import logging
 import os
 import threading
 import time
@@ -20,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from urllib.parse import urlparse
 from app.crypto_utils import verify_signature
 from app.config import SECRET_KEY, BASE_URL, DOMAIN, CORS_ORIGINS
+from app.logging_config import _request_logger
 from app.models import User, Follow, Post, Novel, ProcessedActivity, get_session, init_db
 from app.routes.auth import router as auth_router
 from app.routes.api import router as api_router
@@ -68,24 +68,6 @@ def _check_daily_limit(key: str) -> bool:
         return False
     _rate_limit_daily[key] = pruned + [now]
     return True
-
-# ── logging configuration ──
-_log_handlers = [logging.StreamHandler()]
-_log_file_dir = "logs"
-if _log_file_dir:
-    os.makedirs(_log_file_dir, exist_ok=True)
-    _log_date = datetime.datetime.now().strftime("%Y-%m-%d")
-    _log_handlers.append(logging.FileHandler(os.path.join(_log_file_dir, f"{_log_date}.log")))
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=_log_handlers,
-)
-logging.getLogger("uvicorn.access").setLevel(logging.INFO)
-logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
-logging.getLogger("python_multipart.multipart").setLevel(logging.ERROR)
-
 
 def _delivery_worker():
     from app.models import PendingDelivery, get_session
@@ -157,8 +139,6 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(title="WRIT, the sns for writers", version="1.0.0", lifespan=lifespan)
-
-_request_logger = logging.getLogger("writ.request")
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):

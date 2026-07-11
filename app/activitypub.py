@@ -89,6 +89,25 @@ def _sanitize_html(html: str) -> str:
     return html
 
 
+def _normalize_mentions(html: str) -> str:
+    """Convert Mastodon-style mention HTML to plain @username text."""
+    def _strip_mention(m):
+        text = re.sub(r'<[^>]+>', '', m.group(0))
+        match = re.search(r'@(\w+)', text)
+        return '@' + match.group(1) if match else text
+    # <span class="h-card"> wrapping (optional) + <a with u-url mention class
+    html = re.sub(
+        r'<span[^>]*class="[^"]*\bh-card\b[^"]*"[^>]*>\s*<a[^>]*class="[^"]*\bu-url mention\b[^"]*"[^>]*>.*?</a>\s*</span>',
+        _strip_mention, html, flags=re.IGNORECASE | re.DOTALL
+    )
+    # <a with u-url mention class (without wrapper)
+    html = re.sub(
+        r'<a[^>]*class="[^"]*\bu-url mention\b[^"]*"[^>]*>.*?</a>',
+        _strip_mention, html, flags=re.IGNORECASE | re.DOTALL
+    )
+    return html
+
+
 _PRIVATE_SUBNETS = [
     ipaddress.ip_network("127.0.0.0/8"),
     ipaddress.ip_network("10.0.0.0/8"),
@@ -583,6 +602,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             existing.inbox_url = data.get("inbox", existing.inbox_url)
             existing.shared_inbox_url = data.get("endpoints", {}).get("sharedInbox", existing.shared_inbox_url)
             existing.is_locked = data.get("manuallyApprovesFollowers", existing.is_locked)
+            existing.profile_url = data.get("url", existing.profile_url or "")
             if avatar_url:
                 existing.profile_image = _save_remote_avatar(avatar_url, base_username_clean, existing.profile_image)
             if header_url:
@@ -598,6 +618,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             by_username.public_key = public_key_pem or by_username.public_key
             by_username.display_name = data.get("name", by_username.display_name)
             by_username.summary = data.get("summary", by_username.summary)
+            by_username.profile_url = data.get("url", by_username.profile_url or "")
             if avatar_url:
                 by_username.profile_image = _save_remote_avatar(avatar_url, base_username_clean, by_username.profile_image)
             if header_url:
@@ -625,6 +646,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             public_key=public_key_pem or pub,
             is_remote=True,
             remote_url=actor_url,
+            profile_url=data.get("url", ""),
             inbox_url=data.get("inbox", ""),
             shared_inbox_url=data.get("endpoints", {}).get("sharedInbox", ""),
             profile_image=profile_image,
@@ -667,7 +689,7 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
             follower_id=follower.id, following_id=target.id
         ).first()
         if not existing:
-            follow = Follow(follower_id=follower.id, following_id=target.id, accepted=accepted)
+            follow = Follow(follower_id=follower.id, following_id=target.id, accepted=accepted, activity_id=activity_id)
             session.add(follow)
             notification = Notification(
                 user_id=target.id,
@@ -677,8 +699,9 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
             session.add(notification)
             session.commit()
 
-    # Send Accept
-    _send_accept(actor_url, activity_id, target, follower=follower)
+    # Send Accept only if auto-approved (not locked)
+    if accepted:
+        _send_accept(actor_url, activity_id, target, follower=follower)
 
     return (200, "Followed")
 
@@ -732,7 +755,9 @@ def _handle_reject(activity: dict) -> tuple[int, str]:
 
         local_user = None
         if follower_url:
-            local_user = session.query(User).filter_by(remote_url=follower_url).first()
+            local_username = _parse_username_from_url(follower_url)
+            if local_username:
+                local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
 
         query_filter = {
             "following_id": remote_user.id,
@@ -763,7 +788,6 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
     if isinstance(obj, dict):
         follower_url = obj.get("actor", "")
     elif isinstance(obj, str):
-        # Object is just a URI — try to fetch the Follow activity
         try:
             resp = httpx.get(obj, headers={"Accept": "application/activity+json"}, timeout=10)
             if resp.status_code == 200:
@@ -781,7 +805,7 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
     if isinstance(accepter_url, list):
         accepter_url = accepter_url[0]
 
-    local_username = _parse_username_from_url(accepter_url)
+    local_username = _parse_username_from_url(follower_url)
     if not local_username:
         return (200, "OK")
 
@@ -790,13 +814,13 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
         if not local_user:
             return (200, "OK")
 
-        remote_follower = _resolve_actor(follower_url)
-        if not remote_follower:
+        remote_accepter = _resolve_actor(accepter_url)
+        if not remote_accepter:
             return (200, "OK")
 
         follow_rel = session.query(Follow).filter_by(
-            following_id=local_user.id,
-            follower_id=remote_follower.id,
+            follower_id=local_user.id,
+            following_id=remote_accepter.id,
             accepted=False,
         ).first()
         if not follow_rel:
@@ -806,6 +830,140 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
             session.commit()
 
     return (200, "Accepted follow")
+
+
+def _fetch_remote_post(url: str, signer: User, session, _depth=0):
+    """Fetch a remote AP object and save it as a Post. Returns the Post or None."""
+    if _depth > 3 or not url:
+        return None
+    from urllib.parse import urlparse as _urlparse
+    parsed = _urlparse(url)
+    date_str = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
+    path_with_query = parsed.path or "/"
+    if parsed.query:
+        path_with_query += f"?{parsed.query}"
+    signed_string = (
+        f"(request-target): get {path_with_query}\n"
+        f"host: {parsed.netloc}\n"
+        f"date: {date_str}"
+    )
+    try:
+        sig = sign_string(signed_string, get_private_key(signer, SECRET_KEY))
+    except Exception:
+        return None
+    sig_header = (
+        f'keyId="{signer.actor_uri()}#main-key",'
+        f'headers="(request-target) host date",'
+        f'signature="{sig}"'
+    )
+    headers = {
+        "Accept": "application/activity+json",
+        "Signature": sig_header,
+        "Date": date_str,
+        "Host": parsed.netloc,
+    }
+    try:
+        resp = httpx.get(url, headers=headers, timeout=15, follow_redirects=True)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+    except Exception:
+        return None
+
+    obj = data.get("object", data) if isinstance(data, dict) else {}
+    if not isinstance(obj, dict):
+        return None
+    obj_type = obj.get("type", "")
+    if obj_type not in ("Note", "Question"):
+        return None
+
+    ap_id = obj.get("id", url)
+    existing = session.query(Post).filter_by(ap_id=ap_id).first()
+    if existing and not existing.is_deleted:
+        return existing
+
+    attributed_to = obj.get("attributedTo", "")
+    if isinstance(attributed_to, list):
+        attributed_to = attributed_to[0] if attributed_to else ""
+    if isinstance(attributed_to, dict):
+        attributed_to = attributed_to.get("id", "")
+    if not attributed_to:
+        return None
+
+    _resolve_actor(attributed_to)
+    author = session.query(User).filter_by(remote_url=attributed_to).first()
+    if not author:
+        return None
+
+    raw_content = obj.get("content", "") or ""
+    if len(raw_content) > 65536:
+        raw_content = raw_content[:65536]
+    content = _normalize_mentions(_sanitize_html(raw_content))
+    summary = obj.get("summary", "")
+
+    to = obj.get("to", [])
+    if isinstance(to, str): to = [to]
+    cc = obj.get("cc", [])
+    if isinstance(cc, str): cc = [cc]
+    all_auds = to + cc
+    pub = "https://www.w3.org/ns/activitystreams#Public"
+    if pub in to:
+        vis = "public"
+    elif pub in cc:
+        vis = "home"
+    elif any(a.endswith("/followers") for a in all_auds):
+        vis = "followers"
+    elif all(a.startswith("http") for a in all_auds if a):
+        vis = "mention"
+    else:
+        vis = "home"
+
+    in_reply_to_ap = obj.get("inReplyTo", "")
+    if isinstance(in_reply_to_ap, dict):
+        in_reply_to_ap = in_reply_to_ap.get("id", "")
+
+    in_reply_to_id = None
+    if in_reply_to_ap:
+        parent = session.query(Post).filter_by(ap_id=in_reply_to_ap).first()
+        if parent:
+            in_reply_to_id = parent.id
+        else:
+            parent = _fetch_remote_post(in_reply_to_ap, signer, session, _depth + 1)
+            if parent:
+                in_reply_to_id = parent.id
+
+    mentioned_names = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content or ""))
+    mentioned_ids = []
+    if mentioned_names:
+        users = session.query(User).filter(User.username.in_(mentioned_names)).all()
+        mentioned_ids = [u.id for u in users]
+
+    _process_emoji_tags(obj.get("tag", []), session)
+    session.flush()
+
+    post = Post(
+        author_id=author.id,
+        content=content,
+        summary=summary,
+        visibility=vis,
+        ap_id=ap_id,
+        in_reply_to_ap_id=in_reply_to_ap,
+        in_reply_to_id=in_reply_to_id,
+        mentioned_user_ids=mentioned_ids,
+    )
+    published = obj.get("published", "")
+    if published:
+        try:
+            post.created_at = datetime.datetime.fromisoformat(published.replace("Z", "+00:00"))
+        except Exception:
+            pass
+    session.add(post)
+    try:
+        session.flush()
+    except Exception:
+        session.rollback()
+        return session.query(Post).filter_by(ap_id=ap_id).first()
+    return post
 
 
 def _handle_create(activity: dict) -> tuple[int, str]:
@@ -834,7 +992,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if len(raw_content) > 65536:
             raw_content = raw_content[:65536]
         post_id = obj.get("id", "")
-        content = _sanitize_html(raw_content)
+        content = _normalize_mentions(_sanitize_html(raw_content))
         summary = obj.get("summary", "")
         in_reply_to = obj.get("inReplyTo", "")
 
@@ -848,6 +1006,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         all_audiences = to + cc
         public_uri = "https://www.w3.org/ns/activitystreams#Public"
 
+        is_incoming_dm = False
         if public_uri in to:
             visibility = "public"
         elif public_uri in cc:
@@ -856,6 +1015,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             visibility = "followers"
         elif all_audiences and all(aud.startswith("http") for aud in all_audiences if aud):
             visibility = "mention"
+            is_incoming_dm = True
         else:
             visibility = "home"
 
@@ -887,9 +1047,51 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             reply_to_post = None
             if in_reply_to:
                 reply_to_post = session.query(Post).filter_by(ap_id=in_reply_to).first()
+                if not reply_to_post:
+                    reply_to_post = _fetch_remote_post(in_reply_to, actor, session)
+
+            # Mastodon poll votes: Create(Note) with name + inReplyTo + no content
+            vote_name = obj.get("name", "") if not raw_content.strip() else ""
+            if vote_name and reply_to_post and reply_to_post.poll_data:
+                poll_post = reply_to_post
+                options = poll_post.poll_data.get("options", [])
+                option_idx = -1
+                for i, opt in enumerate(options):
+                    if opt.get("text", "").strip().lower() == vote_name.strip().lower():
+                        option_idx = i
+                        break
+                if option_idx >= 0:
+                    # Check poll expiry
+                    expires_at = poll_post.poll_data.get("expires_at")
+                    if expires_at:
+                        try:
+                            if datetime.datetime.fromisoformat(expires_at) < datetime.datetime.now(datetime.timezone.utc):
+                                return (200, "Poll ended")
+                        except (ValueError, TypeError):
+                            pass
+                    existing_vote = session.query(Vote).filter_by(user_id=actor.id, post_id=poll_post.id).first()
+                    if existing_vote:
+                        if existing_vote.option_index == option_idx:
+                            return (200, "Already voted")
+                        options[existing_vote.option_index]["votes_count"] = max(0, options[existing_vote.option_index].get("votes_count", 0) - 1)
+                        existing_vote.option_index = option_idx
+                    else:
+                        session.add(Vote(user_id=actor.id, post_id=poll_post.id, option_index=option_idx))
+                    options[option_idx]["votes_count"] = options[option_idx].get("votes_count", 0) + 1
+                    poll_post.poll_data = {**poll_post.poll_data, "options": options}
+                    session.commit()
+                    # Broadcast updated poll to connected clients
+                    try:
+                        from app.timeline_stream import broadcast_post
+                        from app.routes.api import _post_json
+                        post_json = _post_json(poll_post, session, None)
+                        broadcast_post(post_json, poll_post.author_id, poll_post.visibility or "public", False)
+                    except Exception:
+                        pass
+                    return (200, "Voted")
 
             # Parse mentioned users from content
-            mentioned_names = set(re.findall(r'@(\w+)', content or ""))
+            mentioned_names = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content or ""))
             # Also parse mentions from AP tag array
             for tag in (obj.get("tag", []) or []):
                 if isinstance(tag, dict) and tag.get("type") == "Mention":
@@ -947,6 +1149,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 in_reply_to_id=reply_to_post.id if reply_to_post else None,
                 media_attachments=media_list if media_list else None,
                 poll_data=poll_data,
+                is_dm=is_incoming_dm,
             )
             session.add(post)
             session.flush()
@@ -960,9 +1163,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     post_id=post.id,
                 ))
 
-            # Notify local followers (skip self)
+            # Notify local followers who enabled post notifications (skip self)
             followers = session.query(Follow).filter(
                 Follow.following_id == actor.id,
+                Follow.notify_on_post == True,
             ).all()
             for f in followers:
                 if not f.follower.is_remote and f.follower.id != actor.id:
@@ -979,6 +1183,48 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 broadcast("new_post", {"post_id": post.id, "author_id": actor.id})
             except Exception as e:
                 logger.warning("broadcast failed: %s", e)
+            try:
+                from app.timeline_stream import broadcast_post
+                author = post.author
+                post_json = {
+                    "id": post.id,
+                    "number": post.number or "",
+                    "content": post.content,
+                    "summary": post.summary or "",
+                    "visibility": post.visibility or "public",
+                    "created_at": post.created_at.isoformat() if post.created_at else "",
+                    "author": {
+                        "id": author.id,
+                        "username": author.username,
+                        "display_name": author.display_name or author.username,
+                        "avatar": author.profile_image or "",
+                        "header": author.header_image or "",
+                        "summary": author.summary or "",
+                        "is_admin": author.is_admin,
+                        "is_locked": getattr(author, 'is_locked', False),
+                        "is_limited": getattr(author, 'is_limited', False),
+                        "is_remote": author.is_remote,
+                        "ap_id": author.remote_url or "",
+                    },
+                    "likes_count": 0,
+                    "boosts_count": 0,
+                    "replies_count": 0,
+                    "liked": False,
+                    "boosted": False,
+                    "bookmarked": False,
+                    "is_mine": False,
+                    "is_dm": is_incoming_dm,
+                    "is_sensitive": getattr(post, 'is_sensitive', False) or False,
+                    "ap_id": post.ap_id or "",
+                    "media_attachments": post.media_attachments or [],
+                    "poll_data": post.poll_data,
+                    "my_vote": None,
+                    "reactions": {},
+                    "my_reaction": None,
+                }
+                broadcast_post(post_json, actor.id, visibility, is_incoming_dm)
+            except Exception as e:
+                logger.warning("timeline broadcast failed: %s", e)
 
         return (200, "Created")
     return (200, "OK")
@@ -1181,6 +1427,10 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
             if not post:
                 return (200, "OK")
             session.query(Like).filter_by(user_id=actor.id, post_id=post.id).delete()
+            session.query(Notification).filter_by(
+                user_id=post.author_id, from_user_id=actor.id,
+                notification_type="like", post_id=post.id,
+            ).delete()
             session.commit()
 
         return (200, "Unliked")
@@ -1200,6 +1450,10 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
             if not post:
                 return (200, "OK")
             session.query(Boost).filter_by(user_id=actor.id, post_id=post.id).delete()
+            session.query(Notification).filter_by(
+                user_id=post.author_id, from_user_id=actor.id,
+                notification_type="boost", post_id=post.id,
+            ).delete()
             session.commit()
 
         return (200, "Unboosted")
@@ -1214,6 +1468,29 @@ def _handle_update(activity: dict) -> tuple[int, str]:
         obj_id = object_data.get("id", "")
         if obj_type in ("Person", "Service"):
             _resolve_actor(obj_id, force_refresh=True)
+        elif obj_type in ("Note", "Question"):
+            with get_session() as session:
+                post = session.query(Post).filter_by(ap_id=obj_id).first()
+                if post and post.poll_data:
+                    one_of = object_data.get("oneOf") or object_data.get("anyOf") or []
+                    if isinstance(one_of, list):
+                        new_options = []
+                        for opt in one_of:
+                            if isinstance(opt, dict) and opt.get("name"):
+                                replies = opt.get("replies", {})
+                                votes_count = 0
+                                if isinstance(replies, dict):
+                                    votes_count = replies.get("totalItems", 0)
+                                new_options.append({"text": opt["name"], "votes_count": votes_count})
+                        if new_options:
+                            old_options = post.poll_data.get("options", [])
+                            text_to_old = {o.get("text", ""): o for o in old_options}
+                            for new_opt in new_options:
+                                old = text_to_old.get(new_opt["text"])
+                                if old:
+                                    new_opt["votes_count"] = max(new_opt.get("votes_count", 0), old.get("votes_count", 0))
+                            post.poll_data = {**post.poll_data, "options": new_options}
+                            session.commit()
     return (200, "Updated")
 
 def _handle_delete(activity: dict) -> tuple[int, str]:
@@ -1249,6 +1526,16 @@ def _send_delete_post(post: Post, sender: User):
         broadcast_to_followers(sender, delete)
     except Exception as e:
         logger.warning("Failed to broadcast Delete: %s", e)
+    # Also send Delete directly to parent author's inbox for remote replies
+    if post.in_reply_to_ap_id:
+        try:
+            with get_session() as s:
+                parent = s.query(Post).filter_by(ap_id=post.in_reply_to_ap_id).first()
+                if parent and parent.author and parent.author.is_remote:
+                    inbox = parent.author.shared_inbox_url or parent.author.inbox_uri()
+                    _post_to_inbox(inbox, delete, sender)
+        except Exception as e:
+            logger.warning("Failed to send Delete to parent author: %s", e)
 
 
 def _handle_flag(activity: dict) -> tuple[int, str]:
@@ -1462,6 +1749,8 @@ def _process_emoji_tags(tags: list, session):
     """Parse Emoji tags from an ActivityPub object, download and save custom emojis."""
     if not tags or not isinstance(tags, list):
         return
+    EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "web", "public", "emojis")
+    os.makedirs(EMOJI_DIR, exist_ok=True)
     for tag in tags:
         if not isinstance(tag, dict) or tag.get("type") != "Emoji":
             continue
@@ -1472,12 +1761,14 @@ def _process_emoji_tags(tags: list, session):
         if not keyword or not re.match(r'^[a-z0-9_]+$', keyword):
             continue
         icon = tag.get("icon", {})
+        # icon can be a single object or a list per ActivityStreams spec
+        if isinstance(icon, list):
+            icon = icon[0] if icon else {}
+        img_url = ""
         if isinstance(icon, dict):
-            img_url = icon.get("url", "")
+            img_url = icon.get("url", "") or icon.get("href", "")
         elif isinstance(icon, str):
             img_url = icon
-        else:
-            img_url = ""
         if not img_url:
             continue
         if not img_url.startswith("http"):
@@ -1492,7 +1783,6 @@ def _process_emoji_tags(tags: list, session):
         if existing:
             continue
 
-        EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "web", "public", "emojis")
         if not _validate_url(img_url):
             continue
         from PIL import Image

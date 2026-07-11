@@ -34,6 +34,7 @@ export default function ProfilePage() {
   const [followingCount, setFollowingCount] = useState(0);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isFollowPending, setIsFollowPending] = useState(false);
+  const [notifyOnPost, setNotifyOnPost] = useState(false);
   const [hasPendingFollower, setHasPendingFollower] = useState(false);
   const [isFollower, setIsFollower] = useState(false);
   const [approvedFollower, setApprovedFollower] = useState<boolean | null>(null);
@@ -79,7 +80,7 @@ export default function ProfilePage() {
       setProfile(d.profile); setPosts(d.posts); setNovels(d.novels);
       setFollowers(d.followers); setFollowing(d.following);
       setFollowersCount(d.followers_count); setFollowingCount(d.following_count);
-      setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setHasPendingFollower(d.has_pending_follower); setIsFollower(d.is_follower); setApprovedFollower(null); setIsMine(d.is_mine);
+      setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setNotifyOnPost(d.notify_on_post); setHasPendingFollower(d.has_pending_follower); setIsFollower(d.is_follower); setApprovedFollower(null); setIsMine(d.is_mine);
       setIsBlocked(!!(d as any).is_blocked); setAmBlocked(!!(d as any).am_i_blocked); setIsMutedUser(!!(d as any).is_muted);
       setPinnedPosts((d as any).pinned_posts_data || []); setPinnedSeries((d as any).pinned_series_data || []);
       setTotalPosts((d as any).total_posts || 0);
@@ -166,9 +167,25 @@ export default function ProfilePage() {
           <div className="profile-avatar-col">
             <Avatar user={profile} className="profile-avatar" />
             {!isMine && (
-              <button onClick={toggleFollow} className={`btn btn-small btn-follow ${isFollowing ? "btn-outline" : isFollowPending ? "btn-outline" : "btn-primary"} btn-follow-fixed`}>
-                {isFollowing ? "언팔로우" : isFollowPending ? "요청됨" : "팔로우"}
-              </button>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <button onClick={toggleFollow} className={`btn btn-small btn-follow ${isFollowing ? "btn-outline" : isFollowPending ? "btn-outline" : "btn-primary"} btn-follow-fixed`}>
+                  {isFollowing ? "언팔로우" : isFollowPending ? "요청됨" : "팔로우"}
+                </button>
+                {isFollowing && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await api.toggleNotify(username);
+                        setNotifyOnPost(res.notify_on_post);
+                      } catch {}
+                    }}
+                    className={`btn btn-small btn-follow ${notifyOnPost ? "btn-primary" : "btn-outline"}`}
+                    title={notifyOnPost ? "새 글 알림 끄기" : "새 글 알림 받기"}
+                  >
+                    <Icon name={notifyOnPost ? "bell_solid" : "bell"} size={14} />
+                  </button>
+                )}
+              </div>
             )}
           </div>
           <div className="profile-info-relative">
