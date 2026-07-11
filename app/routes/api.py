@@ -872,6 +872,8 @@ def api_delete_post(request: Request, post_id: int):
                 if isinstance(m, dict) and m.get("url"):
                     storage.delete(m["url"])
         post.is_deleted = True
+        # Clean up notifications referencing this post
+        s.query(Notification).filter_by(post_id=post.id).delete()
         s.commit()
         if post.ap_id and post.ap_id.startswith("http") and not post.author.is_remote:
             from app.activitypub import _send_delete_post
