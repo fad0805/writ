@@ -1237,14 +1237,9 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
         for i, opt in enumerate(options):
             opt["votes_count"] = counts.get(i, 0)
         s.query(Post).filter(Post.id == post_id).update({"poll_data": {**post.poll_data, "options": options}}, synchronize_session=False)
-        if post.author_id != user.id and not existing:
-            from app.models import Notification
-            s.add(Notification(
-                user_id=post.author_id,
-                from_user_id=user.id,
-                notification_type="vote",
-                post_id=post.id,
-            ))
+        s.flush()
+        s.refresh(post)
+        post_json = _post_json(post, s, user)
         if post.ap_id and post.author and post.author.is_remote:
             inbox = post.author.shared_inbox_url or post.author.inbox_url
             if inbox:
@@ -1272,7 +1267,7 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
             _post_to_inbox(inbox, vote_activity, user)
         except Exception:
             pass
-    return {"ok": True}
+    return {"ok": True, "post": post_json}
 
 
 @router.post("/posts/{post_id}/unvote")
