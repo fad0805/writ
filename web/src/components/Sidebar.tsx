@@ -72,7 +72,7 @@ export default function Sidebar() {
       if (unreadNotifs > 0) {
         ctx.beginPath();
         ctx.arc(28, 4, 5, 0, 2 * Math.PI);
-        ctx.fillStyle = "#e74c3c";
+        ctx.fillStyle = "#689f38";
         ctx.fill();
       }
       link.href = canvas.toDataURL();

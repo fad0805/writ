@@ -1,6 +1,6 @@
 "use client";
 import { useAuth } from "@/lib/auth";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api, NovelData, NotificationData, PostData, PollOption } from "@/lib/api";
 import Icon from "./Icon";
 import Link from "next/link";
@@ -19,9 +19,12 @@ export default function RightSidebar() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [serverInfo, setServerInfo] = useState<{ name: string; description?: string; admins: { username: string; email: string }[] } | null>(null);
 
+  const audioCtxRef = useRef<AudioContext | null>(null);
   const playNotifSound = useCallback(() => {
     try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") ctx.resume();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
