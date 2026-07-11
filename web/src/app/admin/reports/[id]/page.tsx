@@ -104,9 +104,9 @@ export default function ReportDetailPage() {
 
   const handleToggleCw = async () => {
     if (target?.summary) {
-      await fetch(`/api/admin/posts/${report!.target_id}/remove-cw`, { method: "POST", credentials: "include" });
-      setMsg("CW가 해제되었습니다.");
-      load();
+      const res = await fetch(`/api/admin/posts/${report!.target_id}/remove-cw`, { method: "POST", credentials: "include" });
+      if (res.ok) { setMsg("CW가 해제되었습니다."); load(); }
+      else { setMsg("CW 해제 실패"); }
     } else {
       const cwText = prompt("CW 내용을 입력하세요:", "규칙 위반 게시글");
       if (cwText === null) return;

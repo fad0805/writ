@@ -506,6 +506,43 @@ with get_session() as s:
     print(f'deleted {deleted} notifications for deleted posts')
 "
 
+elif [ "$1" = "check-outbox" ]; then
+  id="${2:-7c930c98}"
+  docker compose exec api python3 -c "
+import httpx, json, re
+url = 'https://writ.daydream.ink/@siarte/$id'
+r = httpx.get(url, headers={'Accept': 'application/activity+json'})
+d = r.json()
+obj = d.get('object', d)
+print('=== OUTBOX ===')
+print('type:', obj.get('type'))
+print('content:', obj.get('content','')[:400])
+print('tag:', json.dumps(obj.get('tag',[]), indent=2, ensure_ascii=False)[:300])
+print('to:', obj.get('to'))
+print('cc:', obj.get('cc'))
+print()
+for m in re.finditer(r'<a[^>]*>', obj.get('content','')):
+    print('link:', m.group()[:200])
+"
+
+elif [ "$1" = "check-inbox" ]; then
+  docker compose exec api python3 -c "
+import httpx
+# 루트 인박스로 테스트 Flag 발송
+from app.models import User, Report, get_session
+from app.config import BASE_URL
+flag = {
+    '@context': 'https://www.w3.org/ns/activitystreams',
+    'type': 'Flag',
+    'actor': 'https://writ.daydream.ink/users/siarte',
+    'object': ['https://daydream.ink/users/someuser'],
+    'content': 'Test report from gogo.sh',
+}
+r = httpx.post(f'{BASE_URL}/inbox', json=flag, headers={'Content-Type': 'application/activity+json'})
+print('status:', r.status_code)
+print('body:', r.text[:200])
+"
+
 elif [ "$1" = "network-check" ]; then
   docker compose exec api python3 -c "
 import httpx
