@@ -304,22 +304,33 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
     # First try: DB lookup without network
     with get_session() as s:
         remote_actor = s.query(User).filter_by(remote_url=actor_url).first()
-        if remote_actor and remote_actor.public_key:
-            pass  # found in DB
-        else:
-            # Try activity.actor
+        if not remote_actor or not remote_actor.public_key:
+            for _u in s.query(User).filter_by(is_remote=False).all():
+                if _u.actor_uri() == actor_url:
+                    remote_actor = _u
+                    break
+        if not remote_actor or not remote_actor.public_key:
             act_actor = activity.get("actor", "")
             if isinstance(act_actor, list):
                 act_actor = act_actor[0]
             if act_actor:
                 remote_actor = s.query(User).filter_by(remote_url=act_actor).first()
+                if not remote_actor or not remote_actor.public_key:
+                    for _u in s.query(User).filter_by(is_remote=False).all():
+                        if _u.actor_uri() == act_actor:
+                            remote_actor = _u
+                            break
         if not remote_actor or not remote_actor.public_key:
-            remote_actor = None  # force network fetch below
+            remote_actor = None
 
     if not remote_actor or not remote_actor.public_key:
         try:
-            import httpx as _httpx
-            _resp = _httpx.get(actor_url, headers={"Accept": "application/activity+json"}, timeout=10, follow_redirects=True)
+            from app.config import BASE_URL
+            if BASE_URL in actor_url:
+                pass  # skip self-referencing fetch
+            else:
+                import httpx as _httpx
+                _resp = _httpx.get(actor_url, headers={"Accept": "application/activity+json"}, timeout=10, follow_redirects=True)
             if _resp.status_code == 200:
                 _data = _resp.json()
                 _pubkey = _data.get("publicKey", {}).get("publicKeyPem", "") if isinstance(_data, dict) else ""
