@@ -301,6 +301,7 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
 
     # Resolve the remote actor who signed
     actor_url = key_id.split("#")[0] if "#" in key_id else key_id
+    print(f"[SIG] keyId={key_id} actor_url={actor_url}", flush=True)
     # First try: DB lookup without network
     with get_session() as s:
         remote_actor = s.query(User).filter_by(remote_url=actor_url).first()
@@ -322,28 +323,34 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
                             break
         if not remote_actor or not remote_actor.public_key:
             remote_actor = None
+    print(f"[SIG] db_lookup={'found' if remote_actor else 'miss'}", flush=True)
 
     if not remote_actor or not remote_actor.public_key:
+        print(f"[SIG] trying network fetch for {actor_url}", flush=True)
         try:
             from app.config import BASE_URL
             if BASE_URL in actor_url:
-                pass  # skip self-referencing fetch
+                print(f"[SIG] skip self-fetch ({BASE_URL})", flush=True)
             else:
                 import httpx as _httpx
                 _resp = _httpx.get(actor_url, headers={"Accept": "application/activity+json"}, timeout=10, follow_redirects=True)
-            if _resp.status_code == 200:
-                _data = _resp.json()
-                _pubkey = _data.get("publicKey", {}).get("publicKeyPem", "") if isinstance(_data, dict) else ""
-                if _pubkey:
-                    remote_actor = _resolve_actor(actor_url, force_refresh=True)
-                    if not remote_actor:
-                        class _Actor:
-                            public_key = _pubkey
-                            remote_url = actor_url
-                            is_remote = True
-                            @staticmethod
-                            def actor_uri(): return actor_url
-                        remote_actor = _Actor()
+                print(f"[SIG] fetch status={_resp.status_code}", flush=True)
+                if _resp.status_code == 200:
+                    _data = _resp.json()
+                    _pubkey = _data.get("publicKey", {}).get("publicKeyPem", "") if isinstance(_data, dict) else ""
+                    print(f"[SIG] pubkey_len={len(_pubkey)}", flush=True)
+                    if _pubkey:
+                        remote_actor = _resolve_actor(actor_url, force_refresh=True)
+                        print(f"[SIG] resolve_actor={'ok' if remote_actor else 'fail'}", flush=True)
+                        if not remote_actor:
+                            class _Actor:
+                                public_key = _pubkey
+                                remote_url = actor_url
+                                is_remote = True
+                                @staticmethod
+                                def actor_uri(): return actor_url
+                            remote_actor = _Actor()
+                            print(f"[SIG] using fallback _Actor", flush=True)
         except Exception:
             pass
     if not remote_actor or not remote_actor.public_key:
@@ -354,8 +361,11 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
     if isinstance(activity_actor, list):
         activity_actor = activity_actor[0]
     signer_uri = remote_actor.actor_uri() if not remote_actor.is_remote else remote_actor.remote_url
+    print(f"[SIG] bind_check signer_uri={signer_uri} activity_actor={activity_actor}", flush=True)
     if not activity_actor or signer_uri != activity_actor:
+        print(f"[SIG] bind_check FAIL", flush=True)
         return (False, None)
+    print(f"[SIG] bind_check OK", flush=True)
 
     # Date freshness check — 5분 window to prevent replay
     date_header = request.headers.get("Date", "")
@@ -367,8 +377,10 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
                 now = datetime.datetime.now(datetime.timezone.utc)
                 diff = abs((now - date_dt).total_seconds())
                 if diff > 300:
+                    print(f"[SIG] date_freshness FAIL diff={diff}", flush=True)
                     return (False, None)
         except (ValueError, TypeError, OverflowError):
+            print(f"[SIG] date_parse FAIL", flush=True)
             return (False, None)
 
     # Build signed string (Fix 7 — use original Host header, not rewritten one)
@@ -401,11 +413,15 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
             val = request.headers.get(h, "")
             signed_lines.append(f"{h}: {val}")
     signed_string = "\n".join(signed_lines)
+    print(f"[SIG] verifying signature... signed_string={repr(signed_string)[:200]}", flush=True)
     ok = verify_signature(signed_string, sig_b64, remote_actor.public_key)
+    print(f"[SIG] verify={'OK' if ok else 'FAIL'}", flush=True)
     if not ok:
+        print(f"[SIG] retrying with _resolve_actor force_refresh", flush=True)
         fresh = _resolve_actor(actor_url, force_refresh=True)
         if fresh and fresh.public_key:
             ok = verify_signature(signed_string, sig_b64, fresh.public_key)
+            print(f"[SIG] retry verify={'OK' if ok else 'FAIL'}", flush=True)
             return (ok, fresh if ok else None)
     return (ok, remote_actor if ok else None)
 
