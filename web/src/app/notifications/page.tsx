@@ -84,7 +84,7 @@ export default function NotificationsPage() {
     setLoadingMore(true);
     try {
       const data = await api.getNotifications(filter || undefined, 10, offset);
-      setNotifs((prev) => { const merged = [...prev, ...data.notifications]; if (merged.length >= 200) setHasMore(false); return merged; });
+      setNotifs((prev) => [...prev, ...data.notifications]);
       setHasMore(data.has_more);
       setOffset((prev) => prev + 10);
     } catch {}
@@ -148,14 +148,13 @@ export default function NotificationsPage() {
 
   const handleMarkAllRead = async () => {
     try {
-      await api.getNotifications(filter || undefined);
       if (filter === "direct") {
         const res = await fetch("/api/notifications/direct-threads", { credentials: "include" });
         const data = await res.json();
         setDirectGroups(data.users || []);
         setNotifs([]);
       } else {
-        const data = await api.getNotifications(filter || undefined);
+        const data = await api.getNotifications(filter || undefined, 50, 0);
         setNotifs(data.notifications);
         setDirectGroups([]);
       }
