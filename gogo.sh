@@ -198,6 +198,7 @@ print('endTime:', obj.get('endTime'))
 print('votersCount:', obj.get('votersCount'))
 print('options:', json.dumps(obj.get('oneOf'), indent=2, ensure_ascii=False)[:300])
 print('to:', obj.get('to'))
+print('cc:', obj.get('cc'))
 "
 
 elif [ "$1" = "clear-pending" ]; then
