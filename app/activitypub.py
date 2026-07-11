@@ -1733,9 +1733,7 @@ def _send_flag(reporter: User, target_type: str, target_obj, reason: str, rule_i
     if target_type == "post":
         object_id = target_obj.ap_id
         target_actor_uri = target_obj.author.actor_uri()
-    elif target_type == "novel":
-        return
-    elif target_type == "episode":
+    elif target_type in ("novel", "episode"):
         return
     else:
         return
@@ -1748,10 +1746,11 @@ def _send_flag(reporter: User, target_type: str, target_obj, reason: str, rule_i
         "id": f"{reporter.actor_uri()}/flags/{target_obj.id}",
         "type": "Flag",
         "actor": reporter.actor_uri(),
-        "object": [object_id],
+        "object": [target_actor_uri, object_id],
         "content": content,
     }
-    inbox = target_obj.author.inbox_uri()
+    author = target_obj.author
+    inbox = author.inbox_url or (author.actor_uri().rstrip("/") + "/inbox")
     if inbox:
         _post_to_inbox(inbox, flag, reporter)
 
