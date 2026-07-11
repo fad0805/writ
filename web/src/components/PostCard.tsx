@@ -111,7 +111,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
       await api.deletePost(post.id);
       if (onDelete) onDelete();
       else if (onUpdate) onUpdate();
-      else if (current) window.location.href = document.referrer || '/timeline/home';
+      else if (current) router.back();
     } catch {}
   };
 
