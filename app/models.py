@@ -275,11 +275,10 @@ class Post(Base):
                         tag_name = f"@{u.username}"  # username already has @domain
                     else:
                         tag_name = f"@{u.username}@{DOMAIN}"
-                    # Mastodon h-card mention format
                     mention_html = (
                         f'<span class="h-card" translate="no">'
                         f'<a href="{web_href}" class="u-url mention">'
-                        f'@<span>{short_username}</span>'
+                        f'@{short_username}'
                         f'</a></span>'
                     )
                     short_name = f"@{u.username}"
@@ -304,11 +303,11 @@ class Post(Base):
             return (
                 f'<span class="h-card" translate="no">'
                 f'<a href="{actor_uri}" class="u-url mention">'
-                f'@<span>{handle.split("@")[0]}</span>'
+                f'@{handle.split("@")[0]}'
                 f'</a></span>'
             )
         content = re.sub(
-            r'(?:^|(?<=>)|(?<=\s))@(\w+(?:@[\w-]+(?:\.[\w-]+)*)?)(?=\s|$|<|\.|[,:;!?)\'"])',
+            r'(?:^|(?<=\s))@(\w+(?:@[\w-]+(?:\.[\w-]+)*)?)(?=\s|$|<|\.|[,:;!?)\'"])',
             _wrap_unknown_mention,
             content,
         )
