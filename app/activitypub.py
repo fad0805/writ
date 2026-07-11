@@ -968,6 +968,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
 
 def _handle_create(activity: dict) -> tuple[int, str]:
     import sys, json
+    print(f"[create] FULL: {json.dumps(activity, indent=2, ensure_ascii=False)[:2000]}", flush=True)
     obj = activity.get("object", {})
     obj_type = obj.get("type") if isinstance(obj, dict) else ""
     print(f"[create] obj_type={obj_type} keys={list(obj.keys()) if isinstance(obj,dict) else 'N/A'}", flush=True)
