@@ -115,7 +115,9 @@ export default function RemoteServerDetailPage() {
       const res = await fetch(`/api/admin/remote-server/${encodeURIComponent(domain)}/${action}`, {
         method: "POST", credentials: "include",
       });
-      const d = await res.json().catch(() => ({}));
+      const text = await res.text();
+      let d;
+      try { d = JSON.parse(text); } catch { d = { detail: text }; }
       if (res.ok) {
         if (action === "purge") {
           router.push("/admin/federation");
@@ -124,10 +126,10 @@ export default function RemoteServerDetailPage() {
         setMsg(d.message || "완료되었습니다.");
         load();
       } else {
-        setMsg(d.detail || "실패했습니다.");
+        setMsg(d.detail || text || "실패했습니다.");
       }
-    } catch {
-      setMsg("오류가 발생했습니다.");
+    } catch (e) {
+      setMsg("오류: " + (e instanceof Error ? e.message : String(e)));
     }
   };
 
