@@ -3,7 +3,6 @@ import re
 import json
 import asyncio
 import datetime
-import logging
 import threading
 from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -11,6 +10,7 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
+from app.logging_config import logger
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PendingDelivery, get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.log_utils import log_admin_action
@@ -29,8 +29,6 @@ from app.crypto_utils import encrypt_key, get_private_key
 from app.eventbus import broadcast
 from app.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream
 from app.utils.storage import LocalStorage
-
-logger = logging.getLogger("writ.api")
 
 RESERVED_HANDLES = frozenset({
     "admin", "administrator", "root", "system", "moderator", "support",
@@ -1237,6 +1235,14 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
         for i, opt in enumerate(options):
             opt["votes_count"] = counts.get(i, 0)
         s.query(Post).filter(Post.id == post_id).update({"poll_data": {**post.poll_data, "options": options}}, synchronize_session=False)
+        if post.author_id != user.id and not existing:
+            from app.models import Notification
+            s.add(Notification(
+                user_id=post.author_id,
+                from_user_id=user.id,
+                notification_type="vote",
+                post_id=post.id,
+            ))
         if post.ap_id and post.author and post.author.is_remote:
             inbox = post.author.shared_inbox_url or post.author.inbox_url
             if inbox:
@@ -1888,13 +1894,52 @@ def api_direct_threads(request: Request):
     return {"users": result}
 
 
+def _generate_poll_end_notifications(user_id: int, session):
+    import datetime as _dt
+    now = _dt.datetime.now(_dt.timezone.utc)
+    voted_posts = (
+        session.query(Post)
+        .join(Vote, Vote.post_id == Post.id)
+        .filter(Vote.user_id == user_id, Post.poll_data.isnot(None), Post.is_deleted == False)
+        .all()
+    )
+    for post in voted_posts:
+        expires_at = post.poll_data.get("expires_at") if post.poll_data else None
+        if not expires_at:
+            continue
+        try:
+            exp = _dt.datetime.fromisoformat(expires_at)
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=_dt.timezone.utc)
+            if exp > now:
+                continue
+        except (ValueError, TypeError):
+            continue
+        existing = (
+            session.query(Notification)
+            .filter_by(user_id=user_id, notification_type="poll_ended", post_id=post.id)
+            .first()
+        )
+        if not existing:
+            session.add(Notification(
+                user_id=user_id,
+                from_user_id=post.author_id,
+                notification_type="poll_ended",
+                post_id=post.id,
+            ))
+    session.commit()
+
+
 @router.get("/notifications")
 def api_notifications(request: Request, filter_type: str = Query(""), limit: int = Query(20), offset: int = Query(0), mark_read: bool = Query(True)):
     user = require_auth(request)
     with get_session() as s:
+        _generate_poll_end_notifications(user.id, s)
         q = s.query(Notification).filter_by(user_id=user.id)
         if filter_type == "follow":
             q = q.filter(Notification.notification_type.in_(["follow", "follow_request"]))
+        elif filter_type == "vote":
+            q = q.filter(Notification.notification_type.in_(["vote", "poll_ended"]))
         elif filter_type:
             q = q.filter_by(notification_type=filter_type)
         q = q.order_by(desc(Notification.created_at))

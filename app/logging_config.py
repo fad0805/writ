@@ -20,3 +20,4 @@ logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 logging.getLogger("python_multipart.multipart").setLevel(logging.ERROR)
 
 _request_logger = logging.getLogger("writ.request")
+logger = logging.getLogger("writ.api")

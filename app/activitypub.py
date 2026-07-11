@@ -1074,6 +1074,14 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         session.add(Vote(user_id=actor.id, post_id=poll_post.id, option_index=option_idx))
                     options[option_idx]["votes_count"] = options[option_idx].get("votes_count", 0) + 1
                     poll_post.poll_data = {**poll_post.poll_data, "options": options}
+                    if poll_post.author_id != actor.id:
+                        from app.models import Notification
+                        session.add(Notification(
+                            user_id=poll_post.author_id,
+                            from_user_id=actor.id,
+                            notification_type="vote",
+                            post_id=poll_post.id,
+                        ))
                     session.commit()
                     return (200, "Voted")
 
@@ -1454,6 +1462,29 @@ def _handle_update(activity: dict) -> tuple[int, str]:
         obj_id = object_data.get("id", "")
         if obj_type in ("Person", "Service"):
             _resolve_actor(obj_id, force_refresh=True)
+        elif obj_type in ("Note", "Question"):
+            with get_session() as session:
+                post = session.query(Post).filter_by(ap_id=obj_id).first()
+                if post and post.poll_data:
+                    one_of = object_data.get("oneOf") or object_data.get("anyOf") or []
+                    if isinstance(one_of, list):
+                        new_options = []
+                        for opt in one_of:
+                            if isinstance(opt, dict) and opt.get("name"):
+                                replies = opt.get("replies", {})
+                                votes_count = 0
+                                if isinstance(replies, dict):
+                                    votes_count = replies.get("totalItems", 0)
+                                new_options.append({"text": opt["name"], "votes_count": votes_count})
+                        if new_options:
+                            old_options = post.poll_data.get("options", [])
+                            text_to_old = {o.get("text", ""): o for o in old_options}
+                            for new_opt in new_options:
+                                old = text_to_old.get(new_opt["text"])
+                                if old:
+                                    new_opt["votes_count"] = max(new_opt.get("votes_count", 0), old.get("votes_count", 0))
+                            post.poll_data = {**post.poll_data, "options": new_options}
+                            session.commit()
     return (200, "Updated")
 
 def _handle_delete(activity: dict) -> tuple[int, str]:

@@ -664,6 +664,12 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
                   const next = [...pollOptions];
                   next[i] = e.target.value;
                   setPollOptions(next);
+                  if (i === pollOptions.length - 1 && e.target.value.trim() && pollOptions.length < 10) {
+                    setTimeout(() => {
+                      setPollOptions((prev) => prev.length < 10 && prev[prev.length - 1] !== "" ? [...prev, ""] : prev);
+                      setTimeout(() => pollLastRef.current?.focus(), 0);
+                    }, 0);
+                  }
                 }}
                 style={{ flex: 1, padding: "4px 8px", fontSize: 14, borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-secondary)" }}
               />
