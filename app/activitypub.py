@@ -1100,6 +1100,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             # Mastodon poll votes: Create(Note) with name + inReplyTo + no content
             vote_name = obj.get("name", "") if not raw_content.strip() else ""
             print(f"[create] vote_name={vote_name!r} raw_content_len={len(raw_content)}", flush=True)
+            print(f"[create] has_poll={bool(reply_to_post and reply_to_post.poll_data)}", flush=True)
             if vote_name and reply_to_post and reply_to_post.poll_data:
                 poll_post = reply_to_post
                 options = poll_post.poll_data.get("options", [])
@@ -1108,6 +1109,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     if opt.get("text", "").strip().lower() == vote_name.strip().lower():
                         option_idx = i
                         break
+                print(f"[create] option_idx={option_idx}", flush=True)
                 if option_idx >= 0:
                     # Check poll expiry
                     expires_at = poll_post.poll_data.get("expires_at")
