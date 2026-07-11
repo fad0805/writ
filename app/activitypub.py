@@ -1079,6 +1079,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             if in_reply_to:
                 reply_to_post = session.query(Post).filter_by(ap_id=in_reply_to).first()
                 if not reply_to_post:
+                    # Try alternative scheme (http <-> https)
+                    alt_url = in_reply_to.replace("https://", "http://") if "https://" in in_reply_to else in_reply_to.replace("http://", "https://")
+                    reply_to_post = session.query(Post).filter_by(ap_id=alt_url).first()
+                if not reply_to_post:
                     reply_to_post = _fetch_remote_post(in_reply_to, actor, session)
 
             # Mastodon poll votes: Create(Note) with name + inReplyTo + no content
