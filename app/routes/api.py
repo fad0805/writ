@@ -380,6 +380,13 @@ def api_verify_email(request: Request, token: str = Form(...)):
     with get_session() as s:
         u = s.query(User).filter_by(verification_token=token).first()
         if not u:
+            # Check if already verified (token was cleared by a previous request)
+            u = s.query(User).filter_by(email_verified=True, verification_token="").first()
+            if u:
+                sess = create_session(u.id)
+                resp = JSONResponse({"ok": True, "email_verified": True, "already_verified": True})
+                resp.set_cookie(key="session", value=sess, max_age=30*86400, httponly=True, samesite="lax", path="/")
+                return resp
             raise HTTPException(status_code=400, detail="유효하지 않은 인증 토큰입니다.")
         u.email_verified = True
         u.verification_token = ""

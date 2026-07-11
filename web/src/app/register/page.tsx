@@ -36,6 +36,7 @@ export default function RegisterPage() {
     e.preventDefault();
     if (!agreeRules) { setError("서버 규칙에 동의해 주세요."); return; }
     if (password !== passwordConfirm) { setError("비밀번호가 일치하지 않습니다."); return; }
+    (e.currentTarget.querySelector('button[type="submit"]') as HTMLButtonElement)?.blur();
     setLoading(true); setError("");
     try {
       const form = new FormData();
