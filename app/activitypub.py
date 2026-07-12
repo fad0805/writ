@@ -1358,12 +1358,14 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                             _storage = get_storage()
                             try:
                                 import httpx as _httpx
+                                from urllib.parse import urlparse
                                 _resp = _httpx.get(_url, timeout=10)
                                 if _resp.status_code == 200:
                                     _ext = _url.rsplit(".", 1)[-1].split("?")[0] if "." in _url else "png"
                                     _fname = f"{_kw}.{_ext}"
                                     _storage.save(f"emojis/{_fname}", _resp.content, f"image/{_ext}")
-                                    session.add(CustomEmoji(keyword=_kw, file_name=_fname, category="remote"))
+                                    _emoji_domain = urlparse(actor_url).netloc
+                                    session.add(CustomEmoji(keyword=_kw, file_name=_fname, category="remote", domain=_emoji_domain, source_url=_url))
                                     session.flush()
                             except Exception:
                                 pass
