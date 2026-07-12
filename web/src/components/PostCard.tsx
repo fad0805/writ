@@ -506,8 +506,10 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
                 }}
                 style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 12, fontSize: 13, cursor: "pointer", border: "1px solid var(--border)", background: myReaction === emoji ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-secondary)" }}
               >
-                {emoji.startsWith(":") && emoji.endsWith(":") && reactionEmojiMap[emoji.slice(1, -1)] ? (
-                  <img src={reactionEmojiMap[emoji.slice(1, -1)]} alt={emoji} style={{ width: 18, height: 18, verticalAlign: "middle" }} />
+                {emoji.startsWith(":") && emoji.endsWith(":") ? (
+                  reactionEmojiMap[emoji.slice(1, -1)]
+                    ? <img src={reactionEmojiMap[emoji.slice(1, -1)]} alt={emoji} style={{ width: 18, height: 18, verticalAlign: "middle" }} />
+                    : <span>{emoji.slice(1, -1)}</span>
                 ) : (
                   <span>{emoji}</span>
                 )}
