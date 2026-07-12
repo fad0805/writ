@@ -130,6 +130,7 @@ export default function SettingsPage() {
           </label>
           <p className="form-help">봇 계정은 사용자가 거의 개입하지 않고 프로그램으로 자동 운영되는 계정입니다. 켜면 계정에 봇 표시가 추가됩니다.</p>
         </div>
+        {user?.enable_reactions !== false && (
         <div className="form-group">
           <label>
             <input type="checkbox" checked={enableReactions} onChange={(e) => setEnableReactions(e.target.checked)} />
@@ -137,6 +138,7 @@ export default function SettingsPage() {
           </label>
           <p className="form-help">켜면 다른 사용자가 내 포스트에 이모지로 반응할 수 있습니다.</p>
         </div>
+        )}
         <div className="form-group">
           <label>팔로워/팔로잉 목록 공개</label>
           <div className="visibility-selector">
