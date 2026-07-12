@@ -347,7 +347,7 @@ input[type="text"].explore-search-input:focus {
 
 .timeline-tabs {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   margin-bottom: 20px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -357,8 +357,6 @@ input[type="text"].explore-search-input:focus {
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
   position: relative;
-  -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
-  mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
 }
 .timeline-tabs::-webkit-scrollbar { display: none; }
 .timeline-tabs a {
@@ -367,7 +365,7 @@ input[type="text"].explore-search-input:focus {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 10px 12px;
+  padding: 10px 14px;
   border-radius: 8px;
   color: var(--text-muted);
   font-size: 0.85em;
@@ -1106,7 +1104,7 @@ input:focus {
 
 .notif-tabs {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   margin-bottom: 16px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -1122,7 +1120,7 @@ input:focus {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 10px;
+  padding: 8px 14px;
   white-space: nowrap;
   border-radius: 8px;
   color: var(--text-muted);
@@ -2916,8 +2914,8 @@ input[type="checkbox"] {
 @media (max-width: 380px) {
   .main-content { padding-top: 10px; padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); }
   .auth-container { margin: 20px 10px; padding: 24px 16px 20px; }
-  .notif-tabs { gap: 2px; }
-  .notif-tab { padding: 6px 8px; font-size: 0.78em; }
+  .notif-tabs { gap: 4px; }
+  .notif-tab { padding: 6px 10px; font-size: 0.78em; }
   .novel-scroll .novel-card { flex: 0 0 220px; }
 }
 
@@ -2945,7 +2943,7 @@ input[type="checkbox"] {
   justify-content: center;
   gap: 2px;
   text-decoration: none;
-  color: var(--text-muted);
+  color: var(--text-muted) !important;
   font-size: 0.65em;
   padding: 4px 0;
   min-width: 0;
@@ -2956,7 +2954,8 @@ input[type="checkbox"] {
 
 .mobile-nav-item .icon-wrap,
 .mobile-nav-item .icon-wrap svg {
-  color: var(--text-muted);
+  color: var(--text-muted) !important;
+  stroke: var(--text-muted) !important;
 }
 
 .mobile-nav-item.active {
