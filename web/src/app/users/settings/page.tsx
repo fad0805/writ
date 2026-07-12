@@ -24,7 +24,7 @@ export default function SettingsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [pushSupported, setPushSupported] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
-  const [pushLoading, setPushLoading] = useState(false);
+  const [pushInitial, setPushInitial] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -49,7 +49,7 @@ export default function SettingsPage() {
   useEffect(() => {
     isPushSupported().then((supported) => {
       setPushSupported(supported);
-      if (supported) isSubscribed().then(setPushEnabled);
+      if (supported) isSubscribed().then((v) => { setPushEnabled(v); setPushInitial(v); });
     });
   }, []);
 
@@ -63,24 +63,6 @@ export default function SettingsPage() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
-
-  const handlePushToggle = async () => {
-    if (pushLoading) return;
-    setPushLoading(true);
-    try {
-      if (pushEnabled) {
-        await unsubscribePush();
-        setPushEnabled(false);
-      } else {
-        const ok = await subscribePush();
-        setPushEnabled(ok);
-      }
-    } catch (e: any) {
-      console.error("Push toggle error:", e);
-      alert(`알림 설정 중 오류가 발생했습니다: ${e.message || e}`);
-    }
-    setPushLoading(false);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,7 +82,21 @@ export default function SettingsPage() {
         body: form,
       });
       if (res.ok) { await refreshAuth(); alert("저장되었습니다"); }
-      else alert("저장 실패");
+      else { alert("저장 실패"); setSubmitting(false); return; }
+
+      if (pushEnabled !== pushInitial) {
+        try {
+          if (pushEnabled) {
+            await subscribePush();
+          } else {
+            await unsubscribePush();
+          }
+          setPushInitial(pushEnabled);
+        } catch (e: any) {
+          alert(`브라우저 알림 설정 중 오류: ${e.message || e}`);
+          setPushEnabled(pushInitial);
+        }
+      }
     } catch { alert("저장 실패"); }
     setSubmitting(false);
   };
@@ -161,10 +157,10 @@ export default function SettingsPage() {
         {pushSupported && (
           <div className="form-group">
             <label>
-              <input type="checkbox" checked={pushEnabled} disabled={pushLoading} onChange={handlePushToggle} />
-              {" "}<Icon name="bell" /> 브라우저 알림 {pushEnabled ? "활성화됨" : "비활성화됨"}
+              <input type="checkbox" checked={pushEnabled} onChange={(e) => setPushEnabled(e.target.checked)} />
+              {" "}<Icon name="bell" /> 브라우저 알림 {pushEnabled ? "활성화" : "비활성화"}
             </label>
-            <p className="form-help">브라우저가 꺼져 있어도 새로운 알림을 받을 수 있습니다.</p>
+            <p className="form-help">브라우저가 꺼져 있어도 새로운 알림을 받을 수 있습니다. 변경 후 설정 저장을 눌러주세요.</p>
           </div>
         )}
         <div className="form-actions">
