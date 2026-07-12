@@ -34,6 +34,7 @@ export default function TimelinePage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedIdx, setSelectedIdx] = useState(-1);
   const [replyPost, setReplyPost] = useState<PostData | null>(null);
+  const [showComposer, setShowComposer] = useState(false);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
   const postsRef = useRef(posts);
   postsRef.current = posts;
@@ -206,7 +207,7 @@ export default function TimelinePage() {
   if (!user) return <div className="empty-state">{authLoading ? "로딩 중..." : "로그인이 필요합니다"}</div>;
   return (
     <>
-      <div className="post-form">
+      <div className="post-form post-form-desktop">
         <PostForm onDone={(newPost) => {
           if (newPost) {
             setPosts((prev) => {
@@ -241,6 +242,30 @@ export default function TimelinePage() {
         )}
       </div>
       {replyPost && <ReplyModal post={replyPost} onClose={() => setReplyPost(null)} onDone={() => { setReplyPost(null); load(); }} />}
+      <button className="mobile-fab" onClick={() => setShowComposer(true)}>
+        <Icon name="pen_solid" size={22} />
+      </button>
+      {showComposer && (
+        <div className="mobile-composer-overlay" onClick={() => setShowComposer(false)}>
+          <div className="mobile-composer-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-composer-header">
+              <span>글쓰기</span>
+              <button className="mobile-composer-close" onClick={() => setShowComposer(false)}>
+                <Icon name="x" size={18} />
+              </button>
+            </div>
+            <PostForm onDone={(newPost) => {
+              if (newPost) {
+                setPosts((prev) => {
+                  if (prev.some((p) => p.id === newPost.id)) return prev;
+                  return [newPost, ...prev];
+                });
+              }
+              setShowComposer(false);
+            }} />
+          </div>
+        </div>
+      )}
     </>
   );
 }
