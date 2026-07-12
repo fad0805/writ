@@ -3,6 +3,7 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import RightSidebar from "@/components/RightSidebar";
+import MobileNav from "@/components/MobileNav";
 import KeyboardShortcuts from "@/components/KeyboardShortcuts";
 import NotifSound from "@/components/NotifSound";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <main className="main-content"><ErrorBoundary>{children}</ErrorBoundary></main>
             <RightSidebar />
           </div>
+          <MobileNav />
           <KeyboardShortcuts />
           <NotifSound />
           <DeactivatedRedirect />

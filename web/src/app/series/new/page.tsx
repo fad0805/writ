@@ -19,8 +19,7 @@ export default function NewNovelPage() {
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
   }, [user, authLoading, router]);
-  if (authLoading) return <div className="empty-state">로딩 중...</div>;
-  if (!user) return <div className="empty-state">로그인이 필요합니다</div>;
+
   const inputRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -79,6 +78,9 @@ export default function NewNovelPage() {
     } catch { alert("만들기 실패"); }
     setSubmitting(false);
   };
+
+  if (authLoading) return <div className="empty-state">로딩 중...</div>;
+  if (!user) return null;
 
   return (
     <>

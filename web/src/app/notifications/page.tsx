@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { api, NotificationData, User } from "@/lib/api";
@@ -20,7 +20,6 @@ const FILTERS = [
   { value: "like", label: "즐겨찾기", icon: "star_filled" },
   { value: "boost", label: "재게시", icon: "refresh" },
   { value: "follow", label: "팔로우", icon: "user_solid" },
-  { value: "vote", label: "투표", icon: "check" },
   { value: "new_episode", label: "시리즈", icon: "book" },
   { value: "direct", label: "다이렉트", icon: "direct" },
 ];
@@ -35,33 +34,34 @@ const NOTIF_ICONS: Record<string, string> = {
   post: "bell_solid",
   moderation: "shield_filled",
   new_episode: "book",
-  vote: "check",
-  poll_ended: "chart",
 };
 
 export default function NotificationsPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [notifs, setNotifs] = useState<NotificationData[]>([]);
-  const [directGroups, setDirectGroups] = useState<DirectUserData[]>([]);
-  const [filter, setFilter] = useState("");
-
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
   }, [user, authLoading, router]);
 
-  useEffect(() => {
-    try { const s = sessionStorage.getItem("notif_filter"); if (s) { sessionStorage.removeItem("notif_filter"); setFilter(s); } } catch {}
-  }, []);
+  const [notifs, setNotifs] = useState<NotificationData[]>([]);
+  const [directGroups, setDirectGroups] = useState<DirectUserData[]>([]);
+  const [filter, setFilter] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem("notif_filter");
+      if (saved) {
+        sessionStorage.removeItem("notif_filter");
+        return saved;
+      }
+    } catch {}
+    return "";
+  });
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(20);
-  const isFirstRender = useRef(true);
-
-  if (authLoading || !user) return <div className="empty-state">{authLoading ? "로딩 중..." : "로그인이 필요합니다"}</div>;
 
   const load = useCallback(async () => {
+    if (!user) return;
     setLoading(true);
     try {
       if (filter === "direct") {
@@ -69,7 +69,6 @@ export default function NotificationsPage() {
         const data = await res.json();
         setDirectGroups(data.users || []);
         setNotifs([]);
-        setHasMore(false);
       } else {
         const data = await api.getNotifications(filter || undefined, 20, 0);
         setNotifs(data.notifications);
@@ -79,27 +78,39 @@ export default function NotificationsPage() {
       }
     } catch {}
     setLoading(false);
-  }, [filter]);
+  }, [filter, user]);
 
   const loadMore = useCallback(async () => {
-    if (loading || loadingMore || !hasMore) return;
+    if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     try {
       const data = await api.getNotifications(filter || undefined, 10, offset);
-      setNotifs((prev) => [...prev, ...data.notifications]);
+      setNotifs((prev) => { const merged = [...prev, ...data.notifications]; if (merged.length >= 200) setHasMore(false); return merged; });
       setHasMore(data.has_more);
       setOffset((prev) => prev + 10);
     } catch {}
     setLoadingMore(false);
-  }, [filter, offset, hasMore, loadingMore, loading]);
+  }, [filter, offset, hasMore, loadingMore]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => {
-    if (!loading && !authLoading && user && isFirstRender.current) {
-      window.dispatchEvent(new Event("notificationsread"));
-      isFirstRender.current = false;
-    }
-  }, [loading, authLoading, user]);
+  useEffect(() => { window.dispatchEvent(new Event("notificationsread")); }, []);
+
+  const handleApprove = useCallback(async (username: string) => {
+    try {
+      await fetch(`/api/users/${username}/approve-follow`, { method: "POST", credentials: "include" });
+      setNotifs((prev) => prev.filter((n) => !(n.type === "follow_request" && n.from_user?.username === username)));
+    } catch {}
+  }, []);
+
+  const handleReject = useCallback(async (username: string) => {
+    try {
+      await fetch(`/api/users/${username}/reject-follow`, { method: "POST", credentials: "include" });
+      setNotifs((prev) => prev.filter((n) => !(n.type === "follow_request" && n.from_user?.username === username)));
+    } catch {}
+  }, []);
+
+  if (authLoading) return <div className="empty-state">로딩 중...</div>;
+  if (!user) return null;
 
   const actionNames: Record<string, string> = {
     warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지", unsuspend: "정지 해제",
@@ -115,11 +126,6 @@ export default function NotificationsPage() {
     if (t === "boost") return "님이 회원님의 글을 부스트했습니다";
     if (t === "reply" || t === "mention") return "님이 회원님을 언급했습니다";
     if (t === "post") return "님이 새 글을 작성했습니다";
-    if (t === "vote") return "님이 회원님의 투표에 참여했습니다";
-    if (t === "poll_ended") {
-      if (meta?.is_author) return "내 투표가 종료되었습니다";
-      return "참여한 투표가 종료되었습니다";
-    }
     if (t === "new_episode") {
       if (meta) return `님이 시리즈 "${meta.novel_title}"에 새 에피소드를 작성했습니다`;
       return "님이 새 에피소드를 작성했습니다";
@@ -139,29 +145,16 @@ export default function NotificationsPage() {
     return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   };
 
-  const handleApprove = useCallback(async (username: string) => {
-    try {
-      await fetch(`/api/users/${encodeURIComponent(username)}/approve-follow`, { method: "POST", credentials: "include" });
-      setNotifs((prev) => prev.filter((n) => !(n.type === "follow_request" && n.from_user?.username === username)));
-    } catch {}
-  }, []);
-
-  const handleReject = useCallback(async (username: string) => {
-    try {
-      await fetch(`/api/users/${encodeURIComponent(username)}/reject-follow`, { method: "POST", credentials: "include" });
-      setNotifs((prev) => prev.filter((n) => !(n.type === "follow_request" && n.from_user?.username === username)));
-    } catch {}
-  }, []);
-
   const handleMarkAllRead = async () => {
     try {
+      await api.getNotifications(filter || undefined);
       if (filter === "direct") {
         const res = await fetch("/api/notifications/direct-threads", { credentials: "include" });
         const data = await res.json();
         setDirectGroups(data.users || []);
         setNotifs([]);
       } else {
-        const data = await api.getNotifications(filter || undefined, 50, 0);
+        const data = await api.getNotifications(filter || undefined);
         setNotifs(data.notifications);
         setDirectGroups([]);
       }

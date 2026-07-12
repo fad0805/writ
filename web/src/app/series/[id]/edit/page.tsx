@@ -21,8 +21,7 @@ export default function EditNovelPage() {
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
   }, [user, authLoading, router]);
-  if (authLoading) return <div className="empty-state">로딩 중...</div>;
-  if (!user) return <div className="empty-state">로그인이 필요합니다</div>;
+
   const inputRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -109,6 +108,8 @@ export default function EditNovelPage() {
     setSubmitting(false);
   };
 
+  if (authLoading) return <div className="empty-state">로딩 중...</div>;
+  if (!user) return null;
   if (loading) return <p className="empty-state">로딩 중...</p>;
 
   const showPreview = coverPreview || coverImageUrl;
