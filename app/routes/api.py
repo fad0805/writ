@@ -66,11 +66,9 @@ def _post_json(p, session, user, tl_type=None):
     reactions = {}
     _default_react = "★"
     if p.likes:
-        _has_custom = False
         for like in p.likes:
             if like.reaction:
                 reactions[like.reaction] = reactions.get(like.reaction, 0) + 1
-                _has_custom = True
             else:
                 reactions[_default_react] = reactions.get(_default_react, 0) + 1
     return {
