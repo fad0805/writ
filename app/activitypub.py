@@ -1344,6 +1344,31 @@ def _handle_like(activity: dict) -> tuple[int, str]:
         if not post:
             return (200, "OK")
 
+        # Process remote emoji if present in tag array
+        if reaction and reaction.startswith(":") and reaction.endswith(":"):
+            _kw = reaction[1:-1]
+            _existing_emoji = session.query(CustomEmoji).filter_by(keyword=_kw).first()
+            if not _existing_emoji:
+                for _tag in (activity.get("tag", []) or []):
+                    if isinstance(_tag, dict) and _tag.get("type") == "Emoji":
+                        _icon = _tag.get("icon", {})
+                        _url = _icon.get("url", "") if isinstance(_icon, dict) else ""
+                        if _url:
+                            from app.utils.storage import get_storage
+                            _storage = get_storage()
+                            try:
+                                import httpx as _httpx
+                                _resp = _httpx.get(_url, timeout=10)
+                                if _resp.status_code == 200:
+                                    _ext = _url.rsplit(".", 1)[-1].split("?")[0] if "." in _url else "png"
+                                    _fname = f"{_kw}.{_ext}"
+                                    _storage.save(f"emojis/{_fname}", _resp.content, f"image/{_ext}")
+                                    session.add(CustomEmoji(keyword=_kw, file_name=_fname, category="remote"))
+                                    session.flush()
+                            except Exception:
+                                pass
+                        break
+
         existing = session.query(Like).filter_by(user_id=actor.id, post_id=post.id).first()
         if existing:
             if reaction and existing.reaction != reaction:

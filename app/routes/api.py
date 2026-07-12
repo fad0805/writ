@@ -1254,6 +1254,9 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
             is_new = True
         s.commit()
+        if post.author_id != user.id:
+            from app.timeline_stream import broadcast_refresh_notifs
+            broadcast_refresh_notifs()
         if post.author.is_remote and post.author.shared_inbox_url:
             from app.activitypub import _post_to_inbox
             like_activity = {
