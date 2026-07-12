@@ -157,23 +157,19 @@ export default function SettingsPage() {
             <p className="form-help">다른 사용자에게 관리자/조율자 뱃지를 보여줍니다.</p>
           </div>
         )}
+        {pushSupported && (
+          <div className="form-group">
+            <label>
+              <input type="checkbox" checked={pushEnabled} disabled={pushLoading} onChange={handlePushToggle} />
+              {" "}<Icon name="bell" /> 브라우저 알림 {pushEnabled ? "활성화됨" : "비활성화됨"}
+            </label>
+            <p className="form-help">브라우저가 꺼져 있어도 새로운 알림을 받을 수 있습니다.</p>
+          </div>
+        )}
         <div className="form-actions">
           <button type="submit" disabled={submitting} className="btn btn-primary">설정 저장</button>
         </div>
       </form>
-
-      {pushSupported && (
-        <div className="novel-form" style={{ marginTop: 20 }}>
-          <h3 style={{ fontSize: "1.1em", marginBottom: 16 }}><Icon name="bell" /> 브라우저 알림</h3>
-          <div className="form-group">
-            <label>
-              <input type="checkbox" checked={pushEnabled} disabled={pushLoading} onChange={handlePushToggle} />
-              {" "}<Icon name="bell" /> 푸시 알림 {pushEnabled ? "활성화됨" : "비활성화됨"}
-            </label>
-            <p className="form-help">브라우저가 꺼져 있어도 새로운 알림을 받을 수 있습니다. 토글하여 켜거나 끌 수 있습니다.</p>
-          </div>
-        </div>
-      )}
 
       <div className="novel-form" style={{ marginTop: 20 }}>
         <h3 style={{ fontSize: "1.1em", marginBottom: 16 }}><Icon name="user_solid" /> 팔로우 요청</h3>
