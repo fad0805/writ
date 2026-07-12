@@ -258,7 +258,49 @@ class Post(Base):
         content = re.sub(r'\*(.+?)\*', r'<em>\1</em>', content)
         content = content.replace('\n', '<br>')
 
+        # Convert :emoji: shortcodes to <img> tags (before <p> wrapping)
+        _emoji_pattern = re.compile(r':([a-z0-9_]{2,}):')
+        _emoji_keywords = set(_emoji_pattern.findall(content))
+        _emoji_map = {}
+        if _emoji_keywords:
+            def _get_emoji_url(file_name: str) -> str:
+                from app.config import S3_ENABLED
+                if S3_ENABLED:
+                    from app.utils.storage import get_storage
+                    try:
+                        storage = get_storage()
+                        return storage.url(f"emojis/{file_name}")
+                    except Exception:
+                        pass
+                return f"{BASE_URL}/emojis/{file_name}"
+
+            with get_session() as _es:
+                for kw in _emoji_keywords:
+                    emoji = _es.query(CustomEmoji).filter_by(keyword=kw).first()
+                    if emoji:
+                        _emoji_map[kw] = (_get_emoji_url(emoji.file_name), emoji.keyword)
+            if _emoji_map:
+                def _replace_emoji(m):
+                    kw = m.group(1)
+                    if kw in _emoji_map:
+                        url, keyword = _emoji_map[kw]
+                        return f'<img src="{url}" alt=":{keyword}:" class="custom-emoji" />'
+                    return m.group(0)
+                content = _emoji_pattern.sub(_replace_emoji, content)
+
         tags = []
+        if _emoji_map:
+            for keyword, (url, _) in _emoji_map.items():
+                tags.append({
+                    "type": "Emoji",
+                    "id": f"{BASE_URL}/emojis/{keyword}",
+                    "name": f":{keyword}:",
+                    "icon": {
+                        "type": "Image",
+                        "mediaType": "image/webp",
+                        "url": url,
+                    },
+                })
         if self.mentioned_user_ids:
             from app.config import DOMAIN
             from urllib.parse import urlparse as _urlparse
@@ -322,9 +364,23 @@ class Post(Base):
 
         content = re.sub(r'href="/', f'href="{BASE_URL}/', content)
 
+        _ap_context = [
+            "https://www.w3.org/ns/activitystreams",
+            "https://w3id.org/security/v1",
+            {
+                "manuallyApprovesFollowers": "as:manuallyApprovesFollowers",
+                "toot": "http://joinmastodon.org/ns#",
+                "misskey": "https://misskey-hub.net/ns#",
+                "Hashtag": "as:Hashtag",
+                "sensitive": "as:sensitive",
+                "Emoji": "toot:Emoji",
+                "emoji": "toot:emoji",
+                "quoteUrl": "as:quoteUrl",
+            },
+        ]
         obj_id = f"{BASE_URL}/@{self.author.username}/{self.number}" if self.number else self.ap_id
         obj = {
-            "@context": "https://www.w3.org/ns/activitystreams",
+            "@context": _ap_context,
             "id": obj_id,
             "url": obj_id,
             "type": "Note",
@@ -415,7 +471,7 @@ class Post(Base):
     def to_ap_create(self):
         note = self.to_ap_note()
         return {
-            "@context": "https://www.w3.org/ns/activitystreams",
+            "@context": note.get("@context", "https://www.w3.org/ns/activitystreams"),
             "id": f"{BASE_URL}/activities/create/{self.id}",
             "type": "Create",
             "actor": self.author.actor_uri(),
