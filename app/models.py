@@ -347,8 +347,7 @@ class Post(Base):
             content,
         )
 
-        if content and not content.startswith("<"):
-            content = f"<p>{content}</p>"
+
 
         if self.tag_list:
             for t in self.tag_list:
