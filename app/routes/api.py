@@ -12,7 +12,7 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PendingDelivery, get_session
+from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PendingDelivery, PushSubscription, get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.log_utils import log_admin_action
 
@@ -846,6 +846,15 @@ def api_create_post(
                 s.add(notif)
         s.commit()
 
+        from app.push import send_push_to_user
+        for mu_id in mentioned_ids:
+            if mu_id != user.id:
+                send_push_to_user(mu_id, "mention", user.username, post.id)
+        if parent_id:
+            parent = s.query(Post).filter_by(id=parent_id).first()
+            if parent and parent.author_id != user.id and parent.author_id not in [mid for mid in mentioned_ids if mid != user.id]:
+                send_push_to_user(parent.author_id, "reply", user.username, post.id)
+
         # Async federation broadcast (background thread so it doesn't block response)
         threading.Thread(target=_broadcast_federation, args=(user, post, visibility), daemon=True).start()
 
@@ -981,6 +990,10 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
         s.commit()
         from app.timeline_stream import broadcast_refresh_notifs
         broadcast_refresh_notifs()
+        from app.push import send_push_to_user
+        for admin in admins:
+            if admin.id != user.id:
+                send_push_to_user(admin.id, "moderation", user.username)
 
         if forward_to_remote and target_obj and hasattr(target_obj, 'author') and target_obj.author and target_obj.author.is_remote:
             try:
@@ -1012,6 +1025,9 @@ def api_like_post(request: Request, post_id: int):
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
             s.commit()
             broadcast_refresh_notifs()
+            if post.author_id != user.id:
+                from app.push import send_push_to_user
+                send_push_to_user(post.author_id, "like", user.username, post_id)
         if post.author.is_remote and post.author.shared_inbox_url:
             like_id = f"{BASE_URL}/likes/{uuid.uuid4()}"
             like_rec = existing or s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
@@ -1093,6 +1109,9 @@ def api_boost_post(request: Request, post_id: int):
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id))
             s.commit()
             broadcast_refresh_notifs()
+            if post.author_id != user.id:
+                from app.push import send_push_to_user
+                send_push_to_user(post.author_id, "boost", user.username, post_id)
         if post.author.is_remote and post.author.shared_inbox_url:
             announce_id = f"{BASE_URL}/boosts/{uuid.uuid4()}"
             # Store the activity ID so Unboosts can reference it
@@ -1706,6 +1725,8 @@ def api_follow(request: Request, username: str):
                 s.add(Notification(user_id=target.id, from_user_id=user.id, notification_type="follow_request" if not accepted else "follow"))
             s.commit()
             broadcast_refresh_notifs()
+            from app.push import send_push_to_user
+            send_push_to_user(target.id, "follow" if accepted else "follow_request", user.username)
     return {"ok": True}
 
 
@@ -2449,6 +2470,10 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
                 s.add(n)
         if followers:
             s.commit()
+            from app.push import send_push_to_user
+            for sf in followers:
+                if sf.user_id != user.id:
+                    send_push_to_user(sf.user_id, "new_episode", user.username, metadata={"novel_id": novel.id})
 
         eid = episode.id
     return {"ok": True, "episode_id": eid}
@@ -5730,4 +5755,43 @@ def api_client_log(request: Request):
         return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
 
 
+# ── Web Push ──
+
+@router.get("/push/vapid-public-key")
+def get_vapid_public_key():
+    from app.config import VAPID_PUBLIC_KEY
+    if not VAPID_PUBLIC_KEY:
+        raise HTTPException(404, "Web Push not configured")
+    return {"publicKey": VAPID_PUBLIC_KEY}
+
+
+@router.post("/push/subscribe")
+def subscribe_push(request: Request, endpoint: str = Form(...), p256dh: str = Form(...), auth_key: str = Form(...)):
+    user = require_active_auth(request)
+    with get_session() as s:
+        existing = s.query(PushSubscription).filter_by(user_id=user.id, endpoint=endpoint).first()
+        if existing:
+            existing.p256dh = p256dh
+            existing.auth = auth_key
+        else:
+            s.add(PushSubscription(user_id=user.id, endpoint=endpoint, p256dh=p256dh, auth=auth_key))
+        s.commit()
+    return {"ok": True}
+
+
+@router.post("/push/unsubscribe")
+def unsubscribe_push(request: Request, endpoint: str = Form(...)):
+    user = require_active_auth(request)
+    with get_session() as s:
+        s.query(PushSubscription).filter_by(user_id=user.id, endpoint=endpoint).delete()
+        s.commit()
+    return {"ok": True}
+
+
+@router.get("/push/status")
+def push_status(request: Request):
+    user = require_active_auth(request)
+    with get_session() as s:
+        count = s.query(PushSubscription).filter_by(user_id=user.id).count()
+    return {"subscribed": count > 0}
 

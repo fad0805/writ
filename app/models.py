@@ -596,6 +596,17 @@ class Notification(Base):
     post = relationship("Post", lazy="selectin")
 
 
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    endpoint = Column(Text, nullable=False)
+    p256dh = Column(Text, nullable=False)
+    auth = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+
 class ProfileNote(Base):
     __tablename__ = "profile_notes"
 

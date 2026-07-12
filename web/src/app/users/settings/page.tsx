@@ -7,6 +7,7 @@ import Avatar from "@/components/Avatar";
 import VisibilitySelector from "@/components/VisibilitySelector";
 import SettingsNav from "@/components/SettingsNav";
 import { useAuth } from "@/lib/auth";
+import { isPushSupported, getPermissionState, subscribePush, unsubscribePush, isSubscribed } from "@/lib/push";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -21,6 +22,9 @@ export default function SettingsPage() {
   const [frLoading, setFrLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -43,6 +47,13 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
+    isPushSupported().then((supported) => {
+      setPushSupported(supported);
+      if (supported) isSubscribed().then(setPushEnabled);
+    });
+  }, []);
+
+  useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         const form = document.querySelector(".novel-form") as HTMLFormElement;
@@ -52,6 +63,23 @@ export default function SettingsPage() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+
+  const handlePushToggle = async () => {
+    if (pushLoading) return;
+    setPushLoading(true);
+    try {
+      if (pushEnabled) {
+        await unsubscribePush();
+        setPushEnabled(false);
+      } else {
+        const ok = await subscribePush();
+        setPushEnabled(ok);
+      }
+    } catch (e) {
+      alert("알림 설정 중 오류가 발생했습니다");
+    }
+    setPushLoading(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,6 +161,19 @@ export default function SettingsPage() {
           <button type="submit" disabled={submitting} className="btn btn-primary">설정 저장</button>
         </div>
       </form>
+
+      {pushSupported && (
+        <div className="novel-form" style={{ marginTop: 20 }}>
+          <h3 style={{ fontSize: "1.1em", marginBottom: 16 }}><Icon name="bell" /> 브라우저 알림</h3>
+          <div className="form-group">
+            <label>
+              <input type="checkbox" checked={pushEnabled} disabled={pushLoading} onChange={handlePushToggle} />
+              {" "}<Icon name="bell" /> 푸시 알림 {pushEnabled ? "활성화됨" : "비활성화됨"}
+            </label>
+            <p className="form-help">브라우저가 꺼져 있어도 새로운 알림을 받을 수 있습니다. 토글하여 켜거나 끌 수 있습니다.</p>
+          </div>
+        </div>
+      )}
 
       <div className="novel-form" style={{ marginTop: 20 }}>
         <h3 style={{ fontSize: "1.1em", marginBottom: 16 }}><Icon name="user_solid" /> 팔로우 요청</h3>

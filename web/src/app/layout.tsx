@@ -55,9 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{
           __html: `
             if ('serviceWorker' in navigator) {
-              navigator.serviceWorker.getRegistrations().then(function(regs) {
-                for (var r of regs) r.unregister();
-              });
+              navigator.serviceWorker.register('/sw.js').catch(function() {});
             }
             window.__toggleTheme = function() {
               document.body.classList.toggle('dark-theme');
