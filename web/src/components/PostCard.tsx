@@ -515,7 +515,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
                   <Icon name="star_filled" size={18} style={{ color: "#f1c40f" }} />
                 ) : emoji.startsWith(":") && emoji.endsWith(":") ? (
                   reactionEmojiMap[emojiKey]
-                    ? <img src={reactionEmojiMap[emojiKey]} alt={emoji} style={{ width: 18, height: 18, verticalAlign: "middle" }} />
+                    ? <img src={reactionEmojiMap[emojiKey]} alt={emoji} style={{ width: 22, height: 22, verticalAlign: "middle" }} />
                     : <span>{emoji}</span>
                 ) : (
                   <span>{emoji}</span>
