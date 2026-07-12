@@ -3890,7 +3890,7 @@ def api_copy_emoji(request: Request, emoji_id: int):
             raise HTTPException(status_code=400, detail="Local emoji with this keyword already exists")
         from app.utils.storage import get_storage as _get_storage
         _storage = _get_storage()
-        _ext = src.file_name.rsplit(".", 1)[-1] if "." in src.file_name else "png"
+        _ext = src.file_name.rsplit(".", 1)[-1] if "." in src.file_name else "webp"
         _new_fname = f"{new_kw}.{_ext}"
         try:
             _data = _storage.read(f"emojis/{src.file_name}")
