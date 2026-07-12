@@ -22,6 +22,7 @@ export default function SettingsPage() {
   const [frLoading, setFrLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [serverEnableReactions, setServerEnableReactions] = useState(true);
   const [pushSupported, setPushSupported] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushInitial, setPushInitial] = useState(false);
@@ -36,6 +37,7 @@ export default function SettingsPage() {
       setIsBot(user.is_bot || false);
       setFollowListVis(user.follow_list_visibility || "public");
       setEnableReactions(user.enable_reactions !== false);
+      fetch("/api/server-info").then(r=>r.json()).then((info: any) => setServerEnableReactions(info.enable_reactions !== false)).catch(() => {});
       setLoading(false);
     }).catch(() => router.push("/login"));
   }, [router]);
@@ -130,7 +132,7 @@ export default function SettingsPage() {
           </label>
           <p className="form-help">봇 계정은 사용자가 거의 개입하지 않고 프로그램으로 자동 운영되는 계정입니다. 켜면 계정에 봇 표시가 추가됩니다.</p>
         </div>
-        {user?.enable_reactions !== false && (
+        {serverEnableReactions && (
         <div className="form-group">
           <label>
             <input type="checkbox" checked={enableReactions} onChange={(e) => setEnableReactions(e.target.checked)} />
