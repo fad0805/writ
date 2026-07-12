@@ -226,7 +226,13 @@ def api_me(request: Request):
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
-    return _user_json(user)
+    result = _user_json(user)
+    from app.models import ServerSetting as _SS
+    with get_session() as _s:
+        _settings = _SS.get(_s)
+        if not _settings.enable_reactions:
+            result["enable_reactions"] = False
+    return result
 
 
 @router.post("/auth/login")
@@ -1231,21 +1237,19 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
     user = require_active_auth(request)
     with get_session() as s:
         settings = ServerSetting.get(s)
-        if not settings.enable_reactions:
-            raise HTTPException(status_code=400, detail="Reactions are disabled")
         if not emoji or len(emoji) > 50:
             raise HTTPException(status_code=400, detail="Invalid emoji")
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
-        if not getattr(post.author, 'enable_reactions', True):
-            raise HTTPException(status_code=400, detail="User has disabled reactions")
+        reactions_disabled = not settings.enable_reactions or not getattr(post.author, 'enable_reactions', True)
+        final_emoji = emoji if not reactions_disabled else None
         existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
         is_new = False
         if existing:
-            existing.reaction = emoji
+            existing.reaction = final_emoji
         else:
-            s.add(Like(user_id=user.id, post_id=post_id, reaction=emoji))
+            s.add(Like(user_id=user.id, post_id=post_id, reaction=final_emoji))
             if post.author_id != user.id:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
             is_new = True
