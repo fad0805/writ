@@ -75,8 +75,9 @@ export default function SettingsPage() {
         const ok = await subscribePush();
         setPushEnabled(ok);
       }
-    } catch (e) {
-      alert("알림 설정 중 오류가 발생했습니다");
+    } catch (e: any) {
+      console.error("Push toggle error:", e);
+      alert(`알림 설정 중 오류가 발생했습니다: ${e.message || e}`);
     }
     setPushLoading(false);
   };

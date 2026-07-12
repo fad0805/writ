@@ -63,3 +63,29 @@ S3_PUBLIC_URL = os.environ.get("S3_PUBLIC_URL", "")
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
 VAPID_CLAIM_EMAIL = os.environ.get("VAPID_CLAIM_EMAIL", f"admin@{DOMAIN}")
+
+# Auto-generate VAPID keys if not configured
+if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
+    try:
+        import base64
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.hazmat.primitives import serialization
+
+        _private_key = ec.generate_private_key(ec.SECP256R1())
+        _public_key = _private_key.public_key()
+
+        if not VAPID_PRIVATE_KEY:
+            VAPID_PRIVATE_KEY = _private_key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.PKCS8,
+                serialization.NoEncryption(),
+            ).decode()
+
+        if not VAPID_PUBLIC_KEY:
+            _raw_pub = _public_key.public_bytes(
+                serialization.Encoding.X962,
+                serialization.PublicFormat.UncompressedPoint,
+            )
+            VAPID_PUBLIC_KEY = base64.urlsafe_b64encode(_raw_pub).rstrip(b"=").decode()
+    except Exception:
+        pass
