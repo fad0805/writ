@@ -485,12 +485,12 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
           {reactions && Object.keys(reactions).length > 0 && currentUser?.enable_reactions !== false && post.author?.enable_reactions !== false && (
           <div className="reactions-row" style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8, marginBottom: 4, padding: "0 8px" }} onClick={(e) => e.stopPropagation()}>
             {Object.entries(reactions).sort(([a], [b]) => a === "★" ? -1 : b === "★" ? 1 : 0).map(([emoji, count]) => {
-              const isUnknownCustom = emoji.startsWith(":") && emoji.endsWith(":") && !reactionEmojiMap[emoji.slice(1, -1)];
+              const isNotLocalCustom = emoji.startsWith(":") && emoji.endsWith(":") && !reactionEmojiMap[emoji.slice(1, -1)];
               return (
               <span
                 key={emoji}
-                className={`reaction-badge${myReaction === emoji ? " active" : ""}`}
-                onClick={isUnknownCustom ? undefined : async () => {
+                className={`reaction-badge${myReaction === emoji ? " active" : ""}${isNotLocalCustom ? " reaction-disabled" : ""}`}
+                onClick={isNotLocalCustom ? undefined : async () => {
                   if (myReaction === emoji) {
                     await api.unreact(post.id);
                     const next = { ...reactions };
@@ -508,7 +508,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
                     setLikesCount(likesCount + 1);
                   }
                 }}
-                style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 12, fontSize: 13, cursor: "pointer", border: "1px solid var(--border)", background: myReaction === emoji ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-secondary)" }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 12, fontSize: 13, cursor: isNotLocalCustom ? "default" : "pointer", border: "1px solid var(--border)", background: myReaction === emoji ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-secondary)", opacity: isNotLocalCustom ? 0.5 : 1 }}
               >
 {emoji === "★" ? (
                   <Icon name="star_filled" size={18} style={{ color: "#f1c40f" }} />
