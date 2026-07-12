@@ -48,8 +48,11 @@ def _post_json(p, session, user, tl_type=None):
     liked = session.query(Like).filter_by(user_id=user.id, post_id=p.id).first() is not None if user else False
     boosted = session.query(Boost).filter_by(user_id=user.id, post_id=p.id).first() is not None if user else False
     bookmarked = session.query(Bookmark).filter_by(user_id=user.id, post_id=p.id).first() is not None if user else False
-    latest_boost = session.query(Boost).filter_by(post_id=p.id).order_by(desc(Boost.created_at)).first()
-    booster = session.query(User).get(latest_boost.user_id) if latest_boost else None
+    booster = None
+    if tl_type in ("home", "social", "local", "federated"):
+        latest_boost = session.query(Boost).filter_by(post_id=p.id).order_by(desc(Boost.created_at)).first()
+        if latest_boost:
+            booster = session.query(User).get(latest_boost.user_id)
     my_vote = None
     if user and p.poll_data:
         vote = session.query(Vote).filter_by(user_id=user.id, post_id=p.id).first()
