@@ -2,12 +2,15 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api, NovelData } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
+import Link from "next/link";
 import { hashColor } from "@/lib/avatar";
 import ClickableCover from "@/components/ClickableCover";
 import InfiniteScroll from "@/components/InfiniteScroll";
 
 export default function NovelsPage() {
+  const { user } = useAuth();
   const router = useRouter();
   const [novels, setNovels] = useState<NovelData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,6 +66,12 @@ export default function NovelsPage() {
       <div className="page-header">
         <h2><Icon name="books" /> 모든 시리즈</h2>
       </div>
+      {user && (
+        <div className="series-filter-tabs">
+          <Link href="/series/my" className="series-filter-tab">내 시리즈</Link>
+          <Link href="/series" className="series-filter-tab active">모든 시리즈</Link>
+        </div>
+      )}
       <div className="novel-grid">
         {loading ? (
           <p className="empty-state">로딩 중...</p>

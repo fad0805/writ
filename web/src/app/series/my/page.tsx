@@ -69,6 +69,10 @@ export default function MyNovelsPage() {
         <h2><Icon name="book_solid" /> 내 시리즈</h2>
         <Link href="/series/new" className="btn btn-primary">새 시리즈</Link>
       </div>
+      <div className="series-filter-tabs">
+        <Link href="/series/my" className="series-filter-tab active">내 시리즈</Link>
+        <Link href="/series" className="series-filter-tab">모든 시리즈</Link>
+      </div>
       <div className="novel-grid">
         {loading ? (
           <p className="empty-state">로딩 중...</p>
