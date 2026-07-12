@@ -343,8 +343,22 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
             if BASE_URL in actor_url:
                 print(f"[SIG] skip self-fetch ({BASE_URL})", flush=True)
             else:
-                import httpx as _httpx
-                _resp = _httpx.get(actor_url, headers={"Accept": "application/activity+json"}, timeout=10, follow_redirects=True)
+                import httpx as _httpx, datetime as _dt, time as _time, hashlib as _hl, base64 as _b64
+                from urllib.parse import urlparse as _up
+                from app.crypto_utils import sign_string, get_private_key
+                from app.models import User as _Usr, get_session as _gs
+                _parsed = _up(actor_url)
+                _date = _dt.datetime.now(_dt.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+                _created = int(_time.time())
+                _ss = f"(request-target): get {_parsed.path}\nhost: {_parsed.netloc}\ndate: {_date}\n(created): {_created}"
+                _headers = {"Accept": "application/activity+json", "Date": _date, "Host": _parsed.netloc}
+                with _gs() as _s:
+                    _signer = _s.query(_Usr).filter_by(is_remote=False).first()
+                    if _signer:
+                        _priv = get_private_key(_signer, SECRET_KEY)
+                        _sig = sign_string(_ss, _priv)
+                        _headers["Signature"] = f'keyId="{_signer.actor_uri()}#main-key",algorithm="hs2019",created="{_created}",headers="(request-target) host date (created)",signature="{_sig}"'
+                _resp = _httpx.get(actor_url, headers=_headers, timeout=10, follow_redirects=True)
                 print(f"[SIG] fetch status={_resp.status_code}", flush=True)
                 if _resp.status_code == 200:
                     _data = _resp.json()
