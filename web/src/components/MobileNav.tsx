@@ -137,6 +137,9 @@ export default function MobileNav() {
                 <Icon name="shield" /> <span>서버 관리</span>
               </Link>
             )}
+            <Link href="/rules" className="mobile-more-item">
+              <Icon name="lock" /> <span>서버 규칙</span>
+            </Link>
             <button className="mobile-more-item" onClick={toggleTheme}>
               <Icon name={isDark ? "star" : "moon"} /> <span>{isDark ? "라이트모드" : "다크모드"}</span>
             </button>

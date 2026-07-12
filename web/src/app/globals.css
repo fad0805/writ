@@ -2895,12 +2895,12 @@ input[type="checkbox"] {
   .main-content { padding: 0; padding-top: 15px; padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
   .post-card { border-radius: 0; max-width: 100%; }
   .post-form { border-radius: 0; }
-  .timeline-tabs { border-radius: 0; gap: 6px; }
+  .timeline-tabs { border-radius: 0; gap: 6px; overflow-x: auto; mask-image: linear-gradient(to right, black 85%, transparent 100%); -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%); margin-left: 12px; margin-right: 12px; }
   .profile-header-banner { border-radius: 0; }
   .profile-header { border-radius: 0; }
   .notif-card { border-radius: 0; }
   .reply-form { border-radius: 0; }
-  .notif-tabs { border-radius: 0; }
+  .notif-tabs { border-radius: 0; overflow-x: auto; mask-image: linear-gradient(to right, black 85%, transparent 100%); -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%); margin-left: 12px; margin-right: 12px; }
   .thread-list { }
   .auth-container { margin: 40px 16px; padding: 32px 24px 28px; }
   .auth-container h1 { font-size: 1.3em; margin-bottom: 24px; }
@@ -2909,7 +2909,10 @@ input[type="checkbox"] {
   .episode-body img { max-width: 100%; height: auto; }
   .post-actions-dropdown { right: 0; left: auto; }
   .explore-page-layout { padding: 0 12px; }
+  .feed { padding: 0 12px; }
+  .notif-header-row { padding: 0 12px; }
 }
+
 
 @media (max-width: 380px) {
   .main-content { padding-top: 10px; padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); }
