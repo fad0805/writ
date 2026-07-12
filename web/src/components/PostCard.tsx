@@ -538,7 +538,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
           {(post.is_mine || currentUser?.is_admin || currentUser && !post.is_mine) && (
             <div className="post-actions-more" onClick={(e) => e.stopPropagation()}>
               <button onClick={() => setShowMoreActions(!showMoreActions)} className="action-btn post-actions-more-btn">
-                <Icon name="chart" />
+                <Icon name="more_horizontal" />
               </button>
               {showMoreActions && (
                 <div className="post-actions-dropdown">
