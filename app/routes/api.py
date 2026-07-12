@@ -592,7 +592,7 @@ async def api_timeline_stream(request: Request, tl_type: str = "home"):
                     yield ":keepalive\n\n"
         finally:
             remove_stream(sid)
-    return StreamingResponse(event_gen(), media_type="text/event-stream")
+    return StreamingResponse(event_gen(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
 
 
 @router.get("/timeline/{tl_type}")
@@ -2098,7 +2098,7 @@ async def api_notifications_stream(request: Request):
                     yield ":keepalive\n\n"
         finally:
             remove_notif_stream(sid)
-    return StreamingResponse(event_gen(), media_type="text/event-stream")
+    return StreamingResponse(event_gen(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
 
 
 # ── Novels / Episodes API ──
