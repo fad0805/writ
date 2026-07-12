@@ -9,7 +9,10 @@ import NotifSound from "@/components/NotifSound";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import DeactivatedRedirect from "@/components/DeactivatedRedirect";
 
+const siteUrl = process.env.BASE_URL || "http://localhost:3000";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "WRIT",
   description: "SNS for writers",
   icons: { icon: "/favicon.ico", apple: "/icons/icon-192.png" },

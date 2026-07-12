@@ -22,12 +22,12 @@ export default function NotifSound() {
     const es = new EventSource("/api/notifications/stream");
     es.onmessage = () => {
       try {
-        if (document.hidden && Notification.permission === "granted") {
-          new Notification("WRIT", { body: "새 알림이 있습니다", icon: "/icons/icon-192.png" });
-        }
         if (audioRef.current) {
           audioRef.current.currentTime = 0;
           audioRef.current.play().catch(() => {});
+        }
+        if (document.hidden && Notification.permission === "granted") {
+          new Notification("WRIT", { body: "새 알림이 있습니다", icon: "/icons/icon-192.png", silent: true });
         }
       } catch {}
     };
