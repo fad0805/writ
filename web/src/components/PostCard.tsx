@@ -64,6 +64,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   const [boosted, setBoosted] = useState(post.boosted);
   const [bookmarked, setBookmarked] = useState(post.bookmarked);
   const [pinned, setPinned] = useState(false);
+  const [showMoreActions, setShowMoreActions] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likes_count);
   const [boostsCount, setBoostsCount] = useState(post.boosts_count);
   const [serverLogo, setServerLogo] = useState("");
@@ -200,6 +201,12 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [viewerIndex]);
+  useEffect(() => {
+    if (!showMoreActions) return;
+    const handler = () => setShowMoreActions(false);
+    window.addEventListener("click", handler);
+    return () => window.removeEventListener("click", handler);
+  }, [showMoreActions]);
   useEffect(() => {
     const newFormat = post.content.match(/https?:\/\/([^/]+)\/@(\w+(?:@[\w.-]+)?)\/([a-f0-9]+)/);
     const oldFormat = post.content.match(/https?:\/\/[^/]+\/post\/(\d+)/);
@@ -525,36 +532,46 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
               </button>
             </form>
           )}
-            <button onClick={(e) => { e.stopPropagation(); toggleBookmark(); }} className={`action-btn${bookmarked ? " bookmarked" : ""}`} style={{ color: bookmarked ? "#5b7db5" : undefined }}>
+          <button onClick={(e) => { e.stopPropagation(); toggleBookmark(); }} className={`action-btn${bookmarked ? " bookmarked" : ""}`} style={{ color: bookmarked ? "#5b7db5" : undefined }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill={bookmarked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
           </button>
-          <ShareButton url={post.ap_id?.startsWith("http") ? post.ap_id : (post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`)} />
-          <div className="spacer" />
-          {post.is_mine && (
-            <button onClick={(e) => { e.stopPropagation(); (async () => {
-              const newPinned = !pinned;
-              setPinned(newPinned);
-              const res = await fetch(`/api/${newPinned ? "pin" : "unpin"}/post/${post.id}`, { method: "POST", credentials: "include" });
-              if (!res.ok) { setPinned(!newPinned); const d = await res.json().catch(() => ({})); if (d.detail) alert(d.detail); }
-              else { window.dispatchEvent(new Event("pinchange")); window.dispatchEvent(new Event("profilechange")); }
-            })(); }} className="action-btn" title={pinned ? "고정 해제" : "고정"} style={{ color: pinned ? "var(--danger)" : undefined }}>
-              <Icon name={pinned ? "pin_filled" : "pin"} />
-            </button>
-          )}
-          {(post.is_mine || currentUser?.is_admin) && (
-            <>
-              <button onClick={() => setShowEdit(true)} className="action-btn">
-                <Icon name="edit" />
+          {(post.is_mine || currentUser?.is_admin || currentUser && !post.is_mine) && (
+            <div className="post-actions-more" onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => setShowMoreActions(!showMoreActions)} className="action-btn post-actions-more-btn">
+                <Icon name="chart" />
               </button>
-              <button onClick={handleDelete} className="action-btn action-btn-danger">
-                <Icon name="trash" />
-              </button>
-            </>
-          )}
-          {currentUser && !post.is_mine && (
-            <button onClick={() => { setShowReport(true); setReportReason(""); setReportError(""); setReportDone(false); setSelectedRuleIds([]); fetch("/api/rules").then(r => r.json()).then(setReportRules).catch(() => {}); }} className="action-btn" title="신고" style={{ marginLeft: 12, color: "var(--text-muted)" }}>
-              <Icon name="flag" />
-            </button>
+              {showMoreActions && (
+                <div className="post-actions-dropdown">
+                  <ShareButton url={post.ap_id?.startsWith("http") ? post.ap_id : (post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`)} className="post-actions-dropdown-item" />
+                  {post.is_mine && (
+                    <button onClick={() => { setShowMoreActions(false); (async () => {
+                      const newPinned = !pinned;
+                      setPinned(newPinned);
+                      const res = await fetch(`/api/${newPinned ? "pin" : "unpin"}/post/${post.id}`, { method: "POST", credentials: "include" });
+                      if (!res.ok) { setPinned(!newPinned); const d = await res.json().catch(() => ({})); if (d.detail) alert(d.detail); }
+                      else { window.dispatchEvent(new Event("pinchange")); window.dispatchEvent(new Event("profilechange")); }
+                    })(); }} className="post-actions-dropdown-item">
+                      <Icon name={pinned ? "pin_filled" : "pin"} /> {pinned ? "고정 해제" : "고정"}
+                    </button>
+                  )}
+                  {(post.is_mine || currentUser?.is_admin) && (
+                    <>
+                      <button onClick={() => { setShowMoreActions(false); setShowEdit(true); }} className="post-actions-dropdown-item">
+                        <Icon name="edit" /> 수정
+                      </button>
+                      <button onClick={() => { setShowMoreActions(false); handleDelete(); }} className="post-actions-dropdown-item post-actions-dropdown-danger">
+                        <Icon name="trash" /> 삭제
+                      </button>
+                    </>
+                  )}
+                  {currentUser && !post.is_mine && (
+                    <button onClick={() => { setShowMoreActions(false); setShowReport(true); setReportReason(""); setReportError(""); setReportDone(false); setSelectedRuleIds([]); fetch("/api/rules").then(r => r.json()).then(setReportRules).catch(() => {}); }} className="post-actions-dropdown-item">
+                      <Icon name="flag" /> 신고
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>}
       </div>

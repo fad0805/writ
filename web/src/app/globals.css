@@ -572,6 +572,9 @@ input:focus {
   margin-bottom: 12px;
   transition: border-color 0.2s, background 0.3s;
   cursor: pointer;
+  overflow: hidden;
+  max-width: 100%;
+  word-break: break-word;
 }
 .post-card:hover {
   border-color: var(--card-hover);
@@ -689,6 +692,54 @@ input:focus {
   gap: 15px;
   padding-top: 10px;
   border-top: 1px solid var(--border);
+}
+
+.post-actions-more {
+  position: relative;
+  margin-left: auto;
+}
+
+.post-actions-more-btn {
+  padding: 4px 8px;
+}
+
+.post-actions-dropdown {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  min-width: 140px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  z-index: 100;
+  padding: 4px 0;
+  animation: mobile-more-slide-up 0.15s ease-out;
+  margin-bottom: 4px;
+}
+
+.post-actions-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 0.85em;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.post-actions-dropdown-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.post-actions-dropdown-danger {
+  color: var(--danger);
 }
 
 .action-btn {
