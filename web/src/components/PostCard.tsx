@@ -485,7 +485,8 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
           {reactions && Object.keys(reactions).length > 0 && currentUser?.enable_reactions !== false && post.author?.enable_reactions !== false && (
           <div className="reactions-row" style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8, marginBottom: 4, padding: "0 8px" }} onClick={(e) => e.stopPropagation()}>
             {Object.entries(reactions).sort(([a], [b]) => a === "★" ? -1 : b === "★" ? 1 : 0).map(([emoji, count]) => {
-              const isNotLocalCustom = emoji.startsWith(":") && emoji.endsWith(":") && !reactionEmojiMap[emoji];
+              const emojiKey = emoji.startsWith(":") && emoji.endsWith(":") ? emoji.slice(1, -1) : emoji;
+              const isNotLocalCustom = emoji.startsWith(":") && emoji.endsWith(":") && !reactionEmojiMap[emojiKey];
               return (
               <span
                 key={emoji}
@@ -513,8 +514,8 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
 {emoji === "★" ? (
                   <Icon name="star_filled" size={18} style={{ color: "#f1c40f" }} />
                 ) : emoji.startsWith(":") && emoji.endsWith(":") ? (
-                  reactionEmojiMap[emoji.slice(1, -1)]
-                    ? <img src={reactionEmojiMap[emoji]} alt={emoji} style={{ width: 18, height: 18, verticalAlign: "middle" }} />
+                  reactionEmojiMap[emojiKey]
+                    ? <img src={reactionEmojiMap[emojiKey]} alt={emoji} style={{ width: 18, height: 18, verticalAlign: "middle" }} />
                     : <span>{emoji}</span>
                 ) : (
                   <span>{emoji}</span>
