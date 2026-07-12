@@ -1035,8 +1035,8 @@ def api_like_post(request: Request, post_id: int):
             if post.author_id != user.id:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
             s.commit()
-            broadcast_refresh_notifs()
             if post.author_id != user.id:
+                broadcast_refresh_notifs()
                 from app.push import send_push_to_user
                 send_push_to_user(post.author_id, "like", user.username, post_id)
         if post.author.is_remote and post.author.shared_inbox_url:
