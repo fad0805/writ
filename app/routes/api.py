@@ -401,15 +401,10 @@ def api_verify_email(request: Request, token: str = Form(...)):
     from app.routes.auth import create_session
     with get_session() as s:
         u = s.query(User).filter_by(verification_token=token).first()
+
         if not u:
-            # Check if already verified (token was cleared by a previous request)
-            u = s.query(User).filter_by(email_verified=True, verification_token="").first()
-            if u:
-                sess = create_session(u.id)
-                resp = JSONResponse({"ok": True, "email_verified": True, "already_verified": True})
-                resp.set_cookie(key="session", value=sess, max_age=30*86400, httponly=True, samesite="lax", path="/")
-                return resp
-            raise HTTPException(status_code=400, detail="유효하지 않은 인증 토큰입니다.")
+            raise HTTPException(status_code=400, detail="유효하지 않거나 이미 만료된 인증 토큰입니다.")
+
         u.email_verified = True
         u.verification_token = ""
 
@@ -426,9 +421,7 @@ def api_verify_email(request: Request, token: str = Form(...)):
                 ))
 
         s.commit()
-        sess = create_session(u.id)
         resp = JSONResponse({"ok": True, "email_verified": True})
-        resp.set_cookie(key="session", value=sess, max_age=30*86400, httponly=True, samesite="lax", path="/")
         return resp
 
 
