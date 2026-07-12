@@ -5766,15 +5766,15 @@ def get_vapid_public_key():
 
 
 @router.post("/push/subscribe")
-def subscribe_push(request: Request, endpoint: str = Form(...), p256dh: str = Form(...), auth_key: str = Form(...)):
+def subscribe_push(request: Request, endpoint: str = Form(...), p256dh: str = Form(...), auth: str = Form(...)):
     user = require_active_auth(request)
     with get_session() as s:
         existing = s.query(PushSubscription).filter_by(user_id=user.id, endpoint=endpoint).first()
         if existing:
             existing.p256dh = p256dh
-            existing.auth = auth_key
+            existing.auth = auth
         else:
-            s.add(PushSubscription(user_id=user.id, endpoint=endpoint, p256dh=p256dh, auth=auth_key))
+            s.add(PushSubscription(user_id=user.id, endpoint=endpoint, p256dh=p256dh, auth=auth))
         s.commit()
     return {"ok": True}
 
