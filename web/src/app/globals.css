@@ -360,7 +360,7 @@ input[type="text"].explore-search-input:focus {
 }
 .timeline-tabs::-webkit-scrollbar { display: none; }
 .timeline-tabs a {
-  flex: none;
+  flex: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1116,12 +1116,13 @@ input:focus {
 }
 .notif-tabs::-webkit-scrollbar { display: none; }
 .notif-tab {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 8px 14px;
   white-space: nowrap;
+  min-width: 0;
   border-radius: 8px;
   color: var(--text-muted);
   font-size: 0.85em;
@@ -2897,7 +2898,6 @@ input[type="checkbox"] {
   .post-form { border-radius: 0; margin-left: 12px; margin-right: 12px; }
   .visibility-selector label { flex-shrink: 0; }
   .timeline-tabs { border-radius: 0; gap: 6px; margin-left: 12px; margin-right: 12px; position: sticky; top: 0; z-index: 100; background: var(--bg-primary); padding-top: 4px; padding-bottom: 4px; }
-  .timeline-tabs a { flex: 1; }
   .profile-header-banner { border-radius: 0; }
   .profile-header { border-radius: 0; }
   .notif-card { border-radius: 0; }
