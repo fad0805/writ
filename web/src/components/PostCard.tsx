@@ -484,11 +484,13 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
         )}
           {reactions && Object.keys(reactions).length > 0 && currentUser?.enable_reactions !== false && post.author?.enable_reactions !== false && (
           <div className="reactions-row" style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8, marginBottom: 4, padding: "0 8px" }} onClick={(e) => e.stopPropagation()}>
-            {Object.entries(reactions).sort(([a], [b]) => a === "★" ? -1 : b === "★" ? 1 : 0).map(([emoji, count]) => (
+            {Object.entries(reactions).sort(([a], [b]) => a === "★" ? -1 : b === "★" ? 1 : 0).map(([emoji, count]) => {
+              const isUnknownCustom = emoji.startsWith(":") && emoji.endsWith(":") && !reactionEmojiMap[emoji.slice(1, -1)];
+              return (
               <span
                 key={emoji}
                 className={`reaction-badge${myReaction === emoji ? " active" : ""}`}
-                onClick={async () => {
+                onClick={isUnknownCustom ? undefined : async () => {
                   if (myReaction === emoji) {
                     await api.unreact(post.id);
                     const next = { ...reactions };
@@ -519,7 +521,8 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
                 )}
                 <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{count}</span>
               </span>
-            ))}
+            );
+            })}
           </div>
         )}
         {!readonly && <div className="post-actions" onClick={(e) => e.stopPropagation()}>
