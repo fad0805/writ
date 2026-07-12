@@ -1643,6 +1643,7 @@ def _handle_delete(activity: dict) -> tuple[int, str]:
         post = session.query(Post).filter_by(ap_id=object_url).first()
         if post:
             post.is_deleted = True
+            session.query(Notification).filter_by(post_id=post.id).delete()
             session.commit()
 
     return (200, "Deleted")
