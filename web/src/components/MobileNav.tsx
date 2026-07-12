@@ -126,6 +126,10 @@ export default function MobileNav() {
       {menuOpen && (
         <div className="mobile-more-overlay" onClick={() => setMenuOpen(false)}>
           <div className="mobile-more-menu" ref={menuRef} onClick={(e) => e.stopPropagation()}>
+            <button className="mobile-more-item mobile-more-logout" onClick={handleLogout}>
+              로그아웃
+            </button>
+            <div className="mobile-more-divider" />
             <Link href={`/@${user.username}`} className="mobile-more-item">
               <Icon name="user" /> <span>내 프로필</span>
             </Link>
@@ -142,10 +146,6 @@ export default function MobileNav() {
             </Link>
             <button className="mobile-more-item" onClick={toggleTheme}>
               <Icon name={isDark ? "star" : "moon"} /> <span>{isDark ? "라이트모드" : "다크모드"}</span>
-            </button>
-            <div className="mobile-more-divider" />
-            <button className="mobile-more-item mobile-more-logout" onClick={handleLogout}>
-              로그아웃
             </button>
           </div>
         </div>
