@@ -3904,7 +3904,20 @@ def api_copy_emoji(request: Request, emoji_id: int):
         existing = s.query(CustomEmoji).filter_by(keyword=new_kw, category="기본").first()
         if existing:
             raise HTTPException(status_code=400, detail="Local emoji with this keyword already exists")
-        copy = CustomEmoji(keyword=new_kw, file_name=src.file_name, category="기본", aliases=src.aliases or [])
+        from app.utils.storage import get_storage as _get_storage
+        _storage = _get_storage()
+        _ext = src.file_name.rsplit(".", 1)[-1] if "." in src.file_name else "png"
+        _new_fname = f"{new_kw}.{_ext}"
+        try:
+            _data = _storage.read(f"emojis/{src.file_name}")
+            _storage.save(f"emojis/{_new_fname}", _data, f"image/{_ext}")
+        except Exception:
+            import shutil, os as _os
+            _src_path = _os.path.join(EMOJI_DIR, src.file_name)
+            _dst_path = _os.path.join(EMOJI_DIR, _new_fname)
+            if _os.path.exists(_src_path):
+                shutil.copy2(_src_path, _dst_path)
+        copy = CustomEmoji(keyword=new_kw, file_name=_new_fname, category="기본", aliases=src.aliases or [])
         s.add(copy)
         s.flush()
         return {"ok": True, "emoji": {"id": copy.id, "keyword": copy.keyword, "file_name": copy.file_name, "category": copy.category, "aliases": copy.aliases or [], "url": _emoji_url(copy.file_name), "source_url": copy.source_url or "", "domain": copy.domain or ""}}
