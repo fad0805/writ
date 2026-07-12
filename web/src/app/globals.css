@@ -1028,6 +1028,8 @@ input:focus {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
 }
 .profile-stats::-webkit-scrollbar { display: none; }
 .profile-stat {
