@@ -2878,25 +2878,26 @@ input[type="checkbox"] {
 @media (max-width: 768px) {
   .layout { grid-template-columns: 1fr; }
   .sidebar { display: none; }
-  .main-content { padding: 15px; padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
-  .post-card { border-radius: 0; border-left: none; border-right: none; margin-left: -15px; margin-right: -15px; }
-  .post-form { border-radius: 0; border-left: none; border-right: none; margin-left: -15px; margin-right: -15px; }
-  .timeline-tabs { border-radius: 0; margin-left: -15px; margin-right: -15px; }
+  .main-content { padding: 0; padding-top: 15px; padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); overflow-y: auto; overflow-x: hidden; }
+  .post-card { border-radius: 0; max-width: 100%; }
+  .post-form { border-radius: 0; }
+  .timeline-tabs { border-radius: 0; }
   .profile-header-banner { border-radius: 0; }
-  .profile-header { border-radius: 0; margin-left: -15px; margin-right: -15px; }
-  .notif-card { border-radius: 0; margin-left: -15px; margin-right: -15px; }
-  .reply-form { border-radius: 0; margin-left: -15px; margin-right: -15px; }
-  .notif-tabs { border-radius: 0; margin-left: -15px; margin-right: -15px; }
-  .thread-list { margin-left: -15px; margin-right: -15px; }
+  .profile-header { border-radius: 0; }
+  .notif-card { border-radius: 0; }
+  .reply-form { border-radius: 0; }
+  .notif-tabs { border-radius: 0; }
+  .thread-list { }
   .auth-container { margin: 40px 16px; padding: 32px 24px 28px; }
   .auth-container h1 { font-size: 1.3em; margin-bottom: 24px; }
   .emoji-picker-dropdown { width: calc(100vw - 32px); right: -8px; max-width: 300px; }
   .episode-body { overflow-x: auto; }
   .episode-body img { max-width: 100%; height: auto; }
+  .post-actions-dropdown { right: 0; left: auto; }
 }
 
 @media (max-width: 380px) {
-  .main-content { padding: 10px; padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); }
+  .main-content { padding-top: 10px; padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); }
   .auth-container { margin: 20px 10px; padding: 24px 16px 20px; }
   .notif-tabs { gap: 2px; }
   .notif-tab { padding: 6px 8px; font-size: 0.78em; }
