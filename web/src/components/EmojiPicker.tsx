@@ -26,14 +26,13 @@ export default function EmojiPicker({ onEmoji, dropUp, alignRight }: { onEmoji: 
     if (open) getCustomEmojis().then(setCustomEmojis);
   }, [open]);
 
-  const localEmojis = customEmojis.filter(e => e.category !== "remote");
-  const groupedCustom = localEmojis.reduce<Record<string, CustomEmoji[]>>((acc, e) => {
+  const groupedCustom = customEmojis.reduce<Record<string, CustomEmoji[]>>((acc, e) => {
     const cat = e.category || "기타";
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(e);
     return acc;
   }, {});
-  const searchResults = search ? customEmojis.filter(e => e.category !== "remote" && (e.keyword.includes(search.toLowerCase()) || (e.aliases || []).some((a: string) => a.includes(search.toLowerCase())))) : [];
+  const searchResults = search ? customEmojis.filter(e => e.keyword.includes(search.toLowerCase()) || (e.aliases || []).some((a: string) => a.includes(search.toLowerCase()))) : [];
 
   useEffect(() => {
     if (!open) return;
