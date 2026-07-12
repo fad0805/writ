@@ -775,6 +775,7 @@ def api_create_post(
             content = content + "\n\nepisode: " + share_url
         else:
             content = content + "\n\nseries: " + share_url
+    content = content.strip('\n\r ')
     if not content.strip() and not poll_options:
         raise HTTPException(status_code=400, detail="Content cannot be empty")
     total_len = len(content) + len(summary)
