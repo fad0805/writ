@@ -385,8 +385,9 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
     signer_uri = remote_actor.actor_uri() if not remote_actor.is_remote else remote_actor.remote_url
     print(f"[SIG] bind_check signer_uri={signer_uri} activity_actor={activity_actor}", flush=True)
     if not activity_actor or signer_uri != activity_actor:
-        print(f"[SIG] bind_check FAIL", flush=True)
-        return (False, None)
+        if remote_actor.is_remote:
+            print(f"[SIG] bind_check FAIL (remote)", flush=True)
+            return (False, None)
     print(f"[SIG] bind_check OK", flush=True)
 
     # Date freshness check — 5분 window to prevent replay
