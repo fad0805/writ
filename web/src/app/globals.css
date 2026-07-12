@@ -354,14 +354,17 @@ input[type="text"].explore-search-input:focus {
   border-radius: 12px;
   padding: 4px;
   overflow-x: auto;
+  scrollbar-width: none;
 }
+.timeline-tabs::-webkit-scrollbar { display: none; }
 .timeline-tabs a {
   flex: 1;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 10px 12px;
+  padding: 10px 8px;
   border-radius: 8px;
   color: var(--text-muted);
   font-size: 0.85em;
@@ -572,9 +575,10 @@ input:focus {
   margin-bottom: 12px;
   transition: border-color 0.2s, background 0.3s;
   cursor: pointer;
-  overflow: hidden;
+  overflow-x: hidden;
   max-width: 100%;
   word-break: break-word;
+  position: relative;
 }
 .post-card:hover {
   border-color: var(--card-hover);
@@ -712,7 +716,7 @@ input:focus {
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-  z-index: 100;
+  z-index: 1000;
   padding: 4px 0;
   animation: mobile-more-slide-up 0.15s ease-out;
   margin-bottom: 4px;
