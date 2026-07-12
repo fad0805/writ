@@ -53,7 +53,7 @@ def _post_json(p, session, user, tl_type=None):
         latest_boost = session.query(Boost).filter_by(post_id=p.id).order_by(desc(Boost.created_at)).first()
         if latest_boost:
             import datetime as _dt
-            if (_dt.datetime.now(_dt.timezone.utc) - latest_boost.created_at).total_seconds() < 10800:
+            if (_dt.datetime.now(_dt.timezone.utc) - latest_boost.created_at).total_seconds() > 10800:
                 booster = session.query(User).get(latest_boost.user_id)
     my_vote = None
     if user and p.poll_data:
