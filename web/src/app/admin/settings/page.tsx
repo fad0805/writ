@@ -27,6 +27,7 @@ export default function AdminSettingsPage() {
   const [origAppIcon, setOrigAppIcon] = useState("");
   const [adminIds, setAdminIds] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
+  const [enableReactions, setEnableReactions] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
@@ -52,6 +53,7 @@ export default function AdminSettingsPage() {
         setOrigLogo(d.logo || ""); setOrigFavicon(d.favicon || ""); setOrigAppIcon(d.app_icon || "");
         setAdminIds(d.admin_ids || "");
         setAdminEmail(d.admin_email || "");
+        setEnableReactions(d.enable_reactions !== false);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -86,6 +88,7 @@ export default function AdminSettingsPage() {
       form.append("app_icon", finalAppIcon || "");
       form.append("admin_ids", adminIds);
       form.append("admin_email", adminEmail);
+      form.append("enable_reactions", enableReactions ? "true" : "false");
       const res = await fetch("/api/admin/settings", { method: "POST", credentials: "include", body: form });
       if (res.ok) { setMsg("저장되었습니다."); window.dispatchEvent(new Event("serverchange")); setLogoFile(null); setFaviconFile(null); setAppIconFile(null); setRemoveLogo(false); setRemoveFavicon(false); setRemoveAppIcon(false); fetch("/api/admin/settings", { credentials: "include" }).then(r => r.json()).then(d => { setLogo(d.logo || ""); setLogoPreview(d.logo || ""); setFavicon(d.favicon || ""); setFaviconPreview(d.favicon || ""); setAppIcon(d.app_icon || ""); setAppIconPreview(d.app_icon || ""); setOrigLogo(d.logo || ""); setOrigFavicon(d.favicon || ""); setOrigAppIcon(d.app_icon || ""); }).catch(() => {}); }
       else { const d = await res.json().catch(() => ({})); setMsg(typeof d.detail === "string" ? d.detail : Array.isArray(d.detail) ? d.detail.map((e: any) => e.msg).join(", ") : "저장 실패"); }
@@ -149,6 +152,13 @@ export default function AdminSettingsPage() {
           <label>관리 이메일</label>
           <input type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} className="cw-input" placeholder="admin@example.com" />
           <p className="form-help">서버 정보에 표시할 관리 이메일 주소입니다. 비워두면 설정된 관리자 계정의 이메일이 표시됩니다.</p>
+        </div>
+        <div className="form-group">
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+            <input type="checkbox" checked={enableReactions} onChange={(e) => setEnableReactions(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
+            이모지 반응 활성화
+          </label>
+          <p className="form-help">끄면 모든 게시글에서 이모지 반응 버튼이 사라집니다.</p>
         </div>
         <div className="form-actions">
           <button type="submit" disabled={saving} className="btn btn-primary">{saving ? "저장 중..." : "저장"}</button>
