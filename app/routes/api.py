@@ -1260,7 +1260,7 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
         s.commit()
         if post.author_id != user.id:
             from app.timeline_stream import broadcast_refresh_notifs
-            broadcast_refresh_notifs()
+            broadcast_refresh_notifs(post.author_id)
         if post.author.is_remote and post.author.shared_inbox_url:
             from app.activitypub import _post_to_inbox
             like_activity = {
@@ -2101,7 +2101,7 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
 @router.get("/notifications/stream")
 async def api_notifications_stream(request: Request):
     user = require_auth(request)
-    sid, q = add_notif_stream()
+    sid, q = add_notif_stream(user.id)
     async def event_gen():
         try:
             while True:

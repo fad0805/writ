@@ -57,30 +57,31 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
             if _should_deliver_fast(uid, tl, post_author_id, post_visibility, follower_ids, booster_ids, author_is_local):
                 _enqueue(info["queue"], payload)
 
-_notif_streams: dict[int, asyncio.Queue] = {}
+_notif_streams: dict[int, dict] = {}
 _notif_counter = 0
 
-def add_notif_stream() -> tuple[int, asyncio.Queue]:
+def add_notif_stream(user_id: int = 0) -> tuple[int, asyncio.Queue]:
     global _notif_counter
     _set_loop()
     _notif_counter += 1
     q: asyncio.Queue = asyncio.Queue(maxsize=50)
-    _notif_streams[_notif_counter] = q
-    logger.info("add_notif_stream: sid=%s total=%s", _notif_counter, len(_notif_streams))
+    _notif_streams[_notif_counter] = {"queue": q, "user_id": user_id}
+    logger.info("add_notif_stream: sid=%s uid=%s total=%s", _notif_counter, user_id, len(_notif_streams))
     return _notif_counter, q
 
 def remove_notif_stream(sid: int):
     logger.info("remove_notif_stream: sid=%s remaining=%s", sid, len(_notif_streams) - 1)
     _notif_streams.pop(sid, None)
 
-def broadcast_notif(payload: str):
-    logger.info("broadcast_notif: payload=%s streams=%s", payload, len(_notif_streams))
-    for q in list(_notif_streams.values()):
-        _enqueue(q, payload)
+def broadcast_notif(payload: str, target_user_id: int = 0):
+    logger.info("broadcast_notif: payload=%s target=%s streams=%s", payload, target_user_id, len(_notif_streams))
+    for info in list(_notif_streams.values()):
+        if target_user_id == 0 or info.get("user_id") == target_user_id:
+            _enqueue(info["queue"], payload)
 
-def broadcast_refresh_notifs():
-    logger.info("broadcast_refresh_notifs called")
-    broadcast_notif("refresh")
+def broadcast_refresh_notifs(target_user_id: int = 0):
+    logger.info("broadcast_refresh_notifs called target=%s", target_user_id)
+    broadcast_notif("refresh", target_user_id)
 
 
 def _should_deliver_fast(user_id: int, tl_type: str, author_id: int, visibility: str,
