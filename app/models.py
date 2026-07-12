@@ -823,8 +823,8 @@ class ServerSetting(Base):
     app_icon = Column(String(512), default="")
     admin_ids = Column(String(512), default="")
     admin_email = Column(String(255), default="")
-    federation_mode = Column(String(16), default="blacklist")  # whitelist or blacklist
-    enable_reactions = Column(Boolean, default=False)
+    federation_mode = Column(String(16), default="blacklist")
+    enable_reactions = Column(Boolean, default=True)
 
     @classmethod
     def get(cls, session):
