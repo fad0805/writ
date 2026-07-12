@@ -355,16 +355,19 @@ input[type="text"].explore-search-input:focus {
   padding: 4px;
   overflow-x: auto;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
+  mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
 }
 .timeline-tabs::-webkit-scrollbar { display: none; }
 .timeline-tabs a {
-  flex: 1;
-  min-width: 0;
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 10px 8px;
+  padding: 10px 12px;
   border-radius: 8px;
   color: var(--text-muted);
   font-size: 0.85em;
@@ -2891,7 +2894,7 @@ input[type="checkbox"] {
 @media (max-width: 768px) {
   .layout { grid-template-columns: 1fr; }
   .sidebar { display: none; }
-  .main-content { padding: 0; padding-top: 15px; padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); overflow-y: auto; overflow-x: hidden; }
+  .main-content { padding: 0; padding-top: 15px; padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
   .post-card { border-radius: 0; max-width: 100%; }
   .post-form { border-radius: 0; }
   .timeline-tabs { border-radius: 0; }
