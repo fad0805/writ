@@ -64,10 +64,15 @@ def _post_json(p, session, user, tl_type=None):
     if user and liked:
         my_reaction = session.query(Like.reaction).filter_by(user_id=user.id, post_id=p.id).scalar()
     reactions = {}
+    _default_react = "★"
     if p.likes:
+        _has_custom = False
         for like in p.likes:
             if like.reaction:
                 reactions[like.reaction] = reactions.get(like.reaction, 0) + 1
+                _has_custom = True
+            else:
+                reactions[_default_react] = reactions.get(_default_react, 0) + 1
     return {
         "id": p.id,
         "number": p.number or "",

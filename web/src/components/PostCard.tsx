@@ -73,14 +73,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   }, []);
   const [reactions, setReactions] = useState(post.reactions || {});
   const [myReaction, setMyReaction] = useState(post.my_reaction || null);
-  const [reactionEmojiMap, setReactionEmojiMap] = useState<Record<string, string>>({});
-  useEffect(() => {
-    fetch("/api/emojis").then(r=>r.json()).then((list: any[]) => {
-      const m: Record<string, string> = {};
-      for (const e of list) if (e.keyword && e.url) m[e.keyword] = e.url;
-      setReactionEmojiMap(m);
-    }).catch(() => {});
-  }, []);
+  const [reactionEmojiMap, setReactionEmojiMap] = useState<Record<string, string>>(() => (window as any).__emojiMap || {});
 
   useEffect(() => {
     if (currentUser?.pinned_posts) setPinned(currentUser.pinned_posts.includes(post.id));
@@ -506,7 +499,9 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
                 }}
                 style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 12, fontSize: 13, cursor: "pointer", border: "1px solid var(--border)", background: myReaction === emoji ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-secondary)" }}
               >
-                {emoji.startsWith(":") && emoji.endsWith(":") ? (
+                {emoji === "★" ? (
+                  <Icon name="star_filled" size={18} />
+                ) : emoji.startsWith(":") && emoji.endsWith(":") ? (
                   reactionEmojiMap[emoji.slice(1, -1)]
                     ? <img src={reactionEmojiMap[emoji.slice(1, -1)]} alt={emoji} style={{ width: 18, height: 18, verticalAlign: "middle" }} />
                     : <span>{emoji.slice(1, -1)}</span>
