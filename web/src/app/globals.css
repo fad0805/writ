@@ -1041,13 +1041,18 @@ input:focus {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 4px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+.notif-tabs::-webkit-scrollbar { display: none; }
 .notif-tab {
-  flex: 1;
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 8px;
+  padding: 8px 10px;
+  white-space: nowrap;
   border-radius: 8px;
   color: var(--text-muted);
   font-size: 0.85em;

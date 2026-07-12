@@ -55,7 +55,7 @@ export default function MobileNav() {
     setMenuOpen(false);
   }, [pathname]);
 
-  if (loading || !user) return null;
+  if (loading) return null;
 
   const isActive = (href: string) => {
     if (!pathname) return false;
@@ -77,7 +77,24 @@ export default function MobileNav() {
     router.replace("/");
   };
 
-  const moreActive = isActive("/users/settings") || isActive("/admin") || isActive(`/@${user.username}`);
+  if (!user) {
+    return (
+      <nav className="mobile-nav">
+        <Link href="/explore" className={`mobile-nav-item${isActive("/explore") ? " active" : ""}`}>
+          <Icon name="search" size={20} />
+          <span>탐색</span>
+        </Link>
+        <Link href="/series" className={`mobile-nav-item${isActive("/series") ? " active" : ""}`}>
+          <Icon name="books_solid" size={20} />
+          <span>시리즈</span>
+        </Link>
+        <Link href="/login" className={`mobile-nav-item${pathname === "/login" ? " active" : ""}`}>
+          <Icon name="user" size={20} />
+          <span>로그인</span>
+        </Link>
+      </nav>
+    );
+  }
 
   return (
     <>
@@ -97,12 +114,12 @@ export default function MobileNav() {
           </span>
           <span>알림</span>
         </Link>
-        <Link href="/series" className={`mobile-nav-item${pathname?.startsWith("/series") ? " active" : ""}`}>
+        <Link href="/series/my" className={`mobile-nav-item${pathname?.startsWith("/series") ? " active" : ""}`}>
           <Icon name="books_solid" size={20} />
           <span>시리즈</span>
         </Link>
         <button className={`mobile-nav-item${menuOpen ? " active" : ""}`} onClick={() => setMenuOpen(!menuOpen)}>
-          <Icon name={menuOpen ? "x" : "settings_solid"} size={20} />
+          <Icon name={menuOpen ? "x" : "menu"} size={20} />
           <span>더보기</span>
         </button>
       </nav>
@@ -110,7 +127,7 @@ export default function MobileNav() {
         <div className="mobile-more-overlay" onClick={() => setMenuOpen(false)}>
           <div className="mobile-more-menu" ref={menuRef} onClick={(e) => e.stopPropagation()}>
             <Link href={`/@${user.username}`} className="mobile-more-item">
-              <Icon name="user" /> <span>프로필</span>
+              <Icon name="user" /> <span>내 프로필</span>
             </Link>
             <Link href="/users/settings" className="mobile-more-item">
               <Icon name="settings" /> <span>설정 관리</span>
