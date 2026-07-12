@@ -2955,7 +2955,10 @@ input[type="checkbox"] {
   flex: 1;
   transition: color 0.15s;
   -webkit-tap-highlight-color: transparent;
-  color-scheme: light;
+  background: transparent;
+  border: none;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .mobile-nav-item .icon-wrap,
