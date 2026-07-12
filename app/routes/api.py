@@ -49,11 +49,11 @@ def _post_json(p, session, user, tl_type=None):
     boosted = session.query(Boost).filter_by(user_id=user.id, post_id=p.id).first() is not None if user else False
     bookmarked = session.query(Bookmark).filter_by(user_id=user.id, post_id=p.id).first() is not None if user else False
     booster = None
-    if user and p.author_id != user.id:
-        following_author = session.query(Follow).filter_by(follower_id=user.id, following_id=p.author_id, accepted=True).first()
-        if not following_author:
-            latest_boost = session.query(Boost).filter_by(post_id=p.id).order_by(desc(Boost.created_at)).first()
-            if latest_boost:
+    if p.author_id != (user.id if user else 0):
+        latest_boost = session.query(Boost).filter_by(post_id=p.id).order_by(desc(Boost.created_at)).first()
+        if latest_boost:
+            import datetime as _dt
+            if (_dt.datetime.now(_dt.timezone.utc) - latest_boost.created_at).total_seconds() < 10800:
                 booster = session.query(User).get(latest_boost.user_id)
     my_vote = None
     if user and p.poll_data:
