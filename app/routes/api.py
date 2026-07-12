@@ -3893,6 +3893,22 @@ def api_update_emoji(request: Request, emoji_id: int, category: str = Form(""), 
         s.commit()
         return {"ok": True, "emoji": {"id": emoji.id, "keyword": emoji.keyword, "file_name": emoji.file_name, "category": emoji.category, "aliases": emoji.aliases or [], "url": _emoji_url(emoji.file_name), "source_url": emoji.source_url or "", "domain": emoji.domain or ""}}
 
+@router.post("/emojis/{emoji_id}/copy")
+def api_copy_emoji(request: Request, emoji_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        src = s.query(CustomEmoji).get(emoji_id)
+        if not src:
+            raise HTTPException(status_code=404, detail="Emoji not found")
+        new_kw = src.keyword
+        existing = s.query(CustomEmoji).filter_by(keyword=new_kw, category="기본").first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Local emoji with this keyword already exists")
+        copy = CustomEmoji(keyword=new_kw, file_name=src.file_name, category="기본", aliases=src.aliases or [])
+        s.add(copy)
+        s.flush()
+        return {"ok": True, "emoji": {"id": copy.id, "keyword": copy.keyword, "file_name": copy.file_name, "category": copy.category, "aliases": copy.aliases or [], "url": _emoji_url(copy.file_name), "source_url": copy.source_url or "", "domain": copy.domain or ""}}
+
 @router.delete("/emojis/{emoji_id}")
 def api_delete_emoji(request: Request, emoji_id: int):
     user = require_auth(request)

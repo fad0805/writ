@@ -116,7 +116,7 @@ export default function AdminEmojiPage() {
                     </div>
                   </div>
                   {emo.category === "remote" && (
-                    <button type="button" onClick={async (e) => { e.stopPropagation(); const form = new FormData(); form.append("category", "기본"); const res = await fetch(`/api/emojis/${emo.id}`, { method: "PATCH", credentials: "include", body: form }); if (res.ok) { const d = await res.json(); setEmojis(emojis.map(e => e.id === emo.id ? d.emoji : e)); invalidateEmojiCache(); } }} className="btn btn-emoji-copy">복사</button>
+                    <button type="button" onClick={async (e) => { e.stopPropagation(); const res = await fetch(`/api/emojis/${emo.id}/copy`, { method: "POST", credentials: "include" }); if (res.ok) { const d = await res.json(); setEmojis([...emojis, d.emoji || d]); invalidateEmojiCache(); } }} className="btn btn-emoji-copy">복사</button>
                   )}
                   <button type="button" onClick={async (e) => { e.stopPropagation(); if (!confirm(`:${emo.keyword}:를 삭제하시겠습니까?`)) return; try { const res = await fetch(`/api/emojis/${emo.id}`, { method: "DELETE", credentials: "include" }); if (res.ok) { setEmojis(emojis.filter(e => e.id !== emo.id)); invalidateEmojiCache(); } } catch {} }} className="btn emoji-delete-btn">삭제</button>
                 </div>
