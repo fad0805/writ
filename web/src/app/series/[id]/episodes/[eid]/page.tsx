@@ -84,13 +84,7 @@ export default function EpisodeDetailPage() {
         ) : (
           <>
             {episode.summary && <blockquote className="episode-summary">{episode.summary}</blockquote>}
-            <div className="episode-body" dangerouslySetInnerHTML={{ __html: (() => {
-              let html = episode.content;
-              html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-              html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-              html = html.replace(/\n/g, '<br>');
-              return html;
-            })() }} />
+            <div className="episode-body" dangerouslySetInnerHTML={{ __html: episode.content }} />
             {episode.comment && <div className="episode-comment" dangerouslySetInnerHTML={{ __html: episode.comment }} />}
           </>
         )}
