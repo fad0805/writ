@@ -258,7 +258,7 @@ class Post(Base):
         content = re.sub(r'\*(.+?)\*', r'<em>\1</em>', content)
         content = content.replace('\n', '<br>')
 
-        # Convert :emoji: shortcodes to <img> tags (before <p> wrapping)
+        # Collect :emoji: shortcodes for tag array (content stays as :shortcode:)
         _emoji_pattern = re.compile(r':([a-z0-9_]{2,}):')
         _emoji_keywords = set(_emoji_pattern.findall(content))
         _emoji_map = {}
@@ -279,14 +279,6 @@ class Post(Base):
                     emoji = _es.query(CustomEmoji).filter_by(keyword=kw).first()
                     if emoji:
                         _emoji_map[kw] = (_get_emoji_url(emoji.file_name), emoji.keyword)
-            if _emoji_map:
-                def _replace_emoji(m):
-                    kw = m.group(1)
-                    if kw in _emoji_map:
-                        url, keyword = _emoji_map[kw]
-                        return f'<img src="{url}" alt=":{keyword}:" class="custom-emoji" />'
-                    return m.group(0)
-                content = _emoji_pattern.sub(_replace_emoji, content)
 
         tags = []
         if _emoji_map:
