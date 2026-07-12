@@ -515,7 +515,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
           </form>
           {currentUser?.enable_reactions !== false && post.author?.enable_reactions !== false ? (
             <span onClick={(e) => e.stopPropagation()} className="relative-wrap" style={{ marginBottom: -2 }}>
-              <EmojiPicker alignRight onEmoji={async (emoji) => {
+              <EmojiPicker onEmoji={async (emoji) => {
                 try {
                   await api.react(post.id, emoji);
                   setReactions({ ...reactions, [emoji]: (reactions[emoji] || 0) + 1 });
