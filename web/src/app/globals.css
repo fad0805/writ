@@ -2894,8 +2894,10 @@ input[type="checkbox"] {
   .sidebar { display: none; }
   .main-content { padding: 0; padding-top: 15px; padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
   .post-card { border-radius: 0; max-width: 100%; }
-  .post-form { border-radius: 0; }
-  .timeline-tabs { border-radius: 0; gap: 6px; overflow-x: auto; mask-image: linear-gradient(to right, black 85%, transparent 100%); -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%); margin-left: 12px; margin-right: 12px; }
+  .post-form { border-radius: 0; margin-left: 12px; margin-right: 12px; }
+  .visibility-selector label { flex-shrink: 0; }
+  .timeline-tabs { border-radius: 0; gap: 6px; margin-left: 12px; margin-right: 12px; position: sticky; top: 0; z-index: 100; background: var(--bg-primary); padding-top: 4px; padding-bottom: 4px; }
+  .timeline-tabs a { flex: 1; }
   .profile-header-banner { border-radius: 0; }
   .profile-header { border-radius: 0; }
   .notif-card { border-radius: 0; }
@@ -2953,6 +2955,7 @@ input[type="checkbox"] {
   flex: 1;
   transition: color 0.15s;
   -webkit-tap-highlight-color: transparent;
+  color-scheme: light;
 }
 
 .mobile-nav-item .icon-wrap,
