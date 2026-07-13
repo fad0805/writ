@@ -662,15 +662,17 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 User.id.in_(set(_booster_map.values()))
             ).all()}
             _booster_map = {pid: _booster_users.get(uid) for pid, uid in _booster_map.items()}
-        # Batch load reactions
+        # Batch load reactions (GROUP BY in SQL)
         _reactions_map = {}
         _default_react = "★"
-        all_post_likes = session.query(Like).filter(Like.post_id.in_(post_ids)).all()
-        for l in all_post_likes:
-            if l.post_id not in _reactions_map:
-                _reactions_map[l.post_id] = {}
-            r = l.reaction or _default_react
-            _reactions_map[l.post_id][r] = _reactions_map[l.post_id].get(r, 0) + 1
+        from sqlalchemy import func as _func
+        _reaction_rows = session.query(
+            Like.post_id, _func.coalesce(Like.reaction, _default_react), _func.count(Like.id)
+        ).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).all()
+        for pid, react, cnt in _reaction_rows:
+            if pid not in _reactions_map:
+                _reactions_map[pid] = {}
+            _reactions_map[pid][react] = cnt
         # Batch load mentioned users
         all_mentioned_ids = set()
         for p in posts[:limit]:
