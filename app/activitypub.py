@@ -709,9 +709,9 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
             session.add(notification)
             session.commit()
 
-    # Send Accept only if auto-approved (not locked)
-    if accepted:
-        _send_accept(actor_url, activity_id, target, follower=follower)
+        # Send Accept only if auto-approved (not locked) — inside session so follower is still bound
+        if accepted:
+            _send_accept(actor_url, activity_id, target, follower=follower)
 
     return (200, "Followed")
 
