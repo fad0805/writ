@@ -30,12 +30,12 @@ function formatRelative(iso: string, now: number = Date.now()): string {
 
 function rewriteLinks(text: string, validMentions?: Set<string>): string {
   text = text.replace(
-    /<a\s+href="https?:\/\/([^"/]+)\/@([a-zA-Z][a-zA-Z0-9]*)"[^>]*>@?\w*<\/a>/gi,
+    /<a\s+href="https?:\/\/([^"/]+)\/@([a-zA-Z_][a-zA-Z0-9_]*)"[^>]*>@?\w*<\/a>/gi,
     (_m: string, domain: string, user: string) =>
       `<a href="/@${user}@${domain}" class="mention-link">@${user}@${domain}</a>`
   );
 
-  text = text.replace(/(^|>|\s)@([a-zA-Z][a-zA-Z0-9]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?)/g, (_m, before, handle) => {
+  text = text.replace(/(^|>|\s)@([a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?)/g, (_m, before, handle) => {
     return `${before}<a href="/@${handle}" class="mention-link">@${handle}</a>`;
   });
 
@@ -200,7 +200,12 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
         const isLocal = host === (qUrl.match(/https?:\/\/([^/]+)/)?.[1]);
         const linkHref = isLocal ? qUrl.replace(/https?:\/\/[^/]+/, '') : qUrl;
         const linkTarget = isLocal ? '' : ' target="_blank" rel="noopener noreferrer"';
-        html = html.replace(new RegExp(escUrl, 'gi'), `<a href="${linkHref}"${linkTarget}>${qUrl}</a>`);
+        const inAnchorRe = new RegExp(`<a\\s+href="[^"]*${escUrl}[^"]*"[^>]*>[\\s\\S]*?<\\/a>`, 'gi');
+        if (inAnchorRe.test(html)) {
+          html = html.replace(new RegExp(`<a(\\s+)href="[^"]*${escUrl}[^"]*"`), `<a$1href="${linkHref}"${linkTarget}`);
+        } else {
+          html = html.replace(new RegExp(`(^|>|　|\\s)${escUrl}`, 'gi'), `$1<a href="${linkHref}"${linkTarget}>${qUrl}</a>`);
+        }
       }
       html = html.replace(/<span class="quote-inline">\s*RE:\s*<\/span>/gi, '');
     }
@@ -209,7 +214,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   const [contentHtml, setContentHtml] = useState(() => buildContentHtml());
 
   useEffect(() => {
-    const mentionRe = /<a\s+href="\/@([a-zA-Z][a-zA-Z0-9]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}))"[^>]*>[^<]*<\/a>/g;
+    const mentionRe = /<a\s+href="\/@([a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}))"[^>]*>[^<]*<\/a>/g;
     const remoteMentions: string[] = [];
     let m: RegExpExecArray | null;
     while ((m = mentionRe.exec(contentHtml)) !== null) {

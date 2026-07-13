@@ -293,7 +293,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
 
   const insertMention = useCallback((u: User) => {
     if (mentionStart === -1) return;
-    const mentionRegex = /@[a-zA-Z][a-zA-Z0-9]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?/g;
+    const mentionRegex = /@[a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?/g;
     const afterMention = content.slice(mentionStart + 1);
     const wordEndMatch = afterMention.search(mentionRegex);
     const wordEnd = mentionStart + 1 + (wordEndMatch >= 0 ? wordEndMatch : afterMention.length);
