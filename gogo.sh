@@ -506,6 +506,76 @@ with get_session() as s:
     print(f'deleted {deleted} notifications for deleted posts')
 "
 
+elif [ "$1" = "fix-follow" ]; then
+  local_name="${2:-siarte}"
+  remote_handle="${3:-}"
+  if [ -z "$remote_handle" ]; then
+    echo "사용법: ./gogo.sh fix-follow [로컬유저] [원격핸들]" >&2
+    echo "예시: ./gogo.sh fix-follow siarte alex@daydream.ink" >&2
+    exit 1
+  fi
+  docker compose exec -T -e LOCAL_USER="$local_name" -e REMOTE_HANDLE="$remote_handle" api python3 << 'PYEOF'
+import os, json, time
+from app.models import Follow, User, get_session
+from app.activitypub import _post_to_inbox
+from app.config import BASE_URL
+
+local_name = os.environ["LOCAL_USER"]
+remote_handle = os.environ["REMOTE_HANDLE"]
+
+with get_session() as s:
+    me = s.query(User).filter_by(username=local_name, is_remote=False).first()
+    if not me:
+        print(f"local user '{local_name}' not found")
+        exit(1)
+    remote = s.query(User).filter_by(username=remote_handle, is_remote=True).first()
+    if not remote:
+        # try partial match on remote_url
+        domain = remote_handle.split("@")[-1] if "@" in remote_handle else None
+        if domain:
+            remote = s.query(User).filter(User.remote_url.contains(domain)).first()
+    if not remote:
+        print(f"remote user '{remote_handle}' not found")
+        print("remote users in DB:")
+        for u in s.query(User).filter(User.is_remote == True).all():
+            print(f"  {u.username} ({u.remote_url})")
+        exit(1)
+
+    follow = s.query(Follow).filter_by(follower_id=remote.id, following_id=me.id).first()
+    if not follow:
+        print(f"no follow record: {remote_handle}->{local_name}")
+        follow2 = s.query(Follow).filter_by(follower_id=me.id, following_id=remote.id).first()
+        if follow2:
+            print(f"  reverse follow exists (local->remote): accepted={follow2.accepted}")
+        exit(1)
+
+    was = follow.accepted
+    if was:
+        print("already accepted=True")
+    else:
+        follow.accepted = True
+        s.commit()
+        print(f"accepted: {was} -> True")
+
+    inbox = remote.inbox_url or remote.shared_inbox_url or (remote.actor_uri().rstrip("/") + "/inbox")
+    print(f"follower: {remote.username} inbox: {inbox}")
+
+    activity_id = follow.activity_id or f"{remote.actor_uri()}/follows/{follow.id}"
+    follow_obj = {"id": activity_id, "type": "Follow", "actor": remote.actor_uri(), "object": me.actor_uri()}
+    accept = {
+        "@context": "https://www.w3.org/ns/activitystreams",
+        "id": f"{BASE_URL}/activities/accept/{follow.id}-{int(time.time())}",
+        "type": "Accept",
+        "actor": me.actor_uri(),
+        "object": follow_obj,
+    }
+    print(f"sending Accept to {inbox} ...")
+    try:
+        _post_to_inbox(inbox, accept, me)
+        print("done")
+    except Exception as e:
+        print(f"send failed: {e}")
+PYEOF
 elif [ "$1" = "flag-test-signed" ]; then
   docker compose exec -T api python3 << 'PYEOF'
 import httpx, json, time, datetime, hashlib, base64
@@ -777,4 +847,5 @@ else
   echo "  network-check   - 네트워크 연결 확인"
   echo "  api-test        - API 인박스 직접 테스트"
   echo "  migrate-emojis  - 이모지 파일 local/remote 경로 마이그레이션"
+  echo "  fix-follow      - 꼬인 팔로우 강제 수락 및 Accept 전송 (예: ./gogo.sh fix-follow siarte alex@daydream.ink)"
 fi
