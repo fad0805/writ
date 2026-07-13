@@ -166,7 +166,10 @@ def _user_json(u):
         "pinned_series": (u.pinned_series or []) if hasattr(u, 'pinned_series') else [],
         "episode_default_visibility": u.episode_default_visibility or "public",
         "follow_list_visibility": getattr(u, 'follow_list_visibility', 'public') or 'public',
-        "custom_fields": (u.custom_fields or []) if hasattr(u, 'custom_fields') else [],
+        "custom_fields": [
+            {"name": f.get("name") or f.get("label", ""), "label": f.get("name") or f.get("label", ""), "value": f.get("value", "")}
+            for f in (u.custom_fields or [])
+        ] if hasattr(u, 'custom_fields') else [],
         "profile_hashtags": (u.profile_hashtags or []) if hasattr(u, 'profile_hashtags') else [],
         "enable_reactions": getattr(u, 'enable_reactions', True),
         "aliases": (u.aliases or []) if hasattr(u, 'aliases') else [],
@@ -3576,7 +3579,10 @@ def api_update_profile(request: Request, display_name: str = Form(""), summary: 
         try:
             parsed_fields = json.loads(custom_fields)
             if isinstance(parsed_fields, list):
-                db.custom_fields = parsed_fields
+                db.custom_fields = [
+                    {"name": f.get("name") or f.get("label", ""), "value": f.get("value", "")}
+                    for f in parsed_fields
+                ]
         except (json.JSONDecodeError, TypeError):
             pass
         try:

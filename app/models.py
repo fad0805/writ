@@ -154,8 +154,8 @@ class User(Base):
         custom_fields = getattr(self, 'custom_fields', None) or []
         if custom_fields:
             result["attachment"] = [
-                {"type": "PropertyValue", "name": cf.get("name", ""), "value": cf.get("value", "")}
-                for cf in custom_fields if cf.get("name") and cf.get("value")
+                {"type": "PropertyValue", "name": cf.get("name") or cf.get("label", ""), "value": cf.get("value", "")}
+                for cf in custom_fields if (cf.get("name") or cf.get("label")) and cf.get("value")
             ]
         return result
 
