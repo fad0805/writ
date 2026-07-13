@@ -930,13 +930,15 @@ def api_create_post(
         s.commit()
 
         # notify mentioned users
+        mentioned_notified = set()
         for mu_id in mentioned_ids:
             if mu_id != user.id:
                 notif = Notification(user_id=mu_id, from_user_id=user.id, notification_type="mention", post_id=post.id)
                 s.add(notif)
+                mentioned_notified.add(mu_id)
         if parent_id:
             parent = s.query(Post).filter_by(id=parent_id).first()
-            if parent and parent.author_id != user.id:
+            if parent and parent.author_id != user.id and parent.author_id not in mentioned_notified:
                 notif = Notification(user_id=parent.author_id, from_user_id=user.id, notification_type="reply", post_id=post.id)
                 s.add(notif)
         s.commit()
@@ -1118,9 +1120,12 @@ def api_like_post(request: Request, post_id: int):
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
         existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
+        existing_notif = s.query(Notification).filter_by(
+            user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id
+        ).first() if post.author_id != user.id else None
         if not existing:
             s.add(Like(user_id=user.id, post_id=post_id))
-            if post.author_id != user.id:
+            if post.author_id != user.id and not existing_notif:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
             s.commit()
             if post.author_id != user.id:
@@ -1195,6 +1200,9 @@ def api_boost_post(request: Request, post_id: int):
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
         existing = s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
+        existing_notif = s.query(Notification).filter_by(
+            user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id
+        ).first() if post.author_id != user.id else None
         if not existing:
             s.add(Boost(user_id=user.id, post_id=post_id))
             three_hours_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3)
@@ -1204,7 +1212,7 @@ def api_boost_post(request: Request, post_id: int):
             if (twentieth and post.created_at and post.created_at < twentieth
                 and post.created_at < three_hours_ago):
                 post.bumped_at = datetime.datetime.now(datetime.timezone.utc)
-            if post.author_id != user.id:
+            if post.author_id != user.id and not existing_notif:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id))
             s.commit()
             broadcast_refresh_notifs(post.author_id)
@@ -1333,12 +1341,15 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
         reactions_disabled = not settings.enable_reactions or not getattr(post.author, 'enable_reactions', True)
         final_emoji = emoji if not reactions_disabled else None
         existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
+        existing_notif = s.query(Notification).filter_by(
+            user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id
+        ).first() if post.author_id != user.id else None
         is_new = False
         if existing:
             existing.reaction = final_emoji
         else:
             s.add(Like(user_id=user.id, post_id=post_id, reaction=final_emoji))
-            if post.author_id != user.id:
+            if post.author_id != user.id and not existing_notif:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
             is_new = True
         s.commit()

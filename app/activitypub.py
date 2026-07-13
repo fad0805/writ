@@ -1251,13 +1251,13 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         notification_type="mention", post_id=post.id,
                     ))
 
-            # Notify local followers who enabled post notifications (skip self)
+            # Notify local followers who enabled post notifications (skip self + already notified)
             followers = session.query(Follow).filter(
                 Follow.following_id == actor.id,
                 Follow.notify_on_post == True,
             ).all()
             for f in followers:
-                if not f.follower.is_remote and f.follower.id != actor.id:
+                if not f.follower.is_remote and f.follower.id != actor.id and f.follower.id not in _notified:
                     session.add(Notification(
                         user_id=f.follower.id,
                         from_user_id=actor.id,
@@ -1388,13 +1388,17 @@ def _handle_like(activity: dict) -> tuple[int, str]:
         )
         session.add(like)
 
-        n = Notification(
-            user_id=post.author_id,
-            from_user_id=actor.id,
-            notification_type="like",
-            post_id=post.id,
-        )
-        session.add(n)
+        existing_n = session.query(Notification).filter_by(
+            user_id=post.author_id, from_user_id=actor.id, notification_type="like", post_id=post.id
+        ).first()
+        if not existing_n:
+            n = Notification(
+                user_id=post.author_id,
+                from_user_id=actor.id,
+                notification_type="like",
+                post_id=post.id,
+            )
+            session.add(n)
         session.commit()
 
     return (200, "Liked")
@@ -1501,13 +1505,17 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
         )
         session.add(boost)
 
-        n = Notification(
-            user_id=post.author_id,
-            from_user_id=actor.id,
-            notification_type="boost",
-            post_id=post.id,
-        )
-        session.add(n)
+        existing_n = session.query(Notification).filter_by(
+            user_id=post.author_id, from_user_id=actor.id, notification_type="boost", post_id=post.id
+        ).first()
+        if not existing_n:
+            n = Notification(
+                user_id=post.author_id,
+                from_user_id=actor.id,
+                notification_type="boost",
+                post_id=post.id,
+            )
+            session.add(n)
         session.commit()
 
     return (200, "Announced")
