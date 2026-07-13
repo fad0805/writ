@@ -11,6 +11,7 @@ import Avatar from "@/components/Avatar";
 import MentionModal from "@/components/MentionModal";
 import ClickableCover from "@/components/ClickableCover";
 import ConfirmModal from "@/components/ConfirmModal";
+import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
 
 export default function ProfilePage() {
   const params = useParams();
@@ -18,6 +19,7 @@ export default function ProfilePage() {
   const [showMention, setShowMention] = useState(false);
   const [showRemoveFollower, setShowRemoveFollower] = useState(false);
   const [showNote, setShowNote] = useState(false);
+  const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
   const [showMuteModal, setShowMuteModal] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [muteDuration, setMuteDuration] = useState(0);
@@ -67,6 +69,7 @@ export default function ProfilePage() {
       setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setHasPendingFollower(d.has_pending_follower); setIsMine(d.is_mine);
       setIsBlocked(!!(d as any).is_blocked); setAmBlocked(!!(d as any).am_i_blocked); setIsMutedUser(!!(d as any).is_muted);
       setPinnedPosts((d as any).pinned_posts_data || []); setPinnedSeries((d as any).pinned_series_data || []);
+      getCustomEmojis().then(setEmojiMap);
     } catch {}
     setLoading(false);
   }, [username]);
@@ -244,14 +247,17 @@ export default function ProfilePage() {
             <p className="profile-username">@{profile.display_handle || profile.username}</p>
             {profile.summary && (
               <p className="profile-summary" dangerouslySetInnerHTML={{
-                __html: profile.summary
-                  .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-                  .replace(/<[^>]+\s+on\w+\s*=\s*[^>]*>/gi, '')
-                  .replace(/<img[^>]*>/gi, '')
-                  .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '')
-                  .replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '')
-                  .replace(/<embed[^>]*>/gi, '')
-                  .replace(/\n/g, '<br>')
+                __html: renderCustomEmojis(
+                  profile.summary
+                    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                    .replace(/<[^>]+\s+on\w+\s*=\s*[^>]*>/gi, '')
+                    .replace(/<img[^>]*>/gi, '')
+                    .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '')
+                    .replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '')
+                    .replace(/<embed[^>]*>/gi, '')
+                    .replace(/\n/g, '<br>'),
+                  emojiMap
+                )
                   .replace(/<a\s+href="https?:\/\/([^/]+)\/@(\w+)"[^>]*>([^<]*)<\/a>/gi,
                     (_m: string, domain: string, user: string) =>
                       `<a href="/@${user}@${domain}" class="mention-link">@${user}@${domain}</a>`
