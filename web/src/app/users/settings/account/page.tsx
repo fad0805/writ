@@ -92,7 +92,7 @@ export default function AccountSettingsPage() {
         <form onSubmit={handleSubmit}>
           <div className="form-group" style={{ marginBottom: 24 }}>
             <label>새 이메일 주소</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="new@example.com" className="cw-input" />
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={user?.email || ""} className="cw-input" />
             <p className="form-help">변경할 이메일 주소를 입력하세요. 비워두면 변경되지 않습니다.</p>
           </div>
           <div className="form-group" style={{ marginBottom: 8 }}>

@@ -41,6 +41,7 @@ export interface User {
   is_limited?: boolean;
   is_frozen?: boolean;
   is_deceased?: boolean;
+  email?: string;
   email_verified?: boolean;
   role?: string;
   default_visibility?: string;
