@@ -1665,15 +1665,23 @@ def api_user_media(request: Request, username: str, limit: int = Query(12), offs
         if not profile:
             raise HTTPException(status_code=404, detail="User not found")
         import json as _json
-        raw = s.query(Post).options(
+        all_posts = s.query(Post).options(
             selectinload(Post.author)
         ).filter(
             Post.author_id == profile.id,
             Post.is_deleted == False,
-        ).order_by(desc(Post.created_at)).offset(offset).limit(limit + 1).all()
-        raw = [p for p in raw if p.media_attachments and len(_json.loads(p.media_attachments) if isinstance(p.media_attachments, str) else (p.media_attachments or [])) > 0]
-        has_more = len(raw) > limit
-        posts = [_post_json(p, s, user) for p in raw[:limit] if _can_view(p, user, s)]
+        ).order_by(desc(Post.created_at)).all()
+        media_posts = []
+        for p in all_posts:
+            att = p.media_attachments
+            if not att:
+                continue
+            if isinstance(att, str):
+                att = _json.loads(att)
+            if att:
+                media_posts.append(p)
+        has_more = len(media_posts) > offset + limit
+        posts = [_post_json(p, s, user) for p in media_posts[offset:offset + limit] if _can_view(p, user, s)]
         return {"posts": posts, "has_more": has_more}
 
 
