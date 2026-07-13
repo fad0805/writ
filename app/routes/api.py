@@ -4102,7 +4102,7 @@ def api_copy_emoji(request: Request, emoji_id: int):
         from app.utils.storage import get_storage as _get_storage
         _storage = _get_storage()
         try:
-            _data = _storage.read(f"emojis/{_src_sub}/{src.file_name}")
+            _data = _storage.get(f"emojis/{_src_sub}/{src.file_name}")
         except Exception:
             pass
         if not _data:
