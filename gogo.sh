@@ -707,7 +707,7 @@ import os, shutil
 from app.models import CustomEmoji, get_session
 from app.config import S3_ENABLED
 
-EMOJI_DIR = os.path.join(os.path.dirname(__file__), '..', 'web', 'public', 'emojis')
+EMOJI_DIR = '/app/web/public/emojis'
 moved = 0
 skipped = 0
 errors = 0
