@@ -3474,10 +3474,11 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
                 _inboxes[_key] = True
         if _inboxes:
             _delete_activity = {
-                "@context": "https://www.w3.org/ns/activitystreams",
+                "@context": ["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"],
                 "id": f"{_actor_uri}#delete",
                 "type": "Delete",
                 "actor": _actor_uri,
+                "to": ["https://www.w3.org/ns/activitystreams#Public"],
                 "object": _actor_uri,
             }
             from app.activitypub import _post_to_inbox

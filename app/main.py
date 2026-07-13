@@ -245,6 +245,10 @@ def user_actor(request: Request, username: str):
         user = session.query(User).filter_by(username=username, is_remote=False).first()
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
+        if getattr(user, 'is_deactivated', False):
+            if "application/activity+json" in accept or "application/ld+json" in accept:
+                return JSONResponse({"error": "Gone"}, status_code=410)
+            raise HTTPException(status_code=410, detail="Account deleted")
 
         # If ActivityPub request, return actor JSON
         if "application/activity+json" in accept or "application/ld+json" in accept:
@@ -634,6 +638,10 @@ def get_user_by_handle(request: Request, username: str):
         user = session.query(User).filter_by(username=username, is_remote=False).first()
         if not user:
             raise HTTPException(status_code=404, detail="Not found")
+        if getattr(user, 'is_deactivated', False):
+            if "application/activity+json" in accept or "application/ld+json" in accept:
+                return JSONResponse({"error": "Gone"}, status_code=410)
+            raise HTTPException(status_code=410, detail="Account deleted")
 
         if "application/activity+json" in accept or "application/ld+json" in accept:
             return JSONResponse(content=user.to_ap_actor(),
