@@ -41,6 +41,14 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
     if post_visibility not in ("public", "home", "followers") or not _streams:
         return
     payload = json.dumps(post_json, default=str)
+    mentioned_ids = post_json.get("mentioned_user_ids") or []
+    # Extract parent author ID from reply_context
+    parent_author_id = None
+    reply_ctx = post_json.get("reply_context")
+    if reply_ctx and isinstance(reply_ctx, dict):
+        parent_author = reply_ctx.get("author")
+        if parent_author:
+            parent_author_id = parent_author.get("id")
     with get_session() as s:
         follower_ids = {f.follower_id for f in s.query(Follow).filter_by(
             following_id=post_author_id, accepted=True
@@ -51,11 +59,34 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
         author = s.query(User).get(post_author_id)
         author_is_local = author.is_remote == False if author else False
 
+        # Pre-load following lists for home timeline streams
+        home_uids = {info["user_id"] for info in _streams.values() if info.get("tl_type") == "home"}
+        home_follows = {}
+        if home_uids:
+            for f in s.query(Follow).filter(Follow.follower_id.in_(home_uids), Follow.accepted == True).all():
+                home_follows.setdefault(f.follower_id, set()).add(f.following_id)
+
         for sid, info in list(_streams.items()):
             uid = info["user_id"]
             tl = info["tl_type"]
-            if _should_deliver_fast(uid, tl, post_author_id, post_visibility, follower_ids, booster_ids, author_is_local):
-                _enqueue(info["queue"], payload)
+            if not _should_deliver_fast(uid, tl, post_author_id, post_visibility, follower_ids, booster_ids, author_is_local):
+                continue
+            # Additional filtering for home timeline
+            if tl == "home" and (mentioned_ids or parent_author_id):
+                user_follows = home_follows.get(uid, set()) | {uid}
+                # Filter: mention of non-followed user
+                if mentioned_ids:
+                    skip = False
+                    for muid in mentioned_ids:
+                        if muid != post_author_id and muid not in user_follows:
+                            skip = True
+                            break
+                    if skip:
+                        continue
+                # Filter: parent author not followed
+                if parent_author_id and parent_author_id != uid and parent_author_id not in user_follows:
+                    continue
+            _enqueue(info["queue"], payload)
 
 _notif_streams: dict[int, dict] = {}
 _notif_counter = 0
