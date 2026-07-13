@@ -113,6 +113,7 @@ export default function NovelDetailPage() {
                     {isFollowing ? "팔로잉" : "팔로우"}
                   </button>
                 )}
+                {isMine && <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>}
                 {novel.visibility !== "private" && <ShareButton url={`/series/${novel.id}`} />}
                 <div className="series-more-wrap" onClick={() => setShowMoreMenu(!showMoreMenu)}>
                   <button className="action-btn" title="더보기"><Icon name="more" /></button>
@@ -139,7 +140,6 @@ export default function NovelDetailPage() {
                             setShowMoreMenu(false);
                           }}><Icon name={isSeriesPinned ? "pin_filled" : "pin"} /> {isSeriesPinned ? "고정 해제" : "고정"}</button>
                           <button onClick={() => { router.push(`/series/${novel.id}/edit`); setShowMoreMenu(false); }}><Icon name="edit" /> 시리즈 편집</button>
-                          <button onClick={() => { router.push(`/series/${novel.id}/episodes/new`); setShowMoreMenu(false); }}><Icon name="plus" /> 새 에피소드</button>
                         </>
                       )}
                     </div>
