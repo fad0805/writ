@@ -847,13 +847,16 @@ def api_create_post(
         s.commit()
 
         from app.push import send_push_to_user
+        from app.timeline_stream import broadcast_refresh_notifs as _brn
         for mu_id in mentioned_ids:
             if mu_id != user.id:
                 send_push_to_user(mu_id, "mention", user.username, post.id)
+                _brn(mu_id)
         if parent_id:
             parent = s.query(Post).filter_by(id=parent_id).first()
             if parent and parent.author_id != user.id and parent.author_id not in [mid for mid in mentioned_ids if mid != user.id]:
                 send_push_to_user(parent.author_id, "reply", user.username, post.id)
+                _brn(parent.author_id)
 
         # Async federation broadcast (background thread so it doesn't block response)
         threading.Thread(target=_broadcast_federation, args=(user, post, visibility), daemon=True).start()
@@ -989,7 +992,8 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
             ))
         s.commit()
         from app.timeline_stream import broadcast_refresh_notifs
-        broadcast_refresh_notifs()
+        for admin in admins:
+            broadcast_refresh_notifs(admin.id)
         from app.push import send_push_to_user
         for admin in admins:
             if admin.id != user.id:
@@ -1025,7 +1029,7 @@ def api_like_post(request: Request, post_id: int):
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
             s.commit()
             if post.author_id != user.id:
-                broadcast_refresh_notifs()
+                broadcast_refresh_notifs(post.author_id)
                 from app.push import send_push_to_user
                 send_push_to_user(post.author_id, "like", user.username, post_id)
         if post.author.is_remote and post.author.shared_inbox_url:
@@ -1066,7 +1070,7 @@ def api_unlike_post(request: Request, post_id: int):
                 from_user_id=user.id, notification_type="like", post_id=post_id
             ).delete()
             s.commit()
-            broadcast_refresh_notifs()
+            broadcast_refresh_notifs(post.author_id)
         if post.author.is_remote and post.author.shared_inbox_url:
             undo = {
                 "@context": "https://www.w3.org/ns/activitystreams",
@@ -1108,7 +1112,7 @@ def api_boost_post(request: Request, post_id: int):
             if post.author_id != user.id:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id))
             s.commit()
-            broadcast_refresh_notifs()
+            broadcast_refresh_notifs(post.author_id)
             if post.author_id != user.id:
                 from app.push import send_push_to_user
                 send_push_to_user(post.author_id, "boost", user.username, post_id)
@@ -1199,7 +1203,7 @@ def api_unboost_post(request: Request, post_id: int):
             if remaining == 0:
                 post.bumped_at = None
             s.commit()
-            broadcast_refresh_notifs()
+            broadcast_refresh_notifs(post.author_id)
         if post.author and post.author.is_remote and post.author.shared_inbox_url:
             undo = {
                 "@context": "https://www.w3.org/ns/activitystreams",
@@ -1279,7 +1283,7 @@ def api_unreact_post(request: Request, post_id: int):
                 from_user_id=user.id, notification_type="like", post_id=post_id
             ).delete()
             s.commit()
-            broadcast_refresh_notifs()
+            broadcast_refresh_notifs(post.author_id)
             if post.author.is_remote and post.author.shared_inbox_url:
                 from app.activitypub import _post_to_inbox
                 undo = {
@@ -1733,7 +1737,7 @@ def api_follow(request: Request, username: str):
             if not existing_notif:
                 s.add(Notification(user_id=target.id, from_user_id=user.id, notification_type="follow_request" if not accepted else "follow"))
             s.commit()
-            broadcast_refresh_notifs()
+            broadcast_refresh_notifs(target.id)
             from app.push import send_push_to_user
             send_push_to_user(target.id, "follow" if accepted else "follow_request", user.username)
     return {"ok": True}
