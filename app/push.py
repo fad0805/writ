@@ -52,6 +52,16 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
             title, body = NOTIF_LABELS.get(notification_type, ("알림", "새 알림이 있습니다"))
             if from_username:
                 body = f"@{from_username} — {body}"
+            if post_id and notification_type in ("reply", "mention"):
+                try:
+                    from app.models import Post as _Po
+                    _p = s.query(_Po).get(post_id)
+                    if _p and _p.content:
+                        _preview = _p.content.replace("<br>", " ").replace("\n", " ").strip()[:80]
+                        if _preview:
+                            body += f"\n{_preview}"
+                except Exception:
+                    pass
 
             url = "/notifications"
             if notification_type in ("reply", "mention") and post_id:
