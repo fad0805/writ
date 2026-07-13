@@ -85,7 +85,7 @@ export default function MobileNav() {
           <span>탐색</span>
         </Link>
         <Link href="/series" className={`mobile-nav-item${isActive("/series") ? " active" : ""}`}>
-          <Icon name="books_solid" size={20} />
+          <Icon name={isActive("/series") ? "books_solid" : "books"} size={20} />
           <span>시리즈</span>
         </Link>
         <Link href="/login" className={`mobile-nav-item${pathname === "/login" ? " active" : ""}`}>
@@ -115,7 +115,7 @@ export default function MobileNav() {
           <span>알림</span>
         </Link>
         <Link href="/series/my" className={`mobile-nav-item${pathname?.startsWith("/series") ? " active" : ""}`}>
-          <Icon name="books_solid" size={20} />
+          <Icon name={pathname?.startsWith("/series") ? "books_solid" : "books"} size={20} />
           <span>시리즈</span>
         </Link>
         <button className={`mobile-nav-item${menuOpen ? " active" : ""}`} onClick={() => setMenuOpen(!menuOpen)}>
