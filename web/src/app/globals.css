@@ -2890,6 +2890,20 @@ input[type="checkbox"] {
   font-size: 0.9em;
 }
 .subtitle { color: var(--text-muted); margin-bottom: 20px; }
+.draft-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9em;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+.draft-banner .btn { font-size: 0.85em; padding: 4px 10px; }
 .novel-form,
 .episode-form {
   background: var(--bg-secondary);

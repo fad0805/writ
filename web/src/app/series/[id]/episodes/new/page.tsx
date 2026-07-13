@@ -1,10 +1,30 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/lib/api";
 import Icon from "@/components/Icon";
 import EpisodeEditor from "@/components/EpisodeEditor";
 import Link from "next/link";
+
+const DRAFT_KEY_PREFIX = "ep-draft-";
+const AUTO_SAVE_DELAY = 3000;
+
+function getDraftKey(novelId: number) { return `${DRAFT_KEY_PREFIX}${novelId}`; }
+
+function saveDraft(key: string, data: Record<string, any>) {
+  try { localStorage.setItem(key, JSON.stringify({ ...data, savedAt: Date.now() })); } catch {}
+}
+
+function loadDraft(key: string) {
+  try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+
+function clearDraft(key: string) { try { localStorage.removeItem(key); } catch {} }
+
+function formatTime(ts: number) {
+  const d = new Date(ts);
+  return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+}
 
 export default function NewEpisodePage() {
   const params = useParams();
@@ -18,15 +38,49 @@ export default function NewEpisodePage() {
   const [announceComment, setAnnounceComment] = useState("");
   const [novelTitle, setNovelTitle] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [lastSaved, setLastSaved] = useState<number | null>(null);
+  const [showRestored, setShowRestored] = useState(false);
+  const novelId = Number(Array.isArray(params.id) ? params.id[0] : params.id);
+  const draftKey = getDraftKey(novelId);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadedRef = useRef(false);
 
   useEffect(() => {
-    const novelId = Number(Array.isArray(params.id) ? params.id[0] : params.id);
     if (isNaN(novelId)) return;
     api.getNovel(novelId).then((d) => {
       if (!d.is_mine) { router.push(`/series/${novelId}`); return; }
       setNovelTitle(d.novel.title);
     }).catch(() => router.push("/series"));
-  }, [params.id, router]);
+  }, [novelId, router]);
+
+  const doSave = useCallback(() => {
+    saveDraft(draftKey, { title, summary, content, comment, isPublished, announce, announceComment });
+    setLastSaved(Date.now());
+  }, [draftKey, title, summary, content, comment, isPublished, announce, announceComment]);
+
+  useEffect(() => {
+    if (!loadedRef.current) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(doSave, AUTO_SAVE_DELAY);
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+  }, [title, summary, content, comment, isPublished, announce, announceComment, doSave]);
+
+  useEffect(() => {
+    if (isNaN(novelId)) return;
+    const draft = loadDraft(draftKey);
+    if (draft) {
+      setTitle(draft.title || "");
+      setSummary(draft.summary || "");
+      setContent(draft.content || "");
+      setComment(draft.comment || "");
+      setIsPublished(draft.isPublished !== undefined ? draft.isPublished : true);
+      setAnnounce(draft.announce || false);
+      setAnnounceComment(draft.announceComment || "");
+      setLastSaved(draft.savedAt);
+      setShowRestored(true);
+    }
+    loadedRef.current = true;
+  }, [novelId, draftKey]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +100,7 @@ export default function NewEpisodePage() {
       }
       const res = await fetch(`/api/series/${params.id}/episodes/new`, { method: "POST", credentials: "include", body: form });
       const data = await res.json();
-      if (res.ok) router.push(`/series/${params.id}/episodes/${data.episode_id}`);
+      if (res.ok) { clearDraft(draftKey); router.push(`/series/${params.id}/episodes/${data.episode_id}`); }
       else alert("게시 실패");
     } catch { alert("게시 실패"); }
     setSubmitting(false);
@@ -55,6 +109,13 @@ export default function NewEpisodePage() {
   return (
     <>
       <h2><Link href={`/series/${params.id}`} className="no-underline" style={{ color: "inherit" }}>{novelTitle || "로딩 중..."}</Link></h2>
+      {showRestored && (
+        <div className="draft-banner">
+          <Icon name="check" /> 임시 저장된 글이 있습니다{lastSaved ? ` (${formatTime(lastSaved)} 저장)` : ""}.
+          <button className="btn btn-small btn-outline" onClick={() => setShowRestored(false)}>이어서 쓰기</button>
+          <button className="btn btn-small" onClick={() => { clearDraft(draftKey); setTitle(""); setSummary(""); setContent(""); setComment(""); setShowRestored(false); }}>비우기</button>
+        </div>
+      )}
       <form onSubmit={handleSubmit} className="episode-form">
         <div className="form-group">
           <label>에피소드 제목</label>
@@ -95,6 +156,7 @@ export default function NewEpisodePage() {
           )}
         </div>
         <div className="form-actions">
+          <button type="button" onClick={doSave} className="btn btn-outline"><Icon name="check" /> 임시저장{lastSaved ? ` (${formatTime(lastSaved)})` : ""}</button>
           <button type="submit" disabled={submitting || !title.trim() || !content.trim()} className="btn btn-primary">게시</button>
           <button type="button" onClick={() => router.back()} className="btn btn-outline">취소</button>
         </div>
