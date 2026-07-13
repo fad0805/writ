@@ -236,7 +236,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   }, []);
   useEffect(() => {
     setContentHtml(buildContentHtml(quoteUrl || undefined, resolvedMentions));
-  }, [quoteUrl, resolvedMentions]);
+  }, [quoteUrl, resolvedMentions, emojiMap]);
 
   // Extract quoted post URL from content
   type QuotedSeries = { type: "series"; novel: NovelData; author: User };
