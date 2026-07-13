@@ -151,6 +151,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="WRIT, the sns for writers", version="1.0.0", lifespan=lifespan)
 
+@app.exception_handler(Exception)
+async def debug_exception_handler(request: Request, exc: Exception):
+    import traceback
+    print(f"[ERROR] {request.method} {request.url.path} raised {type(exc).__name__}: {exc}", flush=True)
+    traceback.print_exc()
+    if isinstance(exc, HTTPException):
+        raise exc
+    return JSONResponse({"detail": f"Internal server error: {exc}"}, status_code=500)
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     import time
