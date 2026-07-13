@@ -501,37 +501,40 @@ def api_logout(request: Request):
 
 def _get_feed(user, tl_type, session, limit=10, offset=0):
     _base_opts = [selectinload(Post.author), selectinload(Post.parent)]
-    if tl_type == "home":
-        following_ids = [f.following_id for f in session.query(Follow).filter_by(
+    # Cache following IDs for home/social (reused across main query + reply filter)
+    _following_ids = None
+    if user and tl_type in ("home", "social"):
+        _following_ids = {f.following_id for f in session.query(Follow).filter_by(
             follower_id=user.id, accepted=True
-        ).all()]
-        following_ids.append(user.id)
+        ).all()}
+        _following_ids.add(user.id)
+    _local_ids = None
+    if tl_type in ("social", "local"):
+        _local_ids = [u.id for u in session.query(User).filter_by(is_remote=False).all()]
+    if tl_type == "home":
+        following_ids = list(_following_ids) if _following_ids else [user.id]
         boosted_ids = [b.post_id for b in session.query(Boost).filter_by(user_id=user.id).all()]
+        final = following_ids[:]
         posts = session.query(Post).options(*_base_opts).filter(
             or_(
-                Post.author_id.in_(following_ids),
+                Post.author_id.in_(final),
                 Post.id.in_(boosted_ids),
             ),
             Post.is_deleted == False,
-            or_(Post.visibility != "home", Post.author_id.in_(following_ids)),
+            or_(Post.visibility != "home", Post.author_id.in_(final)),
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     elif tl_type == "social":
-        following_ids = [f.following_id for f in session.query(Follow).filter_by(
-            follower_id=user.id, accepted=True
-        ).all()]
-        following_ids.append(user.id)
-        local_ids = [u.id for u in session.query(User).filter_by(is_remote=False).all()]
+        following_ids = list(_following_ids) if _following_ids else [user.id]
         posts = session.query(Post).options(*_base_opts).filter(
             or_(
                 Post.author_id.in_(following_ids),
-                and_(Post.author_id.in_(local_ids), Post.visibility == "public"),
+                and_(Post.author_id.in_(_local_ids), Post.visibility == "public"),
             ),
             Post.is_deleted == False,
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     elif tl_type == "local":
-        local_ids = [u.id for u in session.query(User).filter_by(is_remote=False).all()]
         posts = session.query(Post).options(*_base_opts).filter(
-            Post.author_id.in_(local_ids),
+            Post.author_id.in_(_local_ids),
             Post.visibility == "public",
             Post.is_deleted == False,
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
@@ -544,11 +547,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm and p.author_id != user.id and user.id not in (p.mentioned_user_ids or []))]
     # Filter replies: only show if all thread participants are followed (or post is mine)
     # Only for home/social timelines, not local/federated
-    if user and tl_type in ("home", "social"):
-        following_ids = {f.following_id for f in session.query(Follow).filter_by(
-            follower_id=user.id, accepted=True
-        ).all()}
-        following_ids.add(user.id)
+    if user and tl_type in ("home", "social") and _following_ids:
         # Pre-load parent chain for reply posts to avoid N+1
         reply_posts = [p for p in posts if p.author_id != user.id and (p.in_reply_to_id or p.in_reply_to_ap_id)]
         parent_ids_to_load = set()
