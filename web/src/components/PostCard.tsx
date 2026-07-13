@@ -359,7 +359,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
           <div key={i} style={{ position: "relative", lineHeight: 0 }}>
             {isSensitive && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 1, cursor: "pointer", color: "#fff", fontSize: 13, fontWeight: 600 }} onClick={(e) => { e.stopPropagation(); e.preventDefault(); setRevealedSensitive((prev) => new Set(prev).add(i)); }}><span style={{ fontSize: 12, fontWeight: 600, textAlign: "center", lineHeight: 1.3 }}>클릭하여 표시</span></div>}
             {revealed && <button onClick={(e) => { e.stopPropagation(); setRevealedSensitive((prev) => { const n = new Set(prev); n.delete(i); return n; }); }} style={{ position: "absolute", top: 4, right: 4, zIndex: 2, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: 4, color: "#fff", fontSize: 12, padding: "3px 10px", cursor: "pointer" }}>가리기</button>}
-            <img key={i} src={m.url} alt={m.alt || ""} style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "cover", cursor: "pointer", filter: isSensitive ? "blur(20px)" : "none" }} onClick={(e) => { if (!isSensitive) { e.stopPropagation(); setViewerIndex(i); } }} />
+            <img key={i} src={m.url} alt={m.alt || ""} style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "contain", background: "#000", cursor: "pointer", filter: isSensitive ? "blur(20px)" : "none" }} onClick={(e) => { if (!isSensitive) { e.stopPropagation(); setViewerIndex(i); } }} />
           </div>
         );
       })}
