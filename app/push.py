@@ -64,7 +64,7 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
                     pass
 
             url = "/notifications"
-            if notification_type in ("reply", "mention") and post_id:
+            if notification_type in ("reply", "mention", "post") and post_id:
                 url = f"/post/{post_id}"
             elif notification_type == "follow" and from_username:
                 url = f"/@{from_username}"

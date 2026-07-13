@@ -736,6 +736,8 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
             )
             session.add(notification)
             session.commit()
+            from app.push import send_push_to_user
+            send_push_to_user(target.id, "follow" if accepted else "follow_request", follower.username)
 
         # Send Accept only if auto-approved (not locked) — inside session so follower is still bound
         if accepted:
@@ -1170,6 +1172,9 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     _voter_ids.add(poll_post.author_id)
                     for _vid in _voter_ids:
                         broadcast_refresh_notifs(_vid)
+                    if poll_post.author_id != actor.id:
+                        from app.push import send_push_to_user
+                        send_push_to_user(poll_post.author_id, "vote", actor.username, poll_post.id)
                     broadcast_post({
                         "id": poll_post.id,
                         "type": "update",
@@ -1300,6 +1305,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             ).all()
             for f in followers:
                 if not f.follower.is_remote and f.follower.id != actor.id and f.follower.id not in _notified:
+                    _notified.add(f.follower.id)
                     session.add(Notification(
                         user_id=f.follower.id,
                         from_user_id=actor.id,
@@ -1308,6 +1314,19 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     ))
 
             session.commit()
+            from app.push import send_push_to_user
+            _push_notified = set()
+            if reply_to_post and reply_to_post.author_id != actor.id and reply_to_post.author_id not in _push_notified:
+                _push_notified.add(reply_to_post.author_id)
+                send_push_to_user(reply_to_post.author_id, "mention", actor.username, post.id)
+            for _mu_id in mentioned_ids:
+                if _mu_id != actor.id and _mu_id not in _push_notified:
+                    _push_notified.add(_mu_id)
+                    send_push_to_user(_mu_id, "mention", actor.username, post.id)
+            for f in followers:
+                if not f.follower.is_remote and f.follower.id != actor.id and f.follower.id not in _push_notified:
+                    _push_notified.add(f.follower.id)
+                    send_push_to_user(f.follower.id, "post", actor.username, post.id)
             from app.timeline_stream import broadcast_refresh_notifs
             broadcast_refresh_notifs()
             try:
@@ -1443,7 +1462,11 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                 post_id=post.id,
             )
             session.add(n)
-        session.commit()
+            session.commit()
+            from app.push import send_push_to_user
+            send_push_to_user(post.author_id, "like", actor.username, post.id)
+        else:
+            session.commit()
 
     return (200, "Liked")
 
@@ -1560,7 +1583,11 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                 post_id=post.id,
             )
             session.add(n)
-        session.commit()
+            session.commit()
+            from app.push import send_push_to_user
+            send_push_to_user(post.author_id, "boost", actor.username, post.id)
+        else:
+            session.commit()
 
     return (200, "Announced")
 
@@ -1740,6 +1767,11 @@ def _notify_admins(session, reporter, target_type, target_id, reason):
             notification_type="moderation",
             metadata_json=_json.dumps({"type": "report", "target_type": target_type, "target_id": target_id, "target_label": "", "reason": (reason or "")[:200]}),
         ))
+    session.flush()
+    from app.push import send_push_to_user
+    for _a in _admins:
+        if _a.id != reporter.id:
+            send_push_to_user(_a.id, "moderation", reporter.username)
 
 def _handle_flag(activity: dict) -> tuple[int, str]:
     logger.info("=== FLAG called ===")
