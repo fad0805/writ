@@ -3443,6 +3443,36 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
         if not verify_password(password, salt, hval):
             raise HTTPException(status_code=400, detail="비밀번호가 올바르지 않습니다.")
 
+        # Delete all posts
+        for p in s.query(Post).filter_by(author_id=db.id).all():
+            s.query(Like).filter(Like.post_id == p.id).delete()
+            s.query(Boost).filter(Boost.post_id == p.id).delete()
+            s.query(Bookmark).filter(Bookmark.post_id == p.id).delete()
+            s.query(Vote).filter(Vote.post_id == p.id).delete()
+            s.query(Notification).filter(Notification.post_id == p.id).delete()
+            s.delete(p)
+
+        # Delete all series and episodes
+        for n in s.query(Novel).filter_by(author_id=db.id).all():
+            for e in s.query(Episode).filter_by(novel_id=n.id).all():
+                s.query(EpisodeView).filter(EpisodeView.episode_id == e.id).delete()
+                s.delete(e)
+            s.query(SeriesFollow).filter(SeriesFollow.novel_id == n.id).delete()
+            s.query(SeriesNotice).filter(SeriesNotice.novel_id == n.id).delete()
+            s.query(SeriesMute).filter(SeriesMute.novel_id == n.id).delete()
+            s.delete(n)
+
+        # Remove follow relationships
+        s.query(Follow).filter(
+            or_(Follow.follower_id == db.id, Follow.following_id == db.id)
+        ).delete()
+
+        # Clean up user data
+        s.query(Notification).filter(
+            or_(Notification.user_id == db.id, Notification.from_user_id == db.id)
+        ).delete()
+        s.query(PushSubscription).filter_by(user_id=db.id).delete()
+
         # Anonymize user data
         db.display_name = "탈퇴한 회원"
         db.summary = ""
