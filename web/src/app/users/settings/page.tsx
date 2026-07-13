@@ -23,7 +23,7 @@ export default function SettingsPage() {
   const [frLoading, setFrLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [serverEnableReactions, setServerEnableReactions] = useState(true);
+
   const [pushSupported, setPushSupported] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushInitial, setPushInitial] = useState(false);
@@ -40,7 +40,6 @@ export default function SettingsPage() {
       setFollowListVis(user.follow_list_visibility || "public");
       setEnableReactions(user.enable_reactions !== false);
       setNotifSound(isNotifSoundEnabled());
-      fetch("/api/server-info").then(r=>r.json()).then((info: any) => setServerEnableReactions(info.enable_reactions !== false)).catch(() => {});
       setLoading(false);
     }).catch(() => router.push("/login"));
   }, [router]);
@@ -135,15 +134,13 @@ export default function SettingsPage() {
           </label>
           <p className="form-help">봇 계정은 사용자가 거의 개입하지 않고 프로그램으로 자동 운영되는 계정입니다. 켜면 계정에 봇 표시가 추가됩니다.</p>
         </div>
-        {serverEnableReactions && (
         <div className="form-group">
           <label>
             <input type="checkbox" checked={enableReactions} onChange={(e) => setEnableReactions(e.target.checked)} />
-            {" "}리액션(이모지 반응) 허용
+            {" "}리액션(이모지 반응) 표시
           </label>
-          <p className="form-help">켜면 다른 사용자가 내 포스트에 이모지로 반응할 수 있습니다.</p>
+          <p className="form-help">끄면 모든 리액션이 별(★)로 통합되어 표시됩니다. 내 포스트에 반응을 다는 기능과는 무관합니다.</p>
         </div>
-        )}
         <div className="form-group">
           <label>팔로워/팔로잉 목록 공개</label>
           <div className="visibility-selector">
