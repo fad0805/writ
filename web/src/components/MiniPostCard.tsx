@@ -46,7 +46,7 @@ const TYPE_COLORS: Record<string, string> = {
   poll_ended: "#7c4dff",
 };
 
-export default function MiniPostCard({ post, notifType }: { post: PostData; notifType?: string }) {
+export default function MiniPostCard({ post, notifType, notifLabel }: { post: PostData; notifType?: string; notifLabel?: React.ReactNode }) {
   const [isDark, setIsDark] = useState(false);
   const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
   useEffect(() => { setIsDark(document.body.classList.contains("dark-theme")); }, []);
@@ -81,6 +81,7 @@ export default function MiniPostCard({ post, notifType }: { post: PostData; noti
         </div>
       )}
       <div className="mini-post-content">
+        {notifLabel && <div style={{ fontSize: "0.82em", color: "var(--text-muted)", marginBottom: 3, lineHeight: 1.4 }}>{notifLabel}</div>}
         <div className="mini-post-author">
           {post.author.display_name}
           <span className="mini-post-handle">

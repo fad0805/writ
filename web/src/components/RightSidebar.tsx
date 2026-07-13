@@ -104,26 +104,18 @@ export default function RightSidebar() {
         <div className="notif-mini-list">
           {notifs.length > 0 ? notifs.map((n) => {
             if (n.post) return (
-              <div key={n.id} className="mini-notif-card" style={{ marginTop: 6, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg-tertiary)" }}>
-                {(n.type === "like" || n.type === "boost") && n.from_user && (
-                  <div className="mini-post-author" style={{ fontSize: "0.85em", marginBottom: 4 }}>
-                    <strong>{n.from_user.display_name || n.from_user.username}</strong>
-                    <span className="text-muted" style={{ marginLeft: 4 }}>{n.type === "like" ? "님이 즐겨찾기했습니다" : "님이 부스트했습니다"}</span>
-                  </div>
-                )}
-                <MiniPostCard post={n.post} notifType={n.type} />
-              </div>
+              <MiniPostCard key={n.id} post={n.post} notifType={n.type} notifLabel={
+                (n.type === "like" || n.type === "boost") && n.from_user ? (
+                  <><strong>{n.from_user.display_name || n.from_user.username}</strong> {n.type === "like" ? "님이 즐겨찾기했습니다" : "님이 부스트했습니다"}</>
+                ) : undefined
+              } />
             );
 
             if (n.type === "vote") {
               return (
-                <div key={n.id} className="mini-notif-card" style={{ marginTop: 6, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg-tertiary)" }}>
-                  <div className="mini-post-author" style={{ fontSize: "0.85em", marginBottom: 4 }}>
-                    <strong>{n.from_user?.display_name || "알 수 없음"}</strong>
-                    <span className="text-muted" style={{ marginLeft: 4 }}>님이 투표에 참여했습니다</span>
-                  </div>
-                  {n.post && <MiniPostCard post={n.post} notifType={n.type} />}
-                </div>
+                n.post ? <MiniPostCard key={n.id} post={n.post} notifType={n.type} notifLabel={
+                  <><strong>{n.from_user?.display_name || "알 수 없음"}</strong> 님이 투표에 참여했습니다</>
+                } /> : <div key={n.id} />
               );
             }
 
@@ -132,13 +124,9 @@ export default function RightSidebar() {
               const pollText = pollPost?.poll_data?.options?.map((o: PollOption) => o.text || "").join(" / ") || "";
               const msg = n.metadata?.is_author ? "내 투표가 종료되었습니다" : "참여한 투표가 종료되었습니다";
               return (
-                <div key={n.id} className="mini-notif-card" style={{ marginTop: 6, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg-tertiary)" }}>
-                  <div className="mini-post-author" style={{ fontSize: "0.85em", marginBottom: 4 }}>
-                    <span className="text-muted">{msg}</span>
-                    {pollText && <span className="text-muted" style={{ marginLeft: 4 }}>— {pollText}</span>}
-                  </div>
-                  {pollPost && <MiniPostCard post={pollPost} notifType={n.type} />}
-                </div>
+                pollPost ? <MiniPostCard key={n.id} post={pollPost} notifType={n.type} notifLabel={
+                  <>{msg}{pollText && <> — {pollText}</>}</>
+                } /> : <div key={n.id} />
               );
             }
 
