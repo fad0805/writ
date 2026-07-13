@@ -39,9 +39,15 @@ function rewriteLinks(text: string, validMentions?: Set<string>): string {
     return `${before}<a href="/@${handle}" class="mention-link">@${handle}</a>`;
   });
 
-  return text.replace(/(^|>|\s)#([\w_가-힣]+)/g, (_m, before, tag) => {
+  text = text.replace(/(^|>|\s)#([\w_가-힣]+)/g, (_m, before, tag) => {
     return `${before}<a href="/explore?q=%23${encodeURIComponent(tag)}" class="hashtag-link">#${tag}</a>`;
   });
+
+  text = text.replace(/(^|>|　|\s)(https?:\/\/[^\s<>"')\]]+)/g, (_m: string, before: string, url: string) => {
+    return `${before}<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+  });
+
+  return text;
 }
 
 export default function PostCard({ post, onUpdate, onDelete, current, hideContext, selected, readonly }: { post: PostData; onUpdate?: () => void; onDelete?: () => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean }) {
