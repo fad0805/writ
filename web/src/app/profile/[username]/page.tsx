@@ -266,9 +266,9 @@ export default function ProfilePage() {
             )}
             {(profile as any).custom_fields?.length > 0 && (
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
-                {(profile as any).custom_fields.map((f: { label: string; value: string }, i: number) => (
-                  <div key={i} style={{ fontSize: "0.85em", color: "var(--text-secondary)" }}>
-                    <span style={{ fontWeight: 600, marginRight: 4 }}>{f.label}</span>
+                {(profile as any).custom_fields.map((f: { name?: string; label?: string; value: string }, i: number) => (
+                    <div key={i} style={{ fontSize: "0.85em", color: "var(--text-secondary)" }}>
+                    <span style={{ fontWeight: 600, marginRight: 4 }}>{f.name || f.label}</span>
                     {f.value.startsWith("http") ? <a href={f.value} target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>{f.value}</a> : <span>{f.value}</span>}
                   </div>
                 ))}
