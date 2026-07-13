@@ -581,7 +581,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                     participants.add(parent.author_id)
                     cur = parent
                     depth += 1
-                if participants and not participants <= following_ids:
+                if participants and not participants <= _following_ids:
                     continue
             reply_filtered.append(p)
         posts = reply_filtered
