@@ -193,22 +193,31 @@ export default function TimelinePage() {
   }, [tlType]);
 
   useEffect(() => {
-    let es: EventSource | null = null;
-    try {
-      es = new EventSource(`/api/timeline/stream?type=${tlType}`);
-    } catch { return; }
-    es.onmessage = (event) => {
-      try {
-        const newPost = JSON.parse(event.data);
-        if (deletedIds.current.has(newPost.id)) return;
-        setPosts((prev) => {
-          if (prev.some((p) => p.id === newPost.id)) return prev;
-          return [newPost, ...prev];
-        });
-      } catch {}
-    };
-    es.onerror = () => {};
-    return () => { es?.close(); };
+    const TABS = ["home", "social", "local", "federated"];
+    const streams: EventSource[] = [];
+    for (const t of TABS) {
+      let es: EventSource | null = null;
+      try { es = new EventSource(`/api/timeline/stream?type=${t}`); } catch { continue; }
+      es.onmessage = (event) => {
+        try {
+          const newPost = JSON.parse(event.data);
+          if (deletedIds.current.has(newPost.id)) return;
+          if (t === tlType) {
+            setPosts((prev) => {
+              if (prev.some((p) => p.id === newPost.id)) return prev;
+              return [newPost, ...prev];
+            });
+          }
+          const cached = tabCache.current[t];
+          if (cached && !cached.posts.some((p) => p.id === newPost.id)) {
+            tabCache.current[t] = { ...cached, posts: [newPost, ...cached.posts] };
+          }
+        } catch {}
+      };
+      es.onerror = () => {};
+      streams.push(es);
+    }
+    return () => { for (const es of streams) es?.close(); };
   }, [tlType]);
 
   useEffect(() => {
