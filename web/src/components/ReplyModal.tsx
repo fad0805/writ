@@ -25,7 +25,7 @@ export default function ReplyModal({ post, onClose, onDone }: { post: PostData; 
 
   const mentions = useMemo(() => {
     const set = new Set<string>();
-    const matches = post.content.match(/@(\w+(?:@[\w.-]+)?)/g);
+    const matches = post.content.match(/@([a-zA-Z0-9_]+(?:@[a-zA-Z0-9.-]+)?)/g);
     if (matches) matches.forEach((m) => set.add(m));
     set.add(`@${post.author.username}`);
     if (user) set.delete(`@${user.username}`);

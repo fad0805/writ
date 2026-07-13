@@ -231,7 +231,7 @@ def _can_view(post, viewer, session):
 
 
 def _parse_mentions(content):
-    mentioned = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content))
+    mentioned = set(re.findall(r'@([a-zA-Z0-9_]+(?:@[a-zA-Z0-9.-]+)?)', content))
     if not mentioned:
         return []
     with get_session() as s:
