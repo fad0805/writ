@@ -71,6 +71,25 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 window.open(a.href, '_blank', 'noopener');
               }
             });
+            (function() {
+              var startY = 0;
+              var pulling = false;
+              document.addEventListener('touchstart', function(e) {
+                if (window.scrollY <= 0) {
+                  startY = e.touches[0].clientY;
+                  pulling = true;
+                }
+              }, { passive: true });
+              document.addEventListener('touchmove', function(e) {
+                if (!pulling) return;
+                var diff = e.touches[0].clientY - startY;
+                if (diff > 80 && window.scrollY <= 0) {
+                  pulling = false;
+                  window.location.reload();
+                }
+              }, { passive: true });
+              document.addEventListener('touchend', function() { pulling = false; }, { passive: true });
+            })();
           `
         }} />
       </body>

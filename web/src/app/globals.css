@@ -356,6 +356,7 @@ input[type="text"].explore-search-input:focus {
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
   position: relative;
 }
 .timeline-tabs::-webkit-scrollbar { display: none; }
@@ -1028,6 +1029,7 @@ input:focus {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  touch-action: pan-x;
   -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
   mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
 }
@@ -1112,10 +1114,11 @@ input:focus {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  touch-action: pan-x;
 }
 .notif-tabs::-webkit-scrollbar { display: none; }
 .notif-tab {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
