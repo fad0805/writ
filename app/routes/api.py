@@ -1153,6 +1153,35 @@ def api_delete_post(request: Request, post_id: int):
         post.link_preview = None
         post.is_deleted = True
         s.query(Notification).filter_by(post_id=post.id).delete()
+        s.flush()
+
+        # Cascade purge: if parent shell's entire subtree is now all deleted, hard-delete it too
+        def _all_deleted(pid):
+            return not s.query(Post).filter(
+                Post.in_reply_to_id == pid, Post.is_deleted == False
+            ).first()
+
+        _pid = post.id
+        while True:
+            _parent = s.query(Post).filter(Post.in_reply_to_id == _pid).first()
+            if not _parent:
+                # Check for the current post's parent
+                if _pid == post.id:
+                    _parent = s.query(Post).get(post.in_reply_to_id) if post.in_reply_to_id else None
+                else:
+                    _parent = s.query(Post).get(_pid)
+            if not _parent or not _parent.is_deleted:
+                break
+            if not _all_deleted(_parent.id):
+                break
+            # All children of this parent are deleted → hard-delete the parent
+            s.query(Like).filter(Like.post_id == _parent.id).delete()
+            s.query(Boost).filter(Boost.post_id == _parent.id).delete()
+            s.query(Bookmark).filter(Bookmark.post_id == _parent.id).delete()
+            s.query(Vote).filter(Vote.post_id == _parent.id).delete()
+            s.query(Notification).filter(Notification.post_id == _parent.id).delete()
+            s.delete(_parent)
+            _pid = _parent.in_reply_to_id
         s.commit()
     # Media 삭제 & AP 브로드캐스트는 백그라운드에서
     if media or (ap_id and ap_id.startswith("http") and not is_remote_author):
