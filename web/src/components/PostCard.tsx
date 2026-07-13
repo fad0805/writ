@@ -50,7 +50,7 @@ function rewriteLinks(text: string, validMentions?: Set<string>): string {
   return text;
 }
 
-export default function PostCard({ post, onUpdate, onDelete, current, hideContext, selected, readonly }: { post: PostData; onUpdate?: () => void; onDelete?: () => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean }) {
+export default function PostCard({ post, onUpdate, onDelete, onReply, current, hideContext, selected, readonly }: { post: PostData; onUpdate?: () => void; onDelete?: () => void; onReply?: (newPost?: PostData) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean }) {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const [showReply, setShowReply] = useState(false);
@@ -656,7 +656,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
           )}
         </div>}
       </div>
-      {!readonly && showReply && <ReplyModal post={post} onClose={() => setShowReply(false)} onDone={() => { setShowReply(false); if (onUpdate) onUpdate(); }} />}
+      {!readonly && showReply && <ReplyModal post={post} onClose={() => setShowReply(false)} onDone={(newPost) => { setShowReply(false); if (onReply) onReply(newPost); else if (onUpdate) onUpdate(); }} />}
       {!readonly && showEdit && <EditModal post={post} onClose={() => setShowEdit(false)} onDone={() => { setShowEdit(false); if (onUpdate) onUpdate(); }} />}
       {!readonly && showReport && (
         <div className="reply-modal-backdrop active" onClick={() => setShowReport(false)}>
