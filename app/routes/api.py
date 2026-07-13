@@ -983,9 +983,7 @@ def api_create_post(
     poll_expires_in: int = Form(60),
     link_preview: str = Form(""),
 ):
-    print(f"[DEBUG] api_create_post called content_len={len(content)} user=?", flush=True)
     user = require_active_auth(request)
-    print(f"[DEBUG] api_create_post auth OK user_id={user.id}", flush=True)
     if share_url:
         if "/episodes/" in share_url:
             content = content + "\n\nepisode: " + share_url
