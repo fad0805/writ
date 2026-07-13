@@ -2301,7 +2301,10 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
     user = require_auth(request)
     with get_session() as s:
         _generate_poll_end_notifications(user.id, s)
-        q = s.query(Notification).filter_by(user_id=user.id)
+        q = s.query(Notification).options(
+            selectinload(Notification.from_user),
+            selectinload(Notification.post).selectinload(Post.author),
+        ).filter_by(user_id=user.id)
         if filter_type == "follow":
             q = q.filter(Notification.notification_type.in_(["follow", "follow_request"]))
         elif filter_type == "vote":
@@ -2314,22 +2317,60 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
         has_more = len(raw) > limit
         notifs = raw[:limit]
 
+        # Batch load user interaction data for notification posts
+        notif_post_ids = [n.post_id for n in notifs if n.post_id]
+        if user and notif_post_ids:
+            _liked_ids = {l.post_id for l in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids)).all()}
+            _boosted_ids = {b.post_id for b in s.query(Boost).filter(Boost.user_id == user.id, Boost.post_id.in_(notif_post_ids)).all()}
+            _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(notif_post_ids)).all()}
+            _vote_map = {}
+            for v in s.query(Vote).filter(Vote.user_id == user.id, Vote.post_id.in_(notif_post_ids)).all():
+                _vote_map[v.post_id] = v.option_index
+            _my_reaction_map = {}
+            for l in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids), Like.reaction.isnot(None)).all():
+                _my_reaction_map[l.post_id] = l.reaction
+            from sqlalchemy import func as _func
+            _reactions_map = {}
+            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(notif_post_ids)).group_by(Like.post_id, Like.reaction).all():
+                if pid not in _reactions_map:
+                    _reactions_map[pid] = {}
+                _reactions_map[pid][react] = cnt
+            all_mentioned_ids = set()
+            for p in s.query(Post).filter(Post.id.in_(notif_post_ids)).all():
+                if p.mentioned_user_ids:
+                    all_mentioned_ids.update(p.mentioned_user_ids)
+            _mentioned_users_map = {}
+            if all_mentioned_ids:
+                _mentioned_users = {u.id: u.username for u in s.query(User).filter(User.id.in_(all_mentioned_ids)).all()}
+                for p in s.query(Post).filter(Post.id.in_(notif_post_ids)).all():
+                    if p.mentioned_user_ids:
+                        _mentioned_users_map[p.id] = [_mentioned_users.get(mid, "?") for mid in p.mentioned_user_ids if mid in _mentioned_users]
+                    else:
+                        _mentioned_users_map[p.id] = []
+        else:
+            _liked_ids = _boosted_ids = _bookmarked_ids = set()
+            _vote_map = _my_reaction_map = _reactions_map = _mentioned_users_map = {}
+
         result = []
         for n in notifs:
-            from_user = s.query(User).get(n.from_user_id) if n.from_user_id else None
-            post = s.query(Post).get(n.post_id) if n.post_id else None
             import json as _json
             meta = {}
             if n.metadata_json:
                 try: meta = _json.loads(n.metadata_json)
                 except: pass
+            post = n.post
             item = {
                 "id": n.id,
                 "type": n.notification_type,
                 "created_at": _fmt_dt(n.created_at),
                 "is_read": n.is_read,
-                "from_user": _user_json(from_user) if from_user else None,
-                "post": _post_json(post, s, user) if post and not post.is_deleted and _can_view(post, user, s) else None,
+                "from_user": _user_json(n.from_user) if n.from_user else None,
+                "post": _post_json(post, s, user,
+                    _liked_ids=_liked_ids, _boosted_ids=_boosted_ids,
+                    _bookmarked_ids=_bookmarked_ids, _vote_map=_vote_map,
+                    _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map,
+                    _mentioned_users_map=_mentioned_users_map,
+                ) if post and not post.is_deleted and _can_view(post, user, s) else None,
                 "metadata": meta,
             }
             result.append(item)
