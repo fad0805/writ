@@ -158,7 +158,7 @@ async def debug_exception_handler(request: Request, exc: Exception):
     traceback.print_exc()
     if isinstance(exc, HTTPException):
         raise exc
-    return JSONResponse({"detail": f"Internal server error: {exc}"}, status_code=500)
+    return JSONResponse({"detail": "Internal server error"}, status_code=500)
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
