@@ -818,7 +818,7 @@ def _handle_reject(activity: dict) -> tuple[int, str]:
         session.commit()
 
     from app.timeline_stream import broadcast_refresh_notifs
-    broadcast_refresh_notifs()
+    broadcast_refresh_notifs(local_user.id)
     return (200, "Rejected follow removed")
 
 def _handle_accept(activity: dict) -> tuple[int, str]:
@@ -1165,7 +1165,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     poll_post.poll_data = {**poll_post.poll_data, "options": new_options}
                     session.commit()
                     from app.timeline_stream import broadcast_post, broadcast_refresh_notifs
-                    broadcast_refresh_notifs()
+                    broadcast_refresh_notifs(poll_post.author_id)
                     broadcast_post({
                         "id": poll_post.id,
                         "type": "update",
