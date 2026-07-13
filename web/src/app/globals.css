@@ -3209,32 +3209,30 @@ input[type="checkbox"] {
   border-radius: 14px;
   overflow-y: auto;
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
+  padding: 20px;
+  position: relative;
 }
 
 .mobile-composer-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
   font-weight: 600;
-  font-size: 0.95em;
-  position: sticky;
-  top: 0;
-  background: var(--bg-secondary);
-  z-index: 1;
-  border-radius: 14px 14px 0 0;
+  font-size: 1.17em;
 }
 
 .mobile-composer-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
   background: none;
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  font-size: 1.4em;
+  padding: 0;
+  line-height: 1;
 }
 
 @media (max-width: 768px) {
