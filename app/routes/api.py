@@ -3935,16 +3935,16 @@ def api_fetch_post(request: Request, url: str = Form(...)):
     emojis = []
     with get_session() as es:
         for e in es.query(CustomEmoji).order_by(CustomEmoji.keyword).all():
-            emojis.append({"keyword": e.keyword, "file_name": e.file_name, "url": _emoji_url(e.file_name, e.domain or ""), "aliases": e.aliases or []})
+            emojis.append({"keyword": e.keyword, "file_name": e.file_name, "url": _emoji_url(e.file_name, e.domain or "", e.category or ""), "aliases": e.aliases or []})
     result["_emojis"] = emojis
     return result
 
 
 EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "emojis")
 
-def _emoji_url(file_name: str, domain: str = "") -> str:
+def _emoji_url(file_name: str, domain: str = "", category: str = "") -> str:
     """Return the correct emoji URL (local or S3)."""
-    sub = "remote" if domain else "local"
+    sub = "remote" if domain or category == "remote" else "local"
     from app.config import S3_ENABLED
     if S3_ENABLED:
         from app.utils.storage import get_storage
@@ -3967,7 +3967,7 @@ def api_list_emojis():
                 "file_name": e.file_name,
                 "category": e.category or "",
                 "aliases": e.aliases or [],
-                "url": _emoji_url(e.file_name, e.domain or ""),
+                "url": _emoji_url(e.file_name, e.domain or "", e.category or ""),
                 "source_url": e.source_url or "",
                 "domain": e.domain or "",
             }
@@ -4059,7 +4059,7 @@ def api_create_emoji(
             "file_name": emoji.file_name,
             "category": emoji.category or "",
             "aliases": emoji.aliases or [],
-            "url": _emoji_url(emoji.file_name),
+            "url": _emoji_url(emoji.file_name, emoji.domain or "", emoji.category or ""),
         }
 
 
@@ -4081,7 +4081,7 @@ def api_update_emoji(request: Request, emoji_id: int, category: str = Form(""), 
         if aliases:
             emoji.aliases = [a.strip().lower().replace(" ", "_") for a in aliases.split(",") if a.strip()]
         s.commit()
-        return {"ok": True, "emoji": {"id": emoji.id, "keyword": emoji.keyword, "file_name": emoji.file_name, "category": emoji.category, "aliases": emoji.aliases or [], "url": _emoji_url(emoji.file_name, emoji.domain or ""), "source_url": emoji.source_url or "", "domain": emoji.domain or ""}}
+        return {"ok": True, "emoji": {"id": emoji.id, "keyword": emoji.keyword, "file_name": emoji.file_name, "category": emoji.category, "aliases": emoji.aliases or [], "url": _emoji_url(emoji.file_name, emoji.domain or "", emoji.category or ""), "source_url": emoji.source_url or "", "domain": emoji.domain or ""}}
 
 @router.post("/emojis/{emoji_id}/copy")
 def api_copy_emoji(request: Request, emoji_id: int):
@@ -4112,7 +4112,7 @@ def api_copy_emoji(request: Request, emoji_id: int):
         copy = CustomEmoji(keyword=new_kw, file_name=_new_fname, category="기본", aliases=src.aliases or [])
         s.add(copy)
         s.flush()
-        return {"ok": True, "emoji": {"id": copy.id, "keyword": copy.keyword, "file_name": copy.file_name, "category": copy.category, "aliases": copy.aliases or [], "url": _emoji_url(copy.file_name), "source_url": copy.source_url or "", "domain": copy.domain or ""}}
+        return {"ok": True, "emoji": {"id": copy.id, "keyword": copy.keyword, "file_name": copy.file_name, "category": copy.category, "aliases": copy.aliases or [], "url": _emoji_url(copy.file_name, "", copy.category or ""), "source_url": copy.source_url or "", "domain": copy.domain or ""}}
 
 @router.delete("/emojis/{emoji_id}")
 def api_delete_emoji(request: Request, emoji_id: int):
