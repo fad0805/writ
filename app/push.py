@@ -2,7 +2,6 @@ import json
 import logging
 import threading
 
-from pywebpush import webpush, WebPushException
 from app.config import VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY, VAPID_CLAIM_EMAIL
 
 logger = logging.getLogger("writ.push")
@@ -71,6 +70,7 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
                 "icon": "/icons/icon-192.png",
             })
 
+            from pywebpush import webpush, WebPushException
             for sub in subs:
                 try:
                     webpush(
