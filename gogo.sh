@@ -701,6 +701,21 @@ for target in ['https://daydream.ink', 'https://writ.daydream.ink', 'https://myl
         print(f'{target} -> FAIL: {e}')
 "
 
+elif [ "$1" = "check-emoji-domains" ]; then
+  docker compose exec api python3 -c "
+from app.models import CustomEmoji, get_session
+with get_session() as s:
+    emojis = s.query(CustomEmoji).all()
+    local_count = 0
+    remote_count = 0
+    for e in emojis:
+        sub = 'remote' if e.domain else 'local'
+        if sub == 'local': local_count += 1
+        else: remote_count += 1
+        print(f'  keyword={e.keyword}  domain=\"{e.domain}\"  -> {sub}/{e.file_name}')
+    print(f'total: {len(emojis)} (local={local_count}, remote={remote_count})')
+"
+
 elif [ "$1" = "migrate-emojis" ]; then
   docker compose exec api python3 -c "
 import os, shutil
