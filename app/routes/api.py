@@ -3445,6 +3445,7 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
 
         # Broadcast Delete to all related remote servers BEFORE deleting data
         import json as _json
+        from app.activitypub import _post_to_inbox
         _actor_uri = db.actor_uri()
         # Collect all remote user IDs that have interacted with this user
         _interacted = set()
@@ -3481,18 +3482,38 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
                 "to": ["https://www.w3.org/ns/activitystreams#Public"],
                 "object": _actor_uri,
             }
-            from app.activitypub import _post_to_inbox
             for _inbox in _inboxes:
                 threading.Thread(target=_post_to_inbox, args=(_inbox, _delete_activity, db), daemon=True).start()
 
-        # Delete all posts
+        # Delete posts: hard-delete if no replies, shell+delete activity if in thread
         for p in s.query(Post).filter_by(author_id=db.id).all():
+            has_replies = s.query(Post).filter(Post.in_reply_to_id == p.id).first() is not None
+            if not has_replies and p.ap_id:
+                has_replies = s.query(Post).filter(Post.in_reply_to_ap_id == p.ap_id).first() is not None
             s.query(Like).filter(Like.post_id == p.id).delete()
             s.query(Boost).filter(Boost.post_id == p.id).delete()
             s.query(Bookmark).filter(Bookmark.post_id == p.id).delete()
             s.query(Vote).filter(Vote.post_id == p.id).delete()
             s.query(Notification).filter(Notification.post_id == p.id).delete()
-            s.delete(p)
+            if has_replies:
+                p.content = ""
+                p.media_attachments = []
+                p.poll_data = None
+                p.link_preview = None
+                p.is_deleted = True
+                if p.ap_id and p.ap_id.startswith("http"):
+                    _delete_note = {
+                        "@context": "https://www.w3.org/ns/activitystreams",
+                        "id": f"{p.ap_id}#delete",
+                        "type": "Delete",
+                        "actor": _actor_uri,
+                        "to": ["https://www.w3.org/ns/activitystreams#Public"],
+                        "object": {"id": p.ap_id, "type": "Note"},
+                    }
+                    for _inbox in _inboxes:
+                        threading.Thread(target=_post_to_inbox, args=(_inbox, _delete_note, db), daemon=True).start()
+            else:
+                s.delete(p)
 
         # Delete all series and episodes
         for n in s.query(Novel).filter_by(author_id=db.id).all():
