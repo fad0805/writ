@@ -496,41 +496,61 @@ elif [ "$1" = "purge-deleted" ]; then
   docker compose exec -T api python3 << 'PYEOF'
 from app.models import Post, Like, Boost, Bookmark, Vote, Notification, get_session
 
+def _hard_delete(s, pid):
+    s.query(Like).filter(Like.post_id == pid).delete()
+    s.query(Boost).filter(Boost.post_id == pid).delete()
+    s.query(Bookmark).filter(Bookmark.post_id == pid).delete()
+    s.query(Vote).filter(Vote.post_id == pid).delete()
+    s.query(Notification).filter(Notification.post_id == pid).delete()
+    p = s.query(Post).get(pid)
+    if p:
+        s.delete(p)
+
+def _all_descendants_deleted(s, pid):
+    """Check if every post in the reply subtree of pid is deleted or nonexistent."""
+    children = s.query(Post).filter(Post.in_reply_to_id == pid).all()
+    for c in children:
+        if not c.is_deleted:
+            return False
+        if not _all_descendants_deleted(s, c.id):
+            return False
+    return True
+
 with get_session() as s:
-    # Find deleted posts that have NO replies (not part of any thread)
+    # Pass 1: purge leaf deleted posts, keep shells for thread parents
     deleted = s.query(Post).filter(Post.is_deleted == True).all()
     total = len(deleted)
     purged = 0
     kept = 0
     for p in deleted:
-        # Check if any other post replies to this post
         has_replies = s.query(Post).filter(Post.in_reply_to_id == p.id).first() is not None
-        # Also check if any post references this as parent via in_reply_to_ap_id
         if not has_replies and p.ap_id:
             has_replies = s.query(Post).filter(Post.in_reply_to_ap_id == p.ap_id).first() is not None
         if has_replies:
             kept += 1
-            print(f"  KEEP  post {p.id} (has replies)")
-            # For kept posts, ensure content is blank (shell only)
             if p.content:
                 p.content = ""
                 p.media_attachments = []
                 p.poll_data = None
                 p.link_preview = None
             continue
-        # Hard delete: remove all related data then the post itself
-        s.query(Like).filter(Like.post_id == p.id).delete()
-        s.query(Boost).filter(Boost.post_id == p.id).delete()
-        s.query(Bookmark).filter(Bookmark.post_id == p.id).delete()
-        s.query(Vote).filter(Vote.post_id == p.id).delete()
-        s.query(Notification).filter(Notification.post_id == p.id).delete()
-        s.delete(p)
+        _hard_delete(s, p.id)
         purged += 1
-        print(f"  PURGE post {p.id}")
     s.commit()
-    print(f"\ntotal deleted posts: {total}")
-    print(f"  purged (no replies): {purged}")
-    print(f"  kept (has replies):  {kept}")
+    print(f"pass 1: purged {purged} leaf, kept {kept} shell")
+
+    # Pass 2: recursively purge shells whose entire subtree is also deleted
+    kept = s.query(Post).filter(Post.is_deleted == True).all()
+    pass2 = 0
+    for p in kept:
+        if _all_descendants_deleted(s, p.id):
+            _hard_delete(s, p.id)
+            pass2 += 1
+    s.commit()
+    print(f"pass 2: purged {pass2} shells (whole thread deleted)")
+
+    kept_remaining = s.query(Post).filter(Post.is_deleted == True).count()
+    print(f"remaining shells: {kept_remaining}")
 PYEOF
 
 elif [ "$1" = "clear-notifs" ]; then
