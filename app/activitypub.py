@@ -515,6 +515,25 @@ def _save_remote_avatar(avatar_url: str, local_username: str, old_url: str = "")
     return _save_remote_image(avatar_url, "avatars", local_username, old_url)
 
 
+def _extract_custom_fields(attachment: list) -> list:
+    """Extract PropertyValue entries from remote actor attachment field."""
+    import re
+    fields = []
+    for item in attachment:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") != "PropertyValue":
+            continue
+        name = item.get("name", "").strip()
+        value = item.get("value", "")
+        if not name or not value:
+            continue
+        # Strip HTML tags from value (Mastodon sends HTML links)
+        value = re.sub(r"<[^>]*>", "", value).strip()
+        fields.append({"name": name, "value": value})
+    return fields
+
+
 def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optional[User] = None) -> Optional[User]:
     import sys
     with get_session() as session:
@@ -617,6 +636,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
                 existing.profile_image = _save_remote_avatar(avatar_url, base_username_clean, existing.profile_image)
             if header_url:
                 existing.header_image = _save_remote_image(header_url, "headers", base_username_clean, existing.header_image)
+            existing.custom_fields = _extract_custom_fields(data.get("attachment", []))
             _process_emoji_tags(data.get("tag", []), session)
             session.commit()
             return existing
@@ -633,6 +653,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
                 by_username.profile_image = _save_remote_avatar(avatar_url, base_username_clean, by_username.profile_image)
             if header_url:
                 by_username.header_image = _save_remote_image(header_url, "headers", base_username_clean, by_username.header_image)
+            by_username.custom_fields = _extract_custom_fields(data.get("attachment", []))
             _process_emoji_tags(data.get("tag", []), session)
             session.commit()
             return by_username
@@ -662,6 +683,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             profile_image=profile_image,
             header_image=header_image,
             is_locked=data.get("manuallyApprovesFollowers", False),
+            custom_fields=_extract_custom_fields(data.get("attachment", [])),
         )
         session.add(user)
         session.flush()
