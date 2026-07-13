@@ -244,7 +244,7 @@ export const api = {
     formRequest<{ ok: boolean; report_id: number }>("/api/reports", { target_type, target_id, reason, rule_ids: rule_ids ? JSON.stringify(rule_ids) : "" }),
 
   // Explore
-  explore: () => request<{ posts: PostData[]; novels: NovelData[] }>("/api/explore"),
+  explore: (limit = 20, offset = 0) => request<{ posts: PostData[]; novels: NovelData[]; has_more: boolean }>(`/api/explore?limit=${limit}&offset=${offset}`),
   search: (q: string, author?: string) => request<SearchResults>(`/api/search?q=${encodeURIComponent(q)}${author ? `&author=${encodeURIComponent(author)}` : ""}`),
   autocomplete: (q: string) => request<{ users: User[] }>(`/api/search/users?q=${encodeURIComponent(q)}`),
 

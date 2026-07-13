@@ -24,6 +24,8 @@ function ExploreContent() {
   const [novels, setNovels] = useState<NovelData[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [searched, setSearched] = useState(false);
   const [fetchedUrl, setFetchedUrl] = useState<string | null>(null);
@@ -31,12 +33,37 @@ function ExploreContent() {
   const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
   const [searchAuthor, setSearchAuthor] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const exploreOffsetRef = useRef(0);
   const searchParams = useSearchParams();
 
   const loadExplore = useCallback(() => {
-    setLoading(true); setSearched(false); setFetchedUrl(null);
-    api.explore().then((d) => { setPosts(d.posts); setNovels(d.novels); setUsers([]); setLoading(false); }).catch(() => setLoading(false));
+    setLoading(true); setSearched(false); setFetchedUrl(null); exploreOffsetRef.current = 0;
+    api.explore(20, 0).then((d) => { setPosts(d.posts); setNovels(d.novels); setHasMore(d.has_more); setUsers([]); setLoading(false); }).catch(() => setLoading(false));
   }, []);
+
+  const loadMoreExplore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    exploreOffsetRef.current += 20;
+    try {
+      const d = await api.explore(5, exploreOffsetRef.current);
+      setPosts((prev) => { const ids = new Set(prev.map((p) => p.id)); return [...prev, ...d.posts.filter((p: any) => !ids.has(p.id))]; });
+      setHasMore(d.has_more);
+    } catch {}
+    setLoadingMore(false);
+  }, [loadingMore, hasMore]);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) loadMoreExplore(); },
+      { rootMargin: "200px" }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [loadMoreExplore]);
 
   const doSearch = useCallback(async (q: string, author?: string) => {
     if (!q.trim()) { loadExplore(); return; }
@@ -179,7 +206,9 @@ function ExploreContent() {
         <div className="empty-state">검색 결과가 없습니다.</div>
       ) : (
         <>
-          {!loading && !searched && posts.length > 0 && posts.map((p) => <PostCard key={p.id} post={p} />)}
+          {!loading && !searched && posts.length > 0 && (
+            <>{posts.map((p) => <PostCard key={p.id} post={p} />)}<div ref={sentinelRef} />{loadingMore && <p className="empty-state">불러오는 중...</p>}</>
+          )}
           {user && searched && (
             <>
               {fetchedUrl && posts.length > 0 && (

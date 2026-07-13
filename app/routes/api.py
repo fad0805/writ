@@ -3641,10 +3641,16 @@ def api_by_number(request: Request, username: str, number: str):
 
 
 @router.get("/explore")
-def api_explore(request: Request):
+def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)):
     user = get_current_user(request)
     with get_session() as s:
         local_ids = [u.id for u in s.query(User).filter_by(is_remote=False).all()]
+        total = s.query(Post).filter(
+            Post.author_id.in_(local_ids),
+            Post.visibility == "public",
+            Post.is_deleted == False,
+            Post.in_reply_to_id == None,
+        ).count()
         posts = s.query(Post).options(
             selectinload(Post.author)
         ).filter(
@@ -3652,7 +3658,7 @@ def api_explore(request: Request):
             Post.visibility == "public",
             Post.is_deleted == False,
             Post.in_reply_to_id == None,
-        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).limit(30).all()
+        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit).all()
 
         novels = _apply_latest_activity_order(s.query(Novel).options(
             selectinload(Novel.author),
@@ -3664,6 +3670,7 @@ def api_explore(request: Request):
 
         return {
             "posts": [_post_json(p, s, user) for p in posts],
+            "has_more": offset + limit < total,
             "novels": [_novel_json(n, s) for n in novels],
         }
 
