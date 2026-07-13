@@ -43,7 +43,7 @@ function rewriteLinks(text: string, validMentions?: Set<string>): string {
     return `${before}<a href="/explore?q=%23${encodeURIComponent(tag)}" class="hashtag-link">#${tag}</a>`;
   });
 
-  text = text.replace(/(^|>|　|\s)(https?:\/\/[^\s<>"')\]]+)/g, (_m: string, before: string, url: string) => {
+  text = text.replace(/(^|>|　|\s)(https?:\/\/[^\s<>"')\]]+)(?![^<]*<\/a>)/g, (_m: string, before: string, url: string) => {
     return `${before}<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
   });
 

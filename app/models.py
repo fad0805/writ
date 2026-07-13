@@ -348,7 +348,7 @@ class Post(Base):
         )
 
         content = re.sub(
-            r'(^|>|　|\s)(https?://[^\s<>"\')\]]+)',
+            r'(^|>|　|\s)(https?://[^\s<>"\')\]]+)(?![^<]*</a>)',
             lambda m: f'{m.group(1)}<a href="{m.group(2)}">{m.group(2)}</a>',
             content,
         )
