@@ -57,7 +57,7 @@ def _post_json(p, session, user, tl_type=None,
             "summary": "",
             "visibility": "public",
             "created_at": _fmt_dt(p.created_at),
-            "author": _user_json(p.author),
+            "author": {"id": 0, "username": "deleted", "display_name": "삭제된 사용자", "avatar": "", "header": "", "is_admin": False, "is_remote": False, "summary": "", "is_locked": False, "is_limited": False, "is_frozen": False, "is_deceased": False, "is_deactivated": False, "is_sensitive": False, "role": "user", "show_badge": False, "email_verified": False, "default_visibility": "public", "display_handle": "deleted", "is_bot": False, "pinned_posts": [], "pinned_series": [], "episode_default_visibility": "public", "follow_list_visibility": "public", "custom_fields": [], "profile_hashtags": [], "enable_reactions": True, "aliases": [], "moved_to": ""},
             "likes_count": 0, "boosts_count": 0, "replies_count": 0,
             "liked": False, "boosted": False, "bookmarked": False,
             "is_mine": False, "is_dm": False, "is_sensitive": False,
@@ -801,11 +801,12 @@ def api_get_post(request: Request, post_id: int):
         ).order_by(Post.created_at).all() if reply_ids else []
         result["replies"] = [_post_json(r, s, user) for r in descendants if _can_view(r, user, s)]
         result["has_more_replies"] = offset + limit < total_descendants
-        # ancestors
+        # ancestors (skip deleted parents)
         ancestors = []
         cur = post.parent
         while cur:
-            ancestors.insert(0, _post_json(cur, s, user))
+            if not cur.is_deleted:
+                ancestors.insert(0, _post_json(cur, s, user))
             cur = cur.parent
         if not ancestors and post.in_reply_to_ap_id:
             try:
