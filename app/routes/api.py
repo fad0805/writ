@@ -4094,21 +4094,33 @@ def api_copy_emoji(request: Request, emoji_id: int):
         existing = s.query(CustomEmoji).filter_by(keyword=new_kw, category="기본").first()
         if existing:
             raise HTTPException(status_code=400, detail="Local emoji with this keyword already exists")
-        from app.utils.storage import get_storage as _get_storage
-        _storage = _get_storage()
         _ext = src.file_name.rsplit(".", 1)[-1] if "." in src.file_name else "webp"
         _new_fname = f"{new_kw}.{_ext}"
         _src_sub = "remote" if src.domain or src.category == "remote" else "local"
+        _data = None
+
+        from app.utils.storage import get_storage as _get_storage
+        _storage = _get_storage()
         try:
             _data = _storage.read(f"emojis/{_src_sub}/{src.file_name}")
-            _storage.save(f"emojis/local/{_new_fname}", _data, f"image/{_ext}")
         except Exception:
-            import shutil, os as _os
-            _src_path = _os.path.join(EMOJI_DIR, _src_sub, src.file_name)
-            _dst_path = _os.path.join(EMOJI_DIR, "local", _new_fname)
-            _os.makedirs(_os.path.dirname(_dst_path), exist_ok=True)
-            if _os.path.exists(_src_path):
-                shutil.copy2(_src_path, _dst_path)
+            pass
+        if not _data:
+            _src_path = os.path.join(EMOJI_DIR, _src_sub, src.file_name)
+            if os.path.isfile(_src_path):
+                with open(_src_path, "rb") as f:
+                    _data = f.read()
+
+        if _data:
+            _dst_local = os.path.join(EMOJI_DIR, "local", _new_fname)
+            os.makedirs(os.path.dirname(_dst_local), exist_ok=True)
+            with open(_dst_local, "wb") as f:
+                f.write(_data)
+            try:
+                _storage.save(f"emojis/local/{_new_fname}", _data, f"image/{_ext}")
+            except Exception:
+                pass
+
         copy = CustomEmoji(keyword=new_kw, file_name=_new_fname, category="기본", aliases=src.aliases or [])
         s.add(copy)
         s.commit()
