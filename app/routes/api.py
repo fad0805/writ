@@ -4143,7 +4143,9 @@ def api_fetch_actor(request: Request, url: str = Form(...)):
                         pass
         except Exception:
             pass
-    return _user_json(actor)
+    with get_session() as _s:
+        _attached = _s.query(User).get(actor.id)
+        return _user_json(_attached)
 
 
 @router.post("/fetch-post")
