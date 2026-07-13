@@ -634,6 +634,21 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                     continue
             filtered.append(p)
         posts = filtered
+    # Hide posts that mention someone the user doesn't follow (home timeline only)
+    if user and tl_type == "home":
+        _following_ids_set = _following_ids or set()
+        mention_filtered = []
+        for p in posts:
+            if p.mentioned_user_ids:
+                skip = False
+                for muid in p.mentioned_user_ids:
+                    if muid != p.author_id and muid not in _following_ids_set:
+                        skip = True
+                        break
+                if skip:
+                    continue
+            mention_filtered.append(p)
+        posts = mention_filtered
     has_more = raw_total > limit
     # Batch-load user interaction data for all remaining posts
     post_ids = [p.id for p in posts[:limit]]
