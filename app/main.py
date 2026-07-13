@@ -154,10 +154,15 @@ app = FastAPI(title="WRIT, the sns for writers", version="1.0.0", lifespan=lifes
 @app.exception_handler(Exception)
 async def debug_exception_handler(request: Request, exc: Exception):
     import traceback
+    import sys
     print(f"[ERROR] {request.method} {request.url.path} raised {type(exc).__name__}: {exc}", flush=True)
+    print(f"[ERROR] {'='*60}", flush=True)
     traceback.print_exc()
+    print(f"[ERROR] {'='*60}", flush=True)
+    sys.stdout.flush()
+    sys.stderr.flush()
     if isinstance(exc, HTTPException):
-        raise exc
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
     return JSONResponse({"detail": "Internal server error"}, status_code=500)
 
 @app.middleware("http")
