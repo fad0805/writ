@@ -118,6 +118,7 @@ class User(Base):
             "@context": [
                 "https://www.w3.org/ns/activitystreams",
                 "https://w3id.org/security/v1",
+                {"PropertyValue": "https://schema.org/PropertyValue", "value": "https://schema.org/value"},
             ],
             "id": self.actor_uri(),
             "type": "Person",
