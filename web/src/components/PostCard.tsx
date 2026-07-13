@@ -541,10 +541,9 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
             </div>
           </a>
         )}
-          {reactions && Object.keys(reactions).length > 0 && (
+          {reactions && Object.keys(reactions).length > 0 && currentUser?.enable_reactions !== false && (
           <div className="reactions-row" style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8, marginBottom: 4, padding: "0 8px" }} onClick={(e) => e.stopPropagation()}>
-            {currentUser?.enable_reactions !== false ? (
-              Object.entries(reactions).sort(([a], [b]) => a === "★" ? -1 : b === "★" ? 1 : 0).map(([emoji, count]) => {
+              {Object.entries(reactions).sort(([a], [b]) => a === "★" ? -1 : b === "★" ? 1 : 0).map(([emoji, count]) => {
               const emojiKey = emoji.startsWith(":") && emoji.endsWith(":") ? emoji.slice(1, -1) : emoji;
               const isNotLocalCustom = emoji.startsWith(":") && emoji.endsWith(":") && !reactionEmojiMap[emojiKey];
               return (
@@ -584,12 +583,6 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
               </span>
             );
             })
-            ) : (
-              <span className="reaction-badge" style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 12, fontSize: 13, border: "1px solid var(--border)", background: "var(--bg-secondary)" }}>
-                <Icon name="star_filled" size={18} style={{ color: "#f1c40f" }} />
-                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{Object.values(reactions).reduce((a: number, b: number) => a + b, 0)}</span>
-              </span>
-            )}
           </div>
         )}
         {!readonly && <div className="post-actions" onClick={(e) => e.stopPropagation()}>
