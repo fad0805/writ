@@ -45,33 +45,69 @@ router = APIRouter(prefix="/api")
 
 # ── helpers ──
 
-def _post_json(p, session, user, tl_type=None):
-    liked = session.query(Like).filter_by(user_id=user.id, post_id=p.id).first() is not None if user else False
-    boosted = session.query(Boost).filter_by(user_id=user.id, post_id=p.id).first() is not None if user else False
-    bookmarked = session.query(Bookmark).filter_by(user_id=user.id, post_id=p.id).first() is not None if user else False
+def _post_json(p, session, user, tl_type=None,
+               _liked_ids=None, _boosted_ids=None, _bookmarked_ids=None,
+               _vote_map=None, _my_reaction_map=None, _reactions_map=None,
+               _booster_map=None, _mentioned_users_map=None):
+    if user:
+        if _liked_ids is not None:
+            liked = p.id in _liked_ids
+        else:
+            liked = session.query(Like).filter_by(user_id=user.id, post_id=p.id).first() is not None
+        if _boosted_ids is not None:
+            boosted = p.id in _boosted_ids
+        else:
+            boosted = session.query(Boost).filter_by(user_id=user.id, post_id=p.id).first() is not None
+        if _bookmarked_ids is not None:
+            bookmarked = p.id in _bookmarked_ids
+        else:
+            bookmarked = session.query(Bookmark).filter_by(user_id=user.id, post_id=p.id).first() is not None
+    else:
+        liked = boosted = bookmarked = False
     booster = None
-    if p.author_id != (user.id if user else 0):
-        latest_boost = session.query(Boost).filter_by(post_id=p.id).order_by(desc(Boost.created_at)).first()
-        if latest_boost:
-            import datetime as _dt
-            if (_dt.datetime.now(_dt.timezone.utc) - latest_boost.created_at).total_seconds() > 10800:
-                booster = session.query(User).get(latest_boost.user_id)
+    if user and p.author_id != user.id:
+        if _booster_map is not None:
+            b = _booster_map.get(p.id)
+        else:
+            latest_boost = session.query(Boost).filter_by(post_id=p.id).order_by(desc(Boost.created_at)).first()
+            b = None
+            if latest_boost:
+                import datetime as _dt
+                if (_dt.datetime.now(_dt.timezone.utc) - latest_boost.created_at).total_seconds() > 10800:
+                    b = session.query(User).get(latest_boost.user_id)
+        if b and b.id != p.author_id:
+            booster = b
     my_vote = None
     if user and p.poll_data:
-        vote = session.query(Vote).filter_by(user_id=user.id, post_id=p.id).first()
-        if vote:
-            my_vote = vote.option_index
+        if _vote_map is not None:
+            my_vote = _vote_map.get(p.id)
+        else:
+            vote = session.query(Vote).filter_by(user_id=user.id, post_id=p.id).first()
+            if vote:
+                my_vote = vote.option_index
     my_reaction = None
     if user and liked:
-        my_reaction = session.query(Like.reaction).filter_by(user_id=user.id, post_id=p.id).scalar()
-    reactions = {}
-    _default_react = "★"
-    if p.likes:
-        for like in p.likes:
-            if like.reaction:
-                reactions[like.reaction] = reactions.get(like.reaction, 0) + 1
-            else:
-                reactions[_default_react] = reactions.get(_default_react, 0) + 1
+        if _my_reaction_map is not None:
+            my_reaction = _my_reaction_map.get(p.id)
+        else:
+            my_reaction = session.query(Like.reaction).filter_by(user_id=user.id, post_id=p.id).scalar()
+    if _reactions_map is not None:
+        reactions = _reactions_map.get(p.id, {})
+    else:
+        reactions = {}
+        _default_react = "★"
+        if p.likes:
+            for like in p.likes:
+                if like.reaction:
+                    reactions[like.reaction] = reactions.get(like.reaction, 0) + 1
+                else:
+                    reactions[_default_react] = reactions.get(_default_react, 0) + 1
+    if _mentioned_users_map is not None:
+        mentioned_handles = _mentioned_users_map.get(p.id, [])
+    elif p.mentioned_user_ids:
+        mentioned_handles = [u.username for u in (session.query(User).filter(User.id.in_(p.mentioned_user_ids or [])).all())]
+    else:
+        mentioned_handles = []
     return {
         "id": p.id,
         "number": p.number or "",
@@ -91,14 +127,14 @@ def _post_json(p, session, user, tl_type=None):
         "is_sensitive": getattr(p, 'is_sensitive', False) or False,
         "ap_id": p.ap_id or "",
         "reply_context": _reply_context(p, session, user, tl_type),
-        "boosted_by": _user_json(booster) if booster and booster.id != p.author_id else None,
+        "boosted_by": _user_json(booster) if booster else None,
         "media_attachments": (p.media_attachments or []) if hasattr(p, 'media_attachments') else [],
         "poll_data": p.poll_data,
         "my_vote": my_vote,
         "reactions": reactions,
         "my_reaction": my_reaction,
         "mentioned_user_ids": p.mentioned_user_ids or [],
-        "mentioned_handles": [u.username for u in (session.query(User).filter(User.id.in_(p.mentioned_user_ids or [])).all())] if p.mentioned_user_ids else [],
+        "mentioned_handles": mentioned_handles,
         "link_preview": p.link_preview or None,
     }
 
@@ -464,15 +500,14 @@ def api_logout(request: Request):
 # ── Timeline API ──
 
 def _get_feed(user, tl_type, session, limit=10, offset=0):
+    _base_opts = [selectinload(Post.author), selectinload(Post.parent)]
     if tl_type == "home":
         following_ids = [f.following_id for f in session.query(Follow).filter_by(
             follower_id=user.id, accepted=True
         ).all()]
         following_ids.append(user.id)
         boosted_ids = [b.post_id for b in session.query(Boost).filter_by(user_id=user.id).all()]
-        posts = session.query(Post).options(
-            selectinload(Post.parent).selectinload(Post.author)
-        ).filter(
+        posts = session.query(Post).options(*_base_opts).filter(
             or_(
                 Post.author_id.in_(following_ids),
                 Post.id.in_(boosted_ids),
@@ -486,9 +521,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         ).all()]
         following_ids.append(user.id)
         local_ids = [u.id for u in session.query(User).filter_by(is_remote=False).all()]
-        posts = session.query(Post).options(
-            selectinload(Post.parent).selectinload(Post.author)
-        ).filter(
+        posts = session.query(Post).options(*_base_opts).filter(
             or_(
                 Post.author_id.in_(following_ids),
                 and_(Post.author_id.in_(local_ids), Post.visibility == "public"),
@@ -497,17 +530,13 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     elif tl_type == "local":
         local_ids = [u.id for u in session.query(User).filter_by(is_remote=False).all()]
-        posts = session.query(Post).options(
-            selectinload(Post.parent).selectinload(Post.author)
-        ).filter(
+        posts = session.query(Post).options(*_base_opts).filter(
             Post.author_id.in_(local_ids),
             Post.visibility == "public",
             Post.is_deleted == False,
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     else:
-        posts = session.query(Post).options(
-            selectinload(Post.parent).selectinload(Post.author)
-        ).filter(
+        posts = session.query(Post).options(*_base_opts).filter(
             Post.visibility == "public",
             Post.is_deleted == False,
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
@@ -520,15 +549,34 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             follower_id=user.id, accepted=True
         ).all()}
         following_ids.add(user.id)
+        # Pre-load parent chain for reply posts to avoid N+1
+        reply_posts = [p for p in posts if p.author_id != user.id and (p.in_reply_to_id or p.in_reply_to_ap_id)]
+        parent_ids_to_load = set()
+        for p in reply_posts:
+            pid = p.in_reply_to_id
+            if pid:
+                parent_ids_to_load.add(pid)
+        parent_posts = {}
+        if parent_ids_to_load:
+            for pp in session.query(Post).filter(Post.id.in_(parent_ids_to_load)).all():
+                parent_posts[pp.id] = pp
+        # Load grandparent IDs too (up to 5 levels)
+        for _ in range(5):
+            next_ids = {pp.in_reply_to_id for pp in parent_posts.values() if pp.in_reply_to_id}
+            new_ids = next_ids - set(parent_posts.keys())
+            if not new_ids:
+                break
+            for pp in session.query(Post).filter(Post.id.in_(new_ids)).all():
+                parent_posts[pp.id] = pp
         reply_filtered = []
         for p in posts:
             if p.author_id != user.id and (p.in_reply_to_id or p.in_reply_to_ap_id):
                 participants = set()
-                # Walk local parent chain only (no HTTP fetches)
+                # Walk pre-loaded parent chain
                 cur = p
                 depth = 0
                 while cur and depth < 20:
-                    parent = getattr(cur, 'parent', None)
+                    parent = parent_posts.get(cur.in_reply_to_id) if cur.in_reply_to_id else None
                     if not parent:
                         break
                     participants.add(parent.author_id)
@@ -588,7 +636,75 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             filtered.append(p)
         posts = filtered
     has_more = raw_total > limit
-    return [_post_json(p, session, user, tl_type) for p in posts[:limit]], has_more
+    # Batch-load user interaction data for all remaining posts
+    post_ids = [p.id for p in posts[:limit]]
+    if user and post_ids:
+        _liked_ids = {l.post_id for l in session.query(Like).filter(
+            Like.user_id == user.id, Like.post_id.in_(post_ids)
+        ).all()}
+        _boosted_ids = {b.post_id for b in session.query(Boost).filter(
+            Boost.user_id == user.id, Boost.post_id.in_(post_ids)
+        ).all()}
+        _bookmarked_ids = {bm.post_id for bm in session.query(Bookmark).filter(
+            Bookmark.user_id == user.id, Bookmark.post_id.in_(post_ids)
+        ).all()}
+        _vote_map = {}
+        for v in session.query(Vote).filter(
+            Vote.user_id == user.id, Vote.post_id.in_(post_ids)
+        ).all():
+            _vote_map[v.post_id] = v.option_index
+        _my_reaction_map = {}
+        for l in session.query(Like).filter(
+            Like.user_id == user.id, Like.post_id.in_(post_ids), Like.reaction.isnot(None)
+        ).all():
+            _my_reaction_map[l.post_id] = l.reaction
+        # Batch load latest boost per post
+        _booster_map = {}
+        import datetime as _dt
+        _cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(hours=3)
+        for b in session.query(Boost).filter(
+            Boost.post_id.in_(post_ids), Boost.created_at > _cutoff
+        ).order_by(Boost.created_at.desc()).all():
+            if b.post_id not in _booster_map:
+                _booster_map[b.post_id] = b.user_id
+        if _booster_map:
+            _booster_users = {u.id: u for u in session.query(User).filter(
+                User.id.in_(set(_booster_map.values()))
+            ).all()}
+            _booster_map = {pid: _booster_users.get(uid) for pid, uid in _booster_map.items()}
+        # Batch load reactions
+        _reactions_map = {}
+        _default_react = "★"
+        all_post_likes = session.query(Like).filter(Like.post_id.in_(post_ids)).all()
+        for l in all_post_likes:
+            if l.post_id not in _reactions_map:
+                _reactions_map[l.post_id] = {}
+            r = l.reaction or _default_react
+            _reactions_map[l.post_id][r] = _reactions_map[l.post_id].get(r, 0) + 1
+        # Batch load mentioned users
+        all_mentioned_ids = set()
+        for p in posts[:limit]:
+            if p.mentioned_user_ids:
+                all_mentioned_ids.update(p.mentioned_user_ids)
+        _mentioned_users_map = {}
+        if all_mentioned_ids:
+            _mentioned_users = {u.id: u.username for u in session.query(User).filter(
+                User.id.in_(all_mentioned_ids)
+            ).all()}
+            for p in posts[:limit]:
+                if p.mentioned_user_ids:
+                    _mentioned_users_map[p.id] = [_mentioned_users.get(mid, "?") for mid in p.mentioned_user_ids if mid in _mentioned_users]
+                else:
+                    _mentioned_users_map[p.id] = []
+    else:
+        _liked_ids = _boosted_ids = _bookmarked_ids = set()
+        _vote_map = _my_reaction_map = _reactions_map = _booster_map = _mentioned_users_map = {}
+    return [_post_json(p, session, user, tl_type,
+                       _liked_ids=_liked_ids, _boosted_ids=_boosted_ids,
+                       _bookmarked_ids=_bookmarked_ids, _vote_map=_vote_map,
+                       _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map,
+                       _booster_map=_booster_map, _mentioned_users_map=_mentioned_users_map)
+            for p in posts[:limit]], has_more
 
 
 @router.get("/timeline/stream")
@@ -3991,15 +4107,24 @@ def api_fetch_post(request: Request, url: str = Form(...)):
     if not result:
         raise HTTPException(status_code=400, detail="Failed to save post")
     # Include emoji data so frontend can render immediately
-    emojis = []
     with get_session() as es:
-        for e in es.query(CustomEmoji).order_by(CustomEmoji.keyword).all():
-            emojis.append({"keyword": e.keyword, "file_name": e.file_name, "url": _emoji_url(e.file_name, e.domain or "", e.category or ""), "aliases": e.aliases or []})
-    result["_emojis"] = emojis
+        result["_emojis"] = [
+            {"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]}
+            for e in _load_emojis(es)
+        ]
     return result
 
 
 EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "emojis")
+
+# Simple in-memory TTL cache for emoji list
+_emoji_cache = {"data": None, "ts": 0}
+_EMOJI_CACHE_TTL = 60  # seconds
+
+
+def _invalidate_emoji_cache():
+    _emoji_cache["data"] = None
+    _emoji_cache["ts"] = 0
 
 def _emoji_url(file_name: str, domain: str = "", category: str = "") -> str:
     """Return the correct emoji URL (local or S3)."""
@@ -4015,23 +4140,36 @@ def _emoji_url(file_name: str, domain: str = "", category: str = "") -> str:
     return f"/emojis/{sub}/{file_name}"
 
 
+def _load_emojis(session):
+    """Load all emojis from DB, with simple in-memory TTL caching."""
+    import time as _time
+    now = _time.time()
+    if _emoji_cache["data"] is not None and now - _emoji_cache["ts"] < _EMOJI_CACHE_TTL:
+        return _emoji_cache["data"]
+    emojis = session.query(CustomEmoji).order_by(desc(CustomEmoji.created_at)).all()
+    result = [
+        {
+            "id": e.id,
+            "keyword": e.keyword,
+            "file_name": e.file_name,
+            "category": e.category or "",
+            "aliases": e.aliases or [],
+            "url": _emoji_url(e.file_name, e.domain or "", e.category or ""),
+            "source_url": e.source_url or "",
+            "domain": e.domain or "",
+        }
+        for e in emojis
+    ]
+    _emoji_cache["data"] = result
+    _emoji_cache["ts"] = now
+    return result
+
+
 @router.get("/emojis")
 def api_list_emojis():
     with get_session() as s:
-        emojis = s.query(CustomEmoji).order_by(desc(CustomEmoji.created_at)).all()
-        return [
-            {
-                "id": e.id,
-                "keyword": e.keyword,
-                "file_name": e.file_name,
-                "category": e.category or "",
-                "aliases": e.aliases or [],
-                "url": _emoji_url(e.file_name, e.domain or "", e.category or ""),
-                "source_url": e.source_url or "",
-                "domain": e.domain or "",
-            }
-            for e in emojis
-        ]
+        emojis = _load_emojis(s)
+    return JSONResponse(emojis, headers={"Cache-Control": "public, max-age=300"})
 
 
 @router.post("/emojis")
@@ -4112,6 +4250,7 @@ def api_create_emoji(
         )
         s.add(emoji)
         s.commit()
+        _invalidate_emoji_cache()
         return {
             "id": emoji.id,
             "keyword": emoji.keyword,
@@ -4140,6 +4279,7 @@ def api_update_emoji(request: Request, emoji_id: int, category: str = Form(""), 
         if aliases:
             emoji.aliases = [a.strip().lower().replace(" ", "_") for a in aliases.split(",") if a.strip()]
         s.commit()
+        _invalidate_emoji_cache()
         return {"ok": True, "emoji": {"id": emoji.id, "keyword": emoji.keyword, "file_name": emoji.file_name, "category": emoji.category, "aliases": emoji.aliases or [], "url": _emoji_url(emoji.file_name, emoji.domain or "", emoji.category or ""), "source_url": emoji.source_url or "", "domain": emoji.domain or ""}}
 
 @router.post("/emojis/{emoji_id}/copy")
@@ -4183,6 +4323,7 @@ def api_copy_emoji(request: Request, emoji_id: int):
         copy = CustomEmoji(keyword=new_kw, file_name=_new_fname, category="기본", aliases=src.aliases or [])
         s.add(copy)
         s.commit()
+        _invalidate_emoji_cache()
         return {"ok": True, "emoji": {"id": copy.id, "keyword": copy.keyword, "file_name": copy.file_name, "category": copy.category, "aliases": copy.aliases or [], "url": _emoji_url(copy.file_name, "", copy.category or ""), "source_url": copy.source_url or "", "domain": copy.domain or ""}}
 
 @router.delete("/emojis/{emoji_id}")
@@ -4203,6 +4344,7 @@ def api_delete_emoji(request: Request, emoji_id: int):
             os.remove(file_path)
         s.delete(emoji)
         s.commit()
+        _invalidate_emoji_cache()
     return {"ok": True}
 
 

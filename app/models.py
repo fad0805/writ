@@ -10,7 +10,16 @@ from sqlalchemy.orm import DeclarativeBase, relationship, Session
 from app.config import DATABASE_URL, BASE_URL
 
 _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
-engine = create_engine(DATABASE_URL, connect_args=_connect_args)
+if DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+else:
+    engine = create_engine(
+        DATABASE_URL,
+        pool_size=20,
+        max_overflow=20,
+        pool_pre_ping=True,
+        pool_recycle=3600,
+    )
 
 
 class Base(DeclarativeBase):
@@ -914,6 +923,13 @@ def init_db():
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_notif_user_created ON notifications(user_id, created_at)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_notif_user_type ON notifications(user_id, notification_type)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_follows_follower_following ON follows(follower_id, following_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_posts_bumped ON posts(bumped_at)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_posts_visibility_deleted ON posts(visibility, is_deleted)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_posts_in_reply_to_deleted ON posts(in_reply_to_id, is_deleted)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_likes_user_post ON likes(user_id, post_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_boosts_user_post ON boosts(user_id, post_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_bookmarks_user_post ON bookmarks(user_id, post_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_votes_user_post ON votes(user_id, post_id)"))
             conn.commit()
     except Exception:
         pass
