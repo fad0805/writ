@@ -180,7 +180,11 @@ export default function TimelinePage() {
         const newPost = JSON.parse(event.data);
         setPosts((prev) => {
           if (prev.some((p) => p.id === newPost.id)) return prev;
-          return [newPost, ...prev];
+          const idx = prev.findIndex((p) => (p.bumped_at || p.created_at) < (newPost.bumped_at || newPost.created_at));
+          if (idx === -1) return [...prev, newPost];
+          const next = [...prev];
+          next.splice(idx, 0, newPost);
+          return next;
         });
       } catch {}
     };
