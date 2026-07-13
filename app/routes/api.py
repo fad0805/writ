@@ -1132,20 +1132,35 @@ def api_delete_post(request: Request, post_id: int):
             raise HTTPException(status_code=404, detail="Post not found")
         if post.author_id != user.id and not user.is_admin:
             raise HTTPException(status_code=403, detail="Cannot delete this post")
-        # Delete attached media files
-        if post.media_attachments:
-            from app.utils.storage import get_storage
-            storage = get_storage()
-            for m in post.media_attachments:
-                if isinstance(m, dict) and m.get("url"):
-                    storage.delete(m["url"])
+        media = list(post.media_attachments or [])
+        ap_id = post.ap_id or ""
+        is_remote_author = bool(post.author.is_remote)
         post.is_deleted = True
-        # Clean up notifications referencing this post
         s.query(Notification).filter_by(post_id=post.id).delete()
         s.commit()
-        if post.ap_id and post.ap_id.startswith("http") and not post.author.is_remote:
-            from app.activitypub import _send_delete_post
-            _send_delete_post(post, user)
+    # Media 삭제 & AP 브로드캐스트는 백그라운드에서
+    if media or (ap_id and ap_id.startswith("http") and not is_remote_author):
+        def _background(_pid=post_id, _media=media, _ap_id=ap_id, _remote=is_remote_author, _user=user):
+            if _media:
+                from app.utils.storage import get_storage
+                storage = get_storage()
+                for m in _media:
+                    if isinstance(m, dict) and m.get("url"):
+                        try:
+                            storage.delete(m["url"])
+                        except Exception:
+                            pass
+            if _ap_id and _ap_id.startswith("http") and not _remote:
+                from app.activitypub import _send_delete_post
+                try:
+                    from app.models import get_session as _gs, Post as _Po
+                    with _gs() as _s:
+                        p = _s.query(_Po).get(_pid)
+                        if p:
+                            _send_delete_post(p, _user)
+                except Exception:
+                    pass
+        threading.Thread(target=_background, daemon=True).start()
     return {"ok": True}
 
 
