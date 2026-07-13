@@ -35,6 +35,7 @@ export default function NovelByNumberPage() {
   const [pinnedNotices, setPinnedNotices] = useState<NoticeData[]>([]);
   const [showSharePost, setShowSharePost] = useState(false);
   const [coverRevealed, setCoverRevealed] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [reportReason, setReportReason] = useState("");
   const [reportError, setReportError] = useState("");
@@ -78,6 +79,13 @@ export default function NovelByNumberPage() {
     } catch {}
   };
 
+  useEffect(() => {
+    if (!showMoreMenu) return;
+    const close = () => setShowMoreMenu(false);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [showMoreMenu]);
+
   if (loading) return <p className="empty-state">로딩 중...</p>;
   if (!novel) return <p className="empty-state">시리즈를 찾을 수 없습니다.</p>;
 
@@ -102,37 +110,42 @@ export default function NovelByNumberPage() {
               </div>
               <div className="series-header-btns">
                 {user && !isMine && (
-                  <button className="action-btn" onClick={async () => {
-                    if (isSeriesMuted) { await fetch(`/api/mutes/series/${novel.id}`, { method: "DELETE", credentials: "include" }); setIsSeriesMuted(false); }
-                    else { await fetch(`/api/mutes/series/${novel.id}`, { method: "POST", credentials: "include" }); setIsSeriesMuted(true); }
-                  }} title={isSeriesMuted ? "뮤트 해제" : "시리즈 뮤트"}>
-                    <Icon name={isSeriesMuted ? "mute" : "bell"} />
-                  </button>
-                )}
-                {novel.visibility !== "private" && <ShareButton url={`/series/by-number/${params.username}/${params.number}`} />}
-                {user && <button className="action-btn" onClick={() => setShowSharePost(true)} title="포스트로 공유"><Icon name="edit" /></button>}
-                {user && !isMine && (
-                  <button className="action-btn" onClick={() => { setShowReport(true); setReportReason(""); setReportError(""); setReportDone(false); setSelectedRuleIds([]); fetch("/api/rules").then((r) => r.json()).then((d) => setReportRules(d)).catch(() => {}); }} title="신고">
-                    <Icon name="flag" />
-                  </button>
-                )}
-                {user && !isMine && (
                   <button onClick={toggleFollow} className={`btn btn-small ${isFollowing ? "btn-outline" : "btn-primary"}`}>
                     {isFollowing ? "팔로잉" : "팔로우"}
                   </button>
                 )}
-                {isMine && (
-                  <>
-                    <button className="action-btn" onClick={async () => {
-                      const wasPinned = isSeriesPinned;
-                      setIsSeriesPinned(!wasPinned);
-                      const res = await fetch(`/api/${wasPinned ? "unpin" : "pin"}/series/${novel.id}`, { method: "POST", credentials: "include" });
-                      if (!res.ok) { setIsSeriesPinned(wasPinned); const d = await res.json().catch(() => ({})); if (d.detail) alert(d.detail); }
-                    }} title={isSeriesPinned ? "고정 해제" : "고정"} style={{ color: isSeriesPinned ? "var(--danger)" : undefined }}><Icon name={isSeriesPinned ? "pin_filled" : "pin"} /></button>
-                    <button className="btn btn-small" onClick={() => router.push(`/series/${novel.id}/edit`)}>시리즈 편집</button>
-                    <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>
-                  </>
-                )}
+                {novel.visibility !== "private" && <ShareButton url={`/series/by-number/${params.username}/${params.number}`} />}
+                <div className="series-more-wrap" onClick={() => setShowMoreMenu(!showMoreMenu)}>
+                  <button className="action-btn" title="더보기"><Icon name="more" /></button>
+                  {showMoreMenu && (
+                    <div className="series-more-menu" onClick={(e) => e.stopPropagation()}>
+                      {user && <button onClick={() => { setShowSharePost(true); setShowMoreMenu(false); }}><Icon name="edit" /> 포스트로 공유</button>}
+                      {user && !isMine && (
+                        <button onClick={async () => {
+                          if (isSeriesMuted) { await fetch(`/api/mutes/series/${novel.id}`, { method: "DELETE", credentials: "include" }); setIsSeriesMuted(false); }
+                          else { await fetch(`/api/mutes/series/${novel.id}`, { method: "POST", credentials: "include" }); setIsSeriesMuted(true); }
+                          setShowMoreMenu(false);
+                        }}><Icon name={isSeriesMuted ? "mute" : "bell"} /> {isSeriesMuted ? "뮤트 해제" : "시리즈 뮤트"}</button>
+                      )}
+                      {user && !isMine && (
+                        <button onClick={() => { setShowReport(true); setReportReason(""); setReportError(""); setReportDone(false); setSelectedRuleIds([]); fetch("/api/rules").then((r) => r.json()).then((d) => setReportRules(d)).catch(() => {}); setShowMoreMenu(false); }}><Icon name="flag" /> 신고</button>
+                      )}
+                      {isMine && (
+                        <>
+                          <button onClick={async () => {
+                            const wasPinned = isSeriesPinned;
+                            setIsSeriesPinned(!wasPinned);
+                            const res = await fetch(`/api/${wasPinned ? "unpin" : "pin"}/series/${novel.id}`, { method: "POST", credentials: "include" });
+                            if (!res.ok) { setIsSeriesPinned(wasPinned); const d = await res.json().catch(() => ({})); if (d.detail) alert(d.detail); }
+                            setShowMoreMenu(false);
+                          }}><Icon name={isSeriesPinned ? "pin_filled" : "pin"} /> {isSeriesPinned ? "고정 해제" : "고정"}</button>
+                          <button onClick={() => { router.push(`/series/${novel.id}/edit`); setShowMoreMenu(false); }}><Icon name="edit" /> 시리즈 편집</button>
+                          <button onClick={() => { router.push(`/series/${novel.id}/episodes/new`); setShowMoreMenu(false); }}><Icon name="plus" /> 새 에피소드</button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
