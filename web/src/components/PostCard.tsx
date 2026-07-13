@@ -164,15 +164,25 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
 
   const [quoteUrl, setQuoteUrl] = useState("");
   const validMentions = useMemo(() => new Set(post.mentioned_handles || []), [post.mentioned_handles]);
-  const contentHtml = (() => {
+  const [resolvedMentions, setResolvedMentions] = useState<Map<string, string>>(new Map());
+  const buildContentHtml = (qUrl?: string, resolved?: Map<string, string>) => {
     let html = post.content;
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     html = html.replace(/\n/g, '<br>');
     html = renderCustomEmojis(html, emojiMap);
     html = rewriteLinks(html, validMentions);
-    if (quoteUrl) {
-      const escUrl = quoteUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (resolved && resolved.size) {
+      resolved.forEach((localUser, handle) => {
+        const escaped = handle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        html = html.replace(
+          new RegExp(`<a\\s+href="/@${escaped}"[^>]*>[^<]*<\\/a>`, "g"),
+          `<a href="/@${localUser}" class="mention-link">@${localUser}</a>`
+        );
+      });
+    }
+    if (qUrl) {
+      const escUrl = qUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const hasPrefix = new RegExp(`(series:|episode:)\\s*${escUrl}`, 'i').test(html);
       if (hasPrefix) {
         html = html.replace(new RegExp(`<a[^>]*>${escUrl}<\\/a>`, 'gi'), '');
@@ -180,15 +190,53 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
         html = html.replace(new RegExp(escUrl, 'gi'), '');
       } else {
         const host = typeof window !== 'undefined' ? window.location.host : '';
-        const isLocal = host === (quoteUrl.match(/https?:\/\/([^/]+)/)?.[1]);
-        const linkHref = isLocal ? quoteUrl.replace(/https?:\/\/[^/]+/, '') : quoteUrl;
+        const isLocal = host === (qUrl.match(/https?:\/\/([^/]+)/)?.[1]);
+        const linkHref = isLocal ? qUrl.replace(/https?:\/\/[^/]+/, '') : qUrl;
         const linkTarget = isLocal ? '' : ' target="_blank" rel="noopener noreferrer"';
-        html = html.replace(new RegExp(escUrl, 'gi'), `<a href="${linkHref}"${linkTarget}>${quoteUrl}</a>`);
+        html = html.replace(new RegExp(escUrl, 'gi'), `<a href="${linkHref}"${linkTarget}>${qUrl}</a>`);
       }
       html = html.replace(/<span class="quote-inline">\s*RE:\s*<\/span>/gi, '');
     }
     return html;
-  })();
+  };
+  const [contentHtml, setContentHtml] = useState(() => buildContentHtml());
+
+  useEffect(() => {
+    const mentionRe = /<a\s+href="\/@([a-zA-Z][a-zA-Z0-9]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}))"[^>]*>[^<]*<\/a>/g;
+    const remoteMentions: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = mentionRe.exec(contentHtml)) !== null) {
+      const handle = m[1];
+      if (handle.includes("@") && !validMentions.has(handle) && !resolvedMentions.has(handle)) {
+        remoteMentions.push(handle);
+      }
+    }
+    if (!remoteMentions.length) return;
+    const seen = new Set<string>();
+    remoteMentions.forEach((handle) => {
+      if (seen.has(handle)) return;
+      seen.add(handle);
+      const [username, domain] = handle.split("@");
+      const profileUrl = `https://${domain}/@${username}`;
+      const form = new FormData();
+      form.append("url", profileUrl);
+      fetch("/api/fetch-actor", { method: "POST", credentials: "include", body: form })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.username) {
+            setResolvedMentions((prev) => {
+              const next = new Map(prev);
+              next.set(handle, data.username);
+              return next;
+            });
+          }
+        })
+        .catch(() => {});
+    });
+  }, []);
+  useEffect(() => {
+    setContentHtml(buildContentHtml(quoteUrl || undefined, resolvedMentions));
+  }, [quoteUrl, resolvedMentions]);
 
   // Extract quoted post URL from content
   type QuotedSeries = { type: "series"; novel: NovelData; author: User };
