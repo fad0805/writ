@@ -195,8 +195,25 @@ def _parse_mentions(content):
     if not mentioned:
         return []
     with get_session() as s:
-        users = s.query(User).filter(User.username.in_(mentioned)).all()
-        return [u.id for u in users]
+        user_ids = []
+        for handle in mentioned:
+            if '@' in handle:
+                local_part, domain = handle.split('@', 1)
+                u = s.query(User).filter(
+                    User.username == local_part,
+                    User.is_remote == True,
+                ).first()
+                if u and u.remote_url:
+                    from urllib.parse import urlparse as _urlparse
+                    parsed = _urlparse(u.remote_url)
+                    if parsed.hostname and parsed.hostname.lower() == domain.lower():
+                        user_ids.append(u.id)
+                        continue
+            else:
+                u = s.query(User).filter(User.username == handle).first()
+                if u:
+                    user_ids.append(u.id)
+        return user_ids
 
 
 def _sync_post_tags(post, s):

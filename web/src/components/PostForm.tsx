@@ -299,7 +299,14 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     const wordEnd = mentionStart + 1 + (wordEndMatch >= 0 ? wordEndMatch : afterMention.length);
     const before = content.slice(0, mentionStart);
     const after = content.slice(wordEnd);
-    const inserted = `${before}@${u.username} ${after}`;
+    let handle = u.username;
+    if (u.is_remote && u.remote_url) {
+      try {
+        const h = new URL(u.remote_url).hostname;
+        if (h) handle = `${u.username}@${h}`;
+      } catch {}
+    }
+    const inserted = `${before}@${handle} ${after}`;
     setContent(inserted);
     setMentionStart(-1);
     setMentionQuery("");
@@ -307,7 +314,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     requestAnimationFrame(() => {
       const ta = taRef.current;
       if (ta) {
-        const pos = before.length + u.username.length + 2;
+        const pos = before.length + handle.length + 2;
         ta.setSelectionRange(pos, pos);
         ta.focus();
       }

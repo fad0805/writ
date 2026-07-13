@@ -1165,13 +1165,23 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             mentioned_ids = []
             _seen_ids = set()
             if mentioned_names:
-                mentioned = session.query(User).filter(
-                    User.username.in_(mentioned_names)
-                ).all()
-                for u in mentioned:
-                    if u.id not in _seen_ids:
-                        mentioned_ids.append(u.id)
-                        _seen_ids.add(u.id)
+                for _name in mentioned_names:
+                    if '@' in _name:
+                        _lp, _dom = _name.split('@', 1)
+                        u = session.query(User).filter(
+                            User.username == _lp, User.is_remote == True,
+                        ).first()
+                        if u and u.id not in _seen_ids and u.remote_url:
+                            from urllib.parse import urlparse as _urlparse
+                            _p = _urlparse(u.remote_url)
+                            if _p.hostname and _p.hostname.lower() == _dom.lower():
+                                mentioned_ids.append(u.id)
+                                _seen_ids.add(u.id)
+                    else:
+                        u = session.query(User).filter(User.username == _name).first()
+                        if u and u.id not in _seen_ids:
+                            mentioned_ids.append(u.id)
+                            _seen_ids.add(u.id)
             if mentioned_hrefs:
                 for _href in mentioned_hrefs:
                     u = session.query(User).filter(User.remote_url == _href).first()

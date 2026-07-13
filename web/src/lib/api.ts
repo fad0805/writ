@@ -52,6 +52,7 @@ export interface User {
   pinned_posts?: number[];
   pinned_series?: number[];
   enable_reactions?: boolean;
+  remote_url?: string;
 }
 
 export interface PollOption {
