@@ -49,6 +49,25 @@ def _post_json(p, session, user, tl_type=None,
                _liked_ids=None, _boosted_ids=None, _bookmarked_ids=None,
                _vote_map=None, _my_reaction_map=None, _reactions_map=None,
                _booster_map=None, _mentioned_users_map=None):
+    if p.is_deleted:
+        return {
+            "id": p.id,
+            "number": p.number or "",
+            "content": "",
+            "summary": "",
+            "visibility": "public",
+            "created_at": _fmt_dt(p.created_at),
+            "author": _user_json(p.author),
+            "likes_count": 0, "boosts_count": 0, "replies_count": 0,
+            "liked": False, "boosted": False, "bookmarked": False,
+            "is_mine": False, "is_dm": False, "is_sensitive": False,
+            "ap_id": p.ap_id or "",
+            "reply_context": None, "boosted_by": None,
+            "media_attachments": [], "poll_data": None, "my_vote": None,
+            "reactions": {}, "my_reaction": None,
+            "mentioned_user_ids": [], "mentioned_handles": [],
+            "link_preview": None, "is_deleted": True,
+        }
     if user:
         if _liked_ids is not None:
             liked = p.id in _liked_ids
@@ -204,8 +223,9 @@ def _reply_context(p, session=None, user=None, tl_type=None):
 
 
 def _can_view(post, viewer, session):
+    # Allow viewing deleted posts (show placeholder, preserve thread structure)
     if post.is_deleted:
-        return False
+        return True
     if viewer and post.author_id == viewer.id:
         return True
     v = post.visibility or "public"
@@ -748,7 +768,7 @@ def api_get_post(request: Request, post_id: int):
         post = s.query(Post).options(
             selectinload(Post.author),
             selectinload(Post.parent).selectinload(Post.author),
-        ).filter_by(id=post_id, is_deleted=False).first()
+        ).filter_by(id=post_id).first()
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
         if not _can_view(post, user, s):
@@ -763,7 +783,7 @@ def api_get_post(request: Request, post_id: int):
         descendant_ids = set()
         def collect_descendants(pid):
             children = s.query(Post).options(selectinload(Post.author)).filter_by(
-                in_reply_to_id=pid, is_deleted=False
+                in_reply_to_id=pid
             ).all()
             for c in children:
                 if c.id not in descendant_ids:
@@ -1128,6 +1148,10 @@ def api_delete_post(request: Request, post_id: int):
         media = list(post.media_attachments or [])
         ap_id = post.ap_id or ""
         is_remote_author = bool(post.author.is_remote)
+        post.content = ""
+        post.media_attachments = []
+        post.poll_data = None
+        post.link_preview = None
         post.is_deleted = True
         s.query(Notification).filter_by(post_id=post.id).delete()
         s.commit()
