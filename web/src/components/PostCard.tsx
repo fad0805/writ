@@ -43,7 +43,7 @@ function rewriteLinks(text: string, validMentions?: Set<string>): string {
     return `${before}<a href="/explore?q=%23${encodeURIComponent(tag)}" class="hashtag-link">#${tag}</a>`;
   });
 
-  text = text.replace(/(^|>|　|\s)(https?:\/\/[^\s<>"')\]]+)(?![^<]*<\/a>)/g, (_m: string, before: string, url: string) => {
+  text = text.replace(/(^|>|　|\s)(https?:\/\/[^\s<>"')\]]+)(?![\s\S]*?<\/a>)/g, (_m: string, before: string, url: string) => {
     return `${before}<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
   });
 
@@ -173,6 +173,7 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   const [resolvedMentions, setResolvedMentions] = useState<Map<string, string>>(new Map());
   const buildContentHtml = (qUrl?: string, resolved?: Map<string, string>) => {
     let html = post.content;
+    html = html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     html = html.replace(/\n/g, '<br>');
@@ -399,7 +400,8 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
             <span>@{post.reply_context.author.username}</span>
             <p dangerouslySetInnerHTML={{ __html: (() => {
               const text = (post.reply_context.content || "").slice(0, 90);
-              let html = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+              let html = text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+              html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
               html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
               html = html.replace(/\n/g, '<br>');
               html = renderCustomEmojis(html, emojiMap);
