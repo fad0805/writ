@@ -115,7 +115,7 @@ export default function NovelByNumberPage() {
                   </button>
                 )}
                 {isMine && <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>}
-                {user && <button className="btn btn-small" onClick={() => setShowSharePost(true)}><Icon name="edit" /> 포스트 공유</button>}
+                {user && <button className="action-btn" title="포스트로 공유" onClick={() => setShowSharePost(true)}><Icon name="share" /></button>}
                 <div className="series-more-wrap" onClick={() => setShowMoreMenu(!showMoreMenu)}>
                   <button className="action-btn" title="더보기"><Icon name="more" /></button>
                   {showMoreMenu && (
@@ -139,7 +139,7 @@ export default function NovelByNumberPage() {
                             const res = await fetch(`/api/${wasPinned ? "unpin" : "pin"}/series/${novel.id}`, { method: "POST", credentials: "include" });
                             if (!res.ok) { setIsSeriesPinned(wasPinned); const d = await res.json().catch(() => ({})); if (d.detail) alert(d.detail); }
                             setShowMoreMenu(false);
-                          }}><Icon name={isSeriesPinned ? "pin_filled" : "pin"} /> {isSeriesPinned ? "고정 해제" : "고정"}</button>
+                          }}><Icon name={isSeriesPinned ? "pin_filled" : "pin"} /> 고정</button>
                           <button onClick={() => { router.push(`/series/${novel.id}/edit`); setShowMoreMenu(false); }}><Icon name="edit" /> 시리즈 편집</button>
                         </>
                       )}

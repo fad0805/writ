@@ -2293,8 +2293,11 @@ input[type="checkbox"] {
 .series-header-btns {
   display: flex;
   gap: 8px;
-  align-items: center;
+  align-items: right;
   flex-wrap: wrap;
+  @media (max-width: 768px) {
+    max-width: 70px;
+  } 
 }
 .series-more-wrap {
   position: relative;
