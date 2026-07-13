@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth";
 
 const VIS_ORDER: Record<string, number> = { public: 0, home: 1, followers: 2, mention: 3 };
 
-export default function ReplyModal({ post, onClose, onDone }: { post: PostData; onClose: () => void; onDone?: () => void }) {
+export default function ReplyModal({ post, onClose, onDone }: { post: PostData; onClose: () => void; onDone?: (newPost?: PostData) => void }) {
   const { user } = useAuth();
   const replyVis = useMemo(() => {
     const userVis = user?.default_visibility || "public";

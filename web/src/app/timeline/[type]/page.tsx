@@ -241,7 +241,7 @@ export default function TimelinePage() {
           </InfiniteScroll>
         )}
       </div>
-      {replyPost && <ReplyModal post={replyPost} onClose={() => setReplyPost(null)} onDone={() => { setReplyPost(null); load(); }} />}
+      {replyPost && <ReplyModal post={replyPost} onClose={() => setReplyPost(null)} onDone={(newPost) => { setReplyPost(null); if (newPost) { setPosts((prev) => { if (prev.some((p) => p.id === newPost.id)) return prev; return [newPost, ...prev]; }); } }} />}
       <button className="mobile-fab" onClick={() => setShowComposer(true)}>
         <Icon name="pen_solid" size={22} />
       </button>
