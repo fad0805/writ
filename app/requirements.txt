@@ -9,5 +9,6 @@ python-multipart==0.0.18
 cryptography==44.0.0
 pycryptodome==3.21.0
 Pillow==11.1.0
+pywebpush==2.3.0
 alembic==1.14.1
 boto3==1.35.76
