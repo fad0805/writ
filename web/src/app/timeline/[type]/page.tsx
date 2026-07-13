@@ -105,6 +105,27 @@ export default function TimelinePage() {
     setLoadingMore(false);
   }, [tlType, rawOffset, hasMore, loadingMore]);
 
+  const touchStartX = useRef(0);
+
+  useEffect(() => {
+    const handler = (e: TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+    document.addEventListener("touchstart", handler, { passive: true });
+    return () => document.removeEventListener("touchstart", handler);
+  }, []);
+
+  useEffect(() => {
+    const tabs = ["home", "social", "local", "federated"];
+    const currentIdx = tabs.indexOf(tlType);
+    const handler = (e: TouchEvent) => {
+      const dx = e.changedTouches[0].clientX - touchStartX.current;
+      if (Math.abs(dx) < 60) return;
+      if (dx > 0 && currentIdx > 0) router.push(`/timeline/${tabs[currentIdx - 1]}`);
+      else if (dx < 0 && currentIdx < tabs.length - 1) router.push(`/timeline/${tabs[currentIdx + 1]}`);
+    };
+    document.addEventListener("touchend", handler, { passive: true });
+    return () => document.removeEventListener("touchend", handler);
+  }, [tlType, router]);
+
   useEffect(() => { if (!authLoading && !user) router.replace("/login"); }, [authLoading, user, router]);
 
   useEffect(() => {
@@ -126,18 +147,18 @@ export default function TimelinePage() {
         setSelectedIdx(-1);
         return;
       }
-      const tabs = ["home", "social", "local", "federated"];
-      const currentTabIdx = tabs.indexOf(tlType);
+      const t = ["home", "social", "local", "federated"];
+      const currentTabIdx = t.indexOf(tlType);
       if (e.key === "h" && currentTabIdx > 0) {
         e.preventDefault();
         setSelectedIdx(-1);
-        router.push(`/timeline/${tabs[currentTabIdx - 1]}`);
+        router.push(`/timeline/${t[currentTabIdx - 1]}`);
         return;
       }
-      if (e.key === "l" && currentTabIdx < tabs.length - 1) {
+      if (e.key === "l" && currentTabIdx < t.length - 1) {
         e.preventDefault();
         setSelectedIdx(-1);
-        router.push(`/timeline/${tabs[currentTabIdx + 1]}`);
+        router.push(`/timeline/${t[currentTabIdx + 1]}`);
         return;
       }
       if (e.key === "j") {
