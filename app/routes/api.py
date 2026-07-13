@@ -203,7 +203,7 @@ def _reply_context(p, session=None, user=None, tl_type=None):
             parent = session.query(Post).filter_by(ap_id=p.in_reply_to_ap_id).first()
         except Exception:
             pass
-    if not parent:
+    if not parent or parent.is_deleted:
         return None
     if tl_type == "home" and user and parent.author_id != user.id:
         followed = session.query(Follow).filter_by(
@@ -223,9 +223,8 @@ def _reply_context(p, session=None, user=None, tl_type=None):
 
 
 def _can_view(post, viewer, session):
-    # Allow viewing deleted posts (show placeholder, preserve thread structure)
     if post.is_deleted:
-        return True
+        return False
     if viewer and post.author_id == viewer.id:
         return True
     v = post.visibility or "public"
@@ -768,7 +767,7 @@ def api_get_post(request: Request, post_id: int):
         post = s.query(Post).options(
             selectinload(Post.author),
             selectinload(Post.parent).selectinload(Post.author),
-        ).filter_by(id=post_id).first()
+        ).filter_by(id=post_id, is_deleted=False).first()
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
         if not _can_view(post, user, s):
