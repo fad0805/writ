@@ -3443,6 +3443,30 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
         if not verify_password(password, salt, hval):
             raise HTTPException(status_code=400, detail="비밀번호가 올바르지 않습니다.")
 
+        # Broadcast Delete to followers BEFORE deleting follow data
+        import json as _json
+        _followers = [f.follower_id for f in s.query(Follow).filter_by(following_id=db.id, accepted=True).all()]
+        _actor_uri = db.actor_uri()
+        if _followers:
+            _delete_activity = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": f"{_actor_uri}#delete",
+                "type": "Delete",
+                "actor": _actor_uri,
+                "object": _actor_uri,
+            }
+            _payload = _json.dumps(_delete_activity, ensure_ascii=False)
+            for _fid in _followers:
+                try:
+                    from app.activitypub import _post_to_inbox
+                    _f = s.query(User).get(_fid)
+                    if _f and _f.shared_inbox_url:
+                        threading.Thread(target=_post_to_inbox, args=(_f.shared_inbox_url, _delete_activity, db), daemon=True).start()
+                    elif _f and _f.inbox_url:
+                        threading.Thread(target=_post_to_inbox, args=(_f.inbox_url, _delete_activity, db), daemon=True).start()
+                except Exception:
+                    pass
+
         # Delete all posts
         for p in s.query(Post).filter_by(author_id=db.id).all():
             s.query(Like).filter(Like.post_id == p.id).delete()
@@ -3489,20 +3513,6 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
         s.commit()
         user_id = db.id
         username = db.username
-        actor_uri = db.actor_uri()
-
-    # Broadcast Delete actor to followers for federation
-    try:
-        delete_activity = {
-            "@context": "https://www.w3.org/ns/activitystreams",
-            "id": f"{actor_uri}#delete",
-            "type": "Delete",
-            "actor": actor_uri,
-            "object": actor_uri,
-        }
-        broadcast_to_followers(user, delete_activity)
-    except Exception as e:
-        logger.warning("Failed to broadcast Delete actor: %s", e)
 
     log_admin_action(user_id, username, "delete_account_self", ip_address=request.client.host if request.client else "")
 
