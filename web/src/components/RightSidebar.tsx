@@ -104,9 +104,9 @@ export default function RightSidebar() {
         <div className="notif-mini-list">
           {notifs.length > 0 ? notifs.map((n) => {
             if (n.post) return (
-              <div key={n.id}>
+              <div key={n.id} className="mini-notif-card" style={{ marginTop: 6, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg-tertiary)" }}>
                 {(n.type === "like" || n.type === "boost") && n.from_user && (
-                  <div className="mini-post-author" style={{ padding: "0 12px", marginTop: 4, fontSize: "0.85em" }}>
+                  <div className="mini-post-author" style={{ fontSize: "0.85em", marginBottom: 4 }}>
                     <strong>{n.from_user.display_name || n.from_user.username}</strong>
                     <span className="text-muted" style={{ marginLeft: 4 }}>{n.type === "like" ? "님이 즐겨찾기했습니다" : "님이 부스트했습니다"}</span>
                   </div>
@@ -117,8 +117,8 @@ export default function RightSidebar() {
 
             if (n.type === "vote") {
               return (
-                <div key={n.id}>
-                  <div className="mini-post-author" style={{ padding: "0 12px", marginTop: 4, fontSize: "0.85em" }}>
+                <div key={n.id} className="mini-notif-card" style={{ marginTop: 6, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg-tertiary)" }}>
+                  <div className="mini-post-author" style={{ fontSize: "0.85em", marginBottom: 4 }}>
                     <strong>{n.from_user?.display_name || "알 수 없음"}</strong>
                     <span className="text-muted" style={{ marginLeft: 4 }}>님이 투표에 참여했습니다</span>
                   </div>
@@ -132,8 +132,8 @@ export default function RightSidebar() {
               const pollText = pollPost?.poll_data?.options?.map((o: PollOption) => o.text || "").join(" / ") || "";
               const msg = n.metadata?.is_author ? "내 투표가 종료되었습니다" : "참여한 투표가 종료되었습니다";
               return (
-                <div key={n.id}>
-                  <div className="mini-post-author" style={{ padding: "0 12px", marginTop: 4, fontSize: "0.85em" }}>
+                <div key={n.id} className="mini-notif-card" style={{ marginTop: 6, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg-tertiary)" }}>
+                  <div className="mini-post-author" style={{ fontSize: "0.85em", marginBottom: 4 }}>
                     <span className="text-muted">{msg}</span>
                     {pollText && <span className="text-muted" style={{ marginLeft: 4 }}>— {pollText}</span>}
                   </div>
