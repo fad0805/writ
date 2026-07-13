@@ -1165,7 +1165,11 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     poll_post.poll_data = {**poll_post.poll_data, "options": new_options}
                     session.commit()
                     from app.timeline_stream import broadcast_post, broadcast_refresh_notifs
-                    broadcast_refresh_notifs(poll_post.author_id)
+                    # Notify poll author + all voters
+                    _voter_ids = {v.user_id for v in session.query(Vote).filter_by(post_id=poll_post.id).all()}
+                    _voter_ids.add(poll_post.author_id)
+                    for _vid in _voter_ids:
+                        broadcast_refresh_notifs(_vid)
                     broadcast_post({
                         "id": poll_post.id,
                         "type": "update",
