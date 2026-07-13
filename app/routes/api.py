@@ -4098,7 +4098,7 @@ def api_copy_emoji(request: Request, emoji_id: int):
         _storage = _get_storage()
         _ext = src.file_name.rsplit(".", 1)[-1] if "." in src.file_name else "webp"
         _new_fname = f"{new_kw}.{_ext}"
-        _src_sub = "remote" if src.domain else "local"
+        _src_sub = "remote" if src.domain or src.category == "remote" else "local"
         try:
             _data = _storage.read(f"emojis/{_src_sub}/{src.file_name}")
             _storage.save(f"emojis/local/{_new_fname}", _data, f"image/{_ext}")
@@ -4111,7 +4111,7 @@ def api_copy_emoji(request: Request, emoji_id: int):
                 shutil.copy2(_src_path, _dst_path)
         copy = CustomEmoji(keyword=new_kw, file_name=_new_fname, category="기본", aliases=src.aliases or [])
         s.add(copy)
-        s.flush()
+        s.commit()
         return {"ok": True, "emoji": {"id": copy.id, "keyword": copy.keyword, "file_name": copy.file_name, "category": copy.category, "aliases": copy.aliases or [], "url": _emoji_url(copy.file_name, "", copy.category or ""), "source_url": copy.source_url or "", "domain": copy.domain or ""}}
 
 @router.delete("/emojis/{emoji_id}")
@@ -4122,7 +4122,7 @@ def api_delete_emoji(request: Request, emoji_id: int):
         if not emoji:
             raise HTTPException(status_code=404, detail="Emoji not found")
         from app.utils.storage import get_storage
-        _del_sub = "remote" if emoji.domain else "local"
+        _del_sub = "remote" if emoji.domain or emoji.category == "remote" else "local"
         try:
             get_storage().delete(f"emojis/{_del_sub}/{emoji.file_name}")
         except Exception:
