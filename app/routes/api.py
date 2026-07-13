@@ -545,43 +545,19 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     raw_total = len(posts)
     posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm and p.author_id != user.id and user.id not in (p.mentioned_user_ids or []))]
-    # Filter replies: only show if all thread participants are followed (or post is mine)
-    # Only for home/social timelines, not local/federated
-    if user and tl_type in ("home", "social") and _following_ids:
-        # Pre-load parent chain for reply posts to avoid N+1
-        reply_posts = [p for p in posts if p.author_id != user.id and (p.in_reply_to_id or p.in_reply_to_ap_id)]
-        parent_ids_to_load = set()
-        for p in reply_posts:
-            pid = p.in_reply_to_id
-            if pid:
-                parent_ids_to_load.add(pid)
-        parent_posts = {}
-        if parent_ids_to_load:
-            for pp in session.query(Post).filter(Post.id.in_(parent_ids_to_load)).all():
-                parent_posts[pp.id] = pp
-        # Load grandparent IDs too (up to 5 levels)
-        for _ in range(5):
-            next_ids = {pp.in_reply_to_id for pp in parent_posts.values() if pp.in_reply_to_id}
-            new_ids = next_ids - set(parent_posts.keys())
-            if not new_ids:
-                break
-            for pp in session.query(Post).filter(Post.id.in_(new_ids)).all():
-                parent_posts[pp.id] = pp
+    # Filter replies: hide if direct parent author is not followed
+    # Only for home timeline, not social/local/federated
+    if user and tl_type == "home" and _following_ids:
+        parent_ids = {p.in_reply_to_id for p in posts if p.author_id != user.id and p.in_reply_to_id}
+        parent_authors = {}
+        if parent_ids:
+            for pp in session.query(Post).filter(Post.id.in_(parent_ids)).all():
+                parent_authors[pp.id] = pp.author_id
         reply_filtered = []
         for p in posts:
-            if p.author_id != user.id and (p.in_reply_to_id or p.in_reply_to_ap_id):
-                participants = set()
-                # Walk pre-loaded parent chain
-                cur = p
-                depth = 0
-                while cur and depth < 20:
-                    parent = parent_posts.get(cur.in_reply_to_id) if cur.in_reply_to_id else None
-                    if not parent:
-                        break
-                    participants.add(parent.author_id)
-                    cur = parent
-                    depth += 1
-                if participants and not participants <= _following_ids:
+            if p.author_id != user.id and p.in_reply_to_id:
+                parent_author_id = parent_authors.get(p.in_reply_to_id)
+                if parent_author_id and parent_author_id not in _following_ids:
                     continue
             reply_filtered.append(p)
         posts = reply_filtered
