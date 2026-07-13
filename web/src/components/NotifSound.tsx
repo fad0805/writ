@@ -1,6 +1,17 @@
 "use client";
 import { useEffect, useRef } from "react";
 
+const LS_KEY = "writ_notif_sound";
+
+export function isNotifSoundEnabled(): boolean {
+  if (typeof window === "undefined") return true;
+  return localStorage.getItem(LS_KEY) !== "off";
+}
+
+export function setNotifSoundEnabled(on: boolean) {
+  localStorage.setItem(LS_KEY, on ? "on" : "off");
+}
+
 export default function NotifSound() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -22,7 +33,7 @@ export default function NotifSound() {
     const es = new EventSource("/api/notifications/stream");
     es.onmessage = () => {
       try {
-        if (audioRef.current) {
+        if (audioRef.current && isNotifSoundEnabled()) {
           audioRef.current.currentTime = 0;
           audioRef.current.play().catch(() => {});
         }

@@ -8,6 +8,7 @@ import VisibilitySelector from "@/components/VisibilitySelector";
 import SettingsNav from "@/components/SettingsNav";
 import { useAuth } from "@/lib/auth";
 import { isPushSupported, getPermissionState, subscribePush, unsubscribePush, isSubscribed } from "@/lib/push";
+import { isNotifSoundEnabled, setNotifSoundEnabled } from "@/components/NotifSound";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -26,6 +27,7 @@ export default function SettingsPage() {
   const [pushSupported, setPushSupported] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushInitial, setPushInitial] = useState(false);
+  const [notifSound, setNotifSound] = useState(true);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -37,6 +39,7 @@ export default function SettingsPage() {
       setIsBot(user.is_bot || false);
       setFollowListVis(user.follow_list_visibility || "public");
       setEnableReactions(user.enable_reactions !== false);
+      setNotifSound(isNotifSoundEnabled());
       fetch("/api/server-info").then(r=>r.json()).then((info: any) => setServerEnableReactions(info.enable_reactions !== false)).catch(() => {});
       setLoading(false);
     }).catch(() => router.push("/login"));
@@ -158,6 +161,13 @@ export default function SettingsPage() {
             <p className="form-help">다른 사용자에게 관리자/조율자 뱃지를 보여줍니다.</p>
           </div>
         )}
+        <div className="form-group">
+          <label>
+            <input type="checkbox" checked={notifSound} onChange={(e) => { setNotifSound(e.target.checked); setNotifSoundEnabled(e.target.checked); }} />
+            {" "}<Icon name="bell" /> 알림 소리
+          </label>
+          <p className="form-help">새 알림 수신 시 소리를 재생합니다.</p>
+        </div>
         {pushSupported && (
           <div className="form-group">
             <label>
