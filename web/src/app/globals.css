@@ -631,7 +631,22 @@ input:focus {
   align-items: center;
   gap: 8px;
   margin-bottom: 10px;
-  flex-wrap: wrap;
+  min-width: 0;
+}
+.post-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  flex: 1 1 auto;
+}
+.post-name-wrap .post-author,
+.post-name-wrap .post-username {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
 }
 
 .post-author-avatar {
