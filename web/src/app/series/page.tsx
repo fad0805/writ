@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { api, NovelData } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -12,6 +12,22 @@ import InfiniteScroll from "@/components/InfiniteScroll";
 export default function NovelsPage() {
   const { user } = useAuth();
   const router = useRouter();
+  const touchStartX = useRef(0);
+
+  useEffect(() => {
+    const h = (e: TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+    document.addEventListener("touchstart", h, { passive: true });
+    return () => document.removeEventListener("touchstart", h);
+  }, []);
+
+  useEffect(() => {
+    const h = (e: TouchEvent) => {
+      const dx = e.changedTouches[0].clientX - touchStartX.current;
+      if (Math.abs(dx) > 60 && dx > 0) router.push("/series/my");
+    };
+    document.addEventListener("touchend", h, { passive: true });
+    return () => document.removeEventListener("touchend", h);
+  }, [router]);
   const [novels, setNovels] = useState<NovelData[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
