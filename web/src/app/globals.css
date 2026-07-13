@@ -2312,6 +2312,7 @@ input[type="checkbox"] {
   flex-wrap: wrap;
   @media (max-width: 768px) {
     max-width: 70px;
+    justify-content: flex-end;
   } 
 }
 .series-more-wrap {
