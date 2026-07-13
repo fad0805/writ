@@ -40,7 +40,7 @@ function ExploreContent() {
 
   const doSearch = useCallback(async (q: string, author?: string) => {
     if (!q.trim()) { loadExplore(); return; }
-    const match = q.match(/^@?(\w+)@([\w.-]+)$/);
+    const match = q.match(/(^|>|\s)@([a-zA-Z][a-zA-Z0-9]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?)/g);
     if (match) {
       const form = new FormData(); form.append("url", `https://${match[2]}/users/${match[1]}`);
       try {

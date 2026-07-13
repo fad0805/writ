@@ -3011,6 +3011,61 @@ def api_reactivate_account(request: Request):
     return {"ok": True}
 
 
+@router.post("/settings/delete-account")
+def api_delete_account(request: Request, password: str = Form(...), confirm: str = Form(...)):
+    from app.routes.auth import verify_password
+    user = require_auth(request)
+    if user.is_admin:
+        raise HTTPException(status_code=400, detail="관리자 계정은 탈퇴할 수 없습니다.")
+    if confirm != user.username:
+        raise HTTPException(status_code=400, detail=f"확인을 위해 '{user.username}'을(를) 입력하세요.")
+    with get_session() as s:
+        db = s.query(User).filter_by(id=user.id).first()
+        stored = db.password_hash
+        if ":" not in stored:
+            raise HTTPException(status_code=400, detail="비밀번호 확인 실패")
+        salt, hval = stored.split(":", 1)
+        if not verify_password(password, salt, hval):
+            raise HTTPException(status_code=400, detail="비밀번호가 올바르지 않습니다.")
+
+        # Anonymize user data
+        db.display_name = "탈퇴한 회원"
+        db.summary = ""
+        db.email = f"deleted_{db.id}@deleted.local"
+        db.email_verified = False
+        db.profile_image = ""
+        db.header_image = ""
+        db.password_hash = "deleted"
+        db.is_deactivated = True
+        db.is_locked = False
+        db.is_bot = False
+        db.custom_fields = []
+        db.profile_hashtags = []
+        s.commit()
+        user_id = db.id
+        username = db.username
+        actor_uri = db.actor_uri()
+
+    # Broadcast Delete actor to followers for federation
+    try:
+        delete_activity = {
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": f"{actor_uri}#delete",
+            "type": "Delete",
+            "actor": actor_uri,
+            "object": actor_uri,
+        }
+        broadcast_to_followers(user, delete_activity)
+    except Exception as e:
+        logger.warning("Failed to broadcast Delete actor: %s", e)
+
+    log_admin_action(user_id, username, "delete_account_self", ip_address=request.client.host if request.client else "")
+
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie("session")
+    return resp
+
+
 def _domain_from_actor(u) -> str:
     if not u:
         return ""

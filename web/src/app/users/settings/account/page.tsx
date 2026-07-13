@@ -3,9 +3,11 @@ import { useState } from "react";
 import Icon from "@/components/Icon";
 import SettingsNav from "@/components/SettingsNav";
 import { useAuth } from "@/lib/auth";
+import { useRouter } from "next/navigation";
 
 export default function AccountSettingsPage() {
   const { user, refresh } = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [curPw, setCurPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -17,6 +19,12 @@ export default function AccountSettingsPage() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const [mailSent, setMailSent] = useState(false);
+
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePw, setDeletePw] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleteErr, setDeleteErr] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,6 +65,20 @@ export default function AccountSettingsPage() {
       if (res.ok) setMailSent(true);
       else setErr(d.detail || "메일 전송 실패");
     } catch { setErr("메일 전송 실패"); }
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleteErr(""); setDeleteLoading(true);
+    try {
+      const form = new FormData();
+      form.append("password", deletePw);
+      form.append("confirm", deleteConfirm);
+      const res = await fetch("/api/settings/delete-account", { method: "POST", credentials: "include", body: form });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setDeleteErr(d.detail || "회원 탈퇴 실패"); setDeleteLoading(false); return; }
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      router.push("/");
+    } catch { setDeleteErr("오류가 발생했습니다."); setDeleteLoading(false); }
   };
 
   return (
@@ -119,6 +141,61 @@ export default function AccountSettingsPage() {
           </div>
         </form>
       </div>
+
+      <div className="admin-detail-card" style={{ padding: 20, marginTop: 16, borderColor: "var(--danger)" }}>
+        <h3 style={{ fontSize: 16, color: "var(--danger)", marginTop: 0 }}>회원 탈퇴</h3>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
+          계정을 탈퇴하면 프로필, 게시글, 팔로우 관계 등 모든 데이터가 삭제되며 복구할 수 없습니다.
+        </p>
+        <button type="button" onClick={() => { setShowDeleteModal(true); setDeletePw(""); setDeleteConfirm(""); setDeleteErr(""); }} className="btn btn-danger">
+          회원 탈퇴
+        </button>
+      </div>
+
+      {showDeleteModal && (
+        <div className="modal-overlay" onClick={() => !deleteLoading && setShowDeleteModal(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+            <h3 style={{ marginTop: 0, color: "var(--danger)" }}>회원 탈퇴</h3>
+            <p style={{ fontSize: 13, marginBottom: 16 }}>
+              되돌릴 수 없습니다. 탈퇴하려면 비밀번호와 아이디를 확인하세요.
+            </p>
+            <div className="form-group" style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 13 }}>비밀번호</label>
+              <input
+                type="password"
+                value={deletePw}
+                onChange={(e) => setDeletePw(e.target.value)}
+                placeholder="현재 비밀번호"
+                className="cw-input"
+                disabled={deleteLoading}
+              />
+            </div>
+            <div className="form-group" style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 13 }}>아이디 확인 (<code>{user?.username}</code> 입력)</label>
+              <input
+                type="text"
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                placeholder={user?.username || ""}
+                className="cw-input"
+                disabled={deleteLoading}
+              />
+            </div>
+            {deleteErr && <p className="auth-error" style={{ marginBottom: 12 }}>{deleteErr}</p>}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button type="button" onClick={() => setShowDeleteModal(false)} className="btn btn-outline" disabled={deleteLoading}>취소</button>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                className="btn btn-danger"
+                disabled={deleteLoading || !deletePw || !deleteConfirm}
+              >
+                {deleteLoading ? "탈퇴 중..." : "탈퇴하기"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
