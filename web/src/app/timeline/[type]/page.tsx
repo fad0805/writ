@@ -35,6 +35,7 @@ export default function TimelinePage() {
   const [selectedIdx, setSelectedIdx] = useState(-1);
   const [replyPost, setReplyPost] = useState<PostData | null>(null);
   const [showComposer, setShowComposer] = useState(false);
+  const deletedIds = useRef<Set<number>>(new Set());
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
   const postsRef = useRef(posts);
   postsRef.current = posts;
@@ -178,6 +179,7 @@ export default function TimelinePage() {
     es.onmessage = (event) => {
       try {
         const newPost = JSON.parse(event.data);
+        if (deletedIds.current.has(newPost.id)) return;
         setPosts((prev) => {
           if (prev.some((p) => p.id === newPost.id)) return prev;
           return [newPost, ...prev];
@@ -193,7 +195,7 @@ export default function TimelinePage() {
       api.timeline(tlType, LIMIT, 0).then((data) => {
         setPosts((prev) => {
           const existingIds = new Set(prev.map((p) => p.id));
-          const newOnes = data.posts.filter((p: any) => !existingIds.has(p.id));
+          const newOnes = data.posts.filter((p: any) => !existingIds.has(p.id) && !deletedIds.current.has(p.id));
           if (newOnes.length === 0) return prev;
           return [...newOnes, ...prev];
         });
@@ -237,7 +239,7 @@ export default function TimelinePage() {
           <p className="empty-state">표시할 글이 없습니다.</p>
         ) : (
           <InfiniteScroll hasMore={hasMore} loadingMore={loadingMore} loadMore={loadMore}>
-            {posts.map((p, i) => <div key={p.id} ref={(el) => { cardRefs.current[i] = el; }}><PostCard post={p} onDelete={() => setPosts((prev) => prev.filter((x) => x.id !== p.id))} onUpdate={load} selected={i === selectedIdx} /></div>)}
+            {posts.filter((p) => !deletedIds.current.has(p.id)).map((p, i) => <div key={p.id} ref={(el) => { cardRefs.current[i] = el; }}><PostCard post={p} onDelete={() => { deletedIds.current.add(p.id); setPosts((prev) => prev.filter((x) => x.id !== p.id)); }} onUpdate={load} selected={i === selectedIdx} /></div>)}
           </InfiniteScroll>
         )}
       </div>
