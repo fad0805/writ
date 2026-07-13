@@ -229,6 +229,9 @@ def get_followers(username: str, page: Optional[int] = None):
         if not user:
             return None
 
+        if user.follow_list_visibility == "private":
+            return {"@context": "https://www.w3.org/ns/activitystreams", "id": user.followers_uri(), "type": "OrderedCollection", "totalItems": 0, "first": f"{user.followers_uri()}?page=1"}
+
         query = session.query(Follow).filter(
             Follow.following_id == user.id,
             Follow.accepted == True,
@@ -264,6 +267,9 @@ def get_following(username: str, page: Optional[int] = None):
         user = session.query(User).filter_by(username=username).first()
         if not user:
             return None
+
+        if user.follow_list_visibility == "private":
+            return {"@context": "https://www.w3.org/ns/activitystreams", "id": user.following_uri(), "type": "OrderedCollection", "totalItems": 0, "first": f"{user.following_uri()}?page=1"}
 
         query = session.query(Follow).filter(
             Follow.follower_id == user.id,
