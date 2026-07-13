@@ -26,13 +26,14 @@ function VerifyEmailContent() {
           await api.verifyEmail(token);
           await refresh();
           setStatus("success");
+          setTimeout(() => router.push("/"), 2000);
         } catch (err: unknown) {
           setError(err instanceof Error ? err.message : "인증에 실패했습니다.");
           setStatus("error");
         }
       })();
     }
-  }, [token, refresh]);
+  }, [token, refresh, router]);
 
   const handleResend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,11 +64,8 @@ function VerifyEmailContent() {
         <h1>WRIT</h1>
         <div className="auth-success">
           <p>이메일 인증이 완료되었습니다.</p>
-          <p>이제 WRIT의 모든 기능을 이용하실 수 있습니다.</p>
+          <p>잠시 후 메인 페이지로 이동합니다.</p>
         </div>
-        <Link href="/timeline/home" className="btn btn-primary">
-          타임라인으로 이동
-        </Link>
       </div>
     );
   }
