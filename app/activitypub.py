@@ -1266,55 +1266,63 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     ))
 
             session.commit()
-            from app.timeline_stream import broadcast_refresh_notifs
-            broadcast_refresh_notifs()
-            try:
-                from app.eventbus import broadcast
-                broadcast("new_post", {"post_id": post.id, "author_id": actor.id})
-            except Exception as e:
-                logger.warning("broadcast failed: %s", e)
-            try:
-                from app.timeline_stream import broadcast_post
-                author = post.author
-                post_json = {
-                    "id": post.id,
-                    "number": post.number or "",
-                    "content": post.content,
-                    "summary": post.summary or "",
-                    "visibility": post.visibility or "public",
-                    "created_at": post.created_at.isoformat() if post.created_at else "",
-                    "author": {
-                        "id": author.id,
-                        "username": author.username,
-                        "display_name": author.display_name or author.username,
-                        "avatar": author.profile_image or "",
-                        "header": author.header_image or "",
-                        "summary": author.summary or "",
-                        "is_admin": author.is_admin,
-                        "is_locked": getattr(author, 'is_locked', False),
-                        "is_limited": getattr(author, 'is_limited', False),
-                        "is_remote": author.is_remote,
-                        "ap_id": author.remote_url or "",
-                    },
-                    "likes_count": 0,
-                    "boosts_count": 0,
-                    "replies_count": 0,
-                    "liked": False,
-                    "boosted": False,
-                    "bookmarked": False,
-                    "is_mine": False,
-                    "is_dm": is_incoming_dm,
-                    "is_sensitive": getattr(post, 'is_sensitive', False) or False,
-                    "ap_id": post.ap_id or "",
-                    "media_attachments": post.media_attachments or [],
-                    "poll_data": post.poll_data,
-                    "my_vote": None,
-                    "reactions": {},
-                    "my_reaction": None,
-                }
-                broadcast_post(post_json, actor.id, visibility, is_incoming_dm)
-            except Exception as e:
-                logger.warning("timeline broadcast failed: %s", e)
+
+            is_recent = False
+            if post.created_at:
+                import datetime as _dt
+                _age = (_dt.datetime.now(_dt.timezone.utc) - post.created_at.replace(tzinfo=_dt.timezone.utc)).total_seconds()
+                is_recent = _age < 300
+
+            if is_recent:
+                from app.timeline_stream import broadcast_refresh_notifs
+                broadcast_refresh_notifs()
+                try:
+                    from app.eventbus import broadcast
+                    broadcast("new_post", {"post_id": post.id, "author_id": actor.id})
+                except Exception as e:
+                    logger.warning("broadcast failed: %s", e)
+                try:
+                    from app.timeline_stream import broadcast_post
+                    author = post.author
+                    post_json = {
+                        "id": post.id,
+                        "number": post.number or "",
+                        "content": post.content,
+                        "summary": post.summary or "",
+                        "visibility": post.visibility or "public",
+                        "created_at": post.created_at.isoformat() if post.created_at else "",
+                        "author": {
+                            "id": author.id,
+                            "username": author.username,
+                            "display_name": author.display_name or author.username,
+                            "avatar": author.profile_image or "",
+                            "header": author.header_image or "",
+                            "summary": author.summary or "",
+                            "is_admin": author.is_admin,
+                            "is_locked": getattr(author, 'is_locked', False),
+                            "is_limited": getattr(author, 'is_limited', False),
+                            "is_remote": author.is_remote,
+                            "ap_id": author.remote_url or "",
+                        },
+                        "likes_count": 0,
+                        "boosts_count": 0,
+                        "replies_count": 0,
+                        "liked": False,
+                        "boosted": False,
+                        "bookmarked": False,
+                        "is_mine": False,
+                        "is_dm": is_incoming_dm,
+                        "is_sensitive": getattr(post, 'is_sensitive', False) or False,
+                        "ap_id": post.ap_id or "",
+                        "media_attachments": post.media_attachments or [],
+                        "poll_data": post.poll_data,
+                        "my_vote": None,
+                        "reactions": {},
+                        "my_reaction": None,
+                    }
+                    broadcast_post(post_json, actor.id, visibility, is_incoming_dm)
+                except Exception as e:
+                    logger.warning("timeline broadcast failed: %s", e)
 
         return (200, "Created")
     return (200, "OK")
