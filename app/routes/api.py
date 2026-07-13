@@ -1093,15 +1093,17 @@ def api_create_post(
         s.commit()
 
         from app.push import send_push_to_user
-        from app.timeline_stream import broadcast_refresh_notifs as _brn
+        from app.timeline_stream import broadcast_refresh_notifs as _brn, broadcast_notif_sound
         for mu_id in mentioned_ids:
             if mu_id != user.id:
                 send_push_to_user(mu_id, "mention", user.username, post.id)
+                broadcast_notif_sound(mu_id)
                 _brn(mu_id)
         if parent_id:
             parent = s.query(Post).filter_by(id=parent_id).first()
             if parent and parent.author_id != user.id and parent.author_id not in [mid for mid in mentioned_ids if mid != user.id]:
                 send_push_to_user(parent.author_id, "reply", user.username, post.id)
+                broadcast_notif_sound(parent.author_id)
                 _brn(parent.author_id)
 
         # Async federation broadcast (background thread so it doesn't block response)
@@ -1289,9 +1291,11 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
         for admin in admins:
             broadcast_refresh_notifs(admin.id)
         from app.push import send_push_to_user
+        from app.timeline_stream import broadcast_notif_sound
         for admin in admins:
             if admin.id != user.id:
                 send_push_to_user(admin.id, "moderation", user.username)
+                broadcast_notif_sound(admin.id)
 
         if forward_to_remote and target_obj and hasattr(target_obj, 'author') and target_obj.author and target_obj.author.is_remote:
             try:
@@ -1328,7 +1332,9 @@ def api_like_post(request: Request, post_id: int):
             if post.author_id != user.id:
                 broadcast_refresh_notifs(post.author_id)
                 from app.push import send_push_to_user
+                from app.timeline_stream import broadcast_notif_sound
                 send_push_to_user(post.author_id, "like", user.username, post_id)
+                broadcast_notif_sound(post.author_id)
         if post.author.is_remote and post.author.shared_inbox_url:
             like_id = f"{BASE_URL}/likes/{uuid.uuid4()}"
             like_rec = existing or s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
@@ -1415,7 +1421,9 @@ def api_boost_post(request: Request, post_id: int):
             broadcast_refresh_notifs(post.author_id)
             if post.author_id != user.id:
                 from app.push import send_push_to_user
+                from app.timeline_stream import broadcast_notif_sound
                 send_push_to_user(post.author_id, "boost", user.username, post_id)
+                broadcast_notif_sound(post.author_id)
         if post.author.is_remote and post.author.shared_inbox_url:
             announce_id = f"{BASE_URL}/boosts/{uuid.uuid4()}"
             # Store the activity ID so Unboosts can reference it
@@ -2042,7 +2050,9 @@ def api_follow(request: Request, username: str):
             s.commit()
             broadcast_refresh_notifs(target.id)
             from app.push import send_push_to_user
+            from app.timeline_stream import broadcast_notif_sound
             send_push_to_user(target.id, "follow" if accepted else "follow_request", user.username)
+            broadcast_notif_sound(target.id)
     return {"ok": True}
 
 
@@ -2828,9 +2838,11 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
         if followers:
             s.commit()
             from app.push import send_push_to_user
+            from app.timeline_stream import broadcast_notif_sound
             for sf in followers:
                 if sf.user_id != user.id:
                     send_push_to_user(sf.user_id, "new_episode", user.username, metadata={"novel_id": novel.id})
+                    broadcast_notif_sound(sf.user_id)
 
         eid = episode.id
     return {"ok": True, "episode_id": eid}

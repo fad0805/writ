@@ -114,6 +114,10 @@ def broadcast_refresh_notifs(target_user_id: int = 0):
     logger.info("broadcast_refresh_notifs called target=%s", target_user_id)
     broadcast_notif("refresh", target_user_id)
 
+def broadcast_notif_sound(target_user_id: int):
+    """Send a JSON event that triggers notification sound in the browser."""
+    broadcast_notif(json.dumps({"event": "notif"}), target_user_id)
+
 
 def _should_deliver_fast(user_id: int, tl_type: str, author_id: int, visibility: str,
                          follower_ids: set[int], booster_ids: set[int], author_is_local: bool) -> bool:

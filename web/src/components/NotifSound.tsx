@@ -34,8 +34,8 @@ export default function NotifSound() {
     es.onmessage = (event) => {
       try {
         if (event.data === "refresh") return;
-        JSON.parse(event.data);
-        if (audioRef.current && isNotifSoundEnabled()) {
+        const parsed = JSON.parse(event.data);
+        if (parsed && parsed.event === "notif" && audioRef.current && isNotifSoundEnabled()) {
           audioRef.current.currentTime = 0;
           audioRef.current.play().catch(() => {});
         }
