@@ -1879,8 +1879,8 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             novels_q = novels_q.filter(Novel.visibility != "private")
         novels = _apply_latest_activity_order(novels_q, s).all()
         show_follows = user and (profile.id == user.id or profile.follow_list_visibility != "private")
-        followers = s.query(Follow).filter_by(following_id=profile.id, accepted=True).all()
-        following = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).all()
+        followers = s.query(Follow).filter_by(following_id=profile.id, accepted=True).order_by(desc(Follow.created_at)).all()
+        following = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).order_by(desc(Follow.created_at)).all()
         return {
             "profile": _user_json(profile),
             "posts": [_post_json(p, s, user) for p in posts],
