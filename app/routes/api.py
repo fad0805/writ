@@ -3443,13 +3443,36 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
         if not verify_password(password, salt, hval):
             raise HTTPException(status_code=400, detail="비밀번호가 올바르지 않습니다.")
 
-        # Broadcast Delete to followers BEFORE deleting follow data
+        # Broadcast Delete to all related remote servers BEFORE deleting data
         import json as _json
-        _followers = [f.follower_id for f in s.query(Follow).filter_by(following_id=db.id, accepted=True).all()]
-        _following = [f.following_id for f in s.query(Follow).filter_by(follower_id=db.id, accepted=True).all()]
         _actor_uri = db.actor_uri()
-        _targets = set(_followers + _following)
-        if _targets:
+        # Collect all remote user IDs that have interacted with this user
+        _interacted = set()
+        # followers + following
+        for f in s.query(Follow).filter_by(following_id=db.id, accepted=True).all():
+            _interacted.add(f.follower_id)
+        for f in s.query(Follow).filter_by(follower_id=db.id, accepted=True).all():
+            _interacted.add(f.following_id)
+        # users who boosted or liked this user's posts
+        _my_post_ids = [p.id for p in s.query(Post.id).filter_by(author_id=db.id).all()]
+        if _my_post_ids:
+            for b in s.query(Boost.user_id).filter(Boost.post_id.in_(_my_post_ids)).all():
+                _interacted.add(b.user_id)
+            for l in s.query(Like.user_id).filter(Like.post_id.in_(_my_post_ids)).all():
+                _interacted.add(l.user_id)
+            # users who replied to this user's posts
+            for r in s.query(Post.author_id).filter(Post.in_reply_to_id.in_(_my_post_ids)).all():
+                _interacted.add(r.author_id)
+        # Deduplicate by shared_inbox_url (only remote users)
+        _inboxes = {}
+        for _uid in _interacted:
+            _u = s.query(User).get(_uid)
+            if not _u or not _u.is_remote:
+                continue
+            _key = _u.shared_inbox_url or _u.inbox_url
+            if _key:
+                _inboxes[_key] = True
+        if _inboxes:
             _delete_activity = {
                 "@context": "https://www.w3.org/ns/activitystreams",
                 "id": f"{_actor_uri}#delete",
@@ -3457,17 +3480,9 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
                 "actor": _actor_uri,
                 "object": _actor_uri,
             }
-            _payload = _json.dumps(_delete_activity, ensure_ascii=False)
-            for _tid in _targets:
-                try:
-                    from app.activitypub import _post_to_inbox
-                    _t = s.query(User).get(_tid)
-                    if _t and _t.shared_inbox_url:
-                        threading.Thread(target=_post_to_inbox, args=(_t.shared_inbox_url, _delete_activity, db), daemon=True).start()
-                    elif _t and _t.inbox_url:
-                        threading.Thread(target=_post_to_inbox, args=(_t.inbox_url, _delete_activity, db), daemon=True).start()
-                except Exception:
-                    pass
+            from app.activitypub import _post_to_inbox
+            for _inbox in _inboxes:
+                threading.Thread(target=_post_to_inbox, args=(_inbox, _delete_activity, db), daemon=True).start()
 
         # Delete all posts
         for p in s.query(Post).filter_by(author_id=db.id).all():
