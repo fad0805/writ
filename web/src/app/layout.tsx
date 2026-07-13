@@ -83,7 +83,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               document.addEventListener('touchmove', function(e) {
                 if (!pulling) return;
                 var diff = e.touches[0].clientY - startY;
-                if (diff > 150 && window.scrollY <= 0) {
+                if (diff > 225 && window.scrollY <= 0) {
                   pulling = false;
                   window.location.reload();
                 }
