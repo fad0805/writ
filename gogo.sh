@@ -492,6 +492,47 @@ except Exception as e:
     traceback.print_exc()
 "
 
+elif [ "$1" = "purge-deleted" ]; then
+  docker compose exec -T api python3 << 'PYEOF'
+from app.models import Post, Like, Boost, Bookmark, Vote, Notification, get_session
+
+with get_session() as s:
+    # Find deleted posts that have NO replies (not part of any thread)
+    deleted = s.query(Post).filter(Post.is_deleted == True).all()
+    total = len(deleted)
+    purged = 0
+    kept = 0
+    for p in deleted:
+        # Check if any other post replies to this post
+        has_replies = s.query(Post).filter(Post.in_reply_to_id == p.id).first() is not None
+        # Also check if any post references this as parent via in_reply_to_ap_id
+        if not has_replies and p.ap_id:
+            has_replies = s.query(Post).filter(Post.in_reply_to_ap_id == p.ap_id).first() is not None
+        if has_replies:
+            kept += 1
+            print(f"  KEEP  post {p.id} (has replies)")
+            # For kept posts, ensure content is blank (shell only)
+            if p.content:
+                p.content = ""
+                p.media_attachments = []
+                p.poll_data = None
+                p.link_preview = None
+            continue
+        # Hard delete: remove all related data then the post itself
+        s.query(Like).filter(Like.post_id == p.id).delete()
+        s.query(Boost).filter(Boost.post_id == p.id).delete()
+        s.query(Bookmark).filter(Bookmark.post_id == p.id).delete()
+        s.query(Vote).filter(Vote.post_id == p.id).delete()
+        s.query(Notification).filter(Notification.post_id == p.id).delete()
+        s.delete(p)
+        purged += 1
+        print(f"  PURGE post {p.id}")
+    s.commit()
+    print(f"\ntotal deleted posts: {total}")
+    print(f"  purged (no replies): {purged}")
+    print(f"  kept (has replies):  {kept}")
+PYEOF
+
 elif [ "$1" = "clear-notifs" ]; then
   docker compose exec api python3 -c "
 from app.models import Notification, Post, get_session
@@ -889,5 +930,6 @@ else
   echo "  api-test        - API 인박스 직접 테스트"
   echo "  migrate-emojis  - 이모지 파일 local/remote 경로 마이그레이션"
   echo "  fix-follow      - 꼬인 팔로우 강제 수락 및 Accept 전송 (예: ./gogo.sh fix-follow siarte alex@daydream.ink)"
+  echo "  purge-deleted   - 스레드에 없는 삭제된 게시글 완전 제거 (댓글 있는 건 껍데기 유지)"
   echo "  check-custom-fields - 원격 액터의 attachment/custom_fields 확인 (예: ./gogo.sh check-custom-fields https://daydream.ink/users/siarte)"
 fi
