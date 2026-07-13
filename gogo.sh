@@ -506,6 +506,47 @@ with get_session() as s:
     print(f'deleted {deleted} notifications for deleted posts')
 "
 
+elif [ "$1" = "check-custom-fields" ]; then
+  actor_url="${2}"
+  if [ -z "$actor_url" ]; then
+    echo "사용법: ./gogo.sh check-custom-fields [actor_url]" >&2
+    echo "예시: ./gogo.sh check-custom-fields https://daydream.ink/users/siarte" >&2
+    exit 1
+  fi
+  docker compose exec -T -e ACTOR_URL="$actor_url" api python3 << 'PYEOF'
+import os, json, httpx, re, sys
+
+url = os.environ["ACTOR_URL"]
+r = httpx.get(url, headers={"Accept": "application/activity+json"}, timeout=10)
+if r.status_code != 200:
+    print(f"fetch failed: {r.status_code} {r.text[:200]}")
+    sys.exit(1)
+
+data = r.json()
+print("=== Actor Info ===")
+print(f"type: {data.get('type')}")
+print(f"preferredUsername: {data.get('preferredUsername')}")
+print(f"name: {data.get('name')}")
+
+print("\n=== Attachment (custom fields) ===")
+attachment = data.get("attachment", [])
+print(f"count: {len(attachment)}")
+for i, item in enumerate(attachment):
+    print(f"\n--- field {i} ---")
+    print(f"  type: {item.get('type')}")
+    print(f"  name: {item.get('name')}")
+    print(f"  value: {item.get('value')[:200] if item.get('value') else ''}")
+
+print("\n=== Processed by _extract_custom_fields ===")
+from app.activitypub import _extract_custom_fields
+fields = _extract_custom_fields(attachment)
+print(json.dumps(fields, indent=2, ensure_ascii=False))
+
+# Also show the raw attachment JSON
+print(f"\n=== Raw attachment JSON ===")
+print(json.dumps(attachment, indent=2, ensure_ascii=False)[:2000])
+PYEOF
+
 elif [ "$1" = "fix-follow" ]; then
   local_name="${2:-siarte}"
   remote_handle="${3:-}"
@@ -848,4 +889,5 @@ else
   echo "  api-test        - API 인박스 직접 테스트"
   echo "  migrate-emojis  - 이모지 파일 local/remote 경로 마이그레이션"
   echo "  fix-follow      - 꼬인 팔로우 강제 수락 및 Accept 전송 (예: ./gogo.sh fix-follow siarte alex@daydream.ink)"
+  echo "  check-custom-fields - 원격 액터의 attachment/custom_fields 확인 (예: ./gogo.sh check-custom-fields https://daydream.ink/users/siarte)"
 fi
