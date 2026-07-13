@@ -122,11 +122,11 @@ export default function PostCard({ post, onUpdate, onDelete, current, hideContex
   const handleDelete = async () => {
     const isAdminDeletingOther = currentUser?.is_admin && !post.is_mine;
     if (!confirm(isAdminDeletingOther ? "관리자 권한으로 이 게시글을 삭제하시겠습니까?" : "삭제하시겠습니까?")) return;
+    if (onDelete) onDelete();
+    else if (onUpdate) onUpdate();
+    else if (current) router.back();
     try {
       await api.deletePost(post.id);
-      if (onDelete) onDelete();
-      else if (onUpdate) onUpdate();
-      else if (current) router.back();
     } catch {}
   };
 
