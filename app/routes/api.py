@@ -286,7 +286,13 @@ def api_me(request: Request):
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
-    return _user_json(user)
+    result = _user_json(user)
+    from app.models import ServerSetting as _SS
+    with get_session() as _s:
+        _settings = _SS.get(_s)
+        if not _settings.enable_reactions:
+            result["enable_reactions"] = False
+    return result
 
 
 @router.post("/auth/login")
