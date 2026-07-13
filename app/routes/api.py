@@ -3446,8 +3446,10 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
         # Broadcast Delete to followers BEFORE deleting follow data
         import json as _json
         _followers = [f.follower_id for f in s.query(Follow).filter_by(following_id=db.id, accepted=True).all()]
+        _following = [f.following_id for f in s.query(Follow).filter_by(follower_id=db.id, accepted=True).all()]
         _actor_uri = db.actor_uri()
-        if _followers:
+        _targets = set(_followers + _following)
+        if _targets:
             _delete_activity = {
                 "@context": "https://www.w3.org/ns/activitystreams",
                 "id": f"{_actor_uri}#delete",
@@ -3456,14 +3458,14 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
                 "object": _actor_uri,
             }
             _payload = _json.dumps(_delete_activity, ensure_ascii=False)
-            for _fid in _followers:
+            for _tid in _targets:
                 try:
                     from app.activitypub import _post_to_inbox
-                    _f = s.query(User).get(_fid)
-                    if _f and _f.shared_inbox_url:
-                        threading.Thread(target=_post_to_inbox, args=(_f.shared_inbox_url, _delete_activity, db), daemon=True).start()
-                    elif _f and _f.inbox_url:
-                        threading.Thread(target=_post_to_inbox, args=(_f.inbox_url, _delete_activity, db), daemon=True).start()
+                    _t = s.query(User).get(_tid)
+                    if _t and _t.shared_inbox_url:
+                        threading.Thread(target=_post_to_inbox, args=(_t.shared_inbox_url, _delete_activity, db), daemon=True).start()
+                    elif _t and _t.inbox_url:
+                        threading.Thread(target=_post_to_inbox, args=(_t.inbox_url, _delete_activity, db), daemon=True).start()
                 except Exception:
                     pass
 
