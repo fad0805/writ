@@ -2009,7 +2009,7 @@ def api_followers(request: Request, username: str):
         target = s.query(User).filter_by(username=username, is_remote=False).first()
         if not target:
             raise HTTPException(status_code=404, detail="User not found")
-        follows = s.query(Follow).filter_by(following_id=target.id, accepted=True).all()
+        follows = s.query(Follow).filter_by(following_id=target.id, accepted=True).order_by(desc(Follow.created_at)).all()
         users = [s.query(User).get(f.follower_id) for f in follows]
     return {"users": [_user_json(u) for u in users if u]}
 
@@ -2023,7 +2023,7 @@ def api_following(request: Request, username: str):
         target = s.query(User).filter_by(username=username, is_remote=False).first()
         if not target:
             raise HTTPException(status_code=404, detail="User not found")
-        follows = s.query(Follow).filter_by(follower_id=target.id, accepted=True).all()
+        follows = s.query(Follow).filter_by(follower_id=target.id, accepted=True).order_by(desc(Follow.created_at)).all()
         users = [s.query(User).get(f.following_id) for f in follows]
     return {"users": [_user_json(u) for u in users if u]}
 
@@ -3959,7 +3959,7 @@ def _emoji_url(file_name: str, domain: str = "", category: str = "") -> str:
 @router.get("/emojis")
 def api_list_emojis():
     with get_session() as s:
-        emojis = s.query(CustomEmoji).order_by(CustomEmoji.keyword).all()
+        emojis = s.query(CustomEmoji).order_by(desc(CustomEmoji.created_at)).all()
         return [
             {
                 "id": e.id,
