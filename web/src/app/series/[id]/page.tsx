@@ -114,12 +114,12 @@ export default function NovelDetailPage() {
                   </button>
                 )}
                 {isMine && <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>}
-                {novel.visibility !== "private" && <ShareButton url={`/series/${novel.id}`} />}
+                {user && <button className="btn btn-small" onClick={() => setShowSharePost(true)}><Icon name="edit" /> 포스트 공유</button>}
                 <div className="series-more-wrap" onClick={() => setShowMoreMenu(!showMoreMenu)}>
                   <button className="action-btn" title="더보기"><Icon name="more" /></button>
                   {showMoreMenu && (
                     <div className="series-more-menu" onClick={(e) => e.stopPropagation()}>
-                      {user && <button onClick={() => { setShowSharePost(true); setShowMoreMenu(false); }}><Icon name="edit" /> 포스트로 공유</button>}
+                      {novel.visibility !== "private" && <button onClick={() => { navigator.clipboard.writeText(window.location.origin + `/series/${novel.id}`); setShowMoreMenu(false); }}><Icon name="link" /> 링크 복사</button>}
                       {user && !isMine && (
                         <button onClick={async () => {
                           if (isSeriesMuted) { await fetch(`/api/mutes/series/${novel.id}`, { method: "DELETE", credentials: "include" }); setIsSeriesMuted(false); }
