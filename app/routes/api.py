@@ -984,6 +984,17 @@ def api_create_post(
     link_preview: str = Form(""),
 ):
     user = require_active_auth(request)
+    if share_url:
+        if "/episodes/" in share_url:
+            content = content + "\n\nepisode: " + share_url
+        else:
+            content = content + "\n\nseries: " + share_url
+    content = content.strip('\n\r ')
+    if not content.strip() and not poll_options:
+        raise HTTPException(status_code=400, detail="Content cannot be empty")
+    total_len = len(content) + len(summary)
+    if total_len > MAX_POST_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Total length exceeds {MAX_POST_LENGTH}")
     if visibility not in ("public", "home", "followers", "mention"):
         visibility = "public"
 
