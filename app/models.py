@@ -317,7 +317,7 @@ class Post(Base):
                     )
                     short_name = f"@{u.username}"
                     content = re.sub(
-                        r'(?<!/)' + re.escape(short_name) + r'(?:@[\w.-]+)?(?![^\s<]*(?:</a>|">))',
+                        r'(?<!/)' + re.escape(short_name) + r'(?:@[a-zA-Z0-9.-]+)?(?![^\s<]*(?:</a>|">))',
                         mention_html,
                         content,
                     )
@@ -342,7 +342,7 @@ class Post(Base):
                 f'</a></span>'
             )
         content = re.sub(
-            r'(?<!/)(?:^|(?<=\s))@(\w+(?:@[\w-]+(?:\.[\w-]+)*)?)(?=\s|$|<|\.|[,:;!?)\'"])',
+            r'(?<!/)(?:^|(?<=\s))@([a-zA-Z0-9_]+(?:@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*)?)(?=\s|$|<|\.|[,:;!?)\'"])',
             _wrap_unknown_mention,
             content,
         )
