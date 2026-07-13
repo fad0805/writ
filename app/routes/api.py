@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import io
 import asyncio
 import datetime
 import uuid
@@ -25,7 +26,7 @@ def _fmt_dt(dt: datetime.datetime | None) -> str | None:
         dt = dt.replace(tzinfo=datetime.timezone.utc)
     return dt.astimezone(KST).isoformat()
 from app.activitypub import broadcast_to_followers, _post_to_inbox, _process_emoji_tags, _federation_allowed
-from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY
+from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED
 from app.crypto_utils import encrypt_key, get_private_key
 from app.eventbus import broadcast
 from app.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream
@@ -3934,24 +3935,25 @@ def api_fetch_post(request: Request, url: str = Form(...)):
     emojis = []
     with get_session() as es:
         for e in es.query(CustomEmoji).order_by(CustomEmoji.keyword).all():
-            emojis.append({"keyword": e.keyword, "file_name": e.file_name, "url": _emoji_url(e.file_name), "aliases": e.aliases or []})
+            emojis.append({"keyword": e.keyword, "file_name": e.file_name, "url": _emoji_url(e.file_name, e.domain or ""), "aliases": e.aliases or []})
     result["_emojis"] = emojis
     return result
 
 
 EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "emojis")
 
-def _emoji_url(file_name: str) -> str:
+def _emoji_url(file_name: str, domain: str = "") -> str:
     """Return the correct emoji URL (local or S3)."""
+    sub = "remote" if domain else "local"
     from app.config import S3_ENABLED
     if S3_ENABLED:
         from app.utils.storage import get_storage
         try:
             storage = get_storage()
-            return storage.url(f"emojis/{file_name}")
+            return storage.url(f"emojis/{sub}/{file_name}")
         except Exception:
             pass
-    return f"/emojis/{file_name}"
+    return f"/emojis/{sub}/{file_name}"
 
 
 @router.get("/emojis")
@@ -3965,7 +3967,7 @@ def api_list_emojis():
                 "file_name": e.file_name,
                 "category": e.category or "",
                 "aliases": e.aliases or [],
-                "url": _emoji_url(e.file_name),
+                "url": _emoji_url(e.file_name, e.domain or ""),
                 "source_url": e.source_url or "",
                 "domain": e.domain or "",
             }
@@ -3995,7 +3997,10 @@ def api_create_emoji(
     import uuid
     ext = image.filename.rsplit(".", 1)[-1].lower() if image.filename else "png"
     file_name = f"{uuid.uuid4().hex}.{ext}"
-    file_path = os.path.join(EMOJI_DIR, file_name)
+    local_dir = os.path.join(EMOJI_DIR, "local")
+    os.makedirs(local_dir, exist_ok=True)
+    file_path = os.path.join(local_dir, file_name)
+    _emoji_data = None
 
     try:
         from PIL import Image
@@ -4006,11 +4011,12 @@ def api_create_emoji(
         if h > 0 and w / h > 1.5:
             raise HTTPException(status_code=400, detail="Emoji is too wide (max 2x height)")
         if ext == "gif":
+            _emoji_data = image.file.read()
             with open(file_path, "wb") as f:
-                f.write(image.file.read())
+                f.write(_emoji_data)
         else:
             file_name = f"{uuid.uuid4().hex}.webp"
-            file_path = os.path.join(EMOJI_DIR, file_name)
+            file_path = os.path.join(local_dir, file_name)
             img = Image.open(image.file)
             if img.mode == "RGBA" or img.mode == "P":
                 img = img.convert("RGBA")
@@ -4018,7 +4024,17 @@ def api_create_emoji(
                 img = img.convert("RGB")
             if img.width > 66 or img.height > 66:
                 img = img.resize((img.width // 2, img.height // 2), Image.LANCZOS)
-            img.save(file_path, format="WEBP", quality=100)
+            buf = io.BytesIO()
+            img.save(buf, format="WEBP", quality=100)
+            _emoji_data = buf.getvalue()
+            with open(file_path, "wb") as f:
+                f.write(_emoji_data)
+        if S3_ENABLED and _emoji_data:
+            try:
+                from app.utils.storage import get_storage
+                get_storage().save(f"emojis/local/{file_name}", _emoji_data, f"image/{ext}")
+            except Exception:
+                pass
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to process image: {e}")
 
@@ -4065,7 +4081,7 @@ def api_update_emoji(request: Request, emoji_id: int, category: str = Form(""), 
         if aliases:
             emoji.aliases = [a.strip().lower().replace(" ", "_") for a in aliases.split(",") if a.strip()]
         s.commit()
-        return {"ok": True, "emoji": {"id": emoji.id, "keyword": emoji.keyword, "file_name": emoji.file_name, "category": emoji.category, "aliases": emoji.aliases or [], "url": _emoji_url(emoji.file_name), "source_url": emoji.source_url or "", "domain": emoji.domain or ""}}
+        return {"ok": True, "emoji": {"id": emoji.id, "keyword": emoji.keyword, "file_name": emoji.file_name, "category": emoji.category, "aliases": emoji.aliases or [], "url": _emoji_url(emoji.file_name, emoji.domain or ""), "source_url": emoji.source_url or "", "domain": emoji.domain or ""}}
 
 @router.post("/emojis/{emoji_id}/copy")
 def api_copy_emoji(request: Request, emoji_id: int):
@@ -4082,13 +4098,15 @@ def api_copy_emoji(request: Request, emoji_id: int):
         _storage = _get_storage()
         _ext = src.file_name.rsplit(".", 1)[-1] if "." in src.file_name else "webp"
         _new_fname = f"{new_kw}.{_ext}"
+        _src_sub = "remote" if src.domain else "local"
         try:
-            _data = _storage.read(f"emojis/{src.file_name}")
-            _storage.save(f"emojis/{_new_fname}", _data, f"image/{_ext}")
+            _data = _storage.read(f"emojis/{_src_sub}/{src.file_name}")
+            _storage.save(f"emojis/local/{_new_fname}", _data, f"image/{_ext}")
         except Exception:
             import shutil, os as _os
-            _src_path = _os.path.join(EMOJI_DIR, src.file_name)
-            _dst_path = _os.path.join(EMOJI_DIR, _new_fname)
+            _src_path = _os.path.join(EMOJI_DIR, _src_sub, src.file_name)
+            _dst_path = _os.path.join(EMOJI_DIR, "local", _new_fname)
+            _os.makedirs(_os.path.dirname(_dst_path), exist_ok=True)
             if _os.path.exists(_src_path):
                 shutil.copy2(_src_path, _dst_path)
         copy = CustomEmoji(keyword=new_kw, file_name=_new_fname, category="기본", aliases=src.aliases or [])
@@ -4104,11 +4122,12 @@ def api_delete_emoji(request: Request, emoji_id: int):
         if not emoji:
             raise HTTPException(status_code=404, detail="Emoji not found")
         from app.utils.storage import get_storage
+        _del_sub = "remote" if emoji.domain else "local"
         try:
-            get_storage().delete(f"emojis/{emoji.file_name}")
+            get_storage().delete(f"emojis/{_del_sub}/{emoji.file_name}")
         except Exception:
             pass
-        file_path = os.path.join(EMOJI_DIR, emoji.file_name)
+        file_path = os.path.join(EMOJI_DIR, _del_sub, emoji.file_name)
         if os.path.isfile(file_path):
             os.remove(file_path)
         s.delete(emoji)

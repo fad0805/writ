@@ -701,14 +701,65 @@ for target in ['https://daydream.ink', 'https://writ.daydream.ink', 'https://myl
         print(f'{target} -> FAIL: {e}')
 "
 
+elif [ "$1" = "migrate-emojis" ]; then
+  docker compose exec api python3 -c "
+import os, shutil
+from app.models import CustomEmoji, get_session
+from app.config import S3_ENABLED
+
+EMOJI_DIR = os.path.join(os.path.dirname(__file__), '..', 'web', 'public', 'emojis')
+moved = 0
+skipped = 0
+errors = 0
+
+with get_session() as s:
+    emojis = s.query(CustomEmoji).all()
+    for e in emojis:
+        sub = 'remote' if e.domain else 'local'
+        old_key = f'emojis/{e.file_name}'
+        new_key = f'emojis/{sub}/{e.file_name}'
+        old_path = os.path.join(EMOJI_DIR, e.file_name)
+        new_dir = os.path.join(EMOJI_DIR, sub)
+        new_path = os.path.join(new_dir, e.file_name)
+
+        if os.path.exists(new_path):
+            skipped += 1
+            continue
+
+        if S3_ENABLED:
+            try:
+                from app.utils.storage import get_storage
+                storage = get_storage()
+                data = storage.read(old_key)
+                storage.save(new_key, data, 'image/webp')
+                try:
+                    storage.delete(old_key)
+                except Exception:
+                    pass
+                moved += 1
+                continue
+            except Exception:
+                pass
+
+        if os.path.exists(old_path):
+            os.makedirs(new_dir, exist_ok=True)
+            shutil.move(old_path, new_path)
+            moved += 1
+        else:
+            skipped += 1
+
+print(f'done: {moved} moved, {skipped} skipped, {errors} errors (total {len(emojis)} emojis)')
+"
+
 else
   echo "사용법: ./gogo.sh [명령어]"
   echo ""
   echo "명령어:"
-  echo "  fetch-log     - API 로그 확인"
-  echo "  rebuild       - 코드 풀 + api 빌드 + 재시작"
-  echo "  exec          - 외부 URL 요청 테스트 (path 확인)"
-  echo "  key-test      - 서명/키 검증"
-  echo "  network-check - 네트워크 연결 확인"
-  echo "  api-test      - API 인박스 직접 테스트"
+  echo "  fetch-log       - API 로그 확인"
+  echo "  rebuild         - 코드 풀 + api 빌드 + 재시작"
+  echo "  exec            - 외부 URL 요청 테스트 (path 확인)"
+  echo "  key-test        - 서명/키 검증"
+  echo "  network-check   - 네트워크 연결 확인"
+  echo "  api-test        - API 인박스 직접 테스트"
+  echo "  migrate-emojis  - 이모지 파일 local/remote 경로 마이그레이션"
 fi

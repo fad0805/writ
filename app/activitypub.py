@@ -1363,6 +1363,8 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                     if isinstance(_tag, dict) and _tag.get("type") == "Emoji":
                         _icon = _tag.get("icon", {})
                         _url = _icon.get("url", "") if isinstance(_icon, dict) else ""
+                        _tag_id = _tag.get("id", "")
+                        _domain = urlparse(_tag_id).netloc if _tag_id else ""
                         if _url:
                             from app.utils.storage import get_storage
                             _storage = get_storage()
@@ -1372,8 +1374,8 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                                 if _resp.status_code == 200:
                                     _ext = _url.rsplit(".", 1)[-1].split("?")[0] if "." in _url else "png"
                                     _fname = f"{_kw}.{_ext}"
-                                    _storage.save(f"emojis/{_fname}", _resp.content, f"image/{_ext}")
-                                    session.add(CustomEmoji(keyword=_kw, file_name=_fname, category="remote"))
+                                    _storage.save(f"emojis/remote/{_fname}", _resp.content, f"image/{_ext}")
+                                    session.add(CustomEmoji(keyword=_kw, file_name=_fname, category="remote", domain=_domain))
                                     session.flush()
                             except Exception:
                                 pass
@@ -2054,7 +2056,9 @@ def _process_emoji_tags(tags: list, session):
             if ext == "jpeg":
                 ext = "jpg"
             file_name = f"{uuid.uuid4().hex}.{ext}"
-            file_path = os.path.join(EMOJI_DIR, file_name)
+            remote_dir = os.path.join(EMOJI_DIR, "remote")
+            os.makedirs(remote_dir, exist_ok=True)
+            file_path = os.path.join(remote_dir, file_name)
 
             # Check aspect ratio — skip if too wide (>2x height)
             tmp = Image.open(io.BytesIO(resp.content))
@@ -2067,7 +2071,7 @@ def _process_emoji_tags(tags: list, session):
                 data = resp.content
             else:
                 file_name = f"{uuid.uuid4().hex}.webp"
-                file_path = os.path.join(EMOJI_DIR, file_name)
+                file_path = os.path.join(remote_dir, file_name)
                 img = Image.open(io.BytesIO(resp.content))
                 if img.mode == "RGBA" or img.mode == "P":
                     img = img.convert("RGBA")
@@ -2080,9 +2084,9 @@ def _process_emoji_tags(tags: list, session):
                 data = buf.getvalue()
             # Save via storage backend (S3 or local)
             try:
-                _storage.save(f"emojis/{file_name}", data, f"image/{ext}")
+                _storage.save(f"emojis/remote/{file_name}", data, f"image/{ext}")
             except Exception:
-                os.makedirs(EMOJI_DIR, exist_ok=True)
+                os.makedirs(remote_dir, exist_ok=True)
                 with open(file_path, "wb") as f:
                     f.write(data)
             emoji = CustomEmoji(

@@ -263,22 +263,23 @@ class Post(Base):
         _emoji_keywords = set(_emoji_pattern.findall(content))
         _emoji_map = {}
         if _emoji_keywords:
-            def _get_emoji_url(file_name: str) -> str:
+            def _get_emoji_url(file_name: str, domain: str = "") -> str:
+                sub = "remote" if domain else "local"
                 from app.config import S3_ENABLED
                 if S3_ENABLED:
                     from app.utils.storage import get_storage
                     try:
                         storage = get_storage()
-                        return storage.url(f"emojis/{file_name}")
+                        return storage.url(f"emojis/{sub}/{file_name}")
                     except Exception:
                         pass
-                return f"{BASE_URL}/emojis/{file_name}"
+                return f"{BASE_URL}/emojis/{sub}/{file_name}"
 
             with get_session() as _es:
                 for kw in _emoji_keywords:
                     emoji = _es.query(CustomEmoji).filter_by(keyword=kw).first()
                     if emoji:
-                        _emoji_map[kw] = (_get_emoji_url(emoji.file_name), emoji.keyword)
+                        _emoji_map[kw] = (_get_emoji_url(emoji.file_name, emoji.domain or ""), emoji.keyword)
 
         tags = []
         if _emoji_map:
