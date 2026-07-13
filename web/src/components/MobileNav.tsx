@@ -99,7 +99,7 @@ export default function MobileNav() {
   return (
     <>
       <nav className="mobile-nav">
-        <button onClick={() => { if (pathname?.startsWith("/timeline")) window.scrollTo({ top: 0, behavior: "smooth" }); else router.push("/timeline/home"); }} className={`mobile-nav-item${isActive("/timeline/home") ? " active" : ""}`}>
+        <button onClick={() => { if (pathname?.startsWith("/timeline")) { document.querySelector(".main-content")?.scrollTo({ top: 0, behavior: "smooth" }); } else router.push("/timeline/home"); }} className={`mobile-nav-item${isActive("/timeline/home") ? " active" : ""}`}>
           <Icon name={isActive("/timeline/home") ? "home_solid" : "home"} size={20} />
           <span>홈</span>
         </button>
