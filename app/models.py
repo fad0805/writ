@@ -347,6 +347,11 @@ class Post(Base):
             content,
         )
 
+        content = re.sub(
+            r'(^|>|　|\s)(https?://[^\s<>"\')\]]+)',
+            lambda m: f'{m.group(1)}<a href="{m.group(2)}">{m.group(2)}</a>',
+            content,
+        )
 
 
         if self.tag_list:
