@@ -683,21 +683,68 @@ def _broadcast_federation(user, post, visibility):
             "actor": user.actor_uri(),
             "object": post.to_ap_note(),
         }
-        if visibility == "mention" and post.mentioned_user_ids:
+        if visibility == "mention":
             with get_session() as ap_s:
-                mu_users = ap_s.query(User).filter(
-                    User.id.in_(post.mentioned_user_ids), User.is_remote == True
-                ).all()
-                for mu in mu_users:
-                    inbox = mu.inbox_url or mu.inbox_uri()
-                    domain = mu.actor_uri().split("/")[2] if "//" in mu.actor_uri() else ""
-                    if domain and not _federation_allowed(domain):
-                        continue
-                    _post_to_inbox(inbox, create_activity, user)
+                if post.mentioned_user_ids:
+                    mu_users = ap_s.query(User).filter(
+                        User.id.in_(post.mentioned_user_ids), User.is_remote == True
+                    ).all()
+                    for mu in mu_users:
+                        inbox = mu.inbox_url or mu.inbox_uri()
+                        domain = mu.actor_uri().split("/")[2] if "//" in mu.actor_uri() else ""
+                        if domain and not _federation_allowed(domain):
+                            continue
+                        _post_to_inbox(inbox, create_activity, user)
+                # Also deliver to @user@domain mentions parsed from content
+                from app.activitypub import _resolve_actor
+                import re as _re
+                remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', post.content or ""))
+                for handle in remote_handles:
+                    remote_user = ap_s.query(User).filter(
+                        User.username == handle, User.is_remote == True
+                    ).first()
+                    if not remote_user:
+                        try:
+                            r_name, r_domain = handle.split("@", 1)
+                            if not _federation_allowed(r_domain):
+                                continue
+                            resolved = None
+                            for url in [f"https://{r_domain}/@{r_name}", f"https://{r_domain}/users/{r_name}"]:
+                                try:
+                                    resolved = _resolve_actor(url, sign_as=user)
+                                    if resolved:
+                                        break
+                                except Exception:
+                                    continue
+                            if not resolved:
+                                import httpx as _httpx
+                                wf = _httpx.get(
+                                    f"https://{r_domain}/.well-known/webfinger?resource=acct:{handle}",
+                                    timeout=5,
+                                )
+                                if wf.status_code == 200:
+                                    for link in wf.json().get("links", []):
+                                        if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
+                                            href = link.get("href", "")
+                                            if href:
+                                                resolved = _resolve_actor(href, sign_as=user)
+                                                break
+                            if resolved:
+                                remote_user = ap_s.query(User).get(resolved.id)
+                        except Exception:
+                            pass
+                    if remote_user:
+                        inbox = remote_user.inbox_url or remote_user.inbox_uri()
+                        domain = remote_user.actor_uri().split("/")[2] if "//" in remote_user.actor_uri() else ""
+                        if domain and not _federation_allowed(domain):
+                            continue
+                        _post_to_inbox(inbox, create_activity, user)
         else:
             broadcast_to_followers(user, create_activity)
-            if post.mentioned_user_ids:
-                with get_session() as ap_s:
+            delivered_domains = set()
+            with get_session() as ap_s:
+                # Deliver to mentioned remote users from mentioned_user_ids
+                if post.mentioned_user_ids:
                     follower_ids = {f.following_id for f in ap_s.query(Follow).filter(
                         Follow.following_id == user.id,
                         Follow.follower.has(is_remote=True),
@@ -712,6 +759,54 @@ def _broadcast_federation(user, post, visibility):
                             if domain and not _federation_allowed(domain):
                                 continue
                             _post_to_inbox(inbox, create_activity, user)
+                            delivered_domains.add(domain)
+
+                # Also deliver to @user@domain mentions parsed from content
+                from app.activitypub import _resolve_actor
+                import re as _re
+                remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', post.content or ""))
+                for handle in remote_handles:
+                    remote_user = ap_s.query(User).filter(
+                        User.username == handle, User.is_remote == True
+                    ).first()
+                    if not remote_user:
+                        # Try to resolve via WebFinger + actor fetch
+                        try:
+                            r_name, r_domain = handle.split("@", 1)
+                            if not _federation_allowed(r_domain):
+                                continue
+                            resolved = None
+                            for url in [f"https://{r_domain}/@{r_name}", f"https://{r_domain}/users/{r_name}"]:
+                                try:
+                                    resolved = _resolve_actor(url, sign_as=user)
+                                    if resolved:
+                                        break
+                                except Exception:
+                                    continue
+                            if not resolved:
+                                import httpx as _httpx
+                                wf = _httpx.get(
+                                    f"https://{r_domain}/.well-known/webfinger?resource=acct:{handle}",
+                                    timeout=5,
+                                )
+                                if wf.status_code == 200:
+                                    for link in wf.json().get("links", []):
+                                        if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
+                                            href = link.get("href", "")
+                                            if href:
+                                                resolved = _resolve_actor(href, sign_as=user)
+                                                break
+                            if resolved:
+                                remote_user = ap_s.query(User).get(resolved.id)
+                        except Exception:
+                            pass
+                    if remote_user:
+                        inbox = remote_user.inbox_url or remote_user.inbox_uri()
+                        domain = remote_user.actor_uri().split("/")[2] if "//" in remote_user.actor_uri() else ""
+                        if domain and not _federation_allowed(domain):
+                            continue
+                        _post_to_inbox(inbox, create_activity, user)
+                        delivered_domains.add(domain)
     except Exception as e:
         logger.warning("Failed to broadcast federation activity: %s", e)
 
