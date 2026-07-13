@@ -13,7 +13,7 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PendingDelivery, PushSubscription, get_session
+from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PendingDelivery, PushSubscription, get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.log_utils import log_admin_action
 
@@ -2784,6 +2784,65 @@ def _notice_json(n):
         "created_at": _fmt_dt(n.created_at),
         "updated_at": _fmt_dt(n.updated_at),
     }
+
+
+@router.get("/series/{novel_id}/drafts")
+def api_list_drafts(request: Request, novel_id: int):
+    user = require_active_auth(request)
+    with get_session() as s:
+        novel = s.query(Novel).filter_by(id=novel_id, author_id=user.id).first()
+        if not novel:
+            raise HTTPException(status_code=404, detail="Novel not found")
+        drafts = s.query(EpisodeDraft).filter_by(user_id=user.id, novel_id=novel_id).order_by(desc(EpisodeDraft.updated_at)).limit(5).all()
+        return {"drafts": [{"id": d.id, "title": d.title or "", "summary": d.summary or "", "content": d.content or "", "comment": d.comment or "", "is_published": d.is_published, "announce": d.announce, "announce_comment": d.announce_comment or "", "visibility": d.visibility or "public", "episode_id": d.episode_id, "created_at": _fmt_dt(d.created_at), "updated_at": _fmt_dt(d.updated_at)} for d in drafts]}
+
+
+@router.post("/series/{novel_id}/drafts")
+def api_save_draft(request: Request, novel_id: int, title: str = Form(""), summary: str = Form(""), content: str = Form(""), comment: str = Form(""), is_published: bool = Form(True), announce: bool = Form(False), announce_comment: str = Form(""), visibility: str = Form("public"), draft_id: int = Form(0), episode_id: int = Form(0)):
+    user = require_active_auth(request)
+    with get_session() as s:
+        novel = s.query(Novel).filter_by(id=novel_id, author_id=user.id).first()
+        if not novel:
+            raise HTTPException(status_code=404, detail="Novel not found")
+        if draft_id:
+            draft = s.query(EpisodeDraft).filter_by(id=draft_id, user_id=user.id, novel_id=novel_id).first()
+            if not draft:
+                raise HTTPException(status_code=404, detail="Draft not found")
+        else:
+            count = s.query(EpisodeDraft).filter_by(user_id=user.id, novel_id=novel_id).count()
+            if count >= 5:
+                oldest = s.query(EpisodeDraft).filter_by(user_id=user.id, novel_id=novel_id).order_by(EpisodeDraft.updated_at.asc()).first()
+                if oldest:
+                    s.delete(oldest)
+                    s.flush()
+            draft = EpisodeDraft(user_id=user.id, novel_id=novel_id)
+            s.add(draft)
+            s.flush()
+            draft_id = draft.id
+        draft.title = title
+        draft.summary = summary
+        draft.content = content
+        draft.comment = comment
+        draft.is_published = is_published
+        draft.announce = announce
+        draft.announce_comment = announce_comment
+        draft.visibility = visibility
+        draft.episode_id = episode_id or None
+        draft.updated_at = func.now()
+        s.commit()
+        return {"ok": True, "draft_id": draft_id}
+
+
+@router.post("/series/{novel_id}/drafts/{draft_id}/delete")
+def api_delete_draft(request: Request, novel_id: int, draft_id: int):
+    user = require_active_auth(request)
+    with get_session() as s:
+        draft = s.query(EpisodeDraft).filter_by(id=draft_id, user_id=user.id, novel_id=novel_id).first()
+        if not draft:
+            raise HTTPException(status_code=404, detail="Draft not found")
+        s.delete(draft)
+        s.commit()
+        return {"ok": True}
 
 
 @router.get("/series/{novel_id}/notices")

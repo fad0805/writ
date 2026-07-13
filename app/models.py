@@ -620,6 +620,25 @@ class Episode(Base):
     # ActivityPub post ID (when announced)
 
 
+class EpisodeDraft(Base):
+    __tablename__ = "episode_drafts"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    novel_id = Column(Integer, ForeignKey("novels.id"), nullable=False, index=True)
+    episode_id = Column(Integer, nullable=True)
+    title = Column(String(256), default="")
+    summary = Column(Text, default="")
+    content = Column(Text, default="")
+    comment = Column(Text, default="")
+    is_published = Column(Boolean, default=True)
+    announce = Column(Boolean, default=False)
+    announce_comment = Column(String(200), default="")
+    visibility = Column(String(20), default="public")
+    created_at = Column(DateTime(timezone=True), default=now)
+    updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
+
+
 class Bookmark(Base):
     __tablename__ = "bookmarks"
 

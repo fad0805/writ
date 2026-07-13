@@ -2904,6 +2904,28 @@ input[type="checkbox"] {
   flex-wrap: wrap;
 }
 .draft-banner .btn { font-size: 0.85em; padding: 4px 10px; }
+.draft-actions { display: flex; gap: 8px; align-items: center; }
+.draft-list {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.draft-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.draft-list-item:last-child { border-bottom: none; }
+.draft-list-item:hover { background: var(--bg-secondary); }
+.draft-list-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.draft-list-title { font-weight: 500; font-size: 0.95em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.draft-list-date { font-size: 0.8em; color: var(--text-muted); }
+.draft-list-delete { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px 8px; border-radius: 4px; flex-shrink: 0; }
+.draft-list-delete:hover { color: var(--danger); background: var(--bg-secondary); }
 .novel-form,
 .episode-form {
   background: var(--bg-secondary);
