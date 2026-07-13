@@ -37,6 +37,7 @@ export default function NovelDetailPage() {
   const [coverRevealed, setCoverRevealed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pinnedNotices, setPinnedNotices] = useState<NoticeData[]>([]);
+  const [showShareMenu, setShowShareMenu] = useState(false);
   const [showSharePost, setShowSharePost] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -47,11 +48,11 @@ export default function NovelDetailPage() {
   const [selectedRuleIds, setSelectedRuleIds] = useState<number[]>([]);
 
   useEffect(() => {
-    if (!showMoreMenu) return;
-    const close = () => setShowMoreMenu(false);
+    if (!showMoreMenu && !showShareMenu) return;
+    const close = () => { setShowMoreMenu(false); setShowShareMenu(false); };
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
-  }, [showMoreMenu]);
+  }, [showMoreMenu, showShareMenu]);
 
   useEffect(() => {
     const id = Number(Array.isArray(params.id) ? params.id[0] : params.id);
@@ -114,9 +115,17 @@ export default function NovelDetailPage() {
                   </button>
                 )}
                 {isMine && <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>}
-                {user && <button className="action-btn" title="포스트로 공유" onClick={() => setShowSharePost(true)}><Icon name="share" /></button>}
+                <div className="series-more-wrap">
+                  <button className="action-btn" title="공유" onClick={(e) => { e.stopPropagation(); setShowShareMenu(!showShareMenu); }}><Icon name="share" /></button>
+                  {showShareMenu && (
+                    <div className="series-more-menu" onClick={(e) => e.stopPropagation()}>
+                      <button onClick={() => { setShowShareMenu(false); setShowSharePost(true); }}><Icon name="edit" /> 포스트 공유</button>
+                      <button onClick={() => { navigator.clipboard.writeText(window.location.origin + `/series/${novel.id}`); setShowShareMenu(false); }}><Icon name="link" /> 링크 복사</button>
+                    </div>
+                  )}
+                </div>
                 <div className="series-more-wrap" onClick={() => setShowMoreMenu(!showMoreMenu)}>
-                  <button className="action-btn" title="더보기"><Icon name="more" /></button>
+                  <button className="action-btn" title="더보기"><Icon name="menu" /></button>
                   {showMoreMenu && (
                     <div className="series-more-menu" onClick={(e) => e.stopPropagation()}>
                       {novel.visibility !== "private" && <button onClick={() => { navigator.clipboard.writeText(window.location.origin + `/series/${novel.id}`); setShowMoreMenu(false); }}><Icon name="link" /> 링크 복사</button>}
