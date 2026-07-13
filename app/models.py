@@ -17,7 +17,6 @@ else:
         DATABASE_URL,
         pool_size=20,
         max_overflow=20,
-        pool_pre_ping=True,
         pool_recycle=3600,
     )
 
