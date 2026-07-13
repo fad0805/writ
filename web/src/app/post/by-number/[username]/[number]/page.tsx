@@ -38,6 +38,11 @@ export default function PostByNumberPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const offsetRef = useRef(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const currentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (post) currentRef.current?.scrollIntoView({ behavior: "auto", block: "center" });
+  }, [post]);
 
   const loadPost = async () => {
     setLoading(true);
@@ -106,7 +111,7 @@ export default function PostByNumberPage() {
       {ancestors.map((a) => (
         <div key={a.id} className="thread-child"><PostCard post={a} hideContext /></div>
       ))}
-      <PostCard post={post} current hideContext onUpdate={() => loadPost()} />
+      <div ref={currentRef}><PostCard post={post} current hideContext onUpdate={() => loadPost()} /></div>
       <div className="thread-list">
         <h4>답글 {totalReplies}개</h4>
         <ThreadList posts={replies} parentId={post.id} depth={0} />

@@ -39,6 +39,11 @@ export default function PostDetailPage() {
   const [showRestrictedWarning, setShowRestrictedWarning] = useState(false);
   const offsetRef = useRef(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const currentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (post) currentRef.current?.scrollIntoView({ behavior: "auto", block: "center" });
+  }, [post]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -112,7 +117,7 @@ export default function PostDetailPage() {
       {ancestors.map((a) => (
         <div key={a.id} className="thread-child"><PostCard post={a} hideContext /></div>
       ))}
-      <PostCard post={post} onUpdate={load} onDelete={() => router.push("/timeline/home")} current hideContext />
+      <div ref={currentRef}><PostCard post={post} onUpdate={load} onDelete={() => router.push("/timeline/home")} current hideContext /></div>
       <div className="thread-list">
         <h4>답글 {totalReplies}개</h4>
         <ThreadList posts={replies} parentId={post.id} depth={0} />
