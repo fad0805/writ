@@ -116,6 +116,7 @@ export default function AdminUserDetailPage() {
             __html: renderCustomEmojis(u.summary, emojiMap)
               .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
               .replace(/<[^>]+\s+on\w+\s*=\s*[^>]*>/gi, '')
+              .replace(/<img[^>]*alt="([^"]*)"[^>]*>/gi, '$1')
               .replace(/<img[^>]*>/gi, '')
               .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '')
               .replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '')
