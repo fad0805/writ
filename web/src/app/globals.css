@@ -670,6 +670,9 @@ input:focus {
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  white-space: nowrap;
+  min-width: 80px;
+  justify-content: flex-end;
 }
 
 .post-content {
