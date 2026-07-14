@@ -1131,6 +1131,34 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 if not reply_to_post:
                     _local_signer = session.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor.id, User.is_remote == False).first()
                     reply_to_post = _fetch_remote_post(in_reply_to, _local_signer, session)
+                    if reply_to_post:
+                        try:
+                            from app.timeline_stream import broadcast_post
+                            _ra = reply_to_post.author
+                            broadcast_post({
+                                "id": reply_to_post.id,
+                                "number": reply_to_post.number or "",
+                                "content": reply_to_post.content,
+                                "summary": reply_to_post.summary or "",
+                                "visibility": reply_to_post.visibility or "public",
+                                "created_at": reply_to_post.created_at.isoformat() if reply_to_post.created_at else "",
+                                "author": {
+                                    "id": _ra.id, "username": _ra.username,
+                                    "display_name": _ra.display_name or _ra.username,
+                                    "avatar": _ra.profile_image or "", "header": _ra.header_image or "",
+                                    "summary": _ra.summary or "", "is_admin": _ra.is_admin,
+                                    "is_locked": getattr(_ra, "is_locked", False),
+                                    "is_limited": getattr(_ra, "is_limited", False),
+                                    "is_remote": _ra.is_remote, "ap_id": _ra.remote_url or "",
+                                },
+                                "likes_count": 0, "boosts_count": 0, "replies_count": 0,
+                                "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
+                                "is_dm": False, "is_sensitive": getattr(reply_to_post, "is_sensitive", False) or False,
+                                "ap_id": reply_to_post.ap_id or "", "media_attachments": reply_to_post.media_attachments or [],
+                                "poll_data": reply_to_post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
+                            }, reply_to_post.author_id, reply_to_post.visibility or "public", False)
+                        except Exception:
+                            pass
 
             # Mastodon poll votes: Create(Note) with name + inReplyTo + no content
             vote_name = obj.get("name", "") if not raw_content.strip() else ""
@@ -1600,6 +1628,34 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
             broadcast_notif_sound(post.author_id)
         else:
             session.commit()
+
+        try:
+            from app.timeline_stream import broadcast_post
+            _a = post.author
+            broadcast_post({
+                "id": post.id,
+                "number": post.number or "",
+                "content": post.content,
+                "summary": post.summary or "",
+                "visibility": post.visibility or "public",
+                "created_at": post.created_at.isoformat() if post.created_at else "",
+                "author": {
+                    "id": _a.id, "username": _a.username,
+                    "display_name": _a.display_name or _a.username,
+                    "avatar": _a.profile_image or "", "header": _a.header_image or "",
+                    "summary": _a.summary or "", "is_admin": _a.is_admin,
+                    "is_locked": getattr(_a, "is_locked", False),
+                    "is_limited": getattr(_a, "is_limited", False),
+                    "is_remote": _a.is_remote, "ap_id": _a.remote_url or "",
+                },
+                "likes_count": 0, "boosts_count": 1, "replies_count": 0,
+                "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
+                "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
+                "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
+                "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
+            }, post.author_id, post.visibility or "public", False)
+        except Exception:
+            pass
 
     return (200, "Announced")
 
