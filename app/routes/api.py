@@ -670,8 +670,8 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         deduped.append(p)
     posts = deduped
     # Filter replies: hide if direct parent author is not followed
-    # Only for home timeline, not social/local/federated
-    if user and tl_type == "home" and _following_ids:
+    # Only for home/social timeline, not local/federated
+    if user and tl_type in ("home", "social") and _following_ids:
         parent_ids = {p.in_reply_to_id for p in posts if p.author_id != user.id and p.in_reply_to_id}
         parent_authors = {}
         if parent_ids:

@@ -64,8 +64,8 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
         author = s.query(User).get(post_author_id)
         author_is_local = author.is_remote == False if author else False
 
-        # Pre-load following lists for home timeline streams
-        home_uids = {info["user_id"] for info in _streams.values() if info.get("tl_type") == "home"}
+        # Pre-load following lists for home/social timeline streams
+        home_uids = {info["user_id"] for info in _streams.values() if info.get("tl_type") in ("home", "social")}
         home_follows = {}
         if home_uids:
             for f in s.query(Follow).filter(Follow.follower_id.in_(home_uids), Follow.accepted == True).all():
@@ -76,8 +76,8 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
             tl = info["tl_type"]
             if not _should_deliver_fast(uid, tl, post_author_id, post_visibility, follower_ids, booster_ids, author_is_local):
                 continue
-            # Additional filtering for home timeline
-            if tl == "home" and (mentioned_ids or parent_author_id):
+            # Additional filtering for home/social timeline
+            if tl in ("home", "social") and (mentioned_ids or parent_author_id is not None):
                 user_follows = home_follows.get(uid, set()) | {uid}
                 # Filter: mention of non-followed user
                 if mentioned_ids:
@@ -88,8 +88,10 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                             break
                     if skip:
                         continue
-                # Filter: parent author not followed
-                if parent_author_id and parent_author_id != uid and parent_author_id not in user_follows:
+                # Filter: parent author not followed or parent not found
+                if parent_author_id is None:
+                    continue
+                if parent_author_id != uid and parent_author_id not in user_follows:
                     continue
             _enqueue(info["queue"], payload)
 
