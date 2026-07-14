@@ -174,6 +174,11 @@ export default function ProfilePage() {
                 <button onClick={toggleFollow} className={`btn btn-small btn-follow ${isFollowing ? "btn-outline" : isFollowPending ? "btn-outline" : "btn-primary"} btn-follow-fixed`}>
                   {isFollowing ? "언팔로우" : isFollowPending ? "요청됨" : "팔로우"}
                 </button>
+              </div>
+            )}
+          </div>
+          <div className="profile-info-relative">
+              <div className="profile-corner-actions">
                 {isFollowing && (
                   <button
                     onClick={async () => {
@@ -182,17 +187,12 @@ export default function ProfilePage() {
                         setNotifyOnPost(res.notify_on_post);
                       } catch {}
                     }}
-                    className={`btn btn-small btn-follow ${notifyOnPost ? "btn-primary" : "btn-outline"}`}
+                    className="action-btn"
                     title={notifyOnPost ? "새 글 알림 끄기" : "새 글 알림 받기"}
                   >
                     <Icon name={notifyOnPost ? "bell_solid" : "bell"} size={14} />
                   </button>
                 )}
-              </div>
-            )}
-          </div>
-          <div className="profile-info-relative">
-              <div className="profile-corner-actions">
                 {(isFollower || approvedFollower === true) && (
                   <span
                     onClick={() => setShowRemoveFollower(true)}
