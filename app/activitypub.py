@@ -1681,6 +1681,8 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
                 follower_id=follower.id, following_id=target.id
             ).delete()
             session.commit()
+            from app.timeline_stream import broadcast_refresh_notifs
+            broadcast_refresh_notifs(target.id)
 
         return (200, "Unfollowed")
 
@@ -1710,6 +1712,35 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
                 notification_type="like", post_id=post.id,
             ).delete()
             session.commit()
+            from app.timeline_stream import broadcast_refresh_notifs, broadcast_post
+            broadcast_refresh_notifs(post.author_id)
+            try:
+                _la = post.author
+                broadcast_post({
+                    "id": post.id, "type": "update",
+                    "number": post.number or "",
+                    "content": post.content, "summary": post.summary or "",
+                    "visibility": post.visibility or "public",
+                    "created_at": post.created_at.isoformat() if post.created_at else "",
+                    "author": {
+                        "id": _la.id, "username": _la.username,
+                        "display_name": _la.display_name or _la.username,
+                        "avatar": _la.profile_image or "", "header": _la.header_image or "",
+                        "summary": _la.summary or "", "is_admin": _la.is_admin,
+                        "is_locked": getattr(_la, "is_locked", False),
+                        "is_limited": getattr(_la, "is_limited", False),
+                        "is_remote": _la.is_remote, "ap_id": _la.remote_url or "",
+                    },
+                    "likes_count": session.query(Like).filter_by(post_id=post.id).count(),
+                    "boosts_count": session.query(Boost).filter_by(post_id=post.id).count(),
+                    "replies_count": session.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count(),
+                    "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
+                    "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
+                    "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
+                    "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
+                }, post.author_id, post.visibility or "public", False)
+            except Exception:
+                pass
 
         return (200, "Unliked")
 
@@ -1739,6 +1770,35 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
                 notification_type="boost", post_id=post.id,
             ).delete()
             session.commit()
+            from app.timeline_stream import broadcast_refresh_notifs, broadcast_post
+            broadcast_refresh_notifs(post.author_id)
+            try:
+                _ba = post.author
+                broadcast_post({
+                    "id": post.id, "type": "update",
+                    "number": post.number or "",
+                    "content": post.content, "summary": post.summary or "",
+                    "visibility": post.visibility or "public",
+                    "created_at": post.created_at.isoformat() if post.created_at else "",
+                    "author": {
+                        "id": _ba.id, "username": _ba.username,
+                        "display_name": _ba.display_name or _ba.username,
+                        "avatar": _ba.profile_image or "", "header": _ba.header_image or "",
+                        "summary": _ba.summary or "", "is_admin": _ba.is_admin,
+                        "is_locked": getattr(_ba, "is_locked", False),
+                        "is_limited": getattr(_ba, "is_limited", False),
+                        "is_remote": _ba.is_remote, "ap_id": _ba.remote_url or "",
+                    },
+                    "likes_count": session.query(Like).filter_by(post_id=post.id).count(),
+                    "boosts_count": session.query(Boost).filter_by(post_id=post.id).count(),
+                    "replies_count": session.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count(),
+                    "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
+                    "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
+                    "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
+                    "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
+                }, post.author_id, post.visibility or "public", False)
+            except Exception:
+                pass
 
         return (200, "Unboosted")
 
