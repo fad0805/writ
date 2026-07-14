@@ -1715,11 +1715,17 @@ def _handle_block(activity: dict) -> tuple[int, str]:
     if isinstance(object_url, dict):
         object_url = object_url.get("id", "")
 
-    remote_user = _resolve_actor(actor_url)
+    # Try to resolve with a local user's signature to ensure remote server accepts
+    local_username = _parse_username_from_url(object_url)
+    sign_as = None
+    if local_username:
+        with get_session() as _s:
+            _u = _s.query(User).filter_by(username=local_username, is_remote=False).first()
+            if _u:
+                sign_as = _u
+    remote_user = _resolve_actor(actor_url, sign_as=sign_as)
     if not remote_user:
         return (200, "OK")
-
-    local_username = _parse_username_from_url(object_url)
     try:
         with get_session() as session:
             # Re-query both users in the SAME session to avoid detached instance issues
