@@ -3855,6 +3855,147 @@ def api_export_account(request: Request, export_type: str):
     return PlainTextResponse(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={export_type}.csv"})
 
 
+@router.get("/settings/export-data")
+def api_export_data(request: Request):
+    user = require_auth(request)
+    with get_session() as s:
+        follows = []
+        for f in s.query(Follow).filter_by(follower_id=user.id, accepted=True).all():
+            target = s.query(User).get(f.following_id)
+            if target:
+                follows.append({"handle": target.username, "display_name": target.display_name, "notify_on_post": f.notify_on_post})
+        mutes = []
+        for m in s.query(UserMute).filter_by(user_id=user.id).all():
+            target = s.query(User).get(m.target_user_id)
+            if target:
+                mutes.append({"handle": target.username, "display_name": target.display_name})
+        blocks = []
+        for b in s.query(UserBlock).filter_by(user_id=user.id).all():
+            target = s.query(User).get(b.target_user_id)
+            if target:
+                blocks.append({"handle": target.username, "display_name": target.display_name})
+        bookmarks = []
+        for bm in s.query(Bookmark).filter_by(user_id=user.id).all():
+            post = s.query(Post).get(bm.post_id)
+            if post and not post.is_deleted:
+                bookmarks.append({"url": post.ap_id or f"{BASE_URL}/post/{post.id}", "created_at": str(bm.created_at)})
+        keyword_mutes = []
+        for kw in s.query(KeywordMute).filter_by(user_id=user.id).all():
+            keyword_mutes.append({"keyword": kw.keyword, "name": kw.name or "", "mode": kw.mode, "is_regex": kw.is_regex})
+        return {"follows": follows, "mutes": mutes, "blocks": blocks, "bookmarks": bookmarks, "keyword_mutes": keyword_mutes}
+
+
+@router.get("/settings/export-archive")
+def api_export_archive(request: Request):
+    user = require_auth(request)
+    import zipfile, json as _json
+    buf = io.BytesIO()
+    with get_session() as s:
+        posts = s.query(Post).filter_by(author_id=user.id, is_deleted=False).order_by(Post.created_at).all()
+        posts_data = []
+        for p in posts:
+            posts_data.append({
+                "id": p.id, "content": p.content or "", "summary": p.summary or "",
+                "visibility": p.visibility, "created_at": str(p.created_at),
+                "media_attachments": p.media_attachments or [],
+                "poll_data": p.poll_data, "is_sensitive": p.is_sensitive,
+            })
+        novels = s.query(Novel).filter_by(author_id=user.id).order_by(Novel.created_at).all()
+        novels_data = []
+        for n in novels:
+            eps = s.query(Episode).filter_by(novel_id=n.id).order_by(Episode.episode_number).all()
+            episodes_data = []
+            for e in eps:
+                episodes_data.append({
+                    "episode_number": e.episode_number, "title": e.title,
+                    "content": e.content, "summary": e.summary or "",
+                    "is_published": e.is_published, "created_at": str(e.created_at),
+                })
+            novels_data.append({
+                "title": n.title, "description": n.description or "", "tags": n.tags or "",
+                "status": n.status, "visibility": n.visibility,
+                "is_sensitive": n.is_sensitive, "created_at": str(n.created_at),
+                "episodes": episodes_data,
+            })
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("posts.json", _json.dumps(posts_data, ensure_ascii=False, indent=2))
+        zf.writestr("novels.json", _json.dumps(novels_data, ensure_ascii=False, indent=2))
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="application/zip",
+                             headers={"Content-Disposition": f"attachment; filename=writ_archive_{user.username}.zip"})
+
+
+@router.post("/settings/import-data")
+def api_import_data(request: Request, data: str = Form(...)):
+    user = require_active_auth(request)
+    import json as _json
+    try:
+        payload = _json.loads(data)
+    except Exception:
+        raise HTTPException(status_code=400, detail="잘못된 JSON 형식입니다.")
+    imported = {"follows": 0, "mutes": 0, "blocks": 0, "bookmarks": 0, "keyword_mutes": 0}
+    with get_session() as s:
+        for item in payload.get("follows", []):
+            handle = item.get("handle", "").strip().lower()
+            if not handle:
+                continue
+            target = s.query(User).filter_by(username=handle, is_remote=False).first()
+            if not target or target.id == user.id:
+                continue
+            exists = s.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
+            if not exists:
+                s.add(Follow(follower_id=user.id, following_id=target.id, accepted=True))
+                imported["follows"] += 1
+        for item in payload.get("mutes", []):
+            handle = item.get("handle", "").strip().lower()
+            if not handle:
+                continue
+            target = s.query(User).filter_by(username=handle, is_remote=False).first()
+            if not target or target.id == user.id:
+                continue
+            exists = s.query(UserMute).filter_by(user_id=user.id, target_user_id=target.id).first()
+            if not exists:
+                s.add(UserMute(user_id=user.id, target_user_id=target.id))
+                imported["mutes"] += 1
+        for item in payload.get("blocks", []):
+            handle = item.get("handle", "").strip().lower()
+            if not handle:
+                continue
+            target = s.query(User).filter_by(username=handle, is_remote=False).first()
+            if not target or target.id == user.id:
+                continue
+            exists = s.query(UserBlock).filter_by(user_id=user.id, target_user_id=target.id).first()
+            if not exists:
+                s.add(UserBlock(user_id=user.id, target_user_id=target.id))
+                imported["blocks"] += 1
+        for item in payload.get("bookmarks", []):
+            url = item.get("url", "")
+            if not url:
+                continue
+            post = s.query(Post).filter(Post.ap_id == url).first()
+            if not post:
+                import re as _re
+                m = _re.search(r"/post/(\d+)", url)
+                if m:
+                    post = s.query(Post).filter_by(id=int(m.group(1))).first()
+            if not post or post.is_deleted:
+                continue
+            exists = s.query(Bookmark).filter_by(user_id=user.id, post_id=post.id).first()
+            if not exists:
+                s.add(Bookmark(user_id=user.id, post_id=post.id))
+                imported["bookmarks"] += 1
+        for item in payload.get("keyword_mutes", []):
+            keyword = item.get("keyword", "").strip()
+            if not keyword:
+                continue
+            exists = s.query(KeywordMute).filter_by(user_id=user.id, keyword=keyword).first()
+            if not exists:
+                s.add(KeywordMute(user_id=user.id, keyword=keyword, name=item.get("name", ""), mode=item.get("mode", "or"), is_regex=item.get("is_regex", False)))
+                imported["keyword_mutes"] += 1
+        s.commit()
+    return {"ok": True, "imported": imported}
+
+
 @router.post("/settings/archive-request")
 def api_archive_request(request: Request):
     user = require_auth(request)
