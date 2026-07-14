@@ -4288,7 +4288,9 @@ def api_fetch_actor(request: Request, url: str = Form(...)):
         except Exception:
             pass
     with get_session() as _s:
-        _attached = _s.query(User).get(actor.id)
+        _attached = _s.query(User).filter_by(remote_url=url).first()
+        if not _attached:
+            _attached = _s.query(User).get(actor.id)
         return _user_json(_attached)
 
 
