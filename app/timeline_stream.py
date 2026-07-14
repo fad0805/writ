@@ -50,12 +50,17 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
         if parent_author:
             parent_author_id = parent_author.get("id")
     with get_session() as s:
+        post_id_for_boost = post_json.get("id")
         follower_ids = {f.follower_id for f in s.query(Follow).filter_by(
             following_id=post_author_id, accepted=True
         ).all()}
-        booster_ids = {b.user_id for b in s.query(Boost).join(Post, Boost.post_id == Post.id).filter(
-            Post.author_id == post_author_id
-        ).all()}
+        booster_ids = {b.user_id for b in s.query(Boost).filter_by(post_id=post_id_for_boost).all()}
+        # Also include followers of any user who boosted this post
+        if booster_ids:
+            for bf in s.query(Follow).filter(
+                Follow.following_id.in_(booster_ids), Follow.accepted == True
+            ).all():
+                follower_ids.add(bf.follower_id)
         author = s.query(User).get(post_author_id)
         author_is_local = author.is_remote == False if author else False
 

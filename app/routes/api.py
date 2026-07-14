@@ -535,7 +535,11 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         _local_ids = [u.id for u in session.query(User).filter_by(is_remote=False).all()]
     if tl_type == "home":
         following_ids = list(_following_ids) if _following_ids else [user.id]
-        boosted_ids = [b.post_id for b in session.query(Boost).filter_by(user_id=user.id).all()]
+        my_boosted_ids = [b.post_id for b in session.query(Boost).filter_by(user_id=user.id).all()]
+        followed_boosted_ids = [b.post_id for b in session.query(Boost).filter(
+            Boost.user_id.in_([fid for fid in following_ids if fid != user.id]),
+        ).all()]
+        boosted_ids = list(set(my_boosted_ids) | set(followed_boosted_ids))
         final = following_ids[:]
         posts = session.query(Post).options(*_base_opts).filter(
             or_(
