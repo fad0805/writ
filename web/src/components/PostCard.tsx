@@ -100,7 +100,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     setBoostsCount(post.boosts_count);
     setReactions(post.reactions || {});
     setMyReaction(post.my_reaction || null);
-  }, [post]);
+  }, [post.liked, post.boosted, post.bookmarked, post.likes_count, post.boosts_count, post.content, post.summary, post.reactions, post.my_reaction]);
 
   useEffect(() => {
     if (!post.poll_data) return;
