@@ -1679,7 +1679,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
     obj_type = obj.get("type", "") if isinstance(obj, dict) else ""
 
     if not isinstance(obj, dict) and isinstance(obj, str):
-        logger.info("[UNDO] object is URL, fetching: %s", obj)
+        print(f"[UNDO] object is URL, fetching: {obj}", flush=True)
         fetched = None
         try:
             import httpx
@@ -1687,16 +1687,16 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
             if resp.status_code < 300:
                 fetched = resp.json()
                 obj_type = fetched.get("type", "")
-                logger.info("[UNDO] fetched object type=%s", obj_type)
+                print(f"[UNDO] fetched object type={obj_type}", flush=True)
         except Exception as e:
-            logger.warning("[UNDO] failed to fetch object %s: %s", obj, e)
+            print(f"[UNDO] failed to fetch object {obj}: {e}", flush=True)
         if fetched:
             obj = fetched
         else:
-            logger.warning("[UNDO] could not resolve object, skipping")
+            print(f"[UNDO] could not resolve object, skipping", flush=True)
             return (200, "OK")
 
-    logger.info("[UNDO] obj_type=%s", obj_type)
+    print(f"[UNDO] obj_type={obj_type}", flush=True)
 
     if obj_type == "Follow":
         actor_url = obj.get("actor", activity.get("actor", ""))
