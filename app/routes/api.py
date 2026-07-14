@@ -845,7 +845,7 @@ async def api_timeline_stream(request: Request, tl_type: str = "home"):
 
 
 @router.get("/timeline/{tl_type}")
-def api_timeline(request: Request, tl_type: str, limit: int = Query(10), offset: int = Query(0)):
+def api_timeline(request: Request, tl_type: str, limit: int = Query(10), offset: int = Query(0), s: Session = Depends(get_db)):
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
@@ -853,8 +853,7 @@ def api_timeline(request: Request, tl_type: str, limit: int = Query(10), offset:
         return JSONResponse({"error": "Account deactivated"}, status_code=403)
     if tl_type not in TIMELINE_LABELS:
         tl_type = "home"
-    with get_session() as s:
-        feed, has_more = _get_feed(user, tl_type, s, limit=limit, offset=offset)
+    feed, has_more = _get_feed(user, tl_type, s, limit=limit, offset=offset)
     return {"posts": feed, "timeline_type": tl_type, "has_more": has_more}
 
 
