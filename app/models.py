@@ -64,6 +64,8 @@ class User(Base):
     outbox_url = Column(String(512))
     followers_url = Column(String(512))
     following_url = Column(String(512))
+    remote_followers_count = Column(Integer, default=0)
+    remote_following_count = Column(Integer, default=0)
 
     is_remote = Column(Boolean, default=False)
     is_admin = Column(Boolean, default=False)
@@ -968,6 +970,8 @@ def _add_missing_columns():
         ("session_token", "VARCHAR(256) DEFAULT ''"),
         ("moderation_note", "TEXT DEFAULT ''"),
         ("moved_to", "VARCHAR(512) DEFAULT ''"),
+        ("remote_followers_count", "INTEGER DEFAULT 0"),
+        ("remote_following_count", "INTEGER DEFAULT 0"),
         ("custom_fields", "JSON DEFAULT '[]'"),
         ("profile_hashtags", "JSON DEFAULT '[]'"),
         ("pinned_posts", "JSON DEFAULT '[]'"),

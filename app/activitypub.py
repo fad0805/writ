@@ -538,6 +538,36 @@ def _extract_custom_fields(attachment: list) -> list:
     return fields
 
 
+def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> int:
+    """Fetch totalItems from a remote ActivityPub collection (followers/following)."""
+    if not collection_url:
+        return 0
+    try:
+        import httpx
+        headers = {"Accept": "application/activity+json"}
+        if sign_as:
+            import datetime, time, hashlib, base64
+            from app.crypto_utils import sign_string, get_private_key
+            from app.config import SECRET_KEY
+            from urllib.parse import urlparse
+            parsed = urlparse(collection_url)
+            date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+            created = int(time.time())
+            ss = f"(request-target): get {parsed.path}\nhost: {parsed.netloc}\ndate: {date}\n(created): {created}"
+            priv = get_private_key(sign_as, SECRET_KEY)
+            sig = sign_string(ss, priv)
+            headers["Signature"] = f'keyId="{sign_as.actor_uri()}#main-key",algorithm="hs2019",created="{created}",headers="(request-target) host date (created)",signature="{sig}"'
+            headers["Date"] = date
+            headers["Host"] = parsed.netloc
+        resp = httpx.get(collection_url, headers=headers, timeout=10, follow_redirects=True)
+        if resp.status_code == 200:
+            data = resp.json()
+            return int(data.get("totalItems", 0))
+    except Exception:
+        pass
+    return 0
+
+
 def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optional[User] = None) -> Optional[User]:
     import sys
     with get_session() as session:
@@ -642,6 +672,8 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             if header_url:
                 existing.header_image = _save_remote_image(header_url, "headers", base_username_clean, existing.header_image)
             existing.custom_fields = _extract_custom_fields(data.get("attachment", []))
+            existing.remote_followers_count = _fetch_remote_count(data.get("followers", ""), sign_as)
+            existing.remote_following_count = _fetch_remote_count(data.get("following", ""), sign_as)
             _process_emoji_tags(data.get("tag", []), session)
             session.commit()
             return existing
@@ -659,6 +691,8 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             if header_url:
                 by_username.header_image = _save_remote_image(header_url, "headers", base_username_clean, by_username.header_image)
             by_username.custom_fields = _extract_custom_fields(data.get("attachment", []))
+            by_username.remote_followers_count = _fetch_remote_count(data.get("followers", ""), sign_as)
+            by_username.remote_following_count = _fetch_remote_count(data.get("following", ""), sign_as)
             _process_emoji_tags(data.get("tag", []), session)
             session.commit()
             return by_username
@@ -689,6 +723,8 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             header_image=header_image,
             is_locked=data.get("manuallyApprovesFollowers", False),
             custom_fields=_extract_custom_fields(data.get("attachment", [])),
+            remote_followers_count=_fetch_remote_count(data.get("followers", ""), sign_as),
+            remote_following_count=_fetch_remote_count(data.get("following", ""), sign_as),
         )
         session.add(user)
         session.flush()

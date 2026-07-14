@@ -206,6 +206,8 @@ def _user_json(u):
         "enable_reactions": getattr(u, 'enable_reactions', True),
         "aliases": (u.aliases or []) if hasattr(u, 'aliases') else [],
         "moved_to": getattr(u, 'moved_to', '') or '',
+        "remote_followers_count": getattr(u, 'remote_followers_count', 0) or 0,
+        "remote_following_count": getattr(u, 'remote_following_count', 0) or 0,
     }
 
 
