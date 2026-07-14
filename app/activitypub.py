@@ -332,6 +332,7 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
     elif atype == "Undo":
         return _handle_undo(activity)
     elif atype == "Update":
+        print(f"[INBOX-UPDATE] from={actor} object={type(activity.get('object')).__name__}", flush=True)
         return _handle_update(activity)
     elif atype == "Delete":
         return _handle_delete(activity)
@@ -1844,9 +1845,26 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
 
 def _handle_update(activity: dict) -> tuple[int, str]:
     object_data = activity.get("object", {})
+    print(f"[UPDATE] raw activity keys={list(activity.keys())}", flush=True)
+    print(f"[UPDATE] object type={type(object_data).__name__} is_dict={isinstance(object_data, dict)}", flush=True)
+    if isinstance(object_data, str):
+        print(f"[UPDATE] object is URL: {object_data}", flush=True)
+        try:
+            import httpx
+            resp = httpx.get(object_data, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, follow_redirects=True, timeout=10)
+            if resp.status_code < 300:
+                object_data = resp.json()
+                print(f"[UPDATE] fetched object: type={object_data.get('type','')} id={object_data.get('id','')}", flush=True)
+            else:
+                print(f"[UPDATE] fetch failed status={resp.status_code}", flush=True)
+                return (200, "OK")
+        except Exception as e:
+            print(f"[UPDATE] fetch error: {e}", flush=True)
+            return (200, "OK")
     if isinstance(object_data, dict):
         obj_type = object_data.get("type", "")
         obj_id = object_data.get("id", "")
+        print(f"[UPDATE] obj_type={obj_type} obj_id={obj_id}", flush=True)
         if obj_type in ("Person", "Service"):
             _resolve_actor(obj_id, force_refresh=True)
         elif obj_type in ("Note", "Question"):
