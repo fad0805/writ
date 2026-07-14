@@ -1706,26 +1706,34 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
 
     return (200, "Announced")
 
-
 def _handle_block(activity: dict) -> tuple[int, str]:
+    import sys as _sys
     actor_url = activity.get("actor", "")
     object_url = activity.get("object", "")
     if isinstance(actor_url, list):
         actor_url = actor_url[0]
     if isinstance(object_url, dict):
         object_url = object_url.get("id", "")
+    print(f"[BLOCK] received: actor={actor_url} object={object_url}", flush=True)
 
     # Try to resolve with a local user's signature to ensure remote server accepts
     local_username = _parse_username_from_url(object_url)
+    print(f"[BLOCK] parsed local_username={local_username}", flush=True)
     sign_as = None
     if local_username:
         with get_session() as _s:
             _u = _s.query(User).filter_by(username=local_username, is_remote=False).first()
             if _u:
                 sign_as = _u
+                print(f"[BLOCK] sign_as user={_u.username} id={_u.id}", flush=True)
+            else:
+                print(f"[BLOCK] local user '{local_username}' not found in DB", flush=True)
     remote_user = _resolve_actor(actor_url, sign_as=sign_as)
+    print(f"[BLOCK] _resolve_actor returned: {remote_user.id if remote_user else None}", flush=True)
     if not remote_user:
+        print(f"[BLOCK] could not resolve remote actor, returning OK", flush=True)
         return (200, "OK")
+
     try:
         with get_session() as session:
             # Re-query both users in the SAME session to avoid detached instance issues
@@ -1739,18 +1747,28 @@ def _handle_block(activity: dict) -> tuple[int, str]:
             if not remote:
                 remote = session.query(User).filter_by(id=remote_user.id).first()
             if not remote:
+                print(f"[BLOCK] remote user not found in DB", flush=True)
                 return (200, "OK")
+            print(f"[BLOCK] remote user id={remote.id} username={remote.username}", flush=True)
             local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
             if not local_user:
+                print(f"[BLOCK] local user not found", flush=True)
                 return (200, "OK")
-            session.query(Follow).filter_by(follower_id=remote.id, following_id=local_user.id).delete()
-            session.query(Follow).filter_by(follower_id=local_user.id, following_id=remote.id).delete()
+            print(f"[BLOCK] local user id={local_user.id}", flush=True)
+            deleted_incoming = session.query(Follow).filter_by(follower_id=remote.id, following_id=local_user.id).delete()
+            deleted_outgoing = session.query(Follow).filter_by(follower_id=local_user.id, following_id=remote.id).delete()
             existing = session.query(UserBlock).filter_by(user_id=remote.id, target_user_id=local_user.id).first()
             if not existing:
                 session.add(UserBlock(user_id=remote.id, target_user_id=local_user.id))
-            session.commit()
+                session.commit()
+                print(f"[BLOCK] created UserBlock remote={remote.id} -> local={local_user.id}, deleted follows: in={deleted_incoming} out={deleted_outgoing}", flush=True)
+            else:
+                print(f"[BLOCK] UserBlock already exists", flush=True)
         return (200, "Blocked")
     except Exception as e:
+        import traceback
+        print(f"[BLOCK] EXCEPTION: {e}", flush=True)
+        traceback.print_exc()
         logger.error("Error processing Block from %s: %s", actor_url, e)
         return (200, "OK")
 
