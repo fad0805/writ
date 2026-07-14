@@ -29,6 +29,13 @@ function formatRelative(iso: string, now: number = Date.now()): string {
 }
 
 export function rewriteLinks(text: string, validMentions?: Set<string>): string {
+  // Convert remote hashtag links to local explore
+  text = text.replace(
+    /<a\s+href="https?:\/\/[^"]*\/tags\/([^"/]+)"[^>]*>#(\w+)<\/a>/gi,
+    (_m: string, _tagPath: string, tag: string) =>
+      `<a href="/explore?q=%23${encodeURIComponent(tag)}" class="hashtag-link">#${tag}</a>`
+  );
+
   text = text.replace(
     /<a\s+href="https?:\/\/([^"/]+)\/@([a-zA-Z_][a-zA-Z0-9_]*)"[^>]*>@?\w*<\/a>/gi,
     (_m: string, domain: string, user: string) =>
