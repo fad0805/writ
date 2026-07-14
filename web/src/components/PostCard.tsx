@@ -75,6 +75,8 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   useEffect(() => {
     fetch("/api/server-info").then(r=>r.json()).then(d=>setServerLogo(d.logo||"")).catch(()=>{});
   }, []);
+  const [emojiList, setEmojiList] = useState<CustomEmoji[]>([]);
+  useEffect(() => { getCustomEmojis().then(setEmojiList); }, []);
   const [reactions, setReactions] = useState(post.reactions || {});
   const [myReaction, setMyReaction] = useState(post.my_reaction || null);
   const [reactionEmojiMap, setReactionEmojiMap] = useState<Record<string, string>>(() => {
@@ -394,7 +396,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
           </Link>
           <div className="post-name-wrap">
             <Link href={`/@${post.author.username}`} className="post-author" onClick={(e) => e.stopPropagation()}>
-              {post.author.display_name} {(post.author.role === "admin" || post.author.role === "moderator" || post.author.role === "owner") && (post.author as any).show_badge && <Icon name={post.author.role === "owner" ? "books_solid" : "shield_filled"} style={{ color: post.author.role === "owner" ? "var(--accent)" : post.author.role === "admin" ? "#27ae60" : "#cc8800", fontSize: "0.65em", verticalAlign: "middle", marginLeft: 2 }} title={post.author.role === "owner" ? "오너" : post.author.role === "admin" ? "관리자" : "조율자"} />}
+              <span dangerouslySetInnerHTML={{ __html: renderCustomEmojis(post.author.display_name, emojiList) }} /> {(post.author.role === "admin" || post.author.role === "moderator" || post.author.role === "owner") && (post.author as any).show_badge && <Icon name={post.author.role === "owner" ? "books_solid" : "shield_filled"} style={{ color: post.author.role === "owner" ? "var(--accent)" : post.author.role === "admin" ? "#27ae60" : "#cc8800", fontSize: "0.65em", verticalAlign: "middle", marginLeft: 2 }} title={post.author.role === "owner" ? "오너" : post.author.role === "admin" ? "관리자" : "조율자"} />}
             </Link>
             <Link href={`/@${post.author.username}`} className="post-username" onClick={(e) => e.stopPropagation()}>
               @{post.author.display_handle || post.author.username}
@@ -415,7 +417,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
         {!hideContext && post.reply_context && (
           <Link href={post.reply_context.number ? `/@${post.reply_context.author.username}/${post.reply_context.number}` : `/post/${post.reply_context.id}`} className={`reply-context${post.reply_context.visibility === "mention" ? " mention-context" : ""}`} onClick={(e) => e.stopPropagation()}>
             <span className="reply-context-label">답글 대상</span>
-            <strong>{post.reply_context.author.display_name || post.reply_context.author.username}</strong>
+            <strong dangerouslySetInnerHTML={{ __html: renderCustomEmojis(post.reply_context.author.display_name || post.reply_context.author.username, emojiList) }} />
             <span>@{post.reply_context.author.username}</span>
             <p dangerouslySetInnerHTML={{ __html: (() => {
               const text = (post.reply_context.content || "").slice(0, 90);
