@@ -26,6 +26,7 @@ def _fmt_dt(dt: datetime.datetime | None) -> str | None:
         dt = dt.replace(tzinfo=datetime.timezone.utc)
     return dt.astimezone(KST).isoformat()
 from app.activitypub import broadcast_to_followers, _post_to_inbox, _process_emoji_tags, _federation_allowed, _build_reactions
+from app.database import get_db
 from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED
 from app.crypto_utils import encrypt_key, get_private_key
 from app.eventbus import broadcast
