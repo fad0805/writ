@@ -561,7 +561,6 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
         try:
             import datetime, time
             from app.crypto_utils import sign_string, get_private_key
-            from app.config import SECRET_KEY
             from urllib.parse import urlparse
             date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
             parsed = urlparse(actor_url)
