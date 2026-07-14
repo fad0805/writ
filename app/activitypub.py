@@ -1461,8 +1461,8 @@ def _handle_like(activity: dict) -> tuple[int, str]:
     if not actor:
         return (404, "Actor not found")
 
-    actor_id = actor_id
-    actor_username = actor_username
+    actor_id = actor.id
+    actor_username = actor.username
 
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
@@ -1556,7 +1556,7 @@ def _handle_vote(activity: dict) -> tuple[int, str]:
     if not actor:
         return (404, "Actor not found")
 
-    actor_id = actor_id
+    actor_id = actor.id
 
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
@@ -1619,8 +1619,8 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
     if not actor:
         return (404, "Actor not found")
 
-    actor_id = actor_id
-    actor_username = actor_username
+    actor_id = actor.id
+    actor_username = actor.username
 
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
@@ -1835,7 +1835,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
         if not actor:
             return (200, "OK")
 
-        actor_id = actor_id
+        actor_id = actor.id
         with get_session() as session:
             post = session.query(Post).filter_by(ap_id=object_url).first()
             if not post:
@@ -1894,7 +1894,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
         if not actor:
             return (200, "OK")
 
-        actor_id = actor_id
+        actor_id = actor.id
         with get_session() as session:
             post = session.query(Post).filter_by(ap_id=object_url).first()
             if not post:
