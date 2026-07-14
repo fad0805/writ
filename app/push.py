@@ -2,7 +2,7 @@ import json
 import logging
 import threading
 
-from app.config import VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY, VAPID_CLAIM_EMAIL
+from app.config import VAPID_CLAIM_EMAIL, get_vapid_keys
 
 logger = logging.getLogger("writ.push")
 
@@ -22,11 +22,12 @@ NOTIF_LABELS = {
 
 
 def _get_vapid_key():
-    if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
+    priv, pub = get_vapid_keys()
+    if not priv or not pub:
         return None
     return {
-        "privateKey": VAPID_PRIVATE_KEY,
-        "publicKey": VAPID_PUBLIC_KEY,
+        "privateKey": priv,
+        "publicKey": pub,
     }
 
 

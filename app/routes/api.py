@@ -6917,10 +6917,10 @@ def api_client_log(request: Request):
 
 @router.get("/push/vapid-public-key")
 def get_vapid_public_key():
-    from app.config import VAPID_PUBLIC_KEY
-    if not VAPID_PUBLIC_KEY:
+    from app.config import get_vapid_keys
+    _, key = get_vapid_keys()
+    if not key:
         raise HTTPException(404, "Web Push not configured")
-    key = VAPID_PUBLIC_KEY
     # If PEM format, extract raw base64 key
     if key.startswith("-----"):
         import base64, re

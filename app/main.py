@@ -163,6 +163,48 @@ async def lifespan(app: FastAPI):
         _cleanup_avatars()
     except Exception:
         pass
+    # Persist VAPID keys so push subscriptions survive restart
+    try:
+        from app.config import VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY
+        from app.models import ServerSetting, get_session
+        if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
+            with get_session() as _s:
+                _ss = ServerSetting.get(_s)
+                _db_priv = getattr(_ss, 'vapid_private_key', '') or ''
+                _db_pub = getattr(_ss, 'vapid_public_key', '') or ''
+                if _db_priv and _db_pub:
+                    import os as _os
+                    _os.environ.setdefault("VAPID_PRIVATE_KEY", _db_priv)
+                    _os.environ.setdefault("VAPID_PUBLIC_KEY", _db_pub)
+                else:
+                    import base64, uuid as _uuid
+                    from cryptography.hazmat.primitives.asymmetric import ec
+                    from cryptography.hazmat.primitives import serialization
+                    _pk = ec.generate_private_key(ec.SECP256R1())
+                    _pub = _pk.public_key()
+                    _priv_pem = _pk.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode()
+                    _raw_pub = _pub.public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+                    _pub_b64 = base64.urlsafe_b64encode(_raw_pub).rstrip(b"=").decode()
+                    try:
+                        from sqlalchemy import Column, String
+                        if not hasattr(ServerSetting, 'vapid_private_key'):
+                            import sqlalchemy as _sa
+                            with _s.bind.connect() as _c:
+                                _c.execute(_sa.text("ALTER TABLE server_settings ADD COLUMN vapid_private_key TEXT DEFAULT ''"))
+                                _c.execute(_sa.text("ALTER TABLE server_settings ADD COLUMN vapid_public_key TEXT DEFAULT ''"))
+                                _c.commit()
+                    except Exception:
+                        pass
+                    _ss = _s.query(ServerSetting).first()
+                    if _ss:
+                        _ss.vapid_private_key = _priv_pem
+                        _ss.vapid_public_key = _pub_b64
+                        _s.commit()
+                    import os as _os
+                    _os.environ.setdefault("VAPID_PRIVATE_KEY", _priv_pem)
+                    _os.environ.setdefault("VAPID_PUBLIC_KEY", _pub_b64)
+    except Exception:
+        pass
     t = threading.Thread(target=_delivery_worker, daemon=True)
     t.start()
     t2 = threading.Thread(target=_refresh_remote_profiles, daemon=True)
