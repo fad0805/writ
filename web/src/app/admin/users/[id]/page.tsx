@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
 import AdminNav from "@/components/AdminNav";
+import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
 
 interface UserDetail {
   id: number; username: string; display_name: string; avatar: string;
@@ -35,6 +36,7 @@ export default function AdminUserDetailPage() {
   const { user: me, loading: authLoading } = useAuth();
   const [u, setU] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
   const [showChangeEmail, setShowChangeEmail] = useState(false);
   const [newEmail, setNewEmail] = useState("");
   const [showChangeRole, setShowChangeRole] = useState(false);
@@ -57,6 +59,7 @@ export default function AdminUserDetailPage() {
       const d = await userRes.json();
       setU(d);
       setNoteText(d.moderation_note || "");
+      getCustomEmojis().then(setEmojiMap);
     }
     if (logsRes.ok) {
       const d = await logsRes.json();
@@ -94,19 +97,23 @@ export default function AdminUserDetailPage() {
 
       {/* Profile card */}
       <div className="admin-profile-card">
-        <div className="admin-profile-avatar" style={{ background: `hsl(${hashStr(u.username)}, 35%, 45%)` }}>
-          {(u.display_name || u.username)[0]}
-        </div>
+        {u.avatar ? (
+          <img src={u.avatar} alt="" className="admin-profile-avatar" style={{ objectFit: "cover" }} />
+        ) : (
+          <div className="admin-profile-avatar" style={{ background: `hsl(${hashStr(u.username)}, 35%, 45%)` }}>
+            {(u.display_name || u.username)[0]}
+          </div>
+        )}
         <div className="admin-profile-info">
           <div className="admin-profile-name">
-            {u.display_name}
+            <span dangerouslySetInnerHTML={{ __html: renderCustomEmojis(u.display_name, emojiMap) }} />
             {u.role === "owner" && <Icon name="books_solid" style={{ color: "var(--accent)", fontSize: "0.7em", verticalAlign: "middle", marginLeft: 4 }} title="오너" />}
             {u.role === "admin" && <Icon name="shield_filled" style={{ color: "#27ae60", fontSize: "0.7em", verticalAlign: "middle", marginLeft: 4 }} title="관리자" />}
             {u.role === "moderator" && <Icon name="shield_filled" style={{ color: "#cc8800", fontSize: "0.7em", verticalAlign: "middle", marginLeft: 4 }} title="조율자" />}
           </div>
           <div className="admin-profile-username">@{u.username}</div>
           {u.summary && <div className="admin-profile-summary" dangerouslySetInnerHTML={{
-            __html: u.summary
+            __html: renderCustomEmojis(u.summary, emojiMap)
               .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
               .replace(/<[^>]+\s+on\w+\s*=\s*[^>]*>/gi, '')
               .replace(/<img[^>]*>/gi, '')
