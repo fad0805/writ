@@ -2481,6 +2481,7 @@ def api_following(request: Request, username: str):
 def api_direct_conversation(request: Request, other_id: int):
     user = require_auth(request)
     is_self = (other_id == user.id)
+    from sqlalchemy import cast, String as SAString
     with get_session() as s:
         if is_self:
             other = user
@@ -2488,26 +2489,22 @@ def api_direct_conversation(request: Request, other_id: int):
             other = s.query(User).get(other_id)
             if not other:
                 raise HTTPException(status_code=404, detail="User not found")
+        _contains_self = cast(Post.mentioned_user_ids, SAString).contains(str(user.id))
+        _contains_other = cast(Post.mentioned_user_ids, SAString).contains(str(other_id))
         if is_self:
             conv_posts = s.query(Post).options(selectinload(Post.author)).filter(
                 Post.visibility == "mention",
                 Post.is_deleted == False,
                 Post.author_id == user.id,
-                Post.mentioned_user_ids.contains(user.id),
+                _contains_self,
             ).order_by(Post.created_at).all()
         else:
             conv_posts = s.query(Post).options(selectinload(Post.author)).filter(
                 Post.visibility == "mention",
                 Post.is_deleted == False,
                 or_(
-                    and_(
-                        Post.author_id == user.id,
-                        Post.mentioned_user_ids.contains(other_id),
-                    ),
-                    and_(
-                        Post.author_id == other_id,
-                        Post.mentioned_user_ids.contains(user.id),
-                    ),
+                    and_(Post.author_id == user.id, _contains_other),
+                    and_(Post.author_id == other_id, _contains_self),
                 ),
             ).order_by(Post.created_at).all()
         result = {
