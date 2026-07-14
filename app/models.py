@@ -19,7 +19,6 @@ else:
         max_overflow=20,
         pool_recycle=3600,
         pool_pre_ping=True,
-        pool_recycle=3600,
     )
 
 
