@@ -1757,11 +1757,15 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                     "is_limited": getattr(_a, "is_limited", False),
                     "is_remote": _a.is_remote, "ap_id": _a.remote_url or "",
                 },
-                "likes_count": 0, "boosts_count": 1, "replies_count": 0,
+                "likes_count": session.query(Like).filter_by(post_id=post.id).count(),
+                "boosts_count": session.query(Boost).filter_by(post_id=post.id).count(),
+                "replies_count": session.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count(),
                 "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
                 "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
                 "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
-                "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
+                "poll_data": post.poll_data, "my_vote": None,
+                "reactions": _build_reactions(session, post.id),
+                "my_reaction": None,
             }, post.author_id, post.visibility or "public", False)
         except Exception:
             pass
