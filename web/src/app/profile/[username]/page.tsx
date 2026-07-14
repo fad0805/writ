@@ -2,7 +2,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import { api, User, PostData, NovelData } from "@/lib/api";
-import PostCard from "@/components/PostCard";
+import PostCard, { rewriteLinks } from "@/components/PostCard";
 import InfiniteScroll from "@/components/InfiniteScroll";
 import Icon from "@/components/Icon";
 import { hashColor } from "@/lib/avatar";
@@ -247,7 +247,7 @@ export default function ProfilePage() {
             <p className="profile-username">@{profile.display_handle || profile.username}</p>
             {profile.summary && (
               <p className="profile-summary" dangerouslySetInnerHTML={{
-                __html: renderCustomEmojis(
+                __html: rewriteLinks(renderCustomEmojis(
                   profile.summary
                     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
                     .replace(/<[^>]+\s+on\w+\s*=\s*[^>]*>/gi, '')
@@ -257,7 +257,7 @@ export default function ProfilePage() {
                     .replace(/<embed[^>]*>/gi, '')
                     .replace(/\n/g, '<br>'),
                   emojiMap
-                )
+                ))
                   .replace(/<a\s+href="https?:\/\/([^/]+)\/@(\w+)"[^>]*>([^<]*)<\/a>/gi,
                     (_m: string, domain: string, user: string) =>
                       `<a href="/@${user}@${domain}" class="mention-link">@${user}@${domain}</a>`

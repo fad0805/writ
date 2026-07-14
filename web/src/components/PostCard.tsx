@@ -28,7 +28,7 @@ function formatRelative(iso: string, now: number = Date.now()): string {
   return `${Math.floor(abs / 86400000)}일`;
 }
 
-function rewriteLinks(text: string, validMentions?: Set<string>): string {
+export function rewriteLinks(text: string, validMentions?: Set<string>): string {
   text = text.replace(
     /<a\s+href="https?:\/\/([^"/]+)\/@([a-zA-Z_][a-zA-Z0-9_]*)"[^>]*>@?\w*<\/a>/gi,
     (_m: string, domain: string, user: string) =>
