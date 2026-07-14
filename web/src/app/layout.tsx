@@ -10,28 +10,49 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import DeactivatedRedirect from "@/components/DeactivatedRedirect";
 
 const siteUrl = process.env.BASE_URL || "http://localhost:3000";
+const API_HOST = process.env.API_HOST || "http://localhost:8000";
 
-export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
-  title: "WRIT",
-  description: "SNS for writers",
-  icons: { icon: "/favicon.ico", apple: "/icons/icon-192.png" },
-  manifest: "/api/pwa/manifest",
-  appleWebApp: { capable: true, title: "WRIT", statusBarStyle: "black-translucent" },
-  other: { "mobile-web-app-capable": "yes" },
-  openGraph: {
-    title: "WRIT",
-    description: "SNS for writers",
-    type: "website",
-    images: [{ url: "/icons/icon-512.png" }],
-  },
-  twitter: {
-    card: "summary",
-    title: "WRIT",
-    description: "SNS for writers",
-    images: ["/icons/icon-512.png"],
-  },
-};
+const DEFAULT_TITLE = "WRIT";
+const DEFAULT_DESCRIPTION = "쓰는 이들을 위한 SNS, WRIT";
+
+async function getServerInfo(): Promise<{ name: string; description: string }> {
+  try {
+    const res = await fetch(`${API_HOST}/api/server-info`, { next: { revalidate: 3600 } });
+    if (!res.ok) return { name: DEFAULT_TITLE, description: DEFAULT_DESCRIPTION };
+    const data = await res.json();
+    return {
+      name: data.name || DEFAULT_TITLE,
+      description: data.description || DEFAULT_DESCRIPTION,
+    };
+  } catch {
+    return { name: DEFAULT_TITLE, description: DEFAULT_DESCRIPTION };
+  }
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const { name, description } = await getServerInfo();
+  return {
+    metadataBase: new URL(siteUrl),
+    title: name,
+    description,
+    icons: { icon: "/favicon.ico", apple: "/icons/icon-192.png" },
+    manifest: "/api/pwa/manifest",
+    appleWebApp: { capable: true, title: name, statusBarStyle: "black-translucent" },
+    other: { "mobile-web-app-capable": "yes" },
+    openGraph: {
+      title: name,
+      description,
+      type: "website",
+      images: [{ url: "/icons/icon-512.png" }],
+    },
+    twitter: {
+      card: "summary",
+      title: name,
+      description,
+      images: ["/icons/icon-512.png"],
+    },
+  };
+}
 
 export const viewport = {
   width: "device-width",
