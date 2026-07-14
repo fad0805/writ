@@ -19,4 +19,4 @@ RUN mkdir -p /app/data /app/uploads /app/static /app/logs
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 2>&1 | tee -a /app/logs/$(date +%Y-%m-%d).log"]

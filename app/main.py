@@ -40,6 +40,9 @@ _RATE_LIMIT_DAILY = 500
 _rate_limit_store: dict[str, list[float]] = defaultdict(list)
 _rate_limit_daily: dict[str, list[float]] = defaultdict(list)
 
+_actor_fail_cache: dict[str, float] = {}  # actor_url -> timestamp of last failure
+_ACTOR_FAIL_TTL = 3600  # 1 hour
+
 
 def _check_rate_limit(key: str) -> bool:
     now = time.time()
@@ -358,6 +361,11 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
     print(f"[SIG] db_lookup={'found' if remote_actor else 'miss'}", flush=True)
 
     if not remote_actor or not remote_actor.public_key:
+        # Skip if recently failed
+        _fail_ts = _actor_fail_cache.get(actor_url)
+        if _fail_ts and (time.time() - _fail_ts) < _ACTOR_FAIL_TTL:
+            print(f"[SIG] skip fetch (cached fail, {int(time.time() - _fail_ts)}s ago) for {actor_url}", flush=True)
+            return (False, None)
         print(f"[SIG] trying network fetch for {actor_url}", flush=True)
         try:
             from app.config import BASE_URL
@@ -394,6 +402,9 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
                             def actor_uri(): return actor_url
                         remote_actor = _Actor()
                         print(f"[SIG] using inline _Actor (pubkey_len={len(_pubkey)})", flush=True)
+                else:
+                    _actor_fail_cache[actor_url] = time.time()
+                    print(f"[SIG] cached fail for {actor_url} (status={_resp.status_code})", flush=True)
         except Exception:
             pass
     if not remote_actor or not remote_actor.public_key:

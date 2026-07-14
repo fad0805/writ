@@ -670,7 +670,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         for p in posts:
             if p.author_id != user.id and p.in_reply_to_id:
                 parent_author_id = parent_authors.get(p.in_reply_to_id)
-                if parent_author_id and parent_author_id not in _following_ids:
+                if parent_author_id is None or parent_author_id not in _following_ids:
                     continue
             reply_filtered.append(p)
         posts = reply_filtered
