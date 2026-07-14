@@ -997,6 +997,26 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     _process_emoji_tags(obj.get("tag", []), session)
     session.flush()
 
+    raw_attachments = obj.get("attachment", [])
+    media_list = []
+    if isinstance(raw_attachments, list):
+        for att in raw_attachments:
+            if not isinstance(att, dict):
+                continue
+            att_type = att.get("mediaType", "")
+            att_url = ""
+            if isinstance(att.get("url"), str):
+                att_url = att["url"]
+            elif isinstance(att.get("url"), dict):
+                att_url = att["url"].get("href", "")
+            if not att_url:
+                continue
+            cached = _cache_remote_media(att_url)
+            if att_type.startswith("image/"):
+                media_list.append({"url": cached, "type": "image"})
+            elif att_type.startswith("video/"):
+                media_list.append({"url": cached, "type": "video"})
+
     post = Post(
         author_id=author.id,
         content=content,
@@ -1006,6 +1026,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         in_reply_to_ap_id=in_reply_to_ap,
         in_reply_to_id=in_reply_to_id,
         mentioned_user_ids=mentioned_ids,
+        media_attachments=media_list if media_list else None,
     )
     published = obj.get("published", "")
     if published:
