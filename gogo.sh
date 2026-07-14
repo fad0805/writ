@@ -611,40 +611,50 @@ PYEOF
 
 elif [ "$1" = "dedup-users" ]; then
   docker compose exec -T api python3 << 'PYEOF'
+import re
 from app.models import User, Follow, Post, Like, Boost, Bookmark, Vote, Notification, UserBlock, UserMute, get_session
-from sqlalchemy import func
+
+def _merge(s, keep, dup):
+    print(f"  KEEP id={keep.id} ({keep.username})  MERGE id={dup.id} ({dup.username})")
+    for table, fk in [(Follow, "follower_id"), (Follow, "following_id"),
+                      (Post, "author_id"), (Like, "user_id"), (Boost, "user_id"),
+                      (Bookmark, "user_id"), (Vote, "user_id"),
+                      (Notification, "user_id"), (Notification, "from_user_id"),
+                      (UserBlock, "user_id"), (UserBlock, "target_user_id"),
+                      (UserMute, "user_id"), (UserMute, "target_user_id")]:
+        try:
+            s.query(table).filter_by(**{fk: dup.id}).update({fk: keep.id})
+        except Exception:
+            pass
+    s.delete(dup)
 
 with get_session() as s:
-    # Find remote users with same username (local part before @)
-    dupes = s.query(User.username, func.count(User.id)).filter(
-        User.is_remote == True
-    ).group_by(User.username).having(func.count(User.id) > 1).all()
+    all_remote = s.query(User).filter(User.is_remote == True).order_by(User.id).all()
+    groups = {}
+    for u in all_remote:
+        local = u.username.split("@")[0]
+        domain = ""
+        if u.remote_url:
+            m = re.search(r'https?://([^/]+)', u.remote_url)
+            if m:
+                domain = m.group(1)
+        key = f"{local}@{domain}" if domain else local
+        groups.setdefault(key, []).append(u)
 
-    if not dupes:
-        print("no duplicate remote users found")
-        exit()
-
-    for username, cnt in dupes:
-        users = s.query(User).filter_by(username=username, is_remote=True).order_by(User.id).all()
-        keep = users[0]
-        print(f"\n=== {username} ({cnt} duplicates) ===")
-        print(f"  KEEP: id={keep.id} remote_url={keep.remote_url}")
-        for dup in users[1:]:
-            print(f"  MERGE: id={dup.id} remote_url={dup.remote_url}")
-            # Merge all references to dup.id -> keep.id
-            for table, fk in [(Follow, "follower_id"), (Follow, "following_id"),
-                              (Post, "author_id"), (Like, "user_id"), (Boost, "user_id"),
-                              (Bookmark, "user_id"), (Vote, "user_id"),
-                              (Notification, "user_id"), (Notification, "from_user_id"),
-                              (UserBlock, "user_id"), (UserBlock, "target_user_id"),
-                              (UserMute, "user_id"), (UserMute, "target_user_id")]:
-                try:
-                    s.query(table).filter_by(**{fk: dup.id}).update({fk: keep.id})
-                except Exception:
-                    pass
-            s.delete(dup)
+    total = 0
+    for key, group in groups.items():
+        if len(group) <= 1:
+            continue
+        print(f"\n=== {key} ({len(group)} users) ===")
+        group.sort(key=lambda x: (len(x.remote_url or ""), x.id))
+        keep = group[0]
+        for dup in group[1:]:
+            _merge(s, keep, dup)
+            total += 1
     s.commit()
-    print(f"\nmerged {sum(cnt-1 for _, cnt in dupes)} duplicates")
+    print(f"\ntotal merged: {total}")
+    if total == 0:
+        print("no duplicates found")
 PYEOF
 
 elif [ "$1" = "check-custom-fields" ]; then
