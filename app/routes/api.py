@@ -1167,6 +1167,38 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
         post.summary = summary
         s.commit()
 
+        # Broadcast update to local timeline streams
+        try:
+            from app.timeline_stream import broadcast_post
+            _ua = post.author
+            broadcast_post({
+                "id": post.id,
+                "number": post.number or "",
+                "content": post.content,
+                "summary": post.summary or "",
+                "visibility": post.visibility or "public",
+                "created_at": post.created_at.isoformat() if post.created_at else "",
+                "author": {
+                    "id": _ua.id, "username": _ua.username,
+                    "display_name": _ua.display_name or _ua.username,
+                    "avatar": _ua.profile_image or "", "header": _ua.header_image or "",
+                    "summary": _ua.summary or "", "is_admin": _ua.is_admin,
+                    "is_locked": getattr(_ua, "is_locked", False),
+                    "is_limited": getattr(_ua, "is_limited", False),
+                    "is_remote": _ua.is_remote, "ap_id": _ua.remote_url or "",
+                },
+                "likes_count": s.query(Like).filter_by(post_id=post.id).count(),
+                "boosts_count": s.query(Boost).filter_by(post_id=post.id).count(),
+                "replies_count": s.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count(),
+                "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
+                "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
+                "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
+                "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
+                "type": "update",
+            }, post.author_id, post.visibility or "public", False)
+        except Exception:
+            pass
+
         # Federation: send Update to remote followers
         if post.ap_id:
             try:
