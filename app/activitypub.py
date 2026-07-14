@@ -1129,11 +1129,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     alt_url = in_reply_to.replace("https://", "http://") if "https://" in in_reply_to else in_reply_to.replace("http://", "https://")
                     reply_to_post = session.query(Post).filter_by(ap_id=alt_url).first()
                 if not reply_to_post:
-                    post_num = in_reply_to.split('/')[-1]
-                    try:
-                        reply_to_post = session.query(Post).filter(Post.ap_id.like(f"%{post_num}")).first()
-                    except Exception:
-                        pass
+                    reply_to_post = _fetch_remote_post(in_reply_to, session.query(User).filter_by(is_remote=False).first(), session)
 
             # Mastodon poll votes: Create(Note) with name + inReplyTo + no content
             vote_name = obj.get("name", "") if not raw_content.strip() else ""
@@ -1564,6 +1560,9 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
 
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
+        if not post:
+            _local_signer = session.query(User).filter_by(is_remote=False).first()
+            post = _fetch_remote_post(object_url, _local_signer, session)
         if not post:
             return (200, "OK")
 
