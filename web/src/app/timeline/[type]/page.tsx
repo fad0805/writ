@@ -253,10 +253,7 @@ export default function TimelinePage() {
       <div className="post-form post-form-desktop">
         <PostForm onDone={(newPost) => {
           if (newPost) {
-            setPosts((prev) => {
-              if (prev.some((p) => p.id === newPost.id)) return prev;
-              return [newPost, ...prev];
-            });
+            load(true);
           }
         }} />
       </div>
@@ -299,10 +296,7 @@ export default function TimelinePage() {
             </div>
             <PostForm onDone={(newPost) => {
               if (newPost) {
-                setPosts((prev) => {
-                  if (prev.some((p) => p.id === newPost.id)) return prev;
-                  return [newPost, ...prev];
-                });
+                load(true);
               }
               setShowComposer(false);
             }} />
