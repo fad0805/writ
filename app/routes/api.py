@@ -5154,6 +5154,31 @@ def api_admin_remove_avatar(request: Request, user_id: int):
     return {"ok": True}
 
 
+@router.post("/admin/users/{user_id}/refresh-profile")
+def api_admin_refresh_profile(request: Request, user_id: int):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        u = s.query(User).get(user_id)
+        if not u:
+            raise HTTPException(status_code=404, detail="User not found")
+        if not u.is_remote or not u.remote_url:
+            raise HTTPException(status_code=400, detail="Not a remote user or no remote_url")
+        remote_url = u.remote_url
+    try:
+        from app.activitypub import _resolve_actor
+        actor = _resolve_actor(remote_url, force_refresh=True, sign_as=user)
+        if not actor:
+            raise HTTPException(status_code=400, detail="Failed to refresh profile")
+        log_admin_action(user.id, user.username, "refresh_profile", target_type="user", target_id=user_id, target_username=u.username, ip_address=request.client.host if request.client else "")
+        return {"ok": True, "display_name": actor.display_name}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/admin/users/suspend")
 def api_admin_suspend_users(request: Request, user_ids: str = Form(...)):
     user = require_auth(request)

@@ -117,6 +117,7 @@ export default function AdminUserDetailPage() {
           }} />}
           <div className="admin-profile-actions">
             {u.avatar && <button onClick={() => act(`/api/admin/users/${u.id}/remove-avatar`)} className="btn btn-small btn-outline">프로필 사진 삭제</button>}
+            {u.is_remote && <button onClick={async () => { try { const r = await fetch(`/api/admin/users/${u.id}/refresh-profile`, { method: "POST", credentials: "include" }); if (r.ok) { const d = await r.json(); alert(`프로필 정보를 갱신했습니다: ${d.display_name}`); location.reload(); } else { const d = await r.json(); alert(d.detail || "갱신 실패"); } } catch { alert("갱신 실패"); } }} className="btn btn-small btn-outline">프로필 정보 갱신</button>}
           </div>
         </div>
       </div>
