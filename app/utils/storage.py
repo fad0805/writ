@@ -131,6 +131,8 @@ class S3Storage(StorageBackend):
             return False
 
     def url(self, key: str) -> str:
+        if self.public_url != self.endpoint:
+            return f"{self.public_url}/{key}"
         return f"{self.public_url}/{self.bucket}/{key}"
 
     def _url_to_key(self, url_or_key: str) -> str | None:
