@@ -668,7 +668,10 @@ import json, sys
 from app.models import Post, User, get_session
 
 with get_session() as s:
-    p = s.query(Post).get($post_id)
+    try:
+        p = s.query(Post).get(int($post_id))
+    except ValueError:
+        p = s.query(Post).filter(Post.ap_id == "$post_id").first()
     if not p:
         print("post not found")
         sys.exit(1)
