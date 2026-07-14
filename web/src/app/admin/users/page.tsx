@@ -148,9 +148,13 @@ export default function AdminUsersPage() {
                   <td style={{ padding: "10px" }}><input type="checkbox" checked={selected.has(u.id)} onChange={() => toggle(u.id)} /></td>
                   <td style={{ padding: "10px" }}>
                     <div className="flex-center gap-10">
-                      <div className="admin-user-avatar" style={{ background: `hsl(${hashStr(u.username)}, 35%, 45%)` }}>
-                        {(u.display_name || u.username)[0]}
-                      </div>
+                      {u.avatar ? (
+                        <img src={u.avatar} alt="" className="admin-user-avatar" style={{ objectFit: "cover" }} />
+                      ) : (
+                        <div className="admin-user-avatar" style={{ background: `hsl(${hashStr(u.username)}, 35%, 45%)` }}>
+                          {(u.display_name || u.username)[0]}
+                        </div>
+                      )}
                       <div>
                         <Link href={`/admin/users/${u.id}`} style={{ textDecoration: "none" }}>
                           <div className="admin-user-name">
