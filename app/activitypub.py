@@ -1444,6 +1444,21 @@ def _handle_create(activity: dict) -> tuple[int, str]:
     return (200, "OK")
 
 
+def _build_reactions(session, post_id: int) -> dict:
+    """Build reactions dict from Like table for a given post."""
+    from app.models import Like as _Like
+    from sqlalchemy import func as _func
+    _reactions = {}
+    _default_react = "★"
+    for _pid, _react, _cnt in session.query(_Like.post_id, _func.coalesce(_Like.reaction, _default_react), _func.count(_Like.id)).filter(
+        _Like.post_id == post_id
+    ).group_by(_Like.post_id, _Like.reaction).all():
+        if _pid not in _reactions:
+            _reactions[_pid] = {}
+        _reactions[_pid][_react] = _cnt
+    return _reactions.get(post_id, {})
+
+
 def _handle_like(activity: dict) -> tuple[int, str]:
     raw_actor = activity.get("actor")
     if not raw_actor:
@@ -2088,13 +2103,15 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                                 "is_limited": getattr(_ua, "is_limited", False),
                                 "is_remote": _ua.is_remote, "ap_id": _ua.remote_url or "",
                             },
-                            "likes_count": session.query(Like).filter_by(post_id=post.id).count(),
-                            "boosts_count": session.query(Boost).filter_by(post_id=post.id).count(),
-                            "replies_count": session.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count(),
-                            "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
-                            "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
-                            "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
-                            "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
+                    "likes_count": session.query(Like).filter_by(post_id=post.id).count(),
+                    "boosts_count": session.query(Boost).filter_by(post_id=post.id).count(),
+                    "replies_count": session.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count(),
+                    "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
+                    "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
+                    "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
+                    "poll_data": post.poll_data, "my_vote": None,
+                    "reactions": _build_reactions(session, post.id),
+                    "my_reaction": None,
                             "type": "update",
                         }, post.author_id, post.visibility or "public", False)
                     except Exception:
