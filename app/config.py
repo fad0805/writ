@@ -60,8 +60,8 @@ S3_BUCKET = os.environ.get("S3_BUCKET", "")
 S3_PUBLIC_URL = os.environ.get("S3_PUBLIC_URL", "")
 
 # Web Push / VAPID
-VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
-VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "").replace("\\n", "\n")
+VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "").replace("\\n", "\n")
 VAPID_CLAIM_EMAIL = os.environ.get("VAPID_CLAIM_EMAIL", f"admin@{DOMAIN}")
 
 # Auto-generate VAPID keys if not configured
