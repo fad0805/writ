@@ -11,7 +11,7 @@ from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, 
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, Session
 
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PendingDelivery, PushSubscription, get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
