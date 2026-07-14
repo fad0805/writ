@@ -1066,7 +1066,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if not actor:
             return (404, "Actor not found")
         actor_id = activity.get("actor")
-        actor_username = actor_username
+        actor_username = actor.username
         actor_uri = actor.actor_uri()
         actor_remote_url = actor.remote_url or ""
 
