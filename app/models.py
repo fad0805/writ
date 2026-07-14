@@ -233,7 +233,7 @@ class Post(Base):
     bumped_at = Column(DateTime(timezone=True), nullable=True)
 
     author = relationship("User", back_populates="posts", foreign_keys=[author_id], lazy="selectin")
-    parent = relationship("Post", back_populates="replies", remote_side=[id], lazy="selectin")
+    parent = relationship("Post", back_populates="replies", remote_side=[id], foreign_keys=[in_reply_to_id], lazy="selectin")
     replies = relationship("Post", back_populates="parent", lazy="selectin")
     boost_of = relationship("Post", remote_side=[id], foreign_keys=[boost_of_id], lazy="selectin")
     likes = relationship("Like", back_populates="post", cascade="all, delete-orphan", lazy="selectin")
