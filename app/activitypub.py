@@ -588,6 +588,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
 
     # Verify the response's id domain matches the requested URL's domain
     resp_id = data.get("id", "")
+    canonical_url = resp_id or actor_url
     if resp_id:
         from urllib.parse import urlparse
         req_domain = urlparse(actor_url).hostname or ""
@@ -631,6 +632,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             existing.public_key = public_key_pem
             existing.display_name = data.get("name", existing.display_name)
             existing.summary = data.get("summary", existing.summary)
+            existing.remote_url = canonical_url
             existing.inbox_url = data.get("inbox", existing.inbox_url)
             existing.shared_inbox_url = data.get("endpoints", {}).get("sharedInbox", existing.shared_inbox_url)
             existing.is_locked = data.get("manuallyApprovesFollowers", existing.is_locked)
@@ -647,7 +649,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
         # Also check by username in case remote_url is missing/stale
         by_username = session.query(User).filter_by(username=local_username).first()
         if by_username:
-            by_username.remote_url = actor_url
+            by_username.remote_url = canonical_url
             by_username.public_key = public_key_pem or by_username.public_key
             by_username.display_name = data.get("name", by_username.display_name)
             by_username.summary = data.get("summary", by_username.summary)
@@ -679,7 +681,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             private_key=encrypt_key(priv, SECRET_KEY),
             public_key=public_key_pem or pub,
             is_remote=True,
-            remote_url=actor_url,
+            remote_url=canonical_url,
             profile_url=data.get("url", ""),
             inbox_url=data.get("inbox", ""),
             shared_inbox_url=data.get("endpoints", {}).get("sharedInbox", ""),
