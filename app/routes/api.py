@@ -1594,12 +1594,7 @@ def api_boost_post(request: Request, post_id: int):
                 visibility=post.visibility or "public",
             )
             s.add(boost_post)
-            three_hours_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3)
-            twentieth = s.query(Post.created_at).filter(
-                Post.is_deleted == False,
-            ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(19).limit(1).scalar()
-            if (twentieth and post.created_at and post.created_at < twentieth
-                and post.created_at < three_hours_ago):
+            if post.created_at and post.created_at < datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3):
                 post.bumped_at = datetime.datetime.now(datetime.timezone.utc)
             if post.author_id != user.id and not existing_notif:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id))
