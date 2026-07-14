@@ -1129,7 +1129,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     alt_url = in_reply_to.replace("https://", "http://") if "https://" in in_reply_to else in_reply_to.replace("http://", "https://")
                     reply_to_post = session.query(Post).filter_by(ap_id=alt_url).first()
                 if not reply_to_post:
-                    reply_to_post = _fetch_remote_post(in_reply_to, session.query(User).filter_by(is_remote=False).first(), session)
+                    _local_signer = session.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor.id, User.is_remote == False).first()
+                    reply_to_post = _fetch_remote_post(in_reply_to, _local_signer, session)
 
             # Mastodon poll votes: Create(Note) with name + inReplyTo + no content
             vote_name = obj.get("name", "") if not raw_content.strip() else ""
@@ -1561,7 +1562,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
         if not post:
-            _local_signer = session.query(User).filter_by(is_remote=False).first()
+            _local_signer = session.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor.id, User.is_remote == False).first()
             post = _fetch_remote_post(object_url, _local_signer, session)
         if not post:
             return (200, "OK")
