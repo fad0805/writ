@@ -37,6 +37,7 @@ export default function PostDetailPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [showRestrictedWarning, setShowRestrictedWarning] = useState(false);
+  const [deleted, setDeleted] = useState(false);
   const offsetRef = useRef(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const currentRef = useRef<HTMLDivElement>(null);
@@ -93,6 +94,7 @@ export default function PostDetailPage() {
   const ancestors = useMemo(() => post?.ancestors || [], [post]);
 
   if (loading) return <div className="empty-state">로딩 중...</div>;
+  if (deleted) return <div className="empty-state">삭제된 게시글입니다.</div>;
   if (!post) return <div className="empty-state">게시글을 찾을 수 없습니다.</div>;
 
   if (showRestrictedWarning && post.author?.is_limited) {
@@ -117,7 +119,7 @@ export default function PostDetailPage() {
       {ancestors.map((a) => (
         <div key={a.id} className="thread-child"><PostCard post={a} hideContext /></div>
       ))}
-      <div ref={currentRef}><PostCard post={post} onUpdate={load} onDelete={() => router.push("/timeline/home")} current hideContext /></div>
+      <div ref={currentRef}><PostCard post={post} onUpdate={load} onDelete={() => setDeleted(true)} current hideContext /></div>
       <div className="thread-list">
         <h4>답글 {totalReplies}개</h4>
         <ThreadList posts={replies} parentId={post.id} depth={0} />

@@ -36,6 +36,7 @@ export default function PostByNumberPage() {
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [deleted, setDeleted] = useState(false);
   const offsetRef = useRef(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const currentRef = useRef<HTMLDivElement>(null);
@@ -90,6 +91,7 @@ export default function PostByNumberPage() {
   const ancestors = useMemo(() => post?.ancestors || [], [post]);
 
   if (loading) return <div className="empty-state">로딩 중...</div>;
+  if (deleted) return <div className="empty-state">삭제된 게시글입니다.</div>;
   if (!post) return <div className="empty-state">게시글을 찾을 수 없습니다.</div>;
 
   const username = Array.isArray(params.username) ? params.username[0] : params.username;
@@ -111,7 +113,7 @@ export default function PostByNumberPage() {
       {ancestors.map((a) => (
         <div key={a.id} className="thread-child"><PostCard post={a} hideContext /></div>
       ))}
-      <div ref={currentRef}><PostCard post={post} current hideContext onUpdate={() => loadPost()} /></div>
+      <div ref={currentRef}><PostCard post={post} current hideContext onUpdate={() => loadPost()} onDelete={() => setDeleted(true)} /></div>
       <div className="thread-list">
         <h4>답글 {totalReplies}개</h4>
         <ThreadList posts={replies} parentId={post.id} depth={0} />
