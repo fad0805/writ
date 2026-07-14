@@ -614,6 +614,32 @@ async def user_inbox(request: Request, username: str):
     return JSONResponse({"status": status_code, "message": message}, status_code=200)
 
 
+@app.get("/activities/follow/{follow_uuid}")
+def get_follow_activity(request: Request, follow_uuid: str):
+    from app.models import Follow, User, get_session
+    accept = request.headers.get("Accept", "")
+    if "application/activity+json" not in accept:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    with get_session() as session:
+        activity_id = f"{BASE_URL}/activities/follow/{follow_uuid}"
+        follow = session.query(Follow).filter_by(activity_id=activity_id).first()
+        if not follow:
+            raise HTTPException(status_code=404, detail="Not found")
+        follower = session.query(User).get(follow.follower_id)
+        following = session.query(User).get(follow.following_id)
+        if not follower or not following:
+            raise HTTPException(status_code=404, detail="Not found")
+        obj = following.actor_uri() if following.is_remote else following.actor_uri()
+        activity = {
+            "@context": ["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"],
+            "id": activity_id,
+            "type": "Follow",
+            "actor": follower.actor_uri(),
+            "object": obj,
+            "to": [obj],
+        }
+        return JSONResponse(content=activity, media_type="application/activity+json")
+
 @app.get("/activities/create/{post_id}")
 def get_create_activity(request: Request, post_id: int):
     from app.models import Post, get_session
