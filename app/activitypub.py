@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, RemoteMedia, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, get_session
+from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, RemoteMedia, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, UserBlock, get_session
 from app.config import BASE_URL, SECRET_KEY
 from app.crypto_utils import generate_keypair, sign_string, encrypt_key, get_private_key
 
@@ -336,6 +336,8 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
         return _handle_vote(activity)
     elif atype == "EmojiReact":
         return _handle_like(activity)
+    elif atype == "Block":
+        return _handle_block(activity)
     else:
         return (202, f"Accepted {atype}")
 
@@ -1689,6 +1691,34 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
     return (200, "Announced")
 
 
+def _handle_block(activity: dict) -> tuple[int, str]:
+    actor_url = activity.get("actor", "")
+    object_url = activity.get("object", "")
+    if isinstance(actor_url, list):
+        actor_url = actor_url[0]
+    if isinstance(object_url, dict):
+        object_url = object_url.get("id", "")
+
+    remote_user = _resolve_actor(actor_url)
+    if not remote_user:
+        return (200, "OK")
+
+    local_username = _parse_username_from_url(object_url)
+    with get_session() as session:
+        local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
+        if not local_user:
+            return (200, "OK")
+        # Remote user blocked us — remove follow both ways
+        session.query(Follow).filter_by(follower_id=remote_user.id, following_id=local_user.id).delete()
+        session.query(Follow).filter_by(follower_id=local_user.id, following_id=remote_user.id).delete()
+        # Create local UserBlock so we also filter them
+        existing = session.query(UserBlock).filter_by(user_id=local_user.id, target_user_id=remote_user.id).first()
+        if not existing:
+            session.add(UserBlock(user_id=local_user.id, target_user_id=remote_user.id))
+        session.commit()
+    return (200, "Blocked")
+
+
 def _handle_undo(activity: dict) -> tuple[int, str]:
     obj = activity.get("object", {})
     obj_type = obj.get("type", "") if isinstance(obj, dict) else ""
@@ -1848,6 +1878,27 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
                 pass
 
         return (200, "Unboosted")
+
+    elif obj_type == "Block":
+        actor_url = obj.get("actor", activity.get("actor", ""))
+        object_url = obj.get("object", "")
+        if isinstance(actor_url, list):
+            actor_url = actor_url[0]
+        if isinstance(object_url, dict):
+            object_url = object_url.get("id", "")
+
+        remote_user = _resolve_actor(actor_url)
+        if not remote_user:
+            return (200, "OK")
+
+        local_username = _parse_username_from_url(object_url)
+        with get_session() as session:
+            local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
+            if not local_user:
+                return (200, "OK")
+            session.query(UserBlock).filter_by(user_id=local_user.id, target_user_id=remote_user.id).delete()
+            session.commit()
+        return (200, "Unblocked")
 
     return (200, "OK")
 
