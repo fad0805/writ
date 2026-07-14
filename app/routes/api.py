@@ -6831,7 +6831,19 @@ def get_vapid_public_key():
     from app.config import VAPID_PUBLIC_KEY
     if not VAPID_PUBLIC_KEY:
         raise HTTPException(404, "Web Push not configured")
-    return {"publicKey": VAPID_PUBLIC_KEY}
+    key = VAPID_PUBLIC_KEY
+    # If PEM format, extract raw base64 key
+    if key.startswith("-----"):
+        import base64, re
+        b64 = "".join(re.findall(r"base64,[\s]*([A-Za-z0-9+/=]+)", key)) or "".join(re.findall(r"([A-Za-z0-9+/=]{40,})", key.replace("\n","")))
+        if b64:
+            from cryptography.hazmat.primitives.serialization import load_pem_public_key, Encoding, PublicFormat
+            from cryptography.hazmat.primitives.asymmetric import ec
+            pub = load_pem_public_key(key.encode())
+            if isinstance(pub, ec.EllipticCurvePublicKey):
+                raw = pub.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+                key = base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+    return {"publicKey": key}
 
 
 @router.post("/push/subscribe")
