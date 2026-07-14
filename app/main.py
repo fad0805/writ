@@ -139,24 +139,28 @@ def _refresh_remote_profiles():
         try:
             from app.models import User, get_session
             from app.activitypub import _resolve_actor, _fetch_remote_count
-            with get_session() as s:
-                sign_as = s.query(User).filter_by(is_remote=False).first()
-                remote_users = s.query(User).filter(User.is_remote == True).order_by(User.updated_at.asc()).limit(_BATCH).all()
-                for ru in remote_users:
-                    try:
-                        actor = _resolve_actor(ru.remote_url, force_refresh=True, sign_as=sign_as)
-                        if actor:
-                            _fc = _fetch_remote_count(ru.remote_url.rstrip("/") + "/followers", sign_as)
-                            _fg = _fetch_remote_count(ru.remote_url.rstrip("/") + "/following", sign_as)
-                            with get_session() as _s2:
-                                _u = _s2.query(User).get(actor.id)
-                                if _u:
-                                    _u.remote_followers_count = _fc
-                                    _u.remote_following_count = _fg
-                                    _u.updated_at = datetime.datetime.now(datetime.timezone.utc)
-                                    _s2.commit()
-                    except Exception:
-                        pass
+            # Get list OUTSIDE session to avoid holding DB connections during HTTP requests
+            _remote_list = []
+            with get_session() as _s0:
+                for _ru in _s0.query(User).filter(User.is_remote == True).order_by(User.updated_at.asc()).limit(_BATCH).all():
+                    _remote_list.append(_ru.remote_url)
+            for _url in _remote_list:
+                try:
+                    with get_session() as _ss:
+                        _sa = _ss.query(User).filter_by(is_remote=False).first()
+                    actor = _resolve_actor(_url, force_refresh=True, sign_as=_sa)
+                    if actor:
+                        _fc = _fetch_remote_count(_url.rstrip("/") + "/followers")
+                        _fg = _fetch_remote_count(_url.rstrip("/") + "/following")
+                        with get_session() as _s2:
+                            _u = _s2.query(User).get(actor.id)
+                            if _u:
+                                _u.remote_followers_count = _fc
+                                _u.remote_following_count = _fg
+                                _u.updated_at = datetime.datetime.now(datetime.timezone.utc)
+                                _s2.commit()
+                except Exception:
+                    pass
         except Exception:
             pass
 
