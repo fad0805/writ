@@ -491,22 +491,35 @@ def _cleanup_remote_data():
 
 
 def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url: str = "") -> str:
-    """Download remote image and save, return URL. If old_url given, delete it after new save."""
+    """Download remote image and save as WebP, return URL. If old_url given, delete it after."""
     from app.utils.storage import get_storage
     if not _validate_url(image_url):
         return ""
     ext = image_url.rsplit(".", 1)[-1].lower() if "." in image_url else "jpg"
-    if ext not in ("jpg", "jpeg", "png", "gif", "webp"):
-        ext = "jpg"
-    filename = f"{uuid.uuid4().hex}.{ext}"
-    key = f"{prefix}/remote/{filename}"
+    is_gif = ext == "gif"
     try:
         import httpx
-        r = httpx.get(image_url, timeout=10, follow_redirects=True)
+        import io
+        from PIL import Image as PILImage
+        r = httpx.get(image_url, timeout=15, follow_redirects=True)
         if r.status_code == 200 and len(r.content) <= 10 * 1024 * 1024:
-            storage = get_storage()
-            ct = f"image/{ext}"
-            new_url = storage.save(key, r.content, ct)
+            if is_gif:
+                filename = f"{uuid.uuid4().hex}.gif"
+                key = f"{prefix}/remote/{filename}"
+                storage = get_storage()
+                new_url = storage.save(key, r.content, "image/gif")
+            else:
+                img = PILImage.open(io.BytesIO(r.content))
+                if img.mode in ("RGBA", "P"):
+                    bg = PILImage.new("RGB", img.size, (255, 255, 255))
+                    bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
+                    img = bg
+                out = io.BytesIO()
+                img.save(out, format="WEBP", quality=85)
+                filename = f"{uuid.uuid4().hex}.webp"
+                key = f"{prefix}/remote/{filename}"
+                storage = get_storage()
+                new_url = storage.save(key, out.getvalue(), "image/webp")
             if old_url:
                 try:
                     storage.delete(old_url)
