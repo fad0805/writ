@@ -1195,6 +1195,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 if not reply_to_post:
                     _local_signer = session.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor_id, User.is_remote == False).first()
                     if not _local_signer:
+                        _local_signer = session.query(User).filter_by(is_remote=False, role="owner").first()
+                    if not _local_signer:
                         _local_signer = session.query(User).filter_by(is_remote=False).first()
                     reply_to_post = _fetch_remote_post(in_reply_to, _local_signer, session)
                     if reply_to_post:
