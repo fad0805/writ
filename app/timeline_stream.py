@@ -124,6 +124,15 @@ def broadcast_notif_sound(target_user_id: int):
     broadcast_notif(json.dumps({"event": "notif"}), target_user_id)
 
 
+def broadcast_delete(post_id: int):
+    """Broadcast a delete event to all connected timeline streams."""
+    if not _streams:
+        return
+    payload = json.dumps({"type": "delete", "id": post_id})
+    for info in list(_streams.values()):
+        _enqueue(info["queue"], payload)
+
+
 def _should_deliver_fast(user_id: int, tl_type: str, author_id: int, visibility: str,
                          follower_ids: set[int], booster_ids: set[int], author_is_local: bool) -> bool:
     if tl_type == "home":

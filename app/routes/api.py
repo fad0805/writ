@@ -1258,6 +1258,12 @@ def api_delete_post(request: Request, post_id: int):
             s.delete(_parent)
             _pid = _parent.in_reply_to_id
         s.commit()
+    # Broadcast delete to all connected timeline streams
+    try:
+        from app.timeline_stream import broadcast_delete
+        broadcast_delete(post_id)
+    except Exception:
+        pass
     # Media 삭제 & AP 브로드캐스트는 백그라운드에서
     if media or (ap_id and ap_id.startswith("http") and not is_remote_author):
         def _background(_pid=post_id, _media=media, _ap_id=ap_id, _remote=is_remote_author, _user=user):

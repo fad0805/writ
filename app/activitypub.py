@@ -1976,6 +1976,11 @@ def _handle_delete(activity: dict) -> tuple[int, str]:
             post.is_deleted = True
             session.query(Notification).filter_by(post_id=post.id).delete()
             session.commit()
+            try:
+                from app.timeline_stream import broadcast_delete
+                broadcast_delete(post.id)
+            except Exception:
+                pass
 
     return (200, "Deleted")
 
