@@ -681,9 +681,13 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 parent_authors[pp.id] = pp.author_id
         reply_filtered = []
         for p in posts:
-            if p.author_id != user.id and p.in_reply_to_id:
-                parent_author_id = parent_authors.get(p.in_reply_to_id)
-                if parent_author_id is None or parent_author_id not in _following_ids:
+            if p.author_id != user.id and (p.in_reply_to_id or p.in_reply_to_ap_id):
+                if p.in_reply_to_id:
+                    parent_author_id = parent_authors.get(p.in_reply_to_id)
+                    if parent_author_id is None or parent_author_id not in _following_ids:
+                        continue
+                else:
+                    # remote parent not in DB → hide (can't verify parent author)
                     continue
             reply_filtered.append(p)
         posts = reply_filtered
