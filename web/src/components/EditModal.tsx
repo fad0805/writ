@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { PostData, api } from "@/lib/api";
 import EmojiPicker from "./EmojiPicker";
 
-export default function EditModal({ post, onClose, onDone }: { post: PostData; onClose: () => void; onDone?: () => void }) {
+export default function EditModal({ post, onClose, onDone }: { post: PostData; onClose: () => void; onDone?: (updated?: PostData) => void }) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
@@ -20,8 +20,8 @@ export default function EditModal({ post, onClose, onDone }: { post: PostData; o
     if (forceCw) { alert("관리자가 강제한 CW는 수정할 수 없습니다"); return; }
     setSubmitting(true);
     try {
-      await api.editPost(post.id, { content, summary });
-      if (onDone) onDone();
+      const updatedPost = await api.editPost(post.id, { content, summary });
+      if (onDone) onDone(updatedPost);
     } catch (err: any) { alert(err.message); }
     setSubmitting(false);
   };

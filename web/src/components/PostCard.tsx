@@ -657,7 +657,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
         </div>}
       </div>
       {!readonly && showReply && <ReplyModal post={post} onClose={() => setShowReply(false)} onDone={(newPost) => { setShowReply(false); if (onReply) onReply(newPost); else if (onUpdate) onUpdate(); }} />}
-      {!readonly && showEdit && <EditModal post={post} onClose={() => setShowEdit(false)} onDone={() => { setShowEdit(false); if (onUpdate) onUpdate(); }} />}
+      {!readonly && showEdit && <EditModal post={post} onClose={() => setShowEdit(false)} onDone={(updated) => { setShowEdit(false); if (updated && onUpdate) { /* onUpdate will be called with updated data by parent */ } if (onUpdate) onUpdate(); }} />}
       {!readonly && showReport && (
         <div className="reply-modal-backdrop active" onClick={() => setShowReport(false)}>
           <div className="reply-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>

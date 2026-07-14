@@ -272,7 +272,7 @@ export default function TimelinePage() {
           <p className="empty-state">표시할 글이 없습니다.</p>
         ) : (
           <InfiniteScroll hasMore={hasMore} loadingMore={loadingMore} loadMore={loadMore}>
-            {posts.filter((p) => !deletedIds.current.has(p.id)).map((p, i) => <div key={p.id} ref={(el) => { cardRefs.current[i] = el; }}><PostCard post={p} onDelete={() => { deletedIds.current.add(p.id); setPosts((prev) => prev.filter((x) => x.id !== p.id)); }} onUpdate={load} onReply={(newPost) => { if (newPost) { setPosts((prev) => { if (prev.some((x) => x.id === newPost.id)) return prev; return [newPost, ...prev]; }); } }} selected={i === selectedIdx} /></div>)}
+            {posts.filter((p) => !deletedIds.current.has(p.id)).map((p, i) => <div key={p.id} ref={(el) => { cardRefs.current[i] = el; }}><PostCard post={p} onDelete={() => { deletedIds.current.add(p.id); setPosts((prev) => prev.filter((x) => x.id !== p.id)); }} onUpdate={() => { api.getPost(p.id).then((updated) => { setPosts((prev) => prev.map((x) => x.id === p.id ? updated : x)); }).catch(() => {}); }} onReply={(newPost) => { if (newPost) { setPosts((prev) => { if (prev.some((x) => x.id === newPost.id)) return prev; return [newPost, ...prev]; }); } }} selected={i === selectedIdx} /></div>)}
           </InfiniteScroll>
         )}
       </div>
