@@ -567,6 +567,48 @@ with get_session() as s:
     print(f'deleted {deleted} notifications for deleted posts')
 "
 
+elif [ "$1" = "refresh-actor" ]; then
+  actor_url="${2}"
+  if [ -z "$actor_url" ]; then
+    echo "사용법: ./gogo.sh refresh-actor [actor_url]" >&2
+    echo "예시: ./gogo.sh refresh-actor https://misskey.io/users/xxx" >&2
+    exit 1
+  fi
+  docker compose exec -T -e ACTOR_URL="$actor_url" api python3 << 'PYEOF'
+import os, httpx
+from app.activitypub import _resolve_actor, _process_emoji_tags
+from app.models import User, get_session
+
+url = os.environ["ACTOR_URL"]
+# First check if user exists
+with get_session() as s:
+    u = s.query(User).filter_by(remote_url=url).first()
+    if not u:
+        u = s.query(User).filter(User.remote_url.contains(url.split("/")[-1])).first()
+    if u:
+        print(f"found: username={u.username} remote_url={u.remote_url}")
+    else:
+        print("user not in DB, will try to resolve")
+
+# Force refresh
+from app.config import SECRET_KEY
+from app.crypto_utils import get_private_key
+sign_as = None
+with get_session() as s:
+    sign_as = s.query(User).filter_by(is_remote=False).first()
+
+actor = _resolve_actor(url, force_refresh=True, sign_as=sign_as)
+if actor:
+    print(f"resolved: id={actor.id} username={actor.username}")
+    print(f"display_name={actor.display_name}")
+    print(f"summary={actor.summary[:100] if actor.summary else ''}")
+    print(f"avatar={actor.profile_image}")
+    print(f"inbox={actor.inbox_url}")
+    print(f"remote_url={actor.remote_url}")
+else:
+    print("resolve failed")
+PYEOF
+
 elif [ "$1" = "check-custom-fields" ]; then
   actor_url="${2}"
   if [ -z "$actor_url" ]; then
