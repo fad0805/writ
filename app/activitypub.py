@@ -571,6 +571,28 @@ def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> 
     return 0
 
 
+def _get_instance_actor(session) -> User:
+    """Get or create the instance actor (system account for server-level requests)."""
+    from app.crypto_utils import generate_keypair, encrypt_key
+    from app.config import SECRET_KEY
+    actor = session.query(User).filter_by(username="actor", is_remote=False).first()
+    if not actor:
+        priv, pub = generate_keypair()
+        actor = User(
+            username="actor",
+            display_name="(instance actor)",
+            password_hash="",
+            private_key=encrypt_key(priv, SECRET_KEY),
+            public_key=pub,
+            is_remote=False,
+            is_admin=False,
+            role="actor",
+        )
+        session.add(actor)
+        session.commit()
+    return actor
+
+
 def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optional[User] = None) -> Optional[User]:
     import sys
     with get_session() as session:
@@ -921,6 +943,11 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     parsed = _urlparse(url)
     headers = {"Accept": "application/activity+json"}
 
+    if not signer:
+        try:
+            signer = _get_instance_actor(session)
+        except Exception:
+            pass
     if signer:
         try:
             date_str = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
@@ -1195,9 +1222,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 if not reply_to_post:
                     _local_signer = session.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor_id, User.is_remote == False).first()
                     if not _local_signer:
-                        _local_signer = session.query(User).filter_by(is_remote=False, role="owner").first()
-                    if not _local_signer:
-                        _local_signer = session.query(User).filter_by(is_remote=False).first()
+                        _local_signer = _get_instance_actor(session)
                     reply_to_post = _fetch_remote_post(in_reply_to, _local_signer, session)
                     if reply_to_post:
                         try:
