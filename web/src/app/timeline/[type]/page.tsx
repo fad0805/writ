@@ -201,6 +201,14 @@ export default function TimelinePage() {
       try {
         const newPost = JSON.parse(event.data);
         if (deletedIds.current.has(newPost.id)) return;
+        if (newPost.type === "update") {
+          setPosts((prev) => prev.map((p) => p.id === newPost.id ? { ...p, ...newPost } : p));
+          const cached = tabCache.current[tlType];
+          if (cached) {
+            tabCache.current[tlType] = { ...cached, posts: cached.posts.map((p: any) => p.id === newPost.id ? { ...p, ...newPost } : p) };
+          }
+          return;
+        }
         setPosts((prev) => {
           if (prev.some((p) => p.id === newPost.id)) return prev;
           return [newPost, ...prev];

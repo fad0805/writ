@@ -1893,6 +1893,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
         elif obj_type in ("Note", "Question"):
             with get_session() as session:
                 post = session.query(Post).filter_by(ap_id=obj_id).first()
+                print(f"[UPDATE] post lookup ap_id={obj_id} found={post is not None}", flush=True)
                 if post:
                     # Update content/summary
                     new_content = object_data.get("content", "")
@@ -1923,6 +1924,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     # Update emoji tags
                     _process_emoji_tags(object_data.get("tag", []), session)
                     session.commit()
+                    print(f"[UPDATE] saved content_len={len(post.content)} summary={post.summary!r}", flush=True)
                     try:
                         from app.timeline_stream import broadcast_post
                         _ua = post.author
@@ -1951,8 +1953,11 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                             "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
                             "type": "update",
                         }, post.author_id, post.visibility or "public", False)
-                    except Exception:
-                        pass
+                        print(f"[UPDATE] broadcast sent for post_id={post.id}", flush=True)
+                    except Exception as e:
+                        print(f"[UPDATE] broadcast error: {e}", flush=True)
+                else:
+                    print(f"[UPDATE] post NOT in DB, skipping", flush=True)
     return (200, "Updated")
 
 def _handle_delete(activity: dict) -> tuple[int, str]:
