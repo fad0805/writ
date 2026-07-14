@@ -1178,16 +1178,16 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
                     "actor": user.actor_uri(),
                     "object": note_data,
                 }
+                import json as _json
+                logger.warning("UPDATE OUTBOX activity:\n%s", _json.dumps(update_activity, ensure_ascii=False, indent=2)[:3000])
                 def _send_update():
                     try:
                         broadcast_to_followers(user, update_activity)
                     except Exception as e:
-                        import logging
-                        logging.getLogger("writ").warning("Update federation failed: %s", e)
+                        logger.warning("Update federation failed: %s", e)
                 threading.Thread(target=_send_update, daemon=True).start()
             except Exception as e:
-                import logging
-                logging.getLogger("writ").warning("Update activity build failed: %s", e)
+                logger.warning("Update activity build failed: %s", e)
 
         return _post_json(post, s, user)
 

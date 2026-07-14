@@ -2165,9 +2165,12 @@ def _deliver_sync(inbox_url: str, body: bytes, headers: dict) -> bool:
         try:
             resp = httpx.post(inbox_url, content=body, headers=headers, timeout=15)
             if resp.is_success:
+                logger.warning("DELIVER OK %s status=%s", inbox_url, resp.status_code)
                 return True
             if resp.status_code in (400, 401, 403, 404, 405, 410, 422):
+                logger.warning("DELIVER FAIL %s status=%s body=%s", inbox_url, resp.status_code, resp.text[:300])
                 return False
+            logger.warning("DELIVER RETRY %s status=%s attempt=%s", inbox_url, resp.status_code, attempt+1)
             print(f"[deliver] Retryable: {inbox_url} HTTP {resp.status_code} attempt {attempt+1}/3", flush=True)
         except Exception as e:
             if attempt < 2:
@@ -2180,6 +2183,7 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     if not _validate_url(inbox_url):
         return
     body = json.dumps(activity, ensure_ascii=False).encode("utf-8")
+    logger.warning("POST %s type=%s body_preview=%s", inbox_url, activity.get("type", "?"), body[:500].decode("utf-8", errors="replace"))
     import base64 as _b64
     digest = _b64.b64encode(hashlib.sha256(body).digest()).decode()
     date = datetime.datetime.now(datetime.timezone.utc).strftime(
