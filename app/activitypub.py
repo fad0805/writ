@@ -1704,19 +1704,33 @@ def _handle_block(activity: dict) -> tuple[int, str]:
         return (200, "OK")
 
     local_username = _parse_username_from_url(object_url)
-    with get_session() as session:
-        local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
-        if not local_user:
-            return (200, "OK")
-        # Remote user blocked us — remove follow both ways
-        session.query(Follow).filter_by(follower_id=remote_user.id, following_id=local_user.id).delete()
-        session.query(Follow).filter_by(follower_id=local_user.id, following_id=remote_user.id).delete()
-        # Create UserBlock: remote_user blocked local_user (for am_i_blocked check + timeline filter)
-        existing = session.query(UserBlock).filter_by(user_id=remote_user.id, target_user_id=local_user.id).first()
-        if not existing:
-            session.add(UserBlock(user_id=remote_user.id, target_user_id=local_user.id))
-        session.commit()
-    return (200, "Blocked")
+    try:
+        with get_session() as session:
+            # Re-query both users in the SAME session to avoid detached instance issues
+            remote = session.query(User).filter_by(remote_url=actor_url).first()
+            if not remote:
+                from urllib.parse import urlparse as _up
+                p = _up(actor_url)
+                if "/@" in p.path:
+                    alt_url = f"{p.scheme}://{p.netloc}/users/{p.path.split('/@')[-1]}"
+                    remote = session.query(User).filter_by(remote_url=alt_url).first()
+            if not remote:
+                remote = session.query(User).filter_by(id=remote_user.id).first()
+            if not remote:
+                return (200, "OK")
+            local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
+            if not local_user:
+                return (200, "OK")
+            session.query(Follow).filter_by(follower_id=remote.id, following_id=local_user.id).delete()
+            session.query(Follow).filter_by(follower_id=local_user.id, following_id=remote.id).delete()
+            existing = session.query(UserBlock).filter_by(user_id=remote.id, target_user_id=local_user.id).first()
+            if not existing:
+                session.add(UserBlock(user_id=remote.id, target_user_id=local_user.id))
+            session.commit()
+        return (200, "Blocked")
+    except Exception as e:
+        logger.error("Error processing Block from %s: %s", actor_url, e)
+        return (200, "OK")
 
 
 def _handle_undo(activity: dict) -> tuple[int, str]:
@@ -1892,13 +1906,20 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
             return (200, "OK")
 
         local_username = _parse_username_from_url(object_url)
-        with get_session() as session:
-            local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
-            if not local_user:
-                return (200, "OK")
-            session.query(UserBlock).filter_by(user_id=remote_user.id, target_user_id=local_user.id).delete()
-            session.commit()
-        return (200, "Unblocked")
+        try:
+            with get_session() as session:
+                remote = session.query(User).filter_by(id=remote_user.id).first()
+                if not remote:
+                    return (200, "OK")
+                local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
+                if not local_user:
+                    return (200, "OK")
+                session.query(UserBlock).filter_by(user_id=remote.id, target_user_id=local_user.id).delete()
+                session.commit()
+            return (200, "Unblocked")
+        except Exception as e:
+            logger.error("Error processing Undo Block from %s: %s", actor_url, e)
+            return (200, "OK")
 
     return (200, "OK")
 
