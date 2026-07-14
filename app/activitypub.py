@@ -498,7 +498,7 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
     ext = image_url.rsplit(".", 1)[-1].lower() if "." in image_url else "jpg"
     if ext not in ("jpg", "jpeg", "png", "gif", "webp"):
         ext = "jpg"
-    filename = f"{local_username}_{uuid.uuid4().hex[:8]}.{ext}"
+    filename = f"{uuid.uuid4().hex}.{ext}"
     key = f"{prefix}/remote/{filename}"
     try:
         import httpx
