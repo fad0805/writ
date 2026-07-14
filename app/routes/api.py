@@ -5173,8 +5173,12 @@ def api_admin_refresh_profile(request: Request, user_id: int):
         actor = _resolve_actor(remote_url, force_refresh=True, sign_as=user)
         if not actor:
             raise HTTPException(status_code=400, detail="Failed to refresh profile")
-        log_admin_action(user.id, user.username, "refresh_profile", target_type="user", target_id=user_id, target_username=u.username, ip_address=request.client.host if request.client else "")
-        return {"ok": True, "display_name": actor.display_name}
+        with get_session() as _s2:
+            _reloaded = _s2.query(User).get(actor.id)
+            _name = _reloaded.display_name if _reloaded else ""
+            _username = _reloaded.username if _reloaded else ""
+        log_admin_action(user.id, user.username, "refresh_profile", target_type="user", target_id=user_id, target_username=_username, ip_address=request.client.host if request.client else "")
+        return {"ok": True, "display_name": _name}
     except HTTPException:
         raise
     except Exception as e:
