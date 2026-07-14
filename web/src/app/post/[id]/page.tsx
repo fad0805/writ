@@ -13,7 +13,7 @@ function ThreadNode({ post, depth = 0, onDelete }: { post: PostData; depth?: num
 }
 
 function ThreadList({ posts, parentId, depth = 0, onDelete }: { posts: PostData[]; parentId: number; depth?: number; onDelete?: (id: number) => void }) {
-  const children = posts.filter((p) => p.reply_context?.id === parentId);
+  const children = posts.filter((p) => p.reply_context?.id === parentId && !p.is_deleted);
   if (children.length === 0) return null;
   return (
     <>
@@ -116,7 +116,7 @@ export default function PostDetailPage() {
 
   return (
     <>
-      {ancestors.map((a) => (
+      {ancestors.filter((a) => !a.is_deleted).map((a) => (
         <div key={a.id} className="thread-child"><PostCard post={a} hideContext onDelete={() => setPost((prev) => prev ? { ...prev, ancestors: (prev.ancestors || []).filter((x) => x.id !== a.id) } : prev)} /></div>
       ))}
       <div ref={currentRef}><PostCard post={post} onUpdate={load} onDelete={() => setDeleted(true)} current hideContext /></div>
