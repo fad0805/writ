@@ -493,6 +493,12 @@ def _cleanup_remote_data():
 def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url: str = "") -> str:
     """Download remote image and save, return URL. If old_url given, delete it first."""
     from app.utils.storage import get_storage
+    # Delete old image first
+    if old_url:
+        try:
+            get_storage().delete(old_url)
+        except Exception:
+            pass
     if not _validate_url(image_url):
         return ""
     ext = image_url.rsplit(".", 1)[-1].lower() if "." in image_url else "jpg"
@@ -506,10 +512,7 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
         if r.status_code == 200 and len(r.content) <= 10 * 1024 * 1024:
             storage = get_storage()
             ct = f"image/{ext}"
-            new_url = storage.save(key, r.content, ct)
-            if old_url:
-                storage.delete(old_url)
-            return new_url
+            return storage.save(key, r.content, ct)
     except Exception as e:
         logger.warning("Failed to save remote %s %s: %s", prefix, image_url, e)
     return image_url
