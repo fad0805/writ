@@ -622,12 +622,20 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     elif tl_type == "social":
         following_ids = list(_following_ids) if _following_ids else [user.id]
+        my_boosted_ids = [b.post_id for b in session.query(Boost).filter_by(user_id=user.id).all()]
+        followed_boosted_ids = [b.post_id for b in session.query(Boost).filter(
+            Boost.user_id.in_([fid for fid in following_ids if fid != user.id]),
+        ).all()]
+        boosted_ids = list(set(my_boosted_ids) | set(followed_boosted_ids))
         posts = session.query(Post).options(*_base_opts).filter(
             or_(
-                Post.author_id.in_(following_ids),
-                and_(Post.author_id.in_(_local_ids), Post.visibility == "public"),
+                and_(
+                    or_(Post.author_id.in_(following_ids), Post.id.in_(boosted_ids)),
+                    Post.is_deleted == False,
+                    or_(Post.visibility != "home", Post.author_id.in_(following_ids)),
+                ),
+                and_(Post.author_id.in_(_local_ids), Post.visibility == "public", Post.is_deleted == False),
             ),
-            Post.is_deleted == False,
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     elif tl_type == "local":
         posts = session.query(Post).options(*_base_opts).filter(
