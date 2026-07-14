@@ -130,6 +130,28 @@ def _delivery_worker():
             logger.error("Delivery worker error: %s", e)
 
 
+def _refresh_remote_profiles():
+    """Periodically refresh remote user profiles in the background (5 at a time, every 10 min)."""
+    _BATCH = 5
+    _INTERVAL = 600
+    while True:
+        time.sleep(_INTERVAL)
+        try:
+            from app.models import User, get_session
+            from app.activitypub import _resolve_actor
+            with get_session() as s:
+                remote_users = s.query(User).filter(User.is_remote == True).order_by(User.updated_at.asc()).limit(_BATCH).all()
+                for ru in remote_users:
+                    try:
+                        _resolve_actor(ru.remote_url, force_refresh=True)
+                        ru.updated_at = datetime.datetime.now(datetime.timezone.utc)
+                        s.commit()
+                    except Exception:
+                        s.rollback()
+        except Exception:
+            pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from app.routes.api import _cleanup_avatars
@@ -151,6 +173,8 @@ async def lifespan(app: FastAPI):
         pass
     t = threading.Thread(target=_delivery_worker, daemon=True)
     t.start()
+    t2 = threading.Thread(target=_refresh_remote_profiles, daemon=True)
+    t2.start()
     _cleanup_expired_media()
     _cleanup_remote_data()
     yield
