@@ -213,6 +213,9 @@ class Post(Base):
     in_reply_to_id = Column(Integer, ForeignKey("posts.id"), index=True)
     in_reply_to_ap_id = Column(String(1024), default="")
 
+    # Boost pointer: if set, this post is a boost of another post
+    boost_of_id = Column(Integer, ForeignKey("posts.id"), nullable=True, index=True)
+
     # Novel post (if this post is a novel episode announcement)
     novel_id = Column(Integer, ForeignKey("novels.id"), nullable=True)
     episode_id = Column(Integer, ForeignKey("episodes.id"), nullable=True)
@@ -232,6 +235,7 @@ class Post(Base):
     author = relationship("User", back_populates="posts", foreign_keys=[author_id], lazy="selectin")
     parent = relationship("Post", back_populates="replies", remote_side=[id], lazy="selectin")
     replies = relationship("Post", back_populates="parent", lazy="selectin")
+    boost_of = relationship("Post", remote_side=[id], foreign_keys=[boost_of_id], lazy="selectin")
     likes = relationship("Like", back_populates="post", cascade="all, delete-orphan", lazy="selectin")
     boosts = relationship("Boost", back_populates="post", cascade="all, delete-orphan", lazy="selectin")
     votes = relationship("Vote", back_populates="post", cascade="all, delete-orphan", lazy="selectin")

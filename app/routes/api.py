@@ -68,6 +68,19 @@ def _post_json(p, session, user, tl_type=None,
             "mentioned_user_ids": [], "mentioned_handles": [],
             "link_preview": None, "is_deleted": True,
         }
+
+    # If this is a boost pointer post, resolve to the original
+    if p.boost_of_id:
+        original = session.query(Post).filter_by(id=p.boost_of_id).first()
+        if original and not original.is_deleted:
+            result = _post_json(original, session, user, tl_type,
+                                _liked_ids, _boosted_ids, _bookmarked_ids,
+                                _vote_map, _my_reaction_map, _reactions_map,
+                                _booster_map, _mentioned_users_map)
+            result["boosted_by"] = _user_json(p.author)
+            return result
+        else:
+            return {"id": p.id, "is_deleted": True, "boosted_by": _user_json(p.author)}
     if user:
         if _liked_ids is not None:
             liked = p.id in _liked_ids
@@ -571,6 +584,20 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     raw_total = len(posts)
     posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm and p.author_id != user.id and user.id not in (p.mentioned_user_ids or []))]
+    # Deduplicate: if multiple posts point to the same original, keep only the most recent boost pointer
+    seen_originals = set()
+    deduped = []
+    for p in posts:
+        if p.boost_of_id:
+            if p.boost_of_id in seen_originals:
+                continue
+            seen_originals.add(p.boost_of_id)
+            # Skip if original post is deleted
+            orig = session.query(Post).filter_by(id=p.boost_of_id, is_deleted=False).first()
+            if not orig:
+                continue
+        deduped.append(p)
+    posts = deduped
     # Filter replies: hide if direct parent author is not followed
     # Only for home timeline, not social/local/federated
     if user and tl_type == "home" and _following_ids:
@@ -1435,6 +1462,14 @@ def api_boost_post(request: Request, post_id: int):
         ).first() if post.author_id != user.id else None
         if not existing:
             s.add(Boost(user_id=user.id, post_id=post_id))
+            # Create boost pointer post row
+            boost_post = Post(
+                author_id=user.id,
+                content="",
+                boost_of_id=post_id,
+                visibility=post.visibility or "public",
+            )
+            s.add(boost_post)
             three_hours_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3)
             twentieth = s.query(Post.created_at).filter(
                 Post.is_deleted == False,
@@ -1446,6 +1481,35 @@ def api_boost_post(request: Request, post_id: int):
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id))
             s.commit()
             broadcast_refresh_notifs(post.author_id)
+            # Stream the original post to timelines (includes booster's followers)
+            try:
+                from app.timeline_stream import broadcast_post
+                _ba = post.author
+                broadcast_post({
+                    "id": post.id, "type": "update",
+                    "number": post.number or "",
+                    "content": post.content, "summary": post.summary or "",
+                    "visibility": post.visibility or "public",
+                    "created_at": post.created_at.isoformat() if post.created_at else "",
+                    "author": {
+                        "id": _ba.id, "username": _ba.username,
+                        "display_name": _ba.display_name or _ba.username,
+                        "avatar": _ba.profile_image or "", "header": _ba.header_image or "",
+                        "summary": _ba.summary or "", "is_admin": _ba.is_admin,
+                        "is_locked": getattr(_ba, "is_locked", False),
+                        "is_limited": getattr(_ba, "is_limited", False),
+                        "is_remote": _ba.is_remote, "ap_id": _ba.remote_url or "",
+                    },
+                    "likes_count": s.query(Like).filter_by(post_id=post.id).count(),
+                    "boosts_count": s.query(Boost).filter_by(post_id=post.id).count(),
+                    "replies_count": s.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count(),
+                    "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
+                    "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
+                    "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
+                    "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
+                }, post.author_id, post.visibility or "public", False)
+            except Exception:
+                pass
             if post.author_id != user.id:
                 from app.push import send_push_to_user
                 from app.timeline_stream import broadcast_notif_sound
@@ -1531,6 +1595,8 @@ def api_unboost_post(request: Request, post_id: int):
         announce_id = existing.ap_id if existing and existing.ap_id else ""
         if existing:
             s.delete(existing)
+            # Delete boost pointer post
+            s.query(Post).filter_by(author_id=user.id, boost_of_id=post_id).delete()
             s.query(Notification).filter_by(
                 from_user_id=user.id, notification_type="boost", post_id=post_id
             ).delete()

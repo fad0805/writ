@@ -1615,6 +1615,14 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
             ap_id=boost_ap_id,
         )
         session.add(boost)
+        # Create boost pointer post row
+        boost_post = Post(
+            author_id=actor.id,
+            content="",
+            boost_of_id=post.id,
+            visibility=post.visibility or "public",
+        )
+        session.add(boost_post)
 
         existing_n = session.query(Notification).filter_by(
             user_id=post.author_id, from_user_id=actor.id, notification_type="boost", post_id=post.id
@@ -1772,6 +1780,8 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
             if not post:
                 return (200, "OK")
             session.query(Boost).filter_by(user_id=actor.id, post_id=post.id).delete()
+            # Delete boost pointer post
+            session.query(Post).filter_by(author_id=actor.id, boost_of_id=post.id).delete()
             session.query(Notification).filter_by(
                 user_id=post.author_id, from_user_id=actor.id,
                 notification_type="boost", post_id=post.id,
