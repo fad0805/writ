@@ -1016,4 +1016,4 @@ def _add_cols(table: str, inspector, cols: list[tuple[str, str]]):
 
 
 def get_session():
-    return Session(engine)
+    return Session(engine, expire_on_commit=False)
