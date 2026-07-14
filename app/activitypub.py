@@ -1590,9 +1590,16 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
         post = session.query(Post).filter_by(ap_id=object_url).first()
         if not post:
             _local_signer = session.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor.id, User.is_remote == False).first()
-            post = _fetch_remote_post(object_url, _local_signer, session)
-        if not post:
-            return (200, "OK")
+            if not _local_signer:
+                _local_signer = session.query(User).filter_by(is_remote=False).first()
+            try:
+                post = _fetch_remote_post(object_url, _local_signer, session)
+            except Exception as e:
+                logger.warning("Announce: _fetch_remote_post failed for %s: %s", object_url, e)
+                post = None
+            if not post:
+                logger.warning("Announce: could not fetch remote post %s", object_url)
+                return (200, "OK")
 
         existing = session.query(Boost).filter_by(user_id=actor.id, post_id=post.id).first()
         if existing:
@@ -1824,7 +1831,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                         post.summary = object_data.get("summary", "")
                     # Update poll data
                     if post.poll_data:
-                        one_of = object_data.get("oneOf") or object_data.get("anyAny") or []
+                        one_of = object_data.get("oneOf") or object_data.get("anyOf") or []
                         if isinstance(one_of, list):
                             new_options = []
                             for opt in one_of:
