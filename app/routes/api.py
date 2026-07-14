@@ -6349,12 +6349,14 @@ def api_block_user(request: Request, target_user_id: int):
         target = s.query(User).get(target_user_id)
     if target and target.is_remote and target.remote_url:
         try:
-            block_id = f"{BASE_URL}/users/{user.username}/blocks/{target.id}"
+            block_id = f"{BASE_URL}/users/{user.username}/status/activities/block/{target.id}"
+            actor_uri = f"{BASE_URL}/users/{user.username}"
             block_activity = {
-                "@context": "https://www.w3.org/ns/activitystreams",
+                "@context": ["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"],
                 "type": "Block",
                 "id": block_id,
-                "actor": user.actor_uri() if hasattr(user, 'actor_uri') else f"{BASE_URL}/users/{user.username}",
+                "actor": actor_uri,
+                "to": [target.remote_url],
                 "object": target.remote_url,
             }
             _post_to_inbox(target.shared_inbox_url or target.inbox_uri(), block_activity, user)
@@ -6373,16 +6375,18 @@ def api_unblock_user(request: Request, target_user_id: int):
         s.commit()
     if target and target.is_remote and target.remote_url:
         try:
-            block_id = f"{BASE_URL}/users/{user.username}/blocks/{target.id}"
+            block_id = f"{BASE_URL}/users/{user.username}/status/activities/block/{target.id}"
+            actor_uri = f"{BASE_URL}/users/{user.username}"
             undo_activity = {
-                "@context": "https://www.w3.org/ns/activitystreams",
+                "@context": ["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"],
                 "type": "Undo",
-                "id": f"{BASE_URL}/users/{user.username}/blocks/{target.id}#undo",
-                "actor": user.actor_uri() if hasattr(user, 'actor_uri') else f"{BASE_URL}/users/{user.username}",
+                "id": f"{BASE_URL}/users/{user.username}/status/activities/undo/{target.id}",
+                "actor": actor_uri,
+                "to": [target.remote_url],
                 "object": {
-                    "type": "Block",
                     "id": block_id,
-                    "actor": user.actor_uri() if hasattr(user, 'actor_uri') else f"{BASE_URL}/users/{user.username}",
+                    "type": "Block",
+                    "actor": actor_uri,
                     "object": target.remote_url,
                 },
             }
