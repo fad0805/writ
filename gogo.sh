@@ -657,6 +657,43 @@ with get_session() as s:
         print("no duplicates found")
 PYEOF
 
+elif [ "$1" = "check-post" ]; then
+  post_id="${2}"
+  if [ -z "$post_id" ]; then
+    echo "사용법: ./gogo.sh check-post [post_id]" >&2
+    exit 1
+  fi
+  docker compose exec -T api python3 << PYEOF
+import json, sys
+from app.models import Post, User, get_session
+
+with get_session() as s:
+    p = s.query(Post).get($post_id)
+    if not p:
+        print("post not found")
+        sys.exit(1)
+    print(f"id={p.id} number={p.number} author_id={p.author_id} is_deleted={p.is_deleted}")
+    print(f"content={p.content[:100] if p.content else ''}")
+    print(f"visibility={p.visibility} is_dm={p.is_dm}")
+    print(f"ap_id={p.ap_id}")
+    print(f"in_reply_to_id={p.in_reply_to_id}")
+    print(f"in_reply_to_ap_id={p.in_reply_to_ap_id}")
+    print(f"mentioned_user_ids={p.mentioned_user_ids}")
+    if p.in_reply_to_id:
+        parent = s.query(Post).get(p.in_reply_to_id)
+        if parent:
+            pauthor = s.query(User).get(parent.author_id)
+            print(f"\n--- parent post {parent.id} ---")
+            print(f"author_id={parent.author_id} author_username={pauthor.username if pauthor else '?'}")
+            print(f"content={parent.content[:100] if parent.content else ''}")
+            print(f"visibility={parent.visibility} is_deleted={parent.is_deleted}")
+            print(f"ap_id={parent.ap_id}")
+        else:
+            print(f"\nparent post {p.in_reply_to_id}: not found in DB")
+    if p.in_reply_to_ap_id and (not p.in_reply_to_id or not s.query(Post).get(p.in_reply_to_id)):
+        print(f"\nremote parent: {p.in_reply_to_ap_id}")
+PYEOF
+
 elif [ "$1" = "check-custom-fields" ]; then
   actor_url="${2}"
   if [ -z "$actor_url" ]; then
