@@ -1472,30 +1472,41 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             return (200, "OK")
 
         # Process remote emoji if present in tag array
+        print(f"[EMOJI] reaction='{reaction}' startswith(:)={reaction.startswith(':') if reaction else False}", flush=True)
         if reaction and reaction.startswith(":") and reaction.endswith(":"):
             _kw = reaction[1:-1]
+            print(f"[EMOJI] keyword='{_kw}'", flush=True)
             _existing_emoji = session.query(CustomEmoji).filter_by(keyword=_kw).first()
+            print(f"[EMOJI] existing={_existing_emoji.id if _existing_emoji else None}", flush=True)
             if not _existing_emoji:
-                for _tag in (activity.get("tag", []) or []):
+                tags = activity.get("tag", []) or []
+                print(f"[EMOJI] tags count={len(tags)}", flush=True)
+                for _i, _tag in enumerate(tags):
+                    print(f"[EMOJI] tag[{_i}]: type={_tag.get('type') if isinstance(_tag, dict) else type(_tag).__name__}", flush=True)
                     if isinstance(_tag, dict) and _tag.get("type") == "Emoji":
                         _icon = _tag.get("icon", {})
                         _url = _icon.get("url", "") if isinstance(_icon, dict) else ""
                         _tag_id = _tag.get("id", "")
                         _domain = urlparse(_tag_id).netloc if _tag_id else ""
+                        print(f"[EMOJI] found Emoji tag: name={_tag.get('name')} url={_url} domain={_domain}", flush=True)
                         if _url:
                             from app.utils.storage import get_storage
                             _storage = get_storage()
                             try:
                                 import httpx as _httpx
+                                print(f"[EMOJI] downloading {_url}", flush=True)
                                 _resp = _httpx.get(_url, timeout=10)
+                                print(f"[EMOJI] download status={_resp.status_code} size={len(_resp.content)}", flush=True)
                                 if _resp.status_code == 200:
                                     _ext = _url.rsplit(".", 1)[-1].split("?")[0] if "." in _url else "png"
                                     _fname = f"{_kw}.{_ext}"
                                     _storage.save(f"emojis/remote/{_fname}", _resp.content, f"image/{_ext}")
                                     session.add(CustomEmoji(keyword=_kw, file_name=_fname, category="remote", domain=_domain))
                                     session.flush()
+                                    print(f"[EMOJI] saved: {_fname}", flush=True)
                                     logger.info("Imported remote emoji: %s from %s", _kw, _domain)
                             except Exception as e:
+                                print(f"[EMOJI] error: {e}", flush=True)
                                 logger.warning("Failed to import remote emoji %s: %s", _kw, e)
                         break
 
