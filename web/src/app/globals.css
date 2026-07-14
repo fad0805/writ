@@ -2996,7 +2996,7 @@ input[type="checkbox"] {
   .reply-form { border-radius: 0; }
   .notif-tabs { border-radius: 0; overflow-x: auto; mask-image: linear-gradient(to right, black 85%, transparent 100%); -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%); margin-left: 12px; margin-right: 12px; }
   .thread-list { }
-  .auth-container { margin: 40px 16px; padding: 32px 24px 28px; }
+  .auth-container { margin: 40px auto; width: calc(100% - 32px); padding: 32px 24px 28px; }
   .auth-container h1 { font-size: 1.3em; margin-bottom: 24px; }
   .emoji-picker-dropdown { width: calc(100vw - 32px); right: -8px; max-width: 300px; }
   .episode-body { overflow-x: auto; }
@@ -3010,7 +3010,7 @@ input[type="checkbox"] {
 
 @media (max-width: 380px) {
   .main-content { padding-top: 10px; padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); }
-  .auth-container { margin: 20px 10px; padding: 24px 16px 20px; }
+  .auth-container { margin: 20px auto; width: calc(100% - 20px); padding: 24px 16px 20px; }
   .notif-tabs { gap: 4px; }
   .notif-tab { padding: 6px 10px; font-size: 0.78em; }
   .novel-scroll .novel-card { flex: 0 0 220px; }
