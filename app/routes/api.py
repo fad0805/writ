@@ -4734,10 +4734,24 @@ def _load_emojis(session):
 
 
 @router.get("/emojis")
-def api_list_emojis():
+def api_list_emojis(limit: int = Query(30), offset: int = Query(0)):
     with get_session() as s:
-        emojis = _load_emojis(s)
-    return JSONResponse(emojis, headers={"Cache-Control": "public, max-age=300"})
+        total = s.query(CustomEmoji).count()
+        emojis = s.query(CustomEmoji).order_by(desc(CustomEmoji.created_at)).offset(offset).limit(limit).all()
+        result = [
+            {
+                "id": e.id,
+                "keyword": e.keyword,
+                "file_name": e.file_name,
+                "category": e.category or "",
+                "aliases": e.aliases or [],
+                "url": _emoji_url(e.file_name, e.domain or "", e.category or ""),
+                "source_url": e.source_url or "",
+                "domain": e.domain or "",
+            }
+            for e in emojis
+        ]
+    return JSONResponse({"emojis": result, "total": total, "has_more": offset + limit < total}, headers={"Cache-Control": "public, max-age=300"})
 
 
 @router.post("/emojis")

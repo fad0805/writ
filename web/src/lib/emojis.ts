@@ -32,25 +32,26 @@ export async function getCustomEmojis(): Promise<CustomEmoji[]> {
   if (cache !== null) return cache;
   if (fetchPromise) return fetchPromise;
   fetchPromise = (async () => {
+    const all: CustomEmoji[] = [];
+    let offset = 0;
+    const limit = 30;
     try {
-      const res = await fetch("/api/emojis", { credentials: "include" });
-      if (res.ok) {
-        const fresh: CustomEmoji[] = await res.json();
-        if (cache === null) {
-          cache = fresh;
-        } else {
-          const cur = cache as CustomEmoji[];
-          for (const e of fresh) {
-            if (!cur.some((c) => c.keyword === e.keyword)) {
-              cur.push(e);
-            }
+      while (true) {
+        const res = await fetch(`/api/emojis?limit=${limit}&offset=${offset}`, { credentials: "include" });
+        if (!res.ok) break;
+        const data = await res.json();
+        const batch: CustomEmoji[] = data.emojis || data || [];
+        for (const e of batch) {
+          if (!all.some((c) => c.keyword === e.keyword)) {
+            all.push(e);
           }
         }
-        return cache || [];
+        if (!data.has_more) break;
+        offset += limit;
       }
     } catch {}
-    cache = [];
-    return [];
+    cache = all;
+    return cache;
   })();
   return fetchPromise;
 }
