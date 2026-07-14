@@ -169,7 +169,7 @@ export default function ProfilePage() {
         <div className="profile-info">
           <div className="profile-avatar-col">
             <Avatar user={profile} className="profile-avatar" />
-            {!isMine && (
+            {!isMine && !amBlocked && (
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <button onClick={toggleFollow} className={`btn btn-small btn-follow ${isFollowing ? "btn-outline" : isFollowPending ? "btn-outline" : "btn-primary"} btn-follow-fixed`}>
                   {isFollowing ? "언팔로우" : isFollowPending ? "요청됨" : "팔로우"}
@@ -292,7 +292,7 @@ export default function ProfilePage() {
                   <button onClick={() => router.push("/users/profile/edit")} className="action-btn btn-action-sm">
                     <Icon name="edit" /> 편집
                   </button>
-                ) : (
+                ) : !amBlocked ? (
                   <>
                     <button className="action-btn btn-action-sm" onClick={() => setShowMention(true)}>
                       <Icon name="mention" /> 멘션
@@ -304,7 +304,7 @@ export default function ProfilePage() {
                       <Icon name="edit" /> 메모
                     </button>
                   </>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
@@ -389,7 +389,7 @@ export default function ProfilePage() {
             <span className="profile-stat disabled"><strong>0</strong> 팔로잉</span>
             <span className="profile-stat disabled"><strong>0</strong> 팔로워</span>
           </div>
-          <div className="empty-state">{isBlocked ? "차단한 유저입니다" : "상대방이 당신을 차단했습니다"}</div>
+          <div className="empty-state">{isBlocked ? "차단한 유저입니다" : `${profile.display_name}님이 당신을 차단했습니다`}</div>
         </>
       ) : (
       <>
