@@ -2165,9 +2165,45 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         show_follows = user and (profile.id == user.id or profile.follow_list_visibility != "private")
         followers = s.query(Follow).filter_by(following_id=profile.id, accepted=True).order_by(desc(Follow.created_at)).all()
         following = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).order_by(desc(Follow.created_at)).all()
+        # Batch-load _post_json data for all profile posts
+        _all_post_ids = list({p.id for p in posts} | set(profile.pinned_posts or []))
+        if user and _all_post_ids:
+            _liked_ids = {l.post_id for l in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(_all_post_ids)).all()}
+            _boosted_ids = {b.post_id for b in s.query(Boost).filter(Boost.user_id == user.id, Boost.post_id.in_(_all_post_ids)).all()}
+            _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(_all_post_ids)).all()}
+            _vote_map = {}
+            for v in s.query(Vote).filter(Vote.user_id == user.id, Vote.post_id.in_(_all_post_ids)).all():
+                _vote_map[v.post_id] = v.option_index
+            _my_reaction_map = {}
+            for l in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(_all_post_ids), Like.reaction.isnot(None)).all():
+                _my_reaction_map[l.post_id] = l.reaction
+            from sqlalchemy import func as _func
+            _reactions_map = {}
+            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(_all_post_ids)).group_by(Like.post_id, Like.reaction).all():
+                if pid not in _reactions_map:
+                    _reactions_map[pid] = {}
+                _reactions_map[pid][react] = cnt
+            all_mentioned_ids = set()
+            for pp in s.query(Post).filter(Post.id.in_(_all_post_ids)).all():
+                if pp.mentioned_user_ids:
+                    all_mentioned_ids.update(pp.mentioned_user_ids)
+            _mentioned_users_map = {}
+            if all_mentioned_ids:
+                _mu = {u.id: u.username for u in s.query(User).filter(User.id.in_(all_mentioned_ids)).all()}
+                for pp in s.query(Post).filter(Post.id.in_(_all_post_ids)).all():
+                    if pp.mentioned_user_ids:
+                        _mentioned_users_map[pp.id] = [_mu.get(mid, "?") for mid in pp.mentioned_user_ids if mid in _mu]
+                    else:
+                        _mentioned_users_map[pp.id] = []
+        else:
+            _liked_ids = _boosted_ids = _bookmarked_ids = set()
+            _vote_map = _my_reaction_map = _reactions_map = _mentioned_users_map = {}
+        _pj_kwargs = dict(_liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids,
+                          _vote_map=_vote_map, _my_reaction_map=_my_reaction_map,
+                          _reactions_map=_reactions_map, _mentioned_users_map=_mentioned_users_map)
         return {
             "profile": _user_json(profile),
-            "posts": [_post_json(p, s, user) for p in posts],
+            "posts": [_post_json(p, s, user, **_pj_kwargs) for p in posts],
             "novels": [_novel_json(n, s) for n in novels],
             "followers": [{"user": _user_json(f.follower)} for f in (followers if show_follows else [])],
             "following": [{"user": _user_json(f.following)} for f in (following if show_follows else [])],
@@ -2185,7 +2221,7 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             "am_i_blocked": am_i_blocked,
             "has_more": has_more,
             "offset": offset,
-            "pinned_posts_data": [_post_json(p, s, user) for p in (s.query(Post).filter(Post.id.in_(profile.pinned_posts or []), Post.is_deleted == False).all() if profile.pinned_posts else [])],
+            "pinned_posts_data": [_post_json(p, s, user, **_pj_kwargs) for p in (s.query(Post).filter(Post.id.in_(profile.pinned_posts or []), Post.is_deleted == False).all() if profile.pinned_posts else [])],
             "pinned_series_data": [_novel_json(n, s) for n in (s.query(Novel).filter(Novel.id.in_(profile.pinned_series or [])).all() if profile.pinned_series else [])],
         }
 
