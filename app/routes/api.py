@@ -6346,15 +6346,49 @@ def api_block_user(request: Request, target_user_id: int):
         s.query(Follow).filter_by(follower_id=user.id, following_id=target_user_id).delete()
         s.query(Follow).filter_by(follower_id=target_user_id, following_id=user.id).delete()
         s.commit()
+        target = s.query(User).get(target_user_id)
+    if target and target.is_remote and target.remote_url:
+        try:
+            block_id = f"{BASE_URL}/users/{user.username}/blocks/{target.id}"
+            block_activity = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "Block",
+                "id": block_id,
+                "actor": user.actor_uri() if hasattr(user, 'actor_uri') else f"{BASE_URL}/users/{user.username}",
+                "object": target.remote_url,
+            }
+            _post_to_inbox(target.shared_inbox_url or target.inbox_uri(), block_activity, user)
+        except Exception:
+            pass
     return {"ok": True}
 
 
 @router.delete("/blocks/users/{target_user_id}")
 def api_unblock_user(request: Request, target_user_id: int):
     user = require_active_auth(request)
+    target = None
     with get_session() as s:
+        target = s.query(User).get(target_user_id)
         s.query(UserBlock).filter_by(user_id=user.id, target_user_id=target_user_id).delete()
         s.commit()
+    if target and target.is_remote and target.remote_url:
+        try:
+            block_id = f"{BASE_URL}/users/{user.username}/blocks/{target.id}"
+            undo_activity = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "Undo",
+                "id": f"{BASE_URL}/users/{user.username}/blocks/{target.id}#undo",
+                "actor": user.actor_uri() if hasattr(user, 'actor_uri') else f"{BASE_URL}/users/{user.username}",
+                "object": {
+                    "type": "Block",
+                    "id": block_id,
+                    "actor": user.actor_uri() if hasattr(user, 'actor_uri') else f"{BASE_URL}/users/{user.username}",
+                    "object": target.remote_url,
+                },
+            }
+            _post_to_inbox(target.shared_inbox_url or target.inbox_uri(), undo_activity, user)
+        except Exception:
+            pass
     return {"ok": True}
 
 
