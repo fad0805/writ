@@ -6337,6 +6337,9 @@ def api_block_user(request: Request, target_user_id: int):
     user = require_active_auth(request)
     if user.id == target_user_id:
         raise HTTPException(status_code=400, detail="Cannot block yourself")
+    target_remote_url = None
+    target_shared_inbox = None
+    target_id = None
     with get_session() as s:
         existing = s.query(UserBlock).filter_by(user_id=user.id, target_user_id=target_user_id).first()
         if existing:
@@ -6347,19 +6350,23 @@ def api_block_user(request: Request, target_user_id: int):
         s.query(Follow).filter_by(follower_id=target_user_id, following_id=user.id).delete()
         s.commit()
         target = s.query(User).get(target_user_id)
-    if target and target.is_remote and target.remote_url:
+        if target:
+            target_remote_url = target.remote_url
+            target_shared_inbox = target.shared_inbox_url or target.inbox_uri()
+            target_id = target.id
+    if target_remote_url:
         try:
-            block_id = f"{BASE_URL}/users/{user.username}/status/activities/block/{target.id}"
+            block_id = f"{BASE_URL}/users/{user.username}/status/activities/block/{target_id}"
             actor_uri = f"{BASE_URL}/users/{user.username}"
             block_activity = {
                 "@context": ["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"],
                 "type": "Block",
                 "id": block_id,
                 "actor": actor_uri,
-                "to": [target.remote_url],
-                "object": target.remote_url,
+                "to": [target_remote_url],
+                "object": target_remote_url,
             }
-            _post_to_inbox(target.shared_inbox_url or target.inbox_uri(), block_activity, user)
+            _post_to_inbox(target_shared_inbox, block_activity, user)
         except Exception:
             pass
     return {"ok": True}
@@ -6368,29 +6375,35 @@ def api_block_user(request: Request, target_user_id: int):
 @router.delete("/blocks/users/{target_user_id}")
 def api_unblock_user(request: Request, target_user_id: int):
     user = require_active_auth(request)
-    target = None
+    target_remote_url = None
+    target_shared_inbox = None
+    target_id = None
     with get_session() as s:
         target = s.query(User).get(target_user_id)
+        if target:
+            target_remote_url = target.remote_url
+            target_shared_inbox = target.shared_inbox_url or target.inbox_uri()
+            target_id = target.id
         s.query(UserBlock).filter_by(user_id=user.id, target_user_id=target_user_id).delete()
         s.commit()
-    if target and target.is_remote and target.remote_url:
+    if target_remote_url:
         try:
-            block_id = f"{BASE_URL}/users/{user.username}/status/activities/block/{target.id}"
+            block_id = f"{BASE_URL}/users/{user.username}/status/activities/block/{target_id}"
             actor_uri = f"{BASE_URL}/users/{user.username}"
             undo_activity = {
                 "@context": ["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"],
                 "type": "Undo",
-                "id": f"{BASE_URL}/users/{user.username}/status/activities/undo/{target.id}",
+                "id": f"{BASE_URL}/users/{user.username}/status/activities/undo/{target_id}",
                 "actor": actor_uri,
-                "to": [target.remote_url],
+                "to": [target_remote_url],
                 "object": {
                     "id": block_id,
                     "type": "Block",
                     "actor": actor_uri,
-                    "object": target.remote_url,
+                    "object": target_remote_url,
                 },
             }
-            _post_to_inbox(target.shared_inbox_url or target.inbox_uri(), undo_activity, user)
+            _post_to_inbox(target_shared_inbox, undo_activity, user)
         except Exception:
             pass
     return {"ok": True}
