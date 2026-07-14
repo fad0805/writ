@@ -1172,11 +1172,28 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
         if post.ap_id:
             try:
                 note_data = post.to_ap_note()
+                # Strip @context from Note (it goes on the Activity only)
+                note_data.pop("@context", None)
+                note_data.pop("url", None)
+                # Add required fields matching Mastodon format
+                note_data["atomUri"] = post.ap_id
+                note_data["updated"] = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+                note_data.setdefault("summary", None)
+                note_data.setdefault("sensitive", False)
+                note_data.setdefault("attachment", [])
+                note_data.setdefault("tag", [])
+                note_data.setdefault("inReplyTo", None)
+
                 update_activity = {
-                    "@context": note_data.get("@context", "https://www.w3.org/ns/activitystreams"),
+                    "@context": [
+                        "https://www.w3.org/ns/activitystreams",
+                        "https://w3id.org/security/v1",
+                    ],
                     "id": f"{BASE_URL}/activities/update/{post.id}",
                     "type": "Update",
                     "actor": user.actor_uri(),
+                    "to": note_data.get("to", []),
+                    "cc": note_data.get("cc", []),
                     "object": note_data,
                 }
                 import json as _json
