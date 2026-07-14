@@ -25,7 +25,7 @@ def _fmt_dt(dt: datetime.datetime | None) -> str | None:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=datetime.timezone.utc)
     return dt.astimezone(KST).isoformat()
-from app.activitypub import broadcast_to_followers, _post_to_inbox, _process_emoji_tags, _federation_allowed
+from app.activitypub import broadcast_to_followers, _post_to_inbox, _process_emoji_tags, _federation_allowed, _build_reactions
 from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED
 from app.crypto_utils import encrypt_key, get_private_key
 from app.eventbus import broadcast
@@ -1265,7 +1265,9 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
                 "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
                 "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
                 "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
-                "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
+                "poll_data": post.poll_data, "my_vote": None,
+                "reactions": _build_reactions(s, post.id),
+                "my_reaction": None,
                 "type": "update",
             }, post.author_id, post.visibility or "public", False)
         except Exception:
@@ -1631,7 +1633,9 @@ def api_boost_post(request: Request, post_id: int):
                     "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
                     "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
                     "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
-                    "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
+                    "poll_data": post.poll_data, "my_vote": None,
+                    "reactions": _build_reactions(s, post.id),
+                    "my_reaction": None,
                 }, post.author_id, post.visibility or "public", False)
             except Exception:
                 pass
