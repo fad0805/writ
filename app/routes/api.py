@@ -2234,13 +2234,14 @@ def api_follow(request: Request, username: str):
                 raise HTTPException(status_code=404, detail="Remote user not found")
             existing = s.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
             if not existing:
-                remote_obj = target.remote_url or target.actor_uri()
+                remote_obj = target.actor_uri()
                 follow_activity = {
-                    "@context": "https://www.w3.org/ns/activitystreams",
-                    "id": f"{user.actor_uri()}#follows/{target.id}",
+                    "@context": ["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"],
+                    "id": f"{BASE_URL}/activities/follow/{uuid.uuid4()}",
                     "type": "Follow",
                     "actor": user.actor_uri(),
                     "object": remote_obj,
+                    "to": [remote_obj],
                 }
                 s.add(Follow(follower_id=user.id, following_id=target.id, accepted=False, activity_id=follow_activity["id"]))
                 s.commit()
