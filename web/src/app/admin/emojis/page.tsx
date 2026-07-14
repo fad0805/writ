@@ -30,7 +30,7 @@ export default function AdminEmojiPage() {
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    fetch("/api/emojis", { credentials: "include" })
+    fetch("/api/emojis?limit=999", { credentials: "include" })
       .then(r => r.json()).then(d => setEmojis(d.emojis || d || [])).catch(() => {});
   }, []);
 
