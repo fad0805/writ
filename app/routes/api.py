@@ -606,11 +606,10 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         _local_ids = [u.id for u in session.query(User).filter_by(is_remote=False).all()]
     if tl_type == "home":
         following_ids = list(_following_ids) if _following_ids else [user.id]
-        my_boosted_ids = [b.post_id for b in session.query(Boost).filter_by(user_id=user.id).all()]
-        followed_boosted_ids = [b.post_id for b in session.query(Boost).filter(
-            Boost.user_id.in_([fid for fid in following_ids if fid != user.id]),
-        ).all()]
-        boosted_ids = list(set(my_boosted_ids) | set(followed_boosted_ids))
+        all_boost_user_ids = list(set(following_ids) | {user.id})
+        boosted_ids = list({b.post_id for b in session.query(Boost.post_id).filter(
+            Boost.user_id.in_(all_boost_user_ids),
+        ).all()})
         final = following_ids[:]
         posts = session.query(Post).options(*_base_opts).filter(
             or_(
@@ -622,11 +621,10 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     elif tl_type == "social":
         following_ids = list(_following_ids) if _following_ids else [user.id]
-        my_boosted_ids = [b.post_id for b in session.query(Boost).filter_by(user_id=user.id).all()]
-        followed_boosted_ids = [b.post_id for b in session.query(Boost).filter(
-            Boost.user_id.in_([fid for fid in following_ids if fid != user.id]),
-        ).all()]
-        boosted_ids = list(set(my_boosted_ids) | set(followed_boosted_ids))
+        all_boost_user_ids = list(set(following_ids) | {user.id})
+        boosted_ids = list({b.post_id for b in session.query(Boost.post_id).filter(
+            Boost.user_id.in_(all_boost_user_ids),
+        ).all()})
         posts = session.query(Post).options(*_base_opts).filter(
             or_(
                 and_(
@@ -653,13 +651,18 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     # Deduplicate: track seen post IDs and boost_of targets
     seen_ids = set()
     deduped = []
+    # Pre-fetch originals for all boost pointers in one query
+    boost_pointer_ids = {p.boost_of_id for p in posts if p.boost_of_id}
+    boost_originals = {}
+    if boost_pointer_ids:
+        for orig in session.query(Post).filter(Post.id.in_(boost_pointer_ids), Post.is_deleted == False).all():
+            boost_originals[orig.id] = orig
     for p in posts:
         if p.boost_of_id:
             if p.boost_of_id in seen_ids:
                 continue
             seen_ids.add(p.boost_of_id)
-            orig = session.query(Post).filter_by(id=p.boost_of_id, is_deleted=False).first()
-            if not orig:
+            if p.boost_of_id not in boost_originals:
                 continue
         elif p.id in seen_ids:
             continue
@@ -684,42 +687,46 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         posts = reply_filtered
     # Apply user mutes, blocks, and keyword mutes
     if user:
-        muted_user_ids = {m.target_user_id for m in session.query(UserMute).filter_by(user_id=user.id).all()}
-        blocked_ids = {b.target_user_id for b in session.query(UserBlock).filter_by(user_id=user.id).all()}
-        blocked_by_ids = {b.user_id for b in session.query(UserBlock).filter_by(target_user_id=user.id).all()}
-        muted_series_ids = {m.novel_id for m in session.query(SeriesMute).filter_by(user_id=user.id).all()}
+        muted_user_ids = {m.target_user_id for m in session.query(UserMute.target_user_id).filter_by(user_id=user.id).all()}
+        blocked_ids = {b.target_user_id for b in session.query(UserBlock.target_user_id).filter_by(user_id=user.id).all()}
+        blocked_by_ids = {b.user_id for b in session.query(UserBlock.user_id).filter_by(target_user_id=user.id).all()}
+        muted_series_ids = {m.novel_id for m in session.query(SeriesMute.novel_id).filter_by(user_id=user.id).all()}
         hidden_ids = muted_user_ids | blocked_ids | blocked_by_ids
         kw_mutes = session.query(KeywordMute).filter_by(user_id=user.id).all()
+        # Pre-parse keyword mutes
+        parsed_kw = []
+        for kw in kw_mutes:
+            if kw.is_regex:
+                parsed_kw.append(("regex", kw.keyword, kw.mode, None))
+            else:
+                try:
+                    keywords = json.loads(kw.keyword)
+                    if isinstance(keywords, str):
+                        keywords = [keywords]
+                except (json.JSONDecodeError, TypeError):
+                    keywords = [kw.keyword]
+                keywords = [k.strip().lower() for k in keywords if k.strip()]
+                parsed_kw.append(("text", None, kw.mode, keywords))
         import re
         filtered = []
         for p in posts:
             if p.author_id in hidden_ids:
                 continue
-            # Check series mute
             if p.novel_id and p.novel_id in muted_series_ids:
                 continue
-            # Check keyword mutes
-            if kw_mutes:
-                matched = False
+            if parsed_kw:
                 content_lower = (p.content or "").lower()
-                for kw in kw_mutes:
-                    if kw.is_regex:
+                matched = False
+                for kw_type, pattern, mode, keywords in parsed_kw:
+                    if kw_type == "regex":
                         try:
-                            if re.search(kw.keyword, content_lower):
+                            if re.search(pattern, content_lower):
                                 matched = True
                                 break
                         except re.error:
                             pass
                     else:
-                        import json
-                        try:
-                            keywords = json.loads(kw.keyword)
-                            if isinstance(keywords, str):
-                                keywords = [keywords]
-                        except (json.JSONDecodeError, TypeError):
-                            keywords = [kw.keyword]
-                        keywords = [k.strip().lower() for k in keywords if k.strip()]
-                        if kw.mode == "and":
+                        if mode == "and":
                             if all(k in content_lower for k in keywords):
                                 matched = True
                                 break
@@ -750,25 +757,20 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     # Batch-load user interaction data for all remaining posts
     post_ids = [p.id for p in posts[:limit]]
     if user and post_ids:
-        _liked_ids = {l.post_id for l in session.query(Like).filter(
+        _all_likes = session.query(Like).filter(
             Like.user_id == user.id, Like.post_id.in_(post_ids)
-        ).all()}
-        _boosted_ids = {b.post_id for b in session.query(Boost).filter(
+        ).all()
+        _liked_ids = {l.post_id for l in _all_likes}
+        _my_reaction_map = {l.post_id: l.reaction for l in _all_likes if l.reaction}
+        _boosted_ids = {b.post_id for b in session.query(Boost.post_id).filter(
             Boost.user_id == user.id, Boost.post_id.in_(post_ids)
         ).all()}
-        _bookmarked_ids = {bm.post_id for bm in session.query(Bookmark).filter(
+        _bookmarked_ids = {bm.post_id for bm in session.query(Bookmark.post_id).filter(
             Bookmark.user_id == user.id, Bookmark.post_id.in_(post_ids)
         ).all()}
-        _vote_map = {}
-        for v in session.query(Vote).filter(
+        _vote_map = {v.post_id: v.option_index for v in session.query(Vote).filter(
             Vote.user_id == user.id, Vote.post_id.in_(post_ids)
-        ).all():
-            _vote_map[v.post_id] = v.option_index
-        _my_reaction_map = {}
-        for l in session.query(Like).filter(
-            Like.user_id == user.id, Like.post_id.in_(post_ids), Like.reaction.isnot(None)
-        ).all():
-            _my_reaction_map[l.post_id] = l.reaction
+        ).all()}
         # Batch load latest boost per post
         _booster_map = {}
         import datetime as _dt
