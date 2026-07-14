@@ -672,8 +672,6 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             if header_url:
                 existing.header_image = _save_remote_image(header_url, "headers", base_username_clean, existing.header_image)
             existing.custom_fields = _extract_custom_fields(data.get("attachment", []))
-            existing.remote_followers_count = _fetch_remote_count(data.get("followers", ""), sign_as)
-            existing.remote_following_count = _fetch_remote_count(data.get("following", ""), sign_as)
             _process_emoji_tags(data.get("tag", []), session)
             session.commit()
             return existing
@@ -691,8 +689,6 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             if header_url:
                 by_username.header_image = _save_remote_image(header_url, "headers", base_username_clean, by_username.header_image)
             by_username.custom_fields = _extract_custom_fields(data.get("attachment", []))
-            by_username.remote_followers_count = _fetch_remote_count(data.get("followers", ""), sign_as)
-            by_username.remote_following_count = _fetch_remote_count(data.get("following", ""), sign_as)
             _process_emoji_tags(data.get("tag", []), session)
             session.commit()
             return by_username
@@ -723,8 +719,6 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             header_image=header_image,
             is_locked=data.get("manuallyApprovesFollowers", False),
             custom_fields=_extract_custom_fields(data.get("attachment", [])),
-            remote_followers_count=_fetch_remote_count(data.get("followers", ""), sign_as),
-            remote_following_count=_fetch_remote_count(data.get("following", ""), sign_as),
         )
         session.add(user)
         session.flush()

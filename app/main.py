@@ -131,23 +131,34 @@ def _delivery_worker():
 
 
 def _refresh_remote_profiles():
-    """Periodically refresh remote user profiles in the background (5 at a time, every 10 min)."""
-    _BATCH = 5
+    """Periodically refresh remote user profiles in the background (3 at a time, every 10 min)."""
+    _BATCH = 3
     _INTERVAL = 600
     while True:
         time.sleep(_INTERVAL)
         try:
             from app.models import User, get_session
-            from app.activitypub import _resolve_actor
+            from app.activitypub import _resolve_actor, _fetch_remote_count
+            import httpx
             with get_session() as s:
+                sign_as = s.query(User).filter_by(is_remote=False).first()
                 remote_users = s.query(User).filter(User.is_remote == True).order_by(User.updated_at.asc()).limit(_BATCH).all()
                 for ru in remote_users:
                     try:
-                        _resolve_actor(ru.remote_url, force_refresh=True)
-                        ru.updated_at = datetime.datetime.now(datetime.timezone.utc)
-                        s.commit()
+                        actor = _resolve_actor(ru.remote_url, force_refresh=True, sign_as=sign_as)
+                        if actor:
+                            # Counts are fetched separately to avoid blocking user-facing requests
+                            _fc = _fetch_remote_count(ru.remote_url.rstrip("/") + "/followers", sign_as)
+                            _fg = _fetch_remote_count(ru.remote_url.rstrip("/") + "/following", sign_as)
+                            with get_session() as _s2:
+                                _u = _s2.query(User).get(actor.id)
+                                if _u:
+                                    _u.remote_followers_count = _fc
+                                    _u.remote_following_count = _fg
+                                    _u.updated_at = datetime.datetime.now(datetime.timezone.utc)
+                                    _s2.commit()
                     except Exception:
-                        s.rollback()
+                        pass
         except Exception:
             pass
 
