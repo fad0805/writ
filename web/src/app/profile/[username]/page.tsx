@@ -269,7 +269,7 @@ export default function ProfilePage() {
                 {(profile as any).custom_fields.map((f: { name?: string; label?: string; value: string }, i: number) => (
                     <div key={i} style={{ fontSize: "0.85em", color: "var(--text-secondary)" }}>
                     <span style={{ fontWeight: 600, marginRight: 4 }} dangerouslySetInnerHTML={{ __html: renderCustomEmojis(f.name || f.label || "", emojiMap) }} />
-                    {f.value.startsWith("http") ? <a href={f.value} target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>{f.value}</a> : <span dangerouslySetInnerHTML={{ __html: renderCustomEmojis(f.value, emojiMap) }} />}
+                    {f.value.startsWith("http") ? <a href={f.value} target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>{f.value}</a> : <span dangerouslySetInnerHTML={{ __html: rewriteLinks(renderCustomEmojis(f.value, emojiMap)) }} />}
                   </div>
                 ))}
               </div>
