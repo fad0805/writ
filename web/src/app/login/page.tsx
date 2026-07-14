@@ -60,6 +60,7 @@ export default function LoginPage() {
         )}
         <button type="submit" disabled={loading} className="btn btn-primary">{loading ? "..." : "로그인"}</button>
       </form>
+      <p className="auth-link"><Link href="/reset-password">비밀번호를 잊으셨나요?</Link></p>
       <p className="auth-link">계정이 없으신가요? <Link href="/register">가입하기</Link></p>
     </div>
   );

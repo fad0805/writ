@@ -4,23 +4,23 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { api, PostData } from "@/lib/api";
 import PostCard from "@/components/PostCard";
 
-function ThreadNode({ post, depth = 0 }: { post: PostData; depth?: number }) {
+function ThreadNode({ post, depth = 0, onDelete }: { post: PostData; depth?: number; onDelete?: () => void }) {
   return (
     <div style={{ marginLeft: 20 + depth * 16 }}>
-      <PostCard post={post} hideContext />
+      <PostCard post={post} hideContext onDelete={onDelete} />
     </div>
   );
 }
 
-function ThreadList({ posts, parentId, depth = 0 }: { posts: PostData[]; parentId: number; depth?: number }) {
+function ThreadList({ posts, parentId, depth = 0, onDelete }: { posts: PostData[]; parentId: number; depth?: number; onDelete?: (id: number) => void }) {
   const children = posts.filter((p) => p.reply_context?.id === parentId);
   if (children.length === 0) return null;
   return (
     <>
       {children.map((child) => (
         <div key={child.id}>
-          <ThreadNode post={child} depth={depth} />
-          <ThreadList posts={posts} parentId={child.id} depth={depth + 1} />
+          <ThreadNode post={child} depth={depth} onDelete={() => onDelete?.(child.id)} />
+          <ThreadList posts={posts} parentId={child.id} depth={depth + 1} onDelete={onDelete} />
         </div>
       ))}
     </>
@@ -117,12 +117,12 @@ export default function PostDetailPage() {
   return (
     <>
       {ancestors.map((a) => (
-        <div key={a.id} className="thread-child"><PostCard post={a} hideContext /></div>
+        <div key={a.id} className="thread-child"><PostCard post={a} hideContext onDelete={() => setPost((prev) => prev ? { ...prev, ancestors: (prev.ancestors || []).filter((x) => x.id !== a.id) } : prev)} /></div>
       ))}
       <div ref={currentRef}><PostCard post={post} onUpdate={load} onDelete={() => setDeleted(true)} current hideContext /></div>
       <div className="thread-list">
         <h4>답글 {totalReplies}개</h4>
-        <ThreadList posts={replies} parentId={post.id} depth={0} />
+        <ThreadList posts={replies} parentId={post.id} depth={0} onDelete={(id) => { setReplies((prev) => prev.filter((r) => r.id !== id)); setTotalReplies((prev) => prev - 1); }} />
         <div ref={sentinelRef} className="sentinel" />
         {loadingMore && <p className="empty-state">불러오는 중...</p>}
       </div>

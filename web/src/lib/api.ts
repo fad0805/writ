@@ -311,6 +311,21 @@ export const api = {
     }
     return res.json();
   },
+  forgotPassword: async (email: string) => {
+    const form = new FormData();
+    form.append("email", email);
+    const res = await fetch("/api/auth/forgot-password", { method: "POST", credentials: "include", body: form });
+    if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.detail || "전송 실패"); }
+    return res.json();
+  },
+  resetPassword: async (token: string, password: string) => {
+    const form = new FormData();
+    form.append("token", token);
+    form.append("password", password);
+    const res = await fetch("/api/auth/reset-password", { method: "POST", credentials: "include", body: form });
+    if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.detail || "리셋 실패"); }
+    return res.json();
+  },
   fetchLinkPreview: (url: string) =>
     formRequest<{ url: string; title: string; description: string; image: string }>("/api/link-preview", { url }),
 };

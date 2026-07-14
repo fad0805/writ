@@ -44,6 +44,7 @@ class User(Base):
     email = Column(String(255), unique=True, default="")
     email_verified = Column(Boolean, default=False)
     verification_token = Column(String(128), default="")
+    reset_token = Column(String(128), default="")
     recent_ips = Column(JSON, default=list)
     is_suspended = Column(Boolean, default=False)
     is_frozen = Column(Boolean, default=False)

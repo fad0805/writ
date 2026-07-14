@@ -525,6 +525,64 @@ def api_resend_verification(request: Request, email: str = Form(...)):
         return {"ok": True, "email_sent": True}
 
 
+@router.post("/auth/forgot-password")
+def api_forgot_password(request: Request, email: str = Form(...)):
+    import secrets
+    from app.config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
+    with get_session() as s:
+        u = s.query(User).filter_by(email=email, is_remote=False).first()
+        if not u or not SMTP_SERVER:
+            return {"ok": True}
+        token = secrets.token_urlsafe(32)
+        u.reset_token = token
+        s.commit()
+        reset_url = f"{BASE_URL}/reset-password?token={token}"
+        try:
+            from email.mime.text import MIMEText
+            import smtplib
+            msg = MIMEText(
+                f"안녕하세요, {u.display_name or u.username}님.\n\n"
+                f"WRIT 비밀번호 재설정 요청을 받았습니다.\n"
+                f"아래 링크를 클릭하여 새 비밀번호를 설정해 주세요.\n\n"
+                f"{reset_url}\n\n"
+                f"이 링크는 1시간 동안 유효합니다.\n"
+                f"요청하지 않으셨다면 이 메일을 무시해 주세요.\n\n"
+                f"감사합니다.\nWRIT 팀"
+            )
+            msg["Subject"] = "[WRIT] 비밀번호 재설정"
+            msg["From"] = SMTP_FROM or "noreply@writ.local"
+            msg["To"] = u.email
+            port = SMTP_PORT or 587
+            if port == 465:
+                with smtplib.SMTP_SSL(SMTP_SERVER, port, timeout=10) as smtp:
+                    if SMTP_USER:
+                        smtp.login(SMTP_USER, SMTP_PASSWORD or "")
+                    smtp.send_message(msg)
+            else:
+                with smtplib.SMTP(SMTP_SERVER, port, timeout=10) as smtp:
+                    smtp.starttls()
+                    if SMTP_USER:
+                        smtp.login(SMTP_USER, SMTP_PASSWORD or "")
+                    smtp.send_message(msg)
+        except Exception:
+            logger.exception("Failed to send password reset email to %s", u.email)
+    return {"ok": True}
+
+
+@router.post("/auth/reset-password")
+def api_reset_password(request: Request, token: str = Form(...), password: str = Form(...)):
+    from app.routes.auth import hash_password
+    with get_session() as s:
+        u = s.query(User).filter_by(reset_token=token, is_remote=False).first()
+        if not u:
+            raise HTTPException(status_code=400, detail="유효하지 않거나 만료된 토큰입니다.")
+        salt, hval = hash_password(password)
+        u.password_hash = f"{salt}:{hval}"
+        u.reset_token = ""
+        s.commit()
+    return {"ok": True, "password_reset": True}
+
+
 @router.post("/auth/logout")
 def api_logout(request: Request):
     resp = JSONResponse({"ok": True})
