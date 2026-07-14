@@ -303,6 +303,9 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
     if isinstance(actor, list):
         actor = actor[0]
 
+    actor_domain = urlparse(actor).hostname or "" if actor and isinstance(actor, str) else ""
+    print(f"[INBOX] atype={atype} actor_domain={actor_domain}", flush=True)
+
     # Check federation rules for the actor's domain
     if actor and isinstance(actor, str):
         actor_domain = urlparse(actor).hostname or ""
