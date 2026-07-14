@@ -1531,9 +1531,39 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             session.add(n)
             session.commit()
             from app.push import send_push_to_user
-            from app.timeline_stream import broadcast_notif_sound
+            from app.timeline_stream import broadcast_notif_sound, broadcast_post, broadcast_refresh_notifs as _brn
             send_push_to_user(post.author_id, "like", actor_username, post.id)
             broadcast_notif_sound(post.author_id)
+            _brn(post.author_id)
+            # Broadcast updated reactions to timeline
+            import json as _js, datetime as _dt
+            try:
+                _la = post.author
+                broadcast_post({
+                    "id": post.id, "type": "update",
+                    "number": post.number or "",
+                    "content": post.content, "summary": post.summary or "",
+                    "visibility": post.visibility or "public",
+                    "created_at": post.created_at.isoformat() if post.created_at else "",
+                    "author": {
+                        "id": _la.id, "username": _la.username,
+                        "display_name": _la.display_name or _la.username,
+                        "avatar": _la.profile_image or "", "header": _la.header_image or "",
+                        "summary": _la.summary or "", "is_admin": _la.is_admin,
+                        "is_locked": getattr(_la, "is_locked", False),
+                        "is_limited": getattr(_la, "is_limited", False),
+                        "is_remote": _la.is_remote, "ap_id": _la.remote_url or "",
+                    },
+                    "likes_count": session.query(Like).filter_by(post_id=post.id).count(),
+                    "boosts_count": session.query(Boost).filter_by(post_id=post.id).count(),
+                    "replies_count": session.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count(),
+                    "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
+                    "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
+                    "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
+                    "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
+                }, post.author_id, post.visibility or "public", False)
+            except Exception:
+                pass
         else:
             session.commit()
 
