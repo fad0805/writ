@@ -1027,6 +1027,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         in_reply_to_id=in_reply_to_id,
         mentioned_user_ids=mentioned_ids,
         media_attachments=media_list if media_list else None,
+        is_sensitive=obj.get("sensitive", False),
     )
     published = obj.get("published", "")
     if published:
@@ -1326,6 +1327,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 media_attachments=media_list if media_list else None,
                 poll_data=poll_data,
                 is_dm=is_incoming_dm,
+                is_sensitive=obj.get("sensitive", False),
             )
             session.add(post)
             session.flush()
