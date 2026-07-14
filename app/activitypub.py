@@ -709,13 +709,15 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
     if not target:
         return (404, "Target user not found")
 
+    target_id = target.id
     follower = _resolve_actor(actor_url, sign_as=target)
     if not follower:
         return (404, "Follower not found")
 
+    follower_id = follower.id
     with get_session() as session:
-        target = session.query(User).get(target.id)
-        follower = session.query(User).get(follower.id)
+        target = session.query(User).get(target_id)
+        follower = session.query(User).get(follower_id)
         accepted = not target.is_locked
         existing = session.query(Follow).filter_by(
             follower_id=follower.id, following_id=target.id
@@ -808,6 +810,7 @@ def _handle_reject(activity: dict) -> tuple[int, str]:
             return (200, "No pending follow request found")
 
         local_user = session.query(User).get(follow_rel.follower_id)
+        local_user_id = local_user.id
         session.query(Notification).filter_by(
             from_user_id=remote_user.id, user_id=local_user.id,
             notification_type="follow_request",
@@ -816,7 +819,7 @@ def _handle_reject(activity: dict) -> tuple[int, str]:
         session.commit()
 
     from app.timeline_stream import broadcast_refresh_notifs
-    broadcast_refresh_notifs(local_user.id)
+    broadcast_refresh_notifs(local_user_id)
     return (200, "Rejected follow removed")
 
 def _handle_accept(activity: dict) -> tuple[int, str]:
@@ -854,9 +857,10 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
         if not remote_accepter:
             return (200, "OK")
 
+        remote_accepter_id = remote_accepter.id
         follow_rel = session.query(Follow).filter_by(
             follower_id=local_user.id,
-            following_id=remote_accepter.id,
+            following_id=remote_accepter_id,
             accepted=False,
         ).first()
         if not follow_rel:
@@ -1058,6 +1062,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         actor = _resolve_actor(actor_url, sign_as=_sign_as)
         if not actor:
             return (404, "Actor not found")
+        actor_id = actor_id
+        actor_username = actor_username
+        actor_uri = actor.actor_uri()
+        actor_remote_url = actor.remote_url or ""
 
 
         # Verify attributedTo matches activity actor
@@ -1066,7 +1074,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             obj_attributed = obj_attributed[0] if obj_attributed else ""
         if isinstance(obj_attributed, dict):
             obj_attributed = obj_attributed.get("id", "")
-        if obj_attributed and obj_attributed != actor_url and obj_attributed != actor.actor_uri() and obj_attributed != (actor.remote_url or ""):
+        if obj_attributed and obj_attributed != actor_url and obj_attributed != actor_uri and obj_attributed != actor_remote_url:
             return (403, "attributedTo does not match actor")
 
         # Limit content length (65536 chars ~ 64KB)
@@ -1145,7 +1153,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     alt_url = in_reply_to.replace("https://", "http://") if "https://" in in_reply_to else in_reply_to.replace("http://", "https://")
                     reply_to_post = session.query(Post).filter_by(ap_id=alt_url).first()
                 if not reply_to_post:
-                    _local_signer = session.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor.id, User.is_remote == False).first()
+                    _local_signer = session.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor_id, User.is_remote == False).first()
                     reply_to_post = _fetch_remote_post(in_reply_to, _local_signer, session)
                     if reply_to_post:
                         try:
@@ -1196,14 +1204,14 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                 return (200, "Poll ended")
                         except (ValueError, TypeError) as ex:
                             pass
-                    existing_vote = session.query(Vote).filter_by(user_id=actor.id, post_id=poll_post.id).first()
+                    existing_vote = session.query(Vote).filter_by(user_id=actor_id, post_id=poll_post.id).first()
                     if existing_vote:
                         if existing_vote.option_index == option_idx:
                             return (200, "Already voted")
                         options[existing_vote.option_index]["votes_count"] = max(0, options[existing_vote.option_index].get("votes_count", 0) - 1)
                         existing_vote.option_index = option_idx
                     else:
-                        session.add(Vote(user_id=actor.id, post_id=poll_post.id, option_index=option_idx))
+                        session.add(Vote(user_id=actor_id, post_id=poll_post.id, option_index=option_idx))
                     import copy
                     new_options = copy.deepcopy(options)
                     new_options[option_idx]["votes_count"] = new_options[option_idx].get("votes_count", 0) + 1
@@ -1215,10 +1223,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     _voter_ids.add(poll_post.author_id)
                     for _vid in _voter_ids:
                         broadcast_refresh_notifs(_vid)
-                    if poll_post.author_id != actor.id:
+                    if poll_post.author_id != actor_id:
                         from app.push import send_push_to_user
                         from app.timeline_stream import broadcast_notif_sound
-                        send_push_to_user(poll_post.author_id, "vote", actor.username, poll_post.id)
+                        send_push_to_user(poll_post.author_id, "vote", actor_username, poll_post.id)
                         broadcast_notif_sound(poll_post.author_id)
                     broadcast_post({
                         "id": poll_post.id,
@@ -1310,7 +1318,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         media_list.append({"url": cached, "type": "video"})
 
             post = Post(
-                author_id=actor.id,
+                author_id=actor_id,
                 content=content,
                 summary=summary,
                 visibility=visibility,
@@ -1328,33 +1336,33 @@ def _handle_create(activity: dict) -> tuple[int, str]:
 
             # Notify local users mentioned or replied to
             _notified = set()
-            if reply_to_post and reply_to_post.author_id != actor.id:
+            if reply_to_post and reply_to_post.author_id != actor_id:
                 _notified.add(reply_to_post.author_id)
                 session.add(Notification(
                     user_id=reply_to_post.author_id,
-                    from_user_id=actor.id,
+                    from_user_id=actor_id,
                     notification_type="mention",
                     post_id=post.id,
                 ))
             for _mu_id in mentioned_ids:
-                if _mu_id != actor.id and _mu_id not in _notified:
+                if _mu_id != actor_id and _mu_id not in _notified:
                     _notified.add(_mu_id)
                     session.add(Notification(
-                        user_id=_mu_id, from_user_id=actor.id,
+                        user_id=_mu_id, from_user_id=actor_id,
                         notification_type="mention", post_id=post.id,
                     ))
 
             # Notify local followers who enabled post notifications (skip self + already notified)
             followers = session.query(Follow).filter(
-                Follow.following_id == actor.id,
+                Follow.following_id == actor_id,
                 Follow.notify_on_post == True,
             ).all()
             for f in followers:
-                if not f.follower.is_remote and f.follower.id != actor.id and f.follower.id not in _notified:
+                if not f.follower.is_remote and f.follower.id != actor_id and f.follower.id not in _notified:
                     _notified.add(f.follower.id)
                     session.add(Notification(
                         user_id=f.follower.id,
-                        from_user_id=actor.id,
+                        from_user_id=actor_id,
                         notification_type="post",
                         post_id=post.id,
                     ))
@@ -1363,25 +1371,25 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             from app.push import send_push_to_user
             from app.timeline_stream import broadcast_notif_sound
             _push_notified = set()
-            if reply_to_post and reply_to_post.author_id != actor.id and reply_to_post.author_id not in _push_notified:
+            if reply_to_post and reply_to_post.author_id != actor_id and reply_to_post.author_id not in _push_notified:
                 _push_notified.add(reply_to_post.author_id)
-                send_push_to_user(reply_to_post.author_id, "mention", actor.username, post.id)
+                send_push_to_user(reply_to_post.author_id, "mention", actor_username, post.id)
                 broadcast_notif_sound(reply_to_post.author_id)
             for _mu_id in mentioned_ids:
-                if _mu_id != actor.id and _mu_id not in _push_notified:
+                if _mu_id != actor_id and _mu_id not in _push_notified:
                     _push_notified.add(_mu_id)
-                    send_push_to_user(_mu_id, "mention", actor.username, post.id)
+                    send_push_to_user(_mu_id, "mention", actor_username, post.id)
                     broadcast_notif_sound(_mu_id)
             for f in followers:
-                if not f.follower.is_remote and f.follower.id != actor.id and f.follower.id not in _push_notified:
+                if not f.follower.is_remote and f.follower.id != actor_id and f.follower.id not in _push_notified:
                     _push_notified.add(f.follower.id)
-                    send_push_to_user(f.follower.id, "post", actor.username, post.id)
+                    send_push_to_user(f.follower.id, "post", actor_username, post.id)
                     broadcast_notif_sound(f.follower.id)
             from app.timeline_stream import broadcast_refresh_notifs
             broadcast_refresh_notifs()
             try:
                 from app.eventbus import broadcast
-                broadcast("new_post", {"post_id": post.id, "author_id": actor.id})
+                broadcast("new_post", {"post_id": post.id, "author_id": actor_id})
             except Exception as e:
                 logger.warning("broadcast failed: %s", e)
             try:
@@ -1423,7 +1431,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     "reactions": {},
                     "my_reaction": None,
                 }
-                broadcast_post(post_json, actor.id, visibility, is_incoming_dm)
+                broadcast_post(post_json, actor_id, visibility, is_incoming_dm)
             except Exception as e:
                 logger.warning("timeline broadcast failed: %s", e)
 
@@ -1449,6 +1457,9 @@ def _handle_like(activity: dict) -> tuple[int, str]:
     actor = _resolve_actor(actor_url, sign_as=_sign_as)
     if not actor:
         return (404, "Actor not found")
+
+    actor_id = actor_id
+    actor_username = actor_username
 
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
@@ -1482,7 +1493,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                                 pass
                         break
 
-        existing = session.query(Like).filter_by(user_id=actor.id, post_id=post.id).first()
+        existing = session.query(Like).filter_by(user_id=actor_id, post_id=post.id).first()
         if existing:
             if reaction and existing.reaction != reaction:
                 existing.reaction = reaction
@@ -1494,7 +1505,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             like_ap_id = f"{BASE_URL}/likes/{uuid.uuid4()}"
 
         like = Like(
-            user_id=actor.id,
+            user_id=actor_id,
             post_id=post.id,
             ap_id=like_ap_id,
             reaction=reaction if reaction else None,
@@ -1502,12 +1513,12 @@ def _handle_like(activity: dict) -> tuple[int, str]:
         session.add(like)
 
         existing_n = session.query(Notification).filter_by(
-            user_id=post.author_id, from_user_id=actor.id, notification_type="like", post_id=post.id
+            user_id=post.author_id, from_user_id=actor_id, notification_type="like", post_id=post.id
         ).first()
         if not existing_n:
             n = Notification(
                 user_id=post.author_id,
-                from_user_id=actor.id,
+                from_user_id=actor_id,
                 notification_type="like",
                 post_id=post.id,
             )
@@ -1515,7 +1526,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             session.commit()
             from app.push import send_push_to_user
             from app.timeline_stream import broadcast_notif_sound
-            send_push_to_user(post.author_id, "like", actor.username, post.id)
+            send_push_to_user(post.author_id, "like", actor_username, post.id)
             broadcast_notif_sound(post.author_id)
         else:
             session.commit()
@@ -1541,6 +1552,8 @@ def _handle_vote(activity: dict) -> tuple[int, str]:
     actor = _resolve_actor(actor_url, sign_as=_sign_as)
     if not actor:
         return (404, "Actor not found")
+
+    actor_id = actor_id
 
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
@@ -1569,14 +1582,14 @@ def _handle_vote(activity: dict) -> tuple[int, str]:
                 pass
 
         # Check for existing vote (change or dedup)
-        existing = session.query(Vote).filter_by(user_id=actor.id, post_id=post.id).first()
+        existing = session.query(Vote).filter_by(user_id=actor_id, post_id=post.id).first()
         if existing:
             if existing.option_index == option_idx:
                 return (200, "Already voted")
             options[existing.option_index]["votes_count"] = max(0, options[existing.option_index].get("votes_count", 0) - 1)
             existing.option_index = option_idx
         else:
-            session.add(Vote(user_id=actor.id, post_id=post.id, option_index=option_idx))
+            session.add(Vote(user_id=actor_id, post_id=post.id, option_index=option_idx))
 
         options[option_idx]["votes_count"] = options[option_idx].get("votes_count", 0) + 1
         post.poll_data = {**post.poll_data, "options": options}
@@ -1603,10 +1616,13 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
     if not actor:
         return (404, "Actor not found")
 
+    actor_id = actor_id
+    actor_username = actor_username
+
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
         if not post:
-            _local_signer = session.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor.id, User.is_remote == False).first()
+            _local_signer = session.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor_id, User.is_remote == False).first()
             if not _local_signer:
                 _local_signer = session.query(User).filter_by(is_remote=False).first()
             try:
@@ -1618,7 +1634,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                 logger.warning("Announce: could not fetch remote post %s", object_url)
                 return (200, "OK")
 
-        existing = session.query(Boost).filter_by(user_id=actor.id, post_id=post.id).first()
+        existing = session.query(Boost).filter_by(user_id=actor_id, post_id=post.id).first()
         if existing:
             return (200, "Already boosted")
 
@@ -1627,14 +1643,14 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
             boost_ap_id = f"{BASE_URL}/boosts/{uuid.uuid4()}"
 
         boost = Boost(
-            user_id=actor.id,
+            user_id=actor_id,
             post_id=post.id,
             ap_id=boost_ap_id,
         )
         session.add(boost)
         # Create boost pointer post row
         boost_post = Post(
-            author_id=actor.id,
+            author_id=actor_id,
             content="",
             boost_of_id=post.id,
             visibility=post.visibility or "public",
@@ -1642,12 +1658,12 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
         session.add(boost_post)
 
         existing_n = session.query(Notification).filter_by(
-            user_id=post.author_id, from_user_id=actor.id, notification_type="boost", post_id=post.id
+            user_id=post.author_id, from_user_id=actor_id, notification_type="boost", post_id=post.id
         ).first()
         if not existing_n:
             n = Notification(
                 user_id=post.author_id,
-                from_user_id=actor.id,
+                from_user_id=actor_id,
                 notification_type="boost",
                 post_id=post.id,
             )
@@ -1655,7 +1671,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
             session.commit()
             from app.push import send_push_to_user
             from app.timeline_stream import broadcast_notif_sound
-            send_push_to_user(post.author_id, "boost", actor.username, post.id)
+            send_push_to_user(post.author_id, "boost", actor_username, post.id)
             broadcast_notif_sound(post.author_id)
         else:
             session.commit()
@@ -1766,8 +1782,9 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
             follower = _resolve_actor(actor_url)
             if not follower:
                 return (200, "OK")
+            follower_id = follower.id
             session.query(Follow).filter_by(
-                follower_id=follower.id, following_id=target.id
+                follower_id=follower_id, following_id=target.id
             ).delete()
             session.commit()
             from app.timeline_stream import broadcast_refresh_notifs
@@ -1791,13 +1808,14 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
         if not actor:
             return (200, "OK")
 
+        actor_id = actor_id
         with get_session() as session:
             post = session.query(Post).filter_by(ap_id=object_url).first()
             if not post:
                 return (200, "OK")
-            session.query(Like).filter_by(user_id=actor.id, post_id=post.id).delete()
+            session.query(Like).filter_by(user_id=actor_id, post_id=post.id).delete()
             session.query(Notification).filter_by(
-                user_id=post.author_id, from_user_id=actor.id,
+                user_id=post.author_id, from_user_id=actor_id,
                 notification_type="like", post_id=post.id,
             ).delete()
             session.commit()
@@ -1849,15 +1867,16 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
         if not actor:
             return (200, "OK")
 
+        actor_id = actor_id
         with get_session() as session:
             post = session.query(Post).filter_by(ap_id=object_url).first()
             if not post:
                 return (200, "OK")
-            session.query(Boost).filter_by(user_id=actor.id, post_id=post.id).delete()
+            session.query(Boost).filter_by(user_id=actor_id, post_id=post.id).delete()
             # Delete boost pointer post
-            session.query(Post).filter_by(author_id=actor.id, boost_of_id=post.id).delete()
+            session.query(Post).filter_by(author_id=actor_id, boost_of_id=post.id).delete()
             session.query(Notification).filter_by(
-                user_id=post.author_id, from_user_id=actor.id,
+                user_id=post.author_id, from_user_id=actor_id,
                 notification_type="boost", post_id=post.id,
             ).delete()
             session.commit()
@@ -2223,7 +2242,7 @@ def _handle_move(activity: dict) -> tuple[int, str]:
             return (404, "New actor not found")
 
         # Verify that the new account has the old account in its aliases
-        new_actor_local = session.query(User).filter_by(id=new_actor.id, is_remote=False).first()
+        new_actor_local = session.query(User).filter_by(id=new_actor_id, is_remote=False).first()
         if new_actor_local:
             aliases = new_actor_local.aliases or []
             if old_actor_url not in aliases and local_user.actor_uri() not in aliases:
@@ -2237,10 +2256,10 @@ def _handle_move(activity: dict) -> tuple[int, str]:
         moved_count = 0
         for f in followers:
             existing = session.query(Follow).filter_by(
-                follower_id=f.follower_id, following_id=new_actor.id
+                follower_id=f.follower_id, following_id=new_actor_id
             ).first()
             if not existing:
-                f.following_id = new_actor.id
+                f.following_id = new_actor_id
                 moved_count += 1
         session.commit()
 
