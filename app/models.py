@@ -13,10 +13,13 @@ _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite"
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
-    from sqlalchemy.pool import NullPool
     engine = create_engine(
         DATABASE_URL,
-        poolclass=NullPool,
+        pool_size=5,
+        max_overflow=5,
+        pool_pre_ping=False,
+        pool_use_lifo=True,
+        pool_recycle=3600,
     )
 
 
