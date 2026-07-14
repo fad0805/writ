@@ -603,7 +603,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         _following_ids.add(user.id)
     _local_ids = None
     if tl_type in ("social", "local"):
-        _local_ids = [u.id for u in session.query(User).filter_by(is_remote=False).all()]
+        _local_ids = session.query(User.id).filter_by(is_remote=False).subquery()
     if tl_type == "home":
         following_ids = list(_following_ids) if _following_ids else [user.id]
         all_boost_user_ids = list(set(following_ids) | {user.id})
@@ -4186,7 +4186,7 @@ def api_by_number(request: Request, username: str, number: str):
 def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)):
     user = get_current_user(request)
     with get_session() as s:
-        local_ids = [u.id for u in s.query(User).filter_by(is_remote=False).all()]
+        local_ids = s.query(User.id).filter_by(is_remote=False).subquery()
         total = s.query(Post).filter(
             Post.author_id.in_(local_ids),
             Post.visibility == "public",
