@@ -343,6 +343,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     }
   };
 
+  const stripHtml = (s: string) => s.replace(new RegExp("<[^>]*>", "g"), "");
   const _renderMedia = () => (
     <div className="post-media-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(((post as any).media_attachments || []).length, 2)}, 1fr)`, gap: 4, marginTop: 8 }}>
       {(post as any).media_attachments.slice(0, 16).map((m: any, i: number) => {
@@ -526,7 +527,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
               {quotedEpisode.episode.summary ? (
                 <div className="text-sm" style={{ color: "var(--text-secondary)", marginTop: 4 }}>{quotedEpisode.episode.summary}</div>
               ) : (
-                <div className="text-sm" style={{ color: "var(--text-secondary)", marginTop: 4 }}>{quotedEpisode.episode.content.replace(/\n/g, " ").replace(/<[^>]*>/g, "").slice(0, 50)}{quotedEpisode.episode.content.replace(/\n/g, " ").replace(/<[^>]*>/g, "").length > 50 ? "..." : ""}</div>
+                <div className="text-sm" style={{ color: "var(--text-secondary)", marginTop: 4 }}>{stripHtml(quotedEpisode.episode.content).replace(/\n/g, " ").slice(0, 50)}{stripHtml(quotedEpisode.episode.content).replace(/\n/g, " ").length > 50 ? "..." : ""}</div>
               )}
             </div>
           </div>
@@ -543,7 +544,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
         )}
           {reactions && Object.keys(reactions).length > 0 && currentUser?.enable_reactions !== false && (
           <div className="reactions-row" style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8, marginBottom: 4, padding: "0 8px" }} onClick={(e) => e.stopPropagation()}>
-              {Object.entries(reactions).sort(([a], [b]) => a === "★" ? -1 : b === "★" ? 1 : 0).map(([emoji, count]) => {
+              {Object.entries(reactions).sort(([a], [b]) => a === "\u2605" ? -1 : b === "\u2605" ? 1 : 0).map(([emoji, count]) => {
               const emojiKey = emoji.startsWith(":") && emoji.endsWith(":") ? emoji.slice(1, -1) : emoji;
               const isNotLocalCustom = emoji.startsWith(":") && emoji.endsWith(":") && !reactionEmojiMap[emojiKey];
               return (
@@ -570,7 +571,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
                 }}
                 style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 12, fontSize: 13, cursor: isNotLocalCustom ? "default" : "pointer", border: "1px solid var(--border)", background: myReaction === emoji ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-secondary)", opacity: isNotLocalCustom ? 0.5 : 1 }}
               >
-{emoji === "★" ? (
+{emoji === "\u2605" ? (
                   <Icon name="star_filled" size={18} style={{ color: "#f1c40f" }} />
                 ) : emoji.startsWith(":") && emoji.endsWith(":") ? (
                   reactionEmojiMap[emojiKey]
@@ -582,7 +583,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
                 <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{count}</span>
               </span>
             );
-            })
+            })}
           </div>
         )}
         {!readonly && <div className="post-actions" onClick={(e) => e.stopPropagation()}>
