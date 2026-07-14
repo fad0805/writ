@@ -5169,12 +5169,18 @@ def api_admin_refresh_profile(request: Request, user_id: int):
             raise HTTPException(status_code=400, detail="Not a remote user or no remote_url")
         remote_url = u.remote_url
     try:
-        from app.activitypub import _resolve_actor
+        from app.activitypub import _resolve_actor, _fetch_remote_count
         actor = _resolve_actor(remote_url, force_refresh=True, sign_as=user)
         if not actor:
             raise HTTPException(status_code=400, detail="Failed to refresh profile")
+        _fc = _fetch_remote_count(remote_url.rstrip("/") + "/followers", user)
+        _fg = _fetch_remote_count(remote_url.rstrip("/") + "/following", user)
         with get_session() as _s2:
             _reloaded = _s2.query(User).get(actor.id)
+            if _reloaded:
+                _reloaded.remote_followers_count = _fc
+                _reloaded.remote_following_count = _fg
+                _s2.commit()
             _name = _reloaded.display_name if _reloaded else ""
             _username = _reloaded.username if _reloaded else ""
         log_admin_action(user.id, user.username, "refresh_profile", target_type="user", target_id=user_id, target_username=_username, ip_address=request.client.host if request.client else "")
