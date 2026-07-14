@@ -1494,8 +1494,9 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                                     _storage.save(f"emojis/remote/{_fname}", _resp.content, f"image/{_ext}")
                                     session.add(CustomEmoji(keyword=_kw, file_name=_fname, category="remote", domain=_domain))
                                     session.flush()
-                            except Exception:
-                                pass
+                                    logger.info("Imported remote emoji: %s from %s", _kw, _domain)
+                            except Exception as e:
+                                logger.warning("Failed to import remote emoji %s: %s", _kw, e)
                         break
 
         existing = session.query(Like).filter_by(user_id=actor_id, post_id=post.id).first()
