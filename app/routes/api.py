@@ -642,18 +642,20 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     raw_total = len(posts)
     posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm and p.author_id != user.id and user.id not in (p.mentioned_user_ids or []))]
-    # Deduplicate: if multiple posts point to the same original, keep only the most recent boost pointer
-    seen_originals = set()
+    # Deduplicate: track seen post IDs and boost_of targets
+    seen_ids = set()
     deduped = []
     for p in posts:
         if p.boost_of_id:
-            if p.boost_of_id in seen_originals:
+            if p.boost_of_id in seen_ids:
                 continue
-            seen_originals.add(p.boost_of_id)
-            # Skip if original post is deleted
+            seen_ids.add(p.boost_of_id)
             orig = session.query(Post).filter_by(id=p.boost_of_id, is_deleted=False).first()
             if not orig:
                 continue
+        elif p.id in seen_ids:
+            continue
+        seen_ids.add(p.id)
         deduped.append(p)
     posts = deduped
     # Filter replies: hide if direct parent author is not followed
