@@ -1317,7 +1317,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         _seen_ids.add(u.id)
                     if u is None and BASE_URL in _href:
                         for _u in session.query(User).filter_by(is_remote=False).all():
-                            if _u.actor_uri() == _href and _u.id not in _seen_ids:
+                            if (_u.actor_uri() == _href or _u.actor_uri().replace("/users/", "/@") == _href) and _u.id not in _seen_ids:
                                 mentioned_ids.append(_u.id)
                                 _seen_ids.add(_u.id)
                                 break
