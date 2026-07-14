@@ -720,7 +720,7 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
     follower_id = follower.id
     with get_session() as session:
         target = session.query(User).get(target_id)
-        follower = session.query(User).get(follower_id)
+        follower = session.merge(follower)
         accepted = not target.is_locked
         existing = session.query(Follow).filter_by(
             follower_id=follower.id, following_id=target.id
