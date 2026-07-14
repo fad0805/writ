@@ -223,6 +223,10 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   const [contentHtml, setContentHtml] = useState(() => buildContentHtml());
 
   useEffect(() => {
+    setContentHtml(buildContentHtml());
+  }, [post.id, post.content, post.summary]);
+
+  useEffect(() => {
     const mentionRe = /<a\s+href="\/@([a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}))"[^>]*>[^<]*<\/a>/g;
     const remoteMentions: string[] = [];
     let m: RegExpExecArray | null;
