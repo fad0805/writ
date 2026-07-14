@@ -177,14 +177,11 @@ async def lifespan(app: FastAPI):
                     _os.environ.setdefault("VAPID_PRIVATE_KEY", _db_priv)
                     _os.environ.setdefault("VAPID_PUBLIC_KEY", _db_pub)
                 else:
-                    import base64, uuid as _uuid
-                    from cryptography.hazmat.primitives.asymmetric import ec
-                    from cryptography.hazmat.primitives import serialization
-                    _pk = ec.generate_private_key(ec.SECP256R1())
-                    _pub = _pk.public_key()
-                    _priv_pem = _pk.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode()
-                    _raw_pub = _pub.public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
-                    _pub_b64 = base64.urlsafe_b64encode(_raw_pub).rstrip(b"=").decode()
+                    import py_vapid, base64
+                    _v = py_vapid.Vapid()
+                    _v.generate_keys()
+                    _priv_pem = _v.private_pem().decode().strip()
+                    _pub_b64 = base64.urlsafe_b64encode(_v.public_key).rstrip(b"=").decode()
                     try:
                         from sqlalchemy import Column, String
                         if not hasattr(ServerSetting, 'vapid_private_key'):
