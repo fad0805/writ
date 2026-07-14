@@ -1872,7 +1872,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
         elif obj_type in ("Note", "Question"):
             with get_session() as session:
                 post = session.query(Post).filter_by(ap_id=obj_id).first()
-                if post:
+                if post and not post.is_deleted:
                     # Update content/summary
                     new_content = object_data.get("content", "")
                     if new_content:
