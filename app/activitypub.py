@@ -316,6 +316,8 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
             return (403, "Domain not allowed")
 
     print(f"[INBOX] atype={atype} actor_domain={urlparse(actor).hostname if actor else 'none'}", flush=True)
+    import json as _j
+    print(f"[INBOX] full activity:\n{_j.dumps(activity, ensure_ascii=False, indent=2)[:5000]}", flush=True)
 
     if atype == "Follow":
         return _handle_follow(activity)
