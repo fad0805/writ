@@ -2229,27 +2229,27 @@ def _send_flag(reporter: User, target_type: str, target_obj, reason: str, rule_i
 def _deliver_sync(inbox_url: str, body: bytes, headers: dict) -> bool:
     for attempt in range(3):
         try:
+            print(f"[DELIVER] POST {inbox_url} attempt={attempt+1}/3", flush=True)
             resp = httpx.post(inbox_url, content=body, headers=headers, timeout=15)
+            print(f"[DELIVER] {inbox_url} status={resp.status_code} body={resp.text[:300]}", flush=True)
             if resp.is_success:
-                logger.warning("DELIVER OK %s status=%s", inbox_url, resp.status_code)
                 return True
             if resp.status_code in (400, 401, 403, 404, 405, 410, 422):
-                logger.warning("DELIVER FAIL %s status=%s body=%s", inbox_url, resp.status_code, resp.text[:300])
                 return False
-            logger.warning("DELIVER RETRY %s status=%s attempt=%s", inbox_url, resp.status_code, attempt+1)
-            print(f"[deliver] Retryable: {inbox_url} HTTP {resp.status_code} attempt {attempt+1}/3", flush=True)
+            print(f"[DELIVER] Retryable: {inbox_url} HTTP {resp.status_code} attempt {attempt+1}/3", flush=True)
         except Exception as e:
+            print(f"[DELIVER] Exception: {inbox_url} {type(e).__name__}: {e}", flush=True)
             if attempt < 2:
                 time.sleep(2 ** attempt)
-            print(f"[deliver] Exception: {inbox_url} {type(e).__name__}: {e}", flush=True)
     return False
 
 
 def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     if not _validate_url(inbox_url):
+        print(f"[INBOX-POST] SKIP invalid URL: {inbox_url}", flush=True)
         return
     body = json.dumps(activity, ensure_ascii=False).encode("utf-8")
-    logger.warning("POST %s type=%s body_preview=%s", inbox_url, activity.get("type", "?"), body[:500].decode("utf-8", errors="replace"))
+    print(f"[INBOX-POST] {inbox_url} type={activity.get('type', '?')} body_len={len(body)} preview={body[:300].decode('utf-8', errors='replace')}", flush=True)
     import base64 as _b64
     digest = _b64.b64encode(hashlib.sha256(body).digest()).decode()
     date = datetime.datetime.now(datetime.timezone.utc).strftime(
@@ -2423,21 +2423,28 @@ def _process_emoji_tags(tags: list, session):
 
 
 def broadcast_to_followers(user: User, activity: dict):
+    print(f"[BROADCAST] user={user.username} (id={user.id}) remote={user.is_remote}", flush=True)
     with get_session() as session:
         followers = session.query(Follow).filter(
             Follow.following_id == user.id,
             Follow.follower.has(is_remote=True),
         ).all()
+        print(f"[BROADCAST] remote followers count={len(followers)}", flush=True)
+        for f in followers:
+            print(f"[BROADCAST]   follower={f.follower.username} inbox={f.follower.inbox_uri()} shared={f.follower.shared_inbox_url}", flush=True)
 
     sent = set()
     for f in followers:
         follower = f.follower
         inbox = follower.shared_inbox_url or follower.inbox_uri()
+        print(f"[BROADCAST] checking inbox={inbox}", flush=True)
         if inbox in sent:
+            print(f"[BROADCAST] SKIP duplicate inbox", flush=True)
             continue
         domain = urlparse(inbox).hostname or ""
         if not _federation_allowed(domain):
-            logger.info("Skipping broadcast to blocked domain: %s", domain)
+            print(f"[BROADCAST] SKIP blocked domain: {domain}", flush=True)
             continue
         sent.add(inbox)
+        print(f"[BROADCAST] delivering to {inbox}", flush=True)
         _post_to_inbox(inbox, activity, user)

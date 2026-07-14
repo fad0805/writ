@@ -1180,7 +1180,7 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
                     "object": note_data,
                 }
                 import json as _json
-                logger.warning("UPDATE OUTBOX activity:\n%s", _json.dumps(update_activity, ensure_ascii=False, indent=2)[:3000])
+                print(f"[UPDATE-OUTBOX] full activity:\n{_json.dumps(update_activity, ensure_ascii=False, indent=2)[:5000]}", flush=True)
                 def _send_update():
                     try:
                         broadcast_to_followers(user, update_activity)
