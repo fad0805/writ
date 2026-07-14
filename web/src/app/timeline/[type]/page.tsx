@@ -219,18 +219,11 @@ export default function TimelinePage() {
         }
         setPosts((prev) => {
           if (prev.some((p) => p.id === newPost.id)) return prev;
-          if (prev.length > 0 && newPost.created_at && prev[0].created_at) {
-            if (new Date(newPost.created_at).getTime() < new Date(prev[0].created_at).getTime()) return prev;
-          }
           return [newPost, ...prev];
         });
         const cached = tabCache.current[tlType];
         if (cached && !cached.posts.some((p: any) => p.id === newPost.id)) {
-          const cp = cached.posts;
-          if (cp.length > 0 && newPost.created_at && cp[0].created_at) {
-            if (new Date(newPost.created_at).getTime() < new Date(cp[0].created_at).getTime()) return;
-          }
-          tabCache.current[tlType] = { ...cached, posts: [newPost, ...cp] };
+          tabCache.current[tlType] = { ...cached, posts: [newPost, ...cached.posts] };
         }
       } catch {}
     };
