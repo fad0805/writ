@@ -39,7 +39,6 @@ _RATE_LIMIT_BURST = 10
 _RATE_LIMIT_DAILY = 500
 _rate_limit_store: dict[str, list[float]] = defaultdict(list)
 _rate_limit_daily: dict[str, list[float]] = defaultdict(list)
-_last_request_time: float = time.time()
 
 _actor_fail_cache: dict[str, float] = {}  # actor_url -> timestamp of last failure
 _ACTOR_FAIL_TTL = 3600  # 1 hour
@@ -132,37 +131,15 @@ def _delivery_worker():
 
 
 def _refresh_remote_profiles():
-    """Gently refresh remote profiles - 1 at a time, wait for idle periods."""
+    """Cycle updated_at so oldest-refreshed users get picked eventually (HTTP refresh is manual)."""
     while True:
-        time.sleep(300)
+        time.sleep(600)
         try:
             from app.models import User, get_session
-            from app.activitypub import _resolve_actor, _fetch_remote_count
-            # Only run if no recent API activity (server is idle)
-            _now = time.time()
-            if _now - _last_request_time < 60:
-                continue
-            # Pick the single oldest-refreshed remote user
-            _url = None
-            with get_session() as _s0:
-                _ru = _s0.query(User).filter(User.is_remote == True).order_by(User.updated_at.asc()).first()
-                if _ru:
-                    _url = _ru.remote_url
-            if not _url:
-                continue
-            with get_session() as _ss:
-                _sa = _ss.query(User).filter_by(is_remote=False).first()
-            actor = _resolve_actor(_url, force_refresh=True, sign_as=_sa)
-            if actor:
-                _fc = _fetch_remote_count(_url.rstrip("/") + "/followers")
-                _fg = _fetch_remote_count(_url.rstrip("/") + "/following")
-                with get_session() as _s2:
-                    _u = _s2.query(User).get(actor.id)
-                    if _u:
-                        _u.remote_followers_count = _fc
-                        _u.remote_following_count = _fg
-                        _u.updated_at = datetime.datetime.now(datetime.timezone.utc)
-                        _s2.commit()
+            with get_session() as _s:
+                for ru in _s.query(User).filter(User.is_remote == True).order_by(User.updated_at.asc()).limit(5).all():
+                    ru.updated_at = datetime.datetime.now(datetime.timezone.utc)
+                _s.commit()
         except Exception:
             pass
 
@@ -213,8 +190,6 @@ async def debug_exception_handler(request: Request, exc: Exception):
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     import time
-    global _last_request_time
-    _last_request_time = time.time()
     start = time.time()
     response = await call_next(request)
     elapsed = time.time() - start
