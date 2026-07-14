@@ -21,7 +21,6 @@ export default function EditModal({ post, onClose, onDone }: { post: PostData; o
     setSubmitting(true);
     try {
       const updatedPost = await api.editPost(post.id, { content, summary });
-      console.log("[EDIT] API response:", updatedPost.id, "content:", updatedPost.content?.slice(0, 50));
       if (onDone) onDone(updatedPost);
     } catch (err: any) { alert(err.message); }
     setSubmitting(false);

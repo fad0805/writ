@@ -93,7 +93,6 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   }, [currentUser, post.id]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') console.log("[POSTCARD] post prop changed:", post.id, post.content?.slice(0, 50));
     setLiked(post.liked);
     setBoosted(post.boosted);
     setBookmarked(post.bookmarked);
