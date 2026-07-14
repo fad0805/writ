@@ -37,16 +37,11 @@ def _federation_allowed(domain: str) -> bool:
             domain = domain.lower().strip()
             if mode == "whitelist":
                 allowed = s.query(AllowedServer).filter_by(domain=domain).first()
-                result = allowed is not None
-                print(f"[FED] domain={domain} mode=whitelist found={allowed is not None} result={result}", flush=True)
-                return result
+                return allowed is not None
             else:
                 blocked = s.query(FederationBlock).filter_by(domain=domain).first()
-                result = blocked is None
-                print(f"[FED] domain={domain} mode=blacklist blocked={blocked is not None} result={result}", flush=True)
-                return result
-        except Exception as e:
-            print(f"[FED] exception: {e}", flush=True)
+                return blocked is None
+        except Exception:
             return True
 
 
@@ -315,10 +310,6 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
             logger.info("Rejected inbox activity from blocked domain: %s", actor_domain)
             return (403, "Domain not allowed")
 
-    print(f"[INBOX] atype={atype} actor_domain={urlparse(actor).hostname if actor else 'none'}", flush=True)
-    import json as _j
-    print(f"[INBOX] full activity:\n{_j.dumps(activity, ensure_ascii=False, indent=2)[:5000]}", flush=True)
-
     if atype == "Follow":
         return _handle_follow(activity)
     elif atype == "Accept":
@@ -334,7 +325,6 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
     elif atype == "Undo":
         return _handle_undo(activity)
     elif atype == "Update":
-        print(f"[INBOX-UPDATE] from={actor} object={type(activity.get('object')).__name__}", flush=True)
         return _handle_update(activity)
     elif atype == "Delete":
         return _handle_delete(activity)
@@ -1533,7 +1523,6 @@ def _handle_like(activity: dict) -> tuple[int, str]:
 
 def _handle_vote(activity: dict) -> tuple[int, str]:
     import sys
-    print(f"[vote] start", flush=True)
     raw_actor = activity.get("actor")
     if not raw_actor:
         return (400, "Missing actor")
@@ -1705,7 +1694,6 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
     obj_type = obj.get("type", "") if isinstance(obj, dict) else ""
 
     if not isinstance(obj, dict) and isinstance(obj, str):
-        print(f"[UNDO] object is URL, fetching: {obj}", flush=True)
         fetched = None
         try:
             import httpx
@@ -1713,16 +1701,12 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
             if resp.status_code < 300:
                 fetched = resp.json()
                 obj_type = fetched.get("type", "")
-                print(f"[UNDO] fetched object type={obj_type}", flush=True)
-        except Exception as e:
-            print(f"[UNDO] failed to fetch object {obj}: {e}", flush=True)
+        except Exception:
+            pass
         if fetched:
             obj = fetched
         else:
-            print(f"[UNDO] could not resolve object, skipping", flush=True)
             return (200, "OK")
-
-    print(f"[UNDO] obj_type={obj_type}", flush=True)
 
     if obj_type == "Follow":
         actor_url = obj.get("actor", activity.get("actor", ""))
@@ -1870,32 +1854,24 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
 
 def _handle_update(activity: dict) -> tuple[int, str]:
     object_data = activity.get("object", {})
-    print(f"[UPDATE] raw activity keys={list(activity.keys())}", flush=True)
-    print(f"[UPDATE] object type={type(object_data).__name__} is_dict={isinstance(object_data, dict)}", flush=True)
     if isinstance(object_data, str):
-        print(f"[UPDATE] object is URL: {object_data}", flush=True)
         try:
             import httpx
             resp = httpx.get(object_data, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, follow_redirects=True, timeout=10)
             if resp.status_code < 300:
                 object_data = resp.json()
-                print(f"[UPDATE] fetched object: type={object_data.get('type','')} id={object_data.get('id','')}", flush=True)
             else:
-                print(f"[UPDATE] fetch failed status={resp.status_code}", flush=True)
                 return (200, "OK")
-        except Exception as e:
-            print(f"[UPDATE] fetch error: {e}", flush=True)
+        except Exception:
             return (200, "OK")
     if isinstance(object_data, dict):
         obj_type = object_data.get("type", "")
         obj_id = object_data.get("id", "")
-        print(f"[UPDATE] obj_type={obj_type} obj_id={obj_id}", flush=True)
         if obj_type in ("Person", "Service"):
             _resolve_actor(obj_id, force_refresh=True)
         elif obj_type in ("Note", "Question"):
             with get_session() as session:
                 post = session.query(Post).filter_by(ap_id=obj_id).first()
-                print(f"[UPDATE] post lookup ap_id={obj_id} found={post is not None}", flush=True)
                 if post:
                     # Update content/summary
                     new_content = object_data.get("content", "")
@@ -1926,7 +1902,6 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     # Update emoji tags
                     _process_emoji_tags(object_data.get("tag", []), session)
                     session.commit()
-                    print(f"[UPDATE] saved content_len={len(post.content)} summary={post.summary!r}", flush=True)
                     try:
                         from app.timeline_stream import broadcast_post
                         _ua = post.author
@@ -1955,11 +1930,8 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                             "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
                             "type": "update",
                         }, post.author_id, post.visibility or "public", False)
-                        print(f"[UPDATE] broadcast sent for post_id={post.id}", flush=True)
-                    except Exception as e:
-                        print(f"[UPDATE] broadcast error: {e}", flush=True)
-                else:
-                    print(f"[UPDATE] post NOT in DB, skipping", flush=True)
+                    except Exception:
+                        pass
     return (200, "Updated")
 
 def _handle_delete(activity: dict) -> tuple[int, str]:
@@ -2236,16 +2208,12 @@ def _send_flag(reporter: User, target_type: str, target_obj, reason: str, rule_i
 def _deliver_sync(inbox_url: str, body: bytes, headers: dict) -> bool:
     for attempt in range(3):
         try:
-            print(f"[DELIVER] POST {inbox_url} attempt={attempt+1}/3", flush=True)
             resp = httpx.post(inbox_url, content=body, headers=headers, timeout=15)
-            print(f"[DELIVER] {inbox_url} status={resp.status_code} body={resp.text[:300]}", flush=True)
             if resp.is_success:
                 return True
             if resp.status_code in (400, 401, 403, 404, 405, 410, 422):
                 return False
-            print(f"[DELIVER] Retryable: {inbox_url} HTTP {resp.status_code} attempt {attempt+1}/3", flush=True)
-        except Exception as e:
-            print(f"[DELIVER] Exception: {inbox_url} {type(e).__name__}: {e}", flush=True)
+        except Exception:
             if attempt < 2:
                 time.sleep(2 ** attempt)
     return False
@@ -2253,10 +2221,8 @@ def _deliver_sync(inbox_url: str, body: bytes, headers: dict) -> bool:
 
 def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     if not _validate_url(inbox_url):
-        print(f"[INBOX-POST] SKIP invalid URL: {inbox_url}", flush=True)
         return
     body = json.dumps(activity, ensure_ascii=False).encode("utf-8")
-    print(f"[INBOX-POST] {inbox_url} type={activity.get('type', '?')} body_len={len(body)} preview={body[:300].decode('utf-8', errors='replace')}", flush=True)
     import base64 as _b64
     digest = _b64.b64encode(hashlib.sha256(body).digest()).decode()
     date = datetime.datetime.now(datetime.timezone.utc).strftime(
@@ -2430,28 +2396,20 @@ def _process_emoji_tags(tags: list, session):
 
 
 def broadcast_to_followers(user: User, activity: dict):
-    print(f"[BROADCAST] user={user.username} (id={user.id}) remote={user.is_remote}", flush=True)
     with get_session() as session:
         followers = session.query(Follow).filter(
             Follow.following_id == user.id,
             Follow.follower.has(is_remote=True),
         ).all()
-        print(f"[BROADCAST] remote followers count={len(followers)}", flush=True)
-        for f in followers:
-            print(f"[BROADCAST]   follower={f.follower.username} inbox={f.follower.inbox_uri()} shared={f.follower.shared_inbox_url}", flush=True)
 
     sent = set()
     for f in followers:
         follower = f.follower
         inbox = follower.shared_inbox_url or follower.inbox_uri()
-        print(f"[BROADCAST] checking inbox={inbox}", flush=True)
         if inbox in sent:
-            print(f"[BROADCAST] SKIP duplicate inbox", flush=True)
             continue
         domain = urlparse(inbox).hostname or ""
         if not _federation_allowed(domain):
-            print(f"[BROADCAST] SKIP blocked domain: {domain}", flush=True)
             continue
         sent.add(inbox)
-        print(f"[BROADCAST] delivering to {inbox}", flush=True)
         _post_to_inbox(inbox, activity, user)

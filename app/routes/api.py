@@ -1168,7 +1168,6 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
         s.commit()
 
         # Federation: send Update to remote followers
-        print(f"[EDIT] post_id={post.id} ap_id={post.ap_id} has_ap_id={bool(post.ap_id)}", flush=True)
         if post.ap_id:
             try:
                 note_data = post.to_ap_note()
@@ -1197,7 +1196,6 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
                     "object": note_data,
                 }
                 import json as _json
-                print(f"[UPDATE-OUTBOX] full activity:\n{_json.dumps(update_activity, ensure_ascii=False, indent=2)[:5000]}", flush=True)
                 def _send_update():
                     try:
                         broadcast_to_followers(user, update_activity)
