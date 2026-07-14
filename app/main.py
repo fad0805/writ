@@ -250,6 +250,11 @@ if not S3_ENABLED:
     os.makedirs("uploads", exist_ok=True)
     app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
+# Mount emoji directory
+_emoji_static_dir = os.path.join(os.path.dirname(__file__), "..", "web", "public", "emojis")
+if os.path.isdir(_emoji_static_dir):
+    app.mount("/emojis", StaticFiles(directory=_emoji_static_dir), name="emojis")
+
 # AP/WebFinger routes must be registered before routers to take priority
 @app.get("/.well-known/webfinger")
 def webfinger(request: Request, resource: str = ""):

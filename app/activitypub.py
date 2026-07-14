@@ -2640,13 +2640,18 @@ def _process_emoji_tags(tags: list, session):
                 buf = io.BytesIO()
                 img.save(buf, format="WEBP", quality=100)
                 data = buf.getvalue()
-            # Save via storage backend (S3 or local)
+            # Save to emoji dir (served by /emojis static mount)
             try:
-                _storage.save(f"emojis/remote/{file_name}", data, f"image/{ext}")
-            except Exception:
                 os.makedirs(remote_dir, exist_ok=True)
                 with open(file_path, "wb") as f:
                     f.write(data)
+            except Exception:
+                pass
+            # Also save via storage backend for S3
+            try:
+                _storage.save(f"emojis/remote/{file_name}", data, f"image/{ext}")
+            except Exception:
+                pass
             emoji = CustomEmoji(
                 keyword=keyword,
                 file_name=file_name,

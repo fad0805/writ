@@ -43,6 +43,10 @@ const nextConfig: NextConfig = {
         destination: `${API_HOST}/uploads/:path*`,
       },
       {
+        source: "/emojis/:path*",
+        destination: `${API_HOST}/emojis/:path*`,
+      },
+      {
         source: "/@:username",
         destination: "/profile/:username",
       },
