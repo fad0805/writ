@@ -253,7 +253,7 @@ export default function TimelinePage() {
       <div className="post-form post-form-desktop">
         <PostForm onDone={(newPost) => {
           if (newPost) {
-            load(true);
+            load();
           }
         }} />
       </div>
@@ -296,7 +296,7 @@ export default function TimelinePage() {
             </div>
             <PostForm onDone={(newPost) => {
               if (newPost) {
-                load(true);
+                load();
               }
               setShowComposer(false);
             }} />
