@@ -717,10 +717,10 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
     if not follower:
         return (404, "Follower not found")
 
-    follower_id = follower.id
     with get_session() as session:
         target = session.query(User).get(target_id)
         follower = session.merge(follower)
+        follower_id = follower.id
         accepted = not target.is_locked
         existing = session.query(Follow).filter_by(
             follower_id=follower.id, following_id=target.id
