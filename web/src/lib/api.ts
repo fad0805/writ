@@ -94,6 +94,7 @@ export interface PostData {
   my_reaction?: string | null;
   mentioned_handles?: string[];
   link_preview?: { url: string; title: string; description: string; image: string } | null;
+  is_deleted?: boolean;
 }
 
 export interface ReplyContext {
