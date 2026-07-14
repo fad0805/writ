@@ -1711,10 +1711,10 @@ def _handle_block(activity: dict) -> tuple[int, str]:
         # Remote user blocked us — remove follow both ways
         session.query(Follow).filter_by(follower_id=remote_user.id, following_id=local_user.id).delete()
         session.query(Follow).filter_by(follower_id=local_user.id, following_id=remote_user.id).delete()
-        # Create local UserBlock so we also filter them
-        existing = session.query(UserBlock).filter_by(user_id=local_user.id, target_user_id=remote_user.id).first()
+        # Create UserBlock: remote_user blocked local_user (for am_i_blocked check + timeline filter)
+        existing = session.query(UserBlock).filter_by(user_id=remote_user.id, target_user_id=local_user.id).first()
         if not existing:
-            session.add(UserBlock(user_id=local_user.id, target_user_id=remote_user.id))
+            session.add(UserBlock(user_id=remote_user.id, target_user_id=local_user.id))
         session.commit()
     return (200, "Blocked")
 
@@ -1896,7 +1896,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
             local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
             if not local_user:
                 return (200, "OK")
-            session.query(UserBlock).filter_by(user_id=local_user.id, target_user_id=remote_user.id).delete()
+            session.query(UserBlock).filter_by(user_id=remote_user.id, target_user_id=local_user.id).delete()
             session.commit()
         return (200, "Unblocked")
 
