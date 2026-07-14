@@ -1755,26 +1755,66 @@ def _handle_update(activity: dict) -> tuple[int, str]:
         elif obj_type in ("Note", "Question"):
             with get_session() as session:
                 post = session.query(Post).filter_by(ap_id=obj_id).first()
-                if post and post.poll_data:
-                    one_of = object_data.get("oneOf") or object_data.get("anyOf") or []
-                    if isinstance(one_of, list):
-                        new_options = []
-                        for opt in one_of:
-                            if isinstance(opt, dict) and opt.get("name"):
-                                replies = opt.get("replies", {})
-                                votes_count = 0
-                                if isinstance(replies, dict):
-                                    votes_count = replies.get("totalItems", 0)
-                                new_options.append({"text": opt["name"], "votes_count": votes_count})
-                        if new_options:
-                            old_options = post.poll_data.get("options", [])
-                            text_to_old = {o.get("text", ""): o for o in old_options}
-                            for new_opt in new_options:
-                                old = text_to_old.get(new_opt["text"])
-                                if old:
-                                    new_opt["votes_count"] = max(new_opt.get("votes_count", 0), old.get("votes_count", 0))
-                            post.poll_data = {**post.poll_data, "options": new_options}
-                            session.commit()
+                if post:
+                    # Update content/summary
+                    new_content = object_data.get("content", "")
+                    if new_content:
+                        post.content = _normalize_mentions(_sanitize_html(new_content))
+                    if "summary" in object_data:
+                        post.summary = object_data.get("summary", "")
+                    # Update poll data
+                    if post.poll_data:
+                        one_of = object_data.get("oneOf") or object_data.get("anyAny") or []
+                        if isinstance(one_of, list):
+                            new_options = []
+                            for opt in one_of:
+                                if isinstance(opt, dict) and opt.get("name"):
+                                    replies = opt.get("replies", {})
+                                    votes_count = 0
+                                    if isinstance(replies, dict):
+                                        votes_count = replies.get("totalItems", 0)
+                                    new_options.append({"text": opt["name"], "votes_count": votes_count})
+                            if new_options:
+                                old_options = post.poll_data.get("options", [])
+                                text_to_old = {o.get("text", ""): o for o in old_options}
+                                for new_opt in new_options:
+                                    old = text_to_old.get(new_opt["text"])
+                                    if old:
+                                        new_opt["votes_count"] = max(new_opt.get("votes_count", 0), old.get("votes_count", 0))
+                                post.poll_data = {**post.poll_data, "options": new_options}
+                    # Update emoji tags
+                    _process_emoji_tags(object_data.get("tag", []), session)
+                    session.commit()
+                    try:
+                        from app.timeline_stream import broadcast_post
+                        _ua = post.author
+                        broadcast_post({
+                            "id": post.id,
+                            "number": post.number or "",
+                            "content": post.content,
+                            "summary": post.summary or "",
+                            "visibility": post.visibility or "public",
+                            "created_at": post.created_at.isoformat() if post.created_at else "",
+                            "author": {
+                                "id": _ua.id, "username": _ua.username,
+                                "display_name": _ua.display_name or _ua.username,
+                                "avatar": _ua.profile_image or "", "header": _ua.header_image or "",
+                                "summary": _ua.summary or "", "is_admin": _ua.is_admin,
+                                "is_locked": getattr(_ua, "is_locked", False),
+                                "is_limited": getattr(_ua, "is_limited", False),
+                                "is_remote": _ua.is_remote, "ap_id": _ua.remote_url or "",
+                            },
+                            "likes_count": session.query(Like).filter_by(post_id=post.id).count(),
+                            "boosts_count": session.query(Boost).filter_by(post_id=post.id).count(),
+                            "replies_count": session.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count(),
+                            "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
+                            "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
+                            "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
+                            "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
+                            "type": "update",
+                        }, post.author_id, post.visibility or "public", False)
+                    except Exception:
+                        pass
     return (200, "Updated")
 
 def _handle_delete(activity: dict) -> tuple[int, str]:

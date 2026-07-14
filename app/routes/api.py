@@ -1135,6 +1135,21 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
         post.content = content
         post.summary = summary
         s.commit()
+
+        # Federation: send Update to remote followers
+        if post.ap_id:
+            try:
+                update_activity = {
+                    "@context": "https://www.w3.org/ns/activitystreams",
+                    "id": f"{BASE_URL}/activities/update/{post.id}",
+                    "type": "Update",
+                    "actor": user.actor_uri(),
+                    "object": post.to_ap_note(),
+                }
+                threading.Thread(target=broadcast_to_followers, args=(user, update_activity), daemon=True).start()
+            except Exception:
+                pass
+
         return _post_json(post, s, user)
 
 
