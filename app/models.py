@@ -1015,5 +1015,12 @@ def _add_cols(table: str, inspector, cols: list[tuple[str, str]]):
         pass
 
 
+import contextvars as _cv
+_request_session: _cv.ContextVar = _cv.ContextVar("request_session", default=None)
+
+
 def get_session():
+    sess = _request_session.get()
+    if sess is not None:
+        return sess
     return Session(engine, expire_on_commit=False)
