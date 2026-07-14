@@ -582,7 +582,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
                 <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{count}</span>
               </span>
             );
-            })
+            })}
           </div>
         )}
         {!readonly && <div className="post-actions" onClick={(e) => e.stopPropagation()}>
