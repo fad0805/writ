@@ -719,6 +719,8 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             header_image=header_image,
             is_locked=data.get("manuallyApprovesFollowers", False),
             custom_fields=_extract_custom_fields(data.get("attachment", [])),
+            remote_followers_count=_fetch_remote_count(data.get("followers", ""), sign_as),
+            remote_following_count=_fetch_remote_count(data.get("following", ""), sign_as),
         )
         session.add(user)
         session.flush()
