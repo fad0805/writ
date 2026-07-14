@@ -302,8 +302,8 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     const seriesFormat = post.content.match(/https?:\/\/[^/]+\/series\/(\d+)/);
     const seriesByNumber = post.content.match(/https?:\/\/[^/]+\/series\/by-number\/(\w+)\/([a-f0-9]+)/);
     const episodeFormat = post.content.match(/https?:\/\/[^/]+\/series\/(\d+)\/episodes\/(\d+)/);
-    const anyUrl = post.content.match(/https?:\/\/[^\s<>"']+/);
-    const url = episodeFormat?.[0] || seriesFormat?.[0] || seriesByNumber?.[0] || newFormat?.[0] || oldFormat?.[0] || anyUrl?.[0];
+    const anyUrl = (post.content.match(/https?:\/\/[^\s<>"']+/g) || []).find((u: string) => !u.match(/\/tags\/|\/explore\?/));
+    const url = episodeFormat?.[0] || seriesFormat?.[0] || seriesByNumber?.[0] || newFormat?.[0] || oldFormat?.[0] || anyUrl;
     if (!url) return;
     setQuoteUrl(url);
     setLoadingQuote(true);
