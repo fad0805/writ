@@ -18,6 +18,8 @@ from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Repo
 from app.config import BASE_URL, SECRET_KEY
 from app.crypto_utils import generate_keypair, sign_string, encrypt_key, get_private_key
 
+WRIT_USER_AGENT = "WRIT/1.0 (+https://daydream.ink)"
+
 
 logger = logging.getLogger("writ.activitypub")
 
@@ -501,7 +503,7 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
         import httpx
         import io
         from PIL import Image as PILImage
-        r = httpx.get(image_url, timeout=15, follow_redirects=True)
+        r = httpx.get(image_url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=15, follow_redirects=True)
         if r.status_code == 200 and len(r.content) <= 10 * 1024 * 1024:
             if is_gif:
                 filename = f"{uuid.uuid4().hex}.gif"
@@ -560,7 +562,7 @@ def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> 
         return 0
     try:
         import httpx
-        headers = {"Accept": "application/activity+json"}
+    headers = {"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}
         if sign_as:
             import datetime, time, hashlib, base64
             from app.crypto_utils import sign_string, get_private_key
@@ -915,7 +917,7 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
         follower_url = obj.get("actor", "")
     elif isinstance(obj, str):
         try:
-            resp = httpx.get(obj, headers={"Accept": "application/activity+json"}, timeout=10)
+            resp = httpx.get(obj, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, timeout=10)
             if resp.status_code == 200:
                 follow_activity = resp.json()
                 follower_url = follow_activity.get("actor", "")
@@ -967,7 +969,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
 
     from urllib.parse import urlparse as _urlparse
     parsed = _urlparse(url)
-    headers = {"Accept": "application/activity+json"}
+    headers = {"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}
 
     if not signer:
         try:
@@ -1009,7 +1011,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
 
     if data is None and signer:
         try:
-            resp = httpx.get(url, headers={"Accept": "application/activity+json"}, timeout=15, follow_redirects=True)
+            resp = httpx.get(url, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, timeout=15, follow_redirects=True)
             print(f"[FETCH-POST] retry url={url} status={resp.status_code}", flush=True)
             if resp.status_code == 200:
                 data = resp.json()
@@ -1600,7 +1602,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                         if _url:
                             try:
                                 import httpx as _httpx
-                                _resp = _httpx.get(_url, timeout=10)
+                                _resp = _httpx.get(_url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=10)
                                 if _resp.status_code == 200:
                                     _ext = _url.rsplit(".", 1)[-1].split("?")[0] if "." in _url else "png"
                                     _fname = f"{_kw}.{_ext}"
@@ -2317,7 +2319,7 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
     if not reporter:
         try:
             import httpx as _httpx, json as _json
-            _r = _httpx.get(actor_url, headers={"Accept": "application/activity+json"}, timeout=10, follow_redirects=True)
+            _r = _httpx.get(actor_url, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, timeout=10, follow_redirects=True)
             if _r.status_code == 200:
                 _d = _r.json()
                 _pref = _d.get("preferredUsername", "")
@@ -2626,7 +2628,7 @@ def _process_emoji_tags(tags: list, session):
         from PIL import Image
         import httpx
         try:
-            resp = httpx.get(img_url, follow_redirects=True, timeout=15)
+            resp = httpx.get(img_url, headers={"User-Agent": WRIT_USER_AGENT}, follow_redirects=True, timeout=15)
             if resp.status_code != 200:
                 continue
             ext = "png"
