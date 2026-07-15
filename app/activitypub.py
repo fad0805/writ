@@ -1367,6 +1367,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             # Parse mentioned users from content
             mentioned_names = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content or ""))
             mentioned_hrefs = set()
+            # Get actor domain for same-server mention resolution
+            _actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
             # Also parse mentions from AP tag array
             for tag in (obj.get("tag", []) or []):
                 if isinstance(tag, dict) and tag.get("type") == "Mention":
@@ -1397,7 +1399,15 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                 mentioned_ids.append(u.id)
                                 _seen_ids.add(u.id)
                     else:
-                        u = session.query(User).filter(User.username == _name).first()
+                        # For remote posts, prefer same-domain remote user
+                        u = None
+                        if _actor_domain:
+                            u = session.query(User).filter(
+                                User.username == _name, User.is_remote == True,
+                                User.remote_url.contains(_actor_domain)
+                            ).first()
+                        if not u:
+                            u = session.query(User).filter(User.username == _name).first()
                         if u and u.id not in _seen_ids:
                             mentioned_ids.append(u.id)
                             _seen_ids.add(u.id)
