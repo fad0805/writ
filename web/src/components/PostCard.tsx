@@ -57,7 +57,8 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
   });
 
   text = text.replace(/(^|>|　|\s)(https?:\/\/[^\s<>"')\]]+)(?![\s\S]*?<\/a>)/g, (_m: string, before: string, url: string) => {
-    return `${before}<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+    const isLocal = typeof window !== "undefined" && url.startsWith(window.location.origin);
+    return `${before}<a href="${isLocal ? url.replace(window.location.origin, "") : url}"${isLocal ? "" : ' target="_blank" rel="noopener noreferrer"'}>${url}</a>`;
   });
 
   return text;
