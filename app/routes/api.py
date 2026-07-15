@@ -2962,7 +2962,7 @@ def api_get_novel(request: Request, novel_id: int):
         episodes = s.query(Episode).filter_by(novel_id=novel_id).order_by(Episode.episode_number).all()
         author = s.query(User).get(novel.author_id)
         is_mine = user.id == novel.author_id if user else False
-        episode_list = [_episode_json(e) for e in episodes]
+        episode_list = [_episode_json(e, summary_only=True) for e in episodes]
         novel_json = _novel_json(novel, s)
         if not is_mine:
             for e in episode_list:
@@ -3308,13 +3308,12 @@ def api_delete_novel(request: Request, novel_id: int):
     return {"ok": True}
 
 
-def _episode_json(e):
-    return {
+def _episode_json(e, summary_only=False):
+    d = {
         "id": e.id,
         "novel_id": e.novel_id,
         "episode_number": e.episode_number,
         "title": e.title,
-        "content": e.content,
         "summary": e.summary or "",
         "comment": e.comment or "",
         "views": e.views or 0,
@@ -3322,6 +3321,9 @@ def _episode_json(e):
         "created_at": _fmt_dt(e.created_at),
         "updated_at": _fmt_dt(e.updated_at),
     }
+    if not summary_only:
+        d["content"] = e.content
+    return d
 
 
 def _notice_json(n):
