@@ -5,7 +5,13 @@ export default function Loading({ text = "로딩 중..." }: { text?: string }) {
   const [logo, setLogo] = useState("");
 
   useEffect(() => {
-    fetch("/api/server-info").then((r) => r.json()).then((d) => { setLogo(d.logo || ""); }).catch(() => {});
+    const cached = (window as any).__serverLogo;
+    if (cached !== undefined) { setLogo(cached); return; }
+    fetch("/api/server-info").then((r) => r.json()).then((d) => {
+      const logo = d.logo || "";
+      (window as any).__serverLogo = logo;
+      setLogo(logo);
+    }).catch(() => {});
   }, []);
 
   return (

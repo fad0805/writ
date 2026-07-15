@@ -80,7 +80,13 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   const [boostsCount, setBoostsCount] = useState(post.boosts_count);
   const [serverLogo, setServerLogo] = useState("");
   useEffect(() => {
-    fetch("/api/server-info").then(r=>r.json()).then(d=>setServerLogo(d.logo||"")).catch(()=>{});
+    const cached = (window as any).__serverLogo;
+    if (cached !== undefined) { setServerLogo(cached); return; }
+    fetch("/api/server-info").then(r=>r.json()).then(d=>{
+      const logo = d.logo || "";
+      (window as any).__serverLogo = logo;
+      setServerLogo(logo);
+    }).catch(()=>{});
   }, []);
   const [emojiList, setEmojiList] = useState<CustomEmoji[]>([]);
   useEffect(() => { getCustomEmojis().then(setEmojiList); }, []);
