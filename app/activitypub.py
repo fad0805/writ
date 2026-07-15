@@ -94,35 +94,55 @@ def _sanitize_html(html: str) -> str:
     return html
 
 
+import re
+from urllib.parse import urlparse
+
 def _normalize_mentions(html: str) -> str:
     """
-    Convert Mastodon-style mention HTML to plain @user or @user@domain text.
-    Handles varied class orders and preserves full remote actor handles.
+    Convert Mastodon-style mention HTML to plain text.
+    If the text lacks a domain (e.g. just '@user'), parses the href attribute 
+    to append the correct '@domain' and prevent local user collision.
     """
     def _strip_mention(m):
-        # 1. 태그 안의 모든 HTML 태그를 지우고 텍스트 알맹이만 추출
-        text = re.sub(r'<[^>]+>', '', m.group(0)).strip()
-        
-        # 2. @user@domain.com 또는 @user 형태를 안전하게 추출
-        # (시작 @ 이후에 공백이나 특수문자가 아닌 덩어리를 최대한 긁어옴)
-        match = re.search(r'@[\w.-]+(?:@[\w.-]+)?', text)
-        return match.group(0) if match else text
-
-    # 클래스 순서에 상관없이 'mention'과 'u-url'을 둘 다 포함하는지 검사하는 전방탐색(Lookahead) 정규식
-    # 1. <span> wrapper가 있는 형태 처리
+        full_tag_text = m.group(0)
+        # 1. <a> 태그의 href 주소 추출
+        href_match = re.search(r'href=["\']([^"\']+)["\']', full_tag_text, re.IGNORECASE)
+        domain = None
+        if href_match:
+            try:
+                # URL에서 도메인(예: remote.com)만 쏙 빼오기
+                parsed_url = urlparse(href_match.group(1))
+                domain = parsed_url.netloc.lower()
+            except Exception:
+                pass
+        # 2. 모든 HTML 태그를 지우고 알맹이 텍스트만 추출
+        text = re.sub(r'<[^>]+>', '', full_tag_text).strip()
+        # 3. 텍스트 내부에서 @아이디 파싱
+        match = re.search(r'@([\w.-]+)(?:@([\w.-]+))?', text)
+        if not match:
+            return text
+        username = match.group(1)
+        text_domain = match.group(2)
+        # 4. 텍스트에 이미 도메인이 있다면 그걸 그대로 사용
+        if text_domain:
+            return f"@{username}@{text_domain}"
+        # 5. 텍스트엔 도메인이 없는데 <a> 링크 도메인이 존재한다면?
+        # (단, 우리 서비스 내부 링크일 수도 있으니 로컬 도메인은 붙이지 않도록 방어 코드 추가 가능)
+        if domain:
+            # 예: @jack -> @jack@remote.com 으로 복원
+            return f"@{username}@{domain}"
+        return f"@{username}"
+    # 1. <span> wrapper가 있는 형태 처리 (클래스 순서 무관)
     html = re.sub(
         r'<span[^>]*class="[^"]*\bh-card\b[^"]*"[^>]*>\s*<a[^>]*class="(?=[^"]*\bu-url\b)(?=[^"]*\bmention\b)[^"]*"[^>]*>.*?</a>\s*</span>',
         _strip_mention, html, flags=re.IGNORECASE | re.DOTALL
     )
-    
-    # 2. <a> 태그 단독 형태 처리
+    # 2. <a> 태그 단독 형태 처리 (클래스 순서 무관)
     html = re.sub(
         r'<a[^>]*class="(?=[^"]*\bu-url\b)(?=[^"]*\bmention\b)[^"]*"[^>]*>.*?</a>',
         _strip_mention, html, flags=re.IGNORECASE | re.DOTALL
     )
-    
     return html
-
 
 _PRIVATE_SUBNETS = [
     ipaddress.ip_network("127.0.0.0/8"),
