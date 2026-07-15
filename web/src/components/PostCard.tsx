@@ -202,7 +202,11 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   const [resolvedMentions, setResolvedMentions] = useState<Map<string, string>>(new Map());
   const buildContentHtml = (qUrl?: string, resolved?: Map<string, string>) => {
     let html = post.content;
-    html = html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+    if (!/<[a-zA-Z]/.test(html)) {
+      html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    } else {
+      html = html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+    }
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     html = html.replace(/\n/g, '<br>');
