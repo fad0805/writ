@@ -95,21 +95,32 @@ def _sanitize_html(html: str) -> str:
 
 
 def _normalize_mentions(html: str) -> str:
-    """Convert Mastodon-style mention HTML to plain @username text."""
+    """
+    Convert Mastodon-style mention HTML to plain @user or @user@domain text.
+    Handles varied class orders and preserves full remote actor handles.
+    """
     def _strip_mention(m):
-        text = re.sub(r'<[^>]+>', '', m.group(0))
-        match = re.search(r'@(\w+)', text)
-        return '@' + match.group(1) if match else text
-    # <span class="h-card"> wrapping (optional) + <a with u-url mention class
+        # 1. 태그 안의 모든 HTML 태그를 지우고 텍스트 알맹이만 추출
+        text = re.sub(r'<[^>]+>', '', m.group(0)).strip()
+        
+        # 2. @user@domain.com 또는 @user 형태를 안전하게 추출
+        # (시작 @ 이후에 공백이나 특수문자가 아닌 덩어리를 최대한 긁어옴)
+        match = re.search(r'@[\w.-]+(?:@[\w.-]+)?', text)
+        return match.group(0) if match else text
+
+    # 클래스 순서에 상관없이 'mention'과 'u-url'을 둘 다 포함하는지 검사하는 전방탐색(Lookahead) 정규식
+    # 1. <span> wrapper가 있는 형태 처리
     html = re.sub(
-        r'<span[^>]*class="[^"]*\bh-card\b[^"]*"[^>]*>\s*<a[^>]*class="[^"]*\bu-url mention\b[^"]*"[^>]*>.*?</a>\s*</span>',
+        r'<span[^>]*class="[^"]*\bh-card\b[^"]*"[^>]*>\s*<a[^>]*class="(?=[^"]*\bu-url\b)(?=[^"]*\bmention\b)[^"]*"[^>]*>.*?</a>\s*</span>',
         _strip_mention, html, flags=re.IGNORECASE | re.DOTALL
     )
-    # <a with u-url mention class (without wrapper)
+    
+    # 2. <a> 태그 단독 형태 처리
     html = re.sub(
-        r'<a[^>]*class="[^"]*\bu-url mention\b[^"]*"[^>]*>.*?</a>',
+        r'<a[^>]*class="(?=[^"]*\bu-url\b)(?=[^"]*\bmention\b)[^"]*"[^>]*>.*?</a>',
         _strip_mention, html, flags=re.IGNORECASE | re.DOTALL
     )
+    
     return html
 
 
