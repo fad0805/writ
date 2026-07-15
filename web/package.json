@@ -19,6 +19,8 @@
     "@tiptap/extension-underline": "^3.27.1",
     "@tiptap/react": "^3.27.1",
     "@tiptap/starter-kit": "^3.27.1",
+    "@types/dompurify": "^3.0.5",
+    "dompurify": "^3.4.12",
     "next": "16.2.10",
     "react": "19.2.4",
     "react-dom": "19.2.4"
