@@ -373,6 +373,8 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     return () => window.removeEventListener("click", handler);
   }, [showMoreActions]);
   useEffect(() => {
+    const hasRePrefix = /<span class="quote-inline">\s*RE:\s*<\/span>/i.test(post.content) || /^\s*RE:/i.test(post.content.replace(/<[^>]+>/g, '').trim());
+    if (!hasRePrefix) return;
     const newFormat = post.content.match(/https?:\/\/([^/]+)\/@(\w+(?:@[\w.-]+)?)\/([a-f0-9]+)/);
     const oldFormat = post.content.match(/https?:\/\/[^/]+\/post\/(\d+)/);
     const seriesFormat = post.content.match(/https?:\/\/[^/]+\/series\/(\d+)/);
