@@ -84,19 +84,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likes_count);
   const [boostsCount, setBoostsCount] = useState(post.boosts_count);
-  const [serverLogo, setServerLogo] = useState("");
-  useEffect(() => {
-    const cached = (window as any).__serverLogo;
-    if (cached !== undefined) { setServerLogo(cached); return; }
-    if (!(window as any).__serverLogoPromise) {
-      (window as any).__serverLogoPromise = fetch("/api/server-info").then(r=>r.json()).then(d=>{
-        const logo = d.logo || "";
-        (window as any).__serverLogo = logo;
-        return logo;
-      }).catch(()=>"");
-    }
-    (window as any).__serverLogoPromise.then((logo: string) => { if (logo) setServerLogo(logo); });
-  }, []);
+
   const [emojiList, setEmojiList] = useState<CustomEmoji[]>([]);
   useEffect(() => { getCustomEmojis().then(setEmojiList); }, []);
   const [reactions, setReactions] = useState(post.reactions || {});
@@ -624,7 +612,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
               {quotedSeries.novel.cover_image ? (
                 <ClickableCover src={quotedSeries.novel.cover_image} isSensitive={(quotedSeries.novel as any).is_sensitive} className="cover-img" />
               ) : (
-                serverLogo ? <img src={serverLogo} alt="" className="cover-img" style={{width:64,height:64,objectFit:"contain",padding:8,background:"var(--bg-tertiary)"}} />
+                (window as any).__serverLogo ? <img src={(window as any).__serverLogo} alt="" className="cover-img" style={{width:64,height:64,objectFit:"contain",padding:8,background:"var(--bg-tertiary)"}} />
                 : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(quotedSeries.novel.title) }}>
                   {quotedSeries.novel.title[0]}
                 </div>
@@ -644,7 +632,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
               {quotedEpisode.novel.cover_image ? (
                 <ClickableCover src={quotedEpisode.novel.cover_image} isSensitive={(quotedEpisode.novel as any).is_sensitive} className="cover-img" />
               ) : (
-                serverLogo ? <img src={serverLogo} alt="" className="cover-img" style={{width:64,height:64,objectFit:"contain",padding:8,background:"var(--bg-tertiary)"}} />
+                (window as any).__serverLogo ? <img src={(window as any).__serverLogo} alt="" className="cover-img" style={{width:64,height:64,objectFit:"contain",padding:8,background:"var(--bg-tertiary)"}} />
                 : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(quotedEpisode.novel.title) }}>
                   {quotedEpisode.novel.title[0]}
                 </div>
