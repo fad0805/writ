@@ -141,9 +141,10 @@ def _post_json(p, session, user, tl_type=None,
         from urllib.parse import urlparse as _urlparse2
         mentioned_handles = []
         for u in session.query(User).filter(User.id.in_(p.mentioned_user_ids or [])).all():
-            if u.is_remote and u.remote_url and "@" not in u.username:
+            if u.is_remote and u.remote_url:
+                _local = u.username.split("@")[0]
                 _domain = _urlparse2(u.remote_url).hostname or ""
-                mentioned_handles.append(f"{u.username}@{_domain}")
+                mentioned_handles.append(f"{_local}@{_domain}")
             else:
                 mentioned_handles.append(u.username)
     else:
@@ -839,9 +840,10 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             from urllib.parse import urlparse as _urlparse
             _mentioned_users = {}
             for _mu in session.query(User).filter(User.id.in_(all_mentioned_ids)).all():
-                if _mu.is_remote and _mu.remote_url and "@" not in _mu.username:
+                if _mu.is_remote and _mu.remote_url:
+                    _local = _mu.username.split("@")[0]
                     _domain = _urlparse(_mu.remote_url).hostname or ""
-                    _mentioned_users[_mu.id] = f"{_mu.username}@{_domain}"
+                    _mentioned_users[_mu.id] = f"{_local}@{_domain}"
                 else:
                     _mentioned_users[_mu.id] = _mu.username
             for p in posts[:limit]:
@@ -2288,9 +2290,10 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                 from urllib.parse import urlparse as _urlparse
                 _mu = {}
                 for _um in s.query(User).filter(User.id.in_(all_mentioned_ids)).all():
-                    if _um.is_remote and _um.remote_url and "@" not in _um.username:
+                    if _um.is_remote and _um.remote_url:
+                        _local = _um.username.split("@")[0]
                         _domain = _urlparse(_um.remote_url).hostname or ""
-                        _mu[_um.id] = f"{_um.username}@{_domain}"
+                        _mu[_um.id] = f"{_local}@{_domain}"
                     else:
                         _mu[_um.id] = _um.username
                 for pp in _posts_for_mentions:
@@ -2768,9 +2771,10 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
                 from urllib.parse import urlparse as _urlparse
                 _mentioned_users = {}
                 for _um in s.query(User).filter(User.id.in_(all_mentioned_ids)).all():
-                    if _um.is_remote and _um.remote_url and "@" not in _um.username:
+                    if _um.is_remote and _um.remote_url:
+                        _local = _um.username.split("@")[0]
                         _domain = _urlparse(_um.remote_url).hostname or ""
-                        _mentioned_users[_um.id] = f"{_um.username}@{_domain}"
+                        _mentioned_users[_um.id] = f"{_local}@{_domain}"
                     else:
                         _mentioned_users[_um.id] = _um.username
                 for p in s.query(Post).filter(Post.id.in_(notif_post_ids)).all():
