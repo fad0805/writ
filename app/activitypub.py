@@ -562,7 +562,7 @@ def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> 
         return 0
     try:
         import httpx
-    headers = {"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}
+        headers = {"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}
         if sign_as:
             import datetime, time, hashlib, base64
             from app.crypto_utils import sign_string, get_private_key
