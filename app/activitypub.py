@@ -1392,6 +1392,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         u = session.query(User).filter(
                             User.username == _lp, User.is_remote == True,
                         ).first()
+                        if not u:
+                            u = session.query(User).filter(
+                                User.username.like(f"{_lp}@%"), User.is_remote == True,
+                            ).first()
                         if u and u.id not in _seen_ids and u.remote_url:
                             from urllib.parse import urlparse as _urlparse
                             _p = _urlparse(u.remote_url)
@@ -1405,6 +1409,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             u = session.query(User).filter(
                                 User.username == _name, User.is_remote == True,
                                 User.remote_url.contains(_actor_domain)
+                            ).first()
+                        if not u:
+                            u = session.query(User).filter(
+                                User.username.like(f"{_name}@%"), User.is_remote == True,
                             ).first()
                         if not u:
                             u = session.query(User).filter(User.username == _name).first()
