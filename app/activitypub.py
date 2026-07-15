@@ -1759,17 +1759,26 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
     if not raw_actor:
         return (400, "Missing actor")
     actor_url = raw_actor if isinstance(raw_actor, str) else raw_actor[0]
-    object_url = activity["object"] if isinstance(activity.get("object"), str) else ""
+    raw_object = activity.get("object")
+    object_url = raw_object if isinstance(raw_object, str) else ""
     activity_id = activity.get("id", "")
+    print(f"[ANNOUNCE] actor={actor_url} object_type={type(raw_object).__name__} object_url={object_url[:120]}", flush=True)
+
+    if not object_url and isinstance(raw_object, dict):
+        object_url = raw_object.get("id", "")
+        print(f"[ANNOUNCE] embedded object, extracted id={object_url[:120]}", flush=True)
 
     if not object_url:
+        print("[ANNOUNCE] no object_url, returning early", flush=True)
         return (200, "OK")
 
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
         _sign_as = session.query(User).get(post.author_id) if post else None
+    print(f"[ANNOUNCE] db_post={'found id='+str(post.id) if post else 'none'}", flush=True)
     actor = _resolve_actor(actor_url, sign_as=_sign_as)
     if not actor:
+        print("[ANNOUNCE] actor not found, returning 404", flush=True)
         return (404, "Actor not found")
 
     actor_id = actor.id
@@ -1777,17 +1786,21 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
 
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
+        print(f"[ANNOUNCE] session2 post={'found id='+str(post.id) if post else 'none'}", flush=True)
         if not post:
             _local_signer = session.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor_id, User.is_remote == False).first()
             if not _local_signer:
                 _local_signer = session.query(User).filter_by(is_remote=False).first()
             try:
                 post = _fetch_remote_post(object_url, _local_signer, session)
+                print(f"[ANNOUNCE] fetch_remote_post result={'id='+str(post.id) if post else 'None'}", flush=True)
             except Exception as e:
                 logger.warning("Announce: _fetch_remote_post failed for %s: %s", object_url, e)
+                print(f"[ANNOUNCE] fetch_remote_post EXCEPTION: {e}", flush=True)
                 post = None
             if not post:
                 logger.warning("Announce: could not fetch remote post %s", object_url)
+                print(f"[ANNOUNCE] could not fetch remote post, returning early", flush=True)
                 return (200, "OK")
 
         existing = session.query(Boost).filter_by(user_id=actor_id, post_id=post.id).first()
@@ -1864,6 +1877,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
         except Exception:
             pass
 
+    print(f"[ANNOUNCE] success post_id={post.id} by actor_id={actor_id}", flush=True)
     return (200, "Announced")
 
 def _handle_block(activity: dict) -> tuple[int, str]:
