@@ -69,7 +69,6 @@ export default function ProfilePage() {
       setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setHasPendingFollower(d.has_pending_follower); setIsMine(d.is_mine);
       setIsBlocked(!!(d as any).is_blocked); setAmBlocked(!!(d as any).am_i_blocked); setIsMutedUser(!!(d as any).is_muted);
       setPinnedPosts((d as any).pinned_posts_data || []); setPinnedSeries((d as any).pinned_series_data || []);
-      getCustomEmojis().then(setEmojiMap);
     } catch {}
     setLoading(false);
   }, [username]);
@@ -135,6 +134,7 @@ export default function ProfilePage() {
   }, [tab, loadMedia, mediaLoaded, mediaLoading]);
 
   useEffect(() => { loadProfile(); }, [loadProfile, router]);
+  useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
 
   useEffect(() => {
     if (!loading && profile && !isMine) {
