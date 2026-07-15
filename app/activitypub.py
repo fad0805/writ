@@ -1366,20 +1366,20 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                     "display_name": _ra.display_name or _ra.username,
                                     "avatar": _ra.profile_image or "", "header": _ra.header_image or "",
                                     "summary": _ra.summary or "", "is_admin": _ra.is_admin,
-                                    "is_locked": getattr(_ra, "is_locked", False),
-                                    "is_limited": getattr(_ra, "is_limited", False),
+                                    "is_locked": getattr(_ra, "is_locked", false),
+                                    "is_limited": getattr(_ra, "is_limited", false),
                                     "is_remote": _ra.is_remote, "ap_id": _ra.remote_url or "",
                                 },
                                 "likes_count": 0, "boosts_count": 0, "replies_count": 0,
-                                "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
-                                "is_dm": False, "is_sensitive": getattr(reply_to_post, "is_sensitive", False) or False,
+                                "liked": false, "boosted": false, "bookmarked": false, "is_mine": false,
+                                "is_dm": false, "is_sensitive": getattr(reply_to_post, "is_sensitive", false) or false,
                                 "ap_id": reply_to_post.ap_id or "", "media_attachments": reply_to_post.media_attachments or [],
-                                "poll_data": reply_to_post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
-                            }, reply_to_post.author_id, reply_to_post.visibility or "public", False)
-                        except Exception:
+                                "poll_data": reply_to_post.poll_data, "my_vote": none, "reactions": {}, "my_reaction": none,
+                            }, reply_to_post.author_id, reply_to_post.visibility or "public", false)
+                        except exception:
                             pass
 
-            # Mastodon poll votes: Create(Note) with name + inReplyTo + no content
+            # mastodon poll votes: create(note) with name + inreplyto + no content
             vote_name = obj.get("name", "") if not raw_content.strip() else ""
             if vote_name and reply_to_post and reply_to_post.poll_data:
                 poll_post = reply_to_post
@@ -1396,25 +1396,25 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             exp = datetime.datetime.fromisoformat(expires_at)
                             now = datetime.datetime.now(datetime.timezone.utc)
                             if exp < now:
-                                return (200, "Poll ended")
-                        except (ValueError, TypeError) as ex:
+                                return (200, "poll ended")
+                        except (valueerror, typeerror) as ex:
                             pass
-                    existing_vote = session.query(Vote).filter_by(user_id=actor_id, post_id=poll_post.id).first()
+                    existing_vote = session.query(vote).filter_by(user_id=actor_id, post_id=poll_post.id).first()
                     if existing_vote:
                         if existing_vote.option_index == option_idx:
-                            return (200, "Already voted")
+                            return (200, "already voted")
                         options[existing_vote.option_index]["votes_count"] = max(0, options[existing_vote.option_index].get("votes_count", 0) - 1)
                         existing_vote.option_index = option_idx
                     else:
-                        session.add(Vote(user_id=actor_id, post_id=poll_post.id, option_index=option_idx))
+                        session.add(vote(user_id=actor_id, post_id=poll_post.id, option_index=option_idx))
                     import copy
                     new_options = copy.deepcopy(options)
                     new_options[option_idx]["votes_count"] = new_options[option_idx].get("votes_count", 0) + 1
                     poll_post.poll_data = {**poll_post.poll_data, "options": new_options}
                     session.commit()
                     from app.timeline_stream import broadcast_post, broadcast_refresh_notifs
-                    # Notify poll author + all voters
-                    _voter_ids = {v.user_id for v in session.query(Vote).filter_by(post_id=poll_post.id).all()}
+                    # notify poll author + all voters
+                    _voter_ids = {v.user_id for v in session.query(vote).filter_by(post_id=poll_post.id).all()}
                     _voter_ids.add(poll_post.author_id)
                     for _vid in _voter_ids:
                         broadcast_refresh_notifs(_vid)
@@ -1427,15 +1427,15 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         "id": poll_post.id,
                         "type": "update",
                         "poll_data": poll_post.poll_data,
-                    }, poll_post.author_id, poll_post.visibility or "public", False)
-                    return (200, "Voted")
+                    }, poll_post.author_id, poll_post.visibility or "public", false)
+                    return (200, "voted")
 
-            # Parse mentioned users from content
-            mentioned_names = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content or ""))
+# Parse mentions ONLY from AP tag array (No regex body parsing)
             mentioned_hrefs = set()
+            mentioned_names = set()
             # Get actor domain for same-server mention resolution
             _actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
-            # Also parse mentions from AP tag array
+            # Extract from AP tag array
             for tag in (obj.get("tag", []) or []):
                 if isinstance(tag, dict) and tag.get("type") == "Mention":
                     href = tag.get("href", "")
@@ -1454,17 +1454,24 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             # Process href-based mentions FIRST (most reliable: from AP Mention tag href or to/cc)
             if mentioned_hrefs:
                 for _href in mentioned_hrefs:
+                    # 1. 원격 유저 매칭 시도
                     u = session.query(User).filter(User.remote_url == _href).first()
-                    if u and u.id not in _seen_ids:
-                        mentioned_ids.append(u.id)
-                        _seen_ids.add(u.id)
-                    if u is None and BASE_URL in _href:
+                    if u:
+                        if u.id not in _seen_ids:
+                            mentioned_ids.append(u.id)
+                            _seen_ids.add(u.id)
+                    # 2. 원격에 없고 로컬 베이스 URL이 포함된 경우 로컬 유저 매칭 시도
+                    elif BASE_URL in _href:
                         for _u in session.query(User).filter_by(is_remote=False).all():
-                            if (_u.actor_uri() == _href or _u.actor_uri().replace("/users/", "/@") == _href) and _u.id not in _seen_ids:
+                            # 로컬 유저의 다양한 URI 표현식 커버
+                            local_uris = {
+                                _u.actor_uri().rstrip("/"),
+                                _u.actor_uri().replace("/users/", "/@").rstrip("/")
+                            }
+                            if _href in local_uris and _u.id not in _seen_ids:
                                 mentioned_ids.append(_u.id)
                                 _seen_ids.add(_u.id)
-                                break
-            # Content-based name matching as supplement (only for users not already found)
+                                break            # Content-based name matching as supplement (only for users not already found)
             if mentioned_names:
                 for _name in mentioned_names:
                     if '@' in _name:
