@@ -214,10 +214,10 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     }
     if (qUrl) {
       const escUrl = qUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const hasPrefix = new RegExp(`(RE:|series:|episode:)\\s*${escUrl}`, 'i').test(html);
+      const hasPrefix = new RegExp(`(RE:|series:|episode:)\\s*(<a[^>]*>\\s*)?${escUrl}(\\s*<\\/a>)?`, 'i').test(html);
       if (hasPrefix) {
         html = html.replace(new RegExp(`<a[^>]*>${escUrl}<\\/a>`, 'gi'), '');
-        html = html.replace(new RegExp(`(RE:|series:|episode:)\\s*${escUrl}`, 'gi'), '');
+        html = html.replace(new RegExp(`(RE:|series:|episode:)\\s*(<a[^>]*>\\s*)?${escUrl}(\\s*<\\/a>)?`, 'gi'), '');
         html = html.replace(new RegExp(escUrl, 'gi'), '');
       } else {
         const host = typeof window !== 'undefined' ? window.location.host : '';
