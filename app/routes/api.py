@@ -2188,8 +2188,8 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             novels_q = novels_q.filter(Novel.visibility != "private")
         novels = _apply_latest_activity_order(novels_q, s).all()
         show_follows = user and (profile.id == user.id or profile.follow_list_visibility != "private")
-        followers = s.query(Follow).filter_by(following_id=profile.id, accepted=True).order_by(desc(Follow.created_at)).all()
-        following = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).order_by(desc(Follow.created_at)).all()
+        followers = s.query(Follow).filter_by(following_id=profile.id, accepted=True).order_by(desc(Follow.created_at)).limit(20).all() if show_follows else []
+        following = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).order_by(desc(Follow.created_at)).limit(20).all() if show_follows else []
         # Batch-load _post_json data for all profile posts
         _all_post_ids = list({p.id for p in posts} | set(profile.pinned_posts or []))
         if user and _all_post_ids:
@@ -2209,13 +2209,14 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                     _reactions_map[pid] = {}
                 _reactions_map[pid][react] = cnt
             all_mentioned_ids = set()
-            for pp in s.query(Post).filter(Post.id.in_(_all_post_ids)).all():
+            _posts_for_mentions = s.query(Post).filter(Post.id.in_(_all_post_ids)).all()
+            for pp in _posts_for_mentions:
                 if pp.mentioned_user_ids:
                     all_mentioned_ids.update(pp.mentioned_user_ids)
             _mentioned_users_map = {}
             if all_mentioned_ids:
                 _mu = {u.id: u.username for u in s.query(User).filter(User.id.in_(all_mentioned_ids)).all()}
-                for pp in s.query(Post).filter(Post.id.in_(_all_post_ids)).all():
+                for pp in _posts_for_mentions:
                     if pp.mentioned_user_ids:
                         _mentioned_users_map[pp.id] = [_mu.get(mid, "?") for mid in pp.mentioned_user_ids if mid in _mu]
                     else:
@@ -2258,25 +2259,27 @@ def api_user_media(request: Request, username: str, limit: int = Query(12), offs
         profile = s.query(User).filter_by(username=username).first()
         if not profile:
             raise HTTPException(status_code=404, detail="User not found")
-        import json as _json
-        all_posts = s.query(Post).options(
-            selectinload(Post.author)
-        ).filter(
-            Post.author_id == profile.id,
-            Post.is_deleted == False,
-        ).order_by(desc(Post.created_at)).all()
-        media_posts = []
-        for p in all_posts:
-            att = p.media_attachments
-            if not att:
-                continue
-            if isinstance(att, str):
-                att = _json.loads(att)
-            if att:
-                media_posts.append(p)
-        has_more = len(media_posts) > offset + limit
-        posts = [_post_json(p, s, user) for p in media_posts[offset:offset + limit] if _can_view(p, user, s)]
-        return {"posts": posts, "has_more": has_more}
+        from sqlalchemy import text
+        # Use raw SQL to filter non-empty media_attachments at DB level
+        rows = s.execute(
+            text("SELECT id FROM posts WHERE author_id = :aid AND is_deleted = 0 AND media_attachments IS NOT NULL AND media_attachments != 'null' AND media_attachments != '[]' ORDER BY created_at DESC LIMIT :lim OFFSET :off"),
+            {"aid": profile.id, "lim": limit + 1, "off": offset}
+        ).fetchall()
+        post_ids = [r[0] for r in rows]
+        has_more = len(post_ids) > limit
+        post_ids = post_ids[:limit]
+        if not post_ids:
+            return {"posts": [], "has_more": False}
+        posts = s.query(Post).options(selectinload(Post.author)).filter(Post.id.in_(post_ids)).all()
+        posts = sorted(posts, key=lambda p: post_ids.index(p.id))
+        # Count total for has_more if needed
+        if not has_more:
+            total = s.execute(
+                text("SELECT COUNT(*) FROM posts WHERE author_id = :aid AND is_deleted = 0 AND media_attachments IS NOT NULL AND media_attachments != 'null' AND media_attachments != '[]'"),
+                {"aid": profile.id}
+            ).scalar()
+            has_more = total > offset + limit
+        return {"posts": [_post_json(p, s, user) for p in posts if _can_view(p, user, s)], "has_more": has_more}
 
 
 @router.post("/users/{username}/follow")
