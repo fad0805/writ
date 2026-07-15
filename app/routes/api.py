@@ -5009,14 +5009,7 @@ def api_update_emoji(request: Request, emoji_id: int, category: str = Form(""), 
             emoji.keyword = keyword_clean
         if category:
             emoji.category = category
-        new_aliases = [a.strip().lower().replace(" ", "_") for a in aliases.split(",") if a.strip()]
-        for a in new_aliases:
-            if a == emoji.keyword:
-                raise HTTPException(status_code=400, detail=f"Alias '{a}' is the same as the keyword")
-            existing = s.query(CustomEmoji).filter(CustomEmoji.keyword == a, CustomEmoji.id != emoji_id).first()
-            if existing:
-                raise HTTPException(status_code=400, detail=f"Alias '{a}' conflicts with existing emoji keyword")
-        emoji.aliases = new_aliases
+        emoji.aliases = [a.strip().lower().replace(" ", "_") for a in aliases.split(",") if a.strip()]
         s.commit()
         _invalidate_emoji_cache()
         return {"ok": True, "emoji": {"id": emoji.id, "keyword": emoji.keyword, "file_name": emoji.file_name, "category": emoji.category, "aliases": emoji.aliases or [], "url": _emoji_url(emoji.file_name, emoji.domain or "", emoji.category or ""), "source_url": emoji.source_url or "", "domain": emoji.domain or ""}}
