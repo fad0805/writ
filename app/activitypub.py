@@ -1428,18 +1428,15 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                     _seen_ids.add(_c.id)
                                     break
                     else:
-                        # same-domain remote user only, then local fallback
-                        u = None
+                        # same-domain remote user only (local user handled via href already)
                         if _actor_domain:
                             u = session.query(User).filter(
                                 User.username == _name, User.is_remote == True,
                                 User.remote_url.contains(_actor_domain)
                             ).first()
-                        if not u:
-                            u = session.query(User).filter(User.username == _name, User.is_remote == False).first()
-                        if u and u.id not in _seen_ids:
-                            mentioned_ids.append(u.id)
-                            _seen_ids.add(u.id)
+                            if u and u.id not in _seen_ids:
+                                mentioned_ids.append(u.id)
+                                _seen_ids.add(u.id)
 
             # Check if actor's domain is server-muted
             actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
