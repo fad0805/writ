@@ -237,12 +237,18 @@ export default function TimelinePage() {
 
 
 
-  const refreshOnFocus = () => { if (document.visibilityState === "visible") load(); };
+  const refreshOnFocusRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const refreshOnFocus = () => {
+    if (document.visibilityState !== "visible") return;
+    clearTimeout(refreshOnFocusRef.current);
+    refreshOnFocusRef.current = setTimeout(load, 1000);
+  };
 
   useEffect(() => {
     document.addEventListener("visibilitychange", refreshOnFocus);
     window.addEventListener("focus", refreshOnFocus);
     return () => {
+      clearTimeout(refreshOnFocusRef.current);
       document.removeEventListener("visibilitychange", refreshOnFocus);
       window.removeEventListener("focus", refreshOnFocus);
     };

@@ -4774,7 +4774,7 @@ def api_fetch_actor(request: Request, url: str = Form(...)):
         raise HTTPException(status_code=403, detail=err)
     from app.activitypub import _resolve_actor, _safe_fetch
     from app.activitypub import _safe_fetch
-    actor = _resolve_actor(url, force_refresh=True, sign_as=user)
+    actor = _resolve_actor(url, force_refresh=False, sign_as=user)
     if not actor:
         raise HTTPException(status_code=400, detail="Cannot resolve actor")
 
