@@ -294,9 +294,12 @@ def _parse_mentions(content):
             else:
                 u = s.query(User).filter(User.username == handle, User.is_remote == True).first()
                 if not u:
+                    u = s.query(User).filter(User.username.like(f"{handle}@%"), User.is_remote == True).first()
+                if not u:
                     u = s.query(User).filter(User.username == handle, User.is_remote == False).first()
                 if u:
                     user_ids.append(u.id)
+                    continue
         return user_ids
 
 
