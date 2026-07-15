@@ -1684,34 +1684,21 @@ def api_boost_post(request: Request, post_id: int):
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id))
             s.commit()
             broadcast_refresh_notifs(post.author_id)
-            # Stream the original post to timelines (includes booster's followers)
+            # Stream the boost pointer post as a new timeline entry
             try:
                 from app.timeline_stream import broadcast_post
+                boost_pj = _post_json(boost_post, s, user)
+                boost_pj["mentioned_user_ids"] = []
+                boost_pj["reply_context"] = None
+                threading.Thread(target=_broadcast_timeline, args=(boost_pj, user.id, post.visibility or "public", False), daemon=True).start()
+            except Exception:
+                pass
+            # Also send an update event for the original post (count sync)
+            try:
                 _ba = post.author
                 broadcast_post({
                     "id": post.id, "type": "update",
-                    "number": post.number or "",
-                    "content": post.content, "summary": post.summary or "",
-                    "visibility": post.visibility or "public",
-                    "created_at": post.created_at.isoformat() if post.created_at else "",
-                    "author": {
-                        "id": _ba.id, "username": _ba.username,
-                        "display_name": _ba.display_name or _ba.username,
-                        "avatar": _ba.profile_image or "", "header": _ba.header_image or "",
-                        "summary": _ba.summary or "", "is_admin": _ba.is_admin,
-                        "is_locked": getattr(_ba, "is_locked", False),
-                        "is_limited": getattr(_ba, "is_limited", False),
-                        "is_remote": _ba.is_remote, "ap_id": _ba.remote_url or "",
-                    },
-                    "likes_count": s.query(Like).filter_by(post_id=post.id).count(),
-                    "boosts_count": s.query(Boost).filter_by(post_id=post.id).count(),
-                    "replies_count": s.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count(),
-                    "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
-                    "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
-                    "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
-                    "poll_data": post.poll_data, "my_vote": None,
-                    "reactions": _build_reactions(s, post.id),
-                    "my_reaction": None,
+                    "boosts_count": s.query(Boost).filter_by(post_id=post_id).count(),
                 }, post.author_id, post.visibility or "public", False)
             except Exception:
                 pass
