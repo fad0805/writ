@@ -1148,6 +1148,16 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     mentioned_ids = []
     if mentioned_names:
         users = session.query(User).filter(User.username.in_(mentioned_names)).all()
+        if len(users) < len(mentioned_names):
+            # 골뱅이 뒤를 뗀 순수 로컬 아이디들만 모음 (예: 'jack@remote.com' -> 'jack')
+            local_names = {name.split('@')[0] for name in mentioned_names}
+            extra_users = session.query(User).filter(User.username.in_(local_names)).all()
+            # 중복되지 않게 유저 리스트 합치기
+            existing_ids = {u.id for u in users}
+            for eu in extra_users:
+                if eu.id not in existing_ids:
+                    users.append(eu)
+
         mentioned_ids = [u.id for u in users]
 
     _process_emoji_tags(obj.get("tag", []), session)
