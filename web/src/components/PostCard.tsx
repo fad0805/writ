@@ -44,6 +44,11 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
   );
 
   text = text.replace(/(^|>|\s)@([a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?)/g, (_m, before, handle) => {
+    // If no domain in handle, check validMentions for a remote match
+    if (!handle.includes("@") && validMentions) {
+      const found = Array.from(validMentions).find((v: string) => v.startsWith(handle + "@"));
+      if (found) handle = found;
+    }
     return `${before}<a href="/@${handle}" class="mention-link">@${handle}</a>`;
   });
 
