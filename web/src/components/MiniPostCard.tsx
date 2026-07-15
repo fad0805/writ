@@ -81,14 +81,20 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
           <Icon name={TYPE_ICONS[notifType] || "bell"} size={14} />
         </div>
       ) : (
-        <div className="mini-post-avatar-box mini-post-avatar-box-initials" style={{ background: `hsl(${post.author.username?.length * 37 % 360}, 35%, 40%)` }}>
-          {(post.author.display_name || post.author.username)[0]}
+        <div className="mini-post-avatar-box">
+          {post.author.avatar ? (
+            <img src={post.author.avatar} alt="" className="mini-post-avatar-img" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover" }} />
+          ) : (
+            <div className="mini-post-avatar-box-initials" style={{ background: `hsl(${post.author.username?.length * 37 % 360}, 35%, 40%)`, width: 36, height: 36, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>
+              {(post.author.display_name || post.author.username)[0]}
+            </div>
+          )}
         </div>
       )}
       <div className="mini-post-content">
         {notifLabel && <div style={{ fontSize: "0.82em", color: "var(--text-muted)", marginBottom: 3, lineHeight: 1.4 }}>{notifLabel}</div>}
         <div className="mini-post-author">
-          {post.author.display_name}
+          <span dangerouslySetInnerHTML={{ __html: renderCustomEmojis(post.author.display_name || post.author.username, emojiMap) }} />
           <span className="mini-post-handle">
             @{post.author.display_handle || post.author.username}
           </span>
