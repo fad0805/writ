@@ -32,7 +32,7 @@ export default function TimelinePage() {
   const [hasMore, setHasMore] = useState(true);
   const [rawOffset, setRawOffset] = useState(0);
   const [error, setError] = useState("");
-  const [refreshKey, setRefreshKey] = useState(0);
+
   const [selectedIdx, setSelectedIdx] = useState(-1);
   const [replyPost, setReplyPost] = useState<PostData | null>(null);
   const [showComposer, setShowComposer] = useState(false);
@@ -46,6 +46,7 @@ export default function TimelinePage() {
   const prevTlRef = useRef(tlType);
 
   useEffect(() => {
+    if (typeof localStorage !== "undefined") localStorage.setItem("lastTimelineTab", tlType);
     if (prevTlRef.current !== tlType) {
       tabCache.current[prevTlRef.current] = { posts, hasMore, rawOffset };
       prevTlRef.current = tlType;
@@ -75,12 +76,6 @@ export default function TimelinePage() {
     }
     setLoading(false);
   };
-
-  useEffect(() => {
-    if (refreshKey === 0) return;
-    tabCache.current[tlType] = { posts, hasMore, rawOffset };
-    load();
-  }, [refreshKey]);
 
   useEffect(() => {
     const handler = () => load();
@@ -237,14 +232,7 @@ export default function TimelinePage() {
 
 
 
-  useEffect(() => {
-    document.addEventListener("visibilitychange", refreshOnFocus);
-    window.addEventListener("focus", refreshOnFocus);
-    return () => {
-      document.removeEventListener("visibilitychange", refreshOnFocus);
-      window.removeEventListener("focus", refreshOnFocus);
-    };
-  }, [refreshOnFocus]);
+
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
   if (!user) return <div className="empty-state">{authLoading ? "로딩 중..." : "로그인이 필요합니다"}</div>;
@@ -299,7 +287,10 @@ export default function TimelinePage() {
             </div>
             <PostForm onDone={(newPost) => {
               if (newPost) {
-                load();
+                setPosts((prev) => {
+                  if (prev.some((p) => p.id === newPost.id)) return prev;
+                  return [newPost, ...prev];
+                });
               }
               setShowComposer(false);
             }} />

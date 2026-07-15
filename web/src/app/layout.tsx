@@ -95,21 +95,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             (function() {
               var startY = 0;
               var pulling = false;
+              var pullEl = document.querySelector('.main-content');
               document.addEventListener('touchstart', function(e) {
-                if (window.scrollY <= 0) {
-                  startY = e.touches[0].clientY;
-                  pulling = true;
-                }
+                if (!pullEl || pullEl.scrollTop > 0) return;
+                startY = e.touches[0].clientY;
+                pulling = true;
               }, { passive: true });
               document.addEventListener('touchmove', function(e) {
                 if (!pulling) return;
                 var diff = e.touches[0].clientY - startY;
-                if (diff > 225 && window.scrollY <= 0) {
+                if (diff > 0) pullEl.style.transform = 'translateY(' + Math.min(diff * 0.4, 60) + 'px)';
+                if (diff > 200) {
                   pulling = false;
+                  pullEl.style.transform = '';
                   window.location.reload();
                 }
               }, { passive: true });
-              document.addEventListener('touchend', function() { pulling = false; }, { passive: true });
+              document.addEventListener('touchend', function() {
+                if (pullEl) pullEl.style.transform = '';
+                pulling = false;
+              }, { passive: true });
             })();
           `
         }} />

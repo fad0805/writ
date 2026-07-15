@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, RemoteMedia, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, UserBlock, get_session
+from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, RemoteMedia, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, UserBlock, Tag, get_session
 from app.config import BASE_URL, SECRET_KEY
 from app.crypto_utils import generate_keypair, sign_string, encrypt_key, get_private_key
 
@@ -1552,6 +1552,15 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             )
             session.add(post)
             session.flush()
+
+            # Parse #hashtags from content and sync with Tag model (so hashtag search includes remote posts)
+            for _t in re.findall(r'(?<!\w)#([\w_가-힣]+)', content or ""):
+                _existing = session.query(Tag).filter_by(name=_t.lower()).first()
+                if not _existing:
+                    _existing = Tag(name=_t.lower())
+                    session.add(_existing)
+                    session.flush()
+                post.tag_list.append(_existing)
 
             # Notify local users mentioned or replied to
             _notified = set()

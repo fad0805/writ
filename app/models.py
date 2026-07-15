@@ -373,10 +373,16 @@ class Post(Base):
             content,
         )
 
+        from urllib.parse import quote as _urlencode
+        content = re.sub(
+            r'(^|(?<=\s)|(?<=>))#([^\s<]+)',
+            lambda m: f'{m.group(1)}<a href="{BASE_URL}/explore?tag={_urlencode(m.group(2))}" class="mention hashtag" rel="tag">#{m.group(2)}</a>',
+            content,
+        )
 
         if self.tag_list:
             for t in self.tag_list:
-                tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={t.name}", "name": f"#{t.name}"})
+                tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={_urlencode(t.name)}", "name": f"#{t.name}"})
 
         content = re.sub(r'href="/', f'href="{BASE_URL}/', content)
 

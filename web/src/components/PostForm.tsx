@@ -12,14 +12,22 @@ import { useAuth } from "@/lib/auth";
 const MAX_LENGTH = 500;
 
 export default function PostForm({ parentId, onDone, placeholder, initialContent, initialVisibility, shareUrl }: { parentId?: number; onDone?: (post?: any) => void; placeholder?: string; initialContent?: string; initialVisibility?: string; shareUrl?: string }) {
-  const [content, setContent] = useState(initialContent || "");
-  const [summary, setSummary] = useState("");
-  const [postSensitive, setPostSensitive] = useState(false);
+  const draftKey = `draft_${parentId || "new"}`;
+  const savedDraft = typeof localStorage !== "undefined" ? (() => { try { return JSON.parse(localStorage.getItem(draftKey) || "null"); } catch { return null; } })() : null;
+  const [content, setContent] = useState((savedDraft?.content ?? initialContent) || "");
+  const [summary, setSummary] = useState(savedDraft?.summary ?? "");
+  const [postSensitive, setPostSensitive] = useState(savedDraft?.sensitive ?? false);
   const { user: authUser } = useAuth();
   const [visibilityOverride, setVisibilityOverride] = useState<string | null>(
     initialVisibility || null
   );
   const visibility = visibilityOverride ?? authUser?.default_visibility ?? "public";
+  const visOpts = [
+    { value: "public", label: "공개", icon: "globe" },
+    { value: "home", label: "홈", icon: "home" },
+    { value: "followers", label: "팔로워", icon: "lock" },
+    { value: "mention", label: "멘션", icon: "mail" },
+  ];
   const [submitting, setSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -47,6 +55,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [mediaUploading, setMediaUploading] = useState(false);
   const [mediaWarning, setMediaWarning] = useState("");
   const mediaInputRef = useRef<HTMLInputElement>(null);
+  const [showVisPicker, setShowVisPicker] = useState(false);
   const [showPoll, setShowPoll] = useState(false);
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [pollExpiresIn, setPollExpiresIn] = useState(1440);
@@ -58,6 +67,27 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [showSeriesSearch, setShowSeriesSearch] = useState(false);
   const [seriesSearchQ, setSeriesSearchQ] = useState("");
   const seriesSearchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!showVisPicker) return;
+    const close = (e: MouseEvent) => {
+      if (!(e.target as Element)?.closest?.(".vis-btn-wrap")) setShowVisPicker(false);
+    };
+    setTimeout(() => document.addEventListener("click", close), 0);
+    return () => document.removeEventListener("click", close);
+  }, [showVisPicker]);
+
+  useEffect(() => {
+    if (typeof localStorage === "undefined") return;
+    const t = setTimeout(() => {
+      if (content || summary || postSensitive) {
+        localStorage.setItem(draftKey, JSON.stringify({ content, summary, sensitive: postSensitive }));
+      } else {
+        localStorage.removeItem(draftKey);
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [content, summary, postSensitive, draftKey]);
 
   const totalLen = content.length + summary.length;
   const nearLimit = totalLen > MAX_LENGTH - 50 && totalLen <= MAX_LENGTH;
@@ -513,6 +543,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       const opts = showPoll ? pollOptions.filter(o => o.trim()).map(o => o.trim()) : [];
       const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrl, media_attachments: JSON.stringify(uploaded), is_sensitive: postSensitive, poll_options: opts.length >= 2 ? JSON.stringify(opts) : "", poll_expires_in: pollExpiresIn });
       setContent(""); setSummary(""); setPostSensitive(false); setMediaItems([]); setShowPoll(false); setPollOptions(["", ""]); setPollExpiresIn(24);
+      if (typeof localStorage !== "undefined") localStorage.removeItem(draftKey);
       if (onDone) onDone(result);
       else router.refresh();
     } catch (err: unknown) { alert(err instanceof Error ? err.message : "오류가 발생했습니다"); }
@@ -705,7 +736,20 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         </div>
       )}
       <div className="reply-form-footer">
-        <VisibilitySelector value={visibility} onChange={(v) => setVisibilityOverride(v)} includeMention />
+        <div className="vis-btn-wrap" style={{ position: "relative" }}>
+          <button type="button" className="action-btn" onClick={() => setShowVisPicker(!showVisPicker)} title="공개 설정">
+            <Icon name={visOpts.find(v => v.value === visibility)?.icon || "globe"} />
+          </button>
+          {showVisPicker && (
+            <div className="vis-dropdown" style={{ position: "absolute", bottom: "100%", left: 0, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8, padding: 4, zIndex: 100, display: "flex", flexDirection: "column", gap: 2 }}>
+              {visOpts.map(v => (
+                <button key={v.value} type="button" className={`btn btn-small ${visibility === v.value ? "btn-primary" : "btn-outline"}`} onClick={() => { setVisibilityOverride(v.value); setShowVisPicker(false); }} style={{ textAlign: "left", justifyContent: "flex-start", gap: 6, whiteSpace: "nowrap" }}>
+                  <Icon name={v.icon} size={14} /> {v.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="form-footer-right" style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: "auto" }}>
           <button type="button" className="action-btn" onClick={(e) => { e.stopPropagation(); mediaInputRef.current?.click(); }} title="미디어 첨부" disabled={mediaUploading || mediaItems.length >= 4}>
             <Icon name="image" />

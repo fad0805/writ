@@ -57,7 +57,8 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
   });
 
   text = text.replace(/(^|>|　|\s)(https?:\/\/[^\s<>"')\]]+)(?![\s\S]*?<\/a>)/g, (_m: string, before: string, url: string) => {
-    return `${before}<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+    const isLocal = typeof window !== "undefined" && url.startsWith(window.location.origin);
+    return `${before}<a href="${isLocal ? url.replace(window.location.origin, "") : url}"${isLocal ? "" : ' target="_blank" rel="noopener noreferrer"'}>${url}</a>`;
   });
 
   return text;
@@ -84,23 +85,14 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likes_count);
   const [boostsCount, setBoostsCount] = useState(post.boosts_count);
-  const [serverLogo, setServerLogo] = useState("");
-  useEffect(() => {
-    const cached = (window as any).__serverLogo;
-    if (cached !== undefined) { setServerLogo(cached); return; }
-    fetch("/api/server-info").then(r=>r.json()).then(d=>{
-      const logo = d.logo || "";
-      (window as any).__serverLogo = logo;
-      setServerLogo(logo);
-    }).catch(()=>{});
-  }, []);
+
   const [emojiList, setEmojiList] = useState<CustomEmoji[]>([]);
   useEffect(() => { getCustomEmojis().then(setEmojiList); }, []);
   const [reactions, setReactions] = useState(post.reactions || {});
   const [myReaction, setMyReaction] = useState(post.my_reaction || null);
   const [reactionEmojiMap, setReactionEmojiMap] = useState<Record<string, string>>(() => {
     if ((window as any).__emojiMap) return (window as any).__emojiMap;
-    fetch("/api/emojis").then(r=>r.json()).then((data: any) => { const list: any[] = data.emojis || data || [];
+    getCustomEmojis().then(list => {
       const m: Record<string, string> = {};
       for (const e of list) if (e.keyword && e.url) m[e.keyword] = e.url;
       (window as any).__emojiMap = m;
@@ -621,7 +613,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
               {quotedSeries.novel.cover_image ? (
                 <ClickableCover src={quotedSeries.novel.cover_image} isSensitive={(quotedSeries.novel as any).is_sensitive} className="cover-img" />
               ) : (
-                serverLogo ? <img src={serverLogo} alt="" className="cover-img" style={{width:64,height:64,objectFit:"contain",padding:8,background:"var(--bg-tertiary)"}} />
+                (window as any).__serverLogo ? <img src={(window as any).__serverLogo} alt="" className="cover-img" style={{width:64,height:64,objectFit:"contain",padding:8,background:"var(--bg-tertiary)"}} />
                 : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(quotedSeries.novel.title) }}>
                   {quotedSeries.novel.title[0]}
                 </div>
@@ -641,7 +633,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
               {quotedEpisode.novel.cover_image ? (
                 <ClickableCover src={quotedEpisode.novel.cover_image} isSensitive={(quotedEpisode.novel as any).is_sensitive} className="cover-img" />
               ) : (
-                serverLogo ? <img src={serverLogo} alt="" className="cover-img" style={{width:64,height:64,objectFit:"contain",padding:8,background:"var(--bg-tertiary)"}} />
+                (window as any).__serverLogo ? <img src={(window as any).__serverLogo} alt="" className="cover-img" style={{width:64,height:64,objectFit:"contain",padding:8,background:"var(--bg-tertiary)"}} />
                 : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(quotedEpisode.novel.title) }}>
                   {quotedEpisode.novel.title[0]}
                 </div>
@@ -673,12 +665,12 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
           <div className="reactions-row" style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8, marginBottom: 4, padding: "0 8px" }} onClick={(e) => e.stopPropagation()}>
               {Object.entries(reactions).sort(([a], [b]) => a === "★" ? -1 : b === "★" ? 1 : 0).map(([emoji, count]) => {
               const emojiKey = emoji.startsWith(":") && emoji.endsWith(":") ? emoji.slice(1, -1) : emoji;
-              const isNotLocalCustom = emoji.startsWith(":") && emoji.endsWith(":") && !reactionEmojiMap[emojiKey];
+              const emojiIsRemote = emoji.startsWith(":") && emoji.endsWith(":") && !reactionEmojiMap[emojiKey] && Object.keys(reactionEmojiMap).length > 0;
               return (
               <span
                 key={emoji}
-                className={`reaction-badge${myReaction === emoji ? " active" : ""}${isNotLocalCustom ? " reaction-disabled" : ""}`}
-                onClick={isNotLocalCustom ? undefined : async () => {
+                className={`reaction-badge${myReaction === emoji ? " active" : ""}${emojiIsRemote ? " reaction-disabled" : ""}`}
+                onClick={async () => {
                   if (myReaction === emoji) {
                     await api.unreact(post.id);
                     const next = { ...reactions };
@@ -696,7 +688,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
                     setLikesCount(likesCount + 1);
                   }
                 }}
-                style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 12, fontSize: 13, cursor: isNotLocalCustom ? "default" : "pointer", border: "1px solid var(--border)", background: myReaction === emoji ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-secondary)", opacity: isNotLocalCustom ? 0.5 : 1 }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 12, fontSize: 13, cursor: emojiIsRemote ? "default" : "pointer", border: "1px solid var(--border)", background: myReaction === emoji ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-secondary)", opacity: emojiIsRemote ? 0.5 : 1 }}
               >
 {emoji === "★" ? (
                   <Icon name="star_filled" size={18} style={{ color: "#f1c40f" }} />

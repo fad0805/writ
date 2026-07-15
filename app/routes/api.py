@@ -729,7 +729,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             seen_ids.add(p.boost_of_id)
             if p.boost_of_id not in boost_originals:
                 continue
-        elif p.id in seen_ids:
+        elif p.id in seen_ids and p.author_id != user.id:
             continue
         seen_ids.add(p.id)
         deduped.append(p)
@@ -809,13 +809,11 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         posts = filtered
     # Hide posts that mention someone the user doesn't follow (home/social only)
     if user and tl_type in ("home", "social"):
-        _following_ids_set = {str(fid) for fid in _following_ids} if _following_ids else set()
-        my_id_str = str(user.id)
+        _following_ids_set = set(_following_ids) if _following_ids else set()
 
         mention_filtered = []
         for p in posts:
             skip = False
-            author_id_str = str(p.author_id) if p.author_id else ""
 
             if p.mentioned_user_ids:
                 for muid in p.mentioned_user_ids:
@@ -1763,10 +1761,11 @@ def api_boost_post(request: Request, post_id: int):
             # Stream the boost pointer post as a new timeline entry
             try:
                 from app.timeline_stream import broadcast_post
-                boost_pj = _post_json(boost_post, s, user)
-                boost_pj["mentioned_user_ids"] = []
-                boost_pj["reply_context"] = None
-                threading.Thread(target=_broadcast_timeline, args=(boost_pj, user.id, post.visibility or "public", False), daemon=True).start()
+                og = _post_json(post, s, user)
+                og["id"] = boost_post.id
+                og["boosted_by"] = _user_json(boost_post.author)
+                og["mentioned_user_ids"] = []
+                threading.Thread(target=_broadcast_timeline, args=(og, user.id, post.visibility or "public", False), daemon=True).start()
             except Exception:
                 pass
             # Also send an update event for the original post (count sync)
@@ -4819,7 +4818,7 @@ def api_fetch_actor(request: Request, url: str = Form(...)):
         raise HTTPException(status_code=403, detail=err)
     from app.activitypub import _resolve_actor, _safe_fetch
     from app.activitypub import _safe_fetch
-    actor = _resolve_actor(url, force_refresh=True, sign_as=user)
+    actor = _resolve_actor(url, force_refresh=False, sign_as=user)
     if not actor:
         raise HTTPException(status_code=400, detail="Cannot resolve actor")
 

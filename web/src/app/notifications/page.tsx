@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { api, NotificationData, User } from "@/lib/api";
@@ -163,17 +163,35 @@ export default function NotificationsPage() {
     } catch {}
   };
 
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const updateTabMask = useCallback(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    const atStart = el.scrollLeft <= 2;
+    const atEnd = el.scrollLeft >= el.scrollWidth - el.clientWidth - 2;
+    const fadeSize = 20;
+    const leftFade = atStart ? 0 : fadeSize;
+    const rightFade = atEnd ? 0 : fadeSize;
+    el.style.maskImage = `linear-gradient(to right, transparent ${leftFade}px, black ${leftFade}px, black calc(100% - ${rightFade}px), transparent calc(100% - ${rightFade}px))`;
+    el.style.webkitMaskImage = el.style.maskImage;
+  }, []);
+  useEffect(() => {
+    updateTabMask();
+    window.addEventListener("resize", updateTabMask);
+    return () => window.removeEventListener("resize", updateTabMask);
+  }, [updateTabMask]);
+
   return (
     <>
       <div className="notif-header-row">
         <h2 className="notif-header-title">
           <Icon name="bell" /> 알림
         </h2>
-        <button onClick={handleMarkAllRead} className="btn btn-small notif-mark-read">
+        <button onClick={handleMarkAllRead} className="btn btn-small notif-mark-read" disabled={!notifs.some(n => !n.is_read)} style={{ opacity: notifs.some(n => !n.is_read) ? 1 : 0.4 }}>
           모두 읽음
         </button>
       </div>
-      <div className="notif-tabs">
+      <div className="notif-tabs" ref={tabsRef} onScroll={updateTabMask}>
         {FILTERS.map((f) => (
           <button
             key={f.value}

@@ -23,8 +23,7 @@ COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/next.config.ts ./
 COPY --from=builder /app/node_modules ./node_modules
 
-RUN addgroup -S writ && adduser -S writ -G writ && \
-    chown -R writ:writ /app
+RUN addgroup -S writ && adduser -S writ -G writ
 
 USER writ
 
