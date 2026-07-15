@@ -1430,12 +1430,13 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     }, poll_post.author_id, poll_post.visibility or "public", false)
                     return (200, "voted")
 
-# Parse mentions ONLY from AP tag array (No regex body parsing)
+            # Parse mentions ONLY from AP tag array (No regex body parsing)
             mentioned_hrefs = set()
             mentioned_names = set()
             # Get actor domain for same-server mention resolution
             _actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
             # Extract from AP tag array
+            print(f'tags : {obj.get('tag', [])}', flush=True)
             for tag in (obj.get("tag", []) or []):
                 if isinstance(tag, dict) and tag.get("type") == "Mention":
                     href = tag.get("href", "")
@@ -1449,6 +1450,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 _a = _aud.rstrip("/")
                 if _a and _a.startswith("http"):
                     mentioned_hrefs.add(_a)
+
             mentioned_ids = []
             _seen_ids = set()
             # Process href-based mentions FIRST (most reliable: from AP Mention tag href or to/cc)
@@ -1510,6 +1512,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             if u and u.id not in _seen_ids:
                                 mentioned_ids.append(u.id)
                                 _seen_ids.add(u.id)
+            print(f'mentioned_ids: {mentioned_ids}', flush=True)
 
             # Check if actor's domain is server-muted
             actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
