@@ -15,7 +15,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p /app/data /app/uploads /app/static /app/logs
+RUN mkdir -p /app/data /app/uploads /app/static /app/logs && \
+    groupadd -r writ && useradd -r -g writ -d /app -s /sbin/nologin writ && \
+    chown -R writ:writ /app
+
+USER writ
 
 EXPOSE 8000
 
