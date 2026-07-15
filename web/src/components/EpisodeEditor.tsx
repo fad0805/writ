@@ -91,7 +91,7 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
   useEffect(() => {
     if (internalUpdate.current) { internalUpdate.current = false; return; }
     if (editor && value !== editor.getHTML()) {
-      editor.commands.setContent(value, false);
+      editor.commands.setContent(value, { emitUpdate: false } as any);
     }
   }, [value, editor]);
 
