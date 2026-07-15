@@ -237,6 +237,8 @@ export default function TimelinePage() {
 
 
 
+  const refreshOnFocus = () => { if (document.visibilityState === "visible") load(); };
+
   useEffect(() => {
     document.addEventListener("visibilitychange", refreshOnFocus);
     window.addEventListener("focus", refreshOnFocus);
