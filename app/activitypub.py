@@ -1118,7 +1118,38 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     if isinstance(cc, str): cc = [cc]
     all_auds = to + cc
     pub = "https://www.w3.org/ns/activitystreams#Public"
-    if pub in to:
+
+    # ------------------ [여기서부터 수정] ------------------
+    # 1. obj['tag'] 내부에 Mention 타입이 명시되어 있는지 확인
+    tags = obj.get("tag", [])
+    if isinstance(tags, dict): 
+        tags = [tags]
+    elif not isinstance(tags, list): 
+        tags = []
+
+    has_mention_tag = False
+    collected_mentions = set()
+    for t in tags:
+        if not isinstance(t, dict):
+            continue
+        # 조건 A: 표준 'Mention' 타입 객체인 경우
+        is_mention_type = t.get("type") == "Mention"
+        # 조건 B: name 필드에 '@이름@도메인' 포맷이 들어온 경우 (예: @siarte@serafuku.moe)
+        name_val = t.get("name", "") or ""
+        # 골뱅이가 2개 이상 들어있고 @로 시작하는지 체크
+        is_double_at = name_val.startswith("@") and name_val.count("@") >= 2
+        has_mention_tag = True
+        if is_mention_type or is_double_at:
+            has_mention_tag = True
+            if name_val:
+                collected_mentions.add(name_val)
+            break
+
+    # 2. 공개 범위(Visibility) 판별 조건문
+    # 전체 공개(Public) 주소가 수신처에 없고, 멘션 태그가 감지되면 "mention"으로 지정합니다.
+    if pub not in all_auds and has_mention_tag:
+        vis = "mention"
+    elif pub in to:
         vis = "public"
     elif pub in cc:
         vis = "home"
@@ -1144,8 +1175,19 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
             if parent:
                 in_reply_to_id = parent.id
 
-    # 1. 정규식 보완 (아이디와 도메인에 대시나 점이 들어간 경우까지 안전하게 추출)
-    mentioned_names = set(re.findall(r'@([\w.-]+(?:@[\w.-]+)?)', content or ""))
+    content_mentions = set(re.findall(r'@([\w.-]+(?:@[\w.-]+)?)', content or ""))
+    # tag에서 모은 @이름 멘션들과 본문에서 정규식으로 찾은 멘션들을 하나로 합치기
+    # (tag의 name_val에 포함된 @ 기호를 떼고 정규식 포맷과 일치시킵니다)
+    normalized_tag_mentions = set()
+    for m in collected_mentions:
+        clean_m = m.lstrip("@")  # @siarte@serafuku.moe -> siarte@serafuku.moe
+        if clean_m:
+            normalized_tag_mentions.add(clean_m)
+
+    # 최종 멘션 이름 목록 (중복 제거된 set)
+    all_unique_mentions = content_mentions.union(normalized_tag_mentions)
+    # 기존 코드의 mentioned_ids 리스트 형태로 치환
+    mentioned_ids = list(all_unique_mentions)
     mentioned_ids = []
     if mentioned_names:
         local_lookups = set()
