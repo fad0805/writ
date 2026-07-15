@@ -382,13 +382,14 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   useEffect(() => {
     const hasRePrefix = /<span class="quote-inline">\s*RE:\s*<\/span>/i.test(post.content) || /^\s*RE:/i.test(post.content.replace(/<[^>]+>/g, '').trim());
     if (!hasRePrefix) return;
-    const newFormat = post.content.match(/https?:\/\/([^/]+)\/@(\w+(?:@[\w.-]+)?)\/([a-f0-9]+)/);
-    const oldFormat = post.content.match(/https?:\/\/[^/]+\/post\/(\d+)/);
-    const seriesFormat = post.content.match(/https?:\/\/[^/]+\/series\/(\d+)/);
-    const seriesByNumber = post.content.match(/https?:\/\/[^/]+\/series\/by-number\/(\w+)\/([a-f0-9]+)/);
-    const episodeFormat = post.content.match(/https?:\/\/[^/]+\/series\/(\d+)\/episodes\/(\d+)/);
-    const anyUrl = (post.content.match(/https?:\/\/[^\s<>"']+/g) || []).find((u: string) => !u.match(/\/tags\/|\/explore\?/));
-    const url = episodeFormat?.[0] || seriesFormat?.[0] || seriesByNumber?.[0] || newFormat?.[0] || oldFormat?.[0] || anyUrl;
+    const anyUrl = (post.content.match(/https?:\/\/[^\s<>"']+/g) || []).find((u: string) => !u.match(/\/tags\//));
+    if (!anyUrl) return;
+    const newFormat = anyUrl.match(/https?:\/\/([^/]+)\/@(\w+(?:@[\w.-]+)?)\/([a-f0-9]+)/);
+    const oldFormat = anyUrl.match(/https?:\/\/[^/]+\/post\/(\d+)/);
+    const seriesFormat = anyUrl.match(/https?:\/\/[^/]+\/series\/(\d+)/);
+    const seriesByNumber = anyUrl.match(/https?:\/\/[^/]+\/series\/by-number\/(\w+)\/([a-f0-9]+)/);
+    const episodeFormat = anyUrl.match(/https?:\/\/[^/]+\/series\/(\d+)\/episodes\/(\d+)/);
+    const url = anyUrl;
     if (!url) return;
     setQuoteUrl(url);
     setLoadingQuote(true);
@@ -424,7 +425,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
         .then(r => r.json()).then(d => { setQuotedPost(d); setLoadingQuote(false); })
         .catch(() => setLoadingQuote(false));
     } else {
-      const form = new FormData(); form.append("url", anyUrl![0]);
+      const form = new FormData(); form.append("url", url);
       fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form })
         .then(r => { if (r.ok) return r.json(); throw new Error(); })
         .then(d => {
