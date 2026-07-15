@@ -281,25 +281,31 @@ def _parse_mentions(content):
         for handle in mentioned:
             if '@' in handle:
                 local_part, domain = handle.split('@', 1)
+                from urllib.parse import urlparse as _urlparse
                 u = s.query(User).filter(
                     User.username == local_part,
                     User.is_remote == True,
                 ).first()
                 if u and u.remote_url:
-                    from urllib.parse import urlparse as _urlparse
                     parsed = _urlparse(u.remote_url)
                     if parsed.hostname and parsed.hostname.lower() == domain.lower():
                         user_ids.append(u.id)
                         continue
+                # username may contain @domain, try like + domain check
+                candidates = s.query(User).filter(
+                    User.username.like(f"{local_part}@%"),
+                    User.is_remote == True,
+                ).all()
+                for _c in candidates:
+                    if _c.remote_url:
+                        _p = _urlparse(_c.remote_url)
+                        if _p.hostname and _p.hostname.lower() == domain.lower():
+                            user_ids.append(_c.id)
+                            break
             else:
-                u = s.query(User).filter(User.username == handle, User.is_remote == True).first()
-                if not u:
-                    u = s.query(User).filter(User.username.like(f"{handle}@%"), User.is_remote == True).first()
-                if not u:
-                    u = s.query(User).filter(User.username == handle, User.is_remote == False).first()
+                u = s.query(User).filter(User.username == handle, User.is_remote == False).first()
                 if u:
                     user_ids.append(u.id)
-                    continue
         return user_ids
 
 

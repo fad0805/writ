@@ -1389,21 +1389,32 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 for _name in mentioned_names:
                     if '@' in _name:
                         _lp, _dom = _name.split('@', 1)
+                        from urllib.parse import urlparse as _urlparse
                         u = session.query(User).filter(
                             User.username == _lp, User.is_remote == True,
                         ).first()
-                        if not u:
-                            u = session.query(User).filter(
-                                User.username.like(f"{_lp}@%"), User.is_remote == True,
-                            ).first()
                         if u and u.id not in _seen_ids and u.remote_url:
-                            from urllib.parse import urlparse as _urlparse
                             _p = _urlparse(u.remote_url)
                             if _p.hostname and _p.hostname.lower() == _dom.lower():
                                 mentioned_ids.append(u.id)
                                 _seen_ids.add(u.id)
+                                continue
+                        # username may contain @domain, try like + domain check
+                        candidates = session.query(User).filter(
+                            User.username.like(f"{_lp}@%"),
+                            User.is_remote == True,
+                        ).all()
+                        for _c in candidates:
+                            if _c.id in _seen_ids:
+                                continue
+                            if _c.remote_url:
+                                _p = _urlparse(_c.remote_url)
+                                if _p.hostname and _p.hostname.lower() == _dom.lower():
+                                    mentioned_ids.append(_c.id)
+                                    _seen_ids.add(_c.id)
+                                    break
                     else:
-                        # For remote posts, prefer same-domain remote user
+                        # same-domain remote user only, then local fallback
                         u = None
                         if _actor_domain:
                             u = session.query(User).filter(
@@ -1411,11 +1422,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                 User.remote_url.contains(_actor_domain)
                             ).first()
                         if not u:
-                            u = session.query(User).filter(
-                                User.username.like(f"{_name}@%"), User.is_remote == True,
-                            ).first()
-                        if not u:
-                            u = session.query(User).filter(User.username == _name).first()
+                            u = session.query(User).filter(User.username == _name, User.is_remote == False).first()
                         if u and u.id not in _seen_ids:
                             mentioned_ids.append(u.id)
                             _seen_ids.add(u.id)
