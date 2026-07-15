@@ -913,16 +913,6 @@ class PendingDelivery(Base):
 
 def init_db():
     Base.metadata.create_all(engine)
-    # Alembic migration (logs if fails, non-fatal)
-    try:
-        from alembic.config import Config
-        from alembic import command
-        cfg = Config("alembic.ini")
-        cfg.set_main_option("sqlalchemy.url", str(engine.url))
-        command.upgrade(cfg, "head")
-    except Exception as exc:
-        import logging
-        logging.getLogger("writ.init").warning("Alembic migration skipped: %s", exc)
     # Direct SQL fallback — add missing columns that Alembic may have skipped
     _add_missing_columns()
     # Create additional composite indexes for performance
