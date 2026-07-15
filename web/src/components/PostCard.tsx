@@ -88,11 +88,14 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   useEffect(() => {
     const cached = (window as any).__serverLogo;
     if (cached !== undefined) { setServerLogo(cached); return; }
-    fetch("/api/server-info").then(r=>r.json()).then(d=>{
-      const logo = d.logo || "";
-      (window as any).__serverLogo = logo;
-      setServerLogo(logo);
-    }).catch(()=>{});
+    if (!(window as any).__serverLogoPromise) {
+      (window as any).__serverLogoPromise = fetch("/api/server-info").then(r=>r.json()).then(d=>{
+        const logo = d.logo || "";
+        (window as any).__serverLogo = logo;
+        return logo;
+      }).catch(()=>"");
+    }
+    (window as any).__serverLogoPromise.then((logo: string) => { if (logo) setServerLogo(logo); });
   }, []);
   const [emojiList, setEmojiList] = useState<CustomEmoji[]>([]);
   useEffect(() => { getCustomEmojis().then(setEmojiList); }, []);
