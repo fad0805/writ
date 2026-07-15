@@ -2103,8 +2103,13 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         if len(parts) == 2:
             remote_user, remote_domain = parts
             actor_url = f"https://{remote_domain}/@{remote_user}"
-            from app.activitypub import _resolve_actor
-            _resolve_actor(actor_url)
+            # Fire-and-forget: don't block profile load on remote actor refresh
+            try:
+                from app.activitypub import _resolve_actor
+                import threading
+                threading.Thread(target=_resolve_actor, args=(actor_url,), daemon=True).start()
+            except Exception:
+                pass
     with get_session() as s:
         profile = s.query(User).filter_by(username=username).first()
         if not profile:
@@ -2208,6 +2213,19 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                 if pid not in _reactions_map:
                     _reactions_map[pid] = {}
                 _reactions_map[pid][react] = cnt
+            # Batch-load booster info to avoid N+1 queries in _post_json
+            import datetime as _dt
+            _booster_map = {}
+            _three_hours_ago = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(seconds=10800)
+            _boost_rows = s.query(Boost).filter(
+                Boost.post_id.in_(_all_post_ids),
+                Boost.created_at > _three_hours_ago,
+            ).order_by(desc(Boost.created_at)).all()
+            _booster_user_ids = {b.user_id for b in _boost_rows}
+            _booster_users = {u.id: u for u in s.query(User).filter(User.id.in_(_booster_user_ids)).all()} if _booster_user_ids else {}
+            for b in _boost_rows:
+                if b.post_id not in _booster_map:
+                    _booster_map[b.post_id] = _booster_users.get(b.user_id)
             all_mentioned_ids = set()
             _posts_for_mentions = s.query(Post).filter(Post.id.in_(_all_post_ids)).all()
             for pp in _posts_for_mentions:
@@ -2223,10 +2241,11 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                         _mentioned_users_map[pp.id] = []
         else:
             _liked_ids = _boosted_ids = _bookmarked_ids = set()
-            _vote_map = _my_reaction_map = _reactions_map = _mentioned_users_map = {}
+            _vote_map = _my_reaction_map = _reactions_map = _mentioned_users_map = _booster_map = {}
         _pj_kwargs = dict(_liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids,
                           _vote_map=_vote_map, _my_reaction_map=_my_reaction_map,
-                          _reactions_map=_reactions_map, _mentioned_users_map=_mentioned_users_map)
+                          _reactions_map=_reactions_map, _booster_map=_booster_map,
+                          _mentioned_users_map=_mentioned_users_map)
         return {
             "profile": _user_json(profile),
             "posts": [_post_json(p, s, user, **_pj_kwargs) for p in posts],
