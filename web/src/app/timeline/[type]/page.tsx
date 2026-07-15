@@ -132,21 +132,6 @@ export default function TimelinePage() {
   }, []);
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    const handler = () => {
-      if (document.visibilityState === "visible") {
-        clearTimeout(timer);
-        timer = setTimeout(load, 500);
-      }
-    };
-    document.addEventListener("visibilitychange", handler);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("visibilitychange", handler);
-    };
-  }, []);
-
-  useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (document.activeElement?.tagName || "").toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select") return;
