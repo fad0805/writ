@@ -692,9 +692,15 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
     if "publicKey" in data:
         public_key_pem = data["publicKey"].get("publicKeyPem", "")
 
+    # Download images BEFORE opening DB session to avoid holding connections during network I/O
+    base_username_clean = local_username.replace("@", "_")
+    _dl_avatar = _save_remote_avatar(avatar_url, base_username_clean) if avatar_url else ""
+    _dl_header = _save_remote_image(header_url, "headers", base_username_clean) if header_url else ""
+    _dl_followers = _fetch_remote_count(data.get("followers", ""), sign_as)
+    _dl_following = _fetch_remote_count(data.get("following", ""), sign_as)
+
     with get_session() as session:
         existing = session.query(User).filter_by(remote_url=actor_url).first()
-        base_username_clean = local_username.replace("@", "_")
 
         if existing:
             existing.public_key = public_key_pem
@@ -705,10 +711,10 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             existing.shared_inbox_url = data.get("endpoints", {}).get("sharedInbox", existing.shared_inbox_url)
             existing.is_locked = data.get("manuallyApprovesFollowers", existing.is_locked)
             existing.profile_url = data.get("url", existing.profile_url or "")
-            if avatar_url:
-                existing.profile_image = _save_remote_avatar(avatar_url, base_username_clean, existing.profile_image)
-            if header_url:
-                existing.header_image = _save_remote_image(header_url, "headers", base_username_clean, existing.header_image)
+            if _dl_avatar:
+                existing.profile_image = _dl_avatar
+            if _dl_header:
+                existing.header_image = _dl_header
             existing.custom_fields = _extract_custom_fields(data.get("attachment", []))
             _process_emoji_tags(data.get("tag", []), session)
             session.commit()
@@ -722,10 +728,10 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             by_username.display_name = data.get("name", by_username.display_name)
             by_username.summary = data.get("summary", by_username.summary)
             by_username.profile_url = data.get("url", by_username.profile_url or "")
-            if avatar_url:
-                by_username.profile_image = _save_remote_avatar(avatar_url, base_username_clean, by_username.profile_image)
-            if header_url:
-                by_username.header_image = _save_remote_image(header_url, "headers", base_username_clean, by_username.header_image)
+            if _dl_avatar:
+                by_username.profile_image = _dl_avatar
+            if _dl_header:
+                by_username.header_image = _dl_header
             by_username.custom_fields = _extract_custom_fields(data.get("attachment", []))
             _process_emoji_tags(data.get("tag", []), session)
             session.commit()
@@ -739,8 +745,6 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             counter += 1
 
         priv, pub = generate_keypair()
-        profile_image = _save_remote_avatar(avatar_url, base_username_clean) if avatar_url else ""
-        header_image = _save_remote_image(header_url, "headers", base_username_clean) if header_url else ""
         user = User(
             username=local_username,
             display_name=data.get("name", preferred_username),
@@ -753,12 +757,12 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             profile_url=data.get("url", ""),
             inbox_url=data.get("inbox", ""),
             shared_inbox_url=data.get("endpoints", {}).get("sharedInbox", ""),
-            profile_image=profile_image,
-            header_image=header_image,
+            profile_image=_dl_avatar,
+            header_image=_dl_header,
             is_locked=data.get("manuallyApprovesFollowers", False),
             custom_fields=_extract_custom_fields(data.get("attachment", [])),
-            remote_followers_count=_fetch_remote_count(data.get("followers", ""), sign_as),
-            remote_following_count=_fetch_remote_count(data.get("following", ""), sign_as),
+            remote_followers_count=_dl_followers,
+            remote_following_count=_dl_following,
         )
         session.add(user)
         session.flush()
