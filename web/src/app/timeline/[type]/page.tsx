@@ -231,20 +231,28 @@ export default function TimelinePage() {
     return () => { es?.close(); };
   }, [tlType]);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      api.timeline(tlType, LIMIT, 0).then((data) => {
-        setPosts((prev) => {
-          const existingIds = new Set(prev.map((p) => p.id));
-          const newOnes = data.posts.filter((p: any) => !existingIds.has(p.id) && !deletedIds.current.has(p.id));
-          if (newOnes.length === 0) return prev;
-          return [...newOnes, ...prev];
-        });
-        setHasMore(data.has_more);
-      }).catch(() => {});
-    }, 30000);
-    return () => clearInterval(interval);
+  // 화면 포커스 시 밀린 글 1회 페치 (30초 폴링 대체)
+  const refreshOnFocus = useCallback(() => {
+    if (document.visibilityState !== "visible") return;
+    api.timeline(tlType, LIMIT, 0).then((data) => {
+      setPosts((prev) => {
+        const existingIds = new Set(prev.map((p) => p.id));
+        const newOnes = data.posts.filter((p: any) => !existingIds.has(p.id) && !deletedIds.current.has(p.id));
+        if (newOnes.length === 0) return prev;
+        return [...newOnes, ...prev];
+      });
+      setHasMore(data.has_more);
+    }).catch(() => {});
   }, [tlType]);
+
+  useEffect(() => {
+    document.addEventListener("visibilitychange", refreshOnFocus);
+    window.addEventListener("focus", refreshOnFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", refreshOnFocus);
+      window.removeEventListener("focus", refreshOnFocus);
+    };
+  }, [refreshOnFocus]);
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
   if (!user) return <div className="empty-state">{authLoading ? "로딩 중..." : "로그인이 필요합니다"}</div>;
