@@ -105,7 +105,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 if (!pulling) return;
                 var diff = e.touches[0].clientY - startY;
                 if (diff > 0) pullEl.style.transform = 'translateY(' + Math.min(diff * 0.4, 60) + 'px)';
-                if (diff > 170) {
+                if (diff > 200) {
                   pulling = false;
                   pullEl.style.transform = '';
                   window.location.reload();
