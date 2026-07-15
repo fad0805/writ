@@ -7,7 +7,7 @@ if [ "$1" = "fetch-log" ]; then
 
 elif [ "$1" = "rebuild" ]; then
   git pull
-  docker compose build api
+  docker compose build api web
   docker compose up -d
 
 elif [ "$1" = "exec" ]; then
