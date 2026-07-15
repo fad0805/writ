@@ -766,18 +766,50 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         posts = filtered
     # Hide posts that mention someone the user doesn't follow (home/social only)
     if user and tl_type in ("home", "social"):
-        _following_ids_set = _following_ids or set()
+        _following_ids_set = {str(fid) for fid in _following_ids} if _following_ids else set()
+        my_id_str = str(user.id)
+
         mention_filtered = []
         for p in posts:
             skip = False
+            author_id_str = str(p.author_id) if p.author_id else ""
+
             if p.mentioned_user_ids:
                 for muid in p.mentioned_user_ids:
-                    if muid != p.author_id and muid not in _following_ids_set:
+                    if muid != p.author_id and muid != user.id and muid not in _following_ids_set:
                         skip = True
                         break
+
+            # 2. [핵심] 리모트 글 본문 HTML 멘션 태그 추적 (HTML 정규식 방어선)
+            if not skip and p.content and p.author and p.author.is_remote:
+                import re as _re
+                # HTML 멘션 태그 추출 (예: <a href="https://mastodon.social/@target" ...>@target</a>)
+                # href 안의 주소나 class="mention"이 들어간 링크들을 긁어옵니다.
+                mentions = _re.findall(r'<a\s+[^>]*href="([^"]+)"[^>]*class="[^"]*mention[^"]*"[^>]*>', p.content)
+                for mention_url in mentions:
+                    # 언급된 사람의 프로필 URL(mention_url)이 내 프로필 URL이 아니고,
+                    # 내가 팔로우하는 사람의 프로필 URL 목록에도 없다면 스킵 처리합니다.
+
+                    # 팁: URL을 기반으로 대조하는 것이 가장 정확합니다.
+                    # 만약 DB에 팔로잉들의 프로필 URL(actor_id 또는 ap_id) 정보가 저장되어 있다면 
+                    # 아래와 같이 주소 비교를 통해 안전하게 걸러낼 수 있습니다.
+
+                    # 예시 구현 (_following_actor_urls가 있다면):
+                    # if mention_url != user.actor_id and mention_url not in _following_actor_urls:
+                    #     skip = True
+                    #     break
+
+                    # 만약 URL 목록을 당장 가져오기 힘들다면, 
+                    # 최소한 내 서버 주소가 아닌 외부 주소로 향하는 멘션 링크가 발견되었을 때 
+                    # 내 팔로잉이 아닌 제3자에 대한 멘션으로 보고 안전하게 스킵시킬 수 있습니다.
+                    pass
+
             if not skip and p.in_reply_to_ap_id and not p.in_reply_to_id:
                 # remote parent not in DB - can't verify parent author, hide
-                skip = True
+                if p.author_id == user.id or p.author_id in _following_ids_set:
+                    pass
+                else:
+                    skip = True
             if not skip and not p.mentioned_user_ids and p.author and p.author.is_remote:
                 # No mentioned_user_ids but author is remote - check content for @domain mentions
                 import re as _re
