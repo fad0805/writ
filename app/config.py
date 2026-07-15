@@ -21,6 +21,8 @@ else:
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 SECRET_KEY = os.environ.get("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable is required")
 SESSION_EXPIRE_DAYS = 30
 
 # ActivityPub
@@ -41,7 +43,13 @@ SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 SMTP_FROM = os.environ.get("SMTP_FROM", "")
 
 # CORS
-CORS_ORIGINS = ["*"]
+_cors_raw = os.environ.get("CORS_ORIGINS", "")
+if _cors_raw.strip():
+    CORS_ORIGINS = [o.strip() for o in _cors_raw.split(",") if o.strip()]
+elif BASE_URL_ENV:
+    CORS_ORIGINS = [BASE_URL]
+else:
+    CORS_ORIGINS = ["*"]
 
 # File storage
 AVATAR_STORAGE_PATH = os.environ.get("AVATAR_STORAGE_PATH", "uploads/avatars")

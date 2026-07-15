@@ -44,7 +44,7 @@ def _federation_allowed(domain: str) -> bool:
                 blocked = s.query(FederationBlock).filter_by(domain=domain).first()
                 return blocked is None
         except Exception:
-            return True
+            return False
 
 
 _SAFE_TAGS = {"p", "br", "a", "strong", "em", "b", "i", "u", "s", "ul", "ol", "li", "blockquote", "code", "pre", "span", "img"}
@@ -123,6 +123,10 @@ _PRIVATE_SUBNETS = [
     ipaddress.ip_network("198.18.0.0/15"),
     ipaddress.ip_network("0.0.0.0/8"),
     ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+    ipaddress.ip_network("::ffff:0:0/96"),
+    ipaddress.ip_network("2001:db8::/32"),
 ]
 
 
