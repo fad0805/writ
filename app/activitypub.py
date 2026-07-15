@@ -716,8 +716,11 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             if _dl_header:
                 existing.header_image = _dl_header
             existing.custom_fields = _extract_custom_fields(data.get("attachment", []))
-            _process_emoji_tags(data.get("tag", []), session)
             session.commit()
+            # Process emoji tags AFTER session closes to avoid holding connection during HTTP
+            with get_session() as emoji_s:
+                _process_emoji_tags(data.get("tag", []), emoji_s)
+                emoji_s.commit()
             return existing
 
         # Also check by username in case remote_url is missing/stale
@@ -733,8 +736,10 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             if _dl_header:
                 by_username.header_image = _dl_header
             by_username.custom_fields = _extract_custom_fields(data.get("attachment", []))
-            _process_emoji_tags(data.get("tag", []), session)
             session.commit()
+            with get_session() as emoji_s:
+                _process_emoji_tags(data.get("tag", []), emoji_s)
+                emoji_s.commit()
             return by_username
 
         # Ensure uniqueness
@@ -766,7 +771,10 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
         )
         session.add(user)
         session.flush()
-        _process_emoji_tags(data.get("tag", []), session)
+        session.commit()
+        with get_session() as emoji_s:
+            _process_emoji_tags(data.get("tag", []), emoji_s)
+            emoji_s.commit()
         session.commit()
         return user
 
@@ -927,16 +935,17 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
     if not local_username:
         return (200, "OK")
 
+    # Resolve actor BEFORE opening session (network I/O + its own session)
+    remote_accepter = _resolve_actor(accepter_url)
+    if not remote_accepter:
+        return (200, "OK")
+    remote_accepter_id = remote_accepter.id
+
     with get_session() as session:
         local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
         if not local_user:
             return (200, "OK")
 
-        remote_accepter = _resolve_actor(accepter_url)
-        if not remote_accepter:
-            return (200, "OK")
-
-        remote_accepter_id = remote_accepter.id
         follow_rel = session.query(Follow).filter_by(
             follower_id=local_user.id,
             following_id=remote_accepter_id,
@@ -1060,6 +1069,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     if isinstance(in_reply_to_ap, dict):
         in_reply_to_ap = in_reply_to_ap.get("id", "")
 
+    # NOTE: parent fetch uses session (may do network I/O via recursive _fetch_remote_post)
     in_reply_to_id = None
     if in_reply_to_ap:
         parent = session.query(Post).filter_by(ap_id=in_reply_to_ap).first()
@@ -1378,10 +1388,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 if mute_entry and mute_entry.muted and visibility == "public":
                     visibility = "home"
 
-            # Process custom emoji tags
-            _process_emoji_tags(obj.get("tag", []), session)
-            session.flush()
-
+            # Process custom emoji tags and media BEFORE session (network I/O)
             import json as _json
             raw_attachments = obj.get("attachment", []) if isinstance(obj, dict) else []
             media_list = []
@@ -1454,6 +1461,13 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     ))
 
             session.commit()
+            # Process emoji tags AFTER commit (separate session for HTTP I/O)
+            try:
+                with get_session() as emoji_s:
+                    _process_emoji_tags(obj.get("tag", []), emoji_s)
+                    emoji_s.commit()
+            except Exception:
+                pass
             from app.push import send_push_to_user
             from app.timeline_stream import broadcast_notif_sound
             _push_notified = set()
@@ -1568,43 +1582,42 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             return (200, "OK")
 
         # Process remote emoji if present in tag array
-        print(f"[EMOJI] reaction='{reaction}' startswith(:)={reaction.startswith(':') if reaction else False}", flush=True)
         if reaction and reaction.startswith(":") and reaction.endswith(":"):
             _kw = reaction[1:-1]
-            print(f"[EMOJI] keyword='{_kw}'", flush=True)
             _existing_emoji = session.query(CustomEmoji).filter_by(keyword=_kw).first()
-            print(f"[EMOJI] existing={_existing_emoji.id if _existing_emoji else None}", flush=True)
             if not _existing_emoji:
+                # Do emoji HTTP download outside this session to avoid holding connection
+                _emoji_data = None
                 tags = activity.get("tag", []) or []
-                print(f"[EMOJI] tags count={len(tags)}", flush=True)
-                for _i, _tag in enumerate(tags):
-                    print(f"[EMOJI] tag[{_i}]: type={_tag.get('type') if isinstance(_tag, dict) else type(_tag).__name__}", flush=True)
+                for _tag in tags:
                     if isinstance(_tag, dict) and _tag.get("type") == "Emoji":
                         _icon = _tag.get("icon", {})
                         _url = _icon.get("url", "") if isinstance(_icon, dict) else ""
                         _tag_id = _tag.get("id", "")
                         _domain = urlparse(_tag_id).netloc if _tag_id else ""
-                        print(f"[EMOJI] found Emoji tag: name={_tag.get('name')} url={_url} domain={_domain}", flush=True)
                         if _url:
-                            from app.utils.storage import get_storage
-                            _storage = get_storage()
                             try:
                                 import httpx as _httpx
-                                print(f"[EMOJI] downloading {_url}", flush=True)
                                 _resp = _httpx.get(_url, timeout=10)
-                                print(f"[EMOJI] download status={_resp.status_code} size={len(_resp.content)}", flush=True)
                                 if _resp.status_code == 200:
                                     _ext = _url.rsplit(".", 1)[-1].split("?")[0] if "." in _url else "png"
                                     _fname = f"{_kw}.{_ext}"
-                                    _storage.save(f"emojis/remote/{_fname}", _resp.content, f"image/{_ext}")
-                                    session.add(CustomEmoji(keyword=_kw, file_name=_fname, category="remote", domain=_domain))
-                                    session.flush()
-                                    print(f"[EMOJI] saved: {_fname}", flush=True)
-                                    logger.info("Imported remote emoji: %s from %s", _kw, _domain)
+                                    _emoji_data = (_fname, _resp.content, f"image/{_ext}", _domain)
                             except Exception as e:
-                                print(f"[EMOJI] error: {e}", flush=True)
-                                logger.warning("Failed to import remote emoji %s: %s", _kw, e)
+                                logger.warning("Failed to download remote emoji %s: %s", _kw, e)
                         break
+                if _emoji_data:
+                    _fname, _content, _mime, _domain = _emoji_data
+                    from app.utils.storage import get_storage
+                    _storage = get_storage()
+                    try:
+                        _storage.save(f"emojis/remote/{_fname}", _content, _mime)
+                        with get_session() as emoji_s:
+                            emoji_s.add(CustomEmoji(keyword=_kw, file_name=_fname, category="remote", domain=_domain))
+                            emoji_s.commit()
+                        logger.info("Imported remote emoji: %s from %s", _kw, _domain)
+                    except Exception as e:
+                        logger.warning("Failed to save remote emoji %s: %s", _kw, e)
 
         existing = session.query(Like).filter_by(user_id=actor_id, post_id=post.id).first()
         if existing:
@@ -1854,31 +1867,22 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
     return (200, "Announced")
 
 def _handle_block(activity: dict) -> tuple[int, str]:
-    import sys as _sys
     actor_url = activity.get("actor", "")
     object_url = activity.get("object", "")
     if isinstance(actor_url, list):
         actor_url = actor_url[0]
     if isinstance(object_url, dict):
         object_url = object_url.get("id", "")
-    print(f"[BLOCK] received: actor={actor_url} object={object_url}", flush=True)
 
-    # Try to resolve with a local user's signature to ensure remote server accepts
     local_username = _parse_username_from_url(object_url)
-    print(f"[BLOCK] parsed local_username={local_username}", flush=True)
     sign_as = None
     if local_username:
         with get_session() as _s:
             _u = _s.query(User).filter_by(username=local_username, is_remote=False).first()
             if _u:
                 sign_as = _u
-                print(f"[BLOCK] sign_as user={_u.username} id={_u.id}", flush=True)
-            else:
-                print(f"[BLOCK] local user '{local_username}' not found in DB", flush=True)
     remote_user = _resolve_actor(actor_url, sign_as=sign_as)
-    print(f"[BLOCK] _resolve_actor returned: {remote_user.id if remote_user else None}", flush=True)
     if not remote_user:
-        print(f"[BLOCK] could not resolve remote actor, returning OK", flush=True)
         return (200, "OK")
 
     try:
@@ -1894,28 +1898,18 @@ def _handle_block(activity: dict) -> tuple[int, str]:
             if not remote:
                 remote = session.query(User).filter_by(id=remote_user.id).first()
             if not remote:
-                print(f"[BLOCK] remote user not found in DB", flush=True)
                 return (200, "OK")
-            print(f"[BLOCK] remote user id={remote.id} username={remote.username}", flush=True)
             local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
             if not local_user:
-                print(f"[BLOCK] local user not found", flush=True)
                 return (200, "OK")
-            print(f"[BLOCK] local user id={local_user.id}", flush=True)
             deleted_incoming = session.query(Follow).filter_by(follower_id=remote.id, following_id=local_user.id).delete()
             deleted_outgoing = session.query(Follow).filter_by(follower_id=local_user.id, following_id=remote.id).delete()
             existing = session.query(UserBlock).filter_by(user_id=remote.id, target_user_id=local_user.id).first()
             if not existing:
                 session.add(UserBlock(user_id=remote.id, target_user_id=local_user.id))
                 session.commit()
-                print(f"[BLOCK] created UserBlock remote={remote.id} -> local={local_user.id}, deleted follows: in={deleted_incoming} out={deleted_outgoing}", flush=True)
-            else:
-                print(f"[BLOCK] UserBlock already exists", flush=True)
-        return (200, "Blocked")
+            return (200, "Blocked")
     except Exception as e:
-        import traceback
-        print(f"[BLOCK] EXCEPTION: {e}", flush=True)
-        traceback.print_exc()
         logger.error("Error processing Block from %s: %s", actor_url, e)
         return (200, "OK")
 
@@ -1946,14 +1940,14 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
             actor_url = actor_url[0]
 
         local_username = _parse_username_from_url(object_url)
+        follower = _resolve_actor(actor_url)
+        if not follower:
+            return (200, "OK")
+        follower_id = follower.id
         with get_session() as session:
             target = session.query(User).filter_by(username=local_username, is_remote=False).first()
             if not target:
                 return (200, "OK")
-            follower = _resolve_actor(actor_url)
-            if not follower:
-                return (200, "OK")
-            follower_id = follower.id
             session.query(Follow).filter_by(
                 follower_id=follower_id, following_id=target.id
             ).delete()
@@ -2275,46 +2269,55 @@ def _notify_admins(session, reporter, target_type, target_id, reason):
 
 def _handle_flag(activity: dict) -> tuple[int, str]:
     logger.info("=== FLAG called ===")
-    with get_session() as s:
-        actor_url = activity.get("actor")
-        if isinstance(actor_url, list):
-            actor_url = actor_url[0]
-        logger.info("FLAG actor_url=%s", actor_url)
-        if not actor_url:
-            return (400, "Missing actor")
-        reporter = s.query(User).filter_by(remote_url=actor_url).first()
-        if not reporter:
-            for u in s.query(User).filter(User.is_remote == False).all():
-                if u.actor_uri() == actor_url:
-                    reporter = u
-                    break
-        logger.info("FLAG reporter found: %s", reporter is not None)
-        if not reporter:
-            try:
-                reporter = _resolve_actor(actor_url)
-                logger.info("FLAG _resolve_actor: %s", reporter is not None)
-            except Exception as e:
-                logger.warning("FLAG _resolve_actor failed: %s", e)
-                reporter = None
-        if not reporter:
-            try:
-                import httpx as _httpx, json as _json
-                _r = _httpx.get(actor_url, headers={"Accept": "application/activity+json"}, timeout=10, follow_redirects=True)
-                if _r.status_code == 200:
-                    _d = _r.json()
-                    _pref = _d.get("preferredUsername", "")
-                    if _pref:
-                        from app.crypto_utils import generate_keypair
-                        _domain = urlparse(actor_url).netloc
-                        _username = f"{_pref}@{_domain}"
-                        _pubkey = _d.get("publicKey", {}).get("publicKeyPem", "") if isinstance(_d.get("publicKey"), dict) else ""
-                        _privkey = generate_keypair()[0]
-                        _existing = s.query(User).filter_by(remote_url=actor_url).first()
+    actor_url = activity.get("actor")
+    if isinstance(actor_url, list):
+        actor_url = actor_url[0]
+    logger.info("FLAG actor_url=%s", actor_url)
+    if not actor_url:
+        return (400, "Missing actor")
+
+    # Try to find or resolve reporter BEFORE opening session (avoids connection hold during network I/O)
+    reporter = None
+    try:
+        with get_session() as _s:
+            reporter = _s.query(User).filter_by(remote_url=actor_url).first()
+            if not reporter:
+                for u in _s.query(User).filter(User.is_remote == False).all():
+                    if u.actor_uri() == actor_url:
+                        reporter = u
+                        break
+            if reporter:
+                _reporter_id = reporter.id
+                _reporter_username = reporter.username
+                _reporter_is_remote = reporter.is_remote
+    except Exception:
+        _reporter_id = None
+    logger.info("FLAG reporter found in DB: %s", reporter is not None)
+
+    if not reporter:
+        reporter = _resolve_actor(actor_url)
+        logger.info("FLAG _resolve_actor: %s", reporter is not None)
+
+    if not reporter:
+        try:
+            import httpx as _httpx, json as _json
+            _r = _httpx.get(actor_url, headers={"Accept": "application/activity+json"}, timeout=10, follow_redirects=True)
+            if _r.status_code == 200:
+                _d = _r.json()
+                _pref = _d.get("preferredUsername", "")
+                if _pref:
+                    from app.crypto_utils import generate_keypair
+                    _domain = urlparse(actor_url).netloc
+                    _username = f"{_pref}@{_domain}"
+                    _pubkey = _d.get("publicKey", {}).get("publicKeyPem", "") if isinstance(_d.get("publicKey"), dict) else ""
+                    _privkey = generate_keypair()[0]
+                    with get_session() as _s:
+                        _existing = _s.query(User).filter_by(remote_url=actor_url).first()
                         if _existing:
                             _existing.public_key = _pubkey or _existing.public_key
                             reporter = _existing
                         else:
-                            _by = s.query(User).filter_by(username=_username).first()
+                            _by = _s.query(User).filter_by(username=_username).first()
                             if _by:
                                 _by.remote_url = actor_url
                                 _by.public_key = _pubkey or _by.public_key
@@ -2329,13 +2332,16 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
                                     display_name=_d.get("name", _pref), summary=_d.get("summary", ""),
                                     profile_url=_d.get("url", actor_url),
                                 )
-                                s.add(reporter)
-                        s.flush()
+                                _s.add(reporter)
+                        _s.flush()
                         logger.info("FLAG reporter created via direct fetch: %s", reporter.id)
-            except Exception as e:
-                logger.warning("FLAG direct fetch failed: %s", e)
-        if not reporter:
-            return (202, "Accepted (unknown reporter)")
+        except Exception as e:
+            logger.warning("FLAG direct fetch failed: %s", e)
+
+    if not reporter:
+        return (202, "Accepted (unknown reporter)")
+
+    with get_session() as s:
         objects = activity.get("object", [])
         if isinstance(objects, str):
             objects = [objects]
@@ -2401,6 +2407,13 @@ def _handle_move(activity: dict) -> tuple[int, str]:
         return (400, "Missing target")
 
     from app.config import BASE_URL
+
+    # Resolve new actor BEFORE session (network I/O)
+    new_actor = _resolve_actor(new_actor_url)
+    if not new_actor:
+        return (404, "New actor not found")
+    new_actor_id = new_actor.id
+
     with get_session() as session:
         local_user = None
         for u in session.query(User).filter(User.is_remote == False).all():
@@ -2415,20 +2428,19 @@ def _handle_move(activity: dict) -> tuple[int, str]:
         if not local_user:
             return (200, "OK (not a local/known account)")
 
-        new_actor = _resolve_actor(new_actor_url)
-        if not new_actor:
-            return (404, "New actor not found")
-
         # Verify that the new account has the old account in its aliases
         new_actor_local = session.query(User).filter_by(id=new_actor_id, is_remote=False).first()
         if new_actor_local:
             aliases = new_actor_local.aliases or []
             if old_actor_url not in aliases and local_user.actor_uri() not in aliases:
                 return (403, "New account has not aliased the old account")
-        elif new_actor.is_remote:
-            aliases = new_actor.aliases or []
-            if old_actor_url not in aliases and local_user.remote_url not in aliases:
-                return (403, "New account has not aliased the old account")
+        else:
+            # new_actor is detached; query fresh from session for alias check
+            new_actor_in_session = session.query(User).filter_by(id=new_actor_id).first()
+            if new_actor_in_session and new_actor_in_session.is_remote:
+                aliases = new_actor_in_session.aliases or []
+                if old_actor_url not in aliases and local_user.remote_url not in aliases:
+                    return (403, "New account has not aliased the old account")
 
         followers = session.query(Follow).filter_by(following_id=local_user.id, accepted=True).all()
         moved_count = 0
