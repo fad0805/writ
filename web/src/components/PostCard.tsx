@@ -754,7 +754,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
                       <Icon name={pinned ? "pin_filled" : "pin"} /> {pinned ? "고정 해제" : "고정"}
                     </button>
                   )}
-                  {(post.is_mine || currentUser?.is_admin) && (
+                  {post.is_mine && (
                     <>
                       <button onClick={() => { setShowMoreActions(false); setShowEdit(true); }} className="post-actions-dropdown-item">
                         <Icon name="edit" /> 수정
