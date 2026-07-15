@@ -1144,19 +1144,43 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
             if parent:
                 in_reply_to_id = parent.id
 
-    mentioned_names = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content or ""))
+    # 1. 정규식 보완 (아이디와 도메인에 대시나 점이 들어간 경우까지 안전하게 추출)
+    mentioned_names = set(re.findall(r'@([\w.-]+(?:@[\w.-]+)?)', content or ""))
     mentioned_ids = []
     if mentioned_names:
-        users = session.query(User).filter(User.username.in_(mentioned_names)).all()
-        if len(users) < len(mentioned_names):
-            # 골뱅이 뒤를 뗀 순수 로컬 아이디들만 모음 (예: 'jack@remote.com' -> 'jack')
-            local_names = {name.split('@')[0] for name in mentioned_names}
-            extra_users = session.query(User).filter(User.username.in_(local_names)).all()
-            # 중복되지 않게 유저 리스트 합치기
-            existing_ids = {u.id for u in users}
-            for eu in extra_users:
-                if eu.id not in existing_ids:
-                    users.append(eu)
+        local_lookups = set()
+        remote_lookups = []  # (username, domain) 쌍으로 분리 보관
+        for name in mentioned_names:
+            if '@' in name:
+                parts = name.split('@', 1)
+                remote_lookups.append((parts[0], parts[1]))
+            else:
+                local_lookups.add(name)
+        # 2. 로컬 유저 조회 (username이 단일 아이디인 경우)
+        users = []
+        if local_lookups:
+            local_users = session.query(User).filter(User.username.in_(local_lookups)).all()
+            users.extend(local_users)
+        # 3. 원격 유저 조회 (username과 domain이 DB 상에서 분리되어 있거나, 혹은 remote_url 매칭이 필요한 경우)
+        # ※ 프로젝트의 User 모델 설계에 따라 아래 중 맞는 방식을 선택해야 합니다.
+        if remote_lookups:
+            # 방식 A: User 모델에 domain(또는 host) 필드가 따로 있는 경우 (권장)
+            for r_user, r_domain in remote_lookups:
+                ru = session.query(User).filter(
+                    User.username == r_user,
+                    User.domain == r_domain # (만약 User 모델에 domain 필드가 없다면 아래 방식 B 사용)
+                ).first()
+                if ru:
+                    users.append(ru)
+            # 방식 B: domain 필드가 따로 없고, 멘션된 원격 유저도 로컬 유저 리스트에서 '순수 username'으로만 찾아야 하는 경우
+            # (이 경우 'alice@remote.com'의 앞부분 'alice'만 따서 DB를 조회합니다.)
+            extra_local_names = {u[0] for u in remote_lookups} - local_lookups
+            if extra_local_names:
+                extra_users = session.query(User).filter(User.username.in_(extra_local_names)).all()
+                existing_ids = {u.id for u in users}
+                for eu in extra_users:
+                    if eu.id not in existing_ids:
+                        users.append(eu)
 
         mentioned_ids = [u.id for u in users]
 
