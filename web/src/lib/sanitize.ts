@@ -16,17 +16,17 @@ const EPISODE_CONFIG: DOMPurify.Config = {
 };
 
 export function sanitizePost(html: string): string {
-  return DOMPurify.sanitize(html, POST_CONFIG) as string;
+  return DOMPurify.sanitize(html, POST_CONFIG as any) as unknown as string;
 }
 
 export function sanitizeName(html: string): string {
-  return DOMPurify.sanitize(html, NAME_CONFIG) as string;
+  return DOMPurify.sanitize(html, NAME_CONFIG as any) as unknown as string;
 }
 
 export function sanitizeEpisode(html: string): string {
-  return DOMPurify.sanitize(html, EPISODE_CONFIG) as string;
+  return DOMPurify.sanitize(html, EPISODE_CONFIG as any) as unknown as string;
 }
 
 export function sanitizeBasic(html: string): string {
-  return DOMPurify.sanitize(html, { ALLOWED_TAGS: ["img", "span"], ALLOWED_ATTR: ["src", "alt", "class", "title"] }) as string;
+  return DOMPurify.sanitize(html, { ALLOWED_TAGS: ["img", "span"], ALLOWED_ATTR: ["src", "alt", "class", "title"] } as any) as unknown as string;
 }
