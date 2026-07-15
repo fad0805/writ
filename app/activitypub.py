@@ -372,6 +372,31 @@ def _safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
     finally:
         client.close()
 
+def _validated_get(url: str, headers: dict = None, timeout: int = 15, max_redirects: int = 5):
+    """HTTP GET with SSRF-safe redirect validation."""
+    if not _validate_url(url):
+        return None
+    client = httpx.Client(follow_redirects=False, timeout=timeout)
+    try:
+        resp = client.get(url, headers=headers or {})
+        for _ in range(max_redirects):
+            if resp.status_code not in (301, 302, 307, 308):
+                return resp
+            location = resp.headers.get("location", "")
+            if not location:
+                return resp
+            from urllib.parse import urljoin as _urljoin
+            url = _urljoin(url, location)
+            if not _validate_url(url):
+                logger.warning("SSRF blocked redirect to %s", url)
+                return None
+            resp = client.get(url, headers=headers or {})
+        return resp
+    except Exception:
+        return None
+    finally:
+        client.close()
+
 _REMOTE_MEDIA_MAX_SIZE = 10 * 1024 * 1024
 _REMOTE_MEDIA_EXPIRY_DAYS = 30
 
@@ -501,7 +526,7 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
         import httpx
         import io
         from PIL import Image as PILImage
-        r = httpx.get(image_url, timeout=15, follow_redirects=True)
+        r = _validated_get(image_url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=15)
         if r.status_code == 200 and len(r.content) <= 10 * 1024 * 1024:
             if is_gif:
                 filename = f"{uuid.uuid4().hex}.gif"
@@ -575,8 +600,8 @@ def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> 
             headers["Signature"] = f'keyId="{sign_as.actor_uri()}#main-key",algorithm="hs2019",created="{created}",headers="(request-target) host date (created)",signature="{sig}"'
             headers["Date"] = date
             headers["Host"] = parsed.netloc
-        resp = httpx.get(collection_url, headers=headers, timeout=10, follow_redirects=True)
-        if resp.status_code == 200:
+        resp = _validated_get(collection_url, headers=headers, timeout=10)
+        if resp is not None and resp.status_code == 200:
             data = resp.json()
             return int(data.get("totalItems", 0))
     except Exception:
@@ -1000,16 +1025,16 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     headers["Accept"] = "application/activity+json"
     data = None
     try:
-        resp = httpx.get(url, headers=headers, timeout=15, follow_redirects=True)
-        if resp.status_code == 200:
+        resp = _validated_get(url, headers=headers, timeout=15)
+        if resp is not None and resp.status_code == 200:
             data = resp.json()
     except Exception:
         pass
 
     if data is None and signer:
         try:
-            resp = httpx.get(url, headers={"Accept": "application/activity+json"}, timeout=15, follow_redirects=True)
-            if resp.status_code == 200:
+            resp = _validated_get(url, headers={"Accept": "application/activity+json"}, timeout=15)
+            if resp is not None and resp.status_code == 200:
                 data = resp.json()
         except Exception:
             pass
@@ -1936,8 +1961,8 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
         fetched = None
         try:
             import httpx
-            resp = httpx.get(obj, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, follow_redirects=True, timeout=10)
-            if resp.status_code < 300:
+            resp = _validated_get(obj, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, timeout=10)
+            if resp is not None and resp.status_code < 300:
                 fetched = resp.json()
                 obj_type = fetched.get("type", "")
         except Exception:
@@ -2132,8 +2157,8 @@ def _handle_update(activity: dict) -> tuple[int, str]:
     if isinstance(object_data, str):
         try:
             import httpx
-            resp = httpx.get(object_data, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, follow_redirects=True, timeout=10)
-            if resp.status_code < 300:
+            resp = _validated_get(object_data, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, timeout=10)
+            if resp is not None and resp.status_code < 300:
                 object_data = resp.json()
             else:
                 return (200, "OK")
@@ -2315,7 +2340,7 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
     if not reporter:
         try:
             import httpx as _httpx, json as _json
-            _r = _httpx.get(actor_url, headers={"Accept": "application/activity+json"}, timeout=10, follow_redirects=True)
+            _r = _validated_get(actor_url, headers={"Accept": "application/activity+json"}, timeout=10)
             if _r.status_code == 200:
                 _d = _r.json()
                 _pref = _d.get("preferredUsername", "")
@@ -2624,7 +2649,7 @@ def _process_emoji_tags(tags: list, session):
         from PIL import Image
         import httpx
         try:
-            resp = httpx.get(img_url, follow_redirects=True, timeout=15)
+            resp = _validated_get(img_url, timeout=15)
             if resp.status_code != 200:
                 continue
             ext = "png"
