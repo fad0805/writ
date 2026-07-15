@@ -136,6 +136,7 @@ function ExploreContent() {
     // @username@domain 형식 → 원격 유저 검색
     const match = q.match(/^@?(\w+)@([\w.-]+)$/);
     if (match) {
+      setLoading(true); setSearched(true); setPosts([]); setNovels([]); setUsers([]);
       const form = new FormData(); form.append("url", `https://${match[2]}/users/${match[1]}`);
       try {
         const res = await fetch("/api/fetch-actor", { method: "POST", credentials: "include", body: form });
