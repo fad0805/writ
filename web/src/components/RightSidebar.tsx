@@ -1,6 +1,6 @@
 "use client";
 import { useAuth } from "@/lib/auth";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api, NovelData, NotificationData, PostData, PollOption } from "@/lib/api";
 import Icon from "./Icon";
 import Link from "next/link";
@@ -42,7 +42,8 @@ export default function RightSidebar() {
   }, [user, refreshKey]);
 
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
-  useEffect(() => { fetch("/api/server-info").then((r) => r.json()).then(setServerInfo).catch(() => {}); }, [serverRefreshKey]);
+  const serverInfoFetched = useRef(false);
+  useEffect(() => { if (!serverInfoFetched.current) { serverInfoFetched.current = true; fetch("/api/server-info").then((r) => r.json()).then(setServerInfo).catch(() => {}); } }, [serverRefreshKey]);
 
   useEffect(() => {
     const handler = () => setRefreshKey((k) => k + 1);
