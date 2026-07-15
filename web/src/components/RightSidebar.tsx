@@ -7,6 +7,7 @@ import Link from "next/link";
 import MiniPostCard from "./MiniPostCard";
 import { useRouter } from "next/navigation";
 import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
+import { sanitizeName } from "@/lib/sanitize";
 
 const MODAL_ACTION_NAMES: Record<string, string> = {
   warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지",
@@ -76,7 +77,7 @@ export default function RightSidebar() {
 
   const renderName = (name: string) => {
     const html = renderCustomEmojis(name, emojiMap);
-    return <span dangerouslySetInnerHTML={{ __html: html }} />;
+    return <span dangerouslySetInnerHTML={{ __html: sanitizeName(html) }} />;
   };
 
   const visibleNovels = novels.slice(0, 3);

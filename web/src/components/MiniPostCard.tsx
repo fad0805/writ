@@ -4,6 +4,7 @@ import { PostData } from "@/lib/api";
 import Link from "next/link";
 import Icon from "./Icon";
 import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
+import { sanitizePost, sanitizeName } from "@/lib/sanitize";
 
 function rewriteLinks(text: string, validMentions?: Set<string>): string {
   text = text.replace(
@@ -63,7 +64,7 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     html = html.replace(/\n/g, '<br>');
     html = renderCustomEmojis(html, emojiMap);
-    return rewriteLinks(html, validMentions);
+    return sanitizePost(rewriteLinks(html, validMentions));
   })();
   return (
     <Link
