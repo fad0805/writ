@@ -1385,6 +1385,20 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     mentioned_hrefs.add(_a)
             mentioned_ids = []
             _seen_ids = set()
+            # Process href-based mentions FIRST (most reliable: from AP Mention tag href or to/cc)
+            if mentioned_hrefs:
+                for _href in mentioned_hrefs:
+                    u = session.query(User).filter(User.remote_url == _href).first()
+                    if u and u.id not in _seen_ids:
+                        mentioned_ids.append(u.id)
+                        _seen_ids.add(u.id)
+                    if u is None and BASE_URL in _href:
+                        for _u in session.query(User).filter_by(is_remote=False).all():
+                            if (_u.actor_uri() == _href or _u.actor_uri().replace("/users/", "/@") == _href) and _u.id not in _seen_ids:
+                                mentioned_ids.append(_u.id)
+                                _seen_ids.add(_u.id)
+                                break
+            # Content-based name matching as supplement (only for users not already found)
             if mentioned_names:
                 for _name in mentioned_names:
                     if '@' in _name:
@@ -1426,18 +1440,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         if u and u.id not in _seen_ids:
                             mentioned_ids.append(u.id)
                             _seen_ids.add(u.id)
-            if mentioned_hrefs:
-                for _href in mentioned_hrefs:
-                    u = session.query(User).filter(User.remote_url == _href).first()
-                    if u and u.id not in _seen_ids:
-                        mentioned_ids.append(u.id)
-                        _seen_ids.add(u.id)
-                    if u is None and BASE_URL in _href:
-                        for _u in session.query(User).filter_by(is_remote=False).all():
-                            if (_u.actor_uri() == _href or _u.actor_uri().replace("/users/", "/@") == _href) and _u.id not in _seen_ids:
-                                mentioned_ids.append(_u.id)
-                                _seen_ids.add(_u.id)
-                                break
 
             # Check if actor's domain is server-muted
             actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
