@@ -46,6 +46,7 @@ export default function TimelinePage() {
   const prevTlRef = useRef(tlType);
 
   useEffect(() => {
+    if (typeof localStorage !== "undefined") localStorage.setItem("lastTimelineTab", tlType);
     if (prevTlRef.current !== tlType) {
       tabCache.current[prevTlRef.current] = { posts, hasMore, rawOffset };
       prevTlRef.current = tlType;
