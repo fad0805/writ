@@ -8,6 +8,7 @@ import PostForm from "@/components/PostForm";
 import ReplyModal from "@/components/ReplyModal";
 import InfiniteScroll from "@/components/InfiniteScroll";
 import Icon from "@/components/Icon";
+import { injectEmojis } from "@/lib/emojis";
 import Link from "next/link";
 
 const LIMIT = 20;
@@ -200,6 +201,9 @@ export default function TimelinePage() {
     es.onmessage = (event) => {
       try {
         const newPost = JSON.parse(event.data);
+        if (newPost._emojis) {
+          injectEmojis(newPost._emojis);
+        }
         if (deletedIds.current.has(newPost.id)) return;
         if (newPost.type === "delete") {
           setPosts((prev) => prev.filter((p) => p.id !== newPost.id));
@@ -231,19 +235,7 @@ export default function TimelinePage() {
     return () => { es?.close(); };
   }, [tlType]);
 
-  // 화면 포커스 시 밀린 글 1회 페치 (30초 폴링 대체)
-  const refreshOnFocus = useCallback(() => {
-    if (document.visibilityState !== "visible") return;
-    api.timeline(tlType, LIMIT, 0).then((data) => {
-      setPosts((prev) => {
-        const existingIds = new Set(prev.map((p) => p.id));
-        const newOnes = data.posts.filter((p: any) => !existingIds.has(p.id) && !deletedIds.current.has(p.id));
-        if (newOnes.length === 0) return prev;
-        return [...newOnes, ...prev];
-      });
-      setHasMore(data.has_more);
-    }).catch(() => {});
-  }, [tlType]);
+
 
   useEffect(() => {
     document.addEventListener("visibilitychange", refreshOnFocus);

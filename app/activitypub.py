@@ -94,24 +94,55 @@ def _sanitize_html(html: str) -> str:
     return html
 
 
+import re
+from urllib.parse import urlparse
+
 def _normalize_mentions(html: str) -> str:
-    """Convert Mastodon-style mention HTML to plain @username text."""
+    """
+    Convert Mastodon-style mention HTML to plain text.
+    If the text lacks a domain (e.g. just '@user'), parses the href attribute 
+    to append the correct '@domain' and prevent local user collision.
+    """
     def _strip_mention(m):
-        text = re.sub(r'<[^>]+>', '', m.group(0))
-        match = re.search(r'@(\w+)', text)
-        return '@' + match.group(1) if match else text
-    # <span class="h-card"> wrapping (optional) + <a with u-url mention class
+        full_tag_text = m.group(0)
+        # 1. <a> 태그의 href 주소 추출
+        href_match = re.search(r'href=["\']([^"\']+)["\']', full_tag_text, re.IGNORECASE)
+        domain = None
+        if href_match:
+            try:
+                # URL에서 도메인(예: remote.com)만 쏙 빼오기
+                parsed_url = urlparse(href_match.group(1))
+                domain = parsed_url.netloc.lower()
+            except Exception:
+                pass
+        # 2. 모든 HTML 태그를 지우고 알맹이 텍스트만 추출
+        text = re.sub(r'<[^>]+>', '', full_tag_text).strip()
+        # 3. 텍스트 내부에서 @아이디 파싱
+        match = re.search(r'@([\w.-]+)(?:@([\w.-]+))?', text)
+        if not match:
+            return text
+        username = match.group(1)
+        text_domain = match.group(2)
+        # 4. 텍스트에 이미 도메인이 있다면 그걸 그대로 사용
+        if text_domain:
+            return f"@{username}@{text_domain}"
+        # 5. 텍스트엔 도메인이 없는데 <a> 링크 도메인이 존재한다면?
+        # (단, 우리 서비스 내부 링크일 수도 있으니 로컬 도메인은 붙이지 않도록 방어 코드 추가 가능)
+        if domain:
+            # 예: @jack -> @jack@remote.com 으로 복원
+            return f"@{username}@{domain}"
+        return f"@{username}"
+    # 1. <span> wrapper가 있는 형태 처리 (클래스 순서 무관)
     html = re.sub(
-        r'<span[^>]*class="[^"]*\bh-card\b[^"]*"[^>]*>\s*<a[^>]*class="[^"]*\bu-url mention\b[^"]*"[^>]*>.*?</a>\s*</span>',
+        r'<span[^>]*class="[^"]*\bh-card\b[^"]*"[^>]*>\s*<a[^>]*class="(?=[^"]*\bu-url\b)(?=[^"]*\bmention\b)[^"]*"[^>]*>.*?</a>\s*</span>',
         _strip_mention, html, flags=re.IGNORECASE | re.DOTALL
     )
-    # <a with u-url mention class (without wrapper)
+    # 2. <a> 태그 단독 형태 처리 (클래스 순서 무관)
     html = re.sub(
-        r'<a[^>]*class="[^"]*\bu-url mention\b[^"]*"[^>]*>.*?</a>',
+        r'<a[^>]*class="(?=[^"]*\bu-url\b)(?=[^"]*\bmention\b)[^"]*"[^>]*>.*?</a>',
         _strip_mention, html, flags=re.IGNORECASE | re.DOTALL
     )
     return html
-
 
 _PRIVATE_SUBNETS = [
     ipaddress.ip_network("127.0.0.0/8"),
@@ -1117,10 +1148,44 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
             if parent:
                 in_reply_to_id = parent.id
 
-    mentioned_names = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content or ""))
+    # 1. 정규식 보완 (아이디와 도메인에 대시나 점이 들어간 경우까지 안전하게 추출)
+    mentioned_names = set(re.findall(r'@([\w.-]+(?:@[\w.-]+)?)', content or ""))
     mentioned_ids = []
     if mentioned_names:
-        users = session.query(User).filter(User.username.in_(mentioned_names)).all()
+        local_lookups = set()
+        remote_lookups = []  # (username, domain) 쌍으로 분리 보관
+        for name in mentioned_names:
+            if '@' in name:
+                parts = name.split('@', 1)
+                remote_lookups.append((parts[0], parts[1]))
+            else:
+                local_lookups.add(name)
+        # 2. 로컬 유저 조회 (username이 단일 아이디인 경우)
+        users = []
+        if local_lookups:
+            local_users = session.query(User).filter(User.username.in_(local_lookups)).all()
+            users.extend(local_users)
+        # 3. 원격 유저 조회 (username과 domain이 DB 상에서 분리되어 있거나, 혹은 remote_url 매칭이 필요한 경우)
+        # ※ 프로젝트의 User 모델 설계에 따라 아래 중 맞는 방식을 선택해야 합니다.
+        if remote_lookups:
+            # 방식 A: User 모델에 domain(또는 host) 필드가 따로 있는 경우 (권장)
+            for r_user, r_domain in remote_lookups:
+                ru = session.query(User).filter(
+                    User.username == r_user,
+                    User.domain == r_domain # (만약 User 모델에 domain 필드가 없다면 아래 방식 B 사용)
+                ).first()
+                if ru:
+                    users.append(ru)
+            # 방식 B: domain 필드가 따로 없고, 멘션된 원격 유저도 로컬 유저 리스트에서 '순수 username'으로만 찾아야 하는 경우
+            # (이 경우 'alice@remote.com'의 앞부분 'alice'만 따서 DB를 조회합니다.)
+            extra_local_names = {u[0] for u in remote_lookups} - local_lookups
+            if extra_local_names:
+                extra_users = session.query(User).filter(User.username.in_(extra_local_names)).all()
+                existing_ids = {u.id for u in users}
+                for eu in extra_users:
+                    if eu.id not in existing_ids:
+                        users.append(eu)
+
         mentioned_ids = [u.id for u in users]
 
     _process_emoji_tags(obj.get("tag", []), session)
@@ -1389,32 +1454,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     mentioned_hrefs.add(_a)
             mentioned_ids = []
             _seen_ids = set()
-            if mentioned_names:
-                for _name in mentioned_names:
-                    if '@' in _name:
-                        _lp, _dom = _name.split('@', 1)
-                        u = session.query(User).filter(
-                            User.username == _lp, User.is_remote == True,
-                        ).first()
-                        if u and u.id not in _seen_ids and u.remote_url:
-                            from urllib.parse import urlparse as _urlparse
-                            _p = _urlparse(u.remote_url)
-                            if _p.hostname and _p.hostname.lower() == _dom.lower():
-                                mentioned_ids.append(u.id)
-                                _seen_ids.add(u.id)
-                    else:
-                        # For remote posts, prefer same-domain remote user
-                        u = None
-                        if _actor_domain:
-                            u = session.query(User).filter(
-                                User.username == _name, User.is_remote == True,
-                                User.remote_url.contains(_actor_domain)
-                            ).first()
-                        if not u:
-                            u = session.query(User).filter(User.username == _name).first()
-                        if u and u.id not in _seen_ids:
-                            mentioned_ids.append(u.id)
-                            _seen_ids.add(u.id)
+            # Process href-based mentions FIRST (most reliable: from AP Mention tag href or to/cc)
             if mentioned_hrefs:
                 for _href in mentioned_hrefs:
                     u = session.query(User).filter(User.remote_url == _href).first()
@@ -1427,6 +1467,45 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                 mentioned_ids.append(_u.id)
                                 _seen_ids.add(_u.id)
                                 break
+            # Content-based name matching as supplement (only for users not already found)
+            if mentioned_names:
+                for _name in mentioned_names:
+                    if '@' in _name:
+                        _lp, _dom = _name.split('@', 1)
+                        from urllib.parse import urlparse as _urlparse
+                        u = session.query(User).filter(
+                            User.username == _lp, User.is_remote == True,
+                        ).first()
+                        if u and u.id not in _seen_ids and u.remote_url:
+                            _p = _urlparse(u.remote_url)
+                            if _p.hostname and _p.hostname.lower() == _dom.lower():
+                                mentioned_ids.append(u.id)
+                                _seen_ids.add(u.id)
+                                continue
+                        # username may contain @domain, try like + domain check
+                        candidates = session.query(User).filter(
+                            User.username.like(f"{_lp}@%"),
+                            User.is_remote == True,
+                        ).all()
+                        for _c in candidates:
+                            if _c.id in _seen_ids:
+                                continue
+                            if _c.remote_url:
+                                _p = _urlparse(_c.remote_url)
+                                if _p.hostname and _p.hostname.lower() == _dom.lower():
+                                    mentioned_ids.append(_c.id)
+                                    _seen_ids.add(_c.id)
+                                    break
+                    else:
+                        # same-domain remote user only (local user handled via href already)
+                        if _actor_domain:
+                            u = session.query(User).filter(
+                                User.username == _name, User.is_remote == True,
+                                User.remote_url.contains(_actor_domain)
+                            ).first()
+                            if u and u.id not in _seen_ids:
+                                mentioned_ids.append(u.id)
+                                _seen_ids.add(u.id)
 
             # Check if actor's domain is server-muted
             actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""

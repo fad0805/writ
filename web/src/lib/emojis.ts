@@ -27,8 +27,18 @@ export function injectEmojis(list: CustomEmojiRaw[]) {
 
 let cache: CustomEmoji[] | null = null;
 let fetchPromise: Promise<CustomEmoji[]> | null = null;
+let cacheTs = 0;
 
 export async function getCustomEmojis(): Promise<CustomEmoji[]> {
+  let storedTs = 0;
+  if (typeof localStorage !== "undefined") {
+    storedTs = parseInt(localStorage.getItem("emoji_cache_ts") || "0", 10);
+    if (storedTs > cacheTs) {
+      cache = null;
+      fetchPromise = null;
+      cacheTs = storedTs;
+    }
+  }
   if (cache !== null) return cache;
   if (fetchPromise) return fetchPromise;
   fetchPromise = (async () => {
@@ -52,6 +62,7 @@ export async function getCustomEmojis(): Promise<CustomEmoji[]> {
     } catch {}
     cache = all;
     fetchPromise = null;
+    cacheTs = storedTs || Date.now();
     return cache;
   })();
   return fetchPromise;
@@ -60,6 +71,9 @@ export async function getCustomEmojis(): Promise<CustomEmoji[]> {
 export function invalidateEmojiCache() {
   cache = null;
   fetchPromise = null;
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem("emoji_cache_ts", Date.now().toString());
+  }
 }
 
 export function renderCustomEmojis(html: string, emojis: CustomEmoji[], size?: number): string {

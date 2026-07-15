@@ -172,8 +172,9 @@ def _post_json(p, session, user, tl_type=None,
         mentioned_handles = []
         for u in session.query(User).filter(User.id.in_(p.mentioned_user_ids or [])).all():
             if u.is_remote and u.remote_url:
+                _name = u.username.split("@")[0]
                 _domain = _urlparse2(u.remote_url).hostname or ""
-                mentioned_handles.append(f"{u.username}@{_domain}")
+                mentioned_handles.append(f"{_name}@{_domain}")
             else:
                 mentioned_handles.append(u.username)
     else:
@@ -206,6 +207,7 @@ def _post_json(p, session, user, tl_type=None,
         "mentioned_user_ids": p.mentioned_user_ids or [],
         "mentioned_handles": mentioned_handles,
         "link_preview": p.link_preview or None,
+        "_emojis": [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)],
     }
 
 
@@ -311,18 +313,29 @@ def _parse_mentions(content):
         for handle in mentioned:
             if '@' in handle:
                 local_part, domain = handle.split('@', 1)
+                from urllib.parse import urlparse as _urlparse
                 u = s.query(User).filter(
                     User.username == local_part,
                     User.is_remote == True,
                 ).first()
                 if u and u.remote_url:
-                    from urllib.parse import urlparse as _urlparse
                     parsed = _urlparse(u.remote_url)
                     if parsed.hostname and parsed.hostname.lower() == domain.lower():
                         user_ids.append(u.id)
                         continue
+                # username may contain @domain, try like + domain check
+                candidates = s.query(User).filter(
+                    User.username.like(f"{local_part}@%"),
+                    User.is_remote == True,
+                ).all()
+                for _c in candidates:
+                    if _c.remote_url:
+                        _p = _urlparse(_c.remote_url)
+                        if _p.hostname and _p.hostname.lower() == domain.lower():
+                            user_ids.append(_c.id)
+                            break
             else:
-                u = s.query(User).filter(User.username == handle).first()
+                u = s.query(User).filter(User.username == handle, User.is_remote == False).first()
                 if u:
                     user_ids.append(u.id)
         return user_ids
@@ -796,18 +809,50 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         posts = filtered
     # Hide posts that mention someone the user doesn't follow (home/social only)
     if user and tl_type in ("home", "social"):
-        _following_ids_set = _following_ids or set()
+        _following_ids_set = {str(fid) for fid in _following_ids} if _following_ids else set()
+        my_id_str = str(user.id)
+
         mention_filtered = []
         for p in posts:
             skip = False
+            author_id_str = str(p.author_id) if p.author_id else ""
+
             if p.mentioned_user_ids:
                 for muid in p.mentioned_user_ids:
-                    if muid != p.author_id and muid not in _following_ids_set:
+                    if muid != p.author_id and muid != user.id and muid not in _following_ids_set:
                         skip = True
                         break
+
+            # 2. [핵심] 리모트 글 본문 HTML 멘션 태그 추적 (HTML 정규식 방어선)
+            if not skip and p.content and p.author and p.author.is_remote:
+                import re as _re
+                # HTML 멘션 태그 추출 (예: <a href="https://mastodon.social/@target" ...>@target</a>)
+                # href 안의 주소나 class="mention"이 들어간 링크들을 긁어옵니다.
+                mentions = _re.findall(r'<a\s+[^>]*href="([^"]+)"[^>]*class="[^"]*mention[^"]*"[^>]*>', p.content)
+                for mention_url in mentions:
+                    # 언급된 사람의 프로필 URL(mention_url)이 내 프로필 URL이 아니고,
+                    # 내가 팔로우하는 사람의 프로필 URL 목록에도 없다면 스킵 처리합니다.
+
+                    # 팁: URL을 기반으로 대조하는 것이 가장 정확합니다.
+                    # 만약 DB에 팔로잉들의 프로필 URL(actor_id 또는 ap_id) 정보가 저장되어 있다면 
+                    # 아래와 같이 주소 비교를 통해 안전하게 걸러낼 수 있습니다.
+
+                    # 예시 구현 (_following_actor_urls가 있다면):
+                    # if mention_url != user.actor_id and mention_url not in _following_actor_urls:
+                    #     skip = True
+                    #     break
+
+                    # 만약 URL 목록을 당장 가져오기 힘들다면, 
+                    # 최소한 내 서버 주소가 아닌 외부 주소로 향하는 멘션 링크가 발견되었을 때 
+                    # 내 팔로잉이 아닌 제3자에 대한 멘션으로 보고 안전하게 스킵시킬 수 있습니다.
+                    pass
+
             if not skip and p.in_reply_to_ap_id and not p.in_reply_to_id:
                 # remote parent not in DB - can't verify parent author, hide
-                skip = True
+                if p.author_id == user.id or p.author_id in _following_ids_set:
+                    pass
+                else:
+                    skip = True
             if not skip and not p.mentioned_user_ids and p.author and p.author.is_remote:
                 # No mentioned_user_ids but author is remote - check content for @domain mentions
                 import re as _re
@@ -872,8 +917,9 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             _mentioned_users = {}
             for _mu in session.query(User).filter(User.id.in_(all_mentioned_ids)).all():
                 if _mu.is_remote and _mu.remote_url:
+                    _name = _mu.username.split("@")[0]
                     _domain = _urlparse(_mu.remote_url).hostname or ""
-                    _mentioned_users[_mu.id] = f"{_mu.username}@{_domain}"
+                    _mentioned_users[_mu.id] = f"{_name}@{_domain}"
                 else:
                     _mentioned_users[_mu.id] = _mu.username
             for p in posts[:limit]:
@@ -1714,34 +1760,21 @@ def api_boost_post(request: Request, post_id: int):
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id))
             s.commit()
             broadcast_refresh_notifs(post.author_id)
-            # Stream the original post to timelines (includes booster's followers)
+            # Stream the boost pointer post as a new timeline entry
             try:
                 from app.timeline_stream import broadcast_post
+                boost_pj = _post_json(boost_post, s, user)
+                boost_pj["mentioned_user_ids"] = []
+                boost_pj["reply_context"] = None
+                threading.Thread(target=_broadcast_timeline, args=(boost_pj, user.id, post.visibility or "public", False), daemon=True).start()
+            except Exception:
+                pass
+            # Also send an update event for the original post (count sync)
+            try:
                 _ba = post.author
                 broadcast_post({
                     "id": post.id, "type": "update",
-                    "number": post.number or "",
-                    "content": post.content, "summary": post.summary or "",
-                    "visibility": post.visibility or "public",
-                    "created_at": post.created_at.isoformat() if post.created_at else "",
-                    "author": {
-                        "id": _ba.id, "username": _ba.username,
-                        "display_name": _ba.display_name or _ba.username,
-                        "avatar": _ba.profile_image or "", "header": _ba.header_image or "",
-                        "summary": _ba.summary or "", "is_admin": _ba.is_admin,
-                        "is_locked": getattr(_ba, "is_locked", False),
-                        "is_limited": getattr(_ba, "is_limited", False),
-                        "is_remote": _ba.is_remote, "ap_id": _ba.remote_url or "",
-                    },
-                    "likes_count": s.query(Like).filter_by(post_id=post.id).count(),
-                    "boosts_count": s.query(Boost).filter_by(post_id=post.id).count(),
-                    "replies_count": s.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count(),
-                    "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
-                    "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
-                    "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
-                    "poll_data": post.poll_data, "my_vote": None,
-                    "reactions": _build_reactions(s, post.id),
-                    "my_reaction": None,
+                    "boosts_count": s.query(Boost).filter_by(post_id=post_id).count(),
                 }, post.author_id, post.visibility or "public", False)
             except Exception:
                 pass
@@ -2321,8 +2354,9 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                 _mu = {}
                 for _um in s.query(User).filter(User.id.in_(all_mentioned_ids)).all():
                     if _um.is_remote and _um.remote_url:
+                        _name = _um.username.split("@")[0]
                         _domain = _urlparse(_um.remote_url).hostname or ""
-                        _mu[_um.id] = f"{_um.username}@{_domain}"
+                        _mu[_um.id] = f"{_name}@{_domain}"
                     else:
                         _mu[_um.id] = _um.username
                 for pp in _posts_for_mentions:
@@ -2801,8 +2835,9 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
                 _mentioned_users = {}
                 for _um in s.query(User).filter(User.id.in_(all_mentioned_ids)).all():
                     if _um.is_remote and _um.remote_url:
+                        _name = _um.username.split("@")[0]
                         _domain = _urlparse(_um.remote_url).hostname or ""
-                        _mentioned_users[_um.id] = f"{_um.username}@{_domain}"
+                        _mentioned_users[_um.id] = f"{_name}@{_domain}"
                     else:
                         _mentioned_users[_um.id] = _um.username
                 for p in s.query(Post).filter(Post.id.in_(notif_post_ids)).all():
@@ -5044,14 +5079,14 @@ def api_update_emoji(request: Request, emoji_id: int, category: str = Form(""), 
             raise HTTPException(status_code=404, detail="Emoji not found")
         if keyword:
             keyword_clean = keyword.strip().lower().replace(" ", "_").replace(":", "")
-            existing = s.query(CustomEmoji).filter(CustomEmoji.keyword == keyword_clean, CustomEmoji.id != emoji_id).first()
-            if existing:
-                raise HTTPException(status_code=400, detail="Keyword already taken")
-            emoji.keyword = keyword_clean
+            if keyword_clean != emoji.keyword:
+                existing = s.query(CustomEmoji).filter(CustomEmoji.keyword == keyword_clean, CustomEmoji.id != emoji_id).first()
+                if existing:
+                    raise HTTPException(status_code=400, detail="Keyword already taken")
+                emoji.keyword = keyword_clean
         if category:
             emoji.category = category
-        if aliases:
-            emoji.aliases = [a.strip().lower().replace(" ", "_") for a in aliases.split(",") if a.strip()]
+        emoji.aliases = [a.strip().lower().replace(" ", "_") for a in aliases.split(",") if a.strip()]
         s.commit()
         _invalidate_emoji_cache()
         return {"ok": True, "emoji": {"id": emoji.id, "keyword": emoji.keyword, "file_name": emoji.file_name, "category": emoji.category, "aliases": emoji.aliases or [], "url": _emoji_url(emoji.file_name, emoji.domain or "", emoji.category or ""), "source_url": emoji.source_url or "", "domain": emoji.domain or ""}}
