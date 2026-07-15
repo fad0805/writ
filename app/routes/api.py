@@ -1718,9 +1718,11 @@ def api_boost_post(request: Request, post_id: int):
             # Stream the boost pointer post as a new timeline entry
             try:
                 from app.timeline_stream import broadcast_post
-                boost_pj = _post_json(boost_post, s, user)
-                boost_pj["mentioned_user_ids"] = []
-                threading.Thread(target=_broadcast_timeline, args=(boost_pj, user.id, post.visibility or "public", False), daemon=True).start()
+                og = _post_json(post, s, user)
+                og["id"] = boost_post.id
+                og["boosted_by"] = _user_json(boost_post.author)
+                og["mentioned_user_ids"] = []
+                threading.Thread(target=_broadcast_timeline, args=(og, user.id, post.visibility or "public", False), daemon=True).start()
             except Exception:
                 pass
             # Also send an update event for the original post (count sync)
