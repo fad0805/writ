@@ -755,14 +755,14 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
                     </button>
                   )}
                   {post.is_mine && (
-                    <>
-                      <button onClick={() => { setShowMoreActions(false); setShowEdit(true); }} className="post-actions-dropdown-item">
-                        <Icon name="edit" /> 수정
-                      </button>
-                      <button onClick={() => { setShowMoreActions(false); handleDelete(); }} className="post-actions-dropdown-item post-actions-dropdown-danger">
-                        <Icon name="trash" /> 삭제
-                      </button>
-                    </>
+                    <button onClick={() => { setShowMoreActions(false); setShowEdit(true); }} className="post-actions-dropdown-item">
+                      <Icon name="edit" /> 수정
+                    </button>
+                  )}
+                  {(post.is_mine || currentUser?.is_admin) && (
+                    <button onClick={() => { setShowMoreActions(false); handleDelete(); }} className="post-actions-dropdown-item post-actions-dropdown-danger">
+                      <Icon name="trash" /> 삭제
+                    </button>
                   )}
                   {currentUser && !post.is_mine && (
                     <button onClick={() => { setShowMoreActions(false); setShowReport(true); setReportReason(""); setReportError(""); setReportDone(false); setSelectedRuleIds([]); fetch("/api/rules").then(r => r.json()).then(setReportRules).catch(() => {}); }} className="post-actions-dropdown-item">
