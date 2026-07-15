@@ -1720,7 +1720,6 @@ def api_boost_post(request: Request, post_id: int):
                 from app.timeline_stream import broadcast_post
                 boost_pj = _post_json(boost_post, s, user)
                 boost_pj["mentioned_user_ids"] = []
-                boost_pj["reply_context"] = None
                 threading.Thread(target=_broadcast_timeline, args=(boost_pj, user.id, post.visibility or "public", False), daemon=True).start()
             except Exception:
                 pass

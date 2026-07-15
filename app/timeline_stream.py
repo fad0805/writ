@@ -103,9 +103,10 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                     continue
 
                 # [2] 답글(Reply) 필터링 (부모 글 작성자 미팔로우 방어)
-                # 이 포스트가 '답글'인 경우에만 부모 관계를 검증합니다.
-                is_reply = bool(post_json.get("in_reply_to_id") or post_json.get("in_reply_to_ap_id") or reply_ctx)
-                if is_reply:
+                # 부스트인 경우 스킵 (boosted_by가 있으면 부스트)
+                if post_json.get("boosted_by"):
+                    pass
+                elif bool(post_json.get("in_reply_to_id") or post_json.get("in_reply_to_ap_id") or reply_ctx):
                     # 부모 작성자가 아예 누군지 파악이 안 되거나, 
                     # 파악이 되었더라도 내가 팔로우하는 사람이 아니며, 내가 쓴 답글도 아니라면 홈 피드 전송 차단!
                     if parent_author_id is None:
