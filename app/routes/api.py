@@ -869,6 +869,7 @@ def api_get_post(request: Request, post_id: int):
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    fetch_remote_url = None
     with get_session() as s:
         post = s.query(Post).options(
             selectinload(Post.author),
@@ -886,15 +887,16 @@ def api_get_post(request: Request, post_id: int):
         else:
             result["is_following_author"] = False
         descendant_ids = set()
-        def collect_descendants(pid):
-            children = s.query(Post).options(selectinload(Post.author)).filter_by(
-                in_reply_to_id=pid
-            ).all()
-            for c in children:
-                if c.id not in descendant_ids:
-                    descendant_ids.add(c.id)
-                    collect_descendants(c.id)
-        collect_descendants(post_id)
+        queue = [post_id]
+        while queue:
+            pid = queue.pop(0)
+            child_ids = [r[0] for r in s.query(Post.id).filter(
+                Post.in_reply_to_id == pid, Post.is_deleted == False
+            ).all()]
+            for cid in child_ids:
+                if cid not in descendant_ids:
+                    descendant_ids.add(cid)
+                    queue.append(cid)
         direct_count = s.query(Post).filter_by(in_reply_to_id=post_id, is_deleted=False).count()
         total_descendants = len(descendant_ids)
         result["total_replies"] = direct_count
@@ -902,12 +904,25 @@ def api_get_post(request: Request, post_id: int):
         limit = min(int(request.query_params.get("reply_limit", 5)), 50)
         offset = int(request.query_params.get("reply_offset", 0))
         reply_ids = sorted(descendant_ids)[offset:offset + limit]
-        descendants = s.query(Post).options(selectinload(Post.parent)).filter(
-            Post.id.in_(reply_ids)
-        ).order_by(Post.created_at).all() if reply_ids else []
-        result["replies"] = [_post_json(r, s, user) for r in descendants if _can_view(r, user, s)]
+        if reply_ids:
+            descendants = s.query(Post).options(
+                selectinload(Post.author),
+                selectinload(Post.parent),
+            ).filter(Post.id.in_(reply_ids)).order_by(Post.created_at).all()
+        else:
+            descendants = []
+        reply_id_set = set(reply_ids)
+        if user and reply_id_set:
+            liked_ids = set(r[0] for r in s.query(Like.post_id).filter(
+                Like.user_id == user.id, Like.post_id.in_(reply_id_set)).all())
+            boosted_ids = set(r[0] for r in s.query(Boost.post_id).filter(
+                Boost.user_id == user.id, Boost.post_id.in_(reply_id_set)).all())
+            bookmarked_ids = set(r[0] for r in s.query(Bookmark.post_id).filter(
+                Bookmark.user_id == user.id, Bookmark.post_id.in_(reply_id_set)).all())
+        else:
+            liked_ids = boosted_ids = bookmarked_ids = set()
+        result["replies"] = [_post_json(r, s, user, _liked_ids=liked_ids, _boosted_ids=boosted_ids, _bookmarked_ids=bookmarked_ids) for r in descendants if _can_view(r, user, s)]
         result["has_more_replies"] = offset + limit < total_descendants
-        # ancestors (skip deleted parents)
         ancestors = []
         cur = post.parent
         while cur:
@@ -915,16 +930,21 @@ def api_get_post(request: Request, post_id: int):
                 ancestors.insert(0, _post_json(cur, s, user))
             cur = cur.parent
         if not ancestors and post.in_reply_to_ap_id:
-            try:
-                parent = s.query(Post).filter_by(ap_id=post.in_reply_to_ap_id).first()
-                if not parent:
-                    from app.activitypub import _fetch_remote_post
-                    parent = _fetch_remote_post(post.in_reply_to_ap_id, user, s)
-                if parent:
-                    ancestors = [_post_json(parent, s, user)]
-            except Exception:
-                pass
+            parent = s.query(Post).filter_by(ap_id=post.in_reply_to_ap_id).first()
+            if parent:
+                ancestors = [_post_json(parent, s, user)]
+            else:
+                fetch_remote_url = post.in_reply_to_ap_id
         result["ancestors"] = ancestors
+    if fetch_remote_url:
+        try:
+            from app.activitypub import _fetch_remote_post
+            with get_session() as remote_s:
+                remote_parent = _fetch_remote_post(fetch_remote_url, user, remote_s)
+                if remote_parent:
+                    result["ancestors"] = [_post_json(remote_parent, remote_s, user)]
+        except Exception:
+            pass
     return result
 
 
