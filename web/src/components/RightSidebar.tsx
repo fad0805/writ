@@ -42,8 +42,7 @@ export default function RightSidebar() {
   }, [user, refreshKey]);
 
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
-  const serverInfoFetched = useRef(false);
-  useEffect(() => { if (!serverInfoFetched.current) { serverInfoFetched.current = true; fetch("/api/server-info").then((r) => r.json()).then(setServerInfo).catch(() => {}); } }, [serverRefreshKey]);
+  useEffect(() => { if (!(window as any).__serverInfoFetched) { (window as any).__serverInfoFetched = true; fetch("/api/server-info").then((r) => r.json()).then(setServerInfo).catch(() => {}); } }, [serverRefreshKey]);
 
   useEffect(() => {
     const handler = () => setRefreshKey((k) => k + 1);
