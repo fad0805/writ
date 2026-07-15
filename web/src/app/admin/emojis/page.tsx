@@ -31,7 +31,7 @@ export default function AdminEmojiPage() {
 
   useEffect(() => {
     fetch("/api/emojis?limit=999", { credentials: "include" })
-      .then(r => r.json()).then(d => setEmojis(d.emojis || d || [])).catch(() => {});
+      .then(r => r.json()).then(d => { console.log("[EMOJI ADMIN] response:", d); setEmojis(d.emojis || d || []); }).catch(() => {});
   }, []);
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
