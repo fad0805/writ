@@ -32,7 +32,7 @@ export default function TimelinePage() {
   const [hasMore, setHasMore] = useState(true);
   const [rawOffset, setRawOffset] = useState(0);
   const [error, setError] = useState("");
-  const [refreshKey, setRefreshKey] = useState(0);
+
   const [selectedIdx, setSelectedIdx] = useState(-1);
   const [replyPost, setReplyPost] = useState<PostData | null>(null);
   const [showComposer, setShowComposer] = useState(false);
@@ -75,12 +75,6 @@ export default function TimelinePage() {
     }
     setLoading(false);
   };
-
-  useEffect(() => {
-    if (refreshKey === 0) return;
-    tabCache.current[tlType] = { posts, hasMore, rawOffset };
-    load();
-  }, [refreshKey]);
 
   useEffect(() => {
     const handler = () => load();
@@ -237,22 +231,7 @@ export default function TimelinePage() {
 
 
 
-  const refreshOnFocusRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const refreshOnFocus = () => {
-    if (document.visibilityState !== "visible") return;
-    clearTimeout(refreshOnFocusRef.current);
-    refreshOnFocusRef.current = setTimeout(load, 1000);
-  };
 
-  useEffect(() => {
-    document.addEventListener("visibilitychange", refreshOnFocus);
-    window.addEventListener("focus", refreshOnFocus);
-    return () => {
-      clearTimeout(refreshOnFocusRef.current);
-      document.removeEventListener("visibilitychange", refreshOnFocus);
-      window.removeEventListener("focus", refreshOnFocus);
-    };
-  }, [refreshOnFocus]);
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
   if (!user) return <div className="empty-state">{authLoading ? "로딩 중..." : "로그인이 필요합니다"}</div>;
