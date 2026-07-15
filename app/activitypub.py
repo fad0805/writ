@@ -562,7 +562,7 @@ def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> 
         return 0
     try:
         import httpx
-        headers = {"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}
+        headers = {"Accept": "application/activity+json, application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"", "User-Agent": WRIT_USER_AGENT}
         if sign_as:
             import datetime, time, hashlib, base64
             from app.crypto_utils import sign_string, get_private_key
@@ -917,7 +917,7 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
         follower_url = obj.get("actor", "")
     elif isinstance(obj, str):
         try:
-            resp = httpx.get(obj, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, timeout=10)
+            resp = httpx.get(obj, headers={"Accept": "application/activity+json, application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"", "User-Agent": WRIT_USER_AGENT}, timeout=10)
             if resp.status_code == 200:
                 follow_activity = resp.json()
                 follower_url = follow_activity.get("actor", "")
@@ -1011,7 +1011,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
 
     if data is None and signer:
         try:
-            resp = httpx.get(url, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, timeout=15, follow_redirects=True)
+            resp = httpx.get(url, headers={"Accept": "application/activity+json, application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"", "User-Agent": WRIT_USER_AGENT}, timeout=15, follow_redirects=True)
             print(f"[FETCH-POST] retry url={url} status={resp.status_code}", flush=True)
             if resp.status_code == 200:
                 data = resp.json()
@@ -1940,7 +1940,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
         fetched = None
         try:
             import httpx
-            resp = httpx.get(obj, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, follow_redirects=True, timeout=10)
+            resp = httpx.get(obj, headers={"Accept": "application/activity+json, application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"", "User-Agent": WRIT_USER_AGENT}, follow_redirects=True, timeout=10)
             if resp.status_code < 300:
                 fetched = resp.json()
                 obj_type = fetched.get("type", "")
@@ -2136,7 +2136,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
     if isinstance(object_data, str):
         try:
             import httpx
-            resp = httpx.get(object_data, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, follow_redirects=True, timeout=10)
+            resp = httpx.get(object_data, headers={"Accept": "application/activity+json, application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"", "User-Agent": WRIT_USER_AGENT}, follow_redirects=True, timeout=10)
             if resp.status_code < 300:
                 object_data = resp.json()
             else:
@@ -2319,7 +2319,7 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
     if not reporter:
         try:
             import httpx as _httpx, json as _json
-            _r = _httpx.get(actor_url, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, timeout=10, follow_redirects=True)
+            _r = _httpx.get(actor_url, headers={"Accept": "application/activity+json, application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"", "User-Agent": WRIT_USER_AGENT}, timeout=10, follow_redirects=True)
             if _r.status_code == 200:
                 _d = _r.json()
                 _pref = _d.get("preferredUsername", "")
