@@ -761,7 +761,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             if not skip and not p.mentioned_user_ids and p.author and p.author.is_remote:
                 # No mentioned_user_ids but author is remote - check content for @domain mentions
                 import re as _re
-                _remote_mentions = _re.findall(r'@[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}', p.content or "")
+                _remote_mentions = _re.findall(r'@[\w.-]+@[a-zA-Z0-9.-]+\.(?:[a-zA-Z]{2,})(?!\w)', p.content or "")
                 if _remote_mentions:
                     skip = True
             if skip:
