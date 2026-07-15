@@ -62,8 +62,9 @@ export function invalidateEmojiCache() {
   fetchPromise = null;
 }
 
-export function renderCustomEmojis(html: string, emojis: CustomEmoji[]): string {
+export function renderCustomEmojis(html: string, emojis: CustomEmoji[], size?: number): string {
   if (!emojis || emojis.length === 0) return html;
+  const sz = size ?? 33;
   const seen = new Set<string>();
   const uniq = emojis.filter(e => { if (seen.has(e.keyword)) return false; seen.add(e.keyword); return true; });
   const sorted = [...uniq].sort((a, b) => b.keyword.length - a.keyword.length);
@@ -74,7 +75,7 @@ export function renderCustomEmojis(html: string, emojis: CustomEmoji[]): string 
     const kw = emoji.keyword;
     const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp(`:${escaped}:`, "g");
-    html = html.replace(re, `<img src="${safeUrl}" alt=":${kw}:" title=":${kw}:" class="custom-emoji" width="33" height="33" style="width:33px;height:33px;vertical-align:middle;display:inline-block;object-fit:contain">`);
+    html = html.replace(re, `<img src="${safeUrl}" alt=":${kw}:" title=":${kw}:" class="custom-emoji" width="${sz}" height="${sz}" style="width:${sz}px;height:${sz}px;vertical-align:middle;display:inline-block;object-fit:contain">`);
   }
   return html;
 }
