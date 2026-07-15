@@ -12,9 +12,11 @@ import { useAuth } from "@/lib/auth";
 const MAX_LENGTH = 500;
 
 export default function PostForm({ parentId, onDone, placeholder, initialContent, initialVisibility, shareUrl }: { parentId?: number; onDone?: (post?: any) => void; placeholder?: string; initialContent?: string; initialVisibility?: string; shareUrl?: string }) {
-  const [content, setContent] = useState(initialContent || "");
-  const [summary, setSummary] = useState("");
-  const [postSensitive, setPostSensitive] = useState(false);
+  const draftKey = `draft_${parentId || "new"}`;
+  const savedDraft = typeof localStorage !== "undefined" ? (() => { try { return JSON.parse(localStorage.getItem(draftKey) || "null"); } catch { return null; } })() : null;
+  const [content, setContent] = useState((savedDraft?.content ?? initialContent) || "");
+  const [summary, setSummary] = useState(savedDraft?.summary ?? "");
+  const [postSensitive, setPostSensitive] = useState(savedDraft?.sensitive ?? false);
   const { user: authUser } = useAuth();
   const [visibilityOverride, setVisibilityOverride] = useState<string | null>(
     initialVisibility || null
@@ -74,6 +76,18 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     setTimeout(() => document.addEventListener("click", close), 0);
     return () => document.removeEventListener("click", close);
   }, [showVisPicker]);
+
+  useEffect(() => {
+    if (typeof localStorage === "undefined") return;
+    const t = setTimeout(() => {
+      if (content || summary || postSensitive) {
+        localStorage.setItem(draftKey, JSON.stringify({ content, summary, sensitive: postSensitive }));
+      } else {
+        localStorage.removeItem(draftKey);
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [content, summary, postSensitive, draftKey]);
 
   const totalLen = content.length + summary.length;
   const nearLimit = totalLen > MAX_LENGTH - 50 && totalLen <= MAX_LENGTH;
@@ -529,6 +543,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       const opts = showPoll ? pollOptions.filter(o => o.trim()).map(o => o.trim()) : [];
       const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrl, media_attachments: JSON.stringify(uploaded), is_sensitive: postSensitive, poll_options: opts.length >= 2 ? JSON.stringify(opts) : "", poll_expires_in: pollExpiresIn });
       setContent(""); setSummary(""); setPostSensitive(false); setMediaItems([]); setShowPoll(false); setPollOptions(["", ""]); setPollExpiresIn(24);
+      if (typeof localStorage !== "undefined") localStorage.removeItem(draftKey);
       if (onDone) onDone(result);
       else router.refresh();
     } catch (err: unknown) { alert(err instanceof Error ? err.message : "오류가 발생했습니다"); }
