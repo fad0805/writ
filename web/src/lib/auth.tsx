@@ -27,8 +27,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refresh();
-    const timer = setTimeout(() => setLoading(false), 3000);
-    return () => clearTimeout(timer);
   }, []);
 
   return <AuthCtx.Provider value={{ user, loading, refresh }}>{children}</AuthCtx.Provider>;
