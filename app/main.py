@@ -39,6 +39,7 @@ _RATE_LIMIT_BURST = 10
 _RATE_LIMIT_DAILY = 500
 _rate_limit_store: dict[str, list[float]] = defaultdict(list)
 _rate_limit_daily: dict[str, list[float]] = defaultdict(list)
+_rate_limit_lock = threading.Lock()
 
 _actor_fail_cache: dict[str, float] = {}  # actor_url -> timestamp of last failure
 _ACTOR_FAIL_TTL = 3600  # 1 hour
@@ -47,33 +48,36 @@ _ACTOR_FAIL_TTL = 3600  # 1 hour
 def _check_rate_limit(key: str) -> bool:
     now = time.time()
     window_start = now - _RATE_LIMIT_WINDOW
-    timestamps = _rate_limit_store[key]
-    pruned = [t for t in timestamps if t > window_start]
-    if len(pruned) >= _RATE_LIMIT_MAX:
-        return False
-    _rate_limit_store[key] = pruned + [now]
-    return True
+    with _rate_limit_lock:
+        timestamps = _rate_limit_store[key]
+        pruned = [t for t in timestamps if t > window_start]
+        if len(pruned) >= _RATE_LIMIT_MAX:
+            return False
+        _rate_limit_store[key] = pruned + [now]
+        return True
 
 
 def _check_burst_limit(key: str) -> bool:
     now = time.time()
     burst_start = now - 5
-    timestamps = _rate_limit_store[key]
-    recent = [t for t in timestamps if t > burst_start]
-    if len(recent) >= _RATE_LIMIT_BURST:
-        return False
-    return True
+    with _rate_limit_lock:
+        timestamps = _rate_limit_store[key]
+        recent = [t for t in timestamps if t > burst_start]
+        if len(recent) >= _RATE_LIMIT_BURST:
+            return False
+        return True
 
 
 def _check_daily_limit(key: str) -> bool:
     now = time.time()
     day_start = now - 86400
-    timestamps = _rate_limit_daily[key]
-    pruned = [t for t in timestamps if t > day_start]
-    if len(pruned) >= _RATE_LIMIT_DAILY:
-        return False
-    _rate_limit_daily[key] = pruned + [now]
-    return True
+    with _rate_limit_lock:
+        timestamps = _rate_limit_daily[key]
+        pruned = [t for t in timestamps if t > day_start]
+        if len(pruned) >= _RATE_LIMIT_DAILY:
+            return False
+        _rate_limit_daily[key] = pruned + [now]
+        return True
 
 def _delivery_worker():
     from app.models import PendingDelivery, get_session
@@ -870,8 +874,31 @@ def nodeinfo():
     })
 
 
+def _verify_session_cookie(request: Request) -> bool:
+    """Verify session cookie is present and well-formed (basic auth check)."""
+    token = request.cookies.get("session")
+    if not token:
+        return False
+    try:
+        import base64 as _b64
+        decoded = _b64.urlsafe_b64decode(token.encode()).decode()
+        parts = decoded.split(":")
+        if len(parts) != 3:
+            return False
+        user_id = int(parts[0])
+        expires = int(parts[1])
+        import time as _t
+        if expires <= _t.time():
+            return False
+        return True
+    except Exception:
+        return False
+
+
 @app.get("/api/stream")
 async def sse_stream(request: Request):
+    if not _verify_session_cookie(request):
+        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
     q: asyncio.Queue = asyncio.Queue(maxsize=50)
     add_queue(q)
     try:
@@ -891,6 +918,20 @@ async def sse_stream(request: Request):
 
 @app.websocket("/api/v1/streaming")
 async def websocket_stream(websocket: WebSocket):
+    token = websocket.cookies.get("session")
+    if not token:
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
+    try:
+        import base64 as _b64
+        decoded = _b64.urlsafe_b64decode(token.encode()).decode()
+        parts = decoded.split(":")
+        if len(parts) != 3 or int(parts[2]) <= 0:
+            await websocket.close(code=4001, reason="Unauthorized")
+            return
+    except Exception:
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
     await websocket.accept()
     ws_id, ws_q = add_ws()
     try:

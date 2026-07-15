@@ -19,6 +19,36 @@ from app.log_utils import log_admin_action
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
 
+# Auth rate limiting (IP-based, in-memory)
+import threading
+_auth_failures: dict[str, list[float]] = {}
+_auth_lock = threading.Lock()
+_AUTH_FAIL_WINDOW = 900  # 15 min
+_AUTH_FAIL_MAX = 5
+_AUTH_FAIL_BACKOFF_BASE = 60  # 1 min base
+
+def _check_auth_rate_limit(ip: str) -> bool:
+    now = time.time()
+    with _auth_lock:
+        timestamps = [t for t in _auth_failures.get(ip, []) if t > now - _AUTH_FAIL_WINDOW]
+        _auth_failures[ip] = timestamps
+        if len(timestamps) >= _AUTH_FAIL_MAX:
+            return False
+        timestamps.append(now)
+        return True
+
+def _record_auth_failure(ip: str):
+    now = time.time()
+    with _auth_lock:
+        _auth_failures.setdefault(ip, []).append(now)
+
+def _get_auth_backoff_seconds(ip: str) -> int:
+    with _auth_lock:
+        count = len([t for t in _auth_failures.get(ip, []) if t > time.time() - _AUTH_FAIL_WINDOW])
+    if count < _AUTH_FAIL_MAX:
+        return 0
+    return _AUTH_FAIL_BACKOFF_BASE * (2 ** min(count - _AUTH_FAIL_MAX, 6))
+
 def _fmt_dt(dt: datetime.datetime | None) -> str | None:
     if dt is None:
         return None
@@ -27,7 +57,7 @@ def _fmt_dt(dt: datetime.datetime | None) -> str | None:
     return dt.astimezone(KST).isoformat()
 from app.activitypub import broadcast_to_followers, _post_to_inbox, _process_emoji_tags, _federation_allowed, _build_reactions
 from app.database import get_db
-from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED
+from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED, SCHEME
 from app.crypto_utils import encrypt_key, get_private_key
 from app.eventbus import broadcast
 from app.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream
@@ -334,6 +364,11 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
     from app.routes.auth import hash_password, verify_password, create_session
     try:
         client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
+        backoff = _get_auth_backoff_seconds(client_ip)
+        if backoff > 0:
+            raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
+        if not _check_auth_rate_limit(client_ip):
+            raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
         with get_session() as s:
             q = s.query(User).filter(User.is_remote == False)
             if "@" in username and "." in username:
@@ -342,6 +377,7 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
                 db_user = q.filter(User.username == username).first()
             if not db_user:
                 log_admin_action(None, username, "login_failed", details="user_not_found", ip_address=client_ip)
+                _record_auth_failure(client_ip)
                 raise HTTPException(status_code=401, detail="Invalid credentials")
             if getattr(db_user, 'is_frozen', False):
                 log_admin_action(db_user.id, db_user.username, "login_blocked", details="frozen", ip_address=client_ip)
@@ -355,6 +391,7 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
             salt, hval = stored.split(":", 1)
             if not verify_password(password, salt, hval):
                 log_admin_action(db_user.id, db_user.username, "login_failed", details="wrong_password", ip_address=client_ip)
+                _record_auth_failure(client_ip)
                 raise HTTPException(status_code=401, detail="비밀번호가 틀렸습니다.")
             if not db_user.email_verified:
                 log_admin_action(db_user.id, db_user.username, "login_blocked", details="email_not_verified", ip_address=client_ip)
@@ -368,13 +405,13 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
                 s.commit()
             log_admin_action(db_user.id, db_user.username, "login", ip_address=client_ip)
             resp = JSONResponse(_user_json(db_user))
-            resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/")
+            resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/", secure=(SCHEME == "https"))
             return resp
     except HTTPException:
         raise
     except Exception as exc:
         logger.exception("Login error")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 def _send_verification_email(u: User):
@@ -424,6 +461,9 @@ def _send_verification_email(u: User):
 def api_register(request: Request, username: str = Form(...), password: str = Form(...),
                  display_name: str = Form(""), email: str = Form(...)):
     from app.routes.auth import hash_password
+    client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
+    if not _check_auth_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
     from app.crypto_utils import generate_keypair
     import secrets
     display_handle = username
@@ -531,6 +571,9 @@ def api_resend_verification(request: Request, email: str = Form(...)):
 def api_forgot_password(request: Request, email: str = Form(...)):
     import secrets
     from app.config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
+    client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
+    if not _check_auth_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
     with get_session() as s:
         u = s.query(User).filter_by(email=email, is_remote=False).first()
         if not u or not SMTP_SERVER:
@@ -5290,7 +5333,8 @@ def api_admin_refresh_profile(request: Request, user_id: int):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("refresh_profile error for user %s", user_id)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/admin/users/suspend")
