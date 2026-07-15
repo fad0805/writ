@@ -1001,18 +1001,20 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     data = None
     try:
         resp = httpx.get(url, headers=headers, timeout=15, follow_redirects=True)
+        print(f"[FETCH-POST] url={url} status={resp.status_code}", flush=True)
         if resp.status_code == 200:
             data = resp.json()
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[FETCH-POST] url={url} error={e}", flush=True)
 
     if data is None and signer:
         try:
             resp = httpx.get(url, headers={"Accept": "application/activity+json"}, timeout=15, follow_redirects=True)
+            print(f"[FETCH-POST] retry url={url} status={resp.status_code}", flush=True)
             if resp.status_code == 200:
                 data = resp.json()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[FETCH-POST] retry url={url} error={e}", flush=True)
 
     if data is None:
         return None
