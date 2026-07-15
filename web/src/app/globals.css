@@ -311,7 +311,7 @@ input[type="text"].explore-search-input:focus {
   padding: 20px 30px;
   background: var(--bg-primary);
   overflow-y: auto;
-  transition: background 0.3s;
+  transition: background 0.3s, transform 0.15s ease-out;
 }
 
 .main-content h2 { margin-bottom: 20px; color: var(--text-white); }
