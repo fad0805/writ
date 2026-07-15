@@ -532,7 +532,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
           </Link>
         )}
         {post.summary ? (
-          <details className="cw-box" onClick={(e) => e.stopPropagation()}>
+          <details className="cw-box">
             <summary onClick={(e) => e.stopPropagation()}>⚠️ {post.summary}</summary>
             <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
             {(post as any).media_attachments?.length > 0 && _renderMedia()}
