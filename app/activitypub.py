@@ -967,6 +967,12 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     if _depth > 3 or not url:
         return None
 
+    # Convert web URL /@username/id to AP URL /users/username/statuses/id
+    m = re.match(r'^(https?://[^/]+)/@(\w+(?:@\S+)?)/([a-f0-9]+)(\?.*)?$', url)
+    if m:
+        base, username, status_id, query = m.group(1), m.group(2), m.group(3), m.group(4) or ""
+        url = f"{base}/users/{username}/statuses/{status_id}{query}"
+
     from urllib.parse import urlparse as _urlparse
     parsed = _urlparse(url)
     headers = {"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}
