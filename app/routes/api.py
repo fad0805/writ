@@ -749,14 +749,23 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         _following_ids_set = _following_ids or set()
         mention_filtered = []
         for p in posts:
+            skip = False
             if p.mentioned_user_ids:
-                skip = False
                 for muid in p.mentioned_user_ids:
                     if muid != p.author_id and muid not in _following_ids_set:
                         skip = True
                         break
-                if skip:
-                    continue
+            if not skip and p.in_reply_to_ap_id and not p.in_reply_to_id:
+                # remote parent not in DB - can't verify parent author, hide
+                skip = True
+            if not skip and not p.mentioned_user_ids and p.author and p.author.is_remote:
+                # No mentioned_user_ids but author is remote - check content for @domain mentions
+                import re as _re
+                _remote_mentions = _re.findall(r'@[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}', p.content or "")
+                if _remote_mentions:
+                    skip = True
+            if skip:
+                continue
             mention_filtered.append(p)
         posts = mention_filtered
     has_more = raw_total > limit
