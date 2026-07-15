@@ -187,7 +187,7 @@ export default function NotificationsPage() {
         <h2 className="notif-header-title">
           <Icon name="bell" /> 알림
         </h2>
-        <button onClick={handleMarkAllRead} className="btn btn-small notif-mark-read">
+        <button onClick={handleMarkAllRead} className="btn btn-small notif-mark-read" disabled={!notifs.some(n => !n.is_read)} style={{ opacity: notifs.some(n => !n.is_read) ? 1 : 0.4 }}>
           모두 읽음
         </button>
       </div>
