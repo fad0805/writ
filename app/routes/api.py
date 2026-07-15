@@ -744,8 +744,8 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                     continue
             filtered.append(p)
         posts = filtered
-    # Hide posts that mention someone the user doesn't follow (home timeline only)
-    if user and tl_type == "home":
+    # Hide posts that mention someone the user doesn't follow (home/social only)
+    if user and tl_type in ("home", "social"):
         _following_ids_set = _following_ids or set()
         mention_filtered = []
         for p in posts:
