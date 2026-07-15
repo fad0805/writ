@@ -6,6 +6,7 @@ import Icon from "./Icon";
 import Link from "next/link";
 import MiniPostCard from "./MiniPostCard";
 import { useRouter } from "next/navigation";
+import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
 
 const MODAL_ACTION_NAMES: Record<string, string> = {
   warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지",
@@ -18,6 +19,8 @@ export default function RightSidebar() {
   const [notifs, setNotifs] = useState<NotificationData[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [serverInfo, setServerInfo] = useState<{ name: string; description?: string; admins: { username: string; email: string }[] } | null>(null);
+  const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
+  useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
 
 
   useEffect(() => {
@@ -71,6 +74,11 @@ export default function RightSidebar() {
     } catch {}
   }, []);
 
+  const renderName = (name: string) => {
+    const html = renderCustomEmojis(name, emojiMap);
+    return <span dangerouslySetInnerHTML={{ __html: html }} />;
+  };
+
   const visibleNovels = novels.slice(0, 3);
   const extraCount = novels.length - 3;
   return (
@@ -106,7 +114,7 @@ export default function RightSidebar() {
             if (n.post) return (
               <MiniPostCard key={n.id} post={n.post} notifType={n.type} notifLabel={
                 (n.type === "like" || n.type === "boost") && n.from_user ? (
-                  <><strong>{n.from_user.display_name || n.from_user.username}</strong> {n.type === "like" ? "님이 즐겨찾기했습니다" : "님이 부스트했습니다"}</>
+                  <><strong>{renderName(n.from_user.display_name || n.from_user.username)}</strong> {n.type === "like" ? "님이 즐겨찾기했습니다" : "님이 부스트했습니다"}</>
                 ) : undefined
               } />
             );
@@ -114,7 +122,7 @@ export default function RightSidebar() {
             if (n.type === "vote") {
               return (
                 n.post ? <MiniPostCard key={n.id} post={n.post} notifType={n.type} notifLabel={
-                  <><strong>{n.from_user?.display_name || "알 수 없음"}</strong> 님이 투표에 참여했습니다</>
+                  <><strong>{renderName(n.from_user?.display_name || "알 수 없음")}</strong> 님이 투표에 참여했습니다</>
                 } /> : <div key={n.id} />
               );
             }
@@ -138,7 +146,7 @@ export default function RightSidebar() {
                   </div>
                   <div className="mini-post-content">
                     <div className="mini-post-author">
-                      {n.from_user?.display_name || "알 수 없음"}
+                      {renderName(n.from_user?.display_name || "알 수 없음")}
                       <span className="mini-post-handle">@{n.from_user?.username}</span>
                     </div>
                     <div className="text-sm" style={{ color: "var(--text-muted)" }}>
@@ -164,7 +172,7 @@ export default function RightSidebar() {
                     </div>
                     <div className="mini-post-content">
                       <div className="mini-post-author">
-                        {n.from_user?.display_name || "알 수 없음"}
+                        {renderName(n.from_user?.display_name || "알 수 없음")}
                         <span className="mini-post-handle">@{n.from_user?.username}</span>
                       </div>
                       <div className="text-sm" style={{ color: "var(--text-muted)" }}>가입했습니다</div>
@@ -181,7 +189,7 @@ export default function RightSidebar() {
                     </div>
                     <div className="mini-post-content">
                       <div className="mini-post-author">
-                        {n.from_user?.display_name || "알 수 없음"}
+                        {renderName(n.from_user?.display_name || "알 수 없음")}
                         <span className="mini-post-handle">@{n.from_user?.username}</span>
                       </div>
                       <div className="text-sm" style={{ color: "var(--text-muted)" }}>
@@ -200,7 +208,7 @@ export default function RightSidebar() {
                     </div>
                     <div className="mini-post-content">
                       <div className="text-sm" style={{ color: "var(--text)" }}>
-                        <strong>{fromName}</strong>
+                        <strong>{renderName(fromName)}</strong>
                         <span style={{ color: "var(--text-muted)", marginLeft: 4 }}>님이 계정 이전을 요청했습니다</span>
                       </div>
                       <div className="mini-notif-btns" style={{ display: "flex", gap: 4, marginTop: 4 }}>
@@ -246,7 +254,7 @@ export default function RightSidebar() {
                   </div>
                   <div className="mini-post-content">
                     <div className="mini-post-author">
-                      {n.from_user?.display_name || "알 수 없음"}
+                      {renderName(n.from_user?.display_name || "알 수 없음")}
                       <span className="mini-post-handle">@{n.from_user?.username}</span>
                     </div>
                     <div className="text-sm" style={{ color: "var(--text-muted)" }}>
