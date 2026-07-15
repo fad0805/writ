@@ -1136,8 +1136,8 @@ input:focus {
 }
 .notif-tabs::-webkit-scrollbar { display: none; }
 .notif-tab {
-  flex: 0 0 auto;
-  display: inline-flex;
+  flex: 1;
+  display: flex;
   align-items: center;
   justify-content: center;
   padding: 8px 14px;
