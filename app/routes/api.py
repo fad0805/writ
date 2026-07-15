@@ -686,7 +686,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             seen_ids.add(p.boost_of_id)
             if p.boost_of_id not in boost_originals:
                 continue
-        elif p.id in seen_ids:
+        elif p.id in seen_ids and p.author_id != user.id:
             continue
         seen_ids.add(p.id)
         deduped.append(p)
@@ -766,13 +766,11 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         posts = filtered
     # Hide posts that mention someone the user doesn't follow (home/social only)
     if user and tl_type in ("home", "social"):
-        _following_ids_set = {str(fid) for fid in _following_ids} if _following_ids else set()
-        my_id_str = str(user.id)
+        _following_ids_set = set(_following_ids) if _following_ids else set()
 
         mention_filtered = []
         for p in posts:
             skip = False
-            author_id_str = str(p.author_id) if p.author_id else ""
 
             if p.mentioned_user_ids:
                 for muid in p.mentioned_user_ids:
