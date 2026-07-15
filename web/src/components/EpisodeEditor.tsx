@@ -56,6 +56,7 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
   const fileRef = useRef<HTMLInputElement>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const colorPickerRef = useRef<HTMLDivElement>(null);
+  const internalUpdate = useRef(false);
 
   useEffect(() => {
     if (!showColorPicker) return;
@@ -82,13 +83,15 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
     ],
     content: value,
     onUpdate: ({ editor }) => {
+      internalUpdate.current = true;
       onChange(editor.getHTML());
     },
   });
 
   useEffect(() => {
+    if (internalUpdate.current) { internalUpdate.current = false; return; }
     if (editor && value !== editor.getHTML()) {
-      editor.commands.setContent(value);
+      editor.commands.setContent(value, false);
     }
   }, [value, editor]);
 
