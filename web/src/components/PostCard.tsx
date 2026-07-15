@@ -44,6 +44,11 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
   );
 
   text = text.replace(/(^|>|\s)@([a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?)/g, (_m, before, handle) => {
+    // If no domain in handle, check validMentions for a remote match
+    if (!handle.includes("@") && validMentions) {
+      const found = Array.from(validMentions).find((v: string) => v.startsWith(handle + "@"));
+      if (found) handle = found;
+    }
     return `${before}<a href="/@${handle}" class="mention-link">@${handle}</a>`;
   });
 
@@ -197,7 +202,11 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   const [resolvedMentions, setResolvedMentions] = useState<Map<string, string>>(new Map());
   const buildContentHtml = (qUrl?: string, resolved?: Map<string, string>) => {
     let html = post.content;
-    html = html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+    if (/<\/?[a-zA-Z]+[\s>]/.test(html)) {
+      html = html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+    } else {
+      html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     html = html.replace(/\n/g, '<br>');
@@ -214,10 +223,11 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     }
     if (qUrl) {
       const escUrl = qUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const hasPrefix = new RegExp(`(series:|episode:)\\s*${escUrl}`, 'i').test(html);
+      const hasPrefix = new RegExp(`(RE:|series:|episode:)\\s*(<a[^>]*>\\s*)?${escUrl}`, 'i').test(html);
       if (hasPrefix) {
-        html = html.replace(new RegExp(`<a[^>]*>${escUrl}<\\/a>`, 'gi'), '');
-        html = html.replace(new RegExp(`(series:|episode:)\\s*${escUrl}`, 'gi'), '');
+        // Remove the whole prefix + anchor block or bare URL
+        html = html.replace(new RegExp(`(RE:|series:|episode:|episode\\s*):?\\s*<a[^>]*>[\\s\\S]*?<\\/a>`, 'gi'), '');
+        html = html.replace(new RegExp(`(RE:|series:|episode:|episode\\s*):?\\s*${escUrl}`, 'gi'), '');
         html = html.replace(new RegExp(escUrl, 'gi'), '');
       } else {
         const host = typeof window !== 'undefined' ? window.location.host : '';
@@ -380,15 +390,16 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     return () => window.removeEventListener("click", handler);
   }, [showMoreActions]);
   useEffect(() => {
-    const hasRePrefix = /<span class="quote-inline">\s*RE:\s*<\/span>/i.test(post.content) || /^\s*RE:/i.test(post.content.replace(/<[^>]+>/g, '').trim());
+    const hasRePrefix = /<span class="quote-inline">\s*RE:\s*<\/span>/i.test(post.content) || /\b(RE|series):\s*https?:\/\//i.test(post.content.replace(/<[^>]+>/g, ''));
     if (!hasRePrefix) return;
-    const newFormat = post.content.match(/https?:\/\/([^/]+)\/@(\w+(?:@[\w.-]+)?)\/([a-f0-9]+)/);
-    const oldFormat = post.content.match(/https?:\/\/[^/]+\/post\/(\d+)/);
-    const seriesFormat = post.content.match(/https?:\/\/[^/]+\/series\/(\d+)/);
-    const seriesByNumber = post.content.match(/https?:\/\/[^/]+\/series\/by-number\/(\w+)\/([a-f0-9]+)/);
-    const episodeFormat = post.content.match(/https?:\/\/[^/]+\/series\/(\d+)\/episodes\/(\d+)/);
-    const anyUrl = (post.content.match(/https?:\/\/[^\s<>"']+/g) || []).find((u: string) => !u.match(/\/tags\/|\/explore\?/));
-    const url = episodeFormat?.[0] || seriesFormat?.[0] || seriesByNumber?.[0] || newFormat?.[0] || oldFormat?.[0] || anyUrl;
+    const anyUrl = (post.content.match(/https?:\/\/[^\s<>"']+/g) || []).find((u: string) => !u.match(/\/tags\//));
+    if (!anyUrl) return;
+    const newFormat = anyUrl.match(/https?:\/\/([^/]+)\/@(\w+(?:@[\w.-]+)?)\/([a-f0-9]+)/);
+    const oldFormat = anyUrl.match(/https?:\/\/[^/]+\/post\/(\d+)/);
+    const seriesFormat = anyUrl.match(/https?:\/\/[^/]+\/series\/(\d+)/);
+    const seriesByNumber = anyUrl.match(/https?:\/\/[^/]+\/series\/by-number\/(\w+)\/([a-f0-9]+)/);
+    const episodeFormat = anyUrl.match(/https?:\/\/[^/]+\/series\/(\d+)\/episodes\/(\d+)/);
+    const url = anyUrl;
     if (!url) return;
     setQuoteUrl(url);
     setLoadingQuote(true);
@@ -424,7 +435,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
         .then(r => r.json()).then(d => { setQuotedPost(d); setLoadingQuote(false); })
         .catch(() => setLoadingQuote(false));
     } else {
-      const form = new FormData(); form.append("url", anyUrl![0]);
+      const form = new FormData(); form.append("url", url);
       fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form })
         .then(r => { if (r.ok) return r.json(); throw new Error(); })
         .then(d => {
@@ -479,7 +490,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
       <div className={`post-card${current ? " current" : ""}${selected ? " selected" : ""}${post.visibility === "mention" ? " mention-card" : ""}`} onClick={(e) => { if (current || (e.target as HTMLElement).closest('a')) return; router.push(post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`); }}>
         {post.boosted_by && (
           <div className="boost-badge">
-            <Icon name="refresh" size={12} /> {post.boosted_by.display_name || post.boosted_by.username}님이 부스트
+            <Icon name="refresh" size={12} /> <span dangerouslySetInnerHTML={{ __html: renderCustomEmojis(post.boosted_by.display_name || post.boosted_by.username, emojiList, 14) }} />님이 부스트
           </div>
         )}
         <div className="post-header">
@@ -525,7 +536,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
           </Link>
         )}
         {post.summary ? (
-          <details className="cw-box" onClick={(e) => e.stopPropagation()}>
+          <details className="cw-box">
             <summary onClick={(e) => e.stopPropagation()}>⚠️ {post.summary}</summary>
             <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
             {(post as any).media_attachments?.length > 0 && _renderMedia()}
@@ -743,15 +754,15 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
                       <Icon name={pinned ? "pin_filled" : "pin"} /> {pinned ? "고정 해제" : "고정"}
                     </button>
                   )}
+                  {post.is_mine && (
+                    <button onClick={() => { setShowMoreActions(false); setShowEdit(true); }} className="post-actions-dropdown-item">
+                      <Icon name="edit" /> 수정
+                    </button>
+                  )}
                   {(post.is_mine || currentUser?.is_admin) && (
-                    <>
-                      <button onClick={() => { setShowMoreActions(false); setShowEdit(true); }} className="post-actions-dropdown-item">
-                        <Icon name="edit" /> 수정
-                      </button>
-                      <button onClick={() => { setShowMoreActions(false); handleDelete(); }} className="post-actions-dropdown-item post-actions-dropdown-danger">
-                        <Icon name="trash" /> 삭제
-                      </button>
-                    </>
+                    <button onClick={() => { setShowMoreActions(false); handleDelete(); }} className="post-actions-dropdown-item post-actions-dropdown-danger">
+                      <Icon name="trash" /> 삭제
+                    </button>
                   )}
                   {currentUser && !post.is_mine && (
                     <button onClick={() => { setShowMoreActions(false); setShowReport(true); setReportReason(""); setReportError(""); setReportDone(false); setSelectedRuleIds([]); fetch("/api/rules").then(r => r.json()).then(setReportRules).catch(() => {}); }} className="post-actions-dropdown-item">
