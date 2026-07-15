@@ -2079,16 +2079,15 @@ def api_recent_tags(request: Request, q: str = Query("")):
 @router.get("/users/{username}")
 def api_get_profile(request: Request, username: str, offset: int = 0, limit: int = 10):
     user = get_current_user(request)
+    if "@" in username:
+        parts = username.split("@")
+        if len(parts) == 2:
+            remote_user, remote_domain = parts
+            actor_url = f"https://{remote_domain}/@{remote_user}"
+            from app.activitypub import _resolve_actor
+            _resolve_actor(actor_url)
     with get_session() as s:
         profile = s.query(User).filter_by(username=username).first()
-        if "@" in username:
-            parts = username.split("@")
-            if len(parts) == 2:
-                remote_user, remote_domain = parts
-                actor_url = f"https://{remote_domain}/@{remote_user}"
-                from app.activitypub import _resolve_actor
-                _resolve_actor(actor_url)
-                profile = s.query(User).filter_by(username=username).first()
         if not profile:
             raise HTTPException(status_code=404, detail="User not found")
         is_deactivated = getattr(profile, 'is_deactivated', False) or False
