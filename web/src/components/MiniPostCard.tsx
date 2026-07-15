@@ -59,10 +59,10 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
   const iconColor = notifType ? TYPE_COLORS[notifType] || "var(--text-muted)" : "var(--text-muted)";
   const contentHtml = (() => {
     let html = post.content;
-    if (!/<[a-zA-Z]/.test(html)) {
-      html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    } else {
+    if (/<\/?[a-zA-Z]+[\s>]/.test(html)) {
       html = html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+    } else {
+      html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
