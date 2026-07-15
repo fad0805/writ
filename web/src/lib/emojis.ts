@@ -86,10 +86,14 @@ export function renderCustomEmojis(html: string, emojis: CustomEmoji[], size?: n
     if (!emoji.url) continue;
     const safeUrl = emoji.url.replace(/"/g, "%22").replace(/</g, "%3C").replace(/>/g, "%3E");
     if (!safeUrl.startsWith("https:")) continue;
+    const img = `<img src="${safeUrl}" alt=":${emoji.keyword}:" title=":${emoji.keyword}:" class="custom-emoji" width="${sz}" height="${sz}" style="width:${sz}px;height:${sz}px;vertical-align:middle;display:inline-block;object-fit:contain">`;
     const kw = emoji.keyword;
     const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`:${escaped}:`, "g");
-    html = html.replace(re, `<img src="${safeUrl}" alt=":${kw}:" title=":${kw}:" class="custom-emoji" width="${sz}" height="${sz}" style="width:${sz}px;height:${sz}px;vertical-align:middle;display:inline-block;object-fit:contain">`);
+    html = html.replace(new RegExp(`:${escaped}:`, "g"), img);
+    for (const a of (emoji.aliases || [])) {
+      const aesc = a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      html = html.replace(new RegExp(`:${aesc}:`, "g"), img);
+    }
   }
   return html;
 }
