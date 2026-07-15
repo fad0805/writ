@@ -87,6 +87,7 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                             skip = True
                             break
                     if skip:
+                        logger.info("Stream filter: dropped post %s from uid=%s (mention %s not followed)", post_json.get("id"), uid, muid)
                         continue
                 # Filter: parent author not followed or parent not found
                 if parent_author_id is None:
