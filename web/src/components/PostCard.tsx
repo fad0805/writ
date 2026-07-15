@@ -380,7 +380,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     return () => window.removeEventListener("click", handler);
   }, [showMoreActions]);
   useEffect(() => {
-    const hasRePrefix = /<span class="quote-inline">\s*RE:\s*<\/span>/i.test(post.content) || /^\s*RE:/i.test(post.content.replace(/<[^>]+>/g, '').trim());
+    const hasRePrefix = /<span class="quote-inline">\s*RE:\s*<\/span>/i.test(post.content) || /\bRE:\s*https?:\/\//i.test(post.content.replace(/<[^>]+>/g, ''));
     if (!hasRePrefix) return;
     const anyUrl = (post.content.match(/https?:\/\/[^\s<>"']+/g) || []).find((u: string) => !u.match(/\/tags\//));
     if (!anyUrl) return;
