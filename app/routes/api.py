@@ -138,7 +138,14 @@ def _post_json(p, session, user, tl_type=None,
     if _mentioned_users_map is not None:
         mentioned_handles = _mentioned_users_map.get(p.id, [])
     elif p.mentioned_user_ids:
-        mentioned_handles = [u.username for u in (session.query(User).filter(User.id.in_(p.mentioned_user_ids or [])).all())]
+        from urllib.parse import urlparse as _urlparse2
+        mentioned_handles = []
+        for u in session.query(User).filter(User.id.in_(p.mentioned_user_ids or [])).all():
+            if u.is_remote and u.remote_url:
+                _domain = _urlparse2(u.remote_url).hostname or ""
+                mentioned_handles.append(f"{u.username}@{_domain}")
+            else:
+                mentioned_handles.append(u.username)
     else:
         mentioned_handles = []
     return {
@@ -818,9 +825,14 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 all_mentioned_ids.update(p.mentioned_user_ids)
         _mentioned_users_map = {}
         if all_mentioned_ids:
-            _mentioned_users = {u.id: u.username for u in session.query(User).filter(
-                User.id.in_(all_mentioned_ids)
-            ).all()}
+            from urllib.parse import urlparse as _urlparse
+            _mentioned_users = {}
+            for _mu in session.query(User).filter(User.id.in_(all_mentioned_ids)).all():
+                if _mu.is_remote and _mu.remote_url:
+                    _domain = _urlparse(_mu.remote_url).hostname or ""
+                    _mentioned_users[_mu.id] = f"{_mu.username}@{_domain}"
+                else:
+                    _mentioned_users[_mu.id] = _mu.username
             for p in posts[:limit]:
                 if p.mentioned_user_ids:
                     _mentioned_users_map[p.id] = [_mentioned_users.get(mid, "?") for mid in p.mentioned_user_ids if mid in _mentioned_users]
@@ -2262,7 +2274,14 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                     all_mentioned_ids.update(pp.mentioned_user_ids)
             _mentioned_users_map = {}
             if all_mentioned_ids:
-                _mu = {u.id: u.username for u in s.query(User).filter(User.id.in_(all_mentioned_ids)).all()}
+                from urllib.parse import urlparse as _urlparse
+                _mu = {}
+                for _um in s.query(User).filter(User.id.in_(all_mentioned_ids)).all():
+                    if _um.is_remote and _um.remote_url:
+                        _domain = _urlparse(_um.remote_url).hostname or ""
+                        _mu[_um.id] = f"{_um.username}@{_domain}"
+                    else:
+                        _mu[_um.id] = _um.username
                 for pp in _posts_for_mentions:
                     if pp.mentioned_user_ids:
                         _mentioned_users_map[pp.id] = [_mu.get(mid, "?") for mid in pp.mentioned_user_ids if mid in _mu]
@@ -2735,7 +2754,14 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
                     all_mentioned_ids.update(p.mentioned_user_ids)
             _mentioned_users_map = {}
             if all_mentioned_ids:
-                _mentioned_users = {u.id: u.username for u in s.query(User).filter(User.id.in_(all_mentioned_ids)).all()}
+                from urllib.parse import urlparse as _urlparse
+                _mentioned_users = {}
+                for _um in s.query(User).filter(User.id.in_(all_mentioned_ids)).all():
+                    if _um.is_remote and _um.remote_url:
+                        _domain = _urlparse(_um.remote_url).hostname or ""
+                        _mentioned_users[_um.id] = f"{_um.username}@{_domain}"
+                    else:
+                        _mentioned_users[_um.id] = _um.username
                 for p in s.query(Post).filter(Post.id.in_(notif_post_ids)).all():
                     if p.mentioned_user_ids:
                         _mentioned_users_map[p.id] = [_mentioned_users.get(mid, "?") for mid in p.mentioned_user_ids if mid in _mentioned_users]
