@@ -51,6 +51,7 @@ export async function getCustomEmojis(): Promise<CustomEmoji[]> {
       }
     } catch {}
     cache = all;
+    fetchPromise = null;
     return cache;
   })();
   return fetchPromise;
