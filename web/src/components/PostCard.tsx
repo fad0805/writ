@@ -91,7 +91,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   const [myReaction, setMyReaction] = useState(post.my_reaction || null);
   const [reactionEmojiMap, setReactionEmojiMap] = useState<Record<string, string>>(() => {
     if ((window as any).__emojiMap) return (window as any).__emojiMap;
-    fetch("/api/emojis").then(r=>r.json()).then((data: any) => { const list: any[] = data.emojis || data || [];
+    getCustomEmojis().then(list => {
       const m: Record<string, string> = {};
       for (const e of list) if (e.keyword && e.url) m[e.keyword] = e.url;
       (window as any).__emojiMap = m;
