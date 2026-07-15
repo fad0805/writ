@@ -217,7 +217,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       try {
         const all = await getCustomEmojis();
         const q = emojiQuery.toLowerCase();
-        const matched = all.filter(e => e.keyword.startsWith(q) || (e.aliases || []).some(a => a.startsWith(q)));
+        const matched = all.filter(e => e.category !== "remote" && (e.keyword.startsWith(q) || (e.aliases || []).some(a => a.startsWith(q))));
         setEmojiResults(matched);
         setEmojiIdx(0);
       } catch { setEmojiResults([]); }
