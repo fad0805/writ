@@ -3,6 +3,7 @@ import { useEffect, useMemo } from "react";
 import { PostData } from "@/lib/api";
 import PostForm from "./PostForm";
 import { useAuth } from "@/lib/auth";
+import { sanitizePost } from "@/lib/sanitize";
 
 const VIS_ORDER: Record<string, number> = { public: 0, home: 1, followers: 2, mention: 3 };
 
@@ -39,7 +40,7 @@ export default function ReplyModal({ post, onClose, onDone }: { post: PostData; 
         <h3>답글 작성</h3>
         <div className="reply-modal-original">
           <strong>{post.author.display_name} <span className="reply-modal-handle">@{post.author.username}</span></strong>
-          <p className="reply-modal-content" dangerouslySetInnerHTML={{ __html: post.content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<[^>]+\s+on\w+\s*=\s*[^>]*>/gi, '').replace(/<img[^>]*>/gi, '').replace(/\n/g, '<br>') }} />
+          <p className="reply-modal-content" dangerouslySetInnerHTML={{ __html: sanitizePost(post.content.replace(/\n/g, '<br>')) }} />
         </div>
         <PostForm key={post.id} parentId={post.id} initialVisibility={replyVis} placeholder="답글을 입력하세요..." onDone={onDone} initialContent={mentions} />
       </div>

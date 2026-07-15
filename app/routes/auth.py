@@ -20,7 +20,7 @@ def hash_password(password: str, salt: str = None) -> tuple[str, str]:
 
 def verify_password(password: str, salt: str, hashed: str) -> bool:
     _, h = hash_password(password, salt)
-    return h == hashed
+    return hmac.compare_digest(h, hashed)
 
 
 def create_session(user_id: int) -> str:
