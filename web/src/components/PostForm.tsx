@@ -629,7 +629,6 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
             {emojiResults.map((emo, i) => (
               <div key={emo.id} className={`mention-option ${i === emojiIdx ? "active" : ""} emoji-autocomplete-item`} onMouseDown={(e) => { e.preventDefault(); insertEmoji(emo); }} onMouseEnter={() => setEmojiIdx(i)}>
                 <img src={emo.url} alt={emo.keyword} className="emoji-autocomplete-img" />
-                <span className="emoji-autocomplete-label">:<strong>{emo.keyword}</strong>:</span>
               </div>
             ))}
           </div>
