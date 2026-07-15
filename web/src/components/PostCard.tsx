@@ -179,7 +179,16 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   };
 
   const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
-  useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
+  useEffect(() => {
+    getCustomEmojis().then((all) => {
+      if (post._emojis) {
+        injectEmojis(post._emojis);
+        getCustomEmojis().then(setEmojiMap);
+      } else {
+        setEmojiMap(all);
+      }
+    });
+  }, [post._emojis, post.id]);
 
   const [nowTime, setNowTime] = useState(Date.now());
   useEffect(() => { const id = setInterval(() => setNowTime(Date.now()), 10000); return () => clearInterval(id); }, []);

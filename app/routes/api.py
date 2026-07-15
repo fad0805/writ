@@ -177,6 +177,7 @@ def _post_json(p, session, user, tl_type=None,
         "mentioned_user_ids": p.mentioned_user_ids or [],
         "mentioned_handles": mentioned_handles,
         "link_preview": p.link_preview or None,
+        "_emojis": [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)],
     }
 
 

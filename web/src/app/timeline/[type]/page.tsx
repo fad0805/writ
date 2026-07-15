@@ -8,6 +8,7 @@ import PostForm from "@/components/PostForm";
 import ReplyModal from "@/components/ReplyModal";
 import InfiniteScroll from "@/components/InfiniteScroll";
 import Icon from "@/components/Icon";
+import { injectEmojis } from "@/lib/emojis";
 import Link from "next/link";
 
 const LIMIT = 20;
@@ -200,6 +201,9 @@ export default function TimelinePage() {
     es.onmessage = (event) => {
       try {
         const newPost = JSON.parse(event.data);
+        if (newPost._emojis) {
+          injectEmojis(newPost._emojis);
+        }
         if (deletedIds.current.has(newPost.id)) return;
         if (newPost.type === "delete") {
           setPosts((prev) => prev.filter((p) => p.id !== newPost.id));
