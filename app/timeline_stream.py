@@ -92,7 +92,7 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                 # Filter: parent author not followed or parent not found
                 if parent_author_id is None:
                     continue
-                if parent_author_id != uid and parent_author_id not in user_follows:
+                if parent_author_id != uid and parent_author_id not in user_follows and uid != post_author_id:
                     continue
             _enqueue(info["queue"], payload)
 
