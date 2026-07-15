@@ -4803,15 +4803,20 @@ def _invalidate_emoji_cache():
     _emoji_cache["data"] = None
     _emoji_cache["ts"] = 0
 
+_emoji_storage = None
+
+
 def _emoji_url(file_name: str, domain: str = "", category: str = "") -> str:
     """Return the correct emoji URL (local or S3)."""
+    global _emoji_storage
     sub = "remote" if domain or category == "remote" else "local"
     from app.config import S3_ENABLED
     if S3_ENABLED:
-        from app.utils.storage import get_storage
+        if _emoji_storage is None:
+            from app.utils.storage import get_storage
+            _emoji_storage = get_storage()
         try:
-            storage = get_storage()
-            return storage.url(f"emojis/{sub}/{file_name}")
+            return _emoji_storage.url(f"emojis/{sub}/{file_name}")
         except Exception:
             pass
     return f"/emojis/{sub}/{file_name}"
