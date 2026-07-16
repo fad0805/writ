@@ -9,7 +9,7 @@ import logging
 import threading
 from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import desc, or_, and_, func, cast, String, String as SAString
+from sqlalchemy import desc, or_, and_, func, cast, String
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload, Session
 
@@ -633,7 +633,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             Boost.user_id.in_(all_boost_user_ids),
         ).all()})
         final = following_ids[:]
-        _mentioned_self = cast(Post.mentioned_user_ids, SAString).contains(str(user.id))
+        _mentioned_self = cast(Post.mentioned_user_ids, String).contains(str(user.id))
         posts = session.query(Post).options(*_base_opts).filter(
             or_(
                 Post.author_id.in_(final),
