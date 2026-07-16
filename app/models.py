@@ -220,7 +220,7 @@ class Post(Base):
     in_reply_to_ap_id = Column(String(1024), default="")
 
     # Boost pointer: if set, this post is a boost of another post
-    boost_of_id = Column(Integer, ForeignKey("posts.id"), nullable=True, index=True)
+    boost_of_id = Column(Integer, ForeignKey("posts.id", ondelete="SET NULL"), nullable=True, index=True)
 
     # Novel post (if this post is a novel episode announcement)
     novel_id = Column(Integer, ForeignKey("novels.id"), nullable=True)
