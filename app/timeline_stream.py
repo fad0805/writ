@@ -118,7 +118,6 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                             skip_mention = True
             if skip_mention:
                 print(f"Stream filter: dropped post {post_json.get('id')} from uid={uid} (mention not followed)", flush=True)
-                continue
 
             # [2] 답글(Reply) 필터링 (부모 글 작성자 미팔로우 방어)
             # 부스트인 경우 스킵 (boosted_by가 있으면 부스트)
@@ -130,11 +129,9 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                 if parent_author_id is None:
                     # 부모 작성자 정보가 아예 누락된 리모트 답글은 안전하게 차단
                     print(f"Stream filter: dropped reply {post_json.get("id")} (parent author unverified)", flush=True)
-                    continue
                 # 부모 작성자가 존재할 때, 검증 로직
                 if parent_author_id != uid and parent_author_id not in user_follows and uid != post_author_id:
                     print(f"Stream filter: dropped reply {post_json.get("id")} (parent author {parent_author_id} not followed)", flush=True)
-                    continue
             _enqueue(info["queue"], payload)
     except Exception as e:
         print("!!! BROADCAST_POST ERROR !!!", flush=True)
