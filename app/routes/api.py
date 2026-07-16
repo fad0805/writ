@@ -1718,11 +1718,33 @@ def api_boost_post(request: Request, post_id: int):
             s.commit()
             # Stream the boost pointer post as a new timeline entry
             try:
-                og = _post_json(post, s, user)
-                og["id"] = boost_post.id
-                og["boosted_by"] = _user_json(user)
-                og["mentioned_user_ids"] = []
-                threading.Thread(target=_broadcast_timeline, args=(og, user.id, post.visibility or "public", False), daemon=True).start()
+                _a = post.author
+                _author_json = _user_json(_a)
+                _boosted_json = _user_json(user)
+                _og = {
+                    "id": boost_post.id,
+                    "number": post.number or "",
+                    "content": post.content,
+                    "summary": post.summary or "",
+                    "visibility": post.visibility or "public",
+                    "created_at": _fmt_dt(post.created_at),
+                    "author": _author_json,
+                    "likes_count": 0,
+                    "boosts_count": s.query(Boost).filter_by(post_id=post_id).count(),
+                    "replies_count": post.replies_count or 0,
+                    "liked": False, "boosted": True, "bookmarked": False,
+                    "is_mine": True, "is_dm": False,
+                    "is_sensitive": getattr(post, "is_sensitive", False) or False,
+                    "ap_id": post.ap_id or "",
+                    "reply_context": None,
+                    "boosted_by": _boosted_json,
+                    "media_attachments": (post.media_attachments or []) if hasattr(post, 'media_attachments') else [],
+                    "poll_data": None, "my_vote": None,
+                    "reactions": {}, "my_reaction": None,
+                    "mentioned_user_ids": [], "mentioned_handles": [],
+                    "link_preview": None,
+                }
+                threading.Thread(target=_broadcast_timeline, args=(_og, user.id, post.visibility or "public", False), daemon=True).start()
             except Exception as e:
                 logger.warning("Failed to broadcast boost stream: %s", e)
             # Also send an update event for the original post (count sync)

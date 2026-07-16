@@ -1967,6 +1967,16 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
         )
         session.add(boost_post)
 
+        # 1. 안전하게 DB 세션이 활성화되어 있을 때 미리 _actor와 post.author(_a)를 가져옵니다.
+        _actor = session.query(User).get(actor_id)
+        _a = post.author
+
+        # 2. 통계 개수 조회도 커밋 전에 안전하게 미리 해둡니다.
+        likes_cnt = session.query(Like).filter_by(post_id=post.id).count()
+        boosts_cnt = session.query(Boost).filter_by(post_id=post.id).count()
+        replies_cnt = session.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count()
+        reactions_data = _build_reactions(session, post.id)
+
         existing_n = session.query(Notification).filter_by(
             user_id=post.author_id, from_user_id=actor_id, notification_type="boost", post_id=post.id
         ).first()
@@ -1978,18 +1988,18 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                 post_id=post.id,
             )
             session.add(n)
-            session.commit()
+
+        session.commit()
+
+        # 5. 커밋 이후 외부 연동 (푸시 및 스트리밍) 처리
+        if not existing_n:
             from app.push import send_push_to_user
             from app.timeline_stream import broadcast_notif_sound
             send_push_to_user(post.author_id, "boost", actor_username, post.id)
             broadcast_notif_sound(post.author_id)
-        else:
-            session.commit()
 
         try:
             from app.timeline_stream import broadcast_post
-            _a = post.author
-            _actor = session.query(User).get(actor_id)
             def _safe_user_json(u):
                 if not u:
                     return None
@@ -2029,14 +2039,14 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                 "visibility": post.visibility or "public",
                 "created_at": post.created_at.isoformat() if post.created_at else "",
                 "author": _safe_user_json(_a),
-                "likes_count": session.query(Like).filter_by(post_id=post.id).count(),
-                "boosts_count": session.query(Boost).filter_by(post_id=post.id).count(),
-                "replies_count": session.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count(),
+                "likes_count": likes_cnt,       # 안전하게 받아온 값 대입
+                "boosts_count": boosts_cnt,     # 안전하게 받아온 값 대입
+                "replies_count": replies_cnt,   # 안전하게 받아온 값 대입
                 "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
                 "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
                 "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
                 "poll_data": post.poll_data, "my_vote": None,
-                "reactions": _build_reactions(session, post.id),
+                "reactions": reactions_data,
                 "my_reaction": None,
                 "boosted_by": _safe_user_json(_actor),
                 "mentioned_user_ids": [],
