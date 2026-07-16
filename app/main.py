@@ -250,10 +250,8 @@ if not S3_ENABLED:
     os.makedirs("uploads", exist_ok=True)
     app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-# Mount emoji directory
+# Mount emoji directory (must be after the /emojis/{keyword} route)
 _emoji_static_dir = os.path.join(os.path.dirname(__file__), "..", "web", "public", "emojis")
-if os.path.isdir(_emoji_static_dir):
-    app.mount("/emojis", StaticFiles(directory=_emoji_static_dir), name="emojis")
 
 # AP/WebFinger routes must be registered before routers to take priority
 @app.get("/.well-known/webfinger")
@@ -775,6 +773,40 @@ def get_like(like_uuid: str):
             "_misskey_reaction": like.reaction or "★",
         }, media_type="application/activity+json")
 
+@app.get("/emojis/{keyword}")
+def get_emoji(keyword: str):
+    """Return an Emoji activity (dereferenceable URI)."""
+    from app.models import CustomEmoji, get_session
+    from app.config import S3_ENABLED
+    ap_id = f"{BASE_URL}/emojis/{keyword}"
+    with get_session() as s:
+        emoji = s.query(CustomEmoji).filter_by(keyword=keyword).first()
+        if not emoji:
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        sub = "remote" if emoji.domain or emoji.category == "remote" else "local"
+        if S3_ENABLED:
+            from app.utils.storage import get_storage
+            try:
+                storage = get_storage()
+                url = storage.url(f"emojis/{sub}/{emoji.file_name}")
+            except Exception:
+                url = f"{BASE_URL}/emojis/{sub}/{emoji.file_name}"
+        else:
+            url = f"{BASE_URL}/emojis/{sub}/{emoji.file_name}"
+        ext = emoji.file_name.rsplit(".", 1)[-1].lower() if "." in emoji.file_name else "png"
+        mt = f"image/{ext}" if ext in ("png", "jpg", "jpeg", "gif", "webp", "svg") else "image/png"
+        return JSONResponse({
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": ap_id,
+            "type": "Emoji",
+            "name": f":{keyword}:",
+            "icon": {
+                "type": "Image",
+                "mediaType": mt,
+                "url": url,
+            },
+        }, media_type="application/activity+json")
+
 @app.get("/boosts/{boost_uuid}")
 def get_boost(boost_uuid: str):
     """Return an Announce activity (dereferenceable URI)."""
@@ -918,6 +950,9 @@ def well_known_nodeinfo():
         ]
     })
 
+
+if os.path.isdir(_emoji_static_dir):
+    app.mount("/emojis", StaticFiles(directory=_emoji_static_dir), name="emojis")
 
 app.include_router(auth_router)
 app.include_router(admin_router)

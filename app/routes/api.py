@@ -1948,8 +1948,8 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
                 _kw = emoji[1:-1]
                 _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw).first()
                 if _emoji_row and _emoji_row.file_name:
-                    _sub = "remote" if _emoji_row.domain or _emoji_row.category == "remote" else "local"
-                    _emoji_url = f"{BASE_URL}/emojis/{_sub}/{_emoji_row.file_name}"
+                    _rel_url = _emoji_url(_emoji_row.file_name, _emoji_row.domain or "", _emoji_row.category or "")
+                    _emoji_url = _rel_url if _rel_url.startswith("http") else f"{BASE_URL}{_rel_url}"
                 else:
                     _emoji_url = ""
                 if _emoji_url:
