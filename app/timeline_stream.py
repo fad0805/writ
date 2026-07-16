@@ -91,6 +91,7 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
 
             for sid, info in list(_streams.items()):
                 uid = info["user_id"]
+                print(f'==================== uid: {uid}')
                 tl = info["tl_type"]
                 if not _should_deliver_fast(uid, tl, post_author_id, post_visibility, follower_ids, booster_ids, author_is_local, mentioned_ids):
                     continue
