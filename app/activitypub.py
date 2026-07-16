@@ -1378,7 +1378,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             }, reply_to_post.author_id, reply_to_post.visibility or "public", false)
                         except exception:
                             pass
-
             # mastodon poll votes: create(note) with name + inreplyto + no content
             vote_name = obj.get("name", "") if not raw_content.strip() else ""
             if vote_name and reply_to_post and reply_to_post.poll_data:
@@ -1449,6 +1448,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 _a = _aud.rstrip("/")
                 if _a and _a.startswith("http"):
                     mentioned_hrefs.add(_a)
+            print(f"[_handle_create MENTION DEBUG] actor={actor_url} to={to} cc={cc}", flush=True)
+            print(f"[_handle_create MENTION DEBUG] mentioned_hrefs={mentioned_hrefs} mentioned_names={mentioned_names}", flush=True)
 
             mentioned_ids = []
             _seen_ids = set()
@@ -1461,6 +1462,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         if u.id not in _seen_ids:
                             mentioned_ids.append(u.id)
                             _seen_ids.add(u.id)
+                            print(f"[_handle_create MENTION] REMOTE MATCH: href={_href} -> uid={u.id} username={u.username}", flush=True)
                     # 2. 원격에 없고 로컬 베이스 URL이 포함된 경우 로컬 유저 매칭 시도
                     elif BASE_URL in _href:
                         for _u in session.query(User).filter_by(is_remote=False).all():
@@ -1472,7 +1474,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             if _href in local_uris and _u.id not in _seen_ids:
                                 mentioned_ids.append(_u.id)
                                 _seen_ids.add(_u.id)
+                                print(f"[_handle_create MENTION] LOCAL MATCH: href={_href} -> uid={_u.id} username={_u.username}", flush=True)
                                 break            # Content-based name matching as supplement (only for users not already found)
+                    else:
+                        print(f"[_handle_create MENTION] NO MATCH: href={_href}", flush=True)
             if mentioned_names:
                 for _name in mentioned_names:
                     if '@' in _name:
@@ -1512,7 +1517,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                 mentioned_ids.append(u.id)
                                 _seen_ids.add(u.id)
 
-            # Check if actor's domain is server-muted
+            print(f"[_handle_create MENTION RESULT] mentioned_ids={mentioned_ids} (from hrefs={mentioned_hrefs}, names={mentioned_names})", flush=True)
             actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
             if actor_domain:
                 mute_entry = session.query(MutedServer).filter_by(domain=actor_domain).first()
