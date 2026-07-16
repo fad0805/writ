@@ -9,7 +9,7 @@ import logging
 import threading
 from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import desc, or_, and_, func
+from sqlalchemy import desc, or_, and_, func, cast, String as SAString
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload, Session
 
@@ -633,13 +633,15 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             Boost.user_id.in_(all_boost_user_ids),
         ).all()})
         final = following_ids[:]
+        _mentioned_self = cast(Post.mentioned_user_ids, SAString).contains(str(user.id))
         posts = session.query(Post).options(*_base_opts).filter(
             or_(
                 Post.author_id.in_(final),
                 Post.id.in_(boosted_ids),
+                and_(_mentioned_self, Post.visibility.in_(("followers", "mention", "home"))),
             ),
             Post.is_deleted == False,
-            or_(Post.visibility != "home", Post.author_id.in_(final)),
+            or_(Post.visibility != "home", Post.author_id.in_(final), _mentioned_self),
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     elif tl_type == "social":
         following_ids = list(_following_ids) if _following_ids else [user.id]
@@ -775,8 +777,9 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             if p.mentioned_user_ids:
                 for muid in p.mentioned_user_ids:
                     if muid != p.author_id and muid != user.id and muid not in _following_ids_set:
-                        skip = True
-                        break
+                        if user.id not in p.mentioned_user_ids:
+                            skip = True
+                            break
 
             # 2. [핵심] 리모트 글 본문 HTML 멘션 태그 추적 (HTML 정규식 방어선)
             if not skip and p.content and p.author and p.author.is_remote:
