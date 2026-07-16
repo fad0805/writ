@@ -41,6 +41,7 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
     if post_visibility not in ("public", "home", "followers") or not _streams:
         return
     payload = json.dumps(post_json, default=str)
+    mentioned_ids = post_json.get("mentioned_user_ids") or []
     # Extract parent author ID from reply_context
     parent_author_id = None
     reply_ctx = post_json.get("reply_context")
