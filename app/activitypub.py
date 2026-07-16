@@ -1456,17 +1456,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             # Process href-based mentions FIRST (most reliable: from AP Mention tag href or to/cc)
             if mentioned_hrefs:
                 for _href in mentioned_hrefs:
-                    # 1. 원격 유저 매칭 시도
-                    u = session.query(User).filter(User.remote_url == _href).first()
-                    if u:
-                        if u.id not in _seen_ids:
-                            mentioned_ids.append(u.id)
-                            _seen_ids.add(u.id)
-                            print(f"[_handle_create MENTION] REMOTE MATCH: href={_href} -> uid={u.id} username={u.username}", flush=True)
-                    # 2. 원격에 없고 로컬 베이스 URL이 포함된 경우 로컬 유저 매칭 시도
-                    elif BASE_URL in _href:
+                    _matched = False
+                    # 1. 로컬 유저 매칭 우선 (same-domain shadow user 문제 방지)
+                    if BASE_URL in _href:
                         for _u in session.query(User).filter_by(is_remote=False).all():
-                            # 로컬 유저의 다양한 URI 표현식 커버
                             local_uris = {
                                 _u.actor_uri().rstrip("/"),
                                 _u.actor_uri().replace("/users/", "/@").rstrip("/")
@@ -1475,9 +1468,17 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                 mentioned_ids.append(_u.id)
                                 _seen_ids.add(_u.id)
                                 print(f"[_handle_create MENTION] LOCAL MATCH: href={_href} -> uid={_u.id} username={_u.username}", flush=True)
-                                break            # Content-based name matching as supplement (only for users not already found)
-                    else:
-                        print(f"[_handle_create MENTION] NO MATCH: href={_href}", flush=True)
+                                _matched = True
+                                break
+                    # 2. 원격 유저 매칭 (로컬에서 매칭 안 됐을 때만)
+                    if not _matched:
+                        u = session.query(User).filter(User.remote_url == _href).first()
+                        if u and u.id not in _seen_ids:
+                            mentioned_ids.append(u.id)
+                            _seen_ids.add(u.id)
+                            print(f"[_handle_create MENTION] REMOTE MATCH: href={_href} -> uid={u.id} username={u.username}", flush=True)
+                        elif not u:
+                            print(f"[_handle_create MENTION] NO MATCH: href={_href}", flush=True)
             if mentioned_names:
                 for _name in mentioned_names:
                     if '@' in _name:
