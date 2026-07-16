@@ -615,6 +615,7 @@ def api_logout(request: Request):
 # ── Timeline API ──
 
 def _get_feed(user, tl_type, session, limit=10, offset=0):
+    print(f"[feed] _get_feed uid={user.id if user else None} tl={tl_type} limit={limit} offset={offset}", flush=True)
     _base_opts = [selectinload(Post.author), selectinload(Post.parent)]
     # Cache following IDs for home/social (reused across main query + reply filter)
     _following_ids = None
@@ -671,7 +672,9 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             Post.is_deleted == False,
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     raw_total = len(posts)
+    print(f"[feed] raw query: {raw_total} posts for tl={tl_type}", flush=True)
     posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm and p.author_id != user.id and user.id not in (p.mentioned_user_ids or []))]
+    print(f"[feed] after DM filter: {len(posts)} posts", flush=True)
     # Deduplicate: track seen post IDs and boost_of targets
     seen_ids = set()
     deduped = []
@@ -693,6 +696,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         seen_ids.add(p.id)
         deduped.append(p)
     posts = deduped
+    print(f"[feed] after dedup: {len(posts)} posts", flush=True)
     # Filter replies: hide if direct parent author is not followed
     # Only for home/social timeline, not local/federated
     if user and tl_type in ("home", "social") and _following_ids:
@@ -713,6 +717,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                     continue
             reply_filtered.append(p)
         posts = reply_filtered
+    print(f"[feed] after reply filter: {len(posts)} posts", flush=True)
     # Apply user mutes, blocks, and keyword mutes
     if user:
         muted_user_ids = {m.target_user_id for m in session.query(UserMute.target_user_id).filter_by(user_id=user.id).all()}
@@ -766,6 +771,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                     continue
             filtered.append(p)
         posts = filtered
+        print(f"[feed] after mute/block/keyword filter: {len(posts)} posts", flush=True)
         # Hide posts that mention someone the user doesn't follow (home/social only)
         if user and tl_type in ("home", "social"):
             _following_ids_set = set(_following_ids) if _following_ids else set()
@@ -822,6 +828,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                     continue
                 mention_filtered.append(p)
             posts = mention_filtered
+            print(f"[feed] after mention filter: {len(posts)} posts", flush=True)
     has_more = raw_total > limit
     # Batch-load user interaction data for all remaining posts
     post_ids = [p.id for p in posts[:limit]]
@@ -889,6 +896,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     else:
         _liked_ids = _boosted_ids = _bookmarked_ids = set()
         _vote_map = _my_reaction_map = _reactions_map = _booster_map = _mentioned_users_map = {}
+    print(f"[feed] final: {len(posts[:limit])} posts returned, has_more={has_more}", flush=True)
     return [_post_json(p, session, user, tl_type,
                        _liked_ids=_liked_ids, _boosted_ids=_boosted_ids,
                        _bookmarked_ids=_bookmarked_ids, _vote_map=_vote_map,
