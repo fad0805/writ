@@ -1896,7 +1896,6 @@ def _handle_vote(activity: dict) -> tuple[int, str]:
 
 
 def _handle_announce(activity: dict) -> tuple[int, str]:
-    print(f"activity: {activity}", flush=True)
     raw_actor = activity.get("actor")
     if not raw_actor:
         return (400, "Missing actor")
@@ -1981,6 +1980,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
         existing_n = session.query(Notification).filter_by(
             user_id=post.author_id, from_user_id=actor_id, notification_type="boost", post_id=post.id
         ).first()
+
         if not existing_n:
             n = Notification(
                 user_id=post.author_id,
@@ -1991,10 +1991,10 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
             session.add(n)
 
         session.commit()
-        print(f'session: {session}', flush=True)
 
         # 5. 커밋 이후 외부 연동 (푸시 및 스트리밍) 처리
         if not existing_n:
+            print('existing_n: '+ existing_n, flush=True)
             from app.push import send_push_to_user
             from app.timeline_stream import broadcast_notif_sound
             send_push_to_user(post.author_id, "boost", actor_username, post.id)
