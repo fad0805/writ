@@ -189,16 +189,16 @@ def _should_deliver_fast(user_id: int, tl_type: str, author_id: int, visibility:
     if tl_type == "home":
         if user_id == author_id:
             return True
-        if visibility == "mention":
-            return user_id in mentioned_set
+        if user_id in mentioned_set:
+            return True
         if visibility in ("public", "home", "followers"):
             return user_id in follower_ids or user_id in booster_ids
         return False
     elif tl_type == "social":
         if user_id == author_id:
             return True
-        if visibility == "mention":
-            return user_id in mentioned_set
+        if user_id in mentioned_set:
+            return True
         if visibility == "public":
             return True
         if visibility in ("home", "followers"):
