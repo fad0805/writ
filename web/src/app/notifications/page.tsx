@@ -110,6 +110,24 @@ export default function NotificationsPage() {
     } catch {}
   }, []);
 
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const updateTabMask = useCallback(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    const atStart = el.scrollLeft <= 2;
+    const atEnd = el.scrollLeft >= el.scrollWidth - el.clientWidth - 2;
+    const fadeSize = 20;
+    const leftFade = atStart ? 0 : fadeSize;
+    const rightFade = atEnd ? 0 : fadeSize;
+    el.style.maskImage = `linear-gradient(to right, transparent ${leftFade}px, black ${leftFade}px, black calc(100% - ${rightFade}px), transparent calc(100% - ${rightFade}px))`;
+    el.style.webkitMaskImage = el.style.maskImage;
+  }, []);
+  useEffect(() => {
+    updateTabMask();
+    window.addEventListener("resize", updateTabMask);
+    return () => window.removeEventListener("resize", updateTabMask);
+  }, [updateTabMask]);
+
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
   if (!user) return null;
 
@@ -160,24 +178,6 @@ export default function NotificationsPage() {
       window.dispatchEvent(new Event("notifchange"));
     } catch {}
   };
-
-  const tabsRef = useRef<HTMLDivElement>(null);
-  const updateTabMask = useCallback(() => {
-    const el = tabsRef.current;
-    if (!el) return;
-    const atStart = el.scrollLeft <= 2;
-    const atEnd = el.scrollLeft >= el.scrollWidth - el.clientWidth - 2;
-    const fadeSize = 20;
-    const leftFade = atStart ? 0 : fadeSize;
-    const rightFade = atEnd ? 0 : fadeSize;
-    el.style.maskImage = `linear-gradient(to right, transparent ${leftFade}px, black ${leftFade}px, black calc(100% - ${rightFade}px), transparent calc(100% - ${rightFade}px))`;
-    el.style.webkitMaskImage = el.style.maskImage;
-  }, []);
-  useEffect(() => {
-    updateTabMask();
-    window.addEventListener("resize", updateTabMask);
-    return () => window.removeEventListener("resize", updateTabMask);
-  }, [updateTabMask]);
 
   return (
     <>
