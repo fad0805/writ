@@ -53,6 +53,7 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
     html = renderCustomEmojis(html, emojiMap);
     return sanitizePost(rewriteLinks(html, validMentions));
   })();
+  if (!post || !post.author) return null;
   return (
     <Link
       href={post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`}

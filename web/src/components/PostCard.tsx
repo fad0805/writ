@@ -486,6 +486,8 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     </div>
   );
 
+  if (!post || !post.author) return null;
+
   return (
     <>
       <div className={`post-card${current ? " current" : ""}${selected ? " selected" : ""}${post.visibility === "mention" ? " mention-card" : ""}`} onClick={(e) => { if (current || (e.target as HTMLElement).closest('a')) return; router.push(post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`); }}>

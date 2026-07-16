@@ -2032,6 +2032,10 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                     "aliases": (u.aliases or []) if hasattr(u, 'aliases') else [],
                     "moved_to": getattr(u, "moved_to", "") or "",
                 }
+            _author_data = _safe_user_json(_a)
+            if not _author_data:
+                _a = session.query(User).get(post.author_id)
+                _author_data = _safe_user_json(_a)
             broadcast_post({
                 "id": boost_post.id,
                 "number": post.number or "",
@@ -2039,7 +2043,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                 "summary": post.summary or "",
                 "visibility": post.visibility or "public",
                 "created_at": post.created_at.isoformat() if post.created_at else "",
-                "author": _safe_user_json(_a),
+                "author": _author_data,
                 "likes_count": likes_cnt,       # 안전하게 받아온 값 대입
                 "boosts_count": boosts_cnt,     # 안전하게 받아온 값 대입
                 "replies_count": replies_cnt,   # 안전하게 받아온 값 대입

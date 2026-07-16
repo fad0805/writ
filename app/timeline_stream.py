@@ -54,6 +54,9 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
             content_dict = post_json["content"]
             post_json["content"] = content_dict.get("html") or content_dict.get("text") or str(content_dict)
 
+        if not post_json.get("author"):
+            return
+
         payload = json.dumps(post_json, default=str)
         mentioned_ids = post_json.get("mentioned_user_ids") or []
         # Extract parent author ID from reply_context
