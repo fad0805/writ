@@ -2057,6 +2057,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
             }, post.author_id, post.visibility or "public", False)
         except Exception as e:
             logger.warning("Failed to broadcast boost from AP: %s", e)
+            print(f"Failed to broadcast boost from AP: {e}", flush=True)
 
     print(f"[ANNOUNCE] success post_id={post.id} by actor_id={actor_id}", flush=True)
     return (200, "Announced")
