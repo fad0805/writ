@@ -116,25 +116,25 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                             # 내가 안 흔든 사람(제3자)으로 향하는 멘션 링크가 본문에 보이면 우선 필터링
                             # (스트리밍 세션 성능을 위해 무거운 DB 조회 없이 멘션의 존재 여부로 빠르게 skip 처리합니다)
                             skip_mention = True
-                    if skip_mention:
-                        print(f"Stream filter: dropped post {post_json.get('id')} from uid={uid} (mention not followed)", flush=True)
-                        continue
+                if skip_mention:
+                    print(f"Stream filter: dropped post {post_json.get('id')} from uid={uid} (mention not followed)", flush=True)
+                    continue
 
-                    # [2] 답글(Reply) 필터링 (부모 글 작성자 미팔로우 방어)
-                    # 부스트인 경우 스킵 (boosted_by가 있으면 부스트)
-                    if post_json.get("boosted_by"):
-                        pass
-                    elif bool(post_json.get("in_reply_to_id") or post_json.get("in_reply_to_ap_id") or reply_ctx):
-                        # 부모 작성자가 아예 누군지 파악이 안 되거나, 
-                        # 파악이 되었더라도 내가 팔로우하는 사람이 아니며, 내가 쓴 답글도 아니라면 홈 피드 전송 차단!
-                        if parent_author_id is None:
-                            # 부모 작성자 정보가 아예 누락된 리모트 답글은 안전하게 차단
-                            print(f"Stream filter: dropped reply {post_json.get("id")} (parent author unverified)", flush=True)
-                            continue
-                        # 부모 작성자가 존재할 때, 검증 로직
-                        if parent_author_id != uid and parent_author_id not in user_follows and uid != post_author_id:
-                            print(f"Stream filter: dropped reply {post_json.get("id")} (parent author {parent_author_id} not followed)", flush=True)
-                            continue
+                # [2] 답글(Reply) 필터링 (부모 글 작성자 미팔로우 방어)
+                # 부스트인 경우 스킵 (boosted_by가 있으면 부스트)
+                if post_json.get("boosted_by"):
+                    pass
+                elif bool(post_json.get("in_reply_to_id") or post_json.get("in_reply_to_ap_id") or reply_ctx):
+                    # 부모 작성자가 아예 누군지 파악이 안 되거나, 
+                    # 파악이 되었더라도 내가 팔로우하는 사람이 아니며, 내가 쓴 답글도 아니라면 홈 피드 전송 차단!
+                    if parent_author_id is None:
+                        # 부모 작성자 정보가 아예 누락된 리모트 답글은 안전하게 차단
+                        print(f"Stream filter: dropped reply {post_json.get("id")} (parent author unverified)", flush=True)
+                        continue
+                    # 부모 작성자가 존재할 때, 검증 로직
+                    if parent_author_id != uid and parent_author_id not in user_follows and uid != post_author_id:
+                        print(f"Stream filter: dropped reply {post_json.get("id")} (parent author {parent_author_id} not followed)", flush=True)
+                        continue
                 _enqueue(info["queue"], payload)
     except Exception as e:
         print("!!! BROADCAST_POST ERROR !!!", flush=True)
