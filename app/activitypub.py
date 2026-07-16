@@ -666,6 +666,15 @@ def _get_instance_actor(session) -> User:
 
 def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optional[User] = None) -> Optional[User]:
     import sys
+    _actor_domain = urlparse(actor_url).hostname or ""
+    _own_domain = urlparse(BASE_URL).hostname or ""
+    if _actor_domain and _actor_domain == _own_domain:
+        _u = _parse_username_from_url(actor_url)
+        if _u:
+            with get_session() as _s:
+                local = _s.query(User).filter(User.username == _u, User.is_remote == False).first()
+                if local:
+                    return local
     with get_session() as session:
         user = session.query(User).filter_by(remote_url=actor_url).first()
         if user and not force_refresh:

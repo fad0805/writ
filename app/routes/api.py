@@ -796,7 +796,6 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 is_mentioned_to_me = False
                 if p.mentioned_user_ids and user.id in p.mentioned_user_ids:
                     is_mentioned_to_me = True
-                    break
 
                 skip = False
                 # 내가 언급되지 않은 글에 한해서만 제3자 멘션 필터링을 수행합니다.

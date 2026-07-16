@@ -1102,6 +1102,62 @@ with get_session() as s:
 print(f'done: {moved} moved, {skipped} skipped, {errors} errors (total {len(emojis)} emojis)')
 "
 
+elif [ "$1" = "purge-shadows" ]; then
+  docker compose exec -T api python3 << 'PYEOF'
+from urllib.parse import urlparse
+from app.config import BASE_URL
+from app.models import User, Follow, Post, Like, Boost, Bookmark, Vote, Notification, UserBlock, UserMute, get_session
+
+own_domain = urlparse(BASE_URL).hostname or ""
+print(f"own domain: {own_domain}")
+
+with get_session() as s:
+    shadows = s.query(User).filter(
+        User.is_remote == True,
+        User.remote_url.like(f"%{own_domain}%"),
+    ).all()
+    if not shadows:
+        print("no shadow users found")
+    else:
+        deleted = 0
+        for u in shadows:
+            parsed = urlparse(u.remote_url or "")
+            if parsed.hostname and parsed.hostname.lower() == own_domain.lower():
+                print(f"  shadow: id={u.id} username={u.username} remote_url={u.remote_url}")
+                for table, fk in [(Follow, "follower_id"), (Follow, "following_id"),
+                                  (Post, "author_id"), (Like, "user_id"), (Boost, "user_id"),
+                                  (Bookmark, "user_id"), (Vote, "user_id"),
+                                  (Notification, "user_id"), (Notification, "from_user_id"),
+                                  (UserBlock, "user_id"), (UserBlock, "target_user_id"),
+                                  (UserMute, "user_id"), (UserMute, "target_user_id")]:
+                    try:
+                        s.query(table).filter_by(**{fk: u.id}).update({fk: None})
+                    except Exception:
+                        pass
+                s.delete(u)
+                deleted += 1
+        s.commit()
+        print(f"deleted {deleted} shadow users")
+
+        # Also fix posts with mentioned_user_ids pointing to deleted shadows
+        remaining_remote = {u.id for u in s.query(User).filter(User.is_remote == True).all()}
+        fixed = 0
+        for p in s.query(Post).filter(Post.mentioned_user_ids.isnot(None)).all():
+            if p.mentioned_user_ids:
+                new_ids = [mid for mid in p.mentioned_user_ids if mid in remaining_remote or mid == mid]
+                # Replace shadow IDs with local matching users
+                final_ids = []
+                for mid in new_ids:
+                    if mid not in remaining_remote:
+                        continue
+                    final_ids.append(mid)
+                if final_ids != p.mentioned_user_ids:
+                    p.mentioned_user_ids = final_ids
+                    fixed += 1
+        s.commit()
+        print(f"fixed {fixed} posts with stale mentioned_user_ids")
+PYEOF
+
 else
   echo "사용법: ./gogo.sh [명령어]"
   echo ""
@@ -1117,5 +1173,6 @@ else
   echo "  dedup-users     - 중복 리모트 유저 통합"
   echo "  purge-deleted   - 스레드에 없는 삭제된 게시글 완전 제거 (댓글 있는 건 껍데기 유지)"
   echo "  purge-orphan    - 내용/부스트/답글/ap_id 없는 고아 포스트 삭제"
+  echo "  purge-shadows   - 자기 도메인을 가리키는 그림자 원격 유저 삭제"
   echo "  check-custom-fields - 원격 액터의 attachment/custom_fields 확인 (예: ./gogo.sh check-custom-fields https://daydream.ink/users/siarte)"
 fi
