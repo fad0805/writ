@@ -202,7 +202,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   const validMentions = useMemo(() => new Set(post.mentioned_handles || []), [post.mentioned_handles]);
   const [resolvedMentions, setResolvedMentions] = useState<Map<string, string>>(new Map());
   const buildContentHtml = (qUrl?: string, resolved?: Map<string, string>) => {
-    let html = post.content;
+    let html = post.content || "";
     if (/<\/?[a-zA-Z]+[\s>]/.test(html) || /&[a-z]+;/.test(html)) {
       html = html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
     } else {
