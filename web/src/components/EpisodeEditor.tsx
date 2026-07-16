@@ -8,7 +8,7 @@ import Underline from "@tiptap/extension-underline";
 import Strike from "@tiptap/extension-strike";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
-import { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 
 const SIZES = ["50", "75", "100"];
 
@@ -59,6 +59,7 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
   const internalUpdate = useRef(false);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const initialSet = useRef(false);
 
   const extensions = useMemo(() => [
     StarterKit.configure({
@@ -76,19 +77,21 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
 
   const editor = useEditor({
     extensions,
-    content: value,
-    onUpdate: useCallback(({ editor }: { editor: any }) => {
+    onUpdate: ({ editor }) => {
       internalUpdate.current = true;
       onChangeRef.current(editor.getHTML());
-    }, []),
+    },
   });
 
   useEffect(() => {
-    if (internalUpdate.current) { internalUpdate.current = false; return; }
-    if (editor && value !== editor.getHTML()) {
-      editor.commands.setContent(value, { emitUpdate: false } as any);
+    if (!editor) return;
+    if (!initialSet.current) {
+      if (value) {
+        editor.commands.setContent(value, { emitUpdate: false } as any);
+      }
+      initialSet.current = true;
     }
-  }, [value, editor]);
+  }, [editor, value]);
 
   useEffect(() => {
     if (!showColorPicker) return;
