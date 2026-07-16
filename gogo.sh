@@ -678,6 +678,7 @@ with get_session() as s:
     print(f"id={p.id} number={p.number} author_id={p.author_id} is_deleted={p.is_deleted}")
     print(f"content={p.content[:100] if p.content else ''}")
     print(f"visibility={p.visibility} is_dm={p.is_dm}")
+    print(f"boost_of_id={p.boost_of_id}")
     print(f"ap_id={p.ap_id}")
     print(f"in_reply_to_id={p.in_reply_to_id}")
     print(f"in_reply_to_ap_id={p.in_reply_to_ap_id}")
