@@ -101,15 +101,16 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                     continue
                 # Additional filtering for home/social timeline (skip for mention visibility - targeted delivery)
                 if tl in ("home", "social") and post_visibility != "mention":
+                    # 멘션 대상이면 무조건 전달, 필터 무시
+                    if mentioned_ids and uid in mentioned_ids:
+                        _enqueue(info["queue"], payload)
+                        continue
                     user_follows = home_follows.get(uid, set()) | {uid}
                     content = post_json.get("content") or ""
-                    # [1] 멘션 필터링 (DB ID 기반 + 리모트 HTML 본문 정규식 검사)
+                    # [1] 멘션 필터링 (DB ID 기반)
                     skip_mention = False
                     # 1-A. 페이로드에 명시된 멘션 ID 목록 검사
                     if mentioned_ids:
-                        if uid in mentioned_ids:
-                            _enqueue(info["queue"], payload)
-                            continue
                         for muid in mentioned_ids:
                             if muid != post_author_id and muid not in user_follows and muid != uid:
                                 skip_mention = True
