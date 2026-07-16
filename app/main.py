@@ -772,6 +772,7 @@ def get_like(like_uuid: str):
             "type": "Like",
             "actor": actor.actor_uri(),
             "object": post.ap_id,
+            "_misskey_reaction": like.reaction or "★",
         }, media_type="application/activity+json")
 
 @app.get("/boosts/{boost_uuid}")

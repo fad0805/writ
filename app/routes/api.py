@@ -1660,6 +1660,7 @@ def api_like_post(request: Request, post_id: int):
             if like_rec:
                 like_rec.ap_id = like_id
                 s.commit()
+            reaction = like_rec.reaction if like_rec else None
             like_activity = {
                 "@context": "https://www.w3.org/ns/activitystreams",
                 "id": like_id,
@@ -1668,6 +1669,7 @@ def api_like_post(request: Request, post_id: int):
                 "object": post.ap_id,
                 "to": [post.author.actor_uri()],
                 "cc": [],
+                "_misskey_reaction": reaction or "★",
             }
             inbox = post.author.shared_inbox_url
             try:
@@ -1686,6 +1688,7 @@ def api_unlike_post(request: Request, post_id: int):
             raise HTTPException(status_code=404, detail="Post not found")
         existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
         like_id = existing.ap_id if existing and existing.ap_id else ""
+        existing_reaction = existing.reaction if existing else None
         if existing:
             s.delete(existing)
             s.query(Notification).filter_by(
@@ -1704,6 +1707,7 @@ def api_unlike_post(request: Request, post_id: int):
                     "type": "Like",
                     "actor": user.actor_uri(),
                     "object": post.ap_id,
+                    "_misskey_reaction": existing_reaction or "★",
                 },
             }
             inbox = post.author.shared_inbox_url
@@ -1962,6 +1966,7 @@ def api_unreact_post(request: Request, post_id: int):
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
         existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
+        existing_reaction = existing.reaction if existing else None
         if existing:
             s.delete(existing)
             s.query(Notification).filter_by(
@@ -1981,6 +1986,7 @@ def api_unreact_post(request: Request, post_id: int):
                         "type": "Like",
                         "actor": user.actor_uri(),
                         "object": post.ap_id,
+                        "_misskey_reaction": existing_reaction or "★",
                     },
                 }
                 try:
