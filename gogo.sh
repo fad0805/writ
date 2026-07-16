@@ -683,6 +683,10 @@ with get_session() as s:
     print(f"in_reply_to_id={p.in_reply_to_id}")
     print(f"in_reply_to_ap_id={p.in_reply_to_ap_id}")
     print(f"mentioned_user_ids={p.mentioned_user_ids}")
+    print(f"created_at={p.created_at}")
+    print(f"bumped_at={p.bumped_at}")
+    author = s.query(User).get(p.author_id)
+    print(f"author_username={author.username if author else '?'} (is_remote={author.is_remote if author else '?'})")
     if p.in_reply_to_id:
         parent = s.query(Post).get(p.in_reply_to_id)
         if parent:
