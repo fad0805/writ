@@ -2032,8 +2032,8 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                     "aliases": (u.aliases or []) if hasattr(u, 'aliases') else [],
                     "moved_to": getattr(u, "moved_to", "") or "",
                 }
-            print("_a:" + _safe_user_json(_a), flush=True)
-            print("_actor:" +_safe_user_json(_actor), flush=True)
+            print("_a:" + str(_safe_user_json(_a)), flush=True)
+            print("_actor:" + str(_safe_user_json(_actor)), flush=True)
             broadcast_post({
                 "id": boost_post.id,
                 "number": post.number or "",
