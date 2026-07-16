@@ -84,6 +84,11 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
 
             # Pre-load following lists for home/social timeline streams
             home_uids = {info["user_id"] for info in _streams.values() if info.get("tl_type") in ("home", "social")}
+            all_stream_uids = {info["user_id"] for info in _streams.values()}
+            stream_users = {}
+            if all_stream_uids:
+                for u in s.query(User).filter(User.id.in_(all_stream_uids)).all():
+                    stream_users[u.id] = u
             home_follows = {}
             if home_uids:
                 for f in s.query(Follow).filter(Follow.follower_id.in_(home_uids), Follow.accepted == True).all():
@@ -91,7 +96,6 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
 
             for sid, info in list(_streams.items()):
                 uid = info["user_id"]
-                print(f'==================== info: {info}')
                 tl = info["tl_type"]
                 if not _should_deliver_fast(uid, tl, post_author_id, post_visibility, follower_ids, booster_ids, author_is_local, mentioned_ids):
                     continue
