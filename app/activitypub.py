@@ -1994,7 +1994,6 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
 
         # 5. 커밋 이후 외부 연동 (푸시 및 스트리밍) 처리
         if not existing_n:
-            print('existing_n: '+ existing_n, flush=True)
             from app.push import send_push_to_user
             from app.timeline_stream import broadcast_notif_sound
             send_push_to_user(post.author_id, "boost", actor_username, post.id)
