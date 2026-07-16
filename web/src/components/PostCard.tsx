@@ -249,10 +249,6 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   const [contentHtml, setContentHtml] = useState(() => sanitizePost(buildContentHtml()));
 
   useEffect(() => {
-    setContentHtml(sanitizePost(buildContentHtml()));
-  }, [post.id, post.content, post.summary]);
-
-  useEffect(() => {
     const mentionRe = /<a\s+href="\/@([a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}))"[^>]*>[^<]*<\/a>/g;
     const remoteMentions: string[] = [];
     let m: RegExpExecArray | null;
@@ -286,8 +282,8 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     });
   }, []);
   useEffect(() => {
-    setContentHtml(buildContentHtml(quoteUrl || undefined, resolvedMentions));
-  }, [quoteUrl, resolvedMentions, emojiMap]);
+    setContentHtml(sanitizePost(buildContentHtml(quoteUrl || undefined, resolvedMentions)));
+  }, [post.id, post.content, post.summary, quoteUrl, resolvedMentions, emojiMap]);
 
   // Extract quoted post URL from content
   type QuotedSeries = { type: "series"; novel: NovelData; author: User };

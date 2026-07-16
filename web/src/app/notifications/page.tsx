@@ -147,7 +147,6 @@ export default function NotificationsPage() {
 
   const handleMarkAllRead = async () => {
     try {
-      await api.getNotifications(filter || undefined);
       if (filter === "direct") {
         const res = await fetch("/api/notifications/direct-threads", { credentials: "include" });
         const data = await res.json();
