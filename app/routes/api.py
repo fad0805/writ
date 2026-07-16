@@ -781,9 +781,9 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 is_mentioned_to_me = False
                 if p.mentioned_user_ids and user.id in p.mentioned_user_ids:
                     is_mentioned_to_me = True
+                    break
 
                 skip = False
-                
                 # 내가 언급되지 않은 글에 한해서만 제3자 멘션 필터링을 수행합니다.
                 if not is_mentioned_to_me:
                     if p.mentioned_user_ids:
@@ -804,7 +804,6 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                     if not skip and not p.mentioned_user_ids and p.author and p.author.is_remote:
                         import re as _re
                         _remote_mentions = _re.findall(r'@([\w.-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', p.content or "")
-                        
                         # 멘션이 존재할 때, 그 멘션 중 나를 향한 것이 단 하나도 없다면 스킵합니다.
                         if _remote_mentions:
                             has_my_mention = False
