@@ -110,11 +110,18 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                                 skip_mention = True
                                 break
                     # 1-B. 리모트 글인 경우, 본문 HTML 태그에서 내가 팔로우하지 않는 제3자에게 쏘는 멘션 링크 검사
-                    if not skip_mention and content and author_is_local is False and uid not in mentioned_ids:
+                    if not skip_mention and content and author_is_local is False:
                         import re as _re
                         mentions_in_html = _re.findall(r'<a\s+[^>]*href="([^"]+)"[^>]*class="[^"]*mention[^"]*"[^>]*>', content)
                         if mentions_in_html:
-                            skip_mention = True
+                            # 본문 멘션 중 나를 향한 것이 있으면 스킵하지 않음
+                            my_username = author.username.split("@")[0] if author else ""
+                            is_mentioned_in_html = any(
+                                f"/@{my_username}" in m or f"/@{uid}" in m
+                                for m in mentions_in_html
+                            )
+                            if not is_mentioned_in_html:
+                                skip_mention = True
                     if skip_mention:
                         print(f"Stream filter: dropped post {post_json.get('id')} from uid={uid} (mention not followed)", flush=True)
                         continue
