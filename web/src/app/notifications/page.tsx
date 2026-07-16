@@ -45,20 +45,21 @@ export default function NotificationsPage() {
 
   const [notifs, setNotifs] = useState<NotificationData[]>([]);
   const [directGroups, setDirectGroups] = useState<DirectUserData[]>([]);
-  const [filter, setFilter] = useState(() => {
-    try {
-      const saved = sessionStorage.getItem("notif_filter");
-      if (saved) {
-        sessionStorage.removeItem("notif_filter");
-        return saved;
-      }
-    } catch {}
-    return "";
-  });
+  const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(20);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("notif_filter");
+      if (saved) {
+        sessionStorage.removeItem("notif_filter");
+        setFilter(saved);
+      }
+    } catch {}
+  }, []);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -151,12 +152,10 @@ export default function NotificationsPage() {
         const res = await fetch("/api/notifications/direct-threads", { credentials: "include" });
         const data = await res.json();
         setDirectGroups(data.users || []);
-        setNotifs([]);
       } else {
-        const data = await api.getNotifications(filter || undefined);
-        setNotifs(data.notifications);
-        setDirectGroups([]);
+        await api.getNotifications(filter || undefined, 9999, 0, true);
       }
+      setNotifs((prev) => prev.map((n) => ({ ...n, is_read: true })));
       window.dispatchEvent(new Event("notificationsread"));
       window.dispatchEvent(new Event("notifchange"));
     } catch {}
