@@ -657,6 +657,35 @@ with get_session() as s:
         print("no duplicates found")
 PYEOF
 
+elif [ "$1" = "purge-orphan" ]; then
+  docker compose exec -T api python3 << 'PYEOF'
+from app.models import Post, Notification, Like, Boost, Bookmark, Vote, get_session
+
+with get_session() as s:
+    orphans = s.query(Post).filter(
+        Post.content.is_(None) | (Post.content == ""),
+        Post.boost_of_id.is_(None),
+        Post.in_reply_to_id.is_(None),
+        (Post.in_reply_to_ap_id == "") | Post.in_reply_to_ap_id.is_(None),
+        Post.ap_id.is_(None),
+        Post.is_deleted == False,
+    ).all()
+    if not orphans:
+        print("no orphan posts found")
+    else:
+        deleted = 0
+        for p in orphans:
+            s.query(Notification).filter(Notification.post_id == p.id).delete()
+            s.query(Like).filter(Like.post_id == p.id).delete()
+            s.query(Boost).filter(Boost.post_id == p.id).delete()
+            s.query(Bookmark).filter(Bookmark.post_id == p.id).delete()
+            s.query(Vote).filter(Vote.post_id == p.id).delete()
+            s.delete(p)
+            deleted += 1
+        s.commit()
+        print(f"deleted {deleted} orphan posts")
+PYEOF
+
 elif [ "$1" = "check-post" ]; then
   post_id="${2}"
   if [ -z "$post_id" ]; then
@@ -1087,5 +1116,6 @@ else
   echo "  fix-follow      - 꼬인 팔로우 강제 수락 및 Accept 전송 (예: ./gogo.sh fix-follow siarte alex@daydream.ink)"
   echo "  dedup-users     - 중복 리모트 유저 통합"
   echo "  purge-deleted   - 스레드에 없는 삭제된 게시글 완전 제거 (댓글 있는 건 껍데기 유지)"
+  echo "  purge-orphan    - 내용/부스트/답글/ap_id 없는 고아 포스트 삭제"
   echo "  check-custom-fields - 원격 액터의 attachment/custom_fields 확인 (예: ./gogo.sh check-custom-fields https://daydream.ink/users/siarte)"
 fi
