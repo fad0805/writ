@@ -102,39 +102,34 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                     skip_mention = False
                     # 1-A. 페이로드에 명시된 멘션 ID 목록 검사
                     if mentioned_ids:
-                        if uid in set(mentioned_ids):
-                            break
+                        if uid in mentioned_ids:
+                            _enqueue(info["queue"], payload)
+                            continue
                         for muid in mentioned_ids:
                             if muid != post_author_id and muid not in user_follows and muid != uid:
                                 skip_mention = True
                                 break
                     # 1-B. 리모트 글인 경우, 본문 HTML 태그에서 내가 팔로우하지 않는 제3자에게 쏘는 멘션 링크 검사
-                    # (리모트 글은 언급 ID가 비어있는 채로 오기 때문에 HTML 본문을 직접 뜯어야 합니다)
-                    if not skip_mention and content and author_is_local is False and uid not in set(mentioned_ids):
+                    if not skip_mention and content and author_is_local is False and uid not in mentioned_ids:
                         import re as _re
-                        # href 내부에 클래스명이 mention인 앵커 태그들의 URL 추출
                         mentions_in_html = _re.findall(r'<a\s+[^>]*href="([^"]+)"[^>]*class="[^"]*mention[^"]*"[^>]*>', content)
                         if mentions_in_html:
-                            # 내가 안 흔든 사람(제3자)으로 향하는 멘션 링크가 본문에 보이면 우선 필터링
-                            # (스트리밍 세션 성능을 위해 무거운 DB 조회 없이 멘션의 존재 여부로 빠르게 skip 처리합니다)
                             skip_mention = True
-            if skip_mention:
-                print(f"Stream filter: dropped post {post_json.get('id')} from uid={uid} (mention not followed)", flush=True)
+                    if skip_mention:
+                        print(f"Stream filter: dropped post {post_json.get('id')} from uid={uid} (mention not followed)", flush=True)
+                        continue
 
-            # [2] 답글(Reply) 필터링 (부모 글 작성자 미팔로우 방어)
-            # 부스트인 경우 스킵 (boosted_by가 있으면 부스트)
-            if post_json.get("boosted_by"):
-                pass
-            elif bool(post_json.get("in_reply_to_id") or post_json.get("in_reply_to_ap_id") or reply_ctx):
-                # 부모 작성자가 아예 누군지 파악이 안 되거나, 
-                # 파악이 되었더라도 내가 팔로우하는 사람이 아니며, 내가 쓴 답글도 아니라면 홈 피드 전송 차단!
-                if parent_author_id is None:
-                    # 부모 작성자 정보가 아예 누락된 리모트 답글은 안전하게 차단
-                    print(f"Stream filter: dropped reply {post_json.get("id")} (parent author unverified)", flush=True)
-                # 부모 작성자가 존재할 때, 검증 로직
-                if parent_author_id != uid and parent_author_id not in user_follows and uid != post_author_id:
-                    print(f"Stream filter: dropped reply {post_json.get("id")} (parent author {parent_author_id} not followed)", flush=True)
-            _enqueue(info["queue"], payload)
+                    # [2] 답글(Reply) 필터링 (부모 글 작성자 미팔로우 방어)
+                    if post_json.get("boosted_by"):
+                        pass
+                    elif bool(post_json.get("in_reply_to_id") or post_json.get("in_reply_to_ap_id") or reply_ctx):
+                        if parent_author_id is None:
+                            print(f"Stream filter: dropped reply {post_json.get('id')} (parent author unverified)", flush=True)
+                            continue
+                        if parent_author_id != uid and parent_author_id not in user_follows and uid != post_author_id:
+                            print(f"Stream filter: dropped reply {post_json.get('id')} (parent author {parent_author_id} not followed)", flush=True)
+                            continue
+                _enqueue(info["queue"], payload)
     except Exception as e:
         print("!!! BROADCAST_POST ERROR !!!", flush=True)
         traceback.print_exc()
