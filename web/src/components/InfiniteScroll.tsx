@@ -18,7 +18,10 @@ export default function InfiniteScroll({
     const el = sentinelRef.current;
     if (!el) return;
     const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && !loadingRef.current && hasMore) loadMoreRef.current();
+      if (entries[0].isIntersecting && !loadingRef.current && hasMore) {
+        loadingRef.current = true;
+        loadMoreRef.current();
+      }
     }, { rootMargin: "200px" });
     observer.observe(el);
     return () => observer.disconnect();

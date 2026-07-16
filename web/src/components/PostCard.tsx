@@ -249,10 +249,6 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   const [contentHtml, setContentHtml] = useState(() => sanitizePost(buildContentHtml()));
 
   useEffect(() => {
-    setContentHtml(sanitizePost(buildContentHtml()));
-  }, [post.id, post.content, post.summary]);
-
-  useEffect(() => {
     const mentionRe = /<a\s+href="\/@([a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}))"[^>]*>[^<]*<\/a>/g;
     const remoteMentions: string[] = [];
     let m: RegExpExecArray | null;
@@ -286,8 +282,8 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     });
   }, []);
   useEffect(() => {
-    setContentHtml(buildContentHtml(quoteUrl || undefined, resolvedMentions));
-  }, [quoteUrl, resolvedMentions, emojiMap]);
+    setContentHtml(sanitizePost(buildContentHtml(quoteUrl || undefined, resolvedMentions)));
+  }, [post.id, post.content, post.summary, quoteUrl, resolvedMentions, emojiMap]);
 
   // Extract quoted post URL from content
   type QuotedSeries = { type: "series"; novel: NovelData; author: User };
@@ -685,14 +681,15 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
                   } else {
                     await api.react(post.id, emoji);
                     const next = { ...reactions };
-                    if (myReaction && myReaction !== emoji && next[myReaction]) {
-                      if (next[myReaction] <= 1) delete next[myReaction];
+                    if (myReaction && myReaction !== emoji) {
+                      if ((next[myReaction] || 0) <= 1) delete next[myReaction];
                       else next[myReaction] -= 1;
                     }
                     next[emoji] = (next[emoji] || 0) + 1;
                     setReactions(next);
                     setMyReaction(emoji);
                     setLiked(true);
+                    setLikesCount(myReaction ? likesCount : likesCount + 1);
                   }
                 }}
                 style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 12, fontSize: 13, cursor: emojiIsRemote ? "default" : "pointer", border: "1px solid var(--border)", background: myReaction === emoji ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-secondary)", opacity: emojiIsRemote ? 0.5 : 1 }}
@@ -726,10 +723,16 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
               <EmojiPicker onEmoji={async (emoji) => {
                 try {
                   await api.react(post.id, emoji);
-                  setReactions({ ...reactions, [emoji]: (reactions[emoji] || 0) + 1 });
+                  const next = { ...reactions };
+                  if (myReaction && myReaction !== emoji) {
+                    if ((next[myReaction] || 0) <= 1) delete next[myReaction];
+                    else next[myReaction] -= 1;
+                  }
+                  next[emoji] = (next[emoji] || 0) + 1;
+                  setReactions(next);
                   setMyReaction(emoji);
                   setLiked(true);
-                  setLikesCount(likesCount + 1);
+                  setLikesCount(myReaction ? likesCount : likesCount + 1);
                 } catch {}
               }} />
             </span>

@@ -84,6 +84,11 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
 
             # Pre-load following lists for home/social timeline streams
             home_uids = {info["user_id"] for info in _streams.values() if info.get("tl_type") in ("home", "social")}
+            all_stream_uids = {info["user_id"] for info in _streams.values()}
+            stream_users = {}
+            if all_stream_uids:
+                for u in s.query(User).filter(User.id.in_(all_stream_uids)).all():
+                    stream_users[u.id] = u
             home_follows = {}
             if home_uids:
                 for f in s.query(Follow).filter(Follow.follower_id.in_(home_uids), Follow.accepted == True).all():
@@ -96,9 +101,13 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                     continue
                 # Additional filtering for home/social timeline (skip for mention visibility - targeted delivery)
                 if tl in ("home", "social") and post_visibility != "mention":
+                    # 멘션 대상이면 무조건 전달, 필터 무시
+                    if mentioned_ids and uid in mentioned_ids:
+                        _enqueue(info["queue"], payload)
+                        continue
                     user_follows = home_follows.get(uid, set()) | {uid}
                     content = post_json.get("content") or ""
-                    # [1] 멘션 필터링 (DB ID 기반 + 리모트 HTML 본문 정규식 검사)
+                    # [1] 멘션 필터링 (DB ID 기반)
                     skip_mention = False
                     # 1-A. 페이로드에 명시된 멘션 ID 목록 검사
                     if mentioned_ids:
@@ -106,34 +115,20 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                             if muid != post_author_id and muid not in user_follows and muid != uid:
                                 skip_mention = True
                                 break
-                    # 1-B. 리모트 글인 경우, 본문 HTML 태그에서 내가 팔로우하지 않는 제3자에게 쏘는 멘션 링크 검사
-                    # (리모트 글은 언급 ID가 비어있는 채로 오기 때문에 HTML 본문을 직접 뜯어야 합니다)
-                    if not skip_mention and content and author_is_local is False and uid not in set(mentioned_ids):
-                        import re as _re
-                        # href 내부에 클래스명이 mention인 앵커 태그들의 URL 추출
-                        mentions_in_html = _re.findall(r'<a\s+[^>]*href="([^"]+)"[^>]*class="[^"]*mention[^"]*"[^>]*>', content)
-                        if mentions_in_html:
-                            # 내가 안 흔든 사람(제3자)으로 향하는 멘션 링크가 본문에 보이면 우선 필터링
-                            # (스트리밍 세션 성능을 위해 무거운 DB 조회 없이 멘션의 존재 여부로 빠르게 skip 처리합니다)
-                            skip_mention = True
+                    # 1-B. 리모트 글은 mentioned_ids가 비어있어 HTML로 판별 불가 → 필터 스킵
                     if skip_mention:
-                        logger.info("Stream filter: dropped post %s from uid=%s (mention not followed)", post_json.get("id"), uid)
+                        print(f"Stream filter: dropped post {post_json.get('id')} from uid={uid} (mention not followed)", flush=True)
                         continue
 
                     # [2] 답글(Reply) 필터링 (부모 글 작성자 미팔로우 방어)
-                    # 부스트인 경우 스킵 (boosted_by가 있으면 부스트)
                     if post_json.get("boosted_by"):
                         pass
                     elif bool(post_json.get("in_reply_to_id") or post_json.get("in_reply_to_ap_id") or reply_ctx):
-                        # 부모 작성자가 아예 누군지 파악이 안 되거나, 
-                        # 파악이 되었더라도 내가 팔로우하는 사람이 아니며, 내가 쓴 답글도 아니라면 홈 피드 전송 차단!
                         if parent_author_id is None:
-                            # 부모 작성자 정보가 아예 누락된 리모트 답글은 안전하게 차단
-                            logger.info("Stream filter: dropped reply %s (parent author unverified)", post_json.get("id"))
+                            print(f"Stream filter: dropped reply {post_json.get('id')} (parent author unverified)", flush=True)
                             continue
-                        # 부모 작성자가 존재할 때, 검증 로직
                         if parent_author_id != uid and parent_author_id not in user_follows and uid != post_author_id:
-                            logger.info("Stream filter: dropped reply %s (parent author %s not followed)", post_json.get("id"), parent_author_id)
+                            print(f"Stream filter: dropped reply {post_json.get('id')} (parent author {parent_author_id} not followed)", flush=True)
                             continue
                 _enqueue(info["queue"], payload)
     except Exception as e:

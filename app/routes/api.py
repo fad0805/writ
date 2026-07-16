@@ -274,6 +274,12 @@ def _can_view(post, viewer, session):
     return True
 
 
+def _json_array_has_user(column, user_id):
+    """JSON 배열 컬럼에 user_id가 정확히 포함되어 있는지 확인 (PostgreSQL JSONB @>)"""
+    from sqlalchemy.dialects.postgresql import JSONB
+    return column.cast(JSONB).op('@>')(func.json_build_array(user_id).cast(JSONB))
+
+
 def _parse_mentions(content):
     mentioned = set(re.findall(r'@([a-zA-Z0-9_]+(?:@[a-zA-Z0-9.-]+)?)', content))
     if not mentioned:
@@ -615,6 +621,7 @@ def api_logout(request: Request):
 # ── Timeline API ──
 
 def _get_feed(user, tl_type, session, limit=10, offset=0):
+    print(f"[feed] _get_feed uid={user.id if user else None} tl={tl_type} limit={limit} offset={offset}", flush=True)
     _base_opts = [selectinload(Post.author), selectinload(Post.parent)]
     # Cache following IDs for home/social (reused across main query + reply filter)
     _following_ids = None
@@ -633,7 +640,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             Boost.user_id.in_(all_boost_user_ids),
         ).all()})
         final = following_ids[:]
-        _mentioned_self = cast(Post.mentioned_user_ids, String).contains(str(user.id))
+        _mentioned_self = _json_array_has_user(Post.mentioned_user_ids, user.id)
         posts = session.query(Post).options(*_base_opts).filter(
             or_(
                 Post.author_id.in_(final),
@@ -671,7 +678,9 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             Post.is_deleted == False,
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     raw_total = len(posts)
+    print(f"[feed] raw query: {raw_total} posts for tl={tl_type}", flush=True)
     posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm and p.author_id != user.id and user.id not in (p.mentioned_user_ids or []))]
+    print(f"[feed] after DM filter: {len(posts)} posts", flush=True)
     # Deduplicate: track seen post IDs and boost_of targets
     seen_ids = set()
     deduped = []
@@ -693,6 +702,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         seen_ids.add(p.id)
         deduped.append(p)
     posts = deduped
+    print(f"[feed] after dedup: {len(posts)} posts", flush=True)
     # Filter replies: hide if direct parent author is not followed
     # Only for home/social timeline, not local/federated
     if user and tl_type in ("home", "social") and _following_ids:
@@ -713,6 +723,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                     continue
             reply_filtered.append(p)
         posts = reply_filtered
+    print(f"[feed] after reply filter: {len(posts)} posts", flush=True)
     # Apply user mutes, blocks, and keyword mutes
     if user:
         muted_user_ids = {m.target_user_id for m in session.query(UserMute.target_user_id).filter_by(user_id=user.id).all()}
@@ -766,61 +777,63 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                     continue
             filtered.append(p)
         posts = filtered
-    # Hide posts that mention someone the user doesn't follow (home/social only)
-    if user and tl_type in ("home", "social"):
-        _following_ids_set = set(_following_ids) if _following_ids else set()
+        print(f"[feed] after mute/block/keyword filter: {len(posts)} posts", flush=True)
+        # Hide posts that mention someone the user doesn't follow (home/social only)
+        if user and tl_type in ("home", "social"):
+            _following_ids_set = set(_following_ids) if _following_ids else set()
+            mention_filtered = []
+            for p in posts:
+                # [대원칙] 내가 언급된 글(멘션 대상에 내 ID가 들어있는 글)은 무조건 통과시킨다!
+                is_mentioned_to_me = False
+                if p.mentioned_user_ids and user.id in p.mentioned_user_ids:
+                    is_mentioned_to_me = True
+                    break
 
-        mention_filtered = []
-        for p in posts:
-            skip = False
+                skip = False
+                # 내가 언급되지 않은 글에 한해서만 제3자 멘션 필터링을 수행합니다.
+                if not is_mentioned_to_me:
+                    if p.mentioned_user_ids:
+                        for muid in p.mentioned_user_ids:
+                            # 언급된 사람이 작성자 본인도 아니고, 나도 아니고, 내 팔로잉도 아니라면 스킵
+                            if muid != p.author_id and muid != user.id and muid not in _following_ids_set:
+                                skip = True
+                                break
 
-            if p.mentioned_user_ids:
-                for muid in p.mentioned_user_ids:
-                    if muid != p.author_id and muid != user.id and muid not in _following_ids_set and muid != user.id:
-                        if user.id not in p.mentioned_user_ids:
-                            skip = True
-                            break
+                    # 2. 리모트 글 본문 HTML 멘션 태그 추적
+                    if not skip and p.content and p.author and p.author.is_remote:
+                        import re as _re
+                        mentions = _re.findall(r'<a\s+[^>]*href="([^"]+)"[^>]*class="[^"]*mention[^"]*"[^>]*>', p.content)
+                        # (생략된 기존 주소 대조 로직 적용 가능)
+                        pass
 
-            # 2. [핵심] 리모트 글 본문 HTML 멘션 태그 추적 (HTML 정규식 방어선)
-            if not skip and p.content and p.author and p.author.is_remote:
-                import re as _re
-                # HTML 멘션 태그 추출 (예: <a href="https://mastodon.social/@target" ...>@target</a>)
-                # href 안의 주소나 class="mention"이 들어간 링크들을 긁어옵니다.
-                mentions = _re.findall(r'<a\s+[^>]*href="([^"]+)"[^>]*class="[^"]*mention[^"]*"[^>]*>', p.content)
-                for mention_url in mentions:
-                    # 언급된 사람의 프로필 URL(mention_url)이 내 프로필 URL이 아니고,
-                    # 내가 팔로우하는 사람의 프로필 URL 목록에도 없다면 스킵 처리합니다.
+                    # 3. DB에 멘션 ID가 없지만 본문에 이메일 형식의 원격 멘션이 적힌 경우
+                    if not skip and not p.mentioned_user_ids and p.author and p.author.is_remote:
+                        import re as _re
+                        _remote_mentions = _re.findall(r'@([\w.-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', p.content or "")
+                        # 멘션이 존재할 때, 그 멘션 중 나를 향한 것이 단 하나도 없다면 스킵합니다.
+                        if _remote_mentions:
+                            has_my_mention = False
+                            my_username_lower = user.username.split('@')[0].lower()
+                            for m_user, m_domain in _remote_mentions:
+                                # 로컬 유저네임 매칭 여부 검사
+                                if m_user.lower() == my_username_lower:
+                                    has_my_mention = True
+                                    break
+                            if not has_my_mention:
+                                skip = True
 
-                    # 팁: URL을 기반으로 대조하는 것이 가장 정확합니다.
-                    # 만약 DB에 팔로잉들의 프로필 URL(actor_id 또는 ap_id) 정보가 저장되어 있다면 
-                    # 아래와 같이 주소 비교를 통해 안전하게 걸러낼 수 있습니다.
+                # 부모 글(답장 대상)이 DB에 없는 원격 글일 때 처리
+                if not skip and p.in_reply_to_ap_id and not p.in_reply_to_id:
+                    if p.author_id == user.id or p.author_id in _following_ids_set or is_mentioned_to_me:
+                        pass
+                    else:
+                        skip = True
 
-                    # 예시 구현 (_following_actor_urls가 있다면):
-                    # if mention_url != user.actor_id and mention_url not in _following_actor_urls:
-                    #     skip = True
-                    #     break
-
-                    # 만약 URL 목록을 당장 가져오기 힘들다면, 
-                    # 최소한 내 서버 주소가 아닌 외부 주소로 향하는 멘션 링크가 발견되었을 때 
-                    # 내 팔로잉이 아닌 제3자에 대한 멘션으로 보고 안전하게 스킵시킬 수 있습니다.
-                    pass
-
-            if not skip and p.in_reply_to_ap_id and not p.in_reply_to_id:
-                # remote parent not in DB - can't verify parent author, hide
-                if p.author_id == user.id or p.author_id in _following_ids_set or user.id in (p.mentioned_user_ids or []):
-                    pass
-                else:
-                    skip = True
-            if not skip and not p.mentioned_user_ids and p.author and p.author.is_remote:
-                # No mentioned_user_ids but author is remote - check content for @domain mentions
-                import re as _re
-                _remote_mentions = _re.findall(r'@[\w.-]+@[a-zA-Z0-9.-]+\.(?:[a-zA-Z]{2,})(?!\w)', p.content or "")
-                if _remote_mentions:
-                    skip = True
-            if skip:
-                continue
-            mention_filtered.append(p)
-        posts = mention_filtered
+                if skip:
+                    continue
+                mention_filtered.append(p)
+            posts = mention_filtered
+            print(f"[feed] after mention filter: {len(posts)} posts", flush=True)
     has_more = raw_total > limit
     # Batch-load user interaction data for all remaining posts
     post_ids = [p.id for p in posts[:limit]]
@@ -888,6 +901,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     else:
         _liked_ids = _boosted_ids = _bookmarked_ids = set()
         _vote_map = _my_reaction_map = _reactions_map = _booster_map = _mentioned_users_map = {}
+    print(f"[feed] final: {len(posts[:limit])} posts returned, has_more={has_more}", flush=True)
     return [_post_json(p, session, user, tl_type,
                        _liked_ids=_liked_ids, _boosted_ids=_boosted_ids,
                        _bookmarked_ids=_bookmarked_ids, _vote_map=_vote_map,
@@ -1620,6 +1634,10 @@ def api_like_post(request: Request, post_id: int):
             s.add(Like(user_id=user.id, post_id=post_id))
             if post.author_id != user.id and not existing_notif:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
+            s.flush()
+            keep_id = s.query(Like.id).filter_by(user_id=user.id, post_id=post_id).order_by(Like.id.desc()).first()
+            if keep_id:
+                s.query(Like).filter(Like.user_id == user.id, Like.post_id == post_id, Like.id != keep_id[0]).delete(synchronize_session=False)
             s.commit()
             if post.author_id != user.id:
                 broadcast_refresh_notifs(post.author_id)
@@ -1890,17 +1908,20 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
         reactions_disabled = not settings.enable_reactions or not getattr(post.author, 'enable_reactions', True)
         final_emoji = emoji if not reactions_disabled else None
         existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
+        is_new = existing is None
         existing_notif = s.query(Notification).filter_by(
             user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id
         ).first() if post.author_id != user.id else None
-        is_new = False
         if existing:
             existing.reaction = final_emoji
         else:
             s.add(Like(user_id=user.id, post_id=post_id, reaction=final_emoji))
             if post.author_id != user.id and not existing_notif:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
-            is_new = True
+        s.flush()
+        keep_id = s.query(Like.id).filter_by(user_id=user.id, post_id=post_id).order_by(Like.id.desc()).first()
+        if keep_id:
+            s.query(Like).filter(Like.user_id == user.id, Like.post_id == post_id, Like.id != keep_id[0]).delete(synchronize_session=False)
         s.commit()
         if post.author_id != user.id:
             from app.timeline_stream import broadcast_refresh_notifs
@@ -2633,7 +2654,6 @@ def api_following(request: Request, username: str):
 def api_direct_conversation(request: Request, other_id: int):
     user = require_auth(request)
     is_self = (other_id == user.id)
-    from sqlalchemy import cast, String as SAString
     with get_session() as s:
         if is_self:
             other = user
@@ -2641,8 +2661,8 @@ def api_direct_conversation(request: Request, other_id: int):
             other = s.query(User).get(other_id)
             if not other:
                 raise HTTPException(status_code=404, detail="User not found")
-        _contains_self = cast(Post.mentioned_user_ids, SAString).contains(str(user.id))
-        _contains_other = cast(Post.mentioned_user_ids, SAString).contains(str(other_id))
+        _contains_self = _json_array_has_user(Post.mentioned_user_ids, user.id)
+        _contains_other = _json_array_has_user(Post.mentioned_user_ids, other_id)
         if is_self:
             conv_posts = s.query(Post).options(selectinload(Post.author)).filter(
                 Post.visibility == "mention",
@@ -2671,14 +2691,13 @@ def api_direct_threads(request: Request):
     user = require_auth(request)
     three_months_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=90)
     with get_session() as s:
-        from sqlalchemy import cast, String as SAString
         posts = s.query(Post).filter(
             Post.visibility == "mention",
             Post.is_deleted == False,
             Post.created_at >= three_months_ago,
             or_(
                 Post.author_id == user.id,
-                cast(Post.mentioned_user_ids, SAString).contains(str(user.id)),
+                _json_array_has_user(Post.mentioned_user_ids, user.id),
             ),
         ).order_by(desc(Post.created_at)).limit(200).all()
         author_map = {}
