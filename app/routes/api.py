@@ -778,6 +778,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             mention_filtered = []
             for p in posts:
                 # [대원칙] 내가 언급된 글(멘션 대상에 내 ID가 들어있는 글)은 무조건 통과시킨다!
+                print(f'==================== mentioned_ids = {p.mentioned_user_ids}')
                 is_mentioned_to_me = False
                 if p.mentioned_user_ids and user.id in p.mentioned_user_ids:
                     is_mentioned_to_me = True
