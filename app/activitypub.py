@@ -2051,7 +2051,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                 "my_reaction": None,
                 "boosted_by": _safe_user_json(_actor),
                 "mentioned_user_ids": [],
-            }, post.author_id, post.visibility or "public", False)
+            }, actor_id, post.visibility or "public", False)
         except Exception as e:
             logger.warning("Failed to broadcast boost from AP: %s", e)
             print(f"Failed to broadcast boost from AP: {e}", flush=True)

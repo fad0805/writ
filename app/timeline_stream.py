@@ -1,6 +1,7 @@
 import json
 import asyncio
 import logging
+import traceback
 from app.models import get_session, Post, Follow, User, Boost
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,12 @@ def _set_loop():
 
 def _enqueue(queue: asyncio.Queue, item: str):
     if _main_loop and _main_loop.is_running():
-        _main_loop.call_soon_threadsafe(queue.put_nowait, item)
+        def _put():
+            try:
+                queue.put_nowait(item)
+            except asyncio.QueueFull:
+                pass
+        _main_loop.call_soon_threadsafe(_put)
     else:
         try:
             queue.put_nowait(item)
@@ -43,10 +49,10 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
             return
 
         # content가 dict 타입으로 잘못 유입되었는지 방어 코드 추가
-            if isinstance(post_json.get("content"), dict):
-                # dict 형태라면 특정 언어 코드를 가져오거나 문자열로 강제 치환
-                content_dict = post_json["content"]
-                post_json["content"] = content_dict.get("html") or content_dict.get("text") or str(content_dict)
+        if isinstance(post_json.get("content"), dict):
+            # dict 형태라면 특정 언어 코드를 가져오거나 문자열로 강제 치환
+            content_dict = post_json["content"]
+            post_json["content"] = content_dict.get("html") or content_dict.get("text") or str(content_dict)
 
         payload = json.dumps(post_json, default=str)
         mentioned_ids = post_json.get("mentioned_user_ids") or []
@@ -128,10 +134,8 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                             continue
                 _enqueue(info["queue"], payload)
     except Exception as e:
-        # 에러 발생 시 정확히 몇 번째 줄에서 터졌는지 터미널에 통째로 출력합니다.
-        print("!!! BROADCAST_POST ERROR STACK TRACE !!!", flush=True)
+        print("!!! BROADCAST_POST ERROR !!!", flush=True)
         traceback.print_exc()
-        raise e
 
 _notif_streams: dict[int, dict] = {}
 _notif_counter = 0
