@@ -102,6 +102,14 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   });
 
   useEffect(() => {
+    const handler = () => {
+      if ((window as any).__emojiMap) setReactionEmojiMap({ ...(window as any).__emojiMap });
+    };
+    window.addEventListener("emojichange", handler);
+    return () => window.removeEventListener("emojichange", handler);
+  }, []);
+
+  useEffect(() => {
     if (currentUser?.pinned_posts) setPinned(currentUser.pinned_posts.includes(post.id));
   }, [currentUser, post.id]);
 

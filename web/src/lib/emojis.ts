@@ -18,10 +18,22 @@ export interface CustomEmoji {
 
 export function injectEmojis(list: CustomEmojiRaw[]) {
   if (!cache) cache = [];
+  let changed = false;
   for (const e of list) {
     if (!cache.some((c) => c.keyword === e.keyword)) {
       cache.push({ ...e, category: "remote" });
+      changed = true;
     }
+  }
+  if (changed && typeof window !== "undefined") {
+    if ((window as any).__emojiMap) {
+      for (const e of list) {
+        if (e.keyword && e.url && !(window as any).__emojiMap[e.keyword]) {
+          (window as any).__emojiMap[e.keyword] = e.url;
+        }
+      }
+    }
+    window.dispatchEvent(new CustomEvent("emojichange", { detail: list }));
   }
 }
 
