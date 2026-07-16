@@ -274,6 +274,12 @@ def _can_view(post, viewer, session):
     return True
 
 
+def _json_array_has_user(column, user_id):
+    """JSON 배열 컬럼에 user_id가 정확히 포함되어 있는지 확인 (PostgreSQL JSONB @>)"""
+    from sqlalchemy.dialects.postgresql import JSONB
+    return column.cast(JSONB).op('@>')(func.json_build_array(user_id).cast(JSONB))
+
+
 def _parse_mentions(content):
     mentioned = set(re.findall(r'@([a-zA-Z0-9_]+(?:@[a-zA-Z0-9.-]+)?)', content))
     if not mentioned:
@@ -634,7 +640,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             Boost.user_id.in_(all_boost_user_ids),
         ).all()})
         final = following_ids[:]
-        _mentioned_self = cast(Post.mentioned_user_ids, String).contains(str(user.id))
+        _mentioned_self = _json_array_has_user(Post.mentioned_user_ids, user.id)
         posts = session.query(Post).options(*_base_opts).filter(
             or_(
                 Post.author_id.in_(final),
@@ -778,7 +784,6 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             mention_filtered = []
             for p in posts:
                 # [대원칙] 내가 언급된 글(멘션 대상에 내 ID가 들어있는 글)은 무조건 통과시킨다!
-                print(f'==================== mentioned_ids = {p.mentioned_user_ids}')
                 is_mentioned_to_me = False
                 if p.mentioned_user_ids and user.id in p.mentioned_user_ids:
                     is_mentioned_to_me = True
@@ -2649,7 +2654,6 @@ def api_following(request: Request, username: str):
 def api_direct_conversation(request: Request, other_id: int):
     user = require_auth(request)
     is_self = (other_id == user.id)
-    from sqlalchemy import cast, String as SAString
     with get_session() as s:
         if is_self:
             other = user
@@ -2657,8 +2661,8 @@ def api_direct_conversation(request: Request, other_id: int):
             other = s.query(User).get(other_id)
             if not other:
                 raise HTTPException(status_code=404, detail="User not found")
-        _contains_self = cast(Post.mentioned_user_ids, SAString).contains(str(user.id))
-        _contains_other = cast(Post.mentioned_user_ids, SAString).contains(str(other_id))
+        _contains_self = _json_array_has_user(Post.mentioned_user_ids, user.id)
+        _contains_other = _json_array_has_user(Post.mentioned_user_ids, other_id)
         if is_self:
             conv_posts = s.query(Post).options(selectinload(Post.author)).filter(
                 Post.visibility == "mention",
@@ -2687,14 +2691,13 @@ def api_direct_threads(request: Request):
     user = require_auth(request)
     three_months_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=90)
     with get_session() as s:
-        from sqlalchemy import cast, String as SAString
         posts = s.query(Post).filter(
             Post.visibility == "mention",
             Post.is_deleted == False,
             Post.created_at >= three_months_ago,
             or_(
                 Post.author_id == user.id,
-                cast(Post.mentioned_user_ids, SAString).contains(str(user.id)),
+                _json_array_has_user(Post.mentioned_user_ids, user.id),
             ),
         ).order_by(desc(Post.created_at)).limit(200).all()
         author_map = {}
