@@ -1430,88 +1430,88 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     }, poll_post.author_id, poll_post.visibility or "public", false)
                     return (200, "voted")
 
-            # Parse mentions ONLY from AP tag array (No regex body parsing)
-            mentioned_hrefs = set()
-            mentioned_names = set()
-            # Get actor domain for same-server mention resolution
-            _actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
-            # Extract from AP tag array
-            print(f'tags : {obj.get('tag', [])}', flush=True)
-            for tag in (obj.get("tag", []) or []):
-                if isinstance(tag, dict) and tag.get("type") == "Mention":
-                    href = tag.get("href", "")
-                    name = tag.get("name", "")
-                    if href:
-                        mentioned_hrefs.add(href.rstrip("/"))
-                    if name and name.startswith("@"):
-                        mentioned_names.add(name.lstrip("@"))
-            # Also check `to` / `cc` for local user actor URIs (DMs from Mastodon)
-            for _aud in all_audiences:
-                _a = _aud.rstrip("/")
-                if _a and _a.startswith("http"):
-                    mentioned_hrefs.add(_a)
+                # Parse mentions ONLY from AP tag array (No regex body parsing)
+                mentioned_hrefs = set()
+                mentioned_names = set()
+                # Get actor domain for same-server mention resolution
+                _actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
+                # Extract from AP tag array
+                print(f'tags : {obj.get('tag', [])}', flush=True)
+                for tag in (obj.get("tag", []) or []):
+                    if isinstance(tag, dict) and tag.get("type") == "Mention":
+                        href = tag.get("href", "")
+                        name = tag.get("name", "")
+                        if href:
+                            mentioned_hrefs.add(href.rstrip("/"))
+                        if name and name.startswith("@"):
+                            mentioned_names.add(name.lstrip("@"))
+                # Also check `to` / `cc` for local user actor URIs (DMs from Mastodon)
+                for _aud in all_audiences:
+                    _a = _aud.rstrip("/")
+                    if _a and _a.startswith("http"):
+                        mentioned_hrefs.add(_a)
 
-            mentioned_ids = []
-            _seen_ids = set()
-            # Process href-based mentions FIRST (most reliable: from AP Mention tag href or to/cc)
-            if mentioned_hrefs:
-                for _href in mentioned_hrefs:
-                    # 1. 원격 유저 매칭 시도
-                    u = session.query(User).filter(User.remote_url == _href).first()
-                    if u:
-                        if u.id not in _seen_ids:
-                            mentioned_ids.append(u.id)
-                            _seen_ids.add(u.id)
-                    # 2. 원격에 없고 로컬 베이스 URL이 포함된 경우 로컬 유저 매칭 시도
-                    elif BASE_URL in _href:
-                        for _u in session.query(User).filter_by(is_remote=False).all():
-                            # 로컬 유저의 다양한 URI 표현식 커버
-                            local_uris = {
-                                _u.actor_uri().rstrip("/"),
-                                _u.actor_uri().replace("/users/", "/@").rstrip("/")
-                            }
-                            if _href in local_uris and _u.id not in _seen_ids:
-                                mentioned_ids.append(_u.id)
-                                _seen_ids.add(_u.id)
-                                break            # Content-based name matching as supplement (only for users not already found)
-            if mentioned_names:
-                for _name in mentioned_names:
-                    if '@' in _name:
-                        _lp, _dom = _name.split('@', 1)
-                        from urllib.parse import urlparse as _urlparse
-                        u = session.query(User).filter(
-                            User.username == _lp, User.is_remote == True,
-                        ).first()
-                        if u and u.id not in _seen_ids and u.remote_url:
-                            _p = _urlparse(u.remote_url)
-                            if _p.hostname and _p.hostname.lower() == _dom.lower():
+                mentioned_ids = []
+                _seen_ids = set()
+                # Process href-based mentions FIRST (most reliable: from AP Mention tag href or to/cc)
+                if mentioned_hrefs:
+                    for _href in mentioned_hrefs:
+                        # 1. 원격 유저 매칭 시도
+                        u = session.query(User).filter(User.remote_url == _href).first()
+                        if u:
+                            if u.id not in _seen_ids:
                                 mentioned_ids.append(u.id)
                                 _seen_ids.add(u.id)
-                                continue
-                        # username may contain @domain, try like + domain check
-                        candidates = session.query(User).filter(
-                            User.username.like(f"{_lp}@%"),
-                            User.is_remote == True,
-                        ).all()
-                        for _c in candidates:
-                            if _c.id in _seen_ids:
-                                continue
-                            if _c.remote_url:
-                                _p = _urlparse(_c.remote_url)
-                                if _p.hostname and _p.hostname.lower() == _dom.lower():
-                                    mentioned_ids.append(_c.id)
-                                    _seen_ids.add(_c.id)
-                                    break
-                    else:
-                        # same-domain remote user only (local user handled via href already)
-                        if _actor_domain:
+                        # 2. 원격에 없고 로컬 베이스 URL이 포함된 경우 로컬 유저 매칭 시도
+                        elif BASE_URL in _href:
+                            for _u in session.query(User).filter_by(is_remote=False).all():
+                                # 로컬 유저의 다양한 URI 표현식 커버
+                                local_uris = {
+                                    _u.actor_uri().rstrip("/"),
+                                    _u.actor_uri().replace("/users/", "/@").rstrip("/")
+                                }
+                                if _href in local_uris and _u.id not in _seen_ids:
+                                    mentioned_ids.append(_u.id)
+                                    _seen_ids.add(_u.id)
+                                    break            # Content-based name matching as supplement (only for users not already found)
+                if mentioned_names:
+                    for _name in mentioned_names:
+                        if '@' in _name:
+                            _lp, _dom = _name.split('@', 1)
+                            from urllib.parse import urlparse as _urlparse
                             u = session.query(User).filter(
-                                User.username == _name, User.is_remote == True,
-                                User.remote_url.contains(_actor_domain)
+                                User.username == _lp, User.is_remote == True,
                             ).first()
-                            if u and u.id not in _seen_ids:
-                                mentioned_ids.append(u.id)
-                                _seen_ids.add(u.id)
+                            if u and u.id not in _seen_ids and u.remote_url:
+                                _p = _urlparse(u.remote_url)
+                                if _p.hostname and _p.hostname.lower() == _dom.lower():
+                                    mentioned_ids.append(u.id)
+                                    _seen_ids.add(u.id)
+                                    continue
+                            # username may contain @domain, try like + domain check
+                            candidates = session.query(User).filter(
+                                User.username.like(f"{_lp}@%"),
+                                User.is_remote == True,
+                            ).all()
+                            for _c in candidates:
+                                if _c.id in _seen_ids:
+                                    continue
+                                if _c.remote_url:
+                                    _p = _urlparse(_c.remote_url)
+                                    if _p.hostname and _p.hostname.lower() == _dom.lower():
+                                        mentioned_ids.append(_c.id)
+                                        _seen_ids.add(_c.id)
+                                        break
+                        else:
+                            # same-domain remote user only (local user handled via href already)
+                            if _actor_domain:
+                                u = session.query(User).filter(
+                                    User.username == _name, User.is_remote == True,
+                                    User.remote_url.contains(_actor_domain)
+                                ).first()
+                                if u and u.id not in _seen_ids:
+                                    mentioned_ids.append(u.id)
+                                    _seen_ids.add(u.id)
             print(f'mentioned_ids: {mentioned_ids}', flush=True)
 
             # Check if actor's domain is server-muted
