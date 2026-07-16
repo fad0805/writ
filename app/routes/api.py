@@ -9,7 +9,7 @@ import logging
 import threading
 from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import desc, or_, and_, func, cast, String as SAString
+from sqlalchemy import desc, or_, and_, func, cast, String, String as SAString
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload, Session
 
