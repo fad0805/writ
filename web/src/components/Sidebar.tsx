@@ -108,7 +108,7 @@ export default function Sidebar() {
 
   const isActive = (href: string) => {
     if (!pathname) return false;
-    if (pathname.startsWith("/timeline")) return href.startsWith("/timeline");
+    if (href === "/timeline/home") return pathname.startsWith("/timeline");
     if (href === "/series/my") return pathname === "/series/my";
     if (href === "/series") return pathname === "/series";
     if (user && href === `/@${user.username}`) return pathname === `/@${user.username}`;
@@ -247,7 +247,7 @@ export default function Sidebar() {
         </div>
       </Link>
       <ul className="nav-links">
-        <NavItem href={`/timeline/${typeof localStorage !== "undefined" ? (localStorage.getItem("lastTimelineTab") || "home") : "home"}`} active={pathname.startsWith("/timeline")}>
+        <NavItem href="/timeline/home" active={isActive("/timeline/home")}>
           <Icon name="home_solid" /> 타임라인
         </NavItem>
         <NavItem href="/notifications" active={isActive("/notifications")}>
