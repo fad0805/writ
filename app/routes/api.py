@@ -768,60 +768,60 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         posts = filtered
         # Hide posts that mention someone the user doesn't follow (home/social only)
         if user and tl_type in ("home", "social"):
-        _following_ids_set = set(_following_ids) if _following_ids else set()
-        mention_filtered = []
-        for p in posts:
-            # [대원칙] 내가 언급된 글(멘션 대상에 내 ID가 들어있는 글)은 무조건 통과시킨다!
-            is_mentioned_to_me = False
-            if p.mentioned_user_ids and user.id in p.mentioned_user_ids:
-                is_mentioned_to_me = True
+            _following_ids_set = set(_following_ids) if _following_ids else set()
+            mention_filtered = []
+            for p in posts:
+                # [대원칙] 내가 언급된 글(멘션 대상에 내 ID가 들어있는 글)은 무조건 통과시킨다!
+                is_mentioned_to_me = False
+                if p.mentioned_user_ids and user.id in p.mentioned_user_ids:
+                    is_mentioned_to_me = True
 
-            skip = False
-            
-            # 내가 언급되지 않은 글에 한해서만 제3자 멘션 필터링을 수행합니다.
-            if not is_mentioned_to_me:
-                if p.mentioned_user_ids:
-                    for muid in p.mentioned_user_ids:
-                        # 언급된 사람이 작성자 본인도 아니고, 나도 아니고, 내 팔로잉도 아니라면 스킵
-                        if muid != p.author_id and muid != user.id and muid not in _following_ids_set:
-                            skip = True
-                            break
-
-                # 2. 리모트 글 본문 HTML 멘션 태그 추적
-                if not skip and p.content and p.author and p.author.is_remote:
-                    import re as _re
-                    mentions = _re.findall(r'<a\s+[^>]*href="([^"]+)"[^>]*class="[^"]*mention[^"]*"[^>]*>', p.content)
-                    # (생략된 기존 주소 대조 로직 적용 가능)
-                    pass
-
-                # 3. DB에 멘션 ID가 없지만 본문에 이메일 형식의 원격 멘션이 적힌 경우
-                if not skip and not p.mentioned_user_ids and p.author and p.author.is_remote:
-                    import re as _re
-                    _remote_mentions = _re.findall(r'@([\w.-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', p.content or "")
-                    
-                    # 멘션이 존재할 때, 그 멘션 중 나를 향한 것이 단 하나도 없다면 스킵합니다.
-                    if _remote_mentions:
-                        has_my_mention = False
-                        my_username_lower = user.username.split('@')[0].lower()
-                        for m_user, m_domain in _remote_mentions:
-                            # 로컬 유저네임 매칭 여부 검사
-                            if m_user.lower() == my_username_lower:
-                                has_my_mention = True
+                skip = False
+                
+                # 내가 언급되지 않은 글에 한해서만 제3자 멘션 필터링을 수행합니다.
+                if not is_mentioned_to_me:
+                    if p.mentioned_user_ids:
+                        for muid in p.mentioned_user_ids:
+                            # 언급된 사람이 작성자 본인도 아니고, 나도 아니고, 내 팔로잉도 아니라면 스킵
+                            if muid != p.author_id and muid != user.id and muid not in _following_ids_set:
+                                skip = True
                                 break
-                        if not has_my_mention:
-                            skip = True
 
-            # 부모 글(답장 대상)이 DB에 없는 원격 글일 때 처리
-            if not skip and p.in_reply_to_ap_id and not p.in_reply_to_id:
-                if p.author_id == user.id or p.author_id in _following_ids_set or is_mentioned_to_me:
-                    pass
-                else:
-                    skip = True
+                    # 2. 리모트 글 본문 HTML 멘션 태그 추적
+                    if not skip and p.content and p.author and p.author.is_remote:
+                        import re as _re
+                        mentions = _re.findall(r'<a\s+[^>]*href="([^"]+)"[^>]*class="[^"]*mention[^"]*"[^>]*>', p.content)
+                        # (생략된 기존 주소 대조 로직 적용 가능)
+                        pass
 
-            if skip:
-                continue
-            mention_filtered.append(p)
-        posts = mention_filtered
+                    # 3. DB에 멘션 ID가 없지만 본문에 이메일 형식의 원격 멘션이 적힌 경우
+                    if not skip and not p.mentioned_user_ids and p.author and p.author.is_remote:
+                        import re as _re
+                        _remote_mentions = _re.findall(r'@([\w.-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', p.content or "")
+                        
+                        # 멘션이 존재할 때, 그 멘션 중 나를 향한 것이 단 하나도 없다면 스킵합니다.
+                        if _remote_mentions:
+                            has_my_mention = False
+                            my_username_lower = user.username.split('@')[0].lower()
+                            for m_user, m_domain in _remote_mentions:
+                                # 로컬 유저네임 매칭 여부 검사
+                                if m_user.lower() == my_username_lower:
+                                    has_my_mention = True
+                                    break
+                            if not has_my_mention:
+                                skip = True
+
+                # 부모 글(답장 대상)이 DB에 없는 원격 글일 때 처리
+                if not skip and p.in_reply_to_ap_id and not p.in_reply_to_id:
+                    if p.author_id == user.id or p.author_id in _following_ids_set or is_mentioned_to_me:
+                        pass
+                    else:
+                        skip = True
+
+                if skip:
+                    continue
+                mention_filtered.append(p)
+            posts = mention_filtered
     has_more = raw_total > limit
     # Batch-load user interaction data for all remaining posts
     post_ids = [p.id for p in posts[:limit]]
