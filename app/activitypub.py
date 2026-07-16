@@ -1670,7 +1670,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     "my_vote": None,
                     "reactions": {},
                     "my_reaction": None,
-                    "mentioned_user_ids"=mentioned_ids,
+                    "mentioned_user_ids": mentioned_ids,
                 }
                 broadcast_post(post_json, actor_id, visibility, is_incoming_dm)
             except Exception as e:
