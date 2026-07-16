@@ -127,7 +127,7 @@ export default function NewEpisodePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanContent = content.replace(/<[^>]*>/g, "").trim();
+    const cleanContent = (content || "").replace(/<[^>]*>/g, "").trim();
     if (!title.trim() || !cleanContent || submitting) return;
     setSubmitting(true);
     try {
@@ -204,7 +204,7 @@ export default function NewEpisodePage() {
               </button>
             )}
           </div>
-          <button type="submit" disabled={submitting || !title.trim() || !content.trim()} className="btn btn-primary">게시</button>
+          <button type="submit" disabled={submitting || !title.trim() || !(content || "").trim()} className="btn btn-primary">게시</button>
           <button type="button" onClick={() => router.back()} className="btn btn-outline">취소</button>
         </div>
         {showDraftList && (

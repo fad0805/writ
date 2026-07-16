@@ -69,9 +69,9 @@ export default function EditEpisodePage() {
       const ep = d.episodes.find((e: any) => e.id === episodeId);
       if (!ep || !d.is_mine) { router.push(`/series/${novelId}`); return; }
       setTitle(ep.title);
-      setSummary(ep.summary);
+      setSummary(ep.summary || "");
       setComment(ep.comment || "");
-      setContent(ep.content);
+      setContent(ep.content || "");
       setIsPublished(ep.is_published);
       setNovelTitle(d.novel.title);
       setLoading(false);
@@ -143,7 +143,7 @@ export default function EditEpisodePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanContent = content.replace(/<[^>]*>/g, "").trim();
+    const cleanContent = (content || "").replace(/<[^>]*>/g, "").trim();
     if (!title.trim() || !cleanContent || submitting) return;
     setSubmitting(true);
     try {
@@ -228,7 +228,7 @@ export default function EditEpisodePage() {
               </button>
             )}
           </div>
-          <button type="submit" disabled={submitting || !title.trim() || !content.trim()} className="btn btn-primary">저장</button>
+          <button type="submit" disabled={submitting || !title.trim() || !(content || "").trim()} className="btn btn-primary">저장</button>
           <button type="button" onClick={() => router.back()} className="btn btn-outline">취소</button>
         </div>
         {showDraftList && (
