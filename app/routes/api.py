@@ -706,7 +706,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             if p.author_id != user.id and (p.in_reply_to_id or p.in_reply_to_ap_id):
                 if p.in_reply_to_id:
                     parent_author_id = parent_authors.get(p.in_reply_to_id)
-                    if parent_author_id is None or parent_author_id not in _following_ids:
+                    if parent_author_id is None or (parent_author_id not in _following_ids and parent_author_id != user.id):
                         continue
                 else:
                     # remote parent not in DB → hide (can't verify parent author)
@@ -807,7 +807,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
 
             if not skip and p.in_reply_to_ap_id and not p.in_reply_to_id:
                 # remote parent not in DB - can't verify parent author, hide
-                if p.author_id == user.id or p.author_id in _following_ids_set:
+                if p.author_id == user.id or p.author_id in _following_ids_set or user.id in (p.mentioned_user_ids or []):
                     pass
                 else:
                     skip = True
