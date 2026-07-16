@@ -723,7 +723,6 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
     resp_id = data.get("id", "")
     canonical_url = resp_id or actor_url
     if resp_id:
-        from urllib.parse import urlparse
         req_domain = urlparse(actor_url).hostname or ""
         resp_domain = urlparse(resp_id).hostname or ""
         if req_domain and resp_domain and req_domain != resp_domain:
