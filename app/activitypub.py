@@ -1635,6 +1635,25 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             try:
                 from app.timeline_stream import broadcast_post
                 author = post.author
+                _reply_ctx = None
+                if reply_to_post and not getattr(reply_to_post, 'is_deleted', False):
+                    _rp_author = reply_to_post.author
+                    _reply_ctx = {
+                        "id": reply_to_post.id,
+                        "number": reply_to_post.number or "",
+                        "content": (reply_to_post.content or "")[:200],
+                        "author": {
+                            "id": _rp_author.id, "username": _rp_author.username,
+                            "display_name": _rp_author.display_name or _rp_author.username,
+                            "avatar": _rp_author.profile_image or "",
+                            "header": _rp_author.header_image or "",
+                            "summary": _rp_author.summary or "", "is_admin": _rp_author.is_admin,
+                            "is_locked": getattr(_rp_author, "is_locked", False),
+                            "is_limited": getattr(_rp_author, "is_limited", False),
+                            "is_remote": _rp_author.is_remote, "ap_id": _rp_author.remote_url or "",
+                        },
+                        "visibility": reply_to_post.visibility or "public",
+                    }
                 post_json = {
                     "id": post.id,
                     "number": post.number or "",
@@ -1671,6 +1690,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     "reactions": {},
                     "my_reaction": None,
                     "mentioned_user_ids": mentioned_ids,
+                    "reply_context": _reply_ctx,
                 }
                 broadcast_post(post_json, actor_id, visibility, is_incoming_dm)
             except Exception as e:
