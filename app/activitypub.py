@@ -2385,7 +2385,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     "reactions": _build_reactions(session, post.id),
                     "my_reaction": None,
                             "type": "update",
-                        }, post.author_id, post.visibility or "public", False)
+            }, actor_id, post.visibility or "public", False)
                     except Exception:
                         pass
     return (200, "Updated")
