@@ -1722,7 +1722,7 @@ def api_boost_post(request: Request, post_id: int):
                 _author_json = _user_json(_a)
                 _boosted_json = _user_json(user)
                 _og = {
-                    "id": boost_post.id,
+                    "id": post.id,
                     "number": post.number or "",
                     "content": post.content,
                     "summary": post.summary or "",
