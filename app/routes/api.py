@@ -1923,6 +1923,7 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
         reactions_disabled = not settings.enable_reactions or not getattr(post.author, 'enable_reactions', True)
         final_emoji = emoji if not reactions_disabled else None
         existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
+        old_reaction = existing.reaction if existing else None
         is_new = existing is None
         existing_notif = s.query(Notification).filter_by(
             user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id
@@ -1948,12 +1949,13 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
                 _kw = emoji[1:-1]
                 _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw).first()
                 if _emoji_row and _emoji_row.file_name:
-                    _rel_url = _emoji_url(_emoji_row.file_name, _emoji_row.domain or "", _emoji_row.category or "")
-                    _emoji_url = _rel_url if _rel_url.startswith("http") else f"{BASE_URL}{_rel_url}"
+                    _emoji_img = _emoji_url(_emoji_row.file_name, _emoji_row.domain or "", _emoji_row.category or "")
+                    if not _emoji_img.startswith("http"):
+                        _emoji_img = f"{BASE_URL}{_emoji_img}"
                 else:
-                    _emoji_url = ""
-                if _emoji_url:
-                    _tag = [{"type": "Emoji", "id": f"{BASE_URL}/emojis/{_kw}", "name": emoji, "icon": {"type": "Image", "mediaType": "image/png", "url": _emoji_url}}]
+                    _emoji_img = ""
+                if _emoji_img:
+                    _tag = [{"type": "Emoji", "id": f"{BASE_URL}/emojis/{_kw}", "name": emoji, "icon": {"type": "Image", "mediaType": "image/png", "url": _emoji_img}}]
             like_activity = {
                 "@context": "https://www.w3.org/ns/activitystreams",
                 "id": f"{BASE_URL}/likes/{uuid.uuid4()}",
@@ -1965,7 +1967,7 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
             }
             if _tag:
                 like_activity["tag"] = _tag
-            if is_new or (existing and existing.reaction != emoji):
+            if is_new or old_reaction != emoji:
                 inbox = post.author.shared_inbox_url
                 try:
                     _post_to_inbox(inbox, like_activity, user)

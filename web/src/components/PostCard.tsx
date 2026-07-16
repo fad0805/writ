@@ -670,7 +670,6 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
                 className={`reaction-badge${myReaction === emoji ? " active" : ""}${emojiIsRemote ? " reaction-disabled" : ""}`}
                 onClick={async () => {
                   if (myReaction === emoji) {
-                    await api.unreact(post.id);
                     const next = { ...reactions };
                     if (next[emoji] <= 1) delete next[emoji];
                     else next[emoji] -= 1;
@@ -678,8 +677,10 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
                     setMyReaction(null);
                     setLiked(false);
                     setLikesCount(Math.max(0, likesCount - 1));
+                    try {
+                      await api.unreact(post.id);
+                    } catch {}
                   } else {
-                    await api.react(post.id, emoji);
                     const next = { ...reactions };
                     if (myReaction && myReaction !== emoji) {
                       if ((next[myReaction] || 0) <= 1) delete next[myReaction];
@@ -690,6 +691,9 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
                     setMyReaction(emoji);
                     setLiked(true);
                     setLikesCount(myReaction ? likesCount : likesCount + 1);
+                    try {
+                      await api.react(post.id, emoji);
+                    } catch {}
                   }
                 }}
                 style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 12, fontSize: 13, cursor: emojiIsRemote ? "default" : "pointer", border: "1px solid var(--border)", background: myReaction === emoji ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-secondary)", opacity: emojiIsRemote ? 0.5 : 1 }}
@@ -721,18 +725,18 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
           {currentUser?.enable_reactions !== false ? (
             <span onClick={(e) => e.stopPropagation()} className="relative-wrap" style={{ marginBottom: -2 }}>
               <EmojiPicker onEmoji={async (emoji) => {
+                const next = { ...reactions };
+                if (myReaction && myReaction !== emoji) {
+                  if ((next[myReaction] || 0) <= 1) delete next[myReaction];
+                  else next[myReaction] -= 1;
+                }
+                next[emoji] = (next[emoji] || 0) + 1;
+                setReactions(next);
+                setMyReaction(emoji);
+                setLiked(true);
+                setLikesCount(myReaction ? likesCount : likesCount + 1);
                 try {
                   await api.react(post.id, emoji);
-                  const next = { ...reactions };
-                  if (myReaction && myReaction !== emoji) {
-                    if ((next[myReaction] || 0) <= 1) delete next[myReaction];
-                    else next[myReaction] -= 1;
-                  }
-                  next[emoji] = (next[emoji] || 0) + 1;
-                  setReactions(next);
-                  setMyReaction(emoji);
-                  setLiked(true);
-                  setLikesCount(myReaction ? likesCount : likesCount + 1);
                 } catch {}
               }} />
             </span>
