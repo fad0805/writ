@@ -65,9 +65,9 @@ export default function EditEpisodePage() {
 
   useEffect(() => {
     if (isNaN(novelId) || isNaN(episodeId)) return;
-    api.getNovel(novelId).then((d) => {
-      const ep = d.episodes.find((e: any) => e.id === episodeId);
-      if (!ep || !d.is_mine) { router.push(`/series/${novelId}`); return; }
+    api.getEpisode(novelId, episodeId).then((d) => {
+      if (!d.is_mine) { router.push(`/series/${novelId}`); return; }
+      const ep = d.episode;
       setTitle(ep.title);
       setSummary(ep.summary || "");
       setComment(ep.comment || "");
