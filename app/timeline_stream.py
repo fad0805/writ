@@ -102,6 +102,8 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                     skip_mention = False
                     # 1-A. 페이로드에 명시된 멘션 ID 목록 검사
                     if mentioned_ids:
+                        if uid in set(mentioned_ids):
+                            break
                         for muid in mentioned_ids:
                             if muid != post_author_id and muid not in user_follows and muid != uid:
                                 skip_mention = True
