@@ -5482,6 +5482,7 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
             u.is_suspended = True
             for p in s.query(Post).filter(Post.author_id == u.id).all():
                 s.query(Post).filter(Post.in_reply_to_id == p.id).update({"in_reply_to_id": None})
+                s.query(Notification).filter(Notification.post_id == p.id).delete()
                 s.delete(p)
         elif action == "unlimit":
             u.is_limited = False

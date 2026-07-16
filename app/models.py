@@ -683,7 +683,7 @@ class Notification(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     from_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     notification_type = Column(String(32), nullable=False)  # follow, like, boost, reply, mention, moderation
-    post_id = Column(Integer, ForeignKey("posts.id"), nullable=True)
+    post_id = Column(Integer, ForeignKey("posts.id", ondelete="SET NULL"), nullable=True)
     metadata_json = Column(Text, default="")
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now)
