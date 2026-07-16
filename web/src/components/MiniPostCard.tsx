@@ -5,24 +5,7 @@ import Link from "next/link";
 import Icon from "./Icon";
 import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
 import { sanitizePost, sanitizeName } from "@/lib/sanitize";
-
-function rewriteLinks(text: string, validMentions?: Set<string>): string {
-  text = text.replace(
-    /<a\s+href="https?:\/\/([^"/]+)\/@(\w+)"[^>]*>@?\w*<\/a>/gi,
-    (_m: string, domain: string, user: string) =>
-      `<a href="/@${user}@${domain}" class="mention-link">@${user}@${domain}</a>`
-  );
-  text = text.replace(/(^|>|\s)@(\w+(?:@[\w.-]+)?)/g, (_m, before, handle) => {
-    const hasDomain = handle.includes("@");
-    if (hasDomain && !validMentions?.has(handle)) {
-      return `${before}@${handle}`;
-    }
-    return `${before}<a href="/@${handle}" class="mention-link">@${handle}</a>`;
-  });
-  return text.replace(/(^|>|\s)#([\w_가-힣]+)/g, (_m, before, tag) => {
-    return `${before}<a href="/explore?q=%23${encodeURIComponent(tag)}" class="hashtag-link">#${tag}</a>`;
-  });
-}
+import { rewriteLinks } from "./PostCard";
 
 const LIGHT_BG: Record<string, string> = {
   boost: "rgba(104, 159, 56, 0.1)",

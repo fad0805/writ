@@ -2032,26 +2032,6 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                     "aliases": (u.aliases or []) if hasattr(u, 'aliases') else [],
                     "moved_to": getattr(u, "moved_to", "") or "",
                 }
-            print(str({
-                "id": boost_post.id,
-                "number": post.number or "",
-                "content": post.content,
-                "summary": post.summary or "",
-                "visibility": post.visibility or "public",
-                "created_at": post.created_at.isoformat() if post.created_at else "",
-                "author": _safe_user_json(_a),
-                "likes_count": likes_cnt,       # 안전하게 받아온 값 대입
-                "boosts_count": boosts_cnt,     # 안전하게 받아온 값 대입
-                "replies_count": replies_cnt,   # 안전하게 받아온 값 대입
-                "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
-                "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
-                "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
-                "poll_data": post.poll_data, "my_vote": None,
-                "reactions": reactions_data,
-                "my_reaction": None,
-                "boosted_by": _safe_user_json(_actor),
-                "mentioned_user_ids": [],
-            }))
             broadcast_post({
                 "id": boost_post.id,
                 "number": post.number or "",
