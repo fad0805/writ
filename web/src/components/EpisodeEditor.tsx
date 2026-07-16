@@ -8,7 +8,7 @@ import Underline from "@tiptap/extension-underline";
 import Strike from "@tiptap/extension-strike";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 
 const SIZES = ["50", "75", "100"];
 
@@ -57,6 +57,38 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
   const [showColorPicker, setShowColorPicker] = useState(false);
   const colorPickerRef = useRef<HTMLDivElement>(null);
   const internalUpdate = useRef(false);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  const extensions = useMemo(() => [
+    StarterKit.configure({
+      heading: { levels: [2, 3] },
+      strike: false,
+    }),
+    CustomStrike,
+    Underline,
+    TextStyle,
+    Color,
+    Placeholder.configure({ placeholder: "소설 내용을 입력하세요..." }),
+    TextAlign.configure({ types: ["heading", "paragraph"] }),
+    AlignableImage,
+  ], []);
+
+  const editor = useEditor({
+    extensions,
+    content: value,
+    onUpdate: useCallback(({ editor }: { editor: any }) => {
+      internalUpdate.current = true;
+      onChangeRef.current(editor.getHTML());
+    }, []),
+  });
+
+  useEffect(() => {
+    if (internalUpdate.current) { internalUpdate.current = false; return; }
+    if (editor && value !== editor.getHTML()) {
+      editor.commands.setContent(value, { emitUpdate: false } as any);
+    }
+  }, [value, editor]);
 
   useEffect(() => {
     if (!showColorPicker) return;
@@ -66,34 +98,6 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [showColorPicker]);
-
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        heading: { levels: [2, 3] },
-        strike: false,
-      }),
-      CustomStrike,
-      Underline,
-      TextStyle,
-      Color,
-      Placeholder.configure({ placeholder: "소설 내용을 입력하세요..." }),
-      TextAlign.configure({ types: ["heading", "paragraph"] }),
-      AlignableImage,
-    ],
-    content: value,
-    onUpdate: ({ editor }) => {
-      internalUpdate.current = true;
-      onChange(editor.getHTML());
-    },
-  });
-
-  useEffect(() => {
-    if (internalUpdate.current) { internalUpdate.current = false; return; }
-    if (editor && value !== editor.getHTML()) {
-      editor.commands.setContent(value, { emitUpdate: false } as any);
-    }
-  }, [value, editor]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
