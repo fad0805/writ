@@ -1731,6 +1731,7 @@ def api_boost_post(request: Request, post_id: int):
                 broadcast_post({
                     "id": post.id, "type": "update",
                     "boosts_count": s.query(Boost).filter_by(post_id=post_id).count(),
+                    "boosted_by": _user_json(_ba),
                 }, post.author_id, post.visibility or "public", False)
             except Exception:
                 pass
