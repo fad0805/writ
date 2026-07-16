@@ -29,7 +29,13 @@ export default function ReplyModal({ post, onClose, onDone }: { post: PostData; 
     const matches = post.content.match(/@([a-zA-Z0-9_]+(?:@[a-zA-Z0-9.-]+)?)/g);
     if (matches) matches.forEach((m) => set.add(m));
     set.add(`@${post.author.username}`);
-    if (user) set.delete(`@${user.username}`);
+    if (user) {
+      const uname = user.username;
+      for (const m of Array.from(set)) {
+        const namePart = m.startsWith("@") ? m.slice(1).split("@")[0] : m.split("@")[0];
+        if (namePart === uname) set.delete(m);
+      }
+    }
     return Array.from(set).join(" ") + (set.size > 0 ? " " : "");
   }, [post, user]);
 
