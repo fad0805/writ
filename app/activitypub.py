@@ -1988,23 +1988,17 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
 
         try:
             from app.timeline_stream import broadcast_post
+            from app.routes.api import _user_json
             _a = post.author
+            _actor = session.query(User).get(actor_id)
             broadcast_post({
-                "id": post.id,
+                "id": boost_post.id,
                 "number": post.number or "",
                 "content": post.content,
                 "summary": post.summary or "",
                 "visibility": post.visibility or "public",
                 "created_at": post.created_at.isoformat() if post.created_at else "",
-                "author": {
-                    "id": _a.id, "username": _a.username,
-                    "display_name": _a.display_name or _a.username,
-                    "avatar": _a.profile_image or "", "header": _a.header_image or "",
-                    "summary": _a.summary or "", "is_admin": _a.is_admin,
-                    "is_locked": getattr(_a, "is_locked", False),
-                    "is_limited": getattr(_a, "is_limited", False),
-                    "is_remote": _a.is_remote, "ap_id": _a.remote_url or "",
-                },
+                "author": _user_json(_a),
                 "likes_count": session.query(Like).filter_by(post_id=post.id).count(),
                 "boosts_count": session.query(Boost).filter_by(post_id=post.id).count(),
                 "replies_count": session.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count(),
@@ -2014,9 +2008,11 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                 "poll_data": post.poll_data, "my_vote": None,
                 "reactions": _build_reactions(session, post.id),
                 "my_reaction": None,
+                "boosted_by": _user_json(_actor) if _actor else None,
+                "mentioned_user_ids": [],
             }, post.author_id, post.visibility or "public", False)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to broadcast boost from AP: %s", e)
 
     print(f"[ANNOUNCE] success post_id={post.id} by actor_id={actor_id}", flush=True)
     return (200, "Announced")

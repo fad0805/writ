@@ -1691,6 +1691,8 @@ def api_boost_post(request: Request, post_id: int):
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
+        if post.author_id != user.id and post.visibility in ("followers", "mention"):
+            raise HTTPException(status_code=403, detail="Cannot boost followers-only or mention-only posts from other users")
         existing = s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
         existing_notif = s.query(Notification).filter_by(
             user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id
@@ -1714,30 +1716,28 @@ def api_boost_post(request: Request, post_id: int):
             if post.author_id != user.id and not existing_notif:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id))
             s.commit()
-            broadcast_refresh_notifs(post.author_id)
             # Stream the boost pointer post as a new timeline entry
             try:
-                from app.timeline_stream import broadcast_post
                 og = _post_json(post, s, user)
                 og["id"] = boost_post.id
-                og["boosted_by"] = _user_json(boost_post.author)
+                og["boosted_by"] = _user_json(user)
                 og["mentioned_user_ids"] = []
                 threading.Thread(target=_broadcast_timeline, args=(og, user.id, post.visibility or "public", False), daemon=True).start()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to broadcast boost stream: %s", e)
             # Also send an update event for the original post (count sync)
             try:
-                _ba = post.author
                 broadcast_post({
                     "id": post.id, "type": "update",
                     "boosts_count": s.query(Boost).filter_by(post_id=post_id).count(),
-                    "boosted_by": _user_json(_ba),
+                    "boosted_by": _user_json(user),
                 }, post.author_id, post.visibility or "public", False)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to broadcast boost update: %s", e)
             if post.author_id != user.id:
                 from app.push import send_push_to_user
-                from app.timeline_stream import broadcast_notif_sound
+                from app.timeline_stream import broadcast_notif_sound, broadcast_refresh_notifs
+                broadcast_refresh_notifs(post.author_id)
                 send_push_to_user(post.author_id, "boost", user.username, post_id)
                 broadcast_notif_sound(post.author_id)
         if post.author.is_remote and post.author.shared_inbox_url:

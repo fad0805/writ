@@ -710,7 +710,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
             <Icon name="reply" /> {post.replies_count}
           </button>
           <form className="inline-form" onSubmit={(e) => e.preventDefault()}>
-            <button type="button" onClick={toggleBoost} className={`action-btn ${boosted ? "boosted" : ""}`}>
+            <button type="button" onClick={toggleBoost} disabled={!post.is_mine && (post.visibility === "followers" || post.visibility === "mention")} className={`action-btn ${boosted ? "boosted" : ""}`}>
               <Icon name="refresh" /> {boostsCount}
             </button>
           </form>
