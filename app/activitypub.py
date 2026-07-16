@@ -1436,7 +1436,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 # Get actor domain for same-server mention resolution
                 _actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
                 # Extract from AP tag array
-                print(f'tags : {obj.get('tag', [])}', flush=True)
                 for tag in (obj.get("tag", []) or []):
                     if isinstance(tag, dict) and tag.get("type") == "Mention":
                         href = tag.get("href", "")
@@ -1512,7 +1511,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                 if u and u.id not in _seen_ids:
                                     mentioned_ids.append(u.id)
                                     _seen_ids.add(u.id)
-            print(f'mentioned_ids: {mentioned_ids}', flush=True)
 
             # Check if actor's domain is server-muted
             actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
@@ -1673,7 +1671,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     "reactions": {},
                     "my_reaction": None,
                 }
-                broadcast_post(post_json, actor_id, visibility, is_incoming_dm)
+                broadcast_post(post_json, actor_id, visibility, is_incoming_dm, mentioned_ids)
             except Exception as e:
                 logger.warning("timeline broadcast failed: %s", e)
 
