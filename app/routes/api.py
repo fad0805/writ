@@ -1620,6 +1620,10 @@ def api_like_post(request: Request, post_id: int):
             s.add(Like(user_id=user.id, post_id=post_id))
             if post.author_id != user.id and not existing_notif:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
+            s.flush()
+            keep_id = s.query(Like.id).filter_by(user_id=user.id, post_id=post_id).order_by(Like.id.desc()).first()
+            if keep_id:
+                s.query(Like).filter(Like.user_id == user.id, Like.post_id == post_id, Like.id != keep_id[0]).delete(synchronize_session=False)
             s.commit()
             if post.author_id != user.id:
                 broadcast_refresh_notifs(post.author_id)
@@ -1890,17 +1894,20 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
         reactions_disabled = not settings.enable_reactions or not getattr(post.author, 'enable_reactions', True)
         final_emoji = emoji if not reactions_disabled else None
         existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
+        is_new = existing is None
         existing_notif = s.query(Notification).filter_by(
             user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id
         ).first() if post.author_id != user.id else None
-        is_new = False
         if existing:
             existing.reaction = final_emoji
         else:
             s.add(Like(user_id=user.id, post_id=post_id, reaction=final_emoji))
             if post.author_id != user.id and not existing_notif:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
-            is_new = True
+        s.flush()
+        keep_id = s.query(Like.id).filter_by(user_id=user.id, post_id=post_id).order_by(Like.id.desc()).first()
+        if keep_id:
+            s.query(Like).filter(Like.user_id == user.id, Like.post_id == post_id, Like.id != keep_id[0]).delete(synchronize_session=False)
         s.commit()
         if post.author_id != user.id:
             from app.timeline_stream import broadcast_refresh_notifs

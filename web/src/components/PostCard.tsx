@@ -680,10 +680,16 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
                     setLikesCount(Math.max(0, likesCount - 1));
                   } else {
                     await api.react(post.id, emoji);
-                    setReactions({ ...reactions, [emoji]: (reactions[emoji] || 0) + 1 });
+                    const next = { ...reactions };
+                    if (myReaction && myReaction !== emoji) {
+                      if ((next[myReaction] || 0) <= 1) delete next[myReaction];
+                      else next[myReaction] -= 1;
+                    }
+                    next[emoji] = (next[emoji] || 0) + 1;
+                    setReactions(next);
                     setMyReaction(emoji);
                     setLiked(true);
-                    setLikesCount(likesCount + 1);
+                    setLikesCount(myReaction ? likesCount : likesCount + 1);
                   }
                 }}
                 style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 12, fontSize: 13, cursor: emojiIsRemote ? "default" : "pointer", border: "1px solid var(--border)", background: myReaction === emoji ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-secondary)", opacity: emojiIsRemote ? 0.5 : 1 }}
@@ -717,10 +723,16 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
               <EmojiPicker onEmoji={async (emoji) => {
                 try {
                   await api.react(post.id, emoji);
-                  setReactions({ ...reactions, [emoji]: (reactions[emoji] || 0) + 1 });
+                  const next = { ...reactions };
+                  if (myReaction && myReaction !== emoji) {
+                    if ((next[myReaction] || 0) <= 1) delete next[myReaction];
+                    else next[myReaction] -= 1;
+                  }
+                  next[emoji] = (next[emoji] || 0) + 1;
+                  setReactions(next);
                   setMyReaction(emoji);
                   setLiked(true);
-                  setLikesCount(likesCount + 1);
+                  setLikesCount(myReaction ? likesCount : likesCount + 1);
                 } catch {}
               }} />
             </span>
