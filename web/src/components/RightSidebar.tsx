@@ -26,8 +26,9 @@ export default function RightSidebar() {
 
   useEffect(() => {
     if (!user) return;
-    api.getMyNovels().then((d) => setNovels(d.novels)).catch(() => {});
-    api.getNotifications(undefined, 10, 0).then((d) => setNotifs(d.notifications)).catch(() => {});
+    let cancelled = false;
+    api.getMyNovels().then((d) => { if (!cancelled) setNovels(d.novels); }).catch(() => {});
+    api.getNotifications(undefined, 10, 0).then((d) => { if (!cancelled) setNotifs(d.notifications); }).catch(() => {});
     const es = new EventSource("/api/notifications/stream");
     es.onmessage = (event) => {
       if (event.data === "refresh") {
@@ -38,7 +39,7 @@ export default function RightSidebar() {
       }
     };
     es.onerror = () => {};
-    return () => { es.close(); };
+    return () => { cancelled = true; es.close(); };
   }, [user, refreshKey]);
 
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
