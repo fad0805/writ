@@ -30,6 +30,7 @@ export default function Sidebar() {
   const [sidebarServerName, setSidebarServerName] = useState("WRIT");
   const [sidebarLogo, setSidebarLogo] = useState("");
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
+  const [timelineTab, setTimelineTab] = useState("home");
 
   useEffect(() => {
     fetch("/api/server-info")
@@ -44,6 +45,9 @@ export default function Sidebar() {
       document.body.classList.add("dark-theme");
       setIsDark(true);
     }
+  }, []);
+  useEffect(() => {
+    if (typeof localStorage !== "undefined") setTimelineTab(localStorage.getItem("lastTimelineTab") || "home");
   }, []);
   useEffect(() => {
     if (!user) return;
@@ -108,7 +112,7 @@ export default function Sidebar() {
 
   const isActive = (href: string) => {
     if (!pathname) return false;
-    if (pathname.startsWith("/timeline")) return href.startsWith("/timeline");
+    if (href === "/timeline/home") return pathname.startsWith("/timeline");
     if (href === "/series/my") return pathname === "/series/my";
     if (href === "/series") return pathname === "/series";
     if (user && href === `/@${user.username}`) return pathname === `/@${user.username}`;
@@ -247,7 +251,7 @@ export default function Sidebar() {
         </div>
       </Link>
       <ul className="nav-links">
-        <NavItem href={`/timeline/${typeof localStorage !== "undefined" ? (localStorage.getItem("lastTimelineTab") || "home") : "home"}`} active={pathname.startsWith("/timeline")}>
+        <NavItem href={`/timeline/${timelineTab}`} active={pathname.startsWith("/timeline")}>
           <Icon name="home_solid" /> 타임라인
         </NavItem>
         <NavItem href="/notifications" active={isActive("/notifications")}>
