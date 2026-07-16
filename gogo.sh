@@ -1124,33 +1124,46 @@ with get_session() as s:
             parsed = urlparse(u.remote_url or "")
             if parsed.hostname and parsed.hostname.lower() == own_domain.lower():
                 print(f"  shadow: id={u.id} username={u.username} remote_url={u.remote_url}")
+                uid = u.id
+                # Delete dependent rows first, one table at a time with rollback on error
                 for table, fk in [(Follow, "follower_id"), (Follow, "following_id"),
-                                  (Post, "author_id"), (Like, "user_id"), (Boost, "user_id"),
-                                  (Bookmark, "user_id"), (Vote, "user_id"),
                                   (Notification, "user_id"), (Notification, "from_user_id"),
+                                  (Like, "user_id"), (Boost, "user_id"),
+                                  (Bookmark, "user_id"), (Vote, "user_id"),
                                   (UserBlock, "user_id"), (UserBlock, "target_user_id"),
                                   (UserMute, "user_id"), (UserMute, "target_user_id")]:
                     try:
-                        s.query(table).filter_by(**{fk: u.id}).update({fk: None})
-                    except Exception:
-                        pass
-                s.delete(u)
-                deleted += 1
-        s.commit()
+                        n = s.query(table).filter_by(**{fk: uid}).delete()
+                        s.commit()
+                        if n: print(f"    deleted {n} {table.__name__} rows")
+                    except Exception as e:
+                        s.rollback()
+                        print(f"    skip {table.__name__}: {e}")
+                # Nullify FK on Post (author_id) — set to first local user
+                try:
+                    local_user = s.query(User).filter_by(is_remote=False).first()
+                    s.query(Post).filter_by(author_id=uid).update({"author_id": local_user.id if local_user else uid})
+                    s.commit()
+                except Exception as e:
+                    s.rollback()
+                    print(f"    skip Post.author_id: {e}")
+                # Now delete the user
+                try:
+                    s.delete(u)
+                    s.commit()
+                    deleted += 1
+                    print(f"    deleted user id={uid}")
+                except Exception as e:
+                    s.rollback()
+                    print(f"    failed to delete user: {e}")
         print(f"deleted {deleted} shadow users")
 
-        # Also fix posts with mentioned_user_ids pointing to deleted shadows
+        # Fix posts with mentioned_user_ids pointing to deleted shadows
         remaining_remote = {u.id for u in s.query(User).filter(User.is_remote == True).all()}
         fixed = 0
         for p in s.query(Post).filter(Post.mentioned_user_ids.isnot(None)).all():
             if p.mentioned_user_ids:
-                new_ids = [mid for mid in p.mentioned_user_ids if mid in remaining_remote or mid == mid]
-                # Replace shadow IDs with local matching users
-                final_ids = []
-                for mid in new_ids:
-                    if mid not in remaining_remote:
-                        continue
-                    final_ids.append(mid)
+                final_ids = [mid for mid in p.mentioned_user_ids if mid in remaining_remote]
                 if final_ids != p.mentioned_user_ids:
                     p.mentioned_user_ids = final_ids
                     fixed += 1

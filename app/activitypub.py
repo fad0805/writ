@@ -681,8 +681,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             return user
         # Fallback: normalize /@username -> /users/username
         if not user:
-            from urllib.parse import urlparse as _up
-            p = _up(actor_url)
+            p = urlparse(actor_url)
             if "/@" in p.path:
                 alt_url = f"{p.scheme}://{p.netloc}/users/{p.path.split('/@')[-1]}"
                 user = session.query(User).filter_by(remote_url=alt_url).first()
@@ -694,7 +693,6 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
         try:
             import datetime, time
             from app.crypto_utils import sign_string, get_private_key
-            from urllib.parse import urlparse
             date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
             parsed = urlparse(actor_url)
             created = int(time.time())
