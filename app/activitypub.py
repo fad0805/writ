@@ -1634,25 +1634,20 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 logger.warning("broadcast failed: %s", e)
             try:
                 from app.timeline_stream import broadcast_post
+                from app.models import CustomEmoji as _CustomEmoji
                 author = post.author
-                _broadcast_emojis = []
+                _ap_emoji_kws = set()
                 for _tag in (obj.get("tag", []) or []):
                     if not isinstance(_tag, dict) or _tag.get("type") != "Emoji":
                         continue
                     _name = _tag.get("name", "")
-                    if not _name.startswith(":") or not _name.endswith(":"):
-                        continue
-                    _kw = _name[1:-1].strip().lower().replace(" ", "_")
-                    _icon = _tag.get("icon", {})
-                    if isinstance(_icon, list):
-                        _icon = _icon[0] if _icon else {}
-                    _url = ""
-                    if isinstance(_icon, dict):
-                        _url = _icon.get("url", "") or _icon.get("href", "")
-                    elif isinstance(_icon, str):
-                        _url = _icon
-                    if _kw and _url:
-                        _broadcast_emojis.append({"keyword": _kw, "file_name": _url.split("/")[-1], "url": _url, "aliases": []})
+                    if _name.startswith(":") and _name.endswith(":"):
+                        _ap_emoji_kws.add(_name[1:-1].strip().lower().replace(" ", "_"))
+                _broadcast_emojis = []
+                if _ap_emoji_kws:
+                    for e in session.query(_CustomEmoji).filter(_CustomEmoji.keyword.in_(_ap_emoji_kws)).all():
+                        _sub = "remote" if e.domain or e.category == "remote" else "local"
+                        _broadcast_emojis.append({"keyword": e.keyword, "file_name": e.file_name, "url": f"/emojis/{_sub}/{e.file_name}", "aliases": e.aliases or []})
                 _reply_ctx = None
                 if reply_to_post and not getattr(reply_to_post, 'is_deleted', False):
                     _rp_author = reply_to_post.author
