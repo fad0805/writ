@@ -45,7 +45,7 @@ def remove_stream(sid: int):
 
 def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, post_is_dm: bool, mentioned_ids = None):
     try:
-        if post_visibility not in ("public", "home", "followers") or not _streams:
+        if post_visibility not in ("public", "home", "followers", "mention") or not _streams:
             return
 
         # content가 dict 타입으로 잘못 유입되었는지 방어 코드 추가
@@ -92,10 +92,10 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
             for sid, info in list(_streams.items()):
                 uid = info["user_id"]
                 tl = info["tl_type"]
-                if not _should_deliver_fast(uid, tl, post_author_id, post_visibility, follower_ids, booster_ids, author_is_local):
+                if not _should_deliver_fast(uid, tl, post_author_id, post_visibility, follower_ids, booster_ids, author_is_local, mentioned_ids):
                     continue
-                # Additional filtering for home/social timeline
-                if tl in ("home", "social"):
+                # Additional filtering for home/social timeline (skip for mention visibility - targeted delivery)
+                if tl in ("home", "social") and post_visibility != "mention":
                     user_follows = home_follows.get(uid, set()) | {uid}
                     content = post_json.get("content") or ""
                     # [1] 멘션 필터링 (DB ID 기반 + 리모트 HTML 본문 정규식 검사)
@@ -183,16 +183,22 @@ def broadcast_delete(post_id: int):
 
 
 def _should_deliver_fast(user_id: int, tl_type: str, author_id: int, visibility: str,
-                         follower_ids: set[int], booster_ids: set[int], author_is_local: bool) -> bool:
+                         follower_ids: set[int], booster_ids: set[int], author_is_local: bool,
+                         mentioned_ids: list[int] | None = None) -> bool:
+    mentioned_set = set(mentioned_ids) if mentioned_ids else set()
     if tl_type == "home":
         if user_id == author_id:
             return True
+        if visibility == "mention":
+            return user_id in mentioned_set
         if visibility in ("public", "home", "followers"):
             return user_id in follower_ids or user_id in booster_ids
         return False
     elif tl_type == "social":
         if user_id == author_id:
             return True
+        if visibility == "mention":
+            return user_id in mentioned_set
         if visibility == "public":
             return True
         if visibility in ("home", "followers"):
