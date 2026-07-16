@@ -103,7 +103,7 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                     # 1-A. 페이로드에 명시된 멘션 ID 목록 검사
                     if mentioned_ids:
                         for muid in mentioned_ids:
-                            if muid != post_author_id and muid not in user_follows:
+                            if muid != post_author_id and muid not in user_follows and muid != uid:
                                 skip_mention = True
                                 break
                     # 1-B. 리모트 글인 경우, 본문 HTML 태그에서 내가 팔로우하지 않는 제3자에게 쏘는 멘션 링크 검사

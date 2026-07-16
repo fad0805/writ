@@ -638,7 +638,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             or_(
                 Post.author_id.in_(final),
                 Post.id.in_(boosted_ids),
-                and_(_mentioned_self, Post.visibility.in_(("followers", "mention", "home", "public", "unlisted"))),
+                and_(_mentioned_self, Post.visibility.in_(("followers", "mention", "home"))),
             ),
             Post.is_deleted == False,
             or_(Post.visibility != "home", Post.author_id.in_(final), _mentioned_self),
@@ -776,7 +776,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
 
             if p.mentioned_user_ids:
                 for muid in p.mentioned_user_ids:
-                    if muid != p.author_id and muid != user.id and muid not in _following_ids_set:
+                    if muid != p.author_id and muid != user.id and muid not in _following_ids_set and muid != user.id:
                         if user.id not in p.mentioned_user_ids:
                             skip = True
                             break
