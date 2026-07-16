@@ -1660,6 +1660,7 @@ def api_like_post(request: Request, post_id: int):
                 like_rec.ap_id = like_id
                 s.commit()
             reaction = like_rec.reaction if like_rec else None
+            _react = reaction or "★"
             like_activity = {
                 "@context": "https://www.w3.org/ns/activitystreams",
                 "id": like_id,
@@ -1668,7 +1669,8 @@ def api_like_post(request: Request, post_id: int):
                 "object": post.ap_id,
                 "to": [post.author.actor_uri()],
                 "cc": [],
-                "_misskey_reaction": reaction or "★",
+                "content": _react,
+                "_misskey_reaction": _react,
             }
             inbox = post.author.shared_inbox_url
             try:
@@ -1706,6 +1708,7 @@ def api_unlike_post(request: Request, post_id: int):
                     "type": "Like",
                     "actor": user.actor_uri(),
                     "object": post.ap_id,
+                    "content": existing_reaction or "★",
                     "_misskey_reaction": existing_reaction or "★",
                 },
             }
@@ -1940,14 +1943,24 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
             broadcast_refresh_notifs(post.author_id)
         if post.author.is_remote and post.author.shared_inbox_url:
             from app.activitypub import _post_to_inbox
+            _tag = []
+            if emoji.startswith(":") and emoji.endswith(":"):
+                _kw = emoji[1:-1]
+                _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw).first()
+                _emoji_url = f"{BASE_URL}/emojis/{_emoji_row.file_name}" if _emoji_row and _emoji_row.file_name else ""
+                if _emoji_url:
+                    _tag = [{"type": "Emoji", "name": emoji, "icon": {"type": "Image", "mediaType": "image/png", "url": _emoji_url}}]
             like_activity = {
                 "@context": "https://www.w3.org/ns/activitystreams",
                 "id": f"{BASE_URL}/likes/{uuid.uuid4()}",
                 "type": "Like",
                 "actor": user.actor_uri(),
                 "object": post.ap_id,
+                "content": emoji,
                 "_misskey_reaction": emoji,
             }
+            if _tag:
+                like_activity["tag"] = _tag
             if is_new or (existing and existing.reaction != emoji):
                 inbox = post.author.shared_inbox_url
                 try:
@@ -1985,6 +1998,7 @@ def api_unreact_post(request: Request, post_id: int):
                         "type": "Like",
                         "actor": user.actor_uri(),
                         "object": post.ap_id,
+                        "content": existing_reaction or "★",
                         "_misskey_reaction": existing_reaction or "★",
                     },
                 }

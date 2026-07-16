@@ -1748,7 +1748,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
     actor_url = raw_actor if isinstance(raw_actor, str) else raw_actor[0]
     object_url = activity["object"] if isinstance(activity.get("object"), str) else ""
     activity_id = activity.get("id", "")
-    reaction = activity.get("_misskey_reaction", activity.get("reaction", ""))
+    reaction = activity.get("_misskey_reaction", activity.get("content", activity.get("reaction", "")))
 
     if not object_url:
         return (200, "OK")
