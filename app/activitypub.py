@@ -1896,6 +1896,7 @@ def _handle_vote(activity: dict) -> tuple[int, str]:
 
 
 def _handle_announce(activity: dict) -> tuple[int, str]:
+    print(f"activity: {activity}", flush=True)
     raw_actor = activity.get("actor")
     if not raw_actor:
         return (400, "Missing actor")
@@ -1990,6 +1991,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
             session.add(n)
 
         session.commit()
+        print(f'session: {session}', flush=True)
 
         # 5. 커밋 이후 외부 연동 (푸시 및 스트리밍) 처리
         if not existing_n:
@@ -2031,6 +2033,8 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                     "aliases": (u.aliases or []) if hasattr(u, 'aliases') else [],
                     "moved_to": getattr(u, "moved_to", "") or "",
                 }
+            print("_a:" + _safe_user_json(_a), flush=True)
+            print("_actor:" +_safe_user_json(_actor), flush=True)
             broadcast_post({
                 "id": boost_post.id,
                 "number": post.number or "",
