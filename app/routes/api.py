@@ -1947,9 +1947,13 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
             if emoji.startswith(":") and emoji.endswith(":"):
                 _kw = emoji[1:-1]
                 _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw).first()
-                _emoji_url = f"{BASE_URL}/emojis/{_emoji_row.file_name}" if _emoji_row and _emoji_row.file_name else ""
+                if _emoji_row and _emoji_row.file_name:
+                    _sub = "remote" if _emoji_row.domain or _emoji_row.category == "remote" else "local"
+                    _emoji_url = f"{BASE_URL}/emojis/{_sub}/{_emoji_row.file_name}"
+                else:
+                    _emoji_url = ""
                 if _emoji_url:
-                    _tag = [{"type": "Emoji", "name": emoji, "icon": {"type": "Image", "mediaType": "image/png", "url": _emoji_url}}]
+                    _tag = [{"type": "Emoji", "id": f"{BASE_URL}/emojis/{_kw}", "name": emoji, "icon": {"type": "Image", "mediaType": "image/png", "url": _emoji_url}}]
             like_activity = {
                 "@context": "https://www.w3.org/ns/activitystreams",
                 "id": f"{BASE_URL}/likes/{uuid.uuid4()}",
