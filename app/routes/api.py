@@ -1829,7 +1829,8 @@ def api_unboost_post(request: Request, post_id: int):
             if remaining == 0:
                 post.bumped_at = None
             s.commit()
-            broadcast_refresh_notifs(post.author_id)
+            if post.author_id != user.id:
+                broadcast_refresh_notifs(post.author_id)
         if post.author and post.author.is_remote and post.author.shared_inbox_url:
             undo = {
                 "@context": "https://www.w3.org/ns/activitystreams",

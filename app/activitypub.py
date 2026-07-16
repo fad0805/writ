@@ -1988,9 +1988,39 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
 
         try:
             from app.timeline_stream import broadcast_post
-            from app.routes.api import _user_json
             _a = post.author
             _actor = session.query(User).get(actor_id)
+            def _safe_user_json(u):
+                if not u:
+                    return None
+                role = getattr(u, 'role', 'user') or 'user'
+                return {
+                    "id": u.id, "username": u.username,
+                    "display_name": u.display_name or u.username,
+                    "avatar": u.profile_image or "", "header": u.header_image or "",
+                    "summary": u.summary or "", "is_admin": u.is_admin,
+                    "is_locked": getattr(u, "is_locked", False) or False,
+                    "is_limited": getattr(u, "is_limited", False) or False,
+                    "is_frozen": getattr(u, "is_frozen", False) or False,
+                    "is_deceased": getattr(u, "is_deceased", False) or False,
+                    "is_deactivated": getattr(u, "is_deactivated", False) or False,
+                    "is_sensitive": getattr(u, "is_sensitive", False) or False,
+                    "is_remote": u.is_remote, "role": role,
+                    "show_badge": getattr(u, "show_badge", False) or False,
+                    "email_verified": getattr(u, "email_verified", False) or False,
+                    "default_visibility": getattr(u, "default_visibility", "public") or "public",
+                    "display_handle": getattr(u, "display_handle", "") or "",
+                    "is_bot": getattr(u, "is_bot", False) or False,
+                    "pinned_posts": (u.pinned_posts or []) if hasattr(u, 'pinned_posts') else [],
+                    "pinned_series": (u.pinned_series or []) if hasattr(u, 'pinned_series') else [],
+                    "episode_default_visibility": getattr(u, "episode_default_visibility", "public") or "public",
+                    "follow_list_visibility": getattr(u, "follow_list_visibility", "public") or "public",
+                    "custom_fields": (u.custom_fields or []) if hasattr(u, 'custom_fields') else [],
+                    "profile_hashtags": (u.profile_hashtags or []) if hasattr(u, 'profile_hashtags') else [],
+                    "enable_reactions": getattr(u, "enable_reactions", True),
+                    "aliases": (u.aliases or []) if hasattr(u, 'aliases') else [],
+                    "moved_to": getattr(u, "moved_to", "") or "",
+                }
             broadcast_post({
                 "id": boost_post.id,
                 "number": post.number or "",
@@ -1998,7 +2028,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                 "summary": post.summary or "",
                 "visibility": post.visibility or "public",
                 "created_at": post.created_at.isoformat() if post.created_at else "",
-                "author": _user_json(_a),
+                "author": _safe_user_json(_a),
                 "likes_count": session.query(Like).filter_by(post_id=post.id).count(),
                 "boosts_count": session.query(Boost).filter_by(post_id=post.id).count(),
                 "replies_count": session.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count(),
@@ -2008,7 +2038,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                 "poll_data": post.poll_data, "my_vote": None,
                 "reactions": _build_reactions(session, post.id),
                 "my_reaction": None,
-                "boosted_by": _user_json(_actor) if _actor else None,
+                "boosted_by": _safe_user_json(_actor),
                 "mentioned_user_ids": [],
             }, post.author_id, post.visibility or "public", False)
         except Exception as e:
