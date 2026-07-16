@@ -108,7 +108,7 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                                 break
                     # 1-B. 리모트 글인 경우, 본문 HTML 태그에서 내가 팔로우하지 않는 제3자에게 쏘는 멘션 링크 검사
                     # (리모트 글은 언급 ID가 비어있는 채로 오기 때문에 HTML 본문을 직접 뜯어야 합니다)
-                    if not skip_mention and content and author_is_local is False and uid not in mentioned_set:
+                    if not skip_mention and content and author_is_local is False and uid not in set(mentioned_ids):
                         import re as _re
                         # href 내부에 클래스명이 mention인 앵커 태그들의 URL 추출
                         mentions_in_html = _re.findall(r'<a\s+[^>]*href="([^"]+)"[^>]*class="[^"]*mention[^"]*"[^>]*>', content)
