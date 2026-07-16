@@ -282,6 +282,7 @@ def _json_array_has_user(column, user_id):
 
 def _parse_mentions(content):
     mentioned = set(re.findall(r'@([a-zA-Z0-9_]+(?:@[a-zA-Z0-9.-]+)?)', content))
+    print(f"[_parse_mentions] content[:200]={content[:200]!r} handles={mentioned}", flush=True)
     if not mentioned:
         return []
     with get_session() as s:
@@ -298,6 +299,7 @@ def _parse_mentions(content):
                     parsed = _urlparse(u.remote_url)
                     if parsed.hostname and parsed.hostname.lower() == domain.lower():
                         user_ids.append(u.id)
+                        print(f"[_parse_mentions] REMOTE OK: handle={handle} -> uid={u.id} username={u.username}", flush=True)
                         continue
                 # username may contain @domain, try like + domain check
                 candidates = s.query(User).filter(
@@ -309,11 +311,18 @@ def _parse_mentions(content):
                         _p = _urlparse(_c.remote_url)
                         if _p.hostname and _p.hostname.lower() == domain.lower():
                             user_ids.append(_c.id)
+                            print(f"[_parse_mentions] REMOTE CANDIDATE: handle={handle} -> uid={_c.id} username={_c.username}", flush=True)
                             break
+                else:
+                    print(f"[_parse_mentions] REMOTE MISS: handle={handle} (local_part={local_part} domain={domain})", flush=True)
             else:
                 u = s.query(User).filter(User.username == handle, User.is_remote == False).first()
                 if u:
                     user_ids.append(u.id)
+                    print(f"[_parse_mentions] LOCAL OK: handle={handle} -> uid={u.id} username={u.username}", flush=True)
+                else:
+                    print(f"[_parse_mentions] LOCAL MISS: handle={handle}", flush=True)
+        print(f"[_parse_mentions] RESULT: user_ids={user_ids}", flush=True)
         return user_ids
 
 
