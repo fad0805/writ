@@ -15,6 +15,7 @@ export function installCodeCopyButtons(container: HTMLElement) {
         btn.textContent = "Copied!";
         setTimeout(() => { btn.textContent = "Copy"; }, 1500);
       } catch {
+        // Fallback for older browsers / non-HTTPS
         btn.textContent = "Failed";
         setTimeout(() => { btn.textContent = "Copy"; }, 1500);
       }

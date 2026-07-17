@@ -743,15 +743,16 @@ input:focus {
   font-size: 11px;
   color: var(--text-muted);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s;
   z-index: 2;
+  opacity: 0.7;
+  transition: opacity 0.15s;
 }
 .post-content pre:hover .code-copy-btn,
 .episode-body pre:hover .code-copy-btn {
   opacity: 1;
 }
 .code-copy-btn:hover {
+  opacity: 1;
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
