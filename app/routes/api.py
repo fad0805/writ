@@ -4455,12 +4455,6 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
     user = get_current_user(request)
     with get_session() as s:
         local_ids = s.query(User.id).filter_by(is_remote=False).subquery()
-        total = s.query(Post).filter(
-            Post.author_id.in_(local_ids),
-            Post.visibility == "public",
-            Post.is_deleted == False,
-            Post.in_reply_to_id == None,
-        ).count()
         posts = s.query(Post).options(
             selectinload(Post.author)
         ).filter(
@@ -4468,7 +4462,17 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
             Post.visibility == "public",
             Post.is_deleted == False,
             Post.in_reply_to_id == None,
-        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit).all()
+        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
+        has_more = len(posts) > limit
+        posts = posts[:limit]
+
+        post_ids = [p.id for p in posts]
+        if user and post_ids:
+            _liked_ids = {l.post_id for l in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(post_ids)).all()}
+            _boosted_ids = {b.post_id for b in s.query(Boost).filter(Boost.user_id == user.id, Boost.post_id.in_(post_ids)).all()}
+            _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(post_ids)).all()}
+        else:
+            _liked_ids = _boosted_ids = _bookmarked_ids = set()
 
         novels = _apply_latest_activity_order(s.query(Novel).options(
             selectinload(Novel.author),
@@ -4479,8 +4483,8 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
         ), s).limit(20).all()
 
         return {
-            "posts": [_post_json(p, s, user) for p in posts],
-            "has_more": offset + limit < total,
+            "posts": [_post_json(p, s, user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids) for p in posts],
+            "has_more": has_more,
             "novels": [_novel_json(n, s) for n in novels],
         }
 
