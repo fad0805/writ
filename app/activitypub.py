@@ -1238,6 +1238,34 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     except Exception:
         session.rollback()
         return session.query(Post).filter_by(ap_id=ap_id).first()
+
+    # 원격 포스트에 포함된 URL의 링크 미리보기 fetch
+    import re as _re
+    _url_match = _re.search(r'https?://[^\s<>"\')\]]+', content or "")
+    if _url_match:
+        _url = _url_match.group(0)
+        try:
+            import httpx as _httpx
+            _resp = _httpx.get(_url, headers={"User-Agent": "WRIT/1.0"}, timeout=5, follow_redirects=True)
+            if _resp.status_code == 200:
+                _html = _resp.text
+                def _og(n):
+                    _m = _re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', _html, _re.I)
+                    if not _m:
+                        _m = _re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', _html, _re.I)
+                    return _m.group(1) if _m else ""
+                _og_title = _og("title") or (_re.search(r'<title>([^<]*)</title>', _html, _re.I).group(1) if _re.search(r'<title>([^<]*)</title>', _html, _re.I) else "")
+                _og_desc = _og("description")
+                _og_img = _og("image")
+                if _og_img and _og_img.startswith("/"):
+                    from urllib.parse import urlparse as _up
+                    _p = _up(_url)
+                    _og_img = f"{_p.scheme}://{_p.netloc}{_og_img}"
+                if _og_title:
+                    post.link_preview = {"url": _url, "title": _og_title[:200], "description": _og_desc[:400] if _og_desc else "", "image": _og_img or ""}
+        except Exception:
+            pass
+
     return post
 
 
