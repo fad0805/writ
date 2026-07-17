@@ -273,6 +273,12 @@ class Post(Base):
         from urllib.parse import urlparse
         content = self.content
 
+        # Code blocks (```) must be converted before bold/italic
+        content = re.sub(r'```(\w*)\r?\n([\s\S]*?)```', lambda m: f'<pre><code>{m.group(2)}</code></pre>', content)
+        content = re.sub(r'```([^`\n]+?)```', r'<pre><code>\1</code></pre>', content)
+        # Inline code (single backtick) — after code blocks so ``` aren't caught
+        content = re.sub(r'`([^`\n]+?)`', r'<code>\1</code>', content)
+
         content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', content)
         content = re.sub(r'\*(.+?)\*', r'<em>\1</em>', content)
         content = content.replace('\n', '<br>')
