@@ -979,16 +979,22 @@ def api_get_post(request: Request, post_id: int):
             raise HTTPException(status_code=404, detail="Post not found")
         if not _can_view(post, user, s):
             raise HTTPException(status_code=403, detail="Cannot view this post")
-        result = _post_json(post, s, user)
+        main_liked_ids = {post.id} if user and s.query(Like).filter_by(user_id=user.id, post_id=post.id).first() else set()
+        main_boosted_ids = {post.id} if user and s.query(Boost).filter_by(user_id=user.id, post_id=post.id).first() else set()
+        main_bookmarked_ids = {post.id} if user and s.query(Bookmark).filter_by(user_id=user.id, post_id=post.id).first() else set()
+        result = _post_json(post, s, user, _liked_ids=main_liked_ids, _boosted_ids=main_boosted_ids, _bookmarked_ids=main_bookmarked_ids)
         if user and post.author_id != user.id:
             result["is_following_author"] = s.query(Follow).filter_by(
                 follower_id=user.id, following_id=post.author_id, accepted=True
             ).first() is not None
         else:
             result["is_following_author"] = False
+        limit = min(int(request.query_params.get("reply_limit", 5)), 50)
+        offset = int(request.query_params.get("reply_offset", 0))
         descendant_ids = set()
         queue = [post_id]
-        while queue:
+        max_fetch = offset + limit + 200
+        while queue and len(descendant_ids) < max_fetch:
             pid = queue.pop(0)
             child_ids = [r[0] for r in s.query(Post.id).filter(
                 Post.in_reply_to_id == pid, Post.is_deleted == False
@@ -1001,8 +1007,6 @@ def api_get_post(request: Request, post_id: int):
         total_descendants = len(descendant_ids)
         result["total_replies"] = direct_count
         result["total_descendants"] = total_descendants
-        limit = min(int(request.query_params.get("reply_limit", 5)), 50)
-        offset = int(request.query_params.get("reply_offset", 0))
         reply_ids = sorted(descendant_ids)[offset:offset + limit]
         if reply_ids:
             descendants = s.query(Post).options(
@@ -1025,10 +1029,23 @@ def api_get_post(request: Request, post_id: int):
         result["has_more_replies"] = offset + limit < total_descendants
         ancestors = []
         cur = post.parent
+        ancestor_ids = []
         while cur:
             if not cur.is_deleted:
-                ancestors.insert(0, _post_json(cur, s, user))
+                ancestor_ids.append(cur.id)
             cur = cur.parent
+        if ancestor_ids:
+            if user:
+                _anc_liked = {a[0] for a in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(ancestor_ids)).all()}
+                _anc_boosted = {a[0] for a in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(ancestor_ids)).all()}
+                _anc_bookmarked = {a[0] for a in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(ancestor_ids)).all()}
+            else:
+                _anc_liked = _anc_boosted = _anc_bookmarked = set()
+            cur = post.parent
+            while cur:
+                if not cur.is_deleted:
+                    ancestors.insert(0, _post_json(cur, s, user, _liked_ids=_anc_liked, _boosted_ids=_anc_boosted, _bookmarked_ids=_anc_bookmarked))
+                cur = cur.parent
         if not ancestors and post.in_reply_to_ap_id:
             parent = s.query(Post).filter_by(ap_id=post.in_reply_to_ap_id).first()
             if parent:
