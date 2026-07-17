@@ -32,7 +32,7 @@ export default function FollowersPage() {
           <Link key={u.id} href={`/@${u.username}`} className="post-card user-row-card">
             <Avatar user={u} className="post-author-avatar flex items-center justify-center text-white font-bold" />
             <div>
-              <div className="post-author" dangerouslySetInnerHTML={{ __html: renderCustomEmojis(u.display_name, emojiMap) }} />
+              <div className="post-author" dangerouslySetInnerHTML={{ __html: renderCustomEmojis(u.display_name, emojiMap, 14) }} />
               <div className="post-username">@{u.username}</div>
             </div>
           </Link>
