@@ -2874,8 +2874,8 @@ def _background_import_emoji(url: str, keyword: str, domain: str):
             if not _existing:
                 _es.add(CustomEmoji(keyword=keyword, file_name=_fname, category="remote", domain=domain))
                 _es.commit()
-                from app.routes.api import _invalidate_emoji_cache
-                _invalidate_emoji_cache()
+                from app.routes.api import _refresh_emoji_cache_forcibly
+                _refresh_emoji_cache_forcibly(_es)
     except Exception as e:
         logger.warning("Background emoji import failed %s: %s", keyword, e)
 

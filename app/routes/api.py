@@ -5104,10 +5104,22 @@ EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public",
 _emoji_cache = {"data": None, "ts": 0}
 _EMOJI_CACHE_TTL = 60  # seconds
 
-
-def _invalidate_emoji_cache():
-    _emoji_cache["data"] = None
-    _emoji_cache["ts"] = 0
+def _refresh_emoji_cache_forcibly(session):
+    import time
+    emojis = session.query(CustomEmoji).all()
+    # 딕셔너리 형태로 안전하게 직렬화
+    serialized = [{
+        "id": e.id,
+        "keyword": e.keyword,
+        "file_name": e.file_name,
+        "category": e.category,
+        "aliases": list(e.aliases) if e.aliases else [],
+        "url": _emoji_url(e.file_name, e.domain or "", e.category or ""),
+        "source_url": e.source_url or "",
+        "domain": e.domain or ""
+    } for e in emojis]
+    _emoji_cache["data"] = serialized
+    _emoji_cache["ts"] = time.time()
 
 _emoji_storage = None
 
@@ -5266,7 +5278,7 @@ def api_create_emoji(
         )
         s.add(emoji)
         s.commit()
-        _invalidate_emoji_cache()
+        _refresh_emoji_cache_forcibly(s)
         return {
             "id": emoji.id,
             "keyword": emoji.keyword,
@@ -5297,7 +5309,7 @@ def api_update_emoji(request: Request, emoji_id: int, category: str = Form(""), 
             emoji.category = category
         emoji.aliases = [a.strip().lower().replace(" ", "_") for a in aliases.split(",") if a.strip()]
         s.commit()
-        _invalidate_emoji_cache()
+        _refresh_emoji_cache_forcibly(s)
         return {"ok": True, "emoji": {"id": emoji.id, "keyword": emoji.keyword, "file_name": emoji.file_name, "category": emoji.category, "aliases": emoji.aliases or [], "url": _emoji_url(emoji.file_name, emoji.domain or "", emoji.category or ""), "source_url": emoji.source_url or "", "domain": emoji.domain or ""}}
 
 @router.post("/emojis/{emoji_id}/copy")
@@ -5343,7 +5355,7 @@ def api_copy_emoji(request: Request, emoji_id: int):
         copy = CustomEmoji(keyword=new_kw, file_name=_new_fname, category="기본", aliases=src.aliases or [])
         s.add(copy)
         s.commit()
-        _invalidate_emoji_cache()
+        _refresh_emoji_cache_forcibly(s)
         return {"ok": True, "emoji": {"id": copy.id, "keyword": copy.keyword, "file_name": copy.file_name, "category": copy.category, "aliases": copy.aliases or [], "url": _emoji_url(copy.file_name, "", copy.category or ""), "source_url": copy.source_url or "", "domain": copy.domain or ""}}
 
 @router.delete("/emojis/{emoji_id}")
@@ -5366,7 +5378,7 @@ def api_delete_emoji(request: Request, emoji_id: int):
             os.remove(file_path)
         s.delete(emoji)
         s.commit()
-        _invalidate_emoji_cache()
+        _refresh_emoji_cache_forcibly(s)
     return {"ok": True}
 
 
