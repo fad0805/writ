@@ -1,6 +1,6 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { api, PostData } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import PostCard from "@/components/PostCard";
@@ -238,6 +238,9 @@ export default function TimelinePage() {
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
   if (!user) return <div className="empty-state">{authLoading ? "로딩 중..." : "로그인이 필요합니다"}</div>;
+
+  const filteredPosts = posts.filter((p) => !deletedIds.current.has(p.id));
+
   return (
     <>
       <div className="post-form post-form-desktop">
@@ -262,15 +265,18 @@ export default function TimelinePage() {
         ))}
       </div>
       <div className="feed">
-        {loading ? (
-          <p className="empty-state">로딩 중...</p>
-        ) : error ? (
+        {error ? (
           <p className="empty-state">오류: {error}</p>
-        ) : posts.length === 0 ? (
+        ) : !loading && filteredPosts.length === 0 ? (
           <p className="empty-state">표시할 글이 없습니다.</p>
         ) : (
-          <InfiniteScroll hasMore={hasMore} loadingMore={loadingMore} loadMore={loadMore}>
-            {posts.filter((p) => !deletedIds.current.has(p.id)).map((p, i) => <div key={p.id} ref={(el) => { cardRefs.current[i] = el; }}><PostCard post={p} onDelete={() => { deletedIds.current.add(p.id); setPosts((prev) => prev.filter((x) => x.id !== p.id)); }} onUpdate={(updated) => { if (updated) { setPosts((prev) => prev.map((x) => x.id === p.id ? updated : x)); } else { api.getPost(p.id).then((u) => setPosts((prev) => prev.map((x) => x.id === p.id ? u : x))).catch(() => {}); } }} onReply={(newPost) => { if (newPost) { setPosts((prev) => { if (prev.some((x) => x.id === newPost.id)) return prev; return [newPost, ...prev]; }); } }} selected={i === selectedIdx} /></div>)}
+          <InfiniteScroll hasMore={hasMore} loadingMore={loadingMore || loading} loadMore={loadMore}>
+            {filteredPosts.map((p, i) => (
+              <div key={p.id} ref={(el) => { if (el) cardRefs.current[i] = el; }}>
+                <PostCard post={p} onDelete={() => { deletedIds.current.add(p.id); setPosts((prev) => prev.filter((x) => x.id !== p.id)); }} onUpdate={(updated) => { if (updated) { setPosts((prev) => prev.map((x) => x.id === p.id ? updated : x)); } else { api.getPost(p.id).then((u) => setPosts((prev) => prev.map((x) => x.id === p.id ? u : x))).catch(() => {}); } }} onReply={(newPost) => { if (newPost) { setPosts((prev) => { if (prev.some((x) => x.id === newPost.id)) return prev; return [newPost, ...prev]; }); } }} selected={i === selectedIdx} />
+              </div>
+            ))}
+            {loading && <p className="empty-state">로딩 중...</p>}
           </InfiniteScroll>
         )}
       </div>
