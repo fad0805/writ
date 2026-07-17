@@ -2841,7 +2841,10 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
     limit = min(limit, 20)
     user = require_auth(request)
     with get_session() as s:
-        _generate_poll_end_notifications(user.id, s)
+        # 첫 페이지에서만 투표 마감 알림 생성
+        if offset == 0:
+            _generate_poll_end_notifications(user.id, s)
+
         q = s.query(Notification).options(
             selectinload(Notification.from_user),
             selectinload(Notification.post).selectinload(Post.author),
@@ -2857,29 +2860,36 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
         has_more = len(raw) > limit
         notifs = raw[:limit]
 
-        # Batch load user interaction data for notification posts
-        notif_post_ids = [n.post_id for n in notifs if n.post_id]
+        # 이미 로드된 Notification.post 객체를 재사용 (재조회 제거)
+        posts_cache = [n.post for n in notifs if n.post and not n.post.is_deleted]
+        notif_post_ids = [p.id for p in posts_cache]
+
+        _liked_ids = _boosted_ids = _bookmarked_ids = set()
+        _vote_map = _my_reaction_map = _reactions_map = _mentioned_users_map = {}
+
         if user and notif_post_ids:
-            _liked_ids = {l.post_id for l in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids)).all()}
-            _boosted_ids = {b.post_id for b in s.query(Boost).filter(Boost.user_id == user.id, Boost.post_id.in_(notif_post_ids)).all()}
-            _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(notif_post_ids)).all()}
-            _vote_map = {}
-            for v in s.query(Vote).filter(Vote.user_id == user.id, Vote.post_id.in_(notif_post_ids)).all():
+            _liked_ids = {l.post_id for l in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids)).all()}
+            _boosted_ids = {b.post_id for b in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(notif_post_ids)).all()}
+            _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(notif_post_ids)).all()}
+
+            for v in s.query(Vote.post_id, Vote.option_index).filter(Vote.user_id == user.id, Vote.post_id.in_(notif_post_ids)).all():
                 _vote_map[v.post_id] = v.option_index
-            _my_reaction_map = {}
-            for l in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids), Like.reaction.isnot(None)).all():
+
+            for l in s.query(Like.post_id, Like.reaction).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids), Like.reaction.isnot(None)).all():
                 _my_reaction_map[l.post_id] = l.reaction
+
             from sqlalchemy import func as _func
-            _reactions_map = {}
             for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(notif_post_ids)).group_by(Like.post_id, Like.reaction).all():
                 if pid not in _reactions_map:
                     _reactions_map[pid] = {}
                 _reactions_map[pid][react] = cnt
+
+            # posts_cache를 활용해 DB 재조회 제거
             all_mentioned_ids = set()
-            for p in s.query(Post).filter(Post.id.in_(notif_post_ids)).all():
+            for p in posts_cache:
                 if p.mentioned_user_ids:
                     all_mentioned_ids.update(p.mentioned_user_ids)
-            _mentioned_users_map = {}
+
             if all_mentioned_ids:
                 from urllib.parse import urlparse as _urlparse
                 _mentioned_users = {}
@@ -2890,14 +2900,11 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
                         _mentioned_users[_um.id] = f"{_name}@{_domain}"
                     else:
                         _mentioned_users[_um.id] = _um.username
-                for p in s.query(Post).filter(Post.id.in_(notif_post_ids)).all():
+                for p in posts_cache:
                     if p.mentioned_user_ids:
                         _mentioned_users_map[p.id] = [_mentioned_users.get(mid, "?") for mid in p.mentioned_user_ids if mid in _mentioned_users]
                     else:
                         _mentioned_users_map[p.id] = []
-        else:
-            _liked_ids = _boosted_ids = _bookmarked_ids = set()
-            _vote_map = _my_reaction_map = _reactions_map = _mentioned_users_map = {}
 
         result = []
         for n in notifs:
@@ -2923,10 +2930,12 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
             }
             result.append(item)
 
-        # mark as read (only first page, when mark_read=true)
-        if offset == 0 and mark_read:
-            s.query(Notification).filter_by(user_id=user.id, is_read=False).update({"is_read": True})
-            s.commit()
+        # 읽음 처리: 현재 페이지에 노출된 알림만 업데이트
+        if offset == 0 and mark_read and notifs:
+            unread_ids = [n.id for n in notifs if not n.is_read]
+            if unread_ids:
+                s.query(Notification).filter(Notification.id.in_(unread_ids)).update({"is_read": True}, synchronize_session=False)
+                s.commit()
 
     return {"notifications": result, "has_more": has_more, "total": 0}
 
