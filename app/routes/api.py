@@ -2950,7 +2950,7 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
                     _liked_ids=_liked_ids, _boosted_ids=_boosted_ids,
                     _bookmarked_ids=_bookmarked_ids, _vote_map=_vote_map,
                     _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map,
-                    _mentioned_users_map=_mentioned_users_map,
+                    _mentioned_users_map=_mentioned_users_map, _skip_emojis=True,
                 ) if post and not post.is_deleted and _can_view(post, user, s) else None,
                 "metadata": meta,
             }
