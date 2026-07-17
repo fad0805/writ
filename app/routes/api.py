@@ -275,9 +275,14 @@ def _can_view(post, viewer, session):
 
 
 def _json_array_has_user(column, user_id):
-    """JSON 배열 컬럼에 user_id가 정확히 포함되어 있는지 확인 (PostgreSQL JSONB @>)"""
-    from sqlalchemy.dialects.postgresql import JSONB
-    return column.cast(JSONB).op('@>')(func.json_build_array(user_id).cast(JSONB))
+    """JSON 배열 컬럼에 user_id가 정확히 포함되어 있는지 확인"""
+    from sqlalchemy.dialects import postgresql
+    if isinstance(column.type, postgresql.JSONB):
+        from sqlalchemy.dialects.postgresql import JSONB
+        return column.cast(JSONB).op('@>')(func.json_build_array(user_id).cast(JSONB))
+    else:
+        # SQLite fallback: cast to text and check containment via LIKE
+        return column.cast(String).like(f'%{user_id}%')
 
 
 def _parse_mentions(content):
@@ -2458,7 +2463,7 @@ def api_user_media(request: Request, username: str, limit: int = Query(12), offs
         from sqlalchemy import text
         # Use raw SQL to filter non-empty media_attachments at DB level (cast to text for cross-DB compatibility)
         rows = s.execute(
-            text("SELECT id FROM posts WHERE author_id = :aid AND is_deleted = FALSE AND media_attachments IS NOT NULL AND media_attachments::text NOT IN ('null', '[]') ORDER BY created_at DESC LIMIT :lim OFFSET :off"),
+            text("SELECT id FROM posts WHERE author_id = :aid AND is_deleted = FALSE AND CAST(media_attachments AS TEXT) NOT IN ('null', '[]') ORDER BY created_at DESC LIMIT :lim OFFSET :off"),
             {"aid": profile.id, "lim": limit + 1, "off": offset}
         ).fetchall()
         post_ids = [r[0] for r in rows]
@@ -2471,7 +2476,7 @@ def api_user_media(request: Request, username: str, limit: int = Query(12), offs
         # Count total for has_more if needed
         if not has_more:
             total = s.execute(
-                text("SELECT COUNT(*) FROM posts WHERE author_id = :aid AND is_deleted = FALSE AND media_attachments IS NOT NULL AND media_attachments::text NOT IN ('null', '[]')"),
+                text("SELECT COUNT(*) FROM posts WHERE author_id = :aid AND is_deleted = FALSE AND CAST(media_attachments AS TEXT) NOT IN ('null', '[]')"),
                 {"aid": profile.id}
             ).scalar()
             has_more = total > offset + limit
