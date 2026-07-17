@@ -1449,9 +1449,16 @@ input[type="checkbox"] {
 }
 .episode-nav-side {
   display: flex;
+  min-width: 0;
 }
 .episode-nav-side:first-child { justify-content: flex-end; }
 .episode-nav-side:last-child { justify-content: flex-start; }
+.episode-nav-side .btn-outline {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .episode-nav-none {
   font-size: 0.85em;
   color: var(--text-dim);
@@ -3065,6 +3072,7 @@ input[type="checkbox"] {
 @media (max-width: 768px) {
   .layout { grid-template-columns: 1fr; }
   .sidebar { display: none; }
+  .cover-wrap-120 { width: 25vw; height: calc(25vw * 4 / 3); }
   .main-content { padding: 0; padding-top: calc(15px + env(safe-area-inset-top, 0px)); padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
   .post-card { border-radius: 0; max-width: 100%; }
   .post-form { border-radius: 0; margin-left: 12px; margin-right: 12px; }
