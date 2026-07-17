@@ -95,7 +95,12 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
 
   const [emojiList, setEmojiList] = useState<CustomEmoji[]>([]);
   useEffect(() => subscribeEmojis(setEmojiList), []);
-  const [reactions, setReactions] = useState(post.reactions || {});
+  const [reactions, setReactions] = useState<Record<string, number>>(() => {
+    const r = post.reactions;
+    if (!r) return {};
+    if (Array.isArray(r)) return Object.fromEntries(r.map((v: string) => [v, 1]));
+    return r;
+  });
   const [myReaction, setMyReaction] = useState(post.my_reaction || null);
   const reactionEmojiMap = useMemo(() => {
     const m = (window as any).__emojiMap as Record<string, string> | undefined;
@@ -118,7 +123,12 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     setBookmarked(post.bookmarked);
     setLikesCount(post.likes_count);
     setBoostsCount(post.boosts_count);
-    setReactions(post.reactions || {});
+    setReactions((() => {
+      const r = post.reactions;
+      if (!r) return {};
+      if (Array.isArray(r)) return Object.fromEntries(r.map((v: string) => [v, 1]));
+      return r;
+    })());
     setMyReaction(post.my_reaction || null);
   }, [post.liked, post.boosted, post.bookmarked, post.likes_count, post.boosts_count, post.content, post.summary, post.reactions, post.my_reaction]);
 
