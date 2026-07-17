@@ -453,11 +453,21 @@ def _cache_remote_media(remote_url: str) -> str:
         if is_image and len(data) < _REMOTE_MEDIA_MAX_SIZE:
             from PIL import Image
             img = Image.open(io.BytesIO(data))
-            img = img.convert("RGB")
-            out = io.BytesIO()
-            img.save(out, format="WEBP", quality=85)
-            data = out.getvalue()
-            ext = "webp"
+            try:
+                img.seek(1)
+                is_animated = True
+            except (EOFError, NotImplementedError):
+                is_animated = False
+            finally:
+                img.seek(0)
+            if is_animated:
+                pass  # 애니메이션 원본 유지
+            else:
+                img = img.convert("RGB")
+                out = io.BytesIO()
+                img.save(out, format="WEBP", quality=85)
+                data = out.getvalue()
+                ext = "webp"
         name = f"remote_{uuid.uuid4().hex[:12]}.{ext}"
         key = f"media/remote/{name}"
         storage = get_storage()
