@@ -114,7 +114,7 @@ export default function TimelinePage() {
     const currentIdx = tabs.indexOf(tlType);
     const handler = (e: TouchEvent) => {
       const dx = e.changedTouches[0].clientX - touchStartX.current;
-      if (Math.abs(dx) < 60) return;
+      if (Math.abs(dx) < 120) return;
       if (dx > 0 && currentIdx > 0) router.push(`/timeline/${tabs[currentIdx - 1]}`);
       else if (dx < 0 && currentIdx < tabs.length - 1) router.push(`/timeline/${tabs[currentIdx + 1]}`);
     };
