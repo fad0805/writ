@@ -100,23 +100,20 @@ export default function NotificationsPage() {
   useEffect(() => { window.dispatchEvent(new Event("notificationsread")); }, []);
   useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
   useEffect(() => {
-    if (!user) return;
-    const es = new EventSource("/api/notifications/stream");
-    es.onmessage = (event) => {
-      if (event.data === "refresh" && filter !== "direct") {
-        api.getNotifications(undefined, 5, 0, false).then((data) => {
-          setNotifs((prev) => {
-            const existing = new Set(prev.map((n) => n.id));
-            const newItems = data.notifications.filter((n) => !existing.has(n.id));
-            if (newItems.length === 0) return prev;
-            return [...newItems, ...prev];
-          });
-          setHasMore(data.has_more);
-        }).catch(() => {});
-      }
+    if (!user || filter === "direct") return;
+    const handler = () => {
+      api.getNotifications(undefined, 5, 0, false).then((data) => {
+        setNotifs((prev) => {
+          const existing = new Set(prev.map((n) => n.id));
+          const newItems = data.notifications.filter((n) => !existing.has(n.id));
+          if (newItems.length === 0) return prev;
+          return [...newItems, ...prev];
+        });
+        setHasMore(data.has_more);
+      }).catch(() => {});
     };
-    es.onerror = () => {};
-    return () => es.close();
+    window.addEventListener("notifchange", handler);
+    return () => window.removeEventListener("notifchange", handler);
   }, [filter, user]);
 
   const handleApprove = useCallback(async (username: string) => {
