@@ -49,7 +49,7 @@ router = APIRouter(prefix="/api")
 def _post_json(p, session, user, tl_type=None,
                _liked_ids=None, _boosted_ids=None, _bookmarked_ids=None,
                _vote_map=None, _my_reaction_map=None, _reactions_map=None,
-               _booster_map=None, _mentioned_users_map=None):
+               _booster_map=None, _mentioned_users_map=None, _boost_originals=None):
     if p.is_deleted:
         return {
             "id": p.id,
@@ -72,12 +72,12 @@ def _post_json(p, session, user, tl_type=None,
 
     # If this is a boost pointer post, resolve to the original
     if p.boost_of_id:
-        original = session.query(Post).filter_by(id=p.boost_of_id).first()
+        original = (_boost_originals or {}).get(p.boost_of_id) or session.query(Post).filter_by(id=p.boost_of_id).first()
         if original and not original.is_deleted:
             result = _post_json(original, session, user, tl_type,
                                 _liked_ids, _boosted_ids, _bookmarked_ids,
                                 _vote_map, _my_reaction_map, _reactions_map,
-                                _booster_map, _mentioned_users_map)
+                                _booster_map, _mentioned_users_map, _boost_originals)
             result["boosted_by"] = _user_json(p.author)
             return result
         else:
@@ -635,7 +635,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     # Cache following IDs for home/social (reused across main query + reply filter)
     _following_ids = None
     if user and tl_type in ("home", "social"):
-        _following_ids = {f.following_id for f in session.query(Follow).filter_by(
+        _following_ids = {row[0] for row in session.query(Follow.following_id).filter_by(
             follower_id=user.id, accepted=True
         ).all()}
         _following_ids.add(user.id)
@@ -645,7 +645,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     if tl_type == "home":
         following_ids = list(_following_ids) if _following_ids else [user.id]
         all_boost_user_ids = list(set(following_ids) | {user.id})
-        boosted_ids = list({b.post_id for b in session.query(Boost.post_id).filter(
+        boosted_ids = list({row[0] for row in session.query(Boost.post_id).filter(
             Boost.user_id.in_(all_boost_user_ids),
         ).all()})
         final = following_ids[:]
@@ -662,7 +662,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     elif tl_type == "social":
         following_ids = list(_following_ids) if _following_ids else [user.id]
         all_boost_user_ids = list(set(following_ids) | {user.id})
-        boosted_ids = list({b.post_id for b in session.query(Boost.post_id).filter(
+        boosted_ids = list({row[0] for row in session.query(Boost.post_id).filter(
             Boost.user_id.in_(all_boost_user_ids),
         ).all()})
         posts = session.query(Post).options(*_base_opts).filter(
@@ -697,7 +697,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     boost_pointer_ids = {p.boost_of_id for p in posts if p.boost_of_id}
     boost_originals = {}
     if boost_pointer_ids:
-        for orig in session.query(Post).filter(Post.id.in_(boost_pointer_ids), Post.is_deleted == False).all():
+        for orig in session.query(Post).options(selectinload(Post.author)).filter(Post.id.in_(boost_pointer_ids), Post.is_deleted == False).all():
             boost_originals[orig.id] = orig
     for p in posts:
         if p.boost_of_id:
@@ -718,7 +718,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         parent_ids = {p.in_reply_to_id for p in posts if p.author_id != user.id and p.in_reply_to_id}
         parent_authors = {}
         if parent_ids:
-            for pp in session.query(Post).filter(Post.id.in_(parent_ids)).all():
+            for pp in session.query(Post).options(selectinload(Post.author)).filter(Post.id.in_(parent_ids)).all():
                 parent_authors[pp.id] = pp.author_id
         reply_filtered = []
         for p in posts:
@@ -735,10 +735,10 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     print(f"[feed] after reply filter: {len(posts)} posts", flush=True)
     # Apply user mutes, blocks, and keyword mutes
     if user:
-        muted_user_ids = {m.target_user_id for m in session.query(UserMute.target_user_id).filter_by(user_id=user.id).all()}
-        blocked_ids = {b.target_user_id for b in session.query(UserBlock.target_user_id).filter_by(user_id=user.id).all()}
-        blocked_by_ids = {b.user_id for b in session.query(UserBlock.user_id).filter_by(target_user_id=user.id).all()}
-        muted_series_ids = {m.novel_id for m in session.query(SeriesMute.novel_id).filter_by(user_id=user.id).all()}
+        muted_user_ids = {row[0] for row in session.query(UserMute.target_user_id).filter_by(user_id=user.id).all()}
+        blocked_ids = {row[0] for row in session.query(UserBlock.target_user_id).filter_by(user_id=user.id).all()}
+        blocked_by_ids = {row[0] for row in session.query(UserBlock.user_id).filter_by(target_user_id=user.id).all()}
+        muted_series_ids = {row[0] for row in session.query(SeriesMute.novel_id).filter_by(user_id=user.id).all()}
         hidden_ids = muted_user_ids | blocked_ids | blocked_by_ids
         kw_mutes = session.query(KeywordMute).filter_by(user_id=user.id).all()
         # Pre-parse keyword mutes
@@ -842,9 +842,10 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 mention_filtered.append(p)
             posts = mention_filtered
             print(f"[feed] after mention filter: {len(posts)} posts", flush=True)
-    has_more = raw_total > limit
+    has_more = len(posts) > limit
+    posts = posts[:limit]
     # Batch-load user interaction data for all remaining posts
-    post_ids = [p.id for p in posts[:limit]]
+    post_ids = [p.id for p in posts]
     if user and post_ids:
         _all_likes = session.query(Like).filter(
             Like.user_id == user.id, Like.post_id.in_(post_ids)
@@ -887,7 +888,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             _reactions_map[pid][react] = cnt
         # Batch load mentioned users
         all_mentioned_ids = set()
-        for p in posts[:limit]:
+        for p in posts:
             if p.mentioned_user_ids:
                 all_mentioned_ids.update(p.mentioned_user_ids)
         _mentioned_users_map = {}
@@ -901,7 +902,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                     _mentioned_users[_mu.id] = f"{_name}@{_domain}"
                 else:
                     _mentioned_users[_mu.id] = _mu.username
-            for p in posts[:limit]:
+            for p in posts:
                 if p.mentioned_user_ids:
                     _mentioned_users_map[p.id] = [_mentioned_users.get(mid, "?") for mid in p.mentioned_user_ids if mid in _mentioned_users]
                 else:
@@ -909,13 +910,14 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     else:
         _liked_ids = _boosted_ids = _bookmarked_ids = set()
         _vote_map = _my_reaction_map = _reactions_map = _booster_map = _mentioned_users_map = {}
-    print(f"[feed] final: {len(posts[:limit])} posts returned, has_more={has_more}", flush=True)
+    print(f"[feed] final: {len(posts)} posts returned, has_more={has_more}", flush=True)
     return [_post_json(p, session, user, tl_type,
                        _liked_ids=_liked_ids, _boosted_ids=_boosted_ids,
                        _bookmarked_ids=_bookmarked_ids, _vote_map=_vote_map,
                        _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map,
-                       _booster_map=_booster_map, _mentioned_users_map=_mentioned_users_map)
-            for p in posts[:limit]], has_more
+                       _booster_map=_booster_map, _mentioned_users_map=_mentioned_users_map,
+                       _boost_originals=boost_originals)
+            for p in posts], has_more
 
 
 @router.get("/timeline/stream")

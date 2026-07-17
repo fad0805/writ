@@ -96,8 +96,8 @@ class User(Base):
     session_token = Column(String(64), default="")
 
     posts = relationship("Post", back_populates="author", foreign_keys="Post.author_id",
-                         cascade="all, delete-orphan", lazy="selectin")
-    novels = relationship("Novel", back_populates="author", cascade="all, delete-orphan", lazy="selectin")
+                         cascade="all, delete-orphan", lazy="noload")
+    novels = relationship("Novel", back_populates="author", cascade="all, delete-orphan", lazy="noload")
 
     def actor_uri(self):
         if self.is_remote and self.remote_url:
@@ -241,10 +241,10 @@ class Post(Base):
     author = relationship("User", back_populates="posts", foreign_keys=[author_id], lazy="selectin")
     parent = relationship("Post", back_populates="replies", remote_side=[id], foreign_keys=[in_reply_to_id], lazy="selectin")
     replies = relationship("Post", back_populates="parent", foreign_keys=[in_reply_to_id], lazy="selectin")
-    boost_of = relationship("Post", foreign_keys=[boost_of_id], remote_side=[id], lazy="selectin")
+    boost_of = relationship("Post", foreign_keys=[boost_of_id], remote_side=[id], lazy="noload")
     likes = relationship("Like", back_populates="post", cascade="all, delete-orphan", lazy="selectin")
     boosts = relationship("Boost", back_populates="post", cascade="all, delete-orphan", lazy="selectin")
-    votes = relationship("Vote", back_populates="post", cascade="all, delete-orphan", lazy="selectin")
+    votes = relationship("Vote", back_populates="post", cascade="all, delete-orphan", lazy="noload")
     novel = relationship("Novel", foreign_keys=[novel_id], lazy="selectin")
     episode = relationship("Episode", foreign_keys=[episode_id], lazy="selectin")
 
