@@ -97,16 +97,24 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   useEffect(() => { getCustomEmojis().then(setEmojiList); }, []);
   const [reactions, setReactions] = useState(post.reactions || {});
   const [myReaction, setMyReaction] = useState(post.my_reaction || null);
-  const reactionEmojiMap = useMemo(() => {
-    const m = (window as any).__emojiMap as Record<string, string> | undefined;
-    if (m && Object.keys(m).length > 0) return m;
-    const map: Record<string, string> = {};
-    for (const e of emojiList) if (e.keyword && e.url) map[e.keyword] = e.url;
-    if (Object.keys(map).length > 0) {
-      (window as any).__emojiMap = map;
-    }
-    return map;
-  }, [emojiList]);
+  const [reactionEmojiMap, setReactionEmojiMap] = useState<Record<string, string>>(() => {
+    if ((window as any).__emojiMap) return (window as any).__emojiMap;
+    getCustomEmojis().then(list => {
+      const m: Record<string, string> = {};
+      for (const e of list) if (e.keyword && e.url) m[e.keyword] = e.url;
+      (window as any).__emojiMap = m;
+      setReactionEmojiMap(m);
+    }).catch(() => {});
+    return {};
+  });
+
+  useEffect(() => {
+    const handler = () => {
+      if ((window as any).__emojiMap) setReactionEmojiMap({ ...(window as any).__emojiMap });
+    };
+    window.addEventListener("emojichange", handler);
+    return () => window.removeEventListener("emojichange", handler);
+  }, []);
 
   useEffect(() => {
     if (currentUser?.pinned_posts) setPinned(currentUser.pinned_posts.includes(post.id));
