@@ -4454,6 +4454,7 @@ def api_by_number(request: Request, username: str, number: str):
 def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)):
     user = get_current_user(request)
     with get_session() as s:
+        # 1. 포스트 메인 쿼리
         local_ids = s.query(User.id).filter_by(is_remote=False).subquery()
         posts = s.query(Post).options(
             selectinload(Post.author)
@@ -4462,25 +4463,31 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
             Post.visibility == "public",
             Post.is_deleted == False,
             Post.in_reply_to_id == None,
-        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
+        ).order_by(
+            desc(func.coalesce(Post.bumped_at, Post.created_at))
+        ).offset(offset).limit(limit + 1).all()
         has_more = len(posts) > limit
         posts = posts[:limit]
 
+        # 2. 사용자 활동(좋아요, 부스트, 북마크) 배치 로딩
         post_ids = [p.id for p in posts]
         if user and post_ids:
-            _liked_ids = {l.post_id for l in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(post_ids)).all()}
-            _boosted_ids = {b.post_id for b in s.query(Boost).filter(Boost.user_id == user.id, Boost.post_id.in_(post_ids)).all()}
-            _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(post_ids)).all()}
+            _liked_ids = {l.post_id for l in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(post_ids)).all()}
+            _boosted_ids = {b.post_id for b in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(post_ids)).all()}
+            _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(post_ids)).all()}
         else:
             _liked_ids = _boosted_ids = _bookmarked_ids = set()
 
-        novels = _apply_latest_activity_order(s.query(Novel).options(
-            selectinload(Novel.author),
-            selectinload(Novel.tag_list),
-        ).filter(
-            Novel.visibility == "public",
-            Novel.is_published == True,
-        ), s).limit(20).all()
+        # 3. 첫 페이지에서만 소설 목록 조회
+        novels = []
+        if offset == 0:
+            novels = _apply_latest_activity_order(s.query(Novel).options(
+                selectinload(Novel.author),
+                selectinload(Novel.tag_list),
+            ).filter(
+                Novel.visibility == "public",
+                Novel.is_published == True,
+            ), s).limit(20).all()
 
         return {
             "posts": [_post_json(p, s, user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids) for p in posts],
