@@ -218,7 +218,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
       html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
     const codeBlocks: string[] = [];
-    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, _lang, code) => {
+    html = html.replace(/```(\w*)\r?\n([\s\S]*?)```/g, (_m, _lang, code) => {
       const idx = codeBlocks.length;
       codeBlocks.push(`<pre><code>${code.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')}</code></pre>`);
       return `\x00CODEBLOCK_${idx}\x00`;
