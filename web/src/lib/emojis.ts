@@ -42,13 +42,16 @@ let fetchPromise: Promise<CustomEmoji[]> | null = null;
 let cacheTs = 0;
 
 export async function getCustomEmojis(): Promise<CustomEmoji[]> {
-  let storedTs = 0;
   if (typeof localStorage !== "undefined") {
-    storedTs = parseInt(localStorage.getItem("emoji_cache_ts") || "0", 10);
-    if (storedTs > cacheTs) {
-      cache = null;
-      fetchPromise = null;
-      cacheTs = storedTs;
+    const storedTs = parseInt(localStorage.getItem("emoji_cache_ts") || "0", 10);
+    const stored = localStorage.getItem("emoji_cache");
+    if (storedTs > cacheTs && stored) {
+      try {
+        const parsed: CustomEmoji[] = JSON.parse(stored);
+        cache = parsed;
+        cacheTs = storedTs;
+        return parsed;
+      } catch {}
     }
   }
   if (cache !== null) return cache;
@@ -61,7 +64,10 @@ export async function getCustomEmojis(): Promise<CustomEmoji[]> {
       cache = data.emojis || [];
     } catch { cache = []; }
     fetchPromise = null;
-    cacheTs = storedTs || Date.now();
+    cacheTs = Date.now();
+    if (typeof localStorage !== "undefined") {
+      try { localStorage.setItem("emoji_cache", JSON.stringify(cache)); localStorage.setItem("emoji_cache_ts", String(cacheTs)); } catch {}
+    }
     return cache as CustomEmoji[];
   })();
   return fetchPromise;
@@ -71,6 +77,7 @@ export function invalidateEmojiCache() {
   cache = null;
   fetchPromise = null;
   if (typeof localStorage !== "undefined") {
+    localStorage.removeItem("emoji_cache");
     localStorage.setItem("emoji_cache_ts", Date.now().toString());
   }
 }
