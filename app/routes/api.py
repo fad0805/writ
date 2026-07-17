@@ -2837,6 +2837,7 @@ def _generate_poll_end_notifications(user_id: int, session):
 
 @router.get("/notifications")
 def api_notifications(request: Request, filter_type: str = Query(""), limit: int = Query(20), offset: int = Query(0), mark_read: bool = Query(True)):
+    limit = min(limit, 20)
     user = require_auth(request)
     with get_session() as s:
         _generate_poll_end_notifications(user.id, s)
