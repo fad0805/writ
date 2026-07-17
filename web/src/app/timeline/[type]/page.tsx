@@ -49,9 +49,21 @@ export default function TimelinePage() {
   const prevTlRef = useRef(tlType);
 
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem("writ:tl-cache");
+      if (raw) tabCache.current = JSON.parse(raw);
+    } catch {}
+  }, []);
+
+  const saveTabCache = () => {
+    try { localStorage.setItem("writ:tl-cache", JSON.stringify(tabCache.current)); } catch {}
+  };
+
+  useEffect(() => {
     if (typeof localStorage !== "undefined") localStorage.setItem("lastTimelineTab", tlType);
     if (prevTlRef.current !== tlType) {
       tabCache.current[prevTlRef.current] = { posts, hasMore, offset: offsetRef.current };
+      saveTabCache();
       prevTlRef.current = tlType;
     }
     const saved = tabCache.current[tlType];
@@ -75,6 +87,7 @@ export default function TimelinePage() {
       setHasMore(data.has_more);
       offsetRef.current = LIMIT;
       tabCache.current[tlType] = { posts: data.posts, hasMore: data.has_more, offset: LIMIT };
+      saveTabCache();
     } catch (e: any) {
       setError(e.message || "불러오기 실패");
     }
@@ -112,6 +125,7 @@ export default function TimelinePage() {
       if (cached) {
         tabCache.current[tlType].offset = currentOffset + LOAD_MORE;
         tabCache.current[tlType].hasMore = data.has_more;
+        saveTabCache();
       }
     } catch {}
     setLoadingMore(false);
@@ -221,6 +235,7 @@ export default function TimelinePage() {
           const cached = tabCache.current[tlType];
           if (cached) {
             tabCache.current[tlType] = { ...cached, posts: cached.posts.filter((p: any) => p.id !== newPost.id) };
+            saveTabCache();
           }
           return;
         }
@@ -229,6 +244,7 @@ export default function TimelinePage() {
           const cached = tabCache.current[tlType];
           if (cached) {
             tabCache.current[tlType] = { ...cached, posts: cached.posts.map((p: any) => p.id === newPost.id ? { ...p, ...newPost } : p) };
+            saveTabCache();
           }
           return;
         }
@@ -239,6 +255,7 @@ export default function TimelinePage() {
         const cached = tabCache.current[tlType];
         if (cached && !cached.posts.some((p: any) => p.id === newPost.id)) {
           tabCache.current[tlType] = { ...cached, posts: [newPost, ...cached.posts] };
+          saveTabCache();
         }
       } catch {}
     };
@@ -277,7 +294,7 @@ export default function TimelinePage() {
           </Link>
         ))}
       </div>
-      {loading && <div className="empty-state">로딩 중...</div>}<div className="feed">
+      <div className="feed">
         {error ? (
           <p className="empty-state">오류: {error}</p>
         ) : (
@@ -319,7 +336,6 @@ export default function TimelinePage() {
                 </div>
               ))
             )}
-            {(loading || loadingMore) && <p className="empty-state">로딩 중...</p>}
           </InfiniteScroll>
         )}
       </div>
