@@ -2292,21 +2292,21 @@ input[type="checkbox"] {
 /* ── Cover image wrappers (sizes) ── */
 .cover-wrap-80 {
   width: 80px;
-  aspect-ratio: 3/4;
+  height: 107px;
   border-radius: 6px;
   flex-shrink: 0;
   overflow: hidden;
 }
 .cover-wrap-120 {
   width: 120px;
-  aspect-ratio: 3/4;
+  height: 160px;
   border-radius: 8px;
   flex-shrink: 0;
   overflow: hidden;
 }
 .cover-wrap-56 {
   width: 56px;
-  aspect-ratio: 3/4;
+  height: 75px;
   border-radius: 6px;
   flex-shrink: 0;
   overflow: hidden;
