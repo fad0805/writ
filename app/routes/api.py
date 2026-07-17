@@ -953,7 +953,7 @@ def api_timeline(request: Request, tl_type: str, limit: int = Query(10), offset:
     if tl_type not in TIMELINE_LABELS:
         tl_type = "home"
     feed, has_more, emojis = _get_feed(user, tl_type, s, limit=limit, offset=offset)
-    return {"posts": feed, "timeline_type": tl_type, "has_more": has_more, "_debug": {"limit": limit, "offset": offset, "returned": len(feed)}, "_emojis": emojis}
+    return {"posts": feed, "timeline_type": tl_type, "has_more": has_more, "_emojis": emojis}
 
 
 # ── Post CRUD ──
