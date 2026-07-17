@@ -80,9 +80,11 @@ export default function TimelinePage() {
   const load = async () => {
     setLoading(true);
     setError("");
+    console.log("[TL] load:", { tlType, limit: LIMIT, offset: 0 });
     try {
       const data = await api.timeline(tlType, LIMIT, 0);
       if (data._emojis) injectEmojis(data._emojis);
+      console.log("[TL] load result:", { posts: data.posts.length, has_more: data.has_more });
       setPosts(data.posts);
       setHasMore(data.has_more);
       offsetRef.current = LIMIT;
@@ -102,12 +104,14 @@ export default function TimelinePage() {
 
   // 💡 의존성 배열을 단순화하여 렉이 걸려도 항상 최신 정보로 백엔드에 페이징을 요청하도록 보장합니다.
   const loadMore = useCallback(async () => {
+    console.log("[TL] loadMore called:", { tlType, hasMore, loadingMore, offset: offsetRef.current });
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     try {
       const currentOffset = offsetRef.current;
       const data = await api.timeline(tlType, LOAD_MORE, currentOffset);
       if (data._emojis) injectEmojis(data._emojis);
+      console.log("[TL] loadMore result:", { count: data.posts.length, has_more: data.has_more, offset: currentOffset });
       
       setPosts((prev) => {
         const ids = new Set(prev.map((p) => p.id));
@@ -127,7 +131,9 @@ export default function TimelinePage() {
         tabCache.current[tlType].hasMore = data.has_more;
         saveTabCache();
       }
-    } catch {}
+    } catch (e: any) {
+      console.log("[TL] loadMore error:", e);
+    }
     setLoadingMore(false);
   }, [tlType, hasMore, loadingMore]);
 

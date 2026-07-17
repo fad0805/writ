@@ -15,24 +15,38 @@ export default function InfiniteScroll({
   loadingRef.current = loadingMore;
 
   const checkNearBottom = useCallback(() => {
-    if (loadingRef.current || !hasMoreRef.current) return;
+    if (loadingRef.current || !hasMoreRef.current) {
+      console.log("[InfiniteScroll] skip:", { loading: loadingRef.current, hasMore: hasMoreRef.current });
+      return;
+    }
     const el = document.querySelector(".main-content");
-    if (!el) return;
+    if (!el) {
+      console.log("[InfiniteScroll] no .main-content found");
+      return;
+    }
     const { scrollTop, scrollHeight, clientHeight } = el;
-    if (scrollHeight - scrollTop - clientHeight < 400) {
+    const distance = scrollHeight - scrollTop - clientHeight;
+    console.log("[InfiniteScroll] scroll check:", { scrollTop, scrollHeight, clientHeight, distance, threshold: 400, near: distance < 400 });
+    if (distance < 400) {
       loadingRef.current = true;
+      console.log("[InfiniteScroll] → loadMore triggered");
       loadMoreRef.current();
     }
   }, []);
 
   useEffect(() => {
     const el = document.querySelector(".main-content");
-    if (!el) return;
+    if (!el) {
+      console.log("[InfiniteScroll] no .main-content for scroll listener");
+      return;
+    }
+    console.log("[InfiniteScroll] scroll listener attached to .main-content");
     el.addEventListener("scroll", checkNearBottom, { passive: true });
     return () => el.removeEventListener("scroll", checkNearBottom);
   }, [checkNearBottom]);
 
   useEffect(() => {
+    console.log("[InfiniteScroll] post-load recheck:", { loadingMore, hasMore });
     if (!loadingMore && hasMore) checkNearBottom();
   }, [loadingMore, hasMore, checkNearBottom]);
 
