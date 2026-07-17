@@ -5031,6 +5031,16 @@ def api_fetch_actor(request: Request, background_tasks: BackgroundTasks, url: st
     err = _check_fetch_domain_allowed(url)
     if err:
         raise HTTPException(status_code=403, detail=err)
+
+    # 로컬 DB에 이미 존재하는 유저인지 먼저 확인 (외부 네트워크 요청 회피)
+    with get_session() as _s:
+        local_user = _s.query(User).filter(
+            (User.remote_url == url) | (User.ap_id == url)
+        ).first()
+        if local_user:
+            background_tasks.add_task(_background_fetch_outbox, url, user.id, local_user.id)
+            return _user_json(local_user)
+
     from app.activitypub import _resolve_actor
     actor = _resolve_actor(url, force_refresh=False, sign_as=user)
     if not actor:
