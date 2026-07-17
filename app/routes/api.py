@@ -1278,6 +1278,7 @@ def api_create_post(
             content = content + "\n\nepisode: " + share_url
         else:
             content = content + "\n\nseries: " + share_url
+    content = content.replace('\r\n', '\n').replace('\r', '\n')
     content = content.strip('\n\r ')
     if not content.strip() and not poll_options:
         raise HTTPException(status_code=400, detail="Content cannot be empty")
@@ -1406,7 +1407,7 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
             raise HTTPException(status_code=403, detail="Cannot edit this post")
         if post.summary and post.summary.startswith("[관리자 강제] ") and not summary.startswith("[관리자 강제] "):
             raise HTTPException(status_code=403, detail="관리자가 강제한 CW는 수정할 수 없습니다")
-        post.content = content
+        post.content = content.replace('\r\n', '\n').replace('\r', '\n')
         post.summary = summary
         s.commit()
 
