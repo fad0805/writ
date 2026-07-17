@@ -26,6 +26,7 @@ export function injectEmojis(list: CustomEmojiRaw[]) {
     }
   }
   if (changed && typeof window !== "undefined") {
+    (window as any).__emojiCache = cache;
     if ((window as any).__emojiMap) {
       for (const e of list) {
         if (e.keyword && e.url && !(window as any).__emojiMap[e.keyword]) {
@@ -64,6 +65,7 @@ export async function getCustomEmojis(): Promise<CustomEmoji[]> {
       const data = await res.json();
       cache = data.emojis || [];
     } catch { cache = []; }
+    if (typeof window !== "undefined") (window as any).__emojiCache = cache;
     fetchPromise = null;
     cacheTs = Date.now();
     if (typeof localStorage !== "undefined") {

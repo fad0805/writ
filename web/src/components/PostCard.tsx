@@ -93,8 +93,11 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   const [likesCount, setLikesCount] = useState(post.likes_count);
   const [boostsCount, setBoostsCount] = useState(post.boosts_count);
 
-  const [emojiList, setEmojiList] = useState<CustomEmoji[]>([]);
-  useEffect(() => subscribeEmojis(setEmojiList), []);
+  const [emojiList, setEmojiList] = useState<CustomEmoji[]>(() => {
+    if (typeof window !== "undefined" && (window as any).__emojiCache) return (window as any).__emojiCache as CustomEmoji[];
+    return [];
+  });
+  useEffect(() => subscribeEmojis((list) => { (window as any).__emojiCache = list; setEmojiList(list); }), []);
   const [reactions, setReactions] = useState(post.reactions || {});
   const [myReaction, setMyReaction] = useState(post.my_reaction || null);
   const reactionEmojiMap = useMemo(() => {
@@ -177,9 +180,13 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     }
   };
 
-  const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
+  const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>(() => {
+    if (typeof window !== "undefined" && (window as any).__emojiCache) return (window as any).__emojiCache as CustomEmoji[];
+    return [];
+  });
   useEffect(() => {
     getCustomEmojis().then((all) => {
+      (window as any).__emojiCache = all;
       if (post._emojis) {
         injectEmojis(post._emojis);
         getCustomEmojis().then(setEmojiMap);
