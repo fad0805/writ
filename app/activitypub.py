@@ -1875,6 +1875,8 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                             emoji_s.add(CustomEmoji(keyword=_kw, file_name=_fname, category="remote", domain=_domain))
                             emoji_s.commit()
                         logger.info("Imported remote emoji: %s from %s", _kw, _domain)
+                        from app.routes.api import _invalidate_emoji_cache
+                        _invalidate_emoji_cache()
                     except Exception as e:
                         logger.warning("Failed to save remote emoji %s: %s", _kw, e)
 
