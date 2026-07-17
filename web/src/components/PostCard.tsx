@@ -438,7 +438,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   };
 
   const _renderMedia = () => (
-    <div className="post-media-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(((post as any).media_attachments || []).length, 2)}, 1fr)`, gap: 4, marginTop: 8, overflow: "hidden", borderRadius: 8 }}>
+    <div className="post-media-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${((post as any).media_attachments || []).length >= 4 ? 3 : Math.min(((post as any).media_attachments || []).length, 2)}, 1fr)`, gap: 4, marginTop: 8, overflow: "hidden", borderRadius: 8 }}>
       {(post as any).media_attachments.slice(0, 16).map((m: any, i: number) => {
         const postSensitive = (post as any).is_sensitive || (post.author as any)?.is_sensitive || !!(post as any).summary;
         const isSensitive = postSensitive && !revealedSensitive.has(i);
