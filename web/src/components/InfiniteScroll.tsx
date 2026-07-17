@@ -7,31 +7,31 @@ export default function InfiniteScroll({
 }: {
   hasMore: boolean; loadingMore: boolean; loadMore: () => void; children: ReactNode;
 }) {
-  const sentinelRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef(loadMore);
   loadMoreRef.current = loadMore;
+  const hasMoreRef = useRef(hasMore);
+  hasMoreRef.current = hasMore;
   const loadingRef = useRef(loadingMore);
   loadingRef.current = loadingMore;
 
   useEffect(() => {
-    if (!hasMore) return;
-    const el = sentinelRef.current;
+    const el = document.querySelector(".main-content");
     if (!el) return;
-    const scrollRoot = document.querySelector(".main-content");
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && !loadingRef.current && hasMore) {
+    const handler = () => {
+      if (loadingRef.current || !hasMoreRef.current) return;
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      if (scrollHeight - scrollTop - clientHeight < 300) {
         loadingRef.current = true;
         loadMoreRef.current();
       }
-    }, { root: scrollRoot, rootMargin: "200px" });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [hasMore, loadingMore]);
+    };
+    el.addEventListener("scroll", handler, { passive: true });
+    return () => el.removeEventListener("scroll", handler);
+  }, []);
 
   return (
     <>
       {children}
-      <div ref={sentinelRef} className="sentinel" />
       {loadingMore && <Loading text="불러오는 중..." />}
     </>
   );
