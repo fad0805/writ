@@ -496,7 +496,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     <>
       <div className={`post-card${current ? " current" : ""}${selected ? " selected" : ""}${post.visibility === "mention" ? " mention-card" : ""}`} onClick={(e) => { if (current || (e.target as HTMLElement).closest('a')) return; router.push(post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`); }}>
         {post.boosted_by && (
-          <div className="boost-badge">
+          <div className={`boost-badge${currentUser?.id === post.boosted_by.id ? " boost-self" : ""}`}>
             <Icon name="refresh" size={12} /> <span dangerouslySetInnerHTML={{ __html: renderCustomEmojis(post.boosted_by.display_name || post.boosted_by.username, emojiList, 14) }} />님이 부스트
           </div>
         )}

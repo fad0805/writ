@@ -1930,6 +1930,9 @@ input[type="checkbox"] {
   align-items: center;
   gap: 6px;
 }
+.boost-badge.boost-self {
+  color: #16a34a;
+}
 .boost-badge-icon {
   display: inline-flex;
   align-items: center;
