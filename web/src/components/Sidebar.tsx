@@ -8,7 +8,10 @@ import Avatar from "./Avatar";
 
 function NavItem({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
   const handleClick = (e: React.MouseEvent) => {
-    if (active) e.preventDefault();
+    if (active) {
+      e.preventDefault();
+      document.querySelector(".main-content")?.scrollTo({ top: 0, behavior: "smooth" });
+    }
   };
   return (
     <li>
