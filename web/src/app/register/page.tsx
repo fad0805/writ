@@ -19,7 +19,7 @@ export default function RegisterPage() {
   const [done, setDone] = useState(false);
   const [isFirstUser, setIsFirstUser] = useState<boolean | null>(null);
   const router = useRouter();
-  const { refresh } = useAuth();
+
 
   useEffect(() => {
     fetch("/api/v1/instance")
@@ -48,8 +48,7 @@ export default function RegisterPage() {
       if (res.ok) {
         const data = await res.json();
         if (data.email_sent === false) {
-          await refresh();
-          router.replace("/users/settings/account");
+          router.replace("/login");
           return;
         }
         setDone(true);
