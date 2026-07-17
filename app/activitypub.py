@@ -1854,7 +1854,10 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                                             _img.seek(_img.tell() + 1)
                                         _frames[0].save(_out, format="WEBP", save_all=True, append_images=_frames[1:], duration=_durations, loop=0, quality=85)
                                     except (EOFError, NotImplementedError):
-                                        _img = _img.convert("RGBA") if _img.mode in ("P",) else _img.convert("RGB") if _img.mode == "RGBA" else _img
+                                        if _img.mode in ("RGBA", "P"):
+                                            _img = _img.convert("RGBA")
+                                        else:
+                                            _img = _img.convert("RGB")
                                         _img.save(_out, format="WEBP", quality=85)
                                     finally:
                                         _img.seek(0)
