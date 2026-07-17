@@ -85,10 +85,10 @@ export default function NotificationsPage() {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     try {
-      const data = await api.getNotifications(filter || undefined, 10, offset);
+      const data = await api.getNotifications(filter || undefined, 5, offset);
       setNotifs((prev) => { const merged = [...prev, ...data.notifications]; if (merged.length >= 200) setHasMore(false); return merged; });
       setHasMore(data.has_more);
-      setOffset((prev) => prev + 10);
+      setOffset((prev) => prev + 5);
     } catch {}
     setLoadingMore(false);
   }, [filter, offset, hasMore, loadingMore]);
