@@ -34,6 +34,7 @@ export function injectEmojis(list: CustomEmojiRaw[]) {
       }
     }
     window.dispatchEvent(new CustomEvent("emojichange", { detail: list }));
+    _emojiSubscribers.forEach(fn => fn(cache as CustomEmoji[]));
   }
 }
 
