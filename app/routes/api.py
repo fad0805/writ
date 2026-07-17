@@ -2853,7 +2853,6 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
         elif filter_type:
             q = q.filter_by(notification_type=filter_type)
         q = q.order_by(desc(Notification.created_at))
-        total = q.count()
         raw = q.offset(offset).limit(limit + 1).all()
         has_more = len(raw) > limit
         notifs = raw[:limit]
@@ -2929,7 +2928,7 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
             s.query(Notification).filter_by(user_id=user.id, is_read=False).update({"is_read": True})
             s.commit()
 
-    return {"notifications": result, "has_more": has_more, "total": total}
+    return {"notifications": result, "has_more": has_more, "total": 0}
 
 
 @router.get("/notifications/stream")
