@@ -526,6 +526,8 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
 
         log_admin_action(user_id, user.username, "register", ip_address=client_ip, details="first_user" if is_first else "email_required")
 
+        return {"email_sent": not is_first}
+
 
 @router.post("/auth/verify-email")
 def api_verify_email(request: Request, token: str = Form(...)):
