@@ -231,6 +231,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     });
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    html = html.replace(/`(.+?)`/g, '<code>$1</code>');
     html = html.replace(/\n/g, '<br>');
     codeBlocks.forEach((block, i) => {
       html = html.replace(`\x00CODEBLOCK_${i}\x00`, block);
