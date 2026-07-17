@@ -2906,6 +2906,7 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
         _my_reaction_map = {}
         _reactions_map = {}
         _mentioned_users_map = {}
+        _booster_map = {}
 
         if user and notif_post_ids:
             _liked_ids = {l.post_id for l in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids)).all()}
@@ -2917,6 +2918,10 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
 
             for l in s.query(Like.post_id, Like.reaction).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids), Like.reaction.isnot(None)).all():
                 _my_reaction_map[l.post_id] = l.reaction
+
+            for bid, buid in s.query(Boost.post_id, Boost.user_id).filter(Boost.post_id.in_(notif_post_ids)).order_by(desc(Boost.created_at)).all():
+                if bid not in _booster_map:
+                    _booster_map[bid] = buid
 
             from sqlalchemy import func as _func
             for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(notif_post_ids)).group_by(Like.post_id, Like.reaction).all():
@@ -2964,7 +2969,8 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
                     _liked_ids=_liked_ids, _boosted_ids=_boosted_ids,
                     _bookmarked_ids=_bookmarked_ids, _vote_map=_vote_map,
                     _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map,
-                    _mentioned_users_map=_mentioned_users_map, _skip_emojis=True,
+                    _booster_map=_booster_map, _mentioned_users_map=_mentioned_users_map,
+                    _skip_emojis=True,
                 ) if post and not post.is_deleted and _can_view(post, user, s) else None,
                 "metadata": meta,
             }
