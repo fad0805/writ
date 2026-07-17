@@ -492,12 +492,12 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
                 raise HTTPException(status_code=400, detail="해당 이메일 도메인은 가입이 차단되었습니다.")
         user_count = s.query(User).count()
         is_first = user_count == 0
-        from app.config import INITIAL_OWNER_PASSWORD
+        from app.config import INITIAL_OWNER_PASSWORD, APP_ENV
         if is_first and INITIAL_OWNER_PASSWORD and password != INITIAL_OWNER_PASSWORD:
             raise HTTPException(status_code=400, detail="초기 관리자 암호가 일치하지 않습니다.")
         salt, pwd_hash = hash_password(password)
         priv_key, pub_key = generate_keypair()
-        email_verified = is_first
+        email_verified = APP_ENV == "development"
         user = User(
             username=username,
             display_name=display_name or display_handle,
@@ -517,11 +517,10 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
         s.flush()
         user_id = user.id
 
-        if not is_first:
-            try:
-                _send_verification_email(user)
-            except Exception:
-                pass
+        try:
+            _send_verification_email(user)
+        except Exception:
+            pass
         s.commit()
 
         log_admin_action(user_id, user.username, "register", ip_address=client_ip, details="first_user" if is_first else "email_required")
