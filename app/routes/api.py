@@ -2888,7 +2888,10 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
         notif_post_ids = [p.id for p in posts_cache]
 
         _liked_ids = _boosted_ids = _bookmarked_ids = set()
-        _vote_map = _my_reaction_map = _reactions_map = _mentioned_users_map = {}
+        _vote_map = {}
+        _my_reaction_map = {}
+        _reactions_map = {}
+        _mentioned_users_map = {}
 
         if user and notif_post_ids:
             _liked_ids = {l.post_id for l in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids)).all()}
