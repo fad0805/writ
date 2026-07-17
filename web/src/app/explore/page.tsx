@@ -12,6 +12,7 @@ import { Suspense } from "react";
 import { useAuth } from "@/lib/auth";
 import ClickableCover from "@/components/ClickableCover";
 import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
+import { sanitizeName } from "@/lib/sanitize";
 
 function ExploreFallback() {
   return <div className="empty-state">로딩 중...</div>;
@@ -268,7 +269,7 @@ function ExploreContent() {
                       <Link key={u.id} href={`/@${u.username}`} className="user-search-card">
                         <Avatar user={u} className="sidebar-avatar rounded-[8px]" style={{ width: 36, height: 36, minWidth: 36 }} />
                         <div>
-                          <strong dangerouslySetInnerHTML={{ __html: renderCustomEmojis(u.display_name, emojiMap, 14) }} />
+                          <strong dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(u.display_name, emojiMap, 14)) }} />
                           <span>@{u.username}</span>
                         </div>
                       </Link>

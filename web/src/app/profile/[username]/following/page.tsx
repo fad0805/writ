@@ -5,6 +5,7 @@ import { api, User } from "@/lib/api";
 import Link from "next/link";
 import Avatar from "@/components/Avatar";
 import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
+import { sanitizeName } from "@/lib/sanitize";
 
 export default function FollowingPage() {
   const params = useParams();
@@ -32,7 +33,7 @@ export default function FollowingPage() {
           <Link key={u.id} href={`/@${u.username}`} className="post-card user-row-card">
             <Avatar user={u} className="post-author-avatar bg-[var(--accent)] flex items-center justify-center text-white font-bold" />
             <div>
-              <div className="post-author" dangerouslySetInnerHTML={{ __html: renderCustomEmojis(u.display_name, emojiMap, 14) }} />
+              <div className="post-author" dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(u.display_name, emojiMap, 14)) }} />
               <div className="post-username">@{u.username}</div>
             </div>
           </Link>
