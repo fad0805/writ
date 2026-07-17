@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useEffect, ReactNode } from "react";
+import { useRef, useEffect, useCallback, ReactNode } from "react";
 import Loading from "./Loading";
 
 export default function InfiniteScroll({
@@ -14,20 +14,27 @@ export default function InfiniteScroll({
   const loadingRef = useRef(loadingMore);
   loadingRef.current = loadingMore;
 
+  const checkNearBottom = useCallback(() => {
+    if (loadingRef.current || !hasMoreRef.current) return;
+    const el = document.querySelector(".main-content");
+    if (!el) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    if (scrollHeight - scrollTop - clientHeight < 400) {
+      loadingRef.current = true;
+      loadMoreRef.current();
+    }
+  }, []);
+
   useEffect(() => {
     const el = document.querySelector(".main-content");
     if (!el) return;
-    const handler = () => {
-      if (loadingRef.current || !hasMoreRef.current) return;
-      const { scrollTop, scrollHeight, clientHeight } = el;
-      if (scrollHeight - scrollTop - clientHeight < 300) {
-        loadingRef.current = true;
-        loadMoreRef.current();
-      }
-    };
-    el.addEventListener("scroll", handler, { passive: true });
-    return () => el.removeEventListener("scroll", handler);
-  }, []);
+    el.addEventListener("scroll", checkNearBottom, { passive: true });
+    return () => el.removeEventListener("scroll", checkNearBottom);
+  }, [checkNearBottom]);
+
+  useEffect(() => {
+    if (!loadingMore && hasMore) checkNearBottom();
+  }, [loadingMore, hasMore, checkNearBottom]);
 
   return (
     <>
