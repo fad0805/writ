@@ -1,12 +1,13 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api, NovelData, EpisodeData } from "@/lib/api";
 import Icon from "@/components/Icon";
 import ShareButton from "@/components/ShareButton";
 import SharePostModal from "@/components/SharePostModal";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
+import { installCodeCopyButtons } from "@/lib/codeCopy";
 
 export default function EpisodeDetailPage() {
   const params = useParams();
@@ -26,6 +27,7 @@ export default function EpisodeDetailPage() {
   const [reportDone, setReportDone] = useState(false);
   const [reportRules, setReportRules] = useState<any[]>([]);
   const [selectedRuleIds, setSelectedRuleIds] = useState<number[]>([]);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     api.getEpisode(Number(params.id), Number(params.eid))
@@ -39,6 +41,10 @@ export default function EpisodeDetailPage() {
       })
       .catch((err) => { setError(err.message || "불러오기 실패"); setLoading(false); });
   }, [params.id, params.eid, router]);
+
+  useEffect(() => {
+    if (bodyRef.current) installCodeCopyButtons(bodyRef.current);
+  }, [episode]);
 
   const handleDelete = async () => {
     if (!confirm("정말 삭제하시겠습니까?")) return;
@@ -84,7 +90,7 @@ export default function EpisodeDetailPage() {
         ) : (
           <>
             {episode.summary && <blockquote className="episode-summary">{episode.summary}</blockquote>}
-            <div className="episode-body" dangerouslySetInnerHTML={{ __html: episode.content }} />
+            <div ref={bodyRef} className="episode-body" dangerouslySetInnerHTML={{ __html: episode.content }} />
             {episode.comment && <div className="episode-comment" dangerouslySetInnerHTML={{ __html: episode.comment }} />}
           </>
         )}

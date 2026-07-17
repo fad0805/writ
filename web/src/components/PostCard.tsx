@@ -15,6 +15,7 @@ import ShareButton from "@/components/ShareButton";
 import { hashColor } from "@/lib/avatar";
 import { getCustomEmojis, renderCustomEmojis, injectEmojis, CustomEmoji } from "@/lib/emojis";
 import { sanitizePost, sanitizeName } from "@/lib/sanitize";
+import { installCodeCopyButtons } from "@/lib/codeCopy";
 
 const VIS_ICONS: Record<string, string> = {
   public: "globe", home: "home", followers: "lock", mention: "mail",
@@ -292,6 +293,9 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   useEffect(() => {
     setContentHtml(sanitizePost(buildContentHtml(quoteUrl || undefined, resolvedMentions)));
   }, [post.id, post.content, post.summary, quoteUrl, resolvedMentions, emojiMap]);
+  useEffect(() => {
+    if (cardRef.current) installCodeCopyButtons(cardRef.current);
+  }, [contentHtml]);
 
   // Extract quoted post URL from content
   type QuotedSeries = { type: "series"; novel: NovelData; author: User };
@@ -309,6 +313,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   const isPanning = useRef(false);
   const panStart = useRef({ x: 0, y: 0 });
   const panOrigin = useRef({ x: 0, y: 0 });
+  const cardRef = useRef<HTMLDivElement>(null);
   const [revealedSensitive, setRevealedSensitive] = useState<Set<number>>(new Set());
   useEffect(() => {
     if (viewerIndex < 0) return;
@@ -494,7 +499,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
 
   return (
     <>
-      <div className={`post-card${current ? " current" : ""}${selected ? " selected" : ""}${post.visibility === "mention" ? " mention-card" : ""}`} onClick={(e) => { if (current || (e.target as HTMLElement).closest('a')) return; router.push(post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`); }}>
+      <div ref={cardRef} className={`post-card${current ? " current" : ""}${selected ? " selected" : ""}${post.visibility === "mention" ? " mention-card" : ""}`} onClick={(e) => { if (current || (e.target as HTMLElement).closest('a')) return; router.push(post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`); }}>
         {post.boosted_by && (
           <div className={`boost-badge${currentUser?.id === post.boosted_by.id ? " boost-self" : ""}`}>
             <Icon name="refresh" size={12} /> <span dangerouslySetInnerHTML={{ __html: renderCustomEmojis(post.boosted_by.display_name || post.boosted_by.username, emojiList, 14) }} />님이 부스트

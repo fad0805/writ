@@ -1,7 +1,7 @@
 import DOMPurify from "dompurify";
 
 const POST_CONFIG: DOMPurify.Config = {
-  ALLOWED_TAGS: ["p", "br", "strong", "em", "a", "span", "img", "h2", "h3", "h4", "blockquote", "ul", "ol", "li", "hr", "details", "summary", "figure", "figcaption"],
+  ALLOWED_TAGS: ["p", "br", "strong", "em", "a", "span", "img", "h2", "h3", "h4", "blockquote", "ul", "ol", "li", "hr", "details", "summary", "figure", "figcaption", "pre", "code"],
   ALLOWED_ATTR: ["href", "src", "alt", "class", "style", "title", "target", "rel", "data-align", "data-width", "data-wrap"],
 };
 
