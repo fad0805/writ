@@ -311,7 +311,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   }, [post.id, post.content, post.summary, quoteUrl, resolvedMentions, emojiMap]);
   useEffect(() => {
     if (cardRef.current) installCodeCopyButtons(cardRef.current);
-  }, [contentHtml]);
+  }, [contentHtml, post.content]);
 
   // Extract quoted post URL from content
   type QuotedSeries = { type: "series"; novel: NovelData; author: User };

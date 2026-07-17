@@ -494,7 +494,7 @@ export default function ProfilePage() {
             <div className="profile-user-row">
               <Avatar user={f.user} className="sidebar-avatar" />
               <div>
-                <strong className="follower-name">{f.user.display_name}</strong>
+                <strong className="follower-name" dangerouslySetInnerHTML={{ __html: renderCustomEmojis(f.user.display_name, emojiMap) }} />
                 <br /><span className="text-muted">@{f.user.username}</span>
               </div>
             </div>
@@ -508,7 +508,7 @@ export default function ProfilePage() {
             <div className="profile-user-row">
               <Avatar user={f.user} className="sidebar-avatar" />
               <div>
-                <strong className="follower-name">{f.user.display_name}</strong>
+                <strong className="follower-name" dangerouslySetInnerHTML={{ __html: renderCustomEmojis(f.user.display_name, emojiMap) }} />
                 <br /><span className="text-muted">@{f.user.username}</span>
               </div>
             </div>

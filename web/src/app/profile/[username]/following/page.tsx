@@ -4,11 +4,14 @@ import { useState, useEffect } from "react";
 import { api, User } from "@/lib/api";
 import Link from "next/link";
 import Avatar from "@/components/Avatar";
+import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
 
 export default function FollowingPage() {
   const params = useParams();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
+  useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
 
   useEffect(() => {
     api.getFollowing(params.username as string)
@@ -29,7 +32,7 @@ export default function FollowingPage() {
           <Link key={u.id} href={`/@${u.username}`} className="post-card user-row-card">
             <Avatar user={u} className="post-author-avatar bg-[var(--accent)] flex items-center justify-center text-white font-bold" />
             <div>
-              <div className="post-author">{u.display_name}</div>
+              <div className="post-author" dangerouslySetInnerHTML={{ __html: renderCustomEmojis(u.display_name, emojiMap) }} />
               <div className="post-username">@{u.username}</div>
             </div>
           </Link>
