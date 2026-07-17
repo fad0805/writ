@@ -40,8 +40,11 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
 
   text = text.replace(
     /<a\s+href="https?:\/\/([^"/]+)\/@([a-zA-Z_][a-zA-Z0-9_]*)"[^>]*>@?\w*<\/a>/gi,
-    (_m: string, domain: string, user: string) =>
-      `<a href="/@${user}@${domain}" class="mention-link">@${user}@${domain}</a>`
+    (_m: string, domain: string, user: string) => {
+      const localDomain = typeof window !== "undefined" ? window.location.host : "";
+      const display = domain === localDomain ? `@${user}` : `@${user}@${domain}`;
+      return `<a href="/@${user}@${domain}" class="mention-link">${display}</a>`;
+    }
   );
 
   text = text.replace(/(^|>|\s)@([a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?)/g, (_m, before, handle) => {
@@ -50,7 +53,10 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
       const found = Array.from(validMentions).find((v: string) => v.startsWith(handle + "@"));
       if (found) handle = found;
     }
-    return `${before}<a href="/@${handle}" class="mention-link">@${handle}</a>`;
+    const parts = handle.split("@");
+    const localDomain = typeof window !== "undefined" ? window.location.host : "";
+    const display = parts.length === 2 && parts[1] === localDomain ? `@${parts[0]}` : `@${handle}`;
+    return `${before}<a href="/@${handle}" class="mention-link">${display}</a>`;
   });
 
   text = text.replace(/(^|>|\s)#([\w_가-힣]+)/g, (_m, before, tag) => {

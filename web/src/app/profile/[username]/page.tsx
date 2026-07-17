@@ -260,8 +260,11 @@ export default function ProfilePage() {
                   emojiMap
                 ))
                   .replace(/<a\s+href="https?:\/\/([^/]+)\/@(\w+)"[^>]*>([^<]*)<\/a>/gi,
-                    (_m: string, domain: string, user: string) =>
-                      `<a href="/@${user}@${domain}" class="mention-link">@${user}@${domain}</a>`
+                    (_m: string, domain: string, user: string) => {
+                      const localDomain = typeof window !== "undefined" ? window.location.host : "";
+                      const display = domain === localDomain ? `@${user}` : `@${user}@${domain}`;
+                      return `<a href="/@${user}@${domain}" class="mention-link">${display}</a>`;
+                    }
                   )
               }} />
             )}
