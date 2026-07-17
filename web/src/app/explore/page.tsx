@@ -268,7 +268,7 @@ function ExploreContent() {
                       <Link key={u.id} href={`/@${u.username}`} className="user-search-card">
                         <Avatar user={u} className="sidebar-avatar rounded-[8px]" style={{ width: 36, height: 36, minWidth: 36 }} />
                         <div>
-                          <strong dangerouslySetInnerHTML={{ __html: renderCustomEmojis(u.display_name, emojiMap) }} />
+                          <strong dangerouslySetInnerHTML={{ __html: renderCustomEmojis(u.display_name, emojiMap, 14) }} />
                           <span>@{u.username}</span>
                         </div>
                       </Link>

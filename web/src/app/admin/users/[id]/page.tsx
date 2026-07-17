@@ -106,7 +106,7 @@ export default function AdminUserDetailPage() {
         )}
         <div className="admin-profile-info">
           <div className="admin-profile-name">
-            <span dangerouslySetInnerHTML={{ __html: renderCustomEmojis(u.display_name, emojiMap) }} />
+            <span dangerouslySetInnerHTML={{ __html: renderCustomEmojis(u.display_name, emojiMap, 14) }} />
             {u.role === "owner" && <Icon name="books_solid" style={{ color: "var(--accent)", fontSize: "0.7em", verticalAlign: "middle", marginLeft: 4 }} title="오너" />}
             {u.role === "admin" && <Icon name="shield_filled" style={{ color: "#27ae60", fontSize: "0.7em", verticalAlign: "middle", marginLeft: 4 }} title="관리자" />}
             {u.role === "moderator" && <Icon name="shield_filled" style={{ color: "#cc8800", fontSize: "0.7em", verticalAlign: "middle", marginLeft: 4 }} title="조율자" />}
