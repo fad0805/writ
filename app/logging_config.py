@@ -11,7 +11,8 @@ if _log_file_dir:
     try:
         _log_handlers.append(logging.FileHandler(os.path.join(_log_file_dir, f"{_log_date}.log")))
     except PermissionError:
-        pass
+        import sys
+        print(f"[WARN] Cannot write to log file logs/{_log_date}.log - check permissions", file=sys.stderr)
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
