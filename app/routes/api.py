@@ -3021,8 +3021,9 @@ def api_novels(request: Request, limit: int = Query(12), offset: int = Query(0))
 def api_my_novels(request: Request, limit: int = Query(12), offset: int = Query(0)):
     user = require_auth(request)
     with get_session() as s:
-        total = s.query(Novel.id).filter_by(author_id=user.id).count()
-        raw = s.query(Novel).filter_by(author_id=user.id).order_by(desc(Novel.created_at)).offset(offset).limit(limit).all()
+        q = _apply_latest_activity_order(s.query(Novel).filter_by(author_id=user.id), s)
+        total = q.count()
+        raw = q.offset(offset).limit(limit).all()
         novels = [_novel_json(n, s) for n in raw]
         return {"novels": novels, "total": total, "page": offset // limit + 1, "pages": max(1, (total + limit - 1) // limit)}
 
