@@ -1382,7 +1382,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                 "ap_id": reply_to_post.ap_id or "", "media_attachments": reply_to_post.media_attachments or [],
                                 "poll_data": reply_to_post.poll_data, "my_vote": none, "reactions": {}, "my_reaction": none,
                             }, reply_to_post.author_id, reply_to_post.visibility or "public", false)
-                        except exception:
+                        except Exception:
                             pass
             # mastodon poll votes: create(note) with name + inreplyto + no content
             vote_name = obj.get("name", "") if not raw_content.strip() else ""
