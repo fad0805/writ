@@ -472,12 +472,12 @@ def _cache_remote_media(remote_url: str) -> str:
                 frames[0].save(out, format="WEBP", save_all=True, append_images=frames[1:], duration=durations, loop=0, quality=85)
                 data = out.getvalue()
                 ext = "webp"
-            except (EOFError, NotImplementedError):
+            except Exception:
+                out = io.BytesIO()
                 max_dim = 2048
                 if img.width > max_dim or img.height > max_dim:
                     ratio = min(max_dim / img.width, max_dim / img.height)
                     img = img.resize((int(img.width * ratio), int(img.height * ratio)), Image.LANCZOS)
-                out = io.BytesIO()
                 img = img.convert("RGB") if img.mode in ("RGBA", "P") else img
                 img.save(out, format="WEBP", quality=85)
                 data = out.getvalue()
@@ -1853,7 +1853,9 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                                             _durations.append(_img.info.get("duration", 100))
                                             _img.seek(_img.tell() + 1)
                                         _frames[0].save(_out, format="WEBP", save_all=True, append_images=_frames[1:], duration=_durations, loop=0, quality=85)
-                                    except (EOFError, NotImplementedError):
+                                    except Exception:
+                                        _out.seek(0)
+                                        _out.truncate()
                                         if _img.mode in ("RGBA", "P"):
                                             _img = _img.convert("RGBA")
                                         else:
