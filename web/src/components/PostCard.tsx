@@ -677,6 +677,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
                 key={emoji}
                 className={`reaction-badge${myReaction === emoji ? " active" : ""}${emojiIsRemote ? " reaction-disabled" : ""}`}
                 onClick={async () => {
+                  if (emojiIsRemote) return;
                   if (myReaction === emoji) {
                     const next = { ...reactions };
                     if (next[emoji] <= 1) delete next[emoji];

@@ -1920,6 +1920,11 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
         settings = ServerSetting.get(s)
         if not emoji or len(emoji) > 50:
             raise HTTPException(status_code=400, detail="Invalid emoji")
+        if emoji.startswith(":") and emoji.endswith(":"):
+            _kw = emoji[1:-1]
+            _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw).first()
+            if not _emoji_row or (_emoji_row.domain and _emoji_row.domain.strip()):
+                raise HTTPException(status_code=400, detail="Remote emojis cannot be used as reactions")
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
