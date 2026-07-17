@@ -61,9 +61,7 @@ export default function EpisodeDetailPage() {
   return (
     <>
       <article className="episode-content">
-        <div className="episode-header-row">
-          <h2>제 {episode.episode_number}화: {episode.title}</h2>
-          <div className="episode-header-btns">
+        <div className="episode-header-btns" style={{ marginBottom: 12 }}>
             {novel?.visibility !== "private" && <ShareButton url={`/series/${novel.id}/episodes/${episode.id}`} />}
             {user && <button className="action-btn" onClick={() => setShowSharePost(true)} title="포스트로 공유"><Icon name="edit" /></button>}
             {user && !isMine && (
@@ -78,8 +76,8 @@ export default function EpisodeDetailPage() {
                 <button className="btn btn-small btn-danger" onClick={handleDelete}>삭제</button>
               </>
             )}
-          </div>
         </div>
+        <h2>제 {episode.episode_number}화: {episode.title}</h2>
         <div className="episode-meta episode-meta-bottom">
           {isMine && episode.views !== undefined && <span><Icon name="eye" /> {episode.views}</span>}
           <span>{episode.created_at ? new Date(episode.created_at).toLocaleString("ko-KR") : ""}</span>
