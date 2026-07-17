@@ -323,28 +323,33 @@ input[type="text"].explore-search-input:focus {
   background: var(--bg-secondary);
   padding: 20px;
   border-left: 1px solid var(--border);
-  overflow-y: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  overflow: hidden;
   transition: background 0.3s;
   display: flex;
   flex-direction: column;
 }
-.right-sidebar::-webkit-scrollbar { display: none; }
 
 @media (max-height: 750px) {
-  .right-sidebar { padding: 12px 16px; }
-  .right-sidebar .widget { margin-bottom: 14px; }
-  .right-sidebar .widget h4 { margin-bottom: 8px; font-size: 0.85em; }
-  .right-sidebar .novel-mini-card { padding: 6px 8px; }
-  .right-sidebar .novel-mini-card strong { font-size: 0.85em; }
-  .right-sidebar .novel-mini-card span { font-size: 0.75em; }
-  .right-sidebar .mini-post-link { padding: 6px 8px; }
-  .right-sidebar .btn-primary.btn-small { font-size: 0.8em; padding: 4px 10px; }
+  .right-sidebar { padding: 10px 14px; }
+  .right-sidebar .widget { margin-bottom: 12px; }
+  .right-sidebar .widget h4 { margin-bottom: 6px; font-size: 0.82em; }
+  .right-sidebar .novel-mini-card { padding: 5px 7px; }
+  .right-sidebar .novel-mini-card strong { font-size: 0.82em; }
+  .right-sidebar .novel-mini-card span { font-size: 0.72em; }
+  .right-sidebar .mini-post-link { padding: 5px 7px; }
+  .right-sidebar .btn-primary.btn-small { font-size: 0.78em; padding: 3px 8px; }
+  .right-sidebar .full-width-btn { margin-top: 4px; }
+  .right-sidebar .more-link-wrap { display: none; }
+  .right-sidebar [style*="margin-top: auto"] { margin-top: 0 !important; }
+  .right-sidebar .widget:last-child { border-top: none !important; padding-top: 0 !important; }
 }
 @media (max-height: 650px) {
-  .right-sidebar .novel-mini-card:not(:first-child) { display: none; }
-  .right-sidebar .mini-post-link:nth-child(n+4) { display: none; }
+  .right-sidebar { padding: 6px 10px; }
+  .right-sidebar .novel-mini-list { max-height: 42px; overflow: hidden; }
+  .right-sidebar .notif-mini-list { max-height: 130px; overflow: hidden; }
+  .right-sidebar .novel-mini-list .empty-small { display: none; }
+  .right-sidebar .notif-mini-list .empty-small { display: none; }
+  .right-sidebar .widget:last-child { display: none; }
 }
 
 .widget {
