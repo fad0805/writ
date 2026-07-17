@@ -192,6 +192,7 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
         <button type="button" onClick={() => editor?.chain().focus().toggleBulletList().run()} data-active={editor?.isActive("bulletList")}>•</button>
         <button type="button" onClick={() => editor?.chain().focus().toggleOrderedList().run()} data-active={editor?.isActive("orderedList")}>1.</button>
         <button type="button" onClick={() => editor?.chain().focus().setHorizontalRule().run()}>—</button>
+        <button type="button" onClick={() => editor?.chain().focus().toggleCodeBlock().run()} data-active={editor?.isActive("codeBlock")} title="코드 블록"><span style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 700 }}>{ }</span></button>
         <span className="toolbar-sep">:</span>
         <button type="button" onClick={() => align("left")} data-active={isAlign("left")}>←</button>
         <button type="button" onClick={() => align("center")} data-active={isAlign("center")}>↔</button>
