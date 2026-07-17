@@ -60,6 +60,7 @@ export default function TimelinePage() {
   };
 
   useEffect(() => {
+    console.log("[TL] useEffect fired", { tlType, cached: !!tabCache.current[tlType] });
     if (typeof localStorage !== "undefined") localStorage.setItem("lastTimelineTab", tlType);
     if (prevTlRef.current !== tlType) {
       tabCache.current[prevTlRef.current] = { posts, hasMore, offset: offsetRef.current };
@@ -72,6 +73,7 @@ export default function TimelinePage() {
       setHasMore(saved.hasMore);
       offsetRef.current = saved.offset;
       setLoading(false);
+      load();
       return;
     }
     load();
