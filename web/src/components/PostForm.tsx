@@ -67,6 +67,9 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [showSeriesSearch, setShowSeriesSearch] = useState(false);
   const [seriesSearchQ, setSeriesSearchQ] = useState("");
   const seriesSearchRef = useRef<HTMLInputElement>(null);
+  const [linkPreview, setLinkPreview] = useState<{ url: string; title: string; description: string; image: string } | null>(null);
+  const [linkPreviewLoading, setLinkPreviewLoading] = useState(false);
+  const linkPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!showVisPicker) return;
@@ -88,6 +91,24 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     }, 500);
     return () => clearTimeout(t);
   }, [content, summary, postSensitive, draftKey]);
+
+  useEffect(() => {
+    if (linkPreviewTimerRef.current) clearTimeout(linkPreviewTimerRef.current);
+    const urlRegex = /https?:\/\/[^\s<>"')\]]+/i;
+    const match = content.match(urlRegex);
+    if (!match) { setLinkPreview(null); return; }
+    const url = match[0].replace(/[.,;:!?)]+$/, "");
+    if (linkPreview && linkPreview.url === url) return;
+    linkPreviewTimerRef.current = setTimeout(async () => {
+      setLinkPreviewLoading(true);
+      try {
+        const data = await api.fetchLinkPreview(url);
+        if (data && data.title) setLinkPreview(data);
+      } catch {}
+      setLinkPreviewLoading(false);
+    }, 1000);
+    return () => { if (linkPreviewTimerRef.current) clearTimeout(linkPreviewTimerRef.current); };
+  }, [content]);
 
   const totalLen = content.length + summary.length;
   const nearLimit = totalLen > MAX_LENGTH - 50 && totalLen <= MAX_LENGTH;
@@ -541,8 +562,8 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         if (res.ok) { const d = await res.json(); uploaded.push({ url: d.url, type: d.type, alt: m.alt || "" }); }
       }
       const opts = showPoll ? pollOptions.filter(o => o.trim()).map(o => o.trim()) : [];
-      const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrl, media_attachments: JSON.stringify(uploaded), is_sensitive: postSensitive, poll_options: opts.length >= 2 ? JSON.stringify(opts) : "", poll_expires_in: pollExpiresIn });
-      setContent(""); setSummary(""); setPostSensitive(false); setMediaItems([]); setShowPoll(false); setPollOptions(["", ""]); setPollExpiresIn(24);
+      const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrl, media_attachments: JSON.stringify(uploaded), is_sensitive: postSensitive, poll_options: opts.length >= 2 ? JSON.stringify(opts) : "", poll_expires_in: pollExpiresIn, link_preview: linkPreview ? JSON.stringify(linkPreview) : "" });
+      setContent(""); setSummary(""); setPostSensitive(false); setMediaItems([]); setShowPoll(false); setPollOptions(["", ""]); setPollExpiresIn(24); setLinkPreview(null);
       if (typeof localStorage !== "undefined") localStorage.removeItem(draftKey);
       if (onDone) onDone(result);
       else router.refresh();
@@ -590,6 +611,23 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
                 </div>
               </div>
             </div>
+          )}
+        </div>
+      )}
+      {(linkPreview || linkPreviewLoading) && (
+        <div style={{ marginBottom: 8, padding: 10, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-tertiary)", display: "flex", gap: 10, alignItems: "flex-start", position: "relative" }}>
+          {linkPreviewLoading && !linkPreview ? (
+            <div style={{ fontSize: 13, color: "var(--text-muted)" }}>링크 미리보기 불러오는 중...</div>
+          ) : linkPreview && (
+            <>
+              {linkPreview.image && <img src={linkPreview.image} alt="" style={{ width: 60, height: 60, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} onError={(e) => (e.target as HTMLElement).style.display = "none"} />}
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{linkPreview.title}</div>
+                {linkPreview.description && <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{linkPreview.description}</div>}
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>{(() => { try { return new URL(linkPreview.url).hostname; } catch { return ""; } })()}</div>
+              </div>
+              <button type="button" onClick={() => setLinkPreview(null)} style={{ position: "absolute", top: 4, right: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>×</button>
+            </>
           )}
         </div>
       )}
