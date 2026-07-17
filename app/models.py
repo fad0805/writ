@@ -273,15 +273,24 @@ class Post(Base):
         from urllib.parse import urlparse
         content = self.content
 
-        # Code blocks (```) must be converted before bold/italic
-        content = re.sub(r'```(\w*)\r?\n([\s\S]*?)```', lambda m: f'<pre><code>{m.group(2).rstrip()}</code></pre>', content)
-        content = re.sub(r'```([^`\n]+?)```', r'<pre><code>\1</code></pre>', content)
+        # Extract code blocks with placeholders to protect from later transformations
+        code_blocks = []
+        def _save_code_block(m):
+            code_blocks.append(f'<pre><code>{m.group(2).rstrip()}</code></pre>')
+            return f'\x00CODEBLOCK_{len(code_blocks) - 1}\x00'
+        content = re.sub(r'```(\w*)\r?\n([\s\S]*?)```', _save_code_block, content)
+        content = re.sub(r'```([^`\n]+?)```', lambda m: f'<pre><code>{m.group(1)}</code></pre>', content)
+
         # Inline code (single backtick) — after code blocks so ``` aren't caught
         content = re.sub(r'`([^`\n]+?)`', r'<code>\1</code>', content)
 
         content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', content)
         content = re.sub(r'\*(.+?)\*', r'<em>\1</em>', content)
         content = content.replace('\n', '<br>')
+
+        # Restore code blocks
+        for i, block in enumerate(code_blocks):
+            content = content.replace(f'\x00CODEBLOCK_{i}\x00', block)
 
         # Collect :emoji: shortcodes for tag array (content stays as :shortcode:)
         _emoji_pattern = re.compile(r':([a-z0-9_]{2,}):')
