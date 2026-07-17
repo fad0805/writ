@@ -114,7 +114,7 @@ export default function RegisterPage() {
             <span><a href="/rules" target="_blank" rel="noreferrer" style={{ color: "var(--accent)", textDecoration: "underline" }}>서버 규칙</a>에 동의합니다</span>
           </div>
         )}
-        <button type="submit" disabled={loading || (!agreeRules && isFirstUser !== true)} className="btn btn-primary">{loading ? "..." : "가입"}</button>
+        <button type="submit" suppressHydrationWarning disabled={loading || (!agreeRules && isFirstUser !== true)} className="btn btn-primary">{loading ? "..." : "가입"}</button>
       </form>
       <p className="auth-link">이미 계정이 있으신가요? <Link href="/login">로그인</Link></p>
     </div>
