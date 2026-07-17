@@ -5034,9 +5034,7 @@ def api_fetch_actor(request: Request, background_tasks: BackgroundTasks, url: st
 
     # 로컬 DB에 이미 존재하는 유저인지 먼저 확인 (외부 네트워크 요청 회피)
     with get_session() as _s:
-        local_user = _s.query(User).filter(
-            (User.remote_url == url) | (User.ap_id == url)
-        ).first()
+        local_user = _s.query(User).filter_by(remote_url=url).first()
         if local_user:
             background_tasks.add_task(_background_fetch_outbox, url, user.id, local_user.id)
             return _user_json(local_user)
