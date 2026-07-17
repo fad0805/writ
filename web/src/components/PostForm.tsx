@@ -501,14 +501,17 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     const pos = cursor ?? (taRef.current?.selectionStart ?? val.length);
     const before = val.slice(0, pos);
     if (before.endsWith("```") && !before.endsWith("```\n")) {
-      const insertion = "\n\n```";
-      const newVal = val.slice(0, pos) + insertion + val.slice(pos);
-      setContent(newVal);
-      requestAnimationFrame(() => {
-        const ta = taRef.current;
-        if (ta) { ta.setSelectionRange(pos + 1, pos + 1); ta.focus(); }
-      });
-      return;
+      const after = val.slice(pos);
+      if (!after.startsWith("\n\n```")) {
+        const insertion = "\n\n```";
+        const newVal = val.slice(0, pos) + insertion + val.slice(pos);
+        setContent(newVal);
+        requestAnimationFrame(() => {
+          const ta = taRef.current;
+          if (ta) { ta.setSelectionRange(pos + 1, pos + 1); ta.focus(); }
+        });
+        return;
+      }
     }
     setContent(val);
     detectMention(val, pos);

@@ -277,44 +277,48 @@ export default function TimelinePage() {
           </Link>
         ))}
       </div>
-      <div className="feed">
+      {loading && <div className="empty-state">로딩 중...</div>}<div className="feed">
         {error ? (
           <p className="empty-state">오류: {error}</p>
-        ) : !loading && filteredPosts.length === 0 ? (
-          <p className="empty-state">표시할 글이 없습니다.</p>
         ) : (
+          /* 💡 loading 상태와 관계없이 InfiniteScroll은 항상 렌더링 상태를 유지합니다. */
           <InfiniteScroll 
             hasMore={hasMore} 
             loadingMore={loadingMore || loading} 
             loadMore={loadMore}
           >
-            {filteredPosts.map((p, i) => (
-              <div key={p.id} ref={(el) => { if (el) cardRefs.current[i] = el; }}>
-                <PostCard 
-                  post={p} 
-                  onDelete={() => { 
-                    deletedIds.current.add(p.id); 
-                    setPosts((prev) => prev.filter((x) => x.id !== p.id)); 
-                  }} 
-                  onUpdate={(updated) => { 
-                    if (updated) { 
-                      setPosts((prev) => prev.map((x) => x.id === p.id ? updated : x)); 
-                    } else { 
-                      api.getPost(p.id).then((u) => setPosts((prev) => prev.map((x) => x.id === p.id ? u : x))).catch(() => {}); 
-                    } 
-                  }} 
-                  onReply={(newPost) => { 
-                    if (newPost) { 
-                      setPosts((prev) => { 
-                        if (prev.some((x) => x.id === newPost.id)) return prev; 
-                        return [newPost, ...prev]; 
-                      }); 
-                    } 
-                  }} 
-                  selected={i === selectedIdx} 
-                />
-              </div>
-            ))}
+            {/* 실제 데이터가 로드되었고 포스트가 있을 때만 카드들을 그립니다. */}
+            {!loading && filteredPosts.length === 0 ? (
+              <p className="empty-state">표시할 글이 없습니다.</p>
+            ) : (
+              filteredPosts.map((p, i) => (
+                <div key={p.id} ref={(el) => { if (el) cardRefs.current[i] = el; }}>
+                  <PostCard 
+                    post={p} 
+                    onDelete={() => { 
+                      deletedIds.current.add(p.id); 
+                      setPosts((prev) => prev.filter((x) => x.id !== p.id)); 
+                    }} 
+                    onUpdate={(updated) => { 
+                      if (updated) { 
+                        setPosts((prev) => prev.map((x) => x.id === p.id ? updated : x)); 
+                      } else { 
+                        api.getPost(p.id).then((u) => setPosts((prev) => prev.map((x) => x.id === p.id ? u : x))).catch(() => {}); 
+                      } 
+                    }} 
+                    onReply={(newPost) => { 
+                      if (newPost) { 
+                        setPosts((prev) => { 
+                          if (prev.some((x) => x.id === newPost.id)) return prev; 
+                          return [newPost, ...prev]; 
+                        }); 
+                      } 
+                    }} 
+                    selected={i === selectedIdx} 
+                  />
+                </div>
+              ))
+            )}
             {(loading || loadingMore) && <p className="empty-state">로딩 중...</p>}
           </InfiniteScroll>
         )}
