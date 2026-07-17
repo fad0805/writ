@@ -106,7 +106,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         if (data && data.title) setLinkPreview(data);
       } catch {}
       setLinkPreviewLoading(false);
-    }, 1000);
+    }, 300);
     return () => { if (linkPreviewTimerRef.current) clearTimeout(linkPreviewTimerRef.current); };
   }, [content]);
 
