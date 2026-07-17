@@ -4524,14 +4524,46 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
         has_more = len(posts) > limit
         posts = posts[:limit]
 
-        # 2. 사용자 활동(좋아요, 부스트, 북마크) 배치 로딩
+        # 2. 사용자 활동(좋아요, 부스트, 북마크, 리액션, 부스터) 배치 로딩
         post_ids = [p.id for p in posts]
+        _liked_ids = _boosted_ids = _bookmarked_ids = set()
+        _my_reaction_map = {}
+        _reactions_map = {}
+        _booster_map = {}
+        _mentioned_users_map = {}
         if user and post_ids:
             _liked_ids = {l.post_id for l in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(post_ids)).all()}
             _boosted_ids = {b.post_id for b in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(post_ids)).all()}
             _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(post_ids)).all()}
-        else:
-            _liked_ids = _boosted_ids = _bookmarked_ids = set()
+            for l in s.query(Like.post_id, Like.reaction).filter(Like.user_id == user.id, Like.post_id.in_(post_ids), Like.reaction.isnot(None)).all():
+                _my_reaction_map[l.post_id] = l.reaction
+            for bid, buid in s.query(Boost.post_id, Boost.user_id).filter(Boost.post_id.in_(post_ids)).order_by(desc(Boost.created_at)).all():
+                if bid not in _booster_map:
+                    _booster_map[bid] = buid
+            from sqlalchemy import func as _func
+            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).all():
+                if pid not in _reactions_map:
+                    _reactions_map[pid] = {}
+                _reactions_map[pid][react] = cnt
+            all_mentioned_ids = set()
+            for p in posts:
+                if p.mentioned_user_ids:
+                    all_mentioned_ids.update(p.mentioned_user_ids)
+            if all_mentioned_ids:
+                from urllib.parse import urlparse as _urlparse
+                _mentioned_users = {}
+                for _um in s.query(User).filter(User.id.in_(all_mentioned_ids)).all():
+                    if _um.is_remote and _um.remote_url:
+                        _name = _um.username.split("@")[0]
+                        _domain = _urlparse(_um.remote_url).hostname or ""
+                        _mentioned_users[_um.id] = f"{_name}@{_domain}"
+                    else:
+                        _mentioned_users[_um.id] = _um.username
+                for p in posts:
+                    if p.mentioned_user_ids:
+                        _mentioned_users_map[p.id] = [_mentioned_users.get(mid, "?") for mid in p.mentioned_user_ids if mid in _mentioned_users]
+                    else:
+                        _mentioned_users_map[p.id] = []
 
         # 3. 첫 페이지에서만 소설 목록 조회
         novels = []
@@ -4545,7 +4577,7 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
             ), s).limit(20).all()
 
         return {
-            "posts": [_post_json(p, s, user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids, _skip_emojis=True) for p in posts],
+            "posts": [_post_json(p, s, user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids, _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map, _booster_map=_booster_map, _mentioned_users_map=_mentioned_users_map, _skip_emojis=True) for p in posts],
             "has_more": has_more,
             "novels": [_novel_json(n, s) for n in novels],
         }
