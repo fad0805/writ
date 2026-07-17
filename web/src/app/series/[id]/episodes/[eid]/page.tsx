@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { installCodeCopyButtons } from "@/lib/codeCopy";
 
+
 export default function EpisodeDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -28,6 +29,29 @@ export default function EpisodeDetailPage() {
   const [reportRules, setReportRules] = useState<any[]>([]);
   const [selectedRuleIds, setSelectedRuleIds] = useState<number[]>([]);
   const bodyRef = useRef<HTMLDivElement>(null);
+
+  function renderEpisodeContent(html: string): string {
+    let content = html;
+    if (/<\/?[a-zA-Z]+[\s>]/.test(content)) {
+      content = content.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+    } else {
+      content = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    const codeBlocks: string[] = [];
+    content = content.replace(/```(\w*)\r?\n([\s\S]*?)```/g, (_m, _lang, code) => {
+      const idx = codeBlocks.length;
+      codeBlocks.push(`<pre><code>${code.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')}</code></pre>`);
+      return `\x00CODEBLOCK_${idx}\x00`;
+    });
+    content = content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    content = content.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    content = content.replace(/`(.+?)`/g, '<code>$1</code>');
+    content = content.replace(/\n/g, '<br>');
+    codeBlocks.forEach((block, i) => {
+      content = content.replace(`\x00CODEBLOCK_${i}\x00`, block);
+    });
+    return content;
+  }
 
   useEffect(() => {
     api.getEpisode(Number(params.id), Number(params.eid))
@@ -88,7 +112,7 @@ export default function EpisodeDetailPage() {
         ) : (
           <>
             {episode.summary && <blockquote className="episode-summary">{episode.summary}</blockquote>}
-            <div ref={bodyRef} className="episode-body" dangerouslySetInnerHTML={{ __html: episode.content }} />
+            <div ref={bodyRef} className="episode-body" dangerouslySetInnerHTML={{ __html: renderEpisodeContent(episode.content) }} />
             {episode.comment && <div className="episode-comment" dangerouslySetInnerHTML={{ __html: episode.comment }} />}
           </>
         )}

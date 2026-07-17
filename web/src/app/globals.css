@@ -739,8 +739,9 @@ input:focus {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 3px 8px;
+  padding: 4px 6px;
   font-size: 11px;
+  line-height: 1;
   color: var(--text-muted);
   cursor: pointer;
   z-index: 2;
@@ -756,6 +757,20 @@ input:focus {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
+}
+code > .code-copy-btn {
+  position: static;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  opacity: 0.5;
+  vertical-align: middle;
+}
+code:hover > .code-copy-btn {
+  opacity: 0.8;
+}
+code > .code-copy-btn:hover {
+  opacity: 1;
 }
 
 .reply-context {
