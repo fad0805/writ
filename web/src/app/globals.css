@@ -1482,7 +1482,7 @@ input[type="checkbox"] {
 }
 .episode-editor-content {
   padding: 12px 14px;
-  min-height: 300px;
+  min-height: 500px;
 }
 .episode-editor-content .ProseMirror {
   outline: none;
