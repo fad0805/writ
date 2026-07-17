@@ -6,7 +6,7 @@ import Icon from "./Icon";
 import Link from "next/link";
 import MiniPostCard from "./MiniPostCard";
 import { useRouter } from "next/navigation";
-import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
+import { getCustomEmojis, renderCustomEmojis, CustomEmoji, invalidateEmojiCache } from "@/lib/emojis";
 import { sanitizeName } from "@/lib/sanitize";
 
 const MODAL_ACTION_NAMES: Record<string, string> = {
@@ -32,6 +32,7 @@ export default function RightSidebar() {
     const es = new EventSource("/api/notifications/stream");
     es.onmessage = (event) => {
       if (event.data === "refresh") {
+        invalidateEmojiCache();
         api.getNotifications(undefined, 5, 0, false).then((d) => {
           setNotifs((prev) => {
             const existing = new Set(prev.map((n) => n.id));
