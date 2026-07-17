@@ -217,9 +217,18 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     } else {
       html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
+    const codeBlocks: string[] = [];
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, _lang, code) => {
+      const idx = codeBlocks.length;
+      codeBlocks.push(`<pre><code>${code.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')}</code></pre>`);
+      return `\x00CODEBLOCK_${idx}\x00`;
+    });
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     html = html.replace(/\n/g, '<br>');
+    codeBlocks.forEach((block, i) => {
+      html = html.replace(`\x00CODEBLOCK_${i}\x00`, block);
+    });
     html = renderCustomEmojis(html, emojiMap);
     html = rewriteLinks(html, validMentions);
     if (resolved && resolved.size) {
