@@ -2922,6 +2922,9 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
             for bid, buid in s.query(Boost.post_id, Boost.user_id).filter(Boost.post_id.in_(notif_post_ids)).order_by(desc(Boost.created_at)).all():
                 if bid not in _booster_map:
                     _booster_map[bid] = buid
+            if _booster_map:
+                _booster_users = {u.id: u for u in s.query(User).filter(User.id.in_(set(_booster_map.values()))).all()}
+                _booster_map = {pid: _booster_users.get(uid) for pid, uid in _booster_map.items()}
 
             from sqlalchemy import func as _func
             for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(notif_post_ids)).group_by(Like.post_id, Like.reaction).all():
@@ -4540,6 +4543,9 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
             for bid, buid in s.query(Boost.post_id, Boost.user_id).filter(Boost.post_id.in_(post_ids)).order_by(desc(Boost.created_at)).all():
                 if bid not in _booster_map:
                     _booster_map[bid] = buid
+            if _booster_map:
+                _booster_users = {u.id: u for u in s.query(User).filter(User.id.in_(set(_booster_map.values()))).all()}
+                _booster_map = {pid: _booster_users.get(uid) for pid, uid in _booster_map.items()}
             from sqlalchemy import func as _func
             for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).all():
                 if pid not in _reactions_map:
