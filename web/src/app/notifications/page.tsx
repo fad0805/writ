@@ -8,6 +8,8 @@ import PostCard from "@/components/PostCard";
 import Icon from "@/components/Icon";
 import DirectUserCard from "@/components/DirectUserCard";
 import InfiniteScroll from "@/components/InfiniteScroll";
+import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
+import { sanitizeName } from "@/lib/sanitize";
 
 type DirectUserData = User & {
   latest_previews?: { text: string; is_me: boolean }[];
@@ -50,6 +52,7 @@ export default function NotificationsPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(20);
+  const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
 
   useEffect(() => {
     try {
@@ -95,6 +98,17 @@ export default function NotificationsPage() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { window.dispatchEvent(new Event("notificationsread")); }, []);
+  useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
+  useEffect(() => {
+    const es = new EventSource("/api/notifications/stream");
+    es.onmessage = (event) => {
+      if (event.data === "refresh") {
+        load();
+      }
+    };
+    es.onerror = () => {};
+    return () => es.close();
+  }, [load]);
 
   const handleApprove = useCallback(async (username: string) => {
     try {
@@ -227,7 +241,7 @@ export default function NotificationsPage() {
             <div className="notif-body">
               {n.type === "moderation" && n.metadata?.type === "report" ? (
                 <>
-                  <Link href={`/@${n.from_user?.username}`} className="notif-from-link">{n.from_user?.display_name}</Link>{" "}
+                  <Link href={`/@${n.from_user?.username}`} className="notif-from-link"><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user?.display_name || "", emojiMap)) }} /></Link>{" "}
                   님이 <strong>{targetTypeNames[n.metadata.target_type] || n.metadata.target_type}</strong>을(를) 신고했습니다
                   <div className="notif-mod-message">
                     <div style={{ fontSize: 13, marginBottom: 2 }}>
@@ -239,9 +253,9 @@ export default function NotificationsPage() {
                   </div>
                 </>
               ) : n.type === "moderation" && n.metadata?.type === "new_user" ? (
-                <><Link href={`/@${n.from_user?.username}`} className="notif-from-link">{n.from_user?.display_name}</Link> 님이 가입했습니다</>
+                <><Link href={`/@${n.from_user?.username}`} className="notif-from-link"><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user?.display_name || "", emojiMap)) }} /></Link> 님이 가입했습니다</>
               ) : n.type === "moderation" && n.metadata?.type === "migrate_request" ? (
-                <><Link href={`/@${n.from_user?.username}`} className="notif-from-link">{n.from_user?.display_name || n.from_user?.username}</Link> 님이 계정 이전을 요청했습니다
+                <><Link href={`/@${n.from_user?.username}`} className="notif-from-link"><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user?.display_name || n.from_user?.username || "", emojiMap)) }} /></Link> 님이 계정 이전을 요청했습니다
                 <div style={{ marginTop: 6, display: "flex", gap: 6 }}>
                   <button onClick={async () => {
                     const form = new FormData();
@@ -262,7 +276,7 @@ export default function NotificationsPage() {
               ) : (
                 <>{n.from_user && (
                   <Link href={`/@${n.from_user.username}`} className="notif-from-link">
-                    {n.from_user.display_name}
+                    <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user.display_name, emojiMap)) }} />
                   </Link>
                 )}{" "}
                 {typeText(n.type, n.metadata)}</>
