@@ -30,32 +30,35 @@ export default function TimelinePage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [rawOffset, setRawOffset] = useState(0);
   const [error, setError] = useState("");
 
   const [selectedIdx, setSelectedIdx] = useState(-1);
   const [replyPost, setReplyPost] = useState<PostData | null>(null);
   const [showComposer, setShowComposer] = useState(false);
+  
+  // 💡 상태 변경 비동기 문제를 해결하기 위해 offset을 최신 ref로 관리합니다.
+  const offsetRef = useRef(0);
   const deletedIds = useRef<Set<number>>(new Set());
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
   const postsRef = useRef(posts);
   postsRef.current = posts;
   const selectedIdxRef = useRef(selectedIdx);
   selectedIdxRef.current = selectedIdx;
-  const tabCache = useRef<Record<string, { posts: PostData[]; hasMore: boolean; rawOffset: number }>>({});
+  
+  const tabCache = useRef<Record<string, { posts: PostData[]; hasMore: boolean; offset: number }>>({});
   const prevTlRef = useRef(tlType);
 
   useEffect(() => {
     if (typeof localStorage !== "undefined") localStorage.setItem("lastTimelineTab", tlType);
     if (prevTlRef.current !== tlType) {
-      tabCache.current[prevTlRef.current] = { posts, hasMore, rawOffset };
+      tabCache.current[prevTlRef.current] = { posts, hasMore, offset: offsetRef.current };
       prevTlRef.current = tlType;
     }
     const saved = tabCache.current[tlType];
     if (saved) {
       setPosts(saved.posts);
       setHasMore(saved.hasMore);
-      setRawOffset(saved.rawOffset);
+      offsetRef.current = saved.offset;
       setLoading(false);
       return;
     }
@@ -70,8 +73,8 @@ export default function TimelinePage() {
       if (data._emojis) injectEmojis(data._emojis);
       setPosts(data.posts);
       setHasMore(data.has_more);
-      setRawOffset(LIMIT);
-      tabCache.current[tlType] = { posts: data.posts, hasMore: data.has_more, rawOffset: LIMIT };
+      offsetRef.current = LIMIT;
+      tabCache.current[tlType] = { posts: data.posts, hasMore: data.has_more, offset: LIMIT };
     } catch (e: any) {
       setError(e.message || "불러오기 실패");
     }
@@ -84,12 +87,15 @@ export default function TimelinePage() {
     return () => window.removeEventListener("followchange", handler);
   }, [tlType]);
 
+  // 💡 의존성 배열을 단순화하여 렉이 걸려도 항상 최신 정보로 백엔드에 페이징을 요청하도록 보장합니다.
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     try {
-      const data = await api.timeline(tlType, LOAD_MORE, rawOffset);
+      const currentOffset = offsetRef.current;
+      const data = await api.timeline(tlType, LOAD_MORE, currentOffset);
       if (data._emojis) injectEmojis(data._emojis);
+      
       setPosts((prev) => {
         const ids = new Set(prev.map((p) => p.id));
         const newPosts = data.posts.filter((p: any) => !ids.has(p.id));
@@ -97,11 +103,19 @@ export default function TimelinePage() {
         if (total >= 500) setHasMore(false);
         return [...prev, ...newPosts];
       });
+      
       setHasMore(data.has_more);
-      setRawOffset((prev) => prev + LOAD_MORE);
+      offsetRef.current = currentOffset + LOAD_MORE;
+      
+      // 캐시 업데이트
+      const cached = tabCache.current[tlType];
+      if (cached) {
+        tabCache.current[tlType].offset = currentOffset + LOAD_MORE;
+        tabCache.current[tlType].hasMore = data.has_more;
+      }
     } catch {}
     setLoadingMore(false);
-  }, [tlType, rawOffset, hasMore, loadingMore]);
+  }, [tlType, hasMore, loadingMore]);
 
   const touchStartX = useRef(0);
 
@@ -232,14 +246,13 @@ export default function TimelinePage() {
     return () => { es?.close(); };
   }, [tlType]);
 
-
-
-
+  // 성능 최적화용 필터링 분리
+  const filteredPosts = useMemo(() => {
+    return posts.filter((p) => !deletedIds.current.has(p.id));
+  }, [posts]);
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
-  if (!user) return <div className="empty-state">{authLoading ? "로딩 중..." : "로그인이 필요합니다"}</div>;
-
-  const filteredPosts = posts.filter((p) => !deletedIds.current.has(p.id));
+  if (!user) return <div className="empty-state">로그인이 필요합니다</div>;
 
   return (
     <>
@@ -270,13 +283,39 @@ export default function TimelinePage() {
         ) : !loading && filteredPosts.length === 0 ? (
           <p className="empty-state">표시할 글이 없습니다.</p>
         ) : (
-          <InfiniteScroll hasMore={hasMore} loadingMore={loadingMore || loading} loadMore={loadMore}>
+          <InfiniteScroll 
+            hasMore={hasMore} 
+            loadingMore={loadingMore || loading} 
+            loadMore={loadMore}
+          >
             {filteredPosts.map((p, i) => (
               <div key={p.id} ref={(el) => { if (el) cardRefs.current[i] = el; }}>
-                <PostCard post={p} onDelete={() => { deletedIds.current.add(p.id); setPosts((prev) => prev.filter((x) => x.id !== p.id)); }} onUpdate={(updated) => { if (updated) { setPosts((prev) => prev.map((x) => x.id === p.id ? updated : x)); } else { api.getPost(p.id).then((u) => setPosts((prev) => prev.map((x) => x.id === p.id ? u : x))).catch(() => {}); } }} onReply={(newPost) => { if (newPost) { setPosts((prev) => { if (prev.some((x) => x.id === newPost.id)) return prev; return [newPost, ...prev]; }); } }} selected={i === selectedIdx} />
+                <PostCard 
+                  post={p} 
+                  onDelete={() => { 
+                    deletedIds.current.add(p.id); 
+                    setPosts((prev) => prev.filter((x) => x.id !== p.id)); 
+                  }} 
+                  onUpdate={(updated) => { 
+                    if (updated) { 
+                      setPosts((prev) => prev.map((x) => x.id === p.id ? updated : x)); 
+                    } else { 
+                      api.getPost(p.id).then((u) => setPosts((prev) => prev.map((x) => x.id === p.id ? u : x))).catch(() => {}); 
+                    } 
+                  }} 
+                  onReply={(newPost) => { 
+                    if (newPost) { 
+                      setPosts((prev) => { 
+                        if (prev.some((x) => x.id === newPost.id)) return prev; 
+                        return [newPost, ...prev]; 
+                      }); 
+                    } 
+                  }} 
+                  selected={i === selectedIdx} 
+                />
               </div>
             ))}
-            {loading && <p className="empty-state">로딩 중...</p>}
+            {(loading || loadingMore) && <p className="empty-state">로딩 중...</p>}
           </InfiniteScroll>
         )}
       </div>
