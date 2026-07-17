@@ -473,15 +473,14 @@ def _cache_remote_media(remote_url: str) -> str:
                 data = out.getvalue()
                 ext = "webp"
             except Exception:
-                out = io.BytesIO()
+                data = resp.content  # 원본 데이터 보존
                 max_dim = 2048
                 if img.width > max_dim or img.height > max_dim:
                     ratio = min(max_dim / img.width, max_dim / img.height)
                     img = img.resize((int(img.width * ratio), int(img.height * ratio)), Image.LANCZOS)
-                img = img.convert("RGB") if img.mode in ("RGBA", "P") else img
-                img.save(out, format="WEBP", quality=85)
-                data = out.getvalue()
-                ext = "webp"
+                    out = io.BytesIO()
+                    img.save(out, format="PNG" if ext == "png" else "WEBP", quality=85)
+                    data = out.getvalue()
             finally:
                 img.seek(0)
         name = f"remote_{uuid.uuid4().hex[:12]}.{ext}"
@@ -1854,13 +1853,10 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                                             _img.seek(_img.tell() + 1)
                                         _frames[0].save(_out, format="WEBP", save_all=True, append_images=_frames[1:], duration=_durations, loop=0, quality=85)
                                     except Exception:
-                                        _out.seek(0)
-                                        _out.truncate()
-                                        if _img.mode in ("RGBA", "P"):
-                                            _img = _img.convert("RGBA")
-                                        else:
-                                            _img = _img.convert("RGB")
-                                        _img.save(_out, format="WEBP", quality=85)
+                                        _content = _resp.content
+                                        _fname = f"{_kw}.{_url.rsplit('.', 1)[-1].split('?')[0]}"
+                                        _emoji_data = (_fname, _content, f"image/{_url.rsplit('.', 1)[-1].split('?')[0]}", _domain)
+                                        break
                                     finally:
                                         _img.seek(0)
                                     _content = _out.getvalue()
