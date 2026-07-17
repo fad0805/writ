@@ -27,8 +27,5 @@ export function installCodeCopyButtons(container: HTMLElement) {
     installCopyButton(pre, (code || pre).textContent || "");
   });
 
-  container.querySelectorAll("code").forEach((code) => {
-    if (code.closest("pre")) return;
-    installCopyButton(code, code.textContent || "");
-  });
+
 }

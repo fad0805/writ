@@ -758,20 +758,7 @@ input:focus {
   color: #fff;
   border-color: var(--accent);
 }
-code > .code-copy-btn {
-  position: static;
-  display: inline-flex;
-  align-items: center;
-  margin-left: 4px;
-  opacity: 0.5;
-  vertical-align: middle;
-}
-code:hover > .code-copy-btn {
-  opacity: 0.8;
-}
-code > .code-copy-btn:hover {
-  opacity: 1;
-}
+
 
 .reply-context {
   display: block;
