@@ -2814,22 +2814,36 @@ def api_direct_threads(request: Request):
 def _generate_poll_end_notifications(user_id: int, session):
     import datetime as _dt
     now = _dt.datetime.now(_dt.timezone.utc)
+    # 빠른 확인: 사용자의 poll이 없으면 skip
+    has_any_poll = session.query(Post.id).filter(
+        Post.poll_data.isnot(None), Post.is_deleted == False,
+        Post.author_id == user_id,
+    ).first() is not None
+    has_voted_poll = session.query(Post.id).join(Vote, Vote.post_id == Post.id).filter(
+        Vote.user_id == user_id, Post.poll_data.isnot(None), Post.is_deleted == False
+    ).first() is not None
+    if not has_any_poll and not has_voted_poll:
+        return
     candidates = []
-    voted_posts = (
-        session.query(Post)
-        .join(Vote, Vote.post_id == Post.id)
-        .filter(Vote.user_id == user_id, Post.poll_data.isnot(None), Post.is_deleted == False)
-        .all()
-    )
-    candidates.extend(voted_posts)
-    authored_posts = (
-        session.query(Post)
-        .filter(Post.author_id == user_id, Post.poll_data.isnot(None), Post.is_deleted == False)
-        .all()
-    )
-    for p in authored_posts:
-        if p not in candidates:
-            candidates.append(p)
+    if has_voted_poll:
+        voted_posts = (
+            session.query(Post)
+            .join(Vote, Vote.post_id == Post.id)
+            .filter(Vote.user_id == user_id, Post.poll_data.isnot(None), Post.is_deleted == False)
+            .limit(50)
+            .all()
+        )
+        candidates.extend(voted_posts)
+    if has_any_poll:
+        authored_posts = (
+            session.query(Post)
+            .filter(Post.author_id == user_id, Post.poll_data.isnot(None), Post.is_deleted == False)
+            .limit(50)
+            .all()
+        )
+        for p in authored_posts:
+            if p not in candidates and len(candidates) < 100:
+                candidates.append(p)
     for post in candidates:
         expires_at = post.poll_data.get("expires_at") if post.poll_data else None
         if not expires_at:
