@@ -455,26 +455,19 @@ def _cache_remote_media(remote_url: str) -> str:
             img = Image.open(io.BytesIO(data))
             try:
                 img.seek(1)
-                can_shrink = False
+                pass  # 애니메이션 → 원본 유지
             except (EOFError, NotImplementedError):
-                can_shrink = True
-            finally:
-                img.seek(0)
-            if can_shrink:
                 max_dim = 2048
                 if img.width > max_dim or img.height > max_dim:
                     ratio = min(max_dim / img.width, max_dim / img.height)
                     img = img.resize((int(img.width * ratio), int(img.height * ratio)), Image.LANCZOS)
                 out = io.BytesIO()
-                if ext in ("jpg", "jpeg"):
-                    img = img.convert("RGB") if img.mode in ("RGBA", "P") else img
-                    img.save(out, format="WEBP", quality=85)
-                    ext = "webp"
-                elif ext in ("png", "gif"):
-                    img.save(out, format="PNG" if ext == "png" else "GIF")
-                else:
-                    img.save(out, format="WEBP", quality=85)
+                img = img.convert("RGB") if img.mode in ("RGBA", "P") else img
+                img.save(out, format="WEBP", quality=85)
                 data = out.getvalue()
+                ext = "webp"
+            finally:
+                img.seek(0)
         name = f"remote_{uuid.uuid4().hex[:12]}.{ext}"
         key = f"media/remote/{name}"
         storage = get_storage()
