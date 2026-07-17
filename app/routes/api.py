@@ -1863,6 +1863,7 @@ def api_bookmarks(request: Request, limit: int = Query(20), offset: int = Query(
 
 @router.get("/favorites")
 def api_favorites(request: Request, limit: int = Query(10), offset: int = Query(0)):
+    limit = min(limit, 20)
     user = require_active_auth(request)
     with get_session() as s:
         raw = s.query(Like).filter_by(user_id=user.id).order_by(desc(Like.created_at)).offset(offset).limit(limit + 1).all()

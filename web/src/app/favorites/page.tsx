@@ -10,11 +10,11 @@ export default function FavoritesPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [offset, setOffset] = useState(10);
+  const [offset, setOffset] = useState(20);
 
   const load = useCallback(() => {
     setLoading(true);
-    api.getFavorites(10, 0)
+    api.getFavorites(20, 0)
       .then((d) => { setPosts(d.posts); setHasMore(d.has_more); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
@@ -25,10 +25,10 @@ export default function FavoritesPage() {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     try {
-      const d = await api.getFavorites(10, offset);
+      const d = await api.getFavorites(5, offset);
       setPosts((prev) => [...prev, ...d.posts]);
       setHasMore(d.has_more);
-      setOffset((prev) => prev + 10);
+      setOffset((prev) => prev + 5);
     } catch {}
     setLoadingMore(false);
   }, [offset, hasMore, loadingMore]);
