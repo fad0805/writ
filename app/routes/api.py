@@ -135,8 +135,8 @@ def _post_json(p, session, user, tl_type=None,
                     reactions[like.reaction] = reactions.get(like.reaction, 0) + 1
                 else:
                     reactions[_default_react] = reactions.get(_default_react, 0) + 1
-    if _mentioned_users_map is not None:
-        mentioned_handles = _mentioned_users_map.get(p.id, [])
+    if _mentioned_users_map is not None and p.id in _mentioned_users_map:
+        mentioned_handles = _mentioned_users_map[p.id]
     elif p.mentioned_user_ids:
         from urllib.parse import urlparse as _urlparse2
         mentioned_handles = []
@@ -148,7 +148,10 @@ def _post_json(p, session, user, tl_type=None,
             else:
                 mentioned_handles.append(u.username)
     else:
-        mentioned_handles = []
+        # content에서 @handle@domain 패턴 파싱
+        mentioned_handles = list(set(
+            f"{m.group(1)}@{m.group(2)}" for m in re.finditer(r'@([a-zA-Z0-9_]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', p.content or "")
+        ))
     return {
         "id": p.id,
         "number": p.number or "",
