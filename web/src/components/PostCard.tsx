@@ -180,21 +180,9 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     }
   };
 
-  const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>(() => {
-    if (typeof window !== "undefined" && (window as any).__emojiCache) return (window as any).__emojiCache as CustomEmoji[];
-    return [];
-  });
   useEffect(() => {
-    getCustomEmojis().then((all) => {
-      (window as any).__emojiCache = all;
-      if (post._emojis) {
-        injectEmojis(post._emojis);
-        getCustomEmojis().then(setEmojiMap);
-      } else {
-        setEmojiMap(all);
-      }
-    });
-  }, [post._emojis, post.id]);
+    if (post._emojis) injectEmojis(post._emojis);
+  }, [post._emojis]);
 
   const [nowTime, setNowTime] = useState(Date.now());
   useEffect(() => { const id = setInterval(() => setNowTime(Date.now()), 10000); return () => clearInterval(id); }, []);
@@ -234,7 +222,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     codeBlocks.forEach((block, i) => {
       html = html.replace(`\x00CODEBLOCK_${i}\x00`, block);
     });
-    html = renderCustomEmojis(html, emojiMap);
+    html = renderCustomEmojis(html, emojiList);
     html = rewriteLinks(html, validMentions);
     if (qUrl) {
       const escUrl = qUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -264,7 +252,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
 
   useEffect(() => {
     setContentHtml(sanitizePost(buildContentHtml(quoteUrl || undefined)));
-  }, [post.id, post.content, post.summary, quoteUrl, emojiMap]);
+  }, [post.id, post.content, post.summary, quoteUrl, emojiList]);
   useEffect(() => {
     if (cardRef.current) installCodeCopyButtons(cardRef.current);
   }, [contentHtml, post.content]);
@@ -408,7 +396,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
         const fullUrl = `https://${domain}/@${username}/${number}`;
         const form = new FormData(); form.append("url", fullUrl);
         fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form })
-          .then(r => r.json()).then(d => { if (d._emojis) { injectEmojis(d._emojis); getCustomEmojis().then(setEmojiMap); } setQuotedPost(d); setLoadingQuote(false); })
+          .then(r => r.json()).then(d => { if (d._emojis) { injectEmojis(d._emojis); } setQuotedPost(d); setLoadingQuote(false); })
           .catch(() => setLoadingQuote(false));
       }
     } else if (oldFormat) {
@@ -423,8 +411,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
         .then(d => {
           if (d._emojis) {
             injectEmojis(d._emojis);
-            // Immediately update emoji map so render picks it up
-            getCustomEmojis().then(setEmojiMap);
+            getCustomEmojis().then(setEmojiList);
           }
           setQuotedPost(d);
           setLoadingQuote(false);
@@ -512,7 +499,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
               html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
               html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
               html = html.replace(/\n/g, '<br>');
-              html = renderCustomEmojis(html, emojiMap);
+              html = renderCustomEmojis(html, emojiList);
               html = rewriteLinks(html, validMentions);
               if ((post.reply_context.content || "").length > 90) html += "...";
               return sanitizePost(html);
