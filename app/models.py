@@ -274,8 +274,8 @@ class Post(Base):
         content = self.content
 
         # Code blocks (```) must be converted before bold/italic
-        content = re.sub(r'```(\w*)\r?\n([\s\S]*?)```', lambda m: f'<code>{m.group(2).replace(chr(10), "<br>")}</code>', content)
-        content = re.sub(r'```([^`\n]+?)```', r'<code>\1</code>', content)
+        content = re.sub(r'```(\w*)\r?\n([\s\S]*?)```', lambda m: f'<pre><code>{m.group(2).rstrip()}</code></pre>', content)
+        content = re.sub(r'```([^`\n]+?)```', r'<pre><code>\1</code></pre>', content)
         # Inline code (single backtick) — after code blocks so ``` aren't caught
         content = re.sub(r'`([^`\n]+?)`', r'<code>\1</code>', content)
 
