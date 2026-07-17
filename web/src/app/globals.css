@@ -1455,9 +1455,15 @@ input[type="checkbox"] {
 .episode-nav-side:last-child { justify-content: flex-start; }
 .episode-nav-side .btn-outline {
   max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.episode-nav-side .btn-outline .episode-nav-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 .episode-nav-none {
   font-size: 0.85em;

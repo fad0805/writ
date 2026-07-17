@@ -97,7 +97,7 @@ export default function EpisodeDetailPage() {
           <div className="episode-nav-side">
             {prevEp ? (
               <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${prevEp.id}`)}>
-                ← 제 {prevEp.episode_number} 화 ({prevEp.title})
+                <span className="episode-nav-arrow">←</span> <span className="episode-nav-text">제 {prevEp.episode_number} 화 ({prevEp.title})</span>
               </button>
             ) : (
               <span className="episode-nav-none">이전 화가 없습니다</span>
@@ -107,7 +107,7 @@ export default function EpisodeDetailPage() {
           <div className="episode-nav-side">
             {nextEp ? (
               <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${nextEp.id}`)}>
-                제 {nextEp.episode_number} 화 ({nextEp.title}) →
+                <span className="episode-nav-text">제 {nextEp.episode_number} 화 ({nextEp.title})</span> <span className="episode-nav-arrow">→</span>
               </button>
             ) : (
               <span className="episode-nav-none">다음 화가 없습니다</span>
