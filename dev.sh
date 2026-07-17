@@ -129,7 +129,6 @@ _prefix_web() {
 }
 
 echo -e "${YELLOW}[api]${NC} 서버 시작 중 (포트 $BACKEND_PORT)..."
-cd "$ROOT_DIR" && APP_ENV=development PYTHONUNBUFFERED=1 "$PYTHON" -m alembic upgrade head
 cd "$ROOT_DIR" && APP_ENV=development PYTHONUNBUFFERED=1 "$PYTHON" -m uvicorn app.main:app --reload --reload-dir "$ROOT_DIR/app" --host 0.0.0.0 --port "$BACKEND_PORT" \
   > >(tee -a "$COMBINED_LOG" | _prefix_output "[api]" "$GREEN") 2>&1 &
 BACKEND_PID=$!

@@ -100,6 +100,7 @@ export default function NotificationsPage() {
   useEffect(() => { window.dispatchEvent(new Event("notificationsread")); }, []);
   useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
   useEffect(() => {
+    if (!user) return;
     const es = new EventSource("/api/notifications/stream");
     es.onmessage = (event) => {
       if (event.data === "refresh" && filter !== "direct") {
@@ -116,7 +117,7 @@ export default function NotificationsPage() {
     };
     es.onerror = () => {};
     return () => es.close();
-  }, [filter]);
+  }, [filter, user]);
 
   const handleApprove = useCallback(async (username: string) => {
     try {
