@@ -1,16 +1,16 @@
 "use client";
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Placeholder from "@tiptap/extension-placeholder";
-import TextAlign from "@tiptap/extension-text-align";
-import Image from "@tiptap/extension-image";
-import Underline from "@tiptap/extension-underline";
-import Strike from "@tiptap/extension-strike";
-import { TextStyle } from "@tiptap/extension-text-style";
-import { Color } from "@tiptap/extension-color";
-import { useEffect, useRef, useState, useMemo } from "react";
 
-const SIZES = ["50", "75", "100"];
+import { useEditorActions } from "@/hooks/useEditorAction";
+import { Color } from "@tiptap/extension-color";
+import Image from "@tiptap/extension-image";
+import Placeholder from "@tiptap/extension-placeholder";
+import Strike from "@tiptap/extension-strike";
+import TextAlign from "@tiptap/extension-text-align";
+import { TextStyle } from "@tiptap/extension-text-style";
+import Underline from "@tiptap/extension-underline";
+import { EditorContent, useEditor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const CustomStrike = Strike.extend({
   addInputRules() {
@@ -91,6 +91,8 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
     },
   });
 
+  const editorFn = useEditorActions(editor);
+
   useEffect(() => {
     if (!editor) return;
     if (!initialSet.current) {
@@ -109,63 +111,6 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [showColorPicker]);
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !editor) return;
-    const formData = new FormData();
-    formData.append("file", file);
-    try {
-      const res = await fetch("/api/media/upload", { method: "POST", credentials: "include", body: formData });
-      if (res.ok) {
-        const d = await res.json();
-        editor.chain().focus().setImage({ src: d.url }).run();
-      }
-    } catch {}
-    e.target.value = "";
-  };
-
-  const imgAttr = (key: string) => {
-    if (!editor) return null;
-    const { from, to } = editor.state.selection;
-    let val: string | null = null;
-    editor.state.doc.nodesBetween(from, to, (node) => {
-      if (node.type.name === "image") val = node.attrs[key] as string;
-    });
-    return val;
-  };
-
-  const align = (dir: string) => {
-    if (!editor) return;
-    if (editor.isActive("image")) {
-      editor.chain().focus().updateAttributes("image", { "data-align": dir }).run();
-      if (dir === "center") editor.chain().focus().updateAttributes("image", { "data-wrap": "true" }).run();
-    } else {
-      editor.chain().focus().setTextAlign(dir).run();
-    }
-  };
-
-  const isAlign = (dir: string) => {
-    if (!editor) return false;
-    if (editor.isActive("image")) return imgAttr("data-align") === dir;
-    return editor.isActive({ textAlign: dir });
-  };
-
-  const cycleSize = () => {
-    const cur = imgAttr("data-width") || "75";
-    const idx = SIZES.indexOf(cur);
-    const next = SIZES[(idx + 1) % SIZES.length];
-    editor?.chain().focus().updateAttributes("image", { "data-width": next }).run();
-  };
-
-  const toggleWrap = () => {
-    const cur = imgAttr("data-wrap");
-    editor?.chain().focus().updateAttributes("image", { "data-wrap": cur === "false" ? "true" : "false" }).run();
-  };
-
-  const isImageSelected = editor?.isActive("image") ?? false;
-  const imgAlign = imgAttr("data-align");
-  const imgWrap = imgAttr("data-wrap");
 
   const saveRecentColor = (color: string) => {
     const list = recentColorsRef.current.filter((c) => c !== color);
@@ -229,19 +174,19 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
           <button type="button" onClick={() => editor?.chain().focus().toggleCode().run()} data-active={editor?.isActive("code")} title="인라인 코드"><code style={{ fontSize: 12 }}>{'<>'}</code></button>
         </div>
         <div className="episode-editor-toolbar-section">
-          <button type="button" onClick={() => align("left")} data-active={isAlign("left")}>←</button>
-          <button type="button" onClick={() => align("center")} data-active={isAlign("center")}>↔</button>
-          <button type="button" onClick={() => align("right")} data-active={isAlign("right")}>→</button>
+          <button type="button" onClick={() => editorFn?.align("left")} data-active={editorFn?.isAlign("left")}>←</button>
+          <button type="button" onClick={() => editorFn?.align("center")} data-active={editorFn?.isAlign("center")}>↔</button>
+          <button type="button" onClick={() => editorFn?.align("right")} data-active={editorFn?.isAlign("right")}>→</button>
         </div>
         <div className="episode-editor-toolbar-section">
           <button type="button" onClick={() => fileRef.current?.click()} title="이미지 첨부">🖼</button>
-          <button type="button" onClick={cycleSize} title="이미지 크기">{isImageSelected ? `${imgAttr("data-width") || "75"}%` : "□"}</button>
-          {isImageSelected && imgAlign && imgAlign !== "center" && (
-            <button type="button" onClick={toggleWrap} data-active={imgWrap === "true"} title="텍스트 줄바꿈">{imgWrap === "true" ? "↩" : "↪"}</button>
+          <button type="button" onClick={editorFn?.cycleSize} title="이미지 크기">{editorFn?.isImageSelected ? `${editorFn?.imgAttr("data-width") || "75"}%` : "□"}</button>
+          {editorFn?.isImageSelected && editorFn?.imgAlign && editorFn?.imgAlign !== "center" && (
+            <button type="button" onClick={editorFn?.toggleWrap} data-active={editorFn?.imgWrap === "true"} title="텍스트 줄바꿈">{editorFn?.imgWrap === "true" ? "↩" : "↪"}</button>
           )}
         </div>
       </div>
-      <input ref={fileRef} type="file" accept="image/*" hidden onChange={handleImageUpload} />
+      <input ref={fileRef} type="file" accept="image/*" hidden onChange={editorFn?.handleImgUpload} />
       <EditorContent editor={editor} className="episode-editor-content" />
       <style>{`
         .episode-editor-content img.ProseMirror-selectednode { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
