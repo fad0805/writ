@@ -733,9 +733,9 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
                 ) : emoji.startsWith(":") && emoji.endsWith(":") ? (
                   reactionEmojiMap[emojiKey]
                     ? <img src={reactionEmojiMap[emojiKey]} alt={emoji} style={{ height: 22, verticalAlign: "middle" }} />
-                    : <span>{emoji}</span>
+                    : <span>{emojiKey.replace(/@.+$/, "")}</span>
                 ) : (
-                  <span>{emoji}</span>
+                  <span>{emoji.replace(/@.+$/, "")}</span>
                 )}
                 <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{count}</span>
               </span>
