@@ -27,10 +27,11 @@ export default function AdminEmojiPage() {
   const [editCategory, setEditCategory] = useState("");
   const [editAliases, setEditAliases] = useState("");
 
-  const fetchEmojis = (page: number, search?: string) => {
+  const fetchEmojis = (page: number, search?: string, filter?: string) => {
     setEmojiLoading(true);
     const q = search !== undefined ? search : emojiSearch;
-    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE), category: emojiFilter === "all" ? "" : emojiFilter });
+    const f = filter !== undefined ? filter : emojiFilter;
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE), category: f === "all" ? "" : f });
     if (q) params.set("q", q);
     fetch(`/api/emojis?${params}`, { credentials: "include" })
       .then(r => r.json()).then(d => {
@@ -113,7 +114,7 @@ export default function AdminEmojiPage() {
           <input type="text" value={emojiSearch} onChange={(e) => { const v = e.target.value; setEmojiSearch(v); setEmojiPage(0); fetchEmojis(0, v); }} placeholder="이모지 검색..." className="cw-input w-full hm-bottom-8" />
           <div className="flex-row gap-8 mb-12">
             {["all", "local", "remote"].map((f) => (
-              <button key={f} onClick={() => { setEmojiFilter(f); setEmojiPage(0); fetchEmojis(0); }} className={`btn btn-small ${emojiFilter === f ? "btn-primary" : "btn-outline"}`}>{f === "all" ? "전체" : f === "local" ? "로컬" : "리모트"}</button>
+              <button key={f} onClick={() => { setEmojiFilter(f); setEmojiPage(0); fetchEmojis(0, undefined, f); }} className={`btn btn-small ${emojiFilter === f ? "btn-primary" : "btn-outline"}`}>{f === "all" ? "전체" : f === "local" ? "로컬" : "리모트"}</button>
             ))}
           </div>
           {emojiLoading ? (
