@@ -4525,7 +4525,7 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
             Post.is_deleted == False,
             Post.in_reply_to_id == None,
         ).order_by(
-            desc(Post.bumped_at).nullslast(), desc(Post.created_at)
+            desc(Post.created_at)
         ).offset(offset).limit(limit + 1).all()
         has_more = len(posts) > limit
         posts = posts[:limit]
