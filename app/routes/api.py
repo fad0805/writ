@@ -5006,10 +5006,18 @@ def _load_emojis(session):
 
 
 @router.get("/emojis")
-def api_list_emojis(limit: int = Query(30), offset: int = Query(0)):
+def api_list_emojis(limit: int = Query(30), offset: int = Query(0), q: str = Query("")):
     with get_session() as s:
-        total = s.query(CustomEmoji).count()
-        emojis = s.query(CustomEmoji).order_by(desc(CustomEmoji.created_at)).offset(offset).limit(limit).all()
+        query = s.query(CustomEmoji)
+        if q:
+            query = query.filter(
+                or_(
+                    CustomEmoji.keyword.ilike(f"%{q}%"),
+                    CustomEmoji.category.ilike(f"%{q}%"),
+                )
+            )
+        total = query.count()
+        emojis = query.order_by(desc(CustomEmoji.created_at)).offset(offset).limit(limit).all()
         result = [
             {
                 "id": e.id,
