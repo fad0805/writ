@@ -2942,6 +2942,7 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
             if unread_ids:
                 s.query(Notification).filter(Notification.id.in_(unread_ids)).update({"is_read": True}, synchronize_session=False)
                 s.commit()
+                _unread_cache.pop(user.id, None)
 
     return {"notifications": result, "has_more": has_more, "total": 0}
 
@@ -4869,7 +4870,7 @@ def api_unread_count(request: Request):
     if cached and now - cached[1] < _UNREAD_CACHE_TTL:
         return {"count": cached[0]}
     with get_session() as s:
-        count = s.query(Notification).filter_by(user_id=user.id, is_read=False).count()
+        count = s.query(Notification.id).filter_by(user_id=user.id, is_read=False).count()
     _unread_cache[user.id] = (count, now)
     return {"count": count}
 
