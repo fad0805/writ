@@ -82,6 +82,18 @@ export function invalidateEmojiCache() {
   }
 }
 
+const _emojiSubscribers: Set<(emojis: CustomEmoji[]) => void> = new Set();
+
+export function subscribeEmojis(cb: (emojis: CustomEmoji[]) => void): () => void {
+  if (cache) { cb(cache); return () => {}; }
+  _emojiSubscribers.add(cb);
+  getCustomEmojis().then(list => {
+    _emojiSubscribers.forEach(fn => fn(list));
+    _emojiSubscribers.clear();
+  });
+  return () => { _emojiSubscribers.delete(cb); };
+}
+
 export function renderCustomEmojis(html: string, emojis: CustomEmoji[], size?: number): string {
   if (!emojis || emojis.length === 0) return html;
   const sz = size ?? 33;

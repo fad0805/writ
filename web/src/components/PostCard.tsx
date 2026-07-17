@@ -13,7 +13,7 @@ import EmojiPicker from "./EmojiPicker";
 import { useAuth } from "@/lib/auth";
 import ShareButton from "@/components/ShareButton";
 import { hashColor } from "@/lib/avatar";
-import { getCustomEmojis, renderCustomEmojis, injectEmojis, CustomEmoji } from "@/lib/emojis";
+import { getCustomEmojis, renderCustomEmojis, injectEmojis, CustomEmoji, subscribeEmojis } from "@/lib/emojis";
 import { sanitizePost, sanitizeName } from "@/lib/sanitize";
 import { installCodeCopyButtons } from "@/lib/codeCopy";
 
@@ -94,7 +94,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   const [boostsCount, setBoostsCount] = useState(post.boosts_count);
 
   const [emojiList, setEmojiList] = useState<CustomEmoji[]>([]);
-  useEffect(() => { getCustomEmojis().then(setEmojiList); }, []);
+  useEffect(() => subscribeEmojis(setEmojiList), []);
   const [reactions, setReactions] = useState(post.reactions || {});
   const [myReaction, setMyReaction] = useState(post.my_reaction || null);
   const reactionEmojiMap = useMemo(() => {
