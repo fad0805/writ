@@ -455,7 +455,7 @@ def _cache_remote_media(remote_url: str) -> str:
             img = Image.open(io.BytesIO(data))
             try:
                 img.seek(1)
-                can_shrink = False  # 애니메이션은 리사이즈 불가
+                can_shrink = False
             except (EOFError, NotImplementedError):
                 can_shrink = True
             finally:
@@ -467,11 +467,11 @@ def _cache_remote_media(remote_url: str) -> str:
                     img = img.resize((int(img.width * ratio), int(img.height * ratio)), Image.LANCZOS)
                 out = io.BytesIO()
                 if ext in ("jpg", "jpeg"):
-                    if img.mode in ("RGBA", "P"):
-                        img = img.convert("RGB")
-                    img.save(out, format="JPEG", quality=85)
-                elif ext == "png":
-                    img.save(out, format="PNG")
+                    img = img.convert("RGB") if img.mode in ("RGBA", "P") else img
+                    img.save(out, format="WEBP", quality=85)
+                    ext = "webp"
+                elif ext in ("png", "gif"):
+                    img.save(out, format="PNG" if ext == "png" else "GIF")
                 else:
                     img.save(out, format="WEBP", quality=85)
                 data = out.getvalue()
