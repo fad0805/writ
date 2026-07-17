@@ -60,6 +60,14 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const initialSet = useRef(false);
+  const recentColorsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("writ:recent-colors");
+      if (saved) recentColorsRef.current = JSON.parse(saved);
+    } catch {}
+  }, []);
 
   const extensions = useMemo(() => [
     StarterKit.configure({
@@ -159,6 +167,20 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
   const imgAlign = imgAttr("data-align");
   const imgWrap = imgAttr("data-wrap");
 
+  const saveRecentColor = (color: string) => {
+    const list = recentColorsRef.current.filter((c) => c !== color);
+    list.unshift(color);
+    if (list.length > 5) list.length = 5;
+    recentColorsRef.current = list;
+    try { localStorage.setItem("writ:recent-colors", JSON.stringify(list)); } catch {}
+  };
+
+  const applyColor = (color: string) => {
+    editor?.chain().focus().setColor(color).run();
+    saveRecentColor(color);
+    setShowColorPicker(false);
+  };
+
   return (
     <div className="episode-editor">
       <div className="episode-editor-toolbar">
@@ -171,6 +193,14 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
           <button type="button" onClick={() => setShowColorPicker(!showColorPicker)} style={{ color: editor?.getAttributes("textStyle").color || "inherit", fontWeight: 600 }}>A</button>
           {showColorPicker && (
             <div ref={colorPickerRef} className="episode-editor-colorpicker" onClick={(e) => e.stopPropagation()}>
+              {recentColorsRef.current.length > 0 && (
+                <>
+                  {recentColorsRef.current.map((c) => (
+                    <button key={`r-${c}`} type="button" title={`${c} (최근)`} style={{ width: 20, height: 20, border: `2px solid var(--accent)`, borderRadius: 3, cursor: "pointer", background: c, display: "inline-block", margin: 1 }} onClick={() => applyColor(c)} />
+                  ))}
+                  <div style={{ gridColumn: "1 / -1", height: 1, background: "var(--border)", margin: "3px 0" }} />
+                </>
+              )}
               {["#000000","#434343","#666666","#999999","#b7b7b7","#cccccc","#d9d9d9","#efefef","#f3f3f3","#ffffff",
                 "#980000","#ff0000","#ff9900","#ffff00","#00ff00","#00ffff","#4a86e8","#0000ff","#9900ff","#ff00ff",
                 "#e6b8af","#f4cccc","#fce5cd","#fff2cc","#d9ead3","#d0e0e3","#c9daf8","#cfe2f3","#d9d2e9","#ead1dc",
@@ -180,7 +210,7 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
                 "#85200c","#990000","#b45f06","#bf9000","#38761d","#134f5c","#1155cc","#0b5394","#351c75","#741b47",
                 "#5b0f00","#660000","#783f04","#7f6000","#274e13","#0c343d","#1c4587","#073763","#20124d","#4c1130"
               ].map((c) => (
-                <button key={c} type="button" title={c} style={{ width: 20, height: 20, border: "1px solid var(--border)", borderRadius: 3, cursor: "pointer", background: c, display: "inline-block", margin: 1 }} onClick={() => { editor?.chain().focus().setColor(c).run(); setShowColorPicker(false); }} />
+                <button key={c} type="button" title={c} style={{ width: 20, height: 20, border: "1px solid var(--border)", borderRadius: 3, cursor: "pointer", background: c, display: "inline-block", margin: 1 }} onClick={() => applyColor(c)} />
               ))}
             </div>
           )}
