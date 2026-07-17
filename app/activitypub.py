@@ -1826,59 +1826,17 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             _kw = reaction[1:-1]
             _existing_emoji = session.query(CustomEmoji).filter_by(keyword=_kw).first()
             if not _existing_emoji:
-                # Do emoji HTTP download outside this session to avoid holding connection
-                _emoji_data = None
+                _import_data = {"kw": _kw}
                 tags = activity.get("tag", []) or []
                 for _tag in tags:
                     if isinstance(_tag, dict) and _tag.get("type") == "Emoji":
                         _icon = _tag.get("icon", {})
-                        _url = _icon.get("url", "") if isinstance(_icon, dict) else ""
-                        _tag_id = _tag.get("id", "")
-                        _domain = urlparse(_tag_id).netloc if _tag_id else ""
-                        if _url:
-                            try:
-                                import httpx as _httpx
-                                _resp = _httpx.get(_url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=10)
-                                if _resp.status_code == 200:
-                                    from PIL import Image
-                                    _img = Image.open(io.BytesIO(_resp.content))
-                                    _out = io.BytesIO()
-                                    try:
-                                        _img.seek(1)
-                                        _frames = []
-                                        _durations = []
-                                        while True:
-                                            _frames.append(_img.convert("RGBA"))
-                                            _durations.append(_img.info.get("duration", 100))
-                                            _img.seek(_img.tell() + 1)
-                                        _frames[0].save(_out, format="WEBP", save_all=True, append_images=_frames[1:], duration=_durations, loop=0, quality=85)
-                                    except Exception:
-                                        _content = _resp.content
-                                        _fname = f"{_kw}.{_url.rsplit('.', 1)[-1].split('?')[0]}"
-                                        _emoji_data = (_fname, _content, f"image/{_url.rsplit('.', 1)[-1].split('?')[0]}", _domain)
-                                        break
-                                    finally:
-                                        _img.seek(0)
-                                    _content = _out.getvalue()
-                                    _fname = f"{_kw}.webp"
-                                    _emoji_data = (_fname, _content, "image/webp", _domain)
-                            except Exception as e:
-                                logger.warning("Failed to download remote emoji %s: %s", _kw, e)
+                        _import_data["url"] = _icon.get("url", "") if isinstance(_icon, dict) else ""
+                        _import_data["domain"] = urlparse(_tag.get("id", "")).netloc if _tag.get("id", "") else ""
                         break
-                if _emoji_data:
-                    _fname, _content, _mime, _domain = _emoji_data
-                    from app.utils.storage import get_storage
-                    _storage = get_storage()
-                    try:
-                        _storage.save(f"emojis/remote/{_fname}", _content, _mime)
-                        with get_session() as emoji_s:
-                            emoji_s.add(CustomEmoji(keyword=_kw, file_name=_fname, category="remote", domain=_domain))
-                            emoji_s.commit()
-                        logger.info("Imported remote emoji: %s from %s", _kw, _domain)
-                        from app.routes.api import _invalidate_emoji_cache
-                        _invalidate_emoji_cache()
-                    except Exception as e:
-                        logger.warning("Failed to save remote emoji %s: %s", _kw, e)
+                if _import_data.get("url"):
+                    import threading as _thr
+                    _thr.Thread(target=_background_import_emoji, args=(_import_data["url"], _import_data["kw"], _import_data["domain"]), daemon=True).start()
 
         existing = session.query(Like).filter_by(user_id=actor_id, post_id=post.id).first()
         if existing:
@@ -2880,6 +2838,46 @@ def send_to_shared_inbox(user: User, activity: dict):
             continue
         sent.add(inbox)
         _post_to_inbox(inbox, activity, user)
+
+
+def _background_import_emoji(url: str, keyword: str, domain: str):
+    """백그라운드에서 리모트 에모지 다운로드 + WebP 변환 + 저장. Like 처리 지연 방지."""
+    try:
+        import httpx as _hx
+        _resp = _hx.get(url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=15)
+        if _resp.status_code != 200:
+            return
+        from PIL import Image
+        _img = Image.open(io.BytesIO(_resp.content))
+        _out = io.BytesIO()
+        try:
+            _img.seek(1)
+            _frames = []
+            _durations = []
+            while True:
+                _frames.append(_img.convert("RGBA"))
+                _durations.append(_img.info.get("duration", 100))
+                _img.seek(_img.tell() + 1)
+            _frames[0].save(_out, format="WEBP", save_all=True, append_images=_frames[1:], duration=_durations, loop=0, quality=85)
+        except Exception:
+            _out = io.BytesIO()
+            _img = _img.convert("RGBA") if _img.mode in ("RGBA", "P") else _img.convert("RGB")
+            _img.save(_out, format="WEBP", quality=85)
+        finally:
+            _img.seek(0)
+        _content = _out.getvalue()
+        _fname = f"{keyword}.webp"
+        from app.utils.storage import get_storage
+        get_storage().save(f"emojis/remote/{_fname}", _content, "image/webp")
+        with get_session() as _es:
+            _existing = _es.query(CustomEmoji).filter_by(keyword=keyword).first()
+            if not _existing:
+                _es.add(CustomEmoji(keyword=keyword, file_name=_fname, category="remote", domain=domain))
+                _es.commit()
+                from app.routes.api import _invalidate_emoji_cache
+                _invalidate_emoji_cache()
+    except Exception as e:
+        logger.warning("Background emoji import failed %s: %s", keyword, e)
 
 
 def _process_emoji_tags(tags: list, session):
