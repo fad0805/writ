@@ -35,9 +35,16 @@ export default function NotifSound() {
       try {
         if (event.data === "refresh") return;
         const parsed = JSON.parse(event.data);
-        if (parsed && parsed.event === "notif" && audioRef.current && isNotifSoundEnabled()) {
-          audioRef.current.currentTime = 0;
-          audioRef.current.play().catch(() => {});
+        if (parsed && parsed.event === "notif") {
+          if (parsed.unread !== undefined) {
+            const badge = document.querySelector(".notif-badge");
+            if (badge) badge.textContent = String(parsed.unread);
+            if (typeof window !== "undefined") (window as any).__unreadNotifs = parsed.unread;
+          }
+          if (audioRef.current && isNotifSoundEnabled()) {
+            audioRef.current.currentTime = 0;
+            audioRef.current.play().catch(() => {});
+          }
         }
       } catch {}
     };
