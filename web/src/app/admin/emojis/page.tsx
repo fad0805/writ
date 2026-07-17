@@ -30,7 +30,7 @@ export default function AdminEmojiPage() {
   const fetchEmojis = (page: number, search?: string) => {
     setEmojiLoading(true);
     const q = search !== undefined ? search : emojiSearch;
-    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) });
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE), category: emojiFilter === "all" ? "" : emojiFilter });
     if (q) params.set("q", q);
     fetch(`/api/emojis?${params}`, { credentials: "include" })
       .then(r => r.json()).then(d => {
@@ -113,7 +113,7 @@ export default function AdminEmojiPage() {
           <input type="text" value={emojiSearch} onChange={(e) => { const v = e.target.value; setEmojiSearch(v); setEmojiPage(0); fetchEmojis(0, v); }} placeholder="이모지 검색..." className="cw-input w-full hm-bottom-8" />
           <div className="flex-row gap-8 mb-12">
             {["all", "local", "remote"].map((f) => (
-              <button key={f} onClick={() => setEmojiFilter(f)} className={`btn btn-small ${emojiFilter === f ? "btn-primary" : "btn-outline"}`}>{f === "all" ? "전체" : f === "local" ? "로컬" : "리모트"}</button>
+              <button key={f} onClick={() => { setEmojiFilter(f); setEmojiPage(0); fetchEmojis(0); }} className={`btn btn-small ${emojiFilter === f ? "btn-primary" : "btn-outline"}`}>{f === "all" ? "전체" : f === "local" ? "로컬" : "리모트"}</button>
             ))}
           </div>
           {emojiLoading ? (
@@ -122,7 +122,7 @@ export default function AdminEmojiPage() {
             <p className="empty-state">등록된 커스텀 이모지가 없습니다.</p>
           ) : (
             <div className="flex-col gap-8">
-              {emojis.filter(e => (emojiFilter === "all" || (emojiFilter === "local" ? e.category !== "remote" : e.category === "remote")) && (!emojiSearch || e.keyword.includes(emojiSearch.toLowerCase()))).map((emo) => (
+              {emojis.filter(e => !emojiSearch || e.keyword.includes(emojiSearch.toLowerCase())).map((emo) => (
                 <div key={emo.id} className="emoji-list-item" onClick={() => { if (emo.category !== "remote") { setEditEmoji(emo); setEditKeyword(emo.keyword); setEditCategory(emo.category || ""); setEditAliases((emo.aliases || []).join(", ")); } }} style={{ cursor: emo.category !== "remote" ? "pointer" : "default" }}>
                   <img src={emo.url} alt={emo.keyword} width={33} height={33} className="emoji-img-admin" />
                   <div className="emoji-info">

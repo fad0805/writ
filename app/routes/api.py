@@ -5151,7 +5151,7 @@ def _load_emojis(session):
 
 
 @router.get("/emojis")
-def api_list_emojis(limit: int = Query(30), offset: int = Query(0), q: str = Query("")):
+def api_list_emojis(limit: int = Query(30), offset: int = Query(0), q: str = Query(""), category: str = Query("")):
     with get_session() as s:
         query = s.query(CustomEmoji)
         if q:
@@ -5161,6 +5161,10 @@ def api_list_emojis(limit: int = Query(30), offset: int = Query(0), q: str = Que
                     CustomEmoji.category.ilike(f"%{q}%"),
                 )
             )
+        if category == "local":
+            query = query.filter(CustomEmoji.category != "remote")
+        elif category == "remote":
+            query = query.filter(CustomEmoji.category == "remote")
         total = query.count()
         emojis = query.order_by(desc(CustomEmoji.created_at)).offset(offset).limit(limit).all()
         result = [
