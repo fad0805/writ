@@ -1038,7 +1038,7 @@ def api_get_post(request: Request, post_id: int):
                 _bu = {u.id: u for u in s.query(User).filter(User.id.in_(set(_reply_booster_map.values()))).all()}
                 _reply_booster_map = {pid: _bu.get(uid) for pid, uid in _reply_booster_map.items()}
         result["replies"] = [_post_json(r, s, user, _liked_ids=_reply_liked_ids, _boosted_ids=_reply_boosted_ids, _bookmarked_ids=_reply_bookmarked_ids, _booster_map=_reply_booster_map) for r in descendants if _can_view(r, user, s)]
-        result["has_more_replies"] = offset + limit < total_descendants
+        result["has_more_replies"] = offset + limit < len(descendant_ids)
         ancestors = []
         cur = post.parent
         ancestor_ids = []
