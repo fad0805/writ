@@ -1923,7 +1923,9 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
             raise HTTPException(status_code=400, detail="Invalid emoji")
         if emoji.startswith(":") and emoji.endswith(":"):
             _kw = emoji[1:-1]
-            _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw).first()
+            _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw, domain="").first()
+            if not _emoji_row:
+                _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw).first()
             if not _emoji_row or (_emoji_row.domain and _emoji_row.domain.strip()):
                 raise HTTPException(status_code=400, detail="Remote emojis cannot be used as reactions")
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
@@ -1956,7 +1958,9 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
             _tag = []
             if emoji.startswith(":") and emoji.endswith(":"):
                 _kw = emoji[1:-1]
-                _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw).first()
+                _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw, domain="").first()
+                if not _emoji_row:
+                    _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw).first()
                 if _emoji_row and _emoji_row.file_name:
                     _emoji_img = _emoji_url(_emoji_row.file_name, _emoji_row.domain or "", _emoji_row.category or "")
                     if not _emoji_img.startswith("http"):
