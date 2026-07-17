@@ -500,9 +500,9 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const handleContentChange = (val: string, cursor?: number) => {
     const pos = cursor ?? (taRef.current?.selectionStart ?? val.length);
     const before = val.slice(0, pos);
-    if (before.endsWith("```") && !before.endsWith("```\n")) {
+    if (before.endsWith("```") && !before.endsWith("```\n") && !val.endsWith("\n\n```")) {
       const after = val.slice(pos);
-      if (!after.startsWith("\n\n```")) {
+      if (!after.includes("\n\n```")) {
         const insertion = "\n\n```";
         const newVal = val.slice(0, pos) + insertion + val.slice(pos);
         setContent(newVal);
