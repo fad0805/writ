@@ -1,5 +1,30 @@
 import { SIZES } from "@/const/const";
+import { EDITOR_EXTENSIONS } from "@/const/extensions";
 import { Editor } from "@tiptap/core";
+import { useEditor } from "@tiptap/react";
+import { useEffect } from "react";
+
+export function useEditorInit({value, onChange}: {value: string; onChange: (html: string) => void}) {
+  const editor = useEditor({
+    extensions: EDITOR_EXTENSIONS,
+    content: value || "",
+  })
+
+  useEffect(() => {
+    if (!editor) return;
+
+    const handler = ({editor}: {editor: Editor}) => {
+      onChange(editor.getHTML())
+    }
+    editor.on("update", handler);
+
+    return () => {
+      editor.off("update", handler);
+    }
+  }, [editor, onChange])
+
+  return editor;
+}
 
 export function useEditorActions(editor: Editor | null) {
   if (!editor) return null;
@@ -29,7 +54,6 @@ export function useEditorActions(editor: Editor | null) {
   }
 
   const align = (dir: string) => {
-    if (!editor) return;
     if (editor.isActive("image")) {
       editor.chain().focus().updateAttributes("image", { "data-align": dir }).run();
       if (dir === "center") editor.chain().focus().updateAttributes("image", { "data-wrap": "true" }).run();
@@ -39,7 +63,6 @@ export function useEditorActions(editor: Editor | null) {
   }
 
   const isAlign = (dir: string) => {
-    if (!editor) return false;
     if (editor.isActive("image")) return imgAttr("data-align") === dir;
     return editor.isActive({ textAlign: dir });
   }

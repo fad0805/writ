@@ -1,66 +1,17 @@
 "use client";
 
-import { useEditorActions } from "@/hooks/useEditorAction";
-import { Color } from "@tiptap/extension-color";
-import Image from "@tiptap/extension-image";
-import Placeholder from "@tiptap/extension-placeholder";
-import Strike from "@tiptap/extension-strike";
-import TextAlign from "@tiptap/extension-text-align";
-import { TextStyle } from "@tiptap/extension-text-style";
-import Underline from "@tiptap/extension-underline";
-import { EditorContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import { useEffect, useMemo, useRef, useState } from "react";
-
-const CustomStrike = Strike.extend({
-  addInputRules() {
-    return [];
-  },
-});
-
-const AlignableImage = Image.extend({
-  addAttributes() {
-    return {
-      src: { default: null },
-      alt: { default: null },
-      "data-align": { default: "center" },
-      "data-width": { default: "75" },
-      "data-wrap": { default: "true" },
-    };
-  },
-  renderHTML({ node, HTMLAttributes }) {
-    const w = node.attrs["data-width"] as string;
-    const align = node.attrs["data-align"] as string;
-    const wrap = node.attrs["data-wrap"] as string;
-    let style = `width:${w}%`;
-    if (align === "left" && wrap === "true") style += "; float: left; margin: 0 16px 8px 0";
-    else if (align === "right" && wrap === "true") style += "; float: right; margin: 0 0 8px 16px";
-    else if (align === "left" && wrap === "false") style += "; display: block; margin: 8px 0";
-    else if (align === "right" && wrap === "false") style += "; display: block; margin: 8px 0 8px auto";
-    else if (align === "center") style += "; display: block; margin: 8px auto";
-    return ["img", { ...HTMLAttributes, style }];
-  },
-  parseHTML() {
-    return [{
-      tag: "img",
-      getAttrs: (el) => ({
-        "data-align": (el as HTMLElement).getAttribute("data-align") || "center",
-        "data-width": (el as HTMLElement).getAttribute("data-width") || "75",
-        "data-wrap": (el as HTMLElement).getAttribute("data-wrap") || "true",
-      }),
-    }];
-  },
-});
+import { useEditorActions, useEditorInit } from "@/hooks/useEditorAction";
+import { EditorContent } from "@tiptap/react";
+import { useEffect, useRef, useState } from "react";
 
 export default function EpisodeEditor({ value, onChange }: { value: string; onChange: (html: string) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const colorPickerRef = useRef<HTMLDivElement>(null);
-  const internalUpdate = useRef(false);
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-  const initialSet = useRef(false);
   const recentColorsRef = useRef<string[]>([]);
+
+  const editor = useEditorInit({ value, onChange })
+  const editorFn = useEditorActions(editor);
 
   useEffect(() => {
     try {
@@ -68,40 +19,6 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
       if (saved) recentColorsRef.current = JSON.parse(saved);
     } catch {}
   }, []);
-
-  const extensions = useMemo(() => [
-    StarterKit.configure({
-      heading: { levels: [2, 3] },
-      strike: false,
-    }),
-    CustomStrike,
-    Underline,
-    TextStyle,
-    Color,
-    Placeholder.configure({ placeholder: "소설 내용을 입력하세요..." }),
-    TextAlign.configure({ types: ["heading", "paragraph"] }),
-    AlignableImage,
-  ], []);
-
-  const editor = useEditor({
-    extensions,
-    onUpdate: ({ editor }) => {
-      internalUpdate.current = true;
-      onChangeRef.current(editor.getHTML());
-    },
-  });
-
-  const editorFn = useEditorActions(editor);
-
-  useEffect(() => {
-    if (!editor) return;
-    if (!initialSet.current) {
-      if (value) {
-        editor.commands.setContent(value, { emitUpdate: false } as any);
-      }
-      initialSet.current = true;
-    }
-  }, [editor, value]);
 
   useEffect(() => {
     if (!showColorPicker) return;
