@@ -455,7 +455,23 @@ def _cache_remote_media(remote_url: str) -> str:
             img = Image.open(io.BytesIO(data))
             try:
                 img.seek(1)
-                pass  # 애니메이션 → 원본 유지
+                frames = []
+                durations = []
+                try:
+                    while True:
+                        frames.append(img.convert("RGBA"))
+                        durations.append(img.info.get("duration", 100))
+                        img.seek(img.tell() + 1)
+                except EOFError:
+                    pass
+                out = io.BytesIO()
+                max_dim = 2048
+                if any(f.width > max_dim or f.height > max_dim for f in frames):
+                    ratio = min(max_dim / max(f.width for f in frames), max_dim / max(f.height for f in frames))
+                    frames = [f.resize((int(f.width * ratio), int(f.height * ratio)), Image.LANCZOS) for f in frames]
+                frames[0].save(out, format="WEBP", save_all=True, append_images=frames[1:], duration=durations, loop=0, quality=85)
+                data = out.getvalue()
+                ext = "webp"
             except (EOFError, NotImplementedError):
                 max_dim = 2048
                 if img.width > max_dim or img.height > max_dim:
