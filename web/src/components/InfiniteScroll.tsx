@@ -17,15 +17,16 @@ export default function InfiniteScroll({
     if (!hasMore) return;
     const el = sentinelRef.current;
     if (!el) return;
+    const scrollRoot = document.querySelector(".main-content");
     const observer = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting && !loadingRef.current && hasMore) {
         loadingRef.current = true;
         loadMoreRef.current();
       }
-    }, { rootMargin: "200px" });
+    }, { root: scrollRoot, rootMargin: "200px" });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [hasMore]);
+  }, [hasMore, loadingMore]);
 
   return (
     <>
