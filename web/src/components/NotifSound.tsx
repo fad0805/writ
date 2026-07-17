@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useRef } from "react";
-import { useAuth } from "@/lib/auth";
 
 const LS_KEY = "writ_notif_sound";
 
@@ -14,11 +13,9 @@ export function setNotifSoundEnabled(on: boolean) {
 }
 
 export default function NotifSound() {
-  const { user } = useAuth();
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    if (!user) return;
     const init = () => {
       if (audioRef.current) return;
       audioRef.current = new Audio("/alert.wav");
@@ -46,7 +43,7 @@ export default function NotifSound() {
     };
     es.onerror = () => {};
     return () => { es.close(); document.removeEventListener("click", unlock); document.removeEventListener("keydown", unlock); };
-  }, [user]);
+  }, []);
 
   return null;
 }
