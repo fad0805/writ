@@ -80,6 +80,9 @@ export function invalidateEmojiCache() {
     localStorage.removeItem("emoji_cache");
     localStorage.setItem("emoji_cache_ts", Date.now().toString());
   }
+  getCustomEmojis().then(list => {
+    _emojiSubscribers.forEach(fn => fn(list));
+  });
 }
 
 const _emojiSubscribers: Set<(emojis: CustomEmoji[]) => void> = new Set();
@@ -89,7 +92,6 @@ export function subscribeEmojis(cb: (emojis: CustomEmoji[]) => void): () => void
   _emojiSubscribers.add(cb);
   getCustomEmojis().then(list => {
     _emojiSubscribers.forEach(fn => fn(list));
-    _emojiSubscribers.clear();
   });
   return () => { _emojiSubscribers.delete(cb); };
 }
