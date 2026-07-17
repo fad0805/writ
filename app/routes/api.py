@@ -2455,9 +2455,9 @@ def api_user_media(request: Request, username: str, limit: int = Query(12), offs
         if not profile:
             raise HTTPException(status_code=404, detail="User not found")
         from sqlalchemy import text
-        # Use raw SQL to filter non-empty media_attachments at DB level
+        # Use raw SQL to filter non-empty media_attachments at DB level (cast to text for cross-DB compatibility)
         rows = s.execute(
-            text("SELECT id FROM posts WHERE author_id = :aid AND is_deleted = 0 AND media_attachments IS NOT NULL AND media_attachments != 'null' AND media_attachments != '[]' ORDER BY created_at DESC LIMIT :lim OFFSET :off"),
+            text("SELECT id FROM posts WHERE author_id = :aid AND is_deleted = FALSE AND media_attachments IS NOT NULL AND media_attachments::text NOT IN ('null', '[]') ORDER BY created_at DESC LIMIT :lim OFFSET :off"),
             {"aid": profile.id, "lim": limit + 1, "off": offset}
         ).fetchall()
         post_ids = [r[0] for r in rows]
@@ -2470,7 +2470,7 @@ def api_user_media(request: Request, username: str, limit: int = Query(12), offs
         # Count total for has_more if needed
         if not has_more:
             total = s.execute(
-                text("SELECT COUNT(*) FROM posts WHERE author_id = :aid AND is_deleted = 0 AND media_attachments IS NOT NULL AND media_attachments != 'null' AND media_attachments != '[]'"),
+                text("SELECT COUNT(*) FROM posts WHERE author_id = :aid AND is_deleted = FALSE AND media_attachments IS NOT NULL AND media_attachments::text NOT IN ('null', '[]')"),
                 {"aid": profile.id}
             ).scalar()
             has_more = total > offset + limit
