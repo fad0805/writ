@@ -265,39 +265,55 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   };
   const [contentHtml, setContentHtml] = useState(() => sanitizePost(buildContentHtml()));
 
-  useEffect(() => {
-    const mentionRe = /<a\s+href="\/@([a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}))"[^>]*>[^<]*<\/a>/g;
-    const remoteMentions: string[] = [];
-    let m: RegExpExecArray | null;
-    while ((m = mentionRe.exec(contentHtml)) !== null) {
-      const handle = m[1];
-      if (handle.includes("@") && !validMentions.has(handle) && !resolvedMentions.has(handle)) {
-        remoteMentions.push(handle);
-      }
+  // 전역 fetch-actor 큐 (컴포넌트 간 공유)
+  const _fetchActor = useCallback((handle: string) => {
+    const g = window as any;
+    if (!g.__fetchActorCache) g.__fetchActorCache = new Map<string, string>();
+    if (!g.__fetchActorPending) g.__fetchActorPending = new Set<string>();
+    if (g.__fetchActorCache.has(handle)) {
+      setResolvedMentions((prev) => { const n = new Map(prev); n.set(handle, g.__fetchActorCache.get(handle)); return n; });
+      return;
     }
-    if (!remoteMentions.length) return;
-    const seen = new Set<string>();
-    remoteMentions.forEach((handle) => {
-      if (seen.has(handle)) return;
-      seen.add(handle);
-      const [username, domain] = handle.split("@");
-      const profileUrl = `https://${domain}/@${username}`;
-      const form = new FormData();
-      form.append("url", profileUrl);
+    if (g.__fetchActorPending.has(handle)) return;
+    g.__fetchActorPending.add(handle);
+    const [username, domain] = handle.split("@");
+    const form = new FormData();
+    form.append("url", `https://${domain}/@${username}`);
+    setTimeout(() => {
       fetch("/api/fetch-actor", { method: "POST", credentials: "include", body: form })
-        .then((r) => (r.ok ? r.json() : null))
+        .then((r) => r.ok ? r.json() : null)
         .then((data) => {
           if (data?.username) {
-            setResolvedMentions((prev) => {
-              const next = new Map(prev);
-              next.set(handle, data.username);
-              return next;
-            });
+            g.__fetchActorCache.set(handle, data.username);
+            setResolvedMentions((prev) => { const n = new Map(prev); n.set(handle, data.username); return n; });
           }
         })
-        .catch(() => {});
-    });
+        .catch(() => {})
+        .finally(() => g.__fetchActorPending.delete(handle));
+    }, Math.random() * 800);
   }, []);
+
+  useEffect(() => {
+    const mentionRe = /<a\s+href="\/@([a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}))"[^>]*>[^<]*<\/a>/g;
+    const g = window as any;
+    const cache = g.__fetchActorCache as Map<string, string> | undefined;
+    const pending = g.__fetchActorPending as Set<string> | undefined;
+    let m: RegExpExecArray | null;
+    const needsFetch: string[] = [];
+    while ((m = mentionRe.exec(contentHtml)) !== null) {
+      const handle = m[1];
+      if (!handle.includes("@")) continue;
+      if (validMentions.has(handle)) continue;
+      if (resolvedMentions.has(handle)) continue;
+      if (cache?.has(handle)) {
+        setResolvedMentions((prev) => { if (prev.has(handle)) return prev; const n = new Map(prev); n.set(handle, cache.get(handle)!); return n; });
+        continue;
+      }
+      if (pending?.has(handle)) continue;
+      needsFetch.push(handle);
+    }
+    needsFetch.forEach((handle) => _fetchActor(handle));
+  }, [contentHtml, validMentions, resolvedMentions, _fetchActor]);
   useEffect(() => {
     setContentHtml(sanitizePost(buildContentHtml(quoteUrl || undefined, resolvedMentions)));
   }, [post.id, post.content, post.summary, quoteUrl, resolvedMentions, emojiMap]);
