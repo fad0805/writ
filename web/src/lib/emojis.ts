@@ -80,6 +80,9 @@ export function invalidateEmojiCache() {
     localStorage.removeItem("emoji_cache");
     localStorage.setItem("emoji_cache_ts", Date.now().toString());
   }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("emojichange"));
+  }
   getCustomEmojis().then(list => {
     _emojiSubscribers.forEach(fn => fn(list));
   });
