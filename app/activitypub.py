@@ -1841,9 +1841,26 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                                 import httpx as _httpx
                                 _resp = _httpx.get(_url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=10)
                                 if _resp.status_code == 200:
-                                    _ext = _url.rsplit(".", 1)[-1].split("?")[0] if "." in _url else "png"
-                                    _fname = f"{_kw}.{_ext}"
-                                    _emoji_data = (_fname, _resp.content, f"image/{_ext}", _domain)
+                                    from PIL import Image
+                                    _img = Image.open(io.BytesIO(_resp.content))
+                                    _out = io.BytesIO()
+                                    try:
+                                        _img.seek(1)
+                                        _frames = []
+                                        _durations = []
+                                        while True:
+                                            _frames.append(_img.convert("RGBA"))
+                                            _durations.append(_img.info.get("duration", 100))
+                                            _img.seek(_img.tell() + 1)
+                                        _frames[0].save(_out, format="WEBP", save_all=True, append_images=_frames[1:], duration=_durations, loop=0, quality=85)
+                                    except (EOFError, NotImplementedError):
+                                        _img = _img.convert("RGBA") if _img.mode in ("P",) else _img.convert("RGB") if _img.mode == "RGBA" else _img
+                                        _img.save(_out, format="WEBP", quality=85)
+                                    finally:
+                                        _img.seek(0)
+                                    _content = _out.getvalue()
+                                    _fname = f"{_kw}.webp"
+                                    _emoji_data = (_fname, _content, "image/webp", _domain)
                             except Exception as e:
                                 logger.warning("Failed to download remote emoji %s: %s", _kw, e)
                         break
