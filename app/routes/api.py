@@ -982,10 +982,14 @@ def api_get_post(request: Request, post_id: int):
             raise HTTPException(status_code=404, detail="Post not found")
         if not _can_view(post, user, s):
             raise HTTPException(status_code=403, detail="Cannot view this post")
-        main_liked_ids = {post.id} if user and s.query(Like).filter_by(user_id=user.id, post_id=post.id).first() else set()
-        main_boosted_ids = {post.id} if user and s.query(Boost).filter_by(user_id=user.id, post_id=post.id).first() else set()
-        main_bookmarked_ids = {post.id} if user and s.query(Bookmark).filter_by(user_id=user.id, post_id=post.id).first() else set()
-        result = _post_json(post, s, user, _liked_ids=main_liked_ids, _boosted_ids=main_boosted_ids, _bookmarked_ids=main_bookmarked_ids)
+        _main_booster_map = {}
+        if user:
+            _buid = s.query(Boost.user_id).filter_by(post_id=post.id).order_by(desc(Boost.created_at)).first()
+            if _buid:
+                _u = s.query(User).get(_buid[0])
+                if _u:
+                    _main_booster_map[post.id] = _u
+        result = _post_json(post, s, user, _booster_map=_main_booster_map)
         if user and post.author_id != user.id:
             result["is_following_author"] = s.query(Follow).filter_by(
                 follower_id=user.id, following_id=post.author_id, accepted=True
@@ -994,10 +998,12 @@ def api_get_post(request: Request, post_id: int):
             result["is_following_author"] = False
         limit = min(int(request.query_params.get("reply_limit", 5)), 50)
         offset = int(request.query_params.get("reply_offset", 0))
+        direct_count = s.query(Post).filter_by(in_reply_to_id=post_id, is_deleted=False).count()
+        result["total_replies"] = direct_count
         descendant_ids = set()
         queue = [post_id]
-        max_fetch = offset + limit + 200
-        while queue and len(descendant_ids) < max_fetch:
+        need = offset + limit + 1
+        while queue and len(descendant_ids) < need:
             pid = queue.pop(0)
             child_ids = [r[0] for r in s.query(Post.id).filter(
                 Post.in_reply_to_id == pid, Post.is_deleted == False
@@ -1005,11 +1011,10 @@ def api_get_post(request: Request, post_id: int):
             for cid in child_ids:
                 if cid not in descendant_ids:
                     descendant_ids.add(cid)
+                    if len(descendant_ids) >= need:
+                        break
                     queue.append(cid)
-        direct_count = s.query(Post).filter_by(in_reply_to_id=post_id, is_deleted=False).count()
-        total_descendants = len(descendant_ids)
-        result["total_replies"] = direct_count
-        result["total_descendants"] = total_descendants
+        result["total_descendants"] = len(descendant_ids)
         reply_ids = sorted(descendant_ids)[offset:offset + limit]
         if reply_ids:
             descendants = s.query(Post).options(
@@ -1019,16 +1024,20 @@ def api_get_post(request: Request, post_id: int):
         else:
             descendants = []
         reply_id_set = set(reply_ids)
+        _reply_liked_ids = _reply_boosted_ids = _reply_bookmarked_ids = set()
+        _reply_reactions = {}
+        _reply_booster_map = {}
         if user and reply_id_set:
-            liked_ids = set(r[0] for r in s.query(Like.post_id).filter(
-                Like.user_id == user.id, Like.post_id.in_(reply_id_set)).all())
-            boosted_ids = set(r[0] for r in s.query(Boost.post_id).filter(
-                Boost.user_id == user.id, Boost.post_id.in_(reply_id_set)).all())
-            bookmarked_ids = set(r[0] for r in s.query(Bookmark.post_id).filter(
-                Bookmark.user_id == user.id, Bookmark.post_id.in_(reply_id_set)).all())
-        else:
-            liked_ids = boosted_ids = bookmarked_ids = set()
-        result["replies"] = [_post_json(r, s, user, _liked_ids=liked_ids, _boosted_ids=boosted_ids, _bookmarked_ids=bookmarked_ids) for r in descendants if _can_view(r, user, s)]
+            _reply_liked_ids = set(r[0] for r in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(reply_id_set)).all())
+            _reply_boosted_ids = set(r[0] for r in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(reply_id_set)).all())
+            _reply_bookmarked_ids = set(r[0] for r in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(reply_id_set)).all())
+            for bid, buid in s.query(Boost.post_id, Boost.user_id).filter(Boost.post_id.in_(reply_id_set)).order_by(desc(Boost.created_at)).all():
+                if bid not in _reply_booster_map:
+                    _reply_booster_map[bid] = buid
+            if _reply_booster_map:
+                _bu = {u.id: u for u in s.query(User).filter(User.id.in_(set(_reply_booster_map.values()))).all()}
+                _reply_booster_map = {pid: _bu.get(uid) for pid, uid in _reply_booster_map.items()}
+        result["replies"] = [_post_json(r, s, user, _liked_ids=_reply_liked_ids, _boosted_ids=_reply_boosted_ids, _bookmarked_ids=_reply_bookmarked_ids, _booster_map=_reply_booster_map) for r in descendants if _can_view(r, user, s)]
         result["has_more_replies"] = offset + limit < total_descendants
         ancestors = []
         cur = post.parent
