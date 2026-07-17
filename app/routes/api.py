@@ -3220,6 +3220,8 @@ def api_follow_novel(request: Request, novel_id: int):
         novel = s.query(Novel).filter_by(id=novel_id).first()
         if not novel:
             raise HTTPException(status_code=404, detail="Novel not found")
+        if novel.visibility == "private" and novel.author_id != user.id:
+            raise HTTPException(status_code=404, detail="Novel not found")
         existing = s.query(SeriesFollow).filter_by(user_id=user.id, novel_id=novel.id).first()
         if not existing:
             sf = SeriesFollow(user_id=user.id, novel_id=novel.id)
@@ -5193,6 +5195,8 @@ def api_create_emoji(
     image: UploadFile = File(...),
 ):
     user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
     if not keyword.strip():
         raise HTTPException(status_code=400, detail="Keyword is required")
     keyword = keyword.strip().lower().replace(" ", "_")
@@ -5276,6 +5280,8 @@ def api_create_emoji(
 @router.patch("/emojis/{emoji_id}")
 def api_update_emoji(request: Request, emoji_id: int, category: str = Form(""), keyword: str = Form(""), aliases: str = Form("")):
     user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         emoji = s.query(CustomEmoji).get(emoji_id)
         if not emoji:
@@ -5297,6 +5303,8 @@ def api_update_emoji(request: Request, emoji_id: int, category: str = Form(""), 
 @router.post("/emojis/{emoji_id}/copy")
 def api_copy_emoji(request: Request, emoji_id: int):
     user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         src = s.query(CustomEmoji).get(emoji_id)
         if not src:
@@ -5341,6 +5349,8 @@ def api_copy_emoji(request: Request, emoji_id: int):
 @router.delete("/emojis/{emoji_id}")
 def api_delete_emoji(request: Request, emoji_id: int):
     user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         emoji = s.query(CustomEmoji).get(emoji_id)
         if not emoji:
