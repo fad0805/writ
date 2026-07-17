@@ -49,7 +49,7 @@ router = APIRouter(prefix="/api")
 def _post_json(p, session, user, tl_type=None,
                _liked_ids=None, _boosted_ids=None, _bookmarked_ids=None,
                _vote_map=None, _my_reaction_map=None, _reactions_map=None,
-               _booster_map=None, _mentioned_users_map=None, _boost_originals=None):
+               _booster_map=None, _mentioned_users_map=None, _boost_originals=None, _skip_emojis=False):
     if p.is_deleted:
         return {
             "id": p.id,
@@ -177,7 +177,7 @@ def _post_json(p, session, user, tl_type=None,
         "mentioned_user_ids": p.mentioned_user_ids or [],
         "mentioned_handles": mentioned_handles,
         "link_preview": p.link_preview or None,
-        "_emojis": [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)],
+        **(({}) if _skip_emojis else {"_emojis": [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)]}),
     }
 
 
@@ -911,13 +911,14 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         _liked_ids = _boosted_ids = _bookmarked_ids = set()
         _vote_map = _my_reaction_map = _reactions_map = _booster_map = _mentioned_users_map = {}
     print(f"[feed] final: {len(posts)} posts returned, has_more={has_more}", flush=True)
+    _timeline_emojis = [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)]
     return [_post_json(p, session, user, tl_type,
                        _liked_ids=_liked_ids, _boosted_ids=_boosted_ids,
                        _bookmarked_ids=_bookmarked_ids, _vote_map=_vote_map,
                        _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map,
                        _booster_map=_booster_map, _mentioned_users_map=_mentioned_users_map,
-                       _boost_originals=boost_originals)
-            for p in posts], has_more
+                       _boost_originals=boost_originals, _skip_emojis=True)
+            for p in posts], has_more, _timeline_emojis
 
 
 @router.get("/timeline/stream")
@@ -950,8 +951,8 @@ def api_timeline(request: Request, tl_type: str, limit: int = Query(10), offset:
         return JSONResponse({"error": "Account deactivated"}, status_code=403)
     if tl_type not in TIMELINE_LABELS:
         tl_type = "home"
-    feed, has_more = _get_feed(user, tl_type, s, limit=limit, offset=offset)
-    return {"posts": feed, "timeline_type": tl_type, "has_more": has_more}
+    feed, has_more, emojis = _get_feed(user, tl_type, s, limit=limit, offset=offset)
+    return {"posts": feed, "timeline_type": tl_type, "has_more": has_more, "_emojis": emojis}
 
 
 # ── Post CRUD ──

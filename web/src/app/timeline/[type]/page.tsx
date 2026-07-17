@@ -67,6 +67,7 @@ export default function TimelinePage() {
     setError("");
     try {
       const data = await api.timeline(tlType, LIMIT, 0);
+      if (data._emojis) injectEmojis(data._emojis);
       setPosts(data.posts);
       setHasMore(data.has_more);
       setRawOffset(LIMIT);
@@ -88,6 +89,7 @@ export default function TimelinePage() {
     setLoadingMore(true);
     try {
       const data = await api.timeline(tlType, LOAD_MORE, rawOffset);
+      if (data._emojis) injectEmojis(data._emojis);
       setPosts((prev) => {
         const ids = new Set(prev.map((p) => p.id));
         const newPosts = data.posts.filter((p: any) => !ids.has(p.id));

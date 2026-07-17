@@ -187,7 +187,7 @@ export const api = {
 
   // Timeline
   timeline: (type: string = "home", limit: number = 10, offset: number = 0) =>
-    request<{ posts: PostData[]; timeline_type: string; has_more: boolean }>(
+    request<{ posts: PostData[]; timeline_type: string; has_more: boolean; _emojis?: any[] }>(
       `/api/timeline/${type}?limit=${limit}&offset=${offset}`
     ),
 
