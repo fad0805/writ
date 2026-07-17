@@ -842,7 +842,8 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 mention_filtered.append(p)
             posts = mention_filtered
             print(f"[feed] after mention filter: {len(posts)} posts", flush=True)
-    has_more = len(posts) > limit
+    has_more = raw_total > limit
+    print(f"[feed] has_more={has_more} (raw_total={raw_total}, after_filter={len(posts)}, limit={limit})", flush=True)
     posts = posts[:limit]
     # Batch-load user interaction data for all remaining posts
     post_ids = [p.id for p in posts]
