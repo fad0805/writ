@@ -669,12 +669,16 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
           <div className="reactions-row" style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8, marginBottom: 4, padding: "0 8px" }} onClick={(e) => e.stopPropagation()}>
             {Object.entries(reactions).sort(([a], [b]) => a === "★" ? -1 : b === "★" ? 1 : 0).map(([emoji, count]) => {
               const emojiKey = emoji.startsWith(":") && emoji.endsWith(":") ? emoji.slice(1, -1) : emoji;
-              
               const isCustomEmoji = emoji.startsWith(":") && emoji.endsWith(":");
-              
               // 💡 맵의 크기 검사를 빼버리고, 커스텀 이모지인데 우리 로컬 맵에 존재하지 않으면 100% 원격(Remote)으로 간주합니다.
               // 이렇게 해야 로딩 중이거나 진짜 없는 에모지일 때 둘 다 철저하게 차단됩니다.
-              const emojiIsRemote = isCustomEmoji && !reactionEmojiMap[emojiKey];
+              // 💡 수정된 판정 로직:
+              // 1. 애초에 로컬 이모지 맵에 등록조차 안 된 녀석이거나
+              // 2. 맵에 등록은 되어 있지만 이미지 주소 경로에 '/remote/'가 묻어있다면 원격(Remote)으로 판정합니다.
+              const emojiImageUrl = reactionEmojiMap[emojiKey];
+              const emojiIsRemote = isCustomEmoji && (
+                !emojiImageUrl || emojiImageUrl.includes("/remote/")
+              );
 
               return (
                 <span
@@ -683,7 +687,6 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
                   onClick={async () => {
                     // 💡 원격 에모지라면 클릭 시 즉시 리턴하여 백엔드 요청을 방어합니다.
                     if (emojiIsRemote) return;
-
                     if (myReaction === emoji) {
                       const next = { ...reactions };
                       if (next[emoji] <= 1) delete next[emoji];
