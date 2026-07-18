@@ -1446,6 +1446,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                 "is_dm": false, "is_sensitive": getattr(reply_to_post, "is_sensitive", false) or false,
                                 "ap_id": reply_to_post.ap_id or "", "media_attachments": reply_to_post.media_attachments or [],
                                 "poll_data": reply_to_post.poll_data, "my_vote": none, "reactions": {}, "my_reaction": none,
+                                "quote_of_id": reply_to_post.quote_of_id or None, "quote_of_ap_id": reply_to_post.quote_of_ap_id or "",
                             }, reply_to_post.author_id, reply_to_post.visibility or "public", false)
                         except Exception:
                             pass
@@ -1675,6 +1676,16 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 quote_of_ap_id=quote_of_ap_id,
                 quote_of_id=quote_of_id,
             )
+            # Strip "RE: https://..." from quote post content
+            if quote_of_ap_id and post.content:
+                post.content = re.sub(
+                    r'^(<p>\s*)?RE:\s*<a[^>]*>[^<]*</a>\s*(</p>)?\s*',
+                    '', post.content, count=1, flags=re.I
+                )
+                post.content = re.sub(
+                    r'^(<p>\s*)?RE:\s*https?://\S+\s*(</p>)?\s*',
+                    '', post.content, count=1, flags=re.I
+                )
             session.add(post)
             session.flush()
 
@@ -1852,6 +1863,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     "mentioned_user_ids": mentioned_ids,
                     "reply_context": _reply_ctx,
                     "link_preview": post.link_preview,
+                    "quote_of_id": post.quote_of_id or None,
+                    "quote_of_ap_id": post.quote_of_ap_id or "",
                     "_emojis": _broadcast_emojis,
                 }
                 broadcast_post(post_json, actor_id, visibility, is_incoming_dm)
@@ -2216,6 +2229,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                 "my_reaction": None,
                 "boosted_by": _safe_user_json(_actor),
                 "mentioned_user_ids": [],
+                "quote_of_id": post.quote_of_id or None, "quote_of_ap_id": post.quote_of_ap_id or "",
             }, actor_id, post.visibility or "public", False)
         except Exception as e:
             logger.warning("Failed to broadcast boost from AP: %s", e)
