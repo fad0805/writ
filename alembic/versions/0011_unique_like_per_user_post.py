@@ -20,8 +20,10 @@ def upgrade():
             SELECT MIN(id) FROM likes GROUP BY user_id, post_id
         )
     """))
-    op.create_unique_constraint("uq_likes_user_post", "likes", ["user_id", "post_id"])
+    with op.batch_alter_table("likes") as batch_op:
+        batch_op.create_unique_constraint("uq_likes_user_post", ["user_id", "post_id"])
 
 
 def downgrade():
-    op.drop_constraint("uq_likes_user_post", "likes", type_="unique")
+    with op.batch_alter_table("likes") as batch_op:
+        batch_op.drop_constraint("uq_likes_user_post", type_="unique")

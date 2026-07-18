@@ -13,10 +13,12 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column("users", sa.Column("remote_followers_count", sa.Integer, server_default="0"))
-    op.add_column("users", sa.Column("remote_following_count", sa.Integer, server_default="0"))
+    with op.batch_alter_table("users") as batch_op:
+        batch_op.add_column(sa.Column("remote_followers_count", sa.Integer, server_default="0"))
+        batch_op.add_column(sa.Column("remote_following_count", sa.Integer, server_default="0"))
 
 
 def downgrade():
-    op.drop_column("users", "remote_followers_count")
-    op.drop_column("users", "remote_following_count")
+    with op.batch_alter_table("users") as batch_op:
+        batch_op.drop_column("remote_followers_count")
+        batch_op.drop_column("remote_following_count")

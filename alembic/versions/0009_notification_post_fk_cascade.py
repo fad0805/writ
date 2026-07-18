@@ -11,21 +11,29 @@ down_revision = "0008"
 branch_labels = None
 depends_on = None
 
+FK_NAME_PG = "notifications_post_id_fkey"
+
 
 def upgrade():
-    op.drop_constraint("notifications_post_id_fkey", "notifications", type_="foreignkey")
-    op.create_foreign_key(
-        "notifications_post_id_fkey",
-        "notifications", "posts",
-        ["post_id"], ["id"],
-        ondelete="SET NULL",
-    )
+    dialect = op.get_bind().dialect.name
+    if dialect == "sqlite":
+        return
+    with op.batch_alter_table("notifications") as batch_op:
+        batch_op.drop_constraint(FK_NAME_PG, type_="foreignkey")
+        batch_op.create_foreign_key(
+            FK_NAME_PG, "posts",
+            ["post_id"], ["id"],
+            ondelete="SET NULL",
+        )
 
 
 def downgrade():
-    op.drop_constraint("notifications_post_id_fkey", "notifications", type_="foreignkey")
-    op.create_foreign_key(
-        "notifications_post_id_fkey",
-        "notifications", "posts",
-        ["post_id"], ["id"],
-    )
+    dialect = op.get_bind().dialect.name
+    if dialect == "sqlite":
+        return
+    with op.batch_alter_table("notifications") as batch_op:
+        batch_op.drop_constraint(FK_NAME_PG, type_="foreignkey")
+        batch_op.create_foreign_key(
+            FK_NAME_PG, "posts",
+            ["post_id"], ["id"],
+        )
