@@ -1055,7 +1055,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     if _depth > 3 or not url:
         return None
 
-    print(f"[FETCH-POST] url={url} signer={signer.ap_id if signer else 'None'} depth={_depth}", flush=True)
+    print(f"[FETCH-POST] url={url} signer={signer.actor_uri() if signer else 'None'} depth={_depth}", flush=True)
 
     # Convert web URL /@username/id to AP URL /users/username/statuses/id (Mastodon)
     m = re.match(r'^(https?://[^/]+)/@(\w+(?:@\S+)?)/([a-f0-9]+)(\?.*)?$', url)
