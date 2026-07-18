@@ -16,6 +16,7 @@ from sqlalchemy.orm import selectinload, Session
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PendingDelivery, PushSubscription, get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.log_utils import log_admin_action
+from app.activitypub import _fetch_remote_post
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
 
@@ -1119,7 +1120,6 @@ def api_get_post(request: Request, post_id: int):
         result["ancestors"] = ancestors
     if fetch_remote_url:
         try:
-            from app.activitypub import _fetch_remote_post
             with get_session() as remote_s:
                 remote_parent = _fetch_remote_post(fetch_remote_url, user, remote_s)
                 if remote_parent:
@@ -4835,123 +4835,12 @@ def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
             parent_obj = parent_data.get("object", parent_data)
             _fetch_and_save_ap_object(parent_obj, user, _visited, _depth + 1)
 
-    from app.activitypub import _sanitize_html, _convert_urls_and_handles
-    content = _convert_urls_and_handles(_sanitize_html(obj.get("content", "")))
-    if not content:
-        return None
+    actor_url = obj.get("id")
 
-    attributed_to = obj.get("attributedTo", "")
-    if isinstance(attributed_to, list):
-        attributed_to = attributed_to[0] if attributed_to else ""
-    if not attributed_to:
-        return None
-
-    from app.activitypub import _resolve_actor
-    _resolve_actor(attributed_to)
-    author_id = None
-    with get_session() as qs:
-        u = qs.query(User).filter_by(remote_url=attributed_to).first()
-        if u:
-            author_id = u.id
-    if not author_id:
-        # fallback: try parsing username from attributed_to URL
-        try:
-            from urllib.parse import urlparse
-            parsed = urlparse(attributed_to)
-            domain = parsed.netloc
-            preferred = parsed.path.rstrip("/").split("/")[-1]
-            local_username = f"{preferred}@{domain}"
-            with get_session() as qs:
-                u = qs.query(User).filter_by(username=local_username).first()
-                if u:
-                    u.remote_url = attributed_to
-                    qs.commit()
-                    author_id = u.id
-        except Exception:
-            pass
-    if not author_id:
-        return None
-
-    ap_id = obj.get("id", "")
-    summary = obj.get("summary", "")
-
-    # Process custom emoji tags before saving
-    with get_session() as emoji_session:
-        _process_emoji_tags(obj.get("tag", []), emoji_session)
-        emoji_session.commit()
-
-    with get_session() as s:
-        existing = s.query(Post).filter_by(ap_id=ap_id).first()
-        if existing and not existing.is_deleted:
-            return _post_json(existing, s, user)
-        if existing and existing.is_deleted:
-            existing.is_deleted = False
-            existing.content = content
-            existing.summary = summary
-            s.commit()
-            return _post_json(existing, s, user)
-
-        import re
-        mentioned_names = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content or ""))
-        mentioned_ids = []
-        if mentioned_names:
-            mentioned = s.query(User).filter(User.username.in_(mentioned_names)).all()
-            mentioned_ids = [u.id for u in mentioned]
-
-        in_reply_to_ap_id = obj.get("inReplyTo", "")
-
-        in_reply_to_id = None
-        if in_reply_to_ap_id:
-            parent = s.query(Post).filter_by(ap_id=in_reply_to_ap_id).first()
-            if parent:
-                in_reply_to_id = parent.id
-
-        # Determine visibility from to/cc like _handle_create
-        to = obj.get("to", [])
-        if isinstance(to, str): to = [to]
-        cc = obj.get("cc", [])
-        if isinstance(cc, str): cc = [cc]
-        all_auds = to + cc
-        pub = "https://www.w3.org/ns/activitystreams#Public"
-        if pub in to:
-            vis = "public"
-        elif pub in cc:
-            vis = "home"
-        elif any(a.endswith("/followers") for a in all_auds):
-            vis = "followers"
-        elif all(a.startswith("http") for a in all_auds if a):
-            vis = "mention"
-        else:
-            vis = "home"
-
-        post = Post(
-            author_id=author_id,
-            content=content,
-            summary=summary,
-            visibility=vis,
-            ap_id=ap_id,
-            in_reply_to_ap_id=in_reply_to_ap_id,
-            in_reply_to_id=in_reply_to_id,
-            mentioned_user_ids=mentioned_ids,
-        )
-        published = obj.get("published", "")
-        if published:
-            try:
-                post.created_at = datetime.datetime.fromisoformat(published.replace("Z", "+00:00"))
-            except Exception as e:
-                logger.warning("Failed to parse published date: %s", e)
-        s.add(post)
-        try:
-            s.commit()
-        except IntegrityError:
-            s.rollback()
-            s.close()
-            with get_session() as s2:
-                existing = s2.query(Post).filter_by(ap_id=ap_id).first()
-                if existing:
-                    return _post_json(existing, s2, user)
-            return None
-        return _post_json(post, s, user)
+    post = None
+    with get_session() as session:
+        post = _fetch_remote_post(actor_url, user, session, _depth)
+        return _post_json(post, session, user)
 
 
 def _safe_httpx_get(url, headers=None, timeout=15, max_size=5*1024*1024):
