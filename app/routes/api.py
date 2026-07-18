@@ -467,7 +467,7 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
         raise
     except Exception as exc:
         logger.exception("Login error")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 def _send_verification_email(u: User):
@@ -5324,7 +5324,8 @@ def api_create_emoji(
             except Exception:
                 pass
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to process image: {e}")
+        logger.exception("Failed to process emoji image")
+        raise HTTPException(status_code=400, detail="Failed to process image")
 
     alias_list = [a.strip().lower().replace(" ", "_") for a in aliases.split(",") if a.strip()]
 
@@ -5702,7 +5703,8 @@ def api_admin_refresh_profile(request: Request, user_id: int):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to refresh profile for user %s", user_id)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/admin/users/suspend")
@@ -6151,7 +6153,7 @@ def api_admin_forward_report(request: Request, report_id: int):
             _send_flag(reporter, report.target_type, target_obj, report.reason[:200], report.rule_ids or [])
         except Exception as e:
             logger.error("Failed to forward report %s: %s", report_id, e)
-            raise HTTPException(status_code=500, detail=f"Failed to forward: {e}")
+            raise HTTPException(status_code=500, detail="Failed to forward report")
     return {"ok": True}
 
 @router.get("/admin/rules")
@@ -7386,7 +7388,8 @@ def api_client_log(request: Request):
         )
         return {"ok": True}
     except Exception as e:
-        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+        logger.exception("Client log error")
+        return JSONResponse({"ok": False, "error": "Failed to save log"}, status_code=400)
 
 
 # ── Web Push ──
