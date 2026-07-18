@@ -1011,7 +1011,17 @@ def _add_missing_columns():
     ])
 
 
+_SAFE_TABLE_NAMES = {"users", "posts", "novels", "episodes", "follows", "likes", "boosts",
+                      "bookmarks", "notifications", "server_settings", "processed_activities",
+                      "custom_emojis", "votes", "reactions", "user_blocks", "user_mutes",
+                      "keyword_mutes", "series_mutes", "reports", "report_rules",
+                      "federation_blocks", "federation_modes", "allowed_servers", "custom_fields",
+                      "episode_comments", "series_notices", "remote_followers"}
+
+
 def _add_cols(table: str, inspector, cols: list[tuple[str, str]]):
+    if table not in _SAFE_TABLE_NAMES:
+        raise ValueError(f"Invalid table name: {table}")
     try:
         existing = {c["name"] for c in inspector.get_columns(table)}
     except Exception:
