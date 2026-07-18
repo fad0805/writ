@@ -462,7 +462,9 @@ def _cache_remote_media(remote_url: str) -> str:
         if is_image and len(data) < _REMOTE_MEDIA_MAX_SIZE:
             # 💡 [방어 코드 1] 커스텀 이모지 경로이거나 바이너리에 acTL(APNG 청크)이 포함된 경우
             # Pillow가 애니메이션을 깨뜨리지 않도록 가공 없이 원본 데이터 그대로 캐싱 영역으로 패스합니다.
-            is_apng = (orig_ext == "png" and b"acTL" in data)
+            print(f'============================================= {data}')
+            # is_apng = (orig_ext == "png" and b"acTL" in data)
+            is_apng = (orig_ext == "png")
             is_custom_emoji = "custom_emojis" in remote_url
 
             if is_apng or is_custom_emoji:
