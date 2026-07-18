@@ -40,15 +40,6 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
     }
   );
 
-  text = text.replace(
-    /<a\s+href="https?:\/\/([^"/]+)\/@([a-zA-Z_][a-zA-Z0-9_]*)"[^>]*>@?\w*<\/a>/gi,
-    (_m: string, domain: string, user: string) => {
-      const localDomain = typeof window !== "undefined" ? window.location.host : "";
-      const display = domain === localDomain ? `@${user}` : `@${user}@${domain}`;
-      return `<a href="/@${user}@${domain}" class="mention-link">${display}</a>`;
-    }
-  );
-
   // 3. [완성] 순수 텍스트 상태의 @멘션 처리 (HTML 태그 직후에 붙은 멘션도 완벽 대응)
   text = text.replace(
     /(<[^>]+>)|((?:^|>|\s|[^a-zA-Z0-9_]))@([a-zA-Z0-9_]+)(?:@([a-zA-Z0-9.-]+\.[a-zA-Z0-9-]+))?/g,
@@ -73,6 +64,15 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
 
       const prefix = before || "";
       return `${prefix}<a href="/@${handle}" class="mention-link">${display}</a>`;
+    }
+  );
+
+  text = text.replace(
+    /<a\s+href="https?:\/\/([^"/]+)\/@([a-zA-Z_][a-zA-Z0-9_]*)"[^>]*>@?\w*<\/a>/gi,
+    (_m: string, domain: string, user: string) => {
+      const localDomain = typeof window !== "undefined" ? window.location.host : "";
+      const display = domain === localDomain ? `@${user}` : `@${user}@${domain}`;
+      return `<a href="/@${user}@${domain}" class="mention-link">${display}</a>`;
     }
   );
 
