@@ -222,6 +222,10 @@ class Post(Base):
     # Boost pointer: if set, this post is a boost of another post
     boost_of_id = Column(Integer, ForeignKey("posts.id", ondelete="SET NULL"), nullable=True, index=True)
 
+    # Quote pointer: if set, this post quotes another post
+    quote_of_id = Column(Integer, ForeignKey("posts.id", ondelete="SET NULL"), nullable=True, index=True)
+    quote_of_ap_id = Column(String(1024), default="")
+
     # Novel post (if this post is a novel episode announcement)
     novel_id = Column(Integer, ForeignKey("novels.id"), nullable=True)
     episode_id = Column(Integer, ForeignKey("episodes.id"), nullable=True)
@@ -242,6 +246,7 @@ class Post(Base):
     parent = relationship("Post", back_populates="replies", remote_side=[id], foreign_keys=[in_reply_to_id], lazy="selectin")
     replies = relationship("Post", back_populates="parent", foreign_keys=[in_reply_to_id], lazy="selectin")
     boost_of = relationship("Post", foreign_keys=[boost_of_id], remote_side=[id], lazy="noload")
+    quote_of = relationship("Post", foreign_keys=[quote_of_id], remote_side=[id], lazy="noload")
     likes = relationship("Like", back_populates="post", cascade="all, delete-orphan", lazy="selectin")
     boosts = relationship("Boost", back_populates="post", cascade="all, delete-orphan", lazy="selectin")
     votes = relationship("Vote", back_populates="post", cascade="all, delete-orphan", lazy="noload")
@@ -480,6 +485,8 @@ class Post(Base):
                 obj["attachment"] = attachments
         if self.in_reply_to_ap_id:
             obj["inReplyTo"] = self.in_reply_to_ap_id
+        if self.quote_of_ap_id:
+            obj["quoteUrl"] = self.quote_of_ap_id
         if self.poll_data:
             obj["type"] = "Question"
             poll_id = self.ap_id or f"{BASE_URL}/@{self.author.username}/{self.number}"

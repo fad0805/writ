@@ -125,6 +125,8 @@ export interface PostData {
   mentioned_handles?: string[];
   link_preview?: { url: string; title: string; description: string; image: string } | null;
   is_deleted?: boolean;
+  quote_of_id?: number | null;
+  quote_of_ap_id?: string;
   _emojis?: { keyword: string; file_name: string; url: string; aliases: string[] }[];
 }
 

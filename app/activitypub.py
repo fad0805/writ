@@ -1607,6 +1607,20 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     elif att_type.startswith("video/"):
                         media_list.append({"url": cached, "type": "video"})
 
+            # Extract quote reference from Note (Mastodon/Misskey/Firefish compat)
+            quote_of_ap_id = ""
+            quote_of_id = None
+            if isinstance(obj, dict):
+                quote_url = obj.get("quoteUrl") or obj.get("_misskey_quote") or ""
+                if quote_url:
+                    quote_of_ap_id = quote_url
+                    try:
+                        quote_post = _fetch_remote_post(quote_url, actor, session)
+                        if quote_post:
+                            quote_of_id = quote_post.id
+                    except Exception:
+                        pass
+
             post = Post(
                 author_id=actor_id,
                 content=content,
@@ -1620,6 +1634,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 poll_data=poll_data,
                 is_dm=is_incoming_dm,
                 is_sensitive=obj.get("sensitive", False),
+                quote_of_ap_id=quote_of_ap_id,
+                quote_of_id=quote_of_id,
             )
             session.add(post)
             session.flush()

@@ -159,6 +159,12 @@ async def lifespan(app: FastAPI):
             if "link_preview" not in cols:
                 s.execute(_sa.text("ALTER TABLE posts ADD COLUMN link_preview JSON"))
                 s.commit()
+            if "quote_of_id" not in cols:
+                s.execute(_sa.text("ALTER TABLE posts ADD COLUMN quote_of_id INTEGER"))
+                s.commit()
+            if "quote_of_ap_id" not in cols:
+                s.execute(_sa.text("ALTER TABLE posts ADD COLUMN quote_of_ap_id VARCHAR(1024) DEFAULT ''"))
+                s.commit()
     except Exception:
         pass
     try:

@@ -424,6 +424,27 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     }
   }, [post.content]);
 
+  // Handle stored quote reference from ActivityPub (quote_of_id / quote_of_ap_id)
+  useEffect(() => {
+    if (quotedPost || quotedSeries || quotedEpisode || loadingQuote) return;
+    const qid = (post as any).quote_of_id;
+    const qApId = (post as any).quote_of_ap_id;
+    if (qid) {
+      setLoadingQuote(true);
+      fetch(`/api/posts/${qid}?reply_limit=0&reply_offset=0`, { credentials: "include" })
+        .then(r => { if (r.ok) return r.json(); throw new Error(); })
+        .then(d => { setQuotedPost(d); setLoadingQuote(false); })
+        .catch(() => setLoadingQuote(false));
+    } else if (qApId) {
+      setLoadingQuote(true);
+      const form = new FormData(); form.append("url", qApId);
+      fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form })
+        .then(r => { if (r.ok) return r.json(); throw new Error(); })
+        .then(d => { if (d._emojis) { injectEmojis(d._emojis); } setQuotedPost(d); setLoadingQuote(false); })
+        .catch(() => setLoadingQuote(false));
+    }
+  }, [post.id, (post as any).quote_of_id, (post as any).quote_of_ap_id]);
+
   const handleContentClick = (e: React.MouseEvent) => {
     const anchor = (e.target as HTMLElement).closest('a');
     if (!anchor) return;
