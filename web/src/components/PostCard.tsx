@@ -137,6 +137,20 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     }
     return map;
   }, [emojiList]);
+const localReactionEmojiMap = useMemo(() => {
+  const m = (window as any).__localEmojiMap as Record<string, string> | undefined;
+  if (m && Object.keys(m).length > 0) return m;
+  const map: Record<string, string> = {};
+  for (const e of emojiList) {
+    if (e.keyword && e.url && e.url.includes('/emojis/local/')) {
+      map[e.keyword] = e.url;
+    }
+  }
+  if (Object.keys(map).length > 0) {
+    (window as any).__localEmojiMap = map;
+  }
+  return map;
+}, [emojiList]);
 
   useEffect(() => {
     if (currentUser?.pinned_posts) setPinned(currentUser.pinned_posts.includes(post.id));
@@ -673,7 +687,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
               const isCustomEmoji = emoji.startsWith(":") && emoji.endsWith(":");
 
               const isMapLoaded = Object.keys(reactionEmojiMap).length > 0;
-              const emojiIsRemote = isCustomEmoji && isMapLoaded && !reactionEmojiMap[emojiKey];
+              const emojiIsRemote = isCustomEmoji && isMapLoaded && !localReactionEmojiMap[emojiKey];
               return (
                 <span
                   key={emoji}
