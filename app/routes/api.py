@@ -4839,7 +4839,10 @@ def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
 
     post = None
     with get_session() as session:
-        post = _fetch_remote_post(actor_url, user, session, _depth)
+        try:
+            post = _fetch_remote_post(actor_url, user, session, _depth)
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch remote post from {actor_url}: {e}", flush=True)
         return _post_json(post, session, user)
 
 
