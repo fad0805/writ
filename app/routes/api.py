@@ -5083,6 +5083,13 @@ def api_fetch_post(request: Request, url: str = Form(...)):
 
     obj = data.get("object", data)
     obj_type = data.get("type", obj.get("type", ""))
+    if obj_type in ("Person", "Application", "Service"):
+        with get_session() as _us:
+            from app.activitypub import _resolve_actor
+            actor = _resolve_actor(url, sign_as=user)
+            if actor:
+                return {"type": "user", "redirect": f"/@{actor.username}"}
+        raise HTTPException(status_code=400, detail="Cannot resolve actor")
     if obj_type not in ("Note", "Article"):
         raise HTTPException(status_code=400, detail=f"Not a Note/Article (type={obj_type})")
 

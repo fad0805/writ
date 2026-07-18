@@ -223,7 +223,7 @@ export default function Sidebar() {
             try {
               const form = new FormData(); form.append("url", q);
               const res = await fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form });
-              if (res.ok) { const d = await res.json(); setSidebarQ(""); router.push(d.number ? `/@${d.author.username}/${d.number}` : `/post/${d.id}`); return; }
+              if (res.ok) { const d = await res.json(); setSidebarQ(""); if (d.type === "user" && d.redirect) { router.push(d.redirect); } else { router.push(d.number ? `/@${d.author.username}/${d.number}` : `/post/${d.id}`); } return; }
             } catch {}
             toExplore();
           }

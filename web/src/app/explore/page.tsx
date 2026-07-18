@@ -98,7 +98,13 @@ function ExploreContent() {
       form.append("url", url);
       const res = await fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form });
       if (res.ok) {
-        const post: PostData = await res.json();
+        const data = await res.json();
+        if (data.type === "user" && data.redirect) {
+          router.push(data.redirect);
+          setLoading(false);
+          return;
+        }
+        const post: PostData = data;
         setPosts([post]);
         setNovels([]);
         setUsers([]);
@@ -106,7 +112,7 @@ function ExploreContent() {
       } else { const text = await res.text().catch(() => ""); alert("불러오기 실패: " + text.slice(0, 100)); setPosts([]); setNovels([]); setUsers([]); }
     } catch (e: unknown) { alert("불러오기 실패: " + ((e instanceof Error ? e.message : "") || "")); setPosts([]); setNovels([]); setUsers([]); }
     setLoading(false);
-  }, []);
+  }, [router]);
 
   useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
 
