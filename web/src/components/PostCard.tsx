@@ -49,18 +49,24 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
     }
   );
 
+  // 3. [완성] 순수 텍스트 상태의 @멘션 처리 (HTML 태그 직후에 붙은 멘션도 완벽 대응)
   text = text.replace(
-    /(<[^>]+>)|((?:^|>|\s))@([a-zA-Z0-9_]+(?:@[a-zA-Z0-9.-]+\.[a-zA-Z0-9-]+)?)/g,
-    (match, htmlTag, before, handle) => {
-      if (htmlTag) return match;
+    /(<[^>]+>)|((?:^|>|\s|[^a-zA-Z0-9_]))@([a-zA-Z0-9_]+)(?:@([a-zA-Z0-9.-]+\.[a-zA-Z0-9-]+))?/g,
+    (match, htmlTag, before, username, domain) => {
+      if (htmlTag) return match; // HTML 태그 내부는 그대로 통과
 
-      if (!handle.includes("@") && validMentions) {
+      // 도메인이 존재하면 '유저@도메인', 없으면 그냥 '유저'로 handle 조립
+      let handle = domain ? `${username}@${domain}` : username;
+
+      if (!domain && validMentions) {
         const found = Array.from(validMentions).find((v) => v.startsWith(handle + "@"));
         if (found) handle = found;
       }
 
       const parts = handle.split("@");
       const localDomain = typeof window !== "undefined" ? window.location.host : "";
+
+      // 도메인이 현재 내 서버와 일치하면 호스트명을 떼고 간결하게 표시
       const display = parts.length === 2 && parts[1].toLowerCase() === localDomain.toLowerCase() 
         ? `@${parts[0]}` 
         : `@${handle}`;
