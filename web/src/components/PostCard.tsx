@@ -123,6 +123,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     if (typeof window !== "undefined" && (window as any).__emojiCache) return (window as any).__emojiCache as CustomEmoji[];
     return [];
   });
+
   useEffect(() => subscribeEmojis((list) => { (window as any).__emojiCache = list; setEmojiList(list); }), []);
   const [reactions, setReactions] = useState(post.reactions || {});
   const [myReaction, setMyReaction] = useState(post.my_reaction || null);
@@ -365,7 +366,9 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
       setViewerPan({ x: panOrigin.current.x + dx, y: panOrigin.current.y + dy });
     }
   }, []);
+
   const handleViewerMouseUp = useCallback(() => { isPanning.current = false; }, []);
+
   useEffect(() => {
     if (!showMoreActions) return;
     const handler = () => setShowMoreActions(false);
@@ -662,58 +665,77 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
             </div>
           </a>
         )}
-          {reactions && Object.keys(reactions).length > 0 && currentUser?.enable_reactions !== false && (
+        {reactions && Object.keys(reactions).length > 0 && currentUser?.enable_reactions !== false && (
           <div className="reactions-row" style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8, marginBottom: 4, padding: "0 8px" }} onClick={(e) => e.stopPropagation()}>
-              {Object.entries(reactions).sort(([a], [b]) => a === "★" ? -1 : b === "★" ? 1 : 0).map(([emoji, count]) => {
+            {Object.entries(reactions).sort(([a], [b]) => a === "★" ? -1 : b === "★" ? 1 : 0).map(([emoji, count]) => {
               const emojiKey = emoji.startsWith(":") && emoji.endsWith(":") ? emoji.slice(1, -1) : emoji;
-              const emojiIsRemote = emoji.startsWith(":") && emoji.endsWith(":") && !reactionEmojiMap[emojiKey] && Object.keys(reactionEmojiMap).length > 0;
+              
+              const isCustomEmoji = emoji.startsWith(":") && emoji.endsWith(":");
+              
+              // 💡 맵의 크기 검사를 빼버리고, 커스텀 이모지인데 우리 로컬 맵에 존재하지 않으면 100% 원격(Remote)으로 간주합니다.
+              // 이렇게 해야 로딩 중이거나 진짜 없는 에모지일 때 둘 다 철저하게 차단됩니다.
+              const emojiIsRemote = isCustomEmoji && !reactionEmojiMap[emojiKey];
+
               return (
-              <span
-                key={emoji}
-                className={`reaction-badge${myReaction === emoji ? " active" : ""}${emojiIsRemote ? " reaction-disabled" : ""}`}
-                onClick={async () => {
-                  if (emojiIsRemote) return;
-                  if (myReaction === emoji) {
-                    const next = { ...reactions };
-                    if (next[emoji] <= 1) delete next[emoji];
-                    else next[emoji] -= 1;
-                    setReactions(next);
-                    setMyReaction(null);
-                    setLiked(false);
-                    setLikesCount(Math.max(0, likesCount - 1));
-                    try {
-                      await api.unreact(post.id);
-                    } catch {}
-                  } else {
-                    const next = { ...reactions };
-                    if (myReaction && myReaction !== emoji) {
-                      if ((next[myReaction] || 0) <= 1) delete next[myReaction];
-                      else next[myReaction] -= 1;
+                <span
+                  key={emoji}
+                  className={`reaction-badge${myReaction === emoji ? " active" : ""}${emojiIsRemote ? " reaction-disabled" : ""}`}
+                  onClick={async () => {
+                    // 💡 원격 에모지라면 클릭 시 즉시 리턴하여 백엔드 요청을 방어합니다.
+                    if (emojiIsRemote) return;
+
+                    if (myReaction === emoji) {
+                      const next = { ...reactions };
+                      if (next[emoji] <= 1) delete next[emoji];
+                      else next[emoji] -= 1;
+                      setReactions(next);
+                      setMyReaction(null);
+                      setLiked(false);
+                      setLikesCount(Math.max(0, likesCount - 1));
+                      try {
+                        await api.unreact(post.id);
+                      } catch {}
+                    } else {
+                      const next = { ...reactions };
+                      if (myReaction && myReaction !== emoji) {
+                        if ((next[myReaction] || 0) <= 1) delete next[myReaction];
+                        else next[myReaction] -= 1;
+                      }
+                      next[emoji] = (next[emoji] || 0) + 1;
+                      setReactions(next);
+                      setMyReaction(emoji);
+                      setLiked(true);
+                      setLikesCount(myReaction ? likesCount : likesCount + 1);
+                      try {
+                        await api.react(post.id, emoji);
+                      } catch {}
                     }
-                    next[emoji] = (next[emoji] || 0) + 1;
-                    setReactions(next);
-                    setMyReaction(emoji);
-                    setLiked(true);
-                    setLikesCount(myReaction ? likesCount : likesCount + 1);
-                    try {
-                      await api.react(post.id, emoji);
-                    } catch {}
-                  }
-                }}
-                style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 12, fontSize: 13, cursor: emojiIsRemote ? "default" : "pointer", border: "1px solid var(--border)", background: myReaction === emoji ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-secondary)", opacity: emojiIsRemote ? 0.5 : 1 }}
-              >
-{emoji === "★" ? (
-                  <Icon name="star_filled" size={18} style={{ color: "#f1c40f" }} />
-                ) : emoji.startsWith(":") && emoji.endsWith(":") ? (
-                  reactionEmojiMap[emojiKey]
-                    ? <img src={reactionEmojiMap[emojiKey]} alt={emoji} style={{ height: 22, verticalAlign: "middle" }} />
-                    : <span>{emoji}</span>
-                ) : (
-                  <span>{emoji}</span>
-                )}
-                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{count}</span>
-              </span>
-            );
+                  }}
+                  style={{ 
+                    display: "inline-flex", 
+                    alignItems: "center", 
+                    gap: 3, 
+                    padding: "2px 8px", 
+                    borderRadius: 12, 
+                    fontSize: 13, 
+                    cursor: emojiIsRemote ? "default" : "pointer", // 원격이면 커서 기본값
+                    border: "1px solid var(--border)", 
+                    background: myReaction === emoji ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-secondary)", 
+                    opacity: emojiIsRemote ? 0.5 : 1 // 원격이면 흐릿하게 반투명 처리
+                  }}
+                >
+                  {emoji === "★" ? (
+                    <Icon name="star_filled" size={18} style={{ color: "#f1c40f" }} />
+                  ) : isCustomEmoji ? (
+                    reactionEmojiMap[emojiKey]
+                      ? <img src={reactionEmojiMap[emojiKey]} alt={emoji} style={{ height: 22, verticalAlign: "middle" }} />
+                      : <span>{emoji}</span>
+                  ) : (
+                    <span>{emoji}</span>
+                  )}
+                  <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{count}</span>
+                </span>
+              );
             })}
           </div>
         )}
