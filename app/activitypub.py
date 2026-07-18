@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, RemoteMedia, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, UserBlock, Tag, get_session
+from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, UserBlock, Tag, get_session
 from app.config import BASE_URL, SECRET_KEY
 from app.crypto_utils import generate_keypair, sign_string, encrypt_key, get_private_key
 
@@ -93,9 +93,6 @@ def _sanitize_html(html: str) -> str:
     html = re.sub(r'<[^>]+>', _tag_filter, html)
     return html
 
-
-import re
-from urllib.parse import urlparse
 
 def _normalize_mentions(html: str) -> str:
     """
@@ -592,7 +589,6 @@ def _cleanup_remote_data():
 def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url: str = "") -> str:
     """Download remote image. Keep GIF/PNG as-is, convert others (like JPG) to WebP."""
     import uuid
-    import io
     from urllib.parse import urlparse
     from PIL import Image as PILImage
     from app.utils.storage import get_storage
@@ -3033,9 +3029,10 @@ def _background_import_emoji(url: str, keyword: str, domain: str):
 
 
 def _process_emoji_tags(tags: list, session):
-    """Parse Emoji tags from an ActivityPub object, download and save custom emojis."""
+    """Parse Emoji tags from an ActivityPub object, download and save custom emojis safely."""
     if not tags or not isinstance(tags, list):
         return
+    from PIL import Image
     from app.utils.storage import get_storage
     _storage = get_storage()
     EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "web", "public", "emojis")
@@ -3050,7 +3047,6 @@ def _process_emoji_tags(tags: list, session):
         if not keyword or not re.match(r'^[a-z0-9_]+$', keyword):
             continue
         icon = tag.get("icon", {})
-        # icon can be a single object or a list per ActivityStreams spec
         if isinstance(icon, list):
             icon = icon[0] if icon else {}
         img_url = ""
@@ -3058,14 +3054,10 @@ def _process_emoji_tags(tags: list, session):
             img_url = icon.get("url", "") or icon.get("href", "")
         elif isinstance(icon, str):
             img_url = icon
-        if not img_url:
-            continue
-        if not img_url.startswith("http"):
+        if not img_url or not img_url.startswith("http"):
             continue
 
-        # Extract domain from the emoji ActivityPub ID
         emoji_id = tag.get("id", "")
-        from urllib.parse import urlparse
         domain = urlparse(emoji_id).netloc if emoji_id else ""
 
         existing = session.query(CustomEmoji).filter_by(keyword=keyword, domain=domain).first()
@@ -3074,12 +3066,11 @@ def _process_emoji_tags(tags: list, session):
 
         if not _validate_url(img_url):
             continue
-        from PIL import Image
-        import httpx
         try:
             resp = _validated_get(img_url, timeout=15)
             if resp.status_code != 200:
                 continue
+            # Content-Type 기반 안전하게 확장자 추론
             ext = "png"
             ct = resp.headers.get("content-type", "")
             if "jpeg" in ct or "jpg" in ct:
@@ -3096,43 +3087,49 @@ def _process_emoji_tags(tags: list, session):
                     ext = "png"
             if ext == "jpeg":
                 ext = "jpg"
-            file_name = f"{uuid.uuid4().hex}.{ext}"
-            remote_dir = os.path.join(EMOJI_DIR, "remote")
-            os.makedirs(remote_dir, exist_ok=True)
-            file_path = os.path.join(remote_dir, file_name)
 
-            # Check aspect ratio — skip if too wide (>2x height)
+            # 종횡비 체크 (Pillow로 열어서 확인 후 바로 닫기)
             tmp = Image.open(io.BytesIO(resp.content))
             w, h = tmp.size
             tmp.close()
             if h > 0 and w / h > 2.0:
                 continue
 
-            if ext == "gif":
+            remote_dir = os.path.join(EMOJI_DIR, "remote")
+            os.makedirs(remote_dir, exist_ok=True)
+
+            # 💡 [핵심 교정] GIF와 PNG는 원본 데이터(바이너리)를 100% 보존합니다. (APNG 완전 보장)
+            if ext in ("gif", "png"):
+                file_name = f"{uuid.uuid4().hex}.{ext}"
+                file_path = os.path.join(remote_dir, file_name)
                 data = resp.content
+                content_type = "image/gif" if ext == "gif" else "image/png"
             else:
+                # 일반 정지 이미지(JPG 등)만 WebP로 가공
                 file_name = f"{uuid.uuid4().hex}.webp"
                 file_path = os.path.join(remote_dir, file_name)
                 img = Image.open(io.BytesIO(resp.content))
-                if img.mode == "RGBA" or img.mode == "P":
+                if img.mode in ("RGBA", "P"):
                     img = img.convert("RGBA")
                 else:
                     img = img.convert("RGB")
+                # 정지 이미지일 때만 안전하게 리사이징
                 if img.width > 66 or img.height > 66:
                     img = img.resize((img.width // 2, img.height // 2), Image.LANCZOS)
                 buf = io.BytesIO()
                 img.save(buf, format="WEBP", quality=100)
                 data = buf.getvalue()
-            # Save to emoji dir (served by /emojis static mount)
+                content_type = "image/webp"
+
+            # 1. 로컬 static 디렉토리에 저장
             try:
-                os.makedirs(remote_dir, exist_ok=True)
                 with open(file_path, "wb") as f:
                     f.write(data)
             except Exception:
                 pass
-            # Also save via storage backend for S3
+            # 2. S3 등 외부 스토리지 백엔드에 저장 (정확한 content_type 반영)
             try:
-                _storage.save(f"emojis/remote/{file_name}", data, f"image/{ext}")
+                _storage.save(f"emojis/remote/{file_name}", data, content_type)
             except Exception:
                 pass
             emoji = CustomEmoji(
