@@ -284,7 +284,7 @@ export default function RightSidebar() {
           <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>{serverInfo.name}</div>
             {serverInfo.description && <div style={{ fontSize: 12, marginBottom: 6, color: "var(--text-dim)" }}>{serverInfo.description}</div>}
-            {serverInfo.admins.length > 0 && (
+            {serverInfo.admins?.length > 0 && (
               <div style={{ marginBottom: 8 }}>
                 {serverInfo.admins.map((a) => (
                   <div key={a.username} style={{ marginBottom: 2 }}>
