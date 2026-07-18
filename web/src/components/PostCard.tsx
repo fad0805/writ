@@ -200,9 +200,8 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     }).replace(/\. /g, "-").replace(/\.$/, "");
   })() : "";
 
-  const [quoteUrl, setQuoteUrl] = useState("");
   const validMentions = useMemo(() => new Set(post.mentioned_handles || []), [post.mentioned_handles]);
-  const buildContentHtml = (qUrl?: string) => {
+  const buildContentHtml = () => {
     let html = post.content || "";
     if (/<\/?[a-zA-Z]+[\s>]/.test(html) || /&[a-z]+;/.test(html)) {
       html = html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
@@ -224,38 +223,13 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     });
     html = renderCustomEmojis(html, emojiList);
     html = rewriteLinks(html, validMentions);
-    if (qUrl) {
-      const escUrl = qUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const host = typeof window !== 'undefined' ? window.location.host : '';
-      const isLocal = host === (qUrl.match(/https?:\/\/([^/]+)/)?.[1]);
-      const linkHref = isLocal ? qUrl.replace(/https?:\/\/[^/]+/, '') : qUrl;
-      const linkTarget = isLocal ? '' : ' target="_blank" rel="noopener noreferrer"';
-      const rePrefixRe = new RegExp(`(^|<br>|\\n)(RE:|re:)\\s*(<a[^>]*>\\s*)?${escUrl}`, 'i');
-      if (rePrefixRe.test(html)) {
-        const linkHtml = `<a href="${linkHref}"${linkTarget}>${qUrl}</a>`;
-        html = html.replace(new RegExp(`(^|<br>|\\n)(RE:|re:)\\s*(<a[^>]*>[\\s\\S]*?<\\/a>|${escUrl})`, 'gi'), `$1<blockquote class="quote-inline-block">${linkHtml}</blockquote>`);
-      } else {
-        const seriesEpRe = new RegExp(`(RE:|series:|episode:|episode\\s*):?\\s*(<a[^>]*>[\\s\\S]*?<\\/a>|${escUrl})`, 'gi');
-        if (seriesEpRe.test(html)) {
-          html = html.replace(seriesEpRe, '');
-        } else {
-          const inAnchorRe = new RegExp(`<a\\s+href="[^"]*${escUrl}[^"]*"[^>]*>[\\s\\S]*?<\\/a>`, 'gi');
-          if (inAnchorRe.test(html)) {
-            html = html.replace(new RegExp(`<a(\\s+)href="[^"]*${escUrl}[^"]*"`), `<a$1href="${linkHref}"${linkTarget}`);
-          } else {
-            html = html.replace(new RegExp(`(^|>|　|\\s)${escUrl}`, 'gi'), `$1<a href="${linkHref}"${linkTarget}>${qUrl}</a>`);
-          }
-        }
-      }
-      html = html.replace(/<span class="quote-inline">\s*RE:\s*<\/span>/gi, '');
-    }
     return html;
   };
   const [contentHtml, setContentHtml] = useState(() => sanitizePost(buildContentHtml()));
 
   useEffect(() => {
-    setContentHtml(sanitizePost(buildContentHtml(quoteUrl || undefined)));
-  }, [post.id, post.content, post.summary, quoteUrl, emojiList]);
+    setContentHtml(sanitizePost(buildContentHtml()));
+  }, [post.id, post.content, post.summary, emojiList]);
   useEffect(() => {
     if (cardRef.current) installCodeCopyButtons(cardRef.current);
   }, [contentHtml, post.content]);
@@ -362,67 +336,6 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     window.addEventListener("click", handler);
     return () => window.removeEventListener("click", handler);
   }, [showMoreActions]);
-  useEffect(() => {
-    const hasRePrefix = /<span class="quote-inline">\s*RE:\s*<\/span>/i.test(post.content) || /\b(RE|series):\s*https?:\/\//i.test(post.content.replace(/<[^>]+>/g, ''));
-    if (!hasRePrefix) return;
-    const anyUrl = (post.content.match(/https?:\/\/[^\s<>"']+/g) || []).find((u: string) => !u.match(/\/tags\//));
-    if (!anyUrl) return;
-    const newFormat = anyUrl.match(/https?:\/\/([^/]+)\/@(\w+(?:@[\w.-]+)?)\/([a-f0-9]+)/);
-    const oldFormat = anyUrl.match(/https?:\/\/[^/]+\/post\/(\d+)/);
-    const seriesFormat = anyUrl.match(/https?:\/\/[^/]+\/series\/(\d+)/);
-    const seriesByNumber = anyUrl.match(/https?:\/\/[^/]+\/series\/by-number\/(\w+)\/([a-f0-9]+)/);
-    const episodeFormat = anyUrl.match(/https?:\/\/[^/]+\/series\/(\d+)\/episodes\/(\d+)/);
-    const url = anyUrl;
-    if (!url) return;
-    setQuoteUrl(url);
-    setLoadingQuote(true);
-    const isLocal = (url.match(/https?:\/\/([^/]+)/)?.[1]) === window.location.host;
-    if (isLocal && episodeFormat) {
-      fetch("/api/fetch-episode", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ url }) })
-        .then(r => { if (r.ok) return r.json(); throw new Error(); })
-        .then(d => { setQuotedEpisode(d); setLoadingQuote(false); })
-        .catch(() => setLoadingQuote(false));
-    } else if (isLocal && (seriesFormat || seriesByNumber)) {
-      fetch("/api/fetch-series", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ url }) })
-        .then(r => { if (r.ok) return r.json(); throw new Error(); })
-        .then(d => { setQuotedSeries(d); setLoadingQuote(false); })
-        .catch(() => setLoadingQuote(false));
-    } else if (newFormat) {
-      const domain = newFormat[1];
-      const username = newFormat[2];
-      const number = newFormat[3];
-      if (isLocal) {
-        fetch(`/api/by-number/${username}/${number}`, { credentials: "include" })
-          .then(r => r.json()).then(d => { setQuotedPost(d); setLoadingQuote(false); })
-          .catch(() => setLoadingQuote(false));
-      } else {
-        const fullUrl = `https://${domain}/@${username}/${number}`;
-        const form = new FormData(); form.append("url", fullUrl);
-        fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form })
-          .then(r => r.json()).then(d => { if (d.type === "user" && d.redirect) { window.location.href = d.redirect; } else { if (d._emojis) { injectEmojis(d._emojis); } setQuotedPost(d); } setLoadingQuote(false); })
-          .catch(() => setLoadingQuote(false));
-      }
-    } else if (oldFormat) {
-      const postId = oldFormat[1];
-      fetch(`/api/posts/${postId}?reply_limit=0&reply_offset=0`, { credentials: "include" })
-        .then(r => r.json()).then(d => { setQuotedPost(d); setLoadingQuote(false); })
-        .catch(() => setLoadingQuote(false));
-    } else {
-      const form = new FormData(); form.append("url", url);
-      fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form })
-        .then(r => { if (r.ok) return r.json(); throw new Error(); })
-        .then(d => {
-          if (d.type === "user" && d.redirect) { window.location.href = d.redirect; return; }
-          if (d._emojis) {
-            injectEmojis(d._emojis);
-            getCustomEmojis().then(setEmojiList);
-          }
-          setQuotedPost(d);
-          setLoadingQuote(false);
-        })
-        .catch(() => setLoadingQuote(false));
-    }
-  }, [post.content]);
 
   // Handle stored quote reference from ActivityPub (quote_of_id / quote_of_ap_id)
   useEffect(() => {

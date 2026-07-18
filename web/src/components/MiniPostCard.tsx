@@ -50,15 +50,6 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     html = html.replace(/\n/g, '<br>');
-    const reUrlMatch = html.match(/(RE:|re:)\s*(https?:\/\/[^\s<]+)/i);
-    if (reUrlMatch) {
-      const url = reUrlMatch[2];
-      const host = typeof window !== 'undefined' ? window.location.host : '';
-      const isLocal = host === (url.match(/https?:\/\/([^/]+)/)?.[1]);
-      const linkHref = isLocal ? url.replace(/https?:\/\/[^/]+/, '') : url;
-      const linkTarget = isLocal ? '' : ' target="_blank" rel="noopener noreferrer"';
-      html = html.replace(new RegExp(`(RE:|re:)\\s*(https?:\\/\\/[^\\s<]+)`, 'gi'), `<blockquote class="quote-inline-block"><a href="${linkHref}"${linkTarget}>$2</a></blockquote>`);
-    }
     html = renderCustomEmojis(html, emojiMap);
     return sanitizePost(rewriteLinks(html, validMentions));
   })();
