@@ -1209,7 +1209,10 @@ input:focus {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 4px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.notif-tabs::-webkit-scrollbar { display: none; }
 .notif-tab {
   flex: 1;
   display: flex;
