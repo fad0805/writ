@@ -102,6 +102,8 @@ def _convert_urls_and_handles(sanitized_content: str) -> str:
         return f'<a href="/@{username}" class="mention">@{username}</a>'
     sanitized_content = re.sub(r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)(?!@)', _repl_local_handle, sanitized_content)
 
+    return sanitized_content
+
 
 _PRIVATE_SUBNETS = [
     ipaddress.ip_network("127.0.0.0/8"),
