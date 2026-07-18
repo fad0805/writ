@@ -93,14 +93,30 @@ def _convert_urls_and_handles(sanitized_content: str) -> str:
         # 원격 유저 인스턴스 주소 추정 (플랫폼에 맞게 조정 가능, 보통 https://domain/@user 또는 https://domain/users/user)
         user_url = f"https://{domain}/@{username}" 
         return f'<a href="{user_url}" class="mention" target="_blank" rel="noopener noreferrer">@{username}@{domain}</a>'
-    # 원격 핸들 패턴 (@[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+\.[A-Za-z]{2,})
-    sanitized_content = re.sub(r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})', _repl_remote_handle, sanitized_content)
+
+    # 💡 조건 추가: [(?<!href=") 속성 내부 차단] [(?<!">) 이미 a태그 텍스트인 경우 차단]
+    remote_handle_pattern = (
+        r'(?<![A-Za-z0-9_.-])'         # 기존: 문자 흐름 중간 차단
+        r'(?<!href=")(?<!src=")'       # 추가: 태그 속성 내부 차단
+        r'(?<!">)(?<!</a>)'            # 추가: 이미 a태그로 감싸진 텍스트 내부 차단
+        r'@([A-Za-z0-9_.-]+)'
+        r'@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})'
+    )
+    sanitized_content = re.sub(remote_handle_pattern, _repl_remote_handle, sanitized_content)
 
     # 로컬 핸들 변환 (@user) - 이미 위에서 원격이 치환되었으므로 남은 단독 @user 처리
     def _repl_local_handle(m):
         username = m.group(1)
         return f'<a href="/@{username}" class="mention">@{username}</a>'
-    sanitized_content = re.sub(r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)(?!@)', _repl_local_handle, sanitized_content)
+    # 💡 조건 추가: 로컬 핸들도 동일하게 이미 링크 내부에 있으면 패스하도록 방어선 구축
+    local_handle_pattern = (
+        r'(?<![A-Za-z0-9_.-])'
+        r'(?<!href=")(?<!src=")'
+        r'(?<!">)(?<!</a>)'
+        r'@([A-Za-z0-9_.-]+)'
+        r'(?!@)'
+    )
+    sanitized_content = re.sub(local_handle_pattern, _repl_local_handle, sanitized_content)
 
     return sanitized_content
 

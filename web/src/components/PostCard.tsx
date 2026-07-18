@@ -31,6 +31,7 @@ function formatRelative(iso: string, now: number = Date.now()): string {
 }
 
 export function rewriteLinks(text: string, validMentions?: Set<string>): string {
+  console.log(text);
   // Convert remote hashtag links to local explore
   text = text.replace(
     /<a\s+[^>]*href="https?:\/\/[^"]*\/tags\/([^"/]+)"[^>]*>#?(?:<span>)?([\p{L}\p{N}_가-힣]+)(?:<\/span>)?<\/a>/gu,
