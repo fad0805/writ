@@ -418,6 +418,8 @@ class Post(Base):
                 "Emoji": "toot:Emoji",
                 "emoji": "toot:emoji",
                 "quoteUrl": "as:quoteUrl",
+                "quote": {"@id": "https://w3id.org/fep/044f#quote", "@type": "@id"},
+                "quoteUri": "http://fedibird.com/ns#quoteUri",
             },
         ]
         obj_id = f"{BASE_URL}/@{self.author.username}/{self.number}" if self.number else self.ap_id
@@ -487,6 +489,8 @@ class Post(Base):
             obj["inReplyTo"] = self.in_reply_to_ap_id
         if self.quote_of_ap_id:
             obj["quoteUrl"] = self.quote_of_ap_id
+            obj["quote"] = self.quote_of_ap_id
+            obj["quoteUri"] = self.quote_of_ap_id
         if self.poll_data:
             obj["type"] = "Question"
             poll_id = self.ap_id or f"{BASE_URL}/@{self.author.username}/{self.number}"

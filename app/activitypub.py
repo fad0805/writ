@@ -1607,12 +1607,30 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     elif att_type.startswith("video/"):
                         media_list.append({"url": cached, "type": "video"})
 
-            # Extract quote reference from Note (Mastodon/Misskey/Firefish compat)
+            # Extract quote reference from Note (FEP-044f / Mastodon / Misskey / Firefish compat)
             quote_of_ap_id = ""
             quote_of_id = None
             if isinstance(obj, dict):
-                quote_url = obj.get("quoteUrl") or obj.get("_misskey_quote") or ""
-                if quote_url:
+                # FEP-044f primary field, plus legacy compat fields
+                quote_url = (
+                    obj.get("quote")           # FEP-044f (Mastodon 4.4+)
+                    or obj.get("quoteUrl")     # as:quoteUrl
+                    or obj.get("quoteUri")     # fedibird compat
+                    or obj.get("_misskey_quote")  # Misskey/Firefish
+                    or ""
+                )
+                # Some platforms put the quote URL in the tag array
+                if not quote_url and isinstance(obj.get("tag"), list):
+                    for _tag in obj["tag"]:
+                        if not isinstance(_tag, dict):
+                            continue
+                        if _tag.get("type") == "Quote":
+                            quote_url = _tag.get("href") or _tag.get("id") or ""
+                        elif _tag.get("type") == "Link" and _tag.get("rel") == "https://misskey-hub.net/ns#_misskey_quote":
+                            quote_url = _tag.get("href") or ""
+                        if quote_url:
+                            break
+                if quote_url and isinstance(quote_url, str):
                     quote_of_ap_id = quote_url
                     try:
                         quote_post = _fetch_remote_post(quote_url, actor, session)
@@ -1640,31 +1658,32 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             session.add(post)
             session.flush()
 
-            # Fetch link preview for URLs in remote post content
-            _url_match_lp = re.search(r'https?://[^\s<>"\')\]]+', content or "")
-            if _url_match_lp:
-                _url_lp = _url_match_lp.group(0)
-                try:
-                    import httpx as _httpx_lp
-                    _resp_lp = _httpx_lp.get(_url_lp, headers={"User-Agent": "WRIT/1.0"}, timeout=5, follow_redirects=True)
-                    if _resp_lp.status_code == 200:
-                        _html_lp = _resp_lp.text
-                        def _og_lp(n):
-                            _m = re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', _html_lp, re.I)
-                            if not _m:
-                                _m = re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', _html_lp, re.I)
-                            return _m.group(1) if _m else ""
-                        _og_title_lp = _og_lp("title") or (re.search(r'<title>([^<]*)</title>', _html_lp, re.I).group(1) if re.search(r'<title>([^<]*)</title>', _html_lp, re.I) else "")
-                        _og_desc_lp = _og_lp("description")
-                        _og_img_lp = _og_lp("image")
-                        if _og_img_lp and _og_img_lp.startswith("/"):
-                            from urllib.parse import urlparse as _up_lp
-                            _p_lp = _up_lp(_url_lp)
-                            _og_img_lp = f"{_p_lp.scheme}://{_p_lp.netloc}{_og_img_lp}"
-                        if _og_title_lp:
-                            post.link_preview = {"url": _url_lp, "title": _og_title_lp[:200], "description": _og_desc_lp[:400] if _og_desc_lp else "", "image": _og_img_lp or ""}
-                except Exception:
-                    pass
+            # Fetch link preview for URLs in remote post content (skip if quote post)
+            if not quote_of_ap_id:
+                _url_match_lp = re.search(r'https?://[^\s<>"\')\]]+', content or "")
+                if _url_match_lp:
+                    _url_lp = _url_match_lp.group(0)
+                    try:
+                        import httpx as _httpx_lp
+                        _resp_lp = _httpx_lp.get(_url_lp, headers={"User-Agent": "WRIT/1.0"}, timeout=5, follow_redirects=True)
+                        if _resp_lp.status_code == 200:
+                            _html_lp = _resp_lp.text
+                            def _og_lp(n):
+                                _m = re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', _html_lp, re.I)
+                                if not _m:
+                                    _m = re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', _html_lp, re.I)
+                                return _m.group(1) if _m else ""
+                            _og_title_lp = _og_lp("title") or (re.search(r'<title>([^<]*)</title>', _html_lp, re.I).group(1) if re.search(r'<title>([^<]*)</title>', _html_lp, re.I) else "")
+                            _og_desc_lp = _og_lp("description")
+                            _og_img_lp = _og_lp("image")
+                            if _og_img_lp and _og_img_lp.startswith("/"):
+                                from urllib.parse import urlparse as _up_lp
+                                _p_lp = _up_lp(_url_lp)
+                                _og_img_lp = f"{_p_lp.scheme}://{_p_lp.netloc}{_og_img_lp}"
+                            if _og_title_lp:
+                                post.link_preview = {"url": _url_lp, "title": _og_title_lp[:200], "description": _og_desc_lp[:400] if _og_desc_lp else "", "image": _og_img_lp or ""}
+                    except Exception:
+                        pass
 
             # Parse #hashtags from content and sync with Tag model (so hashtag search includes remote posts)
             for _t in re.findall(r'(?<!\w)#([\w_가-힣]+)', content or ""):
