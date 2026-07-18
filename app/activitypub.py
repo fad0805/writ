@@ -460,16 +460,13 @@ def _cache_remote_media(remote_url: str) -> str:
         is_image = orig_ext in ("jpg", "jpeg", "png", "gif", "webp")
 
         if is_image and len(data) < _REMOTE_MEDIA_MAX_SIZE:
-            # 💡 [방어 코드 1] 커스텀 이모지 경로이거나 바이너리에 acTL(APNG 청크)이 포함된 경우
-            # Pillow가 애니메이션을 깨뜨리지 않도록 가공 없이 원본 데이터 그대로 캐싱 영역으로 패스합니다.
-            print(f'============================================= {data}')
-            # is_apng = (orig_ext == "png" and b"acTL" in data)
-            is_apng = (orig_ext == "png")
+            is_apng = (orig_ext == "png" and b"acTL" in data)
             is_custom_emoji = "custom_emojis" in remote_url
 
+            # 💡 [해결] APNG나 커스텀 이모지는 아래 try-except 압축 블록을 "완전히 우회"합니다.
             if is_apng or is_custom_emoji:
-                # 가공 절차를 완전히 생략하고 원본 그대로 보존
-                pass
+                logger.info("Preserving original animated/emoji media without processing: %s", remote_url)
+                # 가공을 하지 않으므로 data와 ext는 원본 상태(png 등)를 그대로 유지합니다.
             else:
                 try:
                     img = Image.open(io.BytesIO(data))
@@ -504,6 +501,7 @@ def _cache_remote_media(remote_url: str) -> str:
                     data = resp.content
                     ext = orig_ext
 
+        # 🚀 이제 보호된 원본 데이터(바이너리)가 안전하게 스토리지로 넘어옵니다.
         name = f"remote_{uuid.uuid4().hex[:12]}.{ext}"
         key = f"media/remote/{name}"
         storage = get_storage()
@@ -602,7 +600,6 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
     ext = image_url.rsplit(".", 1)[-1].lower() if "." in image_url else "jpg"
     is_gif = ext == "gif"
     try:
-        import httpx
         import io
         from PIL import Image as PILImage
         r = _validated_get(image_url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=15)
