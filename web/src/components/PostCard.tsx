@@ -559,7 +559,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
             </div>
           </div>
         )}
-        {post.link_preview && (
+        {post.link_preview && !(post as any).quote_of_id && !(post as any).quote_of_ap_id && (
           <a href={post.link_preview.url} target="_blank" rel="noopener noreferrer" className="link-preview-card" onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: 12, marginTop: 8, padding: 10, borderRadius: 8, border: "1px solid var(--border)", textDecoration: "none", color: "inherit" }}>
             {post.link_preview.image && <img src={post.link_preview.image} alt="" style={{ width: 80, height: 80, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} onError={(e) => (e.target as HTMLElement).style.display = "none"} />}
             <div style={{ minWidth: 0 }}>
