@@ -278,29 +278,34 @@ async def csrf_protection(request: Request, call_next):
         return await call_next(request)
     session_token = request.cookies.get("session", "")
     csrf_token = request.headers.get("X-CSRF-Token", "")
-    host_header = request.headers.get("Host", "")
-    if host_header in ("api:8000", "localhost:8000") or host_header.startswith("172."):
-        host_header = DOMAIN
-    origin = request.headers.get("Origin", "")
-    referer = request.headers.get("Referer", "")
-    if origin:
-        from urllib.parse import urlparse as _urlparse
-        try:
-            origin_host = _urlparse(origin).netloc
-        except Exception:
-            origin_host = ""
-        if origin_host and origin_host != host_header:
-            print(f"[CSRF] origin mismatch: origin={origin_host} host={host_header}", flush=True)
-            return JSONResponse({"detail": "CSRF origin mismatch"}, status_code=403)
-    elif referer:
-        from urllib.parse import urlparse as _urlparse
-        try:
-            referer_host = _urlparse(referer).netloc
-        except Exception:
-            referer_host = ""
-        if referer_host and referer_host != host_header:
-            print(f"[CSRF] referer mismatch: referer={referer_host} host={host_header}", flush=True)
-            return JSONResponse({"detail": "CSRF referer mismatch"}, status_code=403)
+    import os
+    is_dev = os.getenv("APP_ENV", "production") == "development"
+    if is_dev:
+        pass
+    else:
+        host_header = request.headers.get("Host", "")
+        if host_header in ("api:8000", "localhost:8000") or host_header.startswith("172."):
+            host_header = DOMAIN
+        origin = request.headers.get("Origin", "")
+        referer = request.headers.get("Referer", "")
+        if origin:
+            from urllib.parse import urlparse as _urlparse
+            try:
+                origin_host = _urlparse(origin).netloc
+            except Exception:
+                origin_host = ""
+            if origin_host and origin_host != host_header:
+                print(f"[CSRF] origin mismatch: origin={origin_host} host={host_header}", flush=True)
+                return JSONResponse({"detail": "CSRF origin mismatch"}, status_code=403)
+        elif referer:
+            from urllib.parse import urlparse as _urlparse
+            try:
+                referer_host = _urlparse(referer).netloc
+            except Exception:
+                referer_host = ""
+            if referer_host and referer_host != host_header:
+                print(f"[CSRF] referer mismatch: referer={referer_host} host={host_header}", flush=True)
+                return JSONResponse({"detail": "CSRF referer mismatch"}, status_code=403)
     if not validate_csrf_token(csrf_token, session_token):
         return JSONResponse({"detail": "CSRF token missing or invalid"}, status_code=403)
     return await call_next(request)

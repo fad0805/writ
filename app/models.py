@@ -227,8 +227,8 @@ class Post(Base):
     quote_of_ap_id = Column(String(1024), default="")
 
     # Novel post (if this post is a novel episode announcement)
-    novel_id = Column(Integer, ForeignKey("novels.id"), nullable=True)
-    episode_id = Column(Integer, ForeignKey("episodes.id"), nullable=True)
+    novel_id = Column(Integer, ForeignKey("novels.id", ondelete="SET NULL"), nullable=True)
+    episode_id = Column(Integer, ForeignKey("episodes.id", ondelete="SET NULL"), nullable=True)
 
     is_deleted = Column(Boolean, default=False)
     is_pinned = Column(Boolean, default=False)
