@@ -859,56 +859,49 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         if user and tl_type in ("home", "social"):
             _following_ids_set = set(_following_ids) if _following_ids else set()
             mention_filtered = []
+            # 내가 팔로우하는 사람 + 나 자신
+            allowed_authors = _following_ids_set | {user.id}
+
             for p in posts:
-                # [대원칙] 내가 언급된 글(멘션 대상에 내 ID가 들어있는 글)은 무조건 통과시킨다!
+                # [대원칙 1] 내가 직접 언급된 글(DB ID 기반 또는 원격 감지)은 무조건 무사 통과!
                 is_mentioned_to_me = False
                 if p.mentioned_user_ids and user.id in p.mentioned_user_ids:
                     is_mentioned_to_me = True
+                # DB에 멘션 ID가 기록 안 된 원격 글일 경우, 본문 텍스트에서 내 멘션이 있는지 검사
+                if not is_mentioned_to_me and p.content and p.author and p.author.is_remote:
+                    import re as _re
+                    my_username_lower = user.username.split('@')[0].lower()
+                    # 본문에 @내아이디@도메인 또는 @내아이디 형태가 있는지 확인
+                    if _re.search(rf'@{my_username_lower}(?:@[\w.-]+)?\b', p.content.lower()):
+                        is_mentioned_to_me = True
 
+                # 나한테 온 멘션글이라면 작성자가 누구든 묻지도 따지지도 않고 타임라인에 포함
+                if is_mentioned_to_me:
+                    mention_filtered.append(p)
+                    continue
+
+                # 🚨 [대원칙 2] 나한테 온 멘션이 아니라면, 글 작성자가 반드시 '내가 팔로우하는 사람'이어야 함!
+                if p.author_id not in allowed_authors:
+                    # 내가 팔로우하지도 않는 사람이 쓴 글이 홈에 들어왔으므로 드롭
+                    continue
+
+                # -------------------------------------------------------------
+                # 여기서부터는 작성자가 '내가 팔로우하는 사람'일 때의 추가 필터링 (답글 방어)
+                # -------------------------------------------------------------
                 skip = False
-                # 내가 언급되지 않은 글에 한해서만 제3자 멘션 필터링을 수행합니다.
-                if not is_mentioned_to_me:
-                    if p.mentioned_user_ids:
-                        for muid in p.mentioned_user_ids:
-                            # 언급된 사람이 작성자 본인도 아니고, 나도 아니고, 내 팔로잉도 아니라면 스킵
-                            if muid != p.author_id and muid != user.id and muid not in _following_ids_set:
-                                skip = True
-                                break
 
-                    # 2. 리모트 글 본문 HTML 멘션 태그 추적
-                    if not skip and p.content and p.author and p.author.is_remote:
-                        import re as _re
-                        mentions = _re.findall(r'<a\s+[^>]*href="([^"]+)"[^>]*class="[^"]*mention[^"]*"[^>]*>', p.content)
-                        # (생략된 기존 주소 대조 로직 적용 가능)
-                        pass
-
-                    # 3. DB에 멘션 ID가 없지만 본문에 이메일 형식의 원격 멘션이 적힌 경우
-                    if not skip and not p.mentioned_user_ids and p.author and p.author.is_remote:
-                        import re as _re
-                        _remote_mentions = _re.findall(r'@([\w.-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', p.content or "")
-                        # 멘션이 존재할 때, 그 멘션 중 나를 향한 것이 단 하나도 없다면 스킵합니다.
-                        if _remote_mentions:
-                            has_my_mention = False
-                            my_username_lower = user.username.split('@')[0].lower()
-                            for m_user, m_domain in _remote_mentions:
-                                # 로컬 유저네임 매칭 여부 검사
-                                if m_user.lower() == my_username_lower:
-                                    has_my_mention = True
-                                    break
-                            if not has_my_mention:
-                                skip = True
-
-                # 부모 글(답장 대상)이 DB에 없는 원격 글일 때 처리
-                if not skip and p.in_reply_to_ap_id and not p.in_reply_to_id:
-                    if p.author_id == user.id or p.author_id in _following_ids_set or is_mentioned_to_me:
-                        pass
-                    else:
-                        skip = True
+                # 부모 글(답장 대상)이 DB에 없는 원격 글일 때 
+                # (내가 팔로우하는 사람이 엉뚱한 원격 유저에게 보내는 답글 찌꺼기 방어)
+                if p.in_reply_to_ap_id and not p.in_reply_to_id:
+                    # 굳이 안 봐도 되는 남들의 대화 타래라면 스킵
+                    # (부모 작성자를 DB에서 알 수 없으므로 안전하게 스킵 처리)
+                    skip = True
 
                 if skip:
                     continue
+
                 mention_filtered.append(p)
-            posts = mention_filtered
+            posts = mention_filtered # 필터링된 목록으로 갱신
             print(f"[feed] after mention filter: {len(posts)} posts", flush=True)
     has_more = raw_total > limit
     print(f"[feed] has_more={has_more} (raw_total={raw_total}, after_filter={len(posts)}, limit={limit})", flush=True)
