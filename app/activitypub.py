@@ -593,44 +593,61 @@ def _cleanup_remote_data():
 
 
 def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url: str = "") -> str:
-    """Download remote image and save as WebP, return URL. If old_url given, delete it after."""
+    """Download remote image and save safely (preserving animations like GIF/APNG)."""
+    import uuid
+    import io
+    from PIL import Image as PILImage
     from app.utils.storage import get_storage
+
     if not _validate_url(image_url):
         return ""
+
     ext = image_url.rsplit(".", 1)[-1].lower() if "." in image_url else "jpg"
-    is_gif = ext == "gif"
     try:
-        import io
-        from PIL import Image as PILImage
         r = _validated_get(image_url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=15)
-        if r.status_code == 200 and len(r.content) <= 10 * 1024 * 1024:
-            if is_gif:
-                filename = f"{uuid.uuid4().hex}.gif"
-                key = f"{prefix}/remote/{filename}"
-                storage = get_storage()
-                new_url = storage.save(key, r.content, "image/gif")
-            else:
-                img = PILImage.open(io.BytesIO(r.content))
-                if img.mode in ("RGBA", "P"):
-                    bg = PILImage.new("RGB", img.size, (255, 255, 255))
-                    bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
-                    img = bg
-                out = io.BytesIO()
-                img.save(out, format="WEBP", quality=85)
-                filename = f"{uuid.uuid4().hex}.webp"
-                key = f"{prefix}/remote/{filename}"
-                storage = get_storage()
-                new_url = storage.save(key, out.getvalue(), "image/webp")
-            if old_url:
-                try:
-                    storage.delete(old_url)
-                except Exception:
-                    pass
-            return new_url
+        if r.status_code != 200 or len(r.content) > 10 * 1024 * 1024:
+            return image_url
+
+        data = r.content
+        storage = get_storage()
+
+        # 💡 [핵심 방어] GIF이거나 APNG(바이너리에 acTL 청크 포함)인지 검사
+        is_gif = (ext == "gif")
+        is_apng = (ext == "png" and b"acTL" in data)
+
+        if is_gif or is_apng:
+            # 🚀 애니메이션 이미지는 가공하지 않고 원본 바이너리 그대로 저장하여 움직임을 보존합니다.
+            filename = f"{uuid.uuid4().hex}.{ext}"
+            key = f"{prefix}/remote/{filename}"
+            # Content-Type을 각각 정확하게 매칭
+            content_type = "image/apng" if is_apng else "image/gif"
+            new_url = storage.save(key, data, content_type)
+        else:
+            # 일반 정지 이미지는 기존대로 WebP로 변환하여 용량 최적화
+            img = PILImage.open(io.BytesIO(data))
+            # 단일 프레임 이미지인데 투명도가 있다면 흰색 배경 합성
+            if img.mode in ("RGBA", "P"):
+                bg = PILImage.new("RGB", img.size, (255, 255, 255))
+                bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
+                img = bg
+            out = io.BytesIO()
+            img.save(out, format="WEBP", quality=85)
+            filename = f"{uuid.uuid4().hex}.webp"
+            key = f"{prefix}/remote/{filename}"
+            new_url = storage.save(key, out.getvalue(), "image/webp")
+
+        # 기존 오브젝트 삭제 처리
+        if old_url:
+            try:
+                storage.delete(old_url)
+            except Exception:
+                pass
+
+        return new_url
+
     except Exception as e:
         logger.warning("Failed to save remote %s %s: %s", prefix, image_url, e)
     return image_url
-
 
 def _save_remote_avatar(avatar_url: str, local_username: str, old_url: str = "") -> str:
     return _save_remote_image(avatar_url, "avatars", local_username, old_url)
