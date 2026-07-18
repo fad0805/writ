@@ -364,6 +364,45 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     }
   }, [post.id, (post as any).quote_of_id, (post as any).quote_of_ap_id]);
 
+  // Detect series/episode share URLs in content (e.g. "series: https://.../series/123")
+  useEffect(() => {
+    if (quotedPost || quotedSeries || quotedEpisode || loadingQuote) return;
+    const content = post.content || '';
+    const seriesMatch = content.match(/(?:^|\n)\s*series:\s*(https?:\/\/\S+)/i);
+    const episodeMatch = content.match(/(?:^|\n)\s*episode:\s*(https?:\/\/\S+)/i);
+    const match = seriesMatch || episodeMatch;
+    if (!match) return;
+    const url = match[1];
+    const epMatch = url.match(/\/series\/(\d+)\/episodes\/(\d+)/);
+    const seriesOnlyMatch = url.match(/\/series\/(\d+)/);
+    if (epMatch) {
+      const novelId = parseInt(epMatch[1]);
+      const episodeId = parseInt(epMatch[2]);
+      setLoadingQuote(true);
+      fetch(`/api/series/${novelId}/episodes/${episodeId}`, { credentials: 'include' })
+        .then(r => { if (r.ok) return r.json(); throw new Error(); })
+        .then(d => {
+          if (d.episode && d.novel) {
+            setQuotedEpisode({ type: 'episode', episode: d.episode, novel: d.novel, author: d.novel?.author || null });
+          }
+          setLoadingQuote(false);
+        })
+        .catch(() => setLoadingQuote(false));
+    } else if (seriesOnlyMatch) {
+      const novelId = parseInt(seriesOnlyMatch[1]);
+      setLoadingQuote(true);
+      fetch(`/api/series/${novelId}`, { credentials: 'include' })
+        .then(r => { if (r.ok) return r.json(); throw new Error(); })
+        .then(d => {
+          if (d.novel) {
+            setQuotedSeries({ type: 'series', novel: d.novel, author: d.author || null });
+          }
+          setLoadingQuote(false);
+        })
+        .catch(() => setLoadingQuote(false));
+    }
+  }, [post.id, post.content]);
+
   const handleContentClick = (e: React.MouseEvent) => {
     const anchor = (e.target as HTMLElement).closest('a');
     if (!anchor) return;
