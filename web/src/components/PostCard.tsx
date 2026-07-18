@@ -92,6 +92,8 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likes_count);
   const [boostsCount, setBoostsCount] = useState(post.boosts_count);
+  const [seriesMatch, setSeriesMatch] = useState<RegExpMatchArray | null>(null);
+  const [episodeMatch, setEpisodeMatch] = useState<RegExpMatchArray | null>(null);
 
   const [emojiList, setEmojiList] = useState<CustomEmoji[]>(() => {
     if (typeof window !== "undefined" && (window as any).__emojiCache) return (window as any).__emojiCache as CustomEmoji[];
@@ -208,6 +210,10 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   html = html.replace(/(?:<span[^>]*>)?[\s\n]*RE:[\s\n]*(?:<a[^>]*>.*?<\/a>|https?:\/\/[^\s<>]+)[\s\n]*(?:<\/span>)?(?:[\s\n]*<br\s*\/?>)*/gi, '');
     }
     // Strip "series: https://..." and "episode: https://..." (share link metadata)
+    const seriesMatch = html.match(/(?:^|\n)\s*series:\s*(https?:\/\/\S+)/i);
+    const episodeMatch = html.match(/(?:^|\n)\s*episode:\s*(https?:\/\/\S+)/i);
+    setSeriesMatch(seriesMatch);
+    setEpisodeMatch(episodeMatch);
     html = html.replace(/(?:^|\n)\s*(?:series|episode):\s*https?:\/\/\S+\s*/gi, '');
     if (/<\/?[a-zA-Z]+[\s>]/.test(html) || /&[a-z]+;/.test(html)) {
       html = html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
@@ -367,9 +373,6 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   // Detect series/episode share URLs in content (e.g. "series: https://.../series/123")
   useEffect(() => {
     if (quotedPost || quotedSeries || quotedEpisode || loadingQuote) return;
-    const content = post.content || '';
-    const seriesMatch = content.match(/(?:^|\n)\s*series:\s*(https?:\/\/\S+)/i);
-    const episodeMatch = content.match(/(?:^|\n)\s*episode:\s*(https?:\/\/\S+)/i);
     const match = seriesMatch || episodeMatch;
     if (!match) return;
     const url = match[1];
