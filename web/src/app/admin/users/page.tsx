@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
 import AdminNav from "@/components/AdminNav";
+import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
+import { sanitizeName } from "@/lib/sanitize";
 
 type AdminUser = {
   id: number; username: string; display_name: string; avatar: string;
@@ -42,6 +44,9 @@ export default function AdminUsersPage() {
   const [status, setStatus] = useState("all");
   const [role, setRole] = useState("all");
   const [sort, setSort] = useState("newest");
+  const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
+
+  useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
 
   const loadUsers = () => {
     setLoading(true);
@@ -158,7 +163,7 @@ export default function AdminUsersPage() {
                       <div>
                         <Link href={`/admin/users/${u.id}`} style={{ textDecoration: "none" }}>
                           <div className="admin-user-name">
-                            {u.display_name}
+                            <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(u.display_name || u.username, emojiMap, 14)) }} />
                             {u.role === "owner" && <Icon name="books_solid" className="icon-badge-sm" style={{ marginLeft: 3, color: "var(--accent)" }} title="오너" />}
                             {u.role === "admin" && <Icon name="shield_filled" className="icon-badge-sm icon-admin" style={{ marginLeft: 3 }} title="관리자" />}
                             {u.role === "moderator" && <Icon name="shield_filled" className="icon-badge-sm icon-mod" style={{ marginLeft: 3 }} title="조율자" />}

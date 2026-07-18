@@ -12,7 +12,7 @@ import MentionModal from "@/components/MentionModal";
 import ClickableCover from "@/components/ClickableCover";
 import ConfirmModal from "@/components/ConfirmModal";
 import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
-import { sanitizeName, sanitizePost } from "@/lib/sanitize";
+import { sanitizeName, sanitizePost, sanitizeSummary } from "@/lib/sanitize";
 
 export default function ProfilePage() {
   const params = useParams();
