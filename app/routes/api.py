@@ -250,6 +250,52 @@ def _reply_context(p, session=None, user=None, tl_type=None):
     }
 
 
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".ico"}
+ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".webm", ".ogg", ".mov"}
+ALLOWED_UPLOAD_EXTENSIONS = ALLOWED_IMAGE_EXTENSIONS | ALLOWED_VIDEO_EXTENSIONS
+MAX_IMAGE_SIZE = 10 * 1024 * 1024
+MAX_AVATAR_SIZE = 5 * 1024 * 1024
+IMAGE_MIME_PREFIXES = ("image/jpeg", "image/png", "image/gif", "image/webp", "image/ico")
+VIDEO_MIME_TYPES = {"video/mp4", "video/webm", "video/ogg", "video/quicktime"}
+
+
+def _validate_upload(file: UploadFile, *, allow_video: bool = True, max_size: int = MAX_IMAGE_SIZE, label: str = "file"):
+    import os
+    ext = os.path.splitext(file.filename or "file")[1].lower() if file.filename else ""
+    is_video = ext in ALLOWED_VIDEO_EXTENSIONS
+    is_image = ext in ALLOWED_IMAGE_EXTENSIONS
+    if not is_image and not (is_video and allow_video):
+        raise HTTPException(status_code=400, detail=f"{label}: 지원하지 않는 파일 형식입니다")
+    ct = (file.content_type or "").lower()
+    if is_image and not any(ct.startswith(p) for p in IMAGE_MIME_PREFIXES):
+        raise HTTPException(status_code=400, detail=f"{label}: 이미지 MIME 타입이 올바르지 않습니다")
+    if is_video and ct not in VIDEO_MIME_TYPES:
+        raise HTTPException(status_code=400, detail=f"{label}: 비디오 MIME 타입이 올바르지 않습니다")
+    file.file.seek(0, 2)
+    size = file.file.tell()
+    file.file.seek(0)
+    if is_video and size > MAX_VIDEO_SIZE:
+        raise HTTPException(status_code=400, detail=f"{label}: 비디오 파일이 너무 큽니다 (최대 25MB)")
+    if is_image and size > max_size:
+        raise HTTPException(status_code=400, detail=f"{label}: 이미지 파일이 너무 큽니다 (최대 {max_size // (1024*1024)}MB)")
+    return ext, is_image, is_video
+
+
+def _validate_media_url(url: str) -> bool:
+    from urllib.parse import urlparse
+    if not url or not isinstance(url, str):
+        return False
+    parsed = urlparse(url)
+    if parsed.scheme not in ("https", ""):
+        return False
+    if parsed.scheme == "javascript" or parsed.scheme == "data":
+        return False
+    path = parsed.path.lower()
+    allowed_ext = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".webm"}
+    ext = os.path.splitext(path)[1]
+    return ext in allowed_ext
+
+
 def _can_view(post, viewer, session):
     if post.is_deleted:
         return False
@@ -1333,7 +1379,7 @@ def api_create_post(
         try:
             media = _json.loads(media_attachments)
             if isinstance(media, list):
-                post.media_attachments = media[:16]
+                post.media_attachments = [m for m in media[:16] if isinstance(m, str) and _validate_media_url(m)]
         except (_json.JSONDecodeError, TypeError):
             pass
         if poll_options:
@@ -3163,7 +3209,7 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
         from uuid import uuid4
         from PIL import Image as PILImage
         import io
-        ext = "webp"
+        ext, is_image, is_video = _validate_upload(cover_image, allow_video=False, max_size=MAX_AVATAR_SIZE, label="커버 이미지")
         ct = cover_image.content_type or ""
         if "gif" in ct:
             ext = "gif"
@@ -3273,7 +3319,7 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
         from uuid import uuid4
         from PIL import Image as PILImage
         import io
-        ext = "webp"
+        ext, is_image, is_video = _validate_upload(cover_image, allow_video=False, max_size=MAX_AVATAR_SIZE, label="커버 이미지")
         ct = cover_image.content_type or ""
         if "gif" in ct:
             ext = "gif"
@@ -3816,17 +3862,7 @@ def api_upload_media(request: Request, file: UploadFile = File(...)):
     storage = get_storage()
     from PIL import Image as PILImage
     import io, os
-    ext = os.path.splitext(file.filename or "file")[1].lower() if file.filename else ""
-    is_video = ext in (".mp4", ".webm", ".ogg", ".mov")
-    is_image = ext in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".ico")
-    if not is_image and not is_video:
-        raise HTTPException(status_code=400, detail="Unsupported file type")
-    if is_video:
-        file.file.seek(0, 2)
-        size = file.file.tell()
-        file.file.seek(0)
-        if size > MAX_VIDEO_SIZE:
-            raise HTTPException(status_code=400, detail="Video exceeds maximum size (25MB)")
+    ext, is_image, is_video = _validate_upload(file, allow_video=True, max_size=MAX_IMAGE_SIZE, label="미디어")
     from uuid import uuid4
     name = f"{uuid4().hex}.webp" if is_image else f"{uuid4().hex}{ext}"
     key = f"media/{name}"
@@ -4386,6 +4422,7 @@ def _save_profile_image(user_id: int, file: UploadFile, prefix: str, max_size: t
     from PIL import Image as PILImage
     import io
     from uuid import uuid4
+    _validate_upload(file, allow_video=False, max_size=MAX_AVATAR_SIZE, label="프로필 이미지")
     key = f"{prefix}/local/u{user_id}_{uuid4().hex[:8]}.webp"
     img = PILImage.open(file.file)
     img.thumbnail(max_size, PILImage.Resampling.LANCZOS)
@@ -5245,7 +5282,8 @@ def api_create_emoji(
         raise HTTPException(status_code=400, detail=f"Unsupported image type: {image.content_type}")
 
     import uuid
-    ext = image.filename.rsplit(".", 1)[-1].lower() if image.filename else "png"
+    ct_to_ext = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}
+    ext = ct_to_ext.get(image.content_type, "png")
     file_name = f"{uuid.uuid4().hex}.{ext}"
     local_dir = os.path.join(EMOJI_DIR, "local")
     os.makedirs(local_dir, exist_ok=True)
