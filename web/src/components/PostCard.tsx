@@ -377,7 +377,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     if (!match) return;
     const url = match[1];
     const epMatch = url.match(/\/series\/(\d+)\/episodes\/(\d+)/);
-    const seriesOnlyMatch = url.match(/\/series\/(\d+)/);
+    const seriesOnlyMatch = url.match(/\/series\/by-number\/([^\/]+)\/([^\/]+)\/?$/);
     if (epMatch) {
       const novelId = parseInt(epMatch[1]);
       const episodeId = parseInt(epMatch[2]);
@@ -392,17 +392,38 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
         })
         .catch(() => setLoadingQuote(false));
     } else if (seriesOnlyMatch) {
-      const novelId = parseInt(seriesOnlyMatch[1]);
-      setLoadingQuote(true);
-      fetch(`/api/series/${novelId}`, { credentials: 'include' })
-        .then(r => { if (r.ok) return r.json(); throw new Error(); })
-        .then(d => {
-          if (d.novel) {
-            setQuotedSeries({ type: 'series', novel: d.novel, author: d.author || null });
-          }
-          setLoadingQuote(false);
-        })
-        .catch(() => setLoadingQuote(false));
+      // 💡 백엔드 라우터 규격에 맞춰 FormData 객체를 생성합니다.
+      const form = new FormData();
+      form.append("url", url);
+
+      // 백엔드의 @router.post("/fetch-series") 엔드포인트로 POST 요청을 보냅니다.
+      // (만약 prefix가 다르면 /api/fetch-series 등으로 주소를 맞춰주세요)
+      fetch("/api/fetch-series", {
+        method: "POST",
+        credentials: "include",
+        body: form
+      })
+      .then((r) => {
+        if (!r.ok) throw new Error("Series not found");
+        return r.json(); // 이제 백엔드가 HTML이 아닌 진짜 깔끔한 JSON을 줍니다!
+      })
+      .then((d) => {
+        if (!d) return;
+
+        // 백엔드가 리턴해 준 {"type": "series", "novel": ..., "author": ...} 데이터 바인딩
+        if (d.type === "series" && d.novel) {
+          setQuotedSeries({
+            type: 'series',
+            novel: d.novel,
+            author: d.author || null
+          });
+        }
+      })
+      .then(() => setLoadingQuote(false))
+      .catch((err) => {
+        console.error("시리즈 연동 실패:", err);
+        setLoadingQuote(false);
+      });
     }
   }, [post.id, post.content]);
 

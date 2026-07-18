@@ -4528,7 +4528,6 @@ def api_by_series_number(request: Request, username: str, number: str):
 
 @router.post("/fetch-series")
 def api_fetch_series(request: Request, url: str = Form(...)):
-    user = get_current_user(request)
     with get_session() as s:
         import re
         m = re.match(r"https?://[^/]+/series/(\d+)", url)
