@@ -1721,20 +1721,38 @@ def api_list_rules():
 
 
 @router.post("/posts/{post_id}/like")
-def api_like_post(request: Request, post_id: int):
+def api_like_post(request: Request, post_id: int, reaction: str = "★"):
+    """Like a post with a specific emoji/reaction. Rejects if the emoji is not registered locally."""
     user = require_active_auth(request)
+    # -----------------------------------------------------------------
+    # 🛡️ [핵심 방어선] 로컬에 등록되지 않은 커스텀 이모지 리액션 차단
+    # -----------------------------------------------------------------
+    # 리액션이 일반 텍스트/기본 심볼(★)이 아니라 콜론으로 감싸진 커스텀 이모지 형태일 때만 검사
+    if reaction.startswith(":") and reaction.endswith(":"):
+        keyword = reaction[1:-1].strip().lower().replace(" ", "_")
+        with get_session() as s:
+            # domain이 비어있는('category="local"' 등) 진짜 우리 서버 순정 이모지가 존재하는지 확인
+            is_local_defined = s.query(CustomEmoji).filter_by(keyword=keyword, domain="").first()
+            if not is_local_defined:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"The emoji '{reaction}' is not registered on this server."
+                )
+    # -----------------------------------------------------------------
+
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
-            raise HTTPException(status_code=404, detail="Post not found")
+            raise HTTPException(status_code=404, detail="post not found")
         if not _can_view(post, user, s):
-            raise HTTPException(status_code=404, detail="Post not found")
+            raise HTTPException(status_code=404, detail="post not found")
         existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
         existing_notif = s.query(Notification).filter_by(
             user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id
         ).first() if post.author_id != user.id else None
         if not existing:
-            s.add(Like(user_id=user.id, post_id=post_id))
+            # 새 Like 객체 생성 시 요청받은 reaction 값을 저장 (DB 스키마 필드명에 맞춰 적용)
+            s.add(Like(user_id=user.id, post_id=post_id, reaction=reaction))
             if post.author_id != user.id and not existing_notif:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
             s.flush()
@@ -1749,24 +1767,29 @@ def api_like_post(request: Request, post_id: int):
                 send_push_to_user(post.author_id, "like", user.username, post_id)
                 broadcast_notif_sound(post.author_id)
         if post.author.is_remote and post.author.shared_inbox_url:
-            like_id = f"{BASE_URL}/likes/{uuid.uuid4()}"
+            like_id = f"{base_url}/likes/{uuid.uuid4()}"
             like_rec = existing or s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
             if like_rec:
                 like_rec.ap_id = like_id
+                # 이미 존재하던 레코드라면 reaction 업데이트 (원할 경우 추가)
+                if reaction != "★":
+                    like_rec.reaction = reaction
                 s.commit()
-            reaction = like_rec.reaction if like_rec else None
             _react = reaction or "★"
+            is_custom = _react != "★"
+            activity_type = "EmojiReact" if is_custom else "Like"
             like_activity = {
                 "@context": "https://www.w3.org/ns/activitystreams",
                 "id": like_id,
-                "type": "Like",
+                "type": activity_type,
                 "actor": user.actor_uri(),
                 "object": post.ap_id,
                 "to": [post.author.actor_uri()],
-                "cc": [],
-                "content": _react,
-                "_misskey_reaction": _react,
+                "cc": ["https://www.w3.org/ns/activitystreams#Public"],
             }
+            if is_custom or _react:
+                like_activity["content"] = _react
+                like_activity["_misskey_reaction"] = _react
             inbox = post.author.shared_inbox_url
             try:
                 _post_to_inbox(inbox, like_activity, user)
