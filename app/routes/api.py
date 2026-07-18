@@ -4698,7 +4698,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
             tag = s.query(Tag).filter_by(name=query.lower()).first()
             if tag:
                 q_posts = s.query(Post).options(selectinload(Post.author)).filter(
-                    Post.tag_list.any(id=tag.id),
+                    Post.tag_list.any(name=tag.name),
                     Post.is_deleted == False,
                 )
                 if user:
