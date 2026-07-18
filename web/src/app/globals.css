@@ -1526,11 +1526,17 @@ input[type="checkbox"] {
 }
 .episode-editor-toolbar {
   display: flex;
-  gap: 2px;
-  padding: 6px 8px;
+  padding: 6px 0;
   border-bottom: 1px solid var(--border);
   background: var(--bg-secondary);
   flex-wrap: wrap;
+}
+.episode-editor-toolbar-section {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0 6px;
+  border-right: 1px solid var(--border);
 }
 .episode-editor-toolbar button {
   background: none;

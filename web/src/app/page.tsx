@@ -1,8 +1,9 @@
 "use client";
 import { useAuth } from "@/lib/auth";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { redirect, useRouter } from "next/navigation";
 import Icon from "@/components/Icon";
+import Link from "next/link";
 
 export default function Home() {
   const { user, loading } = useAuth();
@@ -14,7 +15,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!loading && user) router.replace("/timeline/home");
+    if (!loading && user) redirect("/timeline/home");
   }, [user, loading, router]);
 
   if (loading) return <div className="empty-state">{serverInfo?.logo ? <img src={serverInfo.logo} alt="" style={{ width: 48, height: 48, marginBottom: 12, objectFit: "contain" }} /> : null}<br />로딩 중...</div>;
@@ -30,8 +31,8 @@ export default function Home() {
         소설을 연재하고, 독자와 소통하고, 글을 나누세요.
       </p>
       <div className="home-buttons">
-        <a href="/login" className="btn btn-primary">로그인</a>
-        <a href="/register" className="btn btn-outline">가입</a>
+        <Link href="/login" className="btn btn-primary">로그인</Link>
+        <Link href="/register" className="btn btn-outline">가입</Link>
       </div>
       <div className="home-features">
         <div><Icon name="globe" size={24} /><br />연합 타임라인</div>
