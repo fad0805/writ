@@ -12,7 +12,7 @@ import MentionModal from "@/components/MentionModal";
 import ClickableCover from "@/components/ClickableCover";
 import ConfirmModal from "@/components/ConfirmModal";
 import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
-import { sanitizeName } from "@/lib/sanitize";
+import { sanitizeName, sanitizePost } from "@/lib/sanitize";
 
 export default function ProfilePage() {
   const params = useParams();
@@ -248,33 +248,18 @@ export default function ProfilePage() {
             <p className="profile-username">@{profile.display_handle || profile.username}</p>
             {profile.summary && (
               <p key={emojiMap.length} className="profile-summary" dangerouslySetInnerHTML={{
-                __html: rewriteLinks(renderCustomEmojis(
-                  profile.summary
-                    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-                    .replace(/<[^>]+\s+on\w+\s*=\s*[^>]*>/gi, '')
-                    .replace(/<img[^>]*alt="([^"]*)"[^>]*>/gi, '$1')
-                    .replace(/<img[^>]*>/gi, '')
-                    .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '')
-                    .replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '')
-                    .replace(/<embed[^>]*>/gi, '')
-                    .replace(/\n/g, '<br>'),
+                __html: sanitizeSummary(rewriteLinks(renderCustomEmojis(
+                  profile.summary.replace(/\n/g, '<br>'),
                   emojiMap
-                ))
-                  .replace(/<a\s+href="https?:\/\/([^/]+)\/@(\w+)"[^>]*>([^<]*)<\/a>/gi,
-                    (_m: string, domain: string, user: string) => {
-                      const localDomain = typeof window !== "undefined" ? window.location.host : "";
-                      const display = domain === localDomain ? `@${user}` : `@${user}@${domain}`;
-                      return `<a href="/@${user}@${domain}" class="mention-link">${display}</a>`;
-                    }
-                  )
+                )))
               }} />
             )}
             {(profile as any).custom_fields?.length > 0 && (
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
                 {(profile as any).custom_fields.map((f: { name?: string; label?: string; value: string }, i: number) => (
                     <div key={i} style={{ fontSize: "0.85em", color: "var(--text-secondary)" }}>
-                    <span style={{ fontWeight: 600, marginRight: 4 }} dangerouslySetInnerHTML={{ __html: renderCustomEmojis(f.name || f.label || "", emojiMap) }} />
-                    {f.value.startsWith("http") ? <a href={f.value} target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>{f.value}</a> : <span dangerouslySetInnerHTML={{ __html: rewriteLinks(renderCustomEmojis(f.value, emojiMap)) }} />}
+                    <span style={{ fontWeight: 600, marginRight: 4 }} dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(f.name || f.label || "", emojiMap)) }} />
+                    {f.value.startsWith("http") ? <a href={f.value} target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>{f.value}</a> : <span dangerouslySetInnerHTML={{ __html: sanitizePost(rewriteLinks(renderCustomEmojis(f.value, emojiMap))) }} />}
                   </div>
                 ))}
               </div>

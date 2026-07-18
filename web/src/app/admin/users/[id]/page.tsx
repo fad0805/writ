@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
 import AdminNav from "@/components/AdminNav";
 import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
-import { sanitizeName } from "@/lib/sanitize";
+import { sanitizeName, sanitizeSummary } from "@/lib/sanitize";
 
 interface UserDetail {
   id: number; username: string; display_name: string; avatar: string;
@@ -114,15 +114,7 @@ export default function AdminUserDetailPage() {
           </div>
           <div className="admin-profile-username">@{u.username}</div>
           {u.summary && <div className="admin-profile-summary" dangerouslySetInnerHTML={{
-            __html: renderCustomEmojis(u.summary, emojiMap)
-              .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-              .replace(/<[^>]+\s+on\w+\s*=\s*[^>]*>/gi, '')
-              .replace(/<img[^>]*alt="([^"]*)"[^>]*>/gi, '$1')
-              .replace(/<img[^>]*>/gi, '')
-              .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '')
-              .replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '')
-              .replace(/<embed[^>]*>/gi, '')
-              .replace(/\n/g, '<br>')
+            __html: sanitizeSummary(renderCustomEmojis(u.summary.replace(/\n/g, '<br>'), emojiMap))
           }} />}
           <div className="admin-profile-actions">
             {u.avatar && <button onClick={() => act(`/api/admin/users/${u.id}/remove-avatar`)} className="btn btn-small btn-outline">프로필 사진 삭제</button>}

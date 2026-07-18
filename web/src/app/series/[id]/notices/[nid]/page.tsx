@@ -5,6 +5,7 @@ import { api, NoticeData, NovelData } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
 import Link from "next/link";
+import { sanitizePost } from "@/lib/sanitize";
 
 export default function NoticeDetailPage() {
   const params = useParams();
@@ -48,7 +49,7 @@ export default function NoticeDetailPage() {
         <p className="text-secondary" style={{ fontSize: "0.85em", marginBottom: 16 }}>
           {notice.created_at ? new Date(notice.created_at).toISOString().slice(0, 10) : ""}
         </p>
-        <div className="notice-content" dangerouslySetInnerHTML={{ __html: notice.content }}></div>
+        <div className="notice-content" dangerouslySetInnerHTML={{ __html: sanitizePost(notice.content) }}></div>
         {(isMine || user?.role === "admin" || user?.role === "moderator" || user?.role === "owner") && (
           <div className="form-actions" style={{ marginTop: 24 }}>
             {isMine && <Link href={`/series/${novelId}/notices/${noticeId}/edit`} className="btn">편집</Link>}

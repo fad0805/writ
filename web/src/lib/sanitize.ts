@@ -30,3 +30,10 @@ export function sanitizeEpisode(html: string): string {
 export function sanitizeBasic(html: string): string {
   return DOMPurify.sanitize(html, { ALLOWED_TAGS: ["img", "span"], ALLOWED_ATTR: ["src", "alt", "class", "title"] } as any) as unknown as string;
 }
+
+export function sanitizeSummary(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ["p", "br", "a", "span", "strong", "em"],
+    ALLOWED_ATTR: ["href", "class"],
+  } as any) as unknown as string;
+}

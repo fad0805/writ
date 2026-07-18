@@ -8,6 +8,7 @@ import SharePostModal from "@/components/SharePostModal";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { installCodeCopyButtons } from "@/lib/codeCopy";
+import { sanitizeEpisode, sanitizeBasic } from "@/lib/sanitize";
 
 
 export default function EpisodeDetailPage() {
@@ -112,8 +113,8 @@ export default function EpisodeDetailPage() {
         ) : (
           <>
             {episode.summary && <blockquote className="episode-summary">{episode.summary}</blockquote>}
-            <div ref={bodyRef} className="episode-body" dangerouslySetInnerHTML={{ __html: renderEpisodeContent(episode.content) }} />
-            {episode.comment && <div className="episode-comment" dangerouslySetInnerHTML={{ __html: episode.comment }} />}
+            <div ref={bodyRef} className="episode-body" dangerouslySetInnerHTML={{ __html: sanitizeEpisode(renderEpisodeContent(episode.content)) }} />
+            {episode.comment && <div className="episode-comment" dangerouslySetInnerHTML={{ __html: sanitizeBasic(episode.comment) }} />}
           </>
         )}
         <div className="episode-footer">
