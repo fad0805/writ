@@ -92,7 +92,7 @@ def _convert_urls_and_handles(sanitized_content: str) -> str:
         domain = m.group(2)
         # 원격 유저 인스턴스 주소 추정 (플랫폼에 맞게 조정 가능, 보통 https://domain/@user 또는 https://domain/users/user)
         user_url = f"https://{domain}/@{username}" 
-        return f'<a href="{user_url}" class="mention" target="_blank">@{username}@{domain}</a>'
+        return f'<a href="{user_url}" class="mention" target="_blank" rel="noopener noreferrer">@{username}@{domain}</a>'
     # 원격 핸들 패턴 (@[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+\.[A-Za-z]{2,})
     sanitized_content = re.sub(r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})', _repl_remote_handle, sanitized_content)
 
