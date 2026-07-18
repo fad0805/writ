@@ -12,7 +12,7 @@ const CATEGORIES: { name: string; emojis: string[] }[] = [
   { name: "기타", emojis: ["💯","💠","🌈","⭐","🌟","✨","⚡","🔥","💥","💦","💨","☄️","🌊","🍕","🍔","🍟","🌭","🍿","🧁","🍩","🍪","🍫","🍬","🍭","🍮","🍯","🍰","🎂","🍨","🍧","🍦"] },
 ];
 
-export default function EmojiPicker({ onEmoji, dropUp, alignRight }: { onEmoji: (emoji: string) => void; dropUp?: boolean; alignRight?: boolean }) {
+export default function EmojiPicker({ onEmoji, dropUp, alignRight, dropLeft }: { onEmoji: (emoji: string) => void; dropUp?: boolean; alignRight?: boolean; dropLeft?: boolean }) {
   const [open, setOpen] = useState(false);
   const [customEmojis, setCustomEmojis] = useState<CustomEmoji[]>([]);
   const [search, setSearch] = useState("");
@@ -55,9 +55,9 @@ export default function EmojiPicker({ onEmoji, dropUp, alignRight }: { onEmoji: 
     const r = triggerRef.current.getBoundingClientRect();
     setPos({
       top: dropUp ? r.top - 4 : r.bottom + 4,
-      left: alignRight ? r.right : r.left,
+      left: dropLeft ? r.left : alignRight ? r.right : r.left,
     });
-  }, [dropUp, alignRight]);
+  }, [dropUp, alignRight, dropLeft]);
 
   useEffect(() => {
     if (!open) { setPos(null); return; }
@@ -78,7 +78,9 @@ export default function EmojiPicker({ onEmoji, dropUp, alignRight }: { onEmoji: 
           [dropUp ? "bottom" : "top"]: "auto",
           [dropUp ? "marginTop" : "marginBottom"]: "auto",
           [dropUp ? "top" : "top"]: pos.top,
-          [alignRight ? "left" : "left"]: pos.left,
+          ...(dropLeft
+            ? { right: window.innerWidth - pos.left }
+            : { left: pos.left }),
           ...(dropUp ? { transform: "translateY(-100%)" } : {}),
         }}>
           <input ref={searchRef} type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="이모지 검색..." className="cw-input emoji-picker-search" />

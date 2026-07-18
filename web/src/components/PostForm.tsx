@@ -801,7 +801,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           <button type="button" className={`action-btn${showPoll ? " active" : ""}`} onClick={() => setShowPoll(!showPoll)} title="투표 추가" style={showPoll ? { color: "var(--accent)" } : undefined}>
             <Icon name="chart" />
           </button>
-          <EmojiPicker alignRight onEmoji={(e) => setContent(content + e)} />
+          <EmojiPicker alignRight dropLeft onEmoji={(e) => setContent(content + e)} />
           <span className="char-count char-count-inline">{totalLen}/{MAX_LENGTH}</span>
           <button type="submit" disabled={submitting || !content.trim() || showSeriesSearch} className="btn btn-primary">
             {submitting ? "..." : parentId ? "답글" : "게시"}
