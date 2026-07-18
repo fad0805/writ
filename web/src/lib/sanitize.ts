@@ -33,7 +33,7 @@ export function sanitizeBasic(html: string): string {
 
 export function sanitizeSummary(html: string): string {
   return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS: ["p", "br", "a", "span", "strong", "em"],
-    ALLOWED_ATTR: ["href", "class"],
+    ALLOWED_TAGS: ["p", "br", "a", "span", "strong", "em", "img"],
+    ALLOWED_ATTR: ["href", "class", "src", "alt", "title", "style"],
   } as any) as unknown as string;
 }
