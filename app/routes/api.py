@@ -3206,7 +3206,13 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
                      tags: str = Form(""), visibility: str = Form("public"), status: str = Form("ongoing"),
                      cover_image: UploadFile = File(None), is_sensitive: bool = Form(False)):
     user = require_active_auth(request)
-    if getattr(user, 'is_deceased', False):
+    is_user_deceased = False
+    if isinstance(user, dict):
+        is_user_deceased = user.get('is_deceased', False)
+    else:
+        is_user_deceased = getattr(user, 'is_deceased', False)
+
+    if is_user_deceased:
         raise HTTPException(status_code=403, detail="고인 계정은 시리즈를 생성할 수 없습니다.")
     if not title.strip():
         raise HTTPException(status_code=400, detail="Title cannot be empty")
