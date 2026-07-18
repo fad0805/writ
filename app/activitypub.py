@@ -437,55 +437,72 @@ _REMOTE_MEDIA_EXPIRY_DAYS = 30
 def _cache_remote_media(remote_url: str) -> str:
     from app.models import RemoteMedia
     from app.utils.storage import get_storage
+    import io
+    import uuid
+    import datetime
+    from PIL import Image, ImageSequence
+
     if not _validate_url(remote_url):
         return remote_url
+
     with get_session() as s:
         existing = s.query(RemoteMedia).filter_by(remote_url=remote_url).first()
         if existing and existing.expires_at and existing.expires_at > datetime.datetime.now(datetime.timezone.utc):
             return existing.local_url
+
     try:
         resp = _safe_fetch(remote_url, max_size=_REMOTE_MEDIA_MAX_SIZE)
         if not resp:
             return remote_url
         data = resp.content
-        ext = remote_url.rsplit(".", 1)[-1].lower() if "." in remote_url else ""
-        is_image = ext in ("jpg", "jpeg", "png", "gif", "webp")
+        orig_ext = remote_url.rsplit(".", 1)[-1].lower() if "." in remote_url else "bin"
+        ext = orig_ext
+        is_image = orig_ext in ("jpg", "jpeg", "png", "gif", "webp")
+
         if is_image and len(data) < _REMOTE_MEDIA_MAX_SIZE:
-            from PIL import Image
-            img = Image.open(io.BytesIO(data))
             try:
-                img.seek(1)
-                frames = []
-                durations = []
-                try:
-                    while True:
-                        frames.append(img.convert("RGBA"))
-                        durations.append(img.info.get("duration", 100))
-                        img.seek(img.tell() + 1)
-                except EOFError:
-                    pass
+                img = Image.open(io.BytesIO(data))
+                # 💡 [핵심] 1번째 프레임 유실 없이 애니메이션 여부를 파악하는 안전한 방법
+                is_animated = getattr(img, "is_animated", False) or (img.format == "GIF")
+                max_dim = 2048
                 out = io.BytesIO()
-                max_dim = 2048
-                if any(f.width > max_dim or f.height > max_dim for f in frames):
-                    ratio = min(max_dim / max(f.width for f in frames), max_dim / max(f.height for f in frames))
-                    frames = [f.resize((int(f.width * ratio), int(f.height * ratio)), Image.LANCZOS) for f in frames]
-                frames[0].save(out, format="WEBP", save_all=True, append_images=frames[1:], duration=durations, loop=0, quality=85)
-                data = out.getvalue()
-                ext = "webp"
-            except Exception:
-                data = resp.content  # 원본 데이터 보존
-                max_dim = 2048
-                if img.width > max_dim or img.height > max_dim:
-                    ratio = min(max_dim / img.width, max_dim / img.height)
-                    img = img.resize((int(img.width * ratio), int(img.height * ratio)), Image.LANCZOS)
-                    out = io.BytesIO()
-                    img.save(out, format="PNG" if ext == "png" else "WEBP", quality=85)
+
+                if is_animated:
+                    # 💡 0번째 프레임부터 차례대로 모든 프레임을 온전히 추출합니다.
+                    frames = []
+                    durations = []
+                    for frame in ImageSequence.Iterator(img):
+                        frames.append(frame.convert("RGBA"))
+                        durations.append(frame.info.get("duration", 100))
+
+                    # 이미지 리사이징이 필요한 경우 처리
+                    if any(f.width > max_dim or f.height > max_dim for f in frames):
+                        ratio = min(max_dim / max(f.width for f in frames), max_dim / max(f.height for f in frames))
+                        frames = [f.resize((int(f.width * ratio), int(f.height * ratio)), Image.LANCZOS) for f in frames]
+                    # 💡 원본이 GIF/WebP/PNG 관계없이 움직이는 WebP로 압축 통합 저장
+                    frames[0].save(out, format="WEBP", save_all=True, append_images=frames[1:], duration=durations, loop=0, quality=85)
                     data = out.getvalue()
-            finally:
-                img.seek(0)
+                    ext = "webp"  # 💡 저장 포맷을 webp로 동기화
+                else:
+                    # 단일 정지 이미지 처리
+                    if img.width > max_dim or img.height > max_dim:
+                        ratio = min(max_dim / img.width, max_dim / img.height)
+                        img = img.resize((int(img.width * ratio), int(img.height * ratio)), Image.LANCZOS)
+                    save_format = "PNG" if orig_ext == "png" else "WEBP"
+                    img.save(out, format=save_format, quality=85)
+                    data = out.getvalue()
+                    ext = save_format.lower()
+
+            except Exception as img_err:
+                # 이미지 파싱 중 에러 발생 시 원본 데이터 바이너리를 그대로 캐싱하여 방어
+                logger.warning("Image processing failed, fallback to original bytes: %s", img_err)
+                data = resp.content
+                ext = orig_ext
+
         name = f"remote_{uuid.uuid4().hex[:12]}.{ext}"
         key = f"media/remote/{name}"
         storage = get_storage()
+        # 💡 최종 변환된 ext 스펙에 맞춰 Content-Type을 정확하게 매칭합니다.
         ct = f"image/{ext}" if is_image else "application/octet-stream"
         local_url = storage.save(key, data, ct)
         expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=_REMOTE_MEDIA_EXPIRY_DAYS)
@@ -499,7 +516,6 @@ def _cache_remote_media(remote_url: str) -> str:
     except Exception as e:
         logger.warning("Failed to cache remote media %s: %s", remote_url, e)
     return remote_url
-
 
 def _cleanup_expired_media():
     from app.models import RemoteMedia
