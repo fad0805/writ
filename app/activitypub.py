@@ -1309,7 +1309,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         return session.query(Post).filter_by(ap_id=ap_id).first()
 
     # 💡 만약 인용 글이 제대로 매칭되었다면 하단의 링크 미리보기(외부링크 상자) 연산을 건너뜁니다.
-    if post.quote_id:
+    if post.quote_of_id:
         return post
 
     # 원격 포스트에 포함된 URL의 링크 미리보기 fetch
