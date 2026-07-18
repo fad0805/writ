@@ -205,7 +205,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     let html = post.content || "";
     // Strip "RE: https://..." from quote posts (Misskey-style quote text)
     if ((post as any).quote_of_id || (post as any).quote_of_ap_id) {
-      html = html.replace(/^(<p>\s*)?RE:\s*(<a[^>]*>[^<]*<\/a>|https?:\/\/\S+)\s*(<\/p>)?\s*/i, '');
+  html = html.replace(/(<span[^>]*>)?\s*RE:\s*(<a[^>]*>.*?<\/a>|https?:\/\/[^\s<>]+)\s*(<\/span>)?/gi, '');
     }
     // Strip "series: https://..." and "episode: https://..." (share link metadata)
     html = html.replace(/(?:^|\n)\s*(?:series|episode):\s*https?:\/\/\S+\s*/gi, '');
