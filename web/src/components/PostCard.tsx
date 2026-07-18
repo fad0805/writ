@@ -49,16 +49,26 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
     }
   );
 
-  text = text.replace(/(?<!<[^>]*)(^|>|\s)@([a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?)/g, (_m, before, handle) => {
+  text = text.replace(
+    /(?<!<[^>]*)(^|>|\s)@([a-zA-Z0-9_]+(?:@[a-zA-Z0-9.-]+\.[a-zA-Z0-9-]+)?)/g, 
+    (_m, before, handle) => {
+      // 1. validMentions 기반 원격 핸들 매칭 보정
       if (!handle.includes("@") && validMentions) {
         const found = Array.from(validMentions).find((v: string) => v.startsWith(handle + "@"));
         if (found) handle = found;
       }
-      const parts = handle.split("@");
+
+      const parts = handle.split("@"); // ['siarte', 'writ.daydream.ink']
       const localDomain = typeof window !== "undefined" ? window.location.host : "";
-      const display = parts.length === 2 && parts[1] === localDomain ? `@${parts[0]}` : `@${handle}`;
+      
+      // 💡 도메인이 현재 내 서버(localDomain)와 일치하면 호스트명을 떼고 간결하게 표시합니다.
+      const display = parts.length === 2 && parts[1].toLowerCase() === localDomain.toLowerCase() 
+        ? `@${parts[0]}` 
+        : `@${handle}`;
+
       return `${before}<a href="/@${handle}" class="mention-link">${display}</a>`;
-    });
+    }
+  );
 
   text = text.replace(
     /(?<!<[^>]*)(^|>|\s)#([\p{L}\p{N}_]+)/gu, 
