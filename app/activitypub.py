@@ -54,8 +54,8 @@ _SAFE_ATTRS = {"a": {"href", "rel", "class"}, "span": {"class"}, "code": {"class
 
 def _sanitize_html(html: str) -> str:
     """Strip dangerous HTML tags/attributes, keep only safe ones."""
-    # Remove script/style blocks and their content
-    html = re.sub(r'<(script|style)[^>]*>.*?</\1>', '', html, flags=re.DOTALL | re.IGNORECASE)
+    # Remove script/style tags but preserve their text content
+    html = re.sub(r'<(script|style)[^>]*>(.*?)</\1>', r'\2', html, flags=re.DOTALL | re.IGNORECASE)
     # Remove remaining script/style self-closing tags
     html = re.sub(r'<(script|style)[^>]*/?>', '', html, flags=re.IGNORECASE)
 
