@@ -12,7 +12,7 @@ const CATEGORIES: { name: string; emojis: string[] }[] = [
   { name: "기타", emojis: ["💯","💠","🌈","⭐","🌟","✨","⚡","🔥","💥","💦","💨","☄️","🌊","🍕","🍔","🍟","🌭","🍿","🧁","🍩","🍪","🍫","🍬","🍭","🍮","🍯","🍰","🎂","🍨","🍧","🍦"] },
 ];
 
-export default function EmojiPicker({ onEmoji, dropUp, alignRight, dropLeft, center }: { onEmoji: (emoji: string) => void; dropUp?: boolean; alignRight?: boolean; dropLeft?: boolean; center?: boolean }) {
+export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: string) => void; dropUp?: boolean }) {
   const [open, setOpen] = useState(false);
   const [customEmojis, setCustomEmojis] = useState<CustomEmoji[]>([]);
   const [search, setSearch] = useState("");
@@ -55,9 +55,9 @@ export default function EmojiPicker({ onEmoji, dropUp, alignRight, dropLeft, cen
     const r = triggerRef.current.getBoundingClientRect();
     setPos({
       top: dropUp ? r.top - 4 : r.bottom + 4,
-      left: dropLeft ? r.left : alignRight ? r.right : r.left,
+      left: r.left + r.width / 2,
     });
-  }, [dropUp, alignRight, dropLeft]);
+  }, [dropUp]);
 
   useEffect(() => {
     if (!open) { setPos(null); return; }
@@ -75,17 +75,9 @@ export default function EmojiPicker({ onEmoji, dropUp, alignRight, dropLeft, cen
       {open && pos && createPortal(
         <div className="emoji-picker-dropdown" style={{
           position: "fixed",
-          ...(center
-            ? { top: "50%", left: "50%", transform: "translate(-50%, -50%)" }
-            : {
-                [dropUp ? "bottom" : "top"]: "auto",
-                [dropUp ? "marginTop" : "marginBottom"]: "auto",
-                top: pos.top,
-                ...(dropLeft
-                  ? { right: window.innerWidth - pos.left }
-                  : { left: pos.left }),
-                ...(dropUp ? { transform: "translateY(-100%)" } : {}),
-              }),
+          top: pos.top,
+          left: pos.left,
+          transform: dropUp ? "translate(-50%, -100%)" : "translateX(-50%)",
         }}>
           <input ref={searchRef} type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="이모지 검색..." className="cw-input emoji-picker-search" />
           {search && searchResults.length > 0 && (
