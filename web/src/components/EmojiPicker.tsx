@@ -12,7 +12,7 @@ const CATEGORIES: { name: string; emojis: string[] }[] = [
   { name: "기타", emojis: ["💯","💠","🌈","⭐","🌟","✨","⚡","🔥","💥","💦","💨","☄️","🌊","🍕","🍔","🍟","🌭","🍿","🧁","🍩","🍪","🍫","🍬","🍭","🍮","🍯","🍰","🎂","🍨","🍧","🍦"] },
 ];
 
-export default function EmojiPicker({ onEmoji, dropUp, alignRight, dropLeft }: { onEmoji: (emoji: string) => void; dropUp?: boolean; alignRight?: boolean; dropLeft?: boolean }) {
+export default function EmojiPicker({ onEmoji, dropUp, alignRight, dropLeft, center }: { onEmoji: (emoji: string) => void; dropUp?: boolean; alignRight?: boolean; dropLeft?: boolean; center?: boolean }) {
   const [open, setOpen] = useState(false);
   const [customEmojis, setCustomEmojis] = useState<CustomEmoji[]>([]);
   const [search, setSearch] = useState("");
@@ -75,13 +75,17 @@ export default function EmojiPicker({ onEmoji, dropUp, alignRight, dropLeft }: {
       {open && pos && createPortal(
         <div className="emoji-picker-dropdown" style={{
           position: "fixed",
-          [dropUp ? "bottom" : "top"]: "auto",
-          [dropUp ? "marginTop" : "marginBottom"]: "auto",
-          [dropUp ? "top" : "top"]: pos.top,
-          ...(dropLeft
-            ? { right: window.innerWidth - pos.left }
-            : { left: pos.left }),
-          ...(dropUp ? { transform: "translateY(-100%)" } : {}),
+          ...(center
+            ? { top: "50%", left: "50%", transform: "translate(-50%, -50%)" }
+            : {
+                [dropUp ? "bottom" : "top"]: "auto",
+                [dropUp ? "marginTop" : "marginBottom"]: "auto",
+                top: pos.top,
+                ...(dropLeft
+                  ? { right: window.innerWidth - pos.left }
+                  : { left: pos.left }),
+                ...(dropUp ? { transform: "translateY(-100%)" } : {}),
+              }),
         }}>
           <input ref={searchRef} type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="이모지 검색..." className="cw-input emoji-picker-search" />
           {search && searchResults.length > 0 && (
