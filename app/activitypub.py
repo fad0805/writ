@@ -69,7 +69,7 @@ def _sanitize_html(html: str) -> str:
     }
     # 스크립트, 스타일, 온클릭 이벤트 등을 전부 날려버리고 안전한 HTML만 반환
     clean_html = nh3.clean(
-        raw_content,
+        html,
         tags=allowed_tags,
         attributes=allowed_attributes,
         link_rel="noopener noreferrer" # 링크 추가 시 보안 속성 강제
