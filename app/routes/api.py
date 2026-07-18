@@ -5269,7 +5269,7 @@ def api_list_emojis(limit: int = Query(30), offset: int = Query(0), q: str = Que
                     CustomEmoji.category.ilike(f"%{q}%"),
                 )
             )
-        if category == "local":
+        if category != "remote":
             query = query.filter(CustomEmoji.category != "remote")
         elif category == "remote":
             query = query.filter(CustomEmoji.category == "remote")
@@ -5407,6 +5407,7 @@ def api_update_emoji(request: Request, emoji_id: int, category: str = Form(""), 
         _refresh_emoji_cache_forcibly(s)
         return {"ok": True, "emoji": {"id": emoji.id, "keyword": emoji.keyword, "file_name": emoji.file_name, "category": emoji.category, "aliases": emoji.aliases or [], "url": _emoji_url(emoji.file_name, emoji.domain or "", emoji.category or ""), "source_url": emoji.source_url or "", "domain": emoji.domain or ""}}
 
+
 @router.post("/emojis/{emoji_id}/copy")
 def api_copy_emoji(request: Request, emoji_id: int):
     user = require_auth(request)
@@ -5452,6 +5453,7 @@ def api_copy_emoji(request: Request, emoji_id: int):
         s.commit()
         _refresh_emoji_cache_forcibly(s)
         return {"ok": True, "emoji": {"id": copy.id, "keyword": copy.keyword, "file_name": copy.file_name, "category": copy.category, "aliases": copy.aliases or [], "url": _emoji_url(copy.file_name, "", copy.category or ""), "source_url": copy.source_url or "", "domain": copy.domain or ""}}
+
 
 @router.delete("/emojis/{emoji_id}")
 def api_delete_emoji(request: Request, emoji_id: int):
