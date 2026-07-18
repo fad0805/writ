@@ -1055,12 +1055,12 @@ def api_get_post(request: Request, post_id: int):
                 _anc_liked = _anc_boosted = _anc_bookmarked = set()
             cur = post.parent
             while cur:
-                if not cur.is_deleted:
+                if not cur.is_deleted and _can_view(cur, user, s):
                     ancestors.insert(0, _post_json(cur, s, user, _liked_ids=_anc_liked, _boosted_ids=_anc_boosted, _bookmarked_ids=_anc_bookmarked))
                 cur = cur.parent
         if not ancestors and post.in_reply_to_ap_id:
             parent = s.query(Post).filter_by(ap_id=post.in_reply_to_ap_id).first()
-            if parent:
+            if parent and _can_view(parent, user, s):
                 ancestors = [_post_json(parent, s, user)]
             else:
                 fetch_remote_url = post.in_reply_to_ap_id
@@ -1674,6 +1674,8 @@ def api_like_post(request: Request, post_id: int):
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
+        if not _can_view(post, user, s):
+            raise HTTPException(status_code=404, detail="Post not found")
         existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
         existing_notif = s.query(Notification).filter_by(
             user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id
@@ -1766,6 +1768,8 @@ def api_boost_post(request: Request, post_id: int):
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        if not _can_view(post, user, s):
             raise HTTPException(status_code=404, detail="Post not found")
         if post.author_id != user.id and post.visibility in ("followers", "mention"):
             raise HTTPException(status_code=403, detail="Cannot boost followers-only or mention-only posts from other users")
@@ -1869,6 +1873,8 @@ def api_bookmark_post(request: Request, post_id: int):
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
+        if not _can_view(post, user, s):
+            raise HTTPException(status_code=404, detail="Post not found")
         existing = s.query(Bookmark).filter_by(user_id=user.id, post_id=post_id).first()
         if not existing:
             s.add(Bookmark(user_id=user.id, post_id=post_id))
@@ -1893,7 +1899,7 @@ def api_bookmarks(request: Request, limit: int = Query(20), offset: int = Query(
     with get_session() as s:
         raw = s.query(Bookmark).filter_by(user_id=user.id).order_by(desc(Bookmark.created_at)).offset(offset).limit(limit + 1).all()
         has_more = len(raw) > limit
-        posts = [_post_json(b.post, s, user) for b in raw[:limit] if b.post and not b.post.is_deleted]
+        posts = [_post_json(b.post, s, user) for b in raw[:limit] if b.post and not b.post.is_deleted and _can_view(b.post, user, s)]
         return {"posts": posts, "has_more": has_more}
 
 
@@ -1904,7 +1910,7 @@ def api_favorites(request: Request, limit: int = Query(10), offset: int = Query(
     with get_session() as s:
         raw = s.query(Like).filter_by(user_id=user.id).order_by(desc(Like.created_at)).offset(offset).limit(limit + 1).all()
         has_more = len(raw) > limit
-        posts = [_post_json(l.post, s, user) for l in raw[:limit] if l.post and not l.post.is_deleted]
+        posts = [_post_json(l.post, s, user) for l in raw[:limit] if l.post and not l.post.is_deleted and _can_view(l.post, user, s)]
         return {"posts": posts, "has_more": has_more}
 
 
@@ -1967,6 +1973,8 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
                 raise HTTPException(status_code=400, detail="Remote emojis cannot be used as reactions")
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        if not _can_view(post, user, s):
             raise HTTPException(status_code=404, detail="Post not found")
         reactions_disabled = not settings.enable_reactions or not getattr(post.author, 'enable_reactions', True)
         final_emoji = emoji if not reactions_disabled else None
@@ -2073,6 +2081,8 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post or not post.poll_data:
             raise HTTPException(status_code=404, detail="Post or poll not found")
+        if not _can_view(post, user, s):
+            raise HTTPException(status_code=404, detail="Post not found")
         options = post.poll_data.get("options", [])
         if option < 0 or option >= len(options):
             raise HTTPException(status_code=400, detail="Invalid option")
@@ -2137,6 +2147,8 @@ def api_unvote_post(request: Request, post_id: int):
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post or not post.poll_data:
             raise HTTPException(status_code=404, detail="Post or poll not found")
+        if not _can_view(post, user, s):
+            raise HTTPException(status_code=404, detail="Post not found")
         existing = s.query(Vote).filter_by(user_id=user.id, post_id=post_id).first()
         if existing:
             options = post.poll_data.get("options", [])
@@ -2479,7 +2491,7 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             "am_i_blocked": am_i_blocked,
             "has_more": has_more,
             "offset": offset,
-            "pinned_posts_data": [_post_json(p, s, user, **_pj_kwargs) for p in (s.query(Post).filter(Post.id.in_(profile.pinned_posts or []), Post.is_deleted == False).all() if profile.pinned_posts else [])],
+            "pinned_posts_data": [_post_json(p, s, user, **_pj_kwargs) for p in (s.query(Post).filter(Post.id.in_(profile.pinned_posts or []), Post.is_deleted == False).all() if profile.pinned_posts else []) if _can_view(p, user, s)],
             "pinned_series_data": [_novel_json(n, s) for n in (s.query(Novel).filter(Novel.id.in_(profile.pinned_series or [])).all() if profile.pinned_series else [])],
         }
 

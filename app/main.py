@@ -364,6 +364,32 @@ def user_following(request: Request, username: str, page: int = None):
     return JSONResponse(content=result, media_type="application/activity+json")
 
 
+def _ap_post_visible(post, request, session):
+    """Check if an AP post is visible to the requester.
+    For non-AP requests, redirect to frontend handles visibility.
+    For AP requests, public/unlisted/home are always visible.
+    Followers-only/mention posts require a valid HTTP signature from a follower/mentioned user.
+    """
+    v = post.visibility or "public"
+    if v in ("public", "unlisted", "home"):
+        return True
+    accept = request.headers.get("Accept", "")
+    if "application/activity+json" not in accept and "application/ld+json" not in accept:
+        return True
+    ok, remote_actor = _verify_http_signature(request, b"", {})
+    if not ok or not remote_actor:
+        return False
+    if v == "followers":
+        if post.mentioned_user_ids and remote_actor.id in post.mentioned_user_ids:
+            return True
+        return session.query(Follow).filter_by(
+            follower_id=remote_actor.id, following_id=post.author_id, accepted=True
+        ).first() is not None
+    if v == "mention":
+        return post.mentioned_user_ids and remote_actor.id in post.mentioned_user_ids
+    return False
+
+
 def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tuple[bool, object]:
     """Verify HTTP signature.
     Returns (ok, remote_actor_or_None).
@@ -711,6 +737,8 @@ def get_create_activity(request: Request, post_id: int):
         post = session.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
             raise HTTPException(status_code=404, detail="Not found")
+        if not _ap_post_visible(post, request, session):
+            raise HTTPException(status_code=404, detail="Not found")
         return JSONResponse(content=post.to_ap_create(),
                             media_type="application/activity+json")
 
@@ -725,6 +753,8 @@ def get_post(request: Request, post_id: int):
             raise HTTPException(status_code=404, detail="Not found")
 
         if "application/activity+json" in accept or "application/ld+json" in accept:
+            if not _ap_post_visible(post, request, session):
+                raise HTTPException(status_code=404, detail="Not found")
             return JSONResponse(content=post.to_ap_note(),
                                 media_type="application/activity+json")
 
@@ -841,6 +871,8 @@ def get_post_by_handle(request: Request, username: str, number: str):
             raise HTTPException(status_code=404, detail="Not found")
 
         if "application/activity+json" in accept or "application/ld+json" in accept:
+            if not _ap_post_visible(post, request, session):
+                raise HTTPException(status_code=404, detail="Not found")
             return JSONResponse(content=post.to_ap_note(),
                                 media_type="application/activity+json")
 
