@@ -1283,7 +1283,8 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
 
     # 원격 포스트에 포함된 URL의 링크 미리보기 fetch
     import re as _re
-    _url_match = _re.search(r'https?://[^\s<>"\')\]]+', content or "")
+    # 💡 [설명] URL 중간이나 끝에 /tags/ 가 들어가거나 # 기호가 들어간 링크는 매칭하지 않습니다.
+    _url_match = _re.search(r'https?://(?:(?!/tags/)[^\s<>"\')\]#])+', content or "")
     if _url_match:
         _url = _url_match.group(0)
         try:
