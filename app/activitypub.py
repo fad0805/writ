@@ -13,6 +13,7 @@ from typing import Optional
 from urllib.parse import urlparse
 
 import httpx
+import nh3
 
 from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, UserBlock, Tag, get_session
 from app.config import BASE_URL, SECRET_KEY
@@ -54,92 +55,53 @@ _SAFE_ATTRS = {"a": {"href", "rel", "class"}, "span": {"class"}, "code": {"class
 
 def _sanitize_html(html: str) -> str:
     """Strip dangerous HTML tags/attributes, keep only safe ones."""
-    # Remove script/style tags but preserve their text content
-    html = re.sub(r'<(script|style)[^>]*>(.*?)</\1>', r'\2', html, flags=re.DOTALL | re.IGNORECASE)
-    # Remove remaining script/style self-closing tags
-    html = re.sub(r'<(script|style)[^>]*/?>', '', html, flags=re.IGNORECASE)
-
-    def _tag_filter(m):
-        tag = m.group(0)
-        # Parse tag name
-        name_match = re.match(r'</?(\w+)', tag)
-        if not name_match:
-            return ''
-        name = name_match.group(1).lower()
-        if name not in _SAFE_TAGS:
-            return ''
-        # For closing tags, return as-is
-        if tag.startswith('</'):
-            return tag
-        # For opening tags, filter attributes
-        allowed = _SAFE_ATTRS.get(name, set())
-        attrs = re.findall(r'''([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')''', tag)
-        safe_attrs = []
-        for attr_name, v1, v2 in attrs:
-            val = v1 or v2 or ''
-            attr_lower = attr_name.lower()
-            if attr_lower.startswith('on'):
-                continue
-            if attr_lower == 'href' and name == 'a':
-                scheme = val.split(':', 1)[0].lower() if ':' in val else ''
-                if scheme not in _SAFE_SCHEMES:
-                    continue
-            if attr_lower in allowed:
-                safe_attrs.append(f'{attr_name}="{val}"')
-        if not safe_attrs:
-            return f'<{name}>'
-        return f'<{name} {" ".join(safe_attrs)}>'
-
-    html = re.sub(r'<[^>]+>', _tag_filter, html)
-    return html
-
-
-def _normalize_mentions(html: str) -> str:
-    """
-    Convert Mastodon-style mention HTML to plain text.
-    If the text lacks a domain (e.g. just '@user'), parses the href attribute 
-    to append the correct '@domain' and prevent local user collision.
-    """
-    def _strip_mention(m):
-        full_tag_text = m.group(0)
-        # 1. <a> 태그의 href 주소 추출
-        href_match = re.search(r'href=["\']([^"\']+)["\']', full_tag_text, re.IGNORECASE)
-        domain = None
-        if href_match:
-            try:
-                # URL에서 도메인(예: remote.com)만 쏙 빼오기
-                parsed_url = urlparse(href_match.group(1))
-                domain = parsed_url.netloc.lower()
-            except Exception:
-                pass
-        # 2. 모든 HTML 태그를 지우고 알맹이 텍스트만 추출
-        text = re.sub(r'<[^>]+>', '', full_tag_text).strip()
-        # 3. 텍스트 내부에서 @아이디 파싱
-        match = re.search(r'@([\w.-]+)(?:@([\w.-]+))?', text)
-        if not match:
-            return text
-        username = match.group(1)
-        text_domain = match.group(2)
-        # 4. 텍스트에 이미 도메인이 있다면 그걸 그대로 사용
-        if text_domain:
-            return f"@{username}@{text_domain}"
-        # 5. 텍스트엔 도메인이 없는데 <a> 링크 도메인이 존재한다면?
-        # (단, 우리 서비스 내부 링크일 수도 있으니 로컬 도메인은 붙이지 않도록 방어 코드 추가 가능)
-        if domain:
-            # 예: @jack -> @jack@remote.com 으로 복원
-            return f"@{username}@{domain}"
-        return f"@{username}"
-    # 1. <span> wrapper가 있는 형태 처리 (클래스 순서 무관)
-    html = re.sub(
-        r'<span[^>]*class="[^"]*\bh-card\b[^"]*"[^>]*>\s*<a[^>]*class="(?=[^"]*\bu-url\b)(?=[^"]*\bmention\b)[^"]*"[^>]*>.*?</a>\s*</span>',
-        _strip_mention, html, flags=re.IGNORECASE | re.DOTALL
+    if not html:
+        return ""
+    # ActivityPub(마스토돈, 미스키 등)에서 흔히 사용하는 안전한 태그 목록
+    allowed_tags = {
+        "a", "p", "br", "span", "b", "i", "strong", "em", 
+        "ul", "ol", "li", "blockquote", "code", "pre", "del"
+    }
+    # 각 태그별로 허용할 속성 (XSS 방지를 위해 href는 https/http만 허용)
+    allowed_attributes = {
+        "a": {"href", "rel", "target", "class"},
+        "span": {"class", "lang"},
+    }
+    # 스크립트, 스타일, 온클릭 이벤트 등을 전부 날려버리고 안전한 HTML만 반환
+    clean_html = nh3.clean(
+        raw_content,
+        tags=allowed_tags,
+        attributes=allowed_attributes,
+        link_rel="noopener noreferrer" # 링크 추가 시 보안 속성 강제
     )
-    # 2. <a> 태그 단독 형태 처리 (클래스 순서 무관)
-    html = re.sub(
-        r'<a[^>]*class="(?=[^"]*\bu-url\b)(?=[^"]*\bmention\b)[^"]*"[^>]*>.*?</a>',
-        _strip_mention, html, flags=re.IGNORECASE | re.DOTALL
-    )
-    return html
+    return clean_html
+
+
+def _convert_urls_and_handles(sanitized_content: str) -> str:
+    url_pattern = r'(?<!href=")(?<!src=")(?<!">)(https?://(?!.*/tags/)[^\s<>"\')\]#]+)'
+    def _repl_raw_url(m):
+        url = m.group(1)
+        return f'<a href="{url}" target="_blank" rel="noopener noreferrer">{url}</a>'
+
+    sanitized_content = re.sub(url_pattern, _repl_raw_url, sanitized_content)
+
+    def _repl_remote_handle(m):
+        full_text = m.group(0)
+        # 앞부분에 문자가 있거나 이메일 포맷 구조, 혹은 html 속성 내부 느낌이면 패스
+        username = m.group(1)
+        domain = m.group(2)
+        # 원격 유저 인스턴스 주소 추정 (플랫폼에 맞게 조정 가능, 보통 https://domain/@user 또는 https://domain/users/user)
+        user_url = f"https://{domain}/@{username}" 
+        return f'<a href="{user_url}" class="mention" target="_blank">@{username}@{domain}</a>'
+    # 원격 핸들 패턴 (@[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+\.[A-Za-z]{2,})
+    sanitized_content = re.sub(r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})', _repl_remote_handle, sanitized_content)
+
+    # 로컬 핸들 변환 (@user) - 이미 위에서 원격이 치환되었으므로 남은 단독 @user 처리
+    def _repl_local_handle(m):
+        username = m.group(1)
+        return f'<a href="/@{username}" class="mention">@{username}</a>'
+    sanitized_content = re.sub(r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)(?!@)', _repl_local_handle, sanitized_content)
+
 
 _PRIVATE_SUBNETS = [
     ipaddress.ip_network("127.0.0.0/8"),
@@ -1175,7 +1137,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     raw_content = obj.get("content", "") or ""
     if len(raw_content) > 65536:
         raw_content = raw_content[:65536]
-    content = _normalize_mentions(_sanitize_html(raw_content))
+    content = _convert_urls_and_handles(_sanitize_html(raw_content))
     summary = obj.get("summary", "")
 
     to = obj.get("to", [])
@@ -1342,6 +1304,8 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     return post
 
 
+
+
 def _handle_create(activity: dict) -> tuple[int, str]:
     import sys
     obj = activity.get("object", {})
@@ -1381,7 +1345,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if len(raw_content) > 65536:
             raw_content = raw_content[:65536]
         post_id = obj.get("id", "")
-        content = _normalize_mentions(_sanitize_html(raw_content))
+        content = _convert_urls_and_handles(_sanitize_html(raw_content))
         summary = obj.get("summary", "")
         in_reply_to = obj.get("inReplyTo", "")
 
@@ -2555,7 +2519,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     # Update content/summary
                     new_content = object_data.get("content", "")
                     if new_content:
-                        post.content = _normalize_mentions(_sanitize_html(new_content))
+                        post.content = _convert_urls_and_handles(_sanitize_html(new_content))
                     if "summary" in object_data:
                         post.summary = object_data.get("summary", "")
                     # Update poll data

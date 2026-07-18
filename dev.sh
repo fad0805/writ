@@ -19,7 +19,7 @@ if [ ! -d "$VENV_DIR" ]; then
 fi
 
 echo -e "${YELLOW}[setup]${NC} Python 의존성 확인 중..."
-"$PYTHON" -m pip install -r "$ROOT_DIR/app/requirements.txt" --quiet
+"$PYTHON" -m pip install -r "$ROOT_DIR/requirements.txt" --quiet
 # watchfiles가 있으면 RustNotify가 db_data/ 권한 오류로 크래시 → 제거
 "$PYTHON" -m pip uninstall -y watchfiles 2>/dev/null || true
 
