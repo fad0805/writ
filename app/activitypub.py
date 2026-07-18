@@ -1197,8 +1197,6 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     all_auds = to + cc
     pub = "https://www.w3.org/ns/activitystreams#Public"
 
-    # ------------------ [여기서부터 수정] ------------------
-    # 1. obj['tag'] 내부에 Mention 타입이 명시되어 있는지 확인
     tags = obj.get("tag", [])
     if isinstance(tags, dict): 
         tags = [tags]
@@ -1211,11 +1209,8 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     for t in tags:
         if not isinstance(t, dict):
             continue
-        # 조건 A: 표준 'Mention' 타입 객체인 경우
         is_mention_type = t.get("type") == "Mention"
-        # 조건 B: name 필드에 '@이름@도메인' 포맷이 들어온 경우 (예: @siarte@serafuku.moe)
         name_val = t.get("name", "") or ""
-        # 골뱅이가 2개 이상 들어있고 @로 시작하는지 체크
         is_double_at = name_val.startswith("@") and name_val.count("@") >= 2
         if is_mention_type or is_double_at:
             has_mention_tag = True
@@ -1223,22 +1218,17 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
             if not actor_href:
                 continue
             try:
-                # [핵심] 멘션된 원격 유저의 정보를 내 DB에 확실하게 동기화/생성합니다.
                 _resolve_actor(actor_href)
-                # 생성/조회된 유저를 DB에서 긁어와 ID를 추가합니다.
                 mentioned_user = session.query(User).filter_by(remote_url=actor_href).first()
                 if mentioned_user:
                     mentioned_ids.append(mentioned_user.id)
             except Exception as e:
-                # 멘션 유저 한 명 해결하다가 전체 글 수집이 터지지 않도록 예외 처리
                 print(f"[FETCH-POST] Failed to resolve mentioned actor={actor_href}: {e}", flush=True)
         elif t.get('type') == "Hashtag":
             tag_name = t.get("name", "") or ""
             hashtag_list.append(Tag(tag_name))
     mentioned_ids = list(set(mentioned_ids))
 
-    # 2. 공개 범위(Visibility) 판별 조건문
-    # 전체 공개(Public) 주소가 수신처에 없고, 멘션 태그가 감지되면 "mention"으로 지정합니다.
     if pub not in all_auds and has_mention_tag:
         vis = "mention"
     elif pub in to:
@@ -1256,7 +1246,6 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     if isinstance(in_reply_to_ap, dict):
         in_reply_to_ap = in_reply_to_ap.get("id", "")
 
-    # NOTE: parent fetch uses session (may do network I/O via recursive _fetch_remote_post)
     in_reply_to_id = None
     if in_reply_to_ap:
         parent = session.query(Post).filter_by(ap_id=in_reply_to_ap).first()
@@ -1266,6 +1255,17 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
             parent = _fetch_remote_post(in_reply_to_ap, signer, session, _depth + 1)
             if parent:
                 in_reply_to_id = parent.id
+
+    # 💡 [해결] 원격 오브젝트에서 인용 URL(quoteUrl) 추출 및 연동 처리
+    quote_url = obj.get("quoteUrl", "")
+    quote_id = None
+    if quote_url:
+        quoted_post = session.query(Post).filter_by(ap_id=quote_url).first()
+        if not quoted_post:
+            # 내 DB에 없다면 인용된 원본 게시물도 연합망에서 깊이(depth)를 더해 긁어옵니다.
+            quoted_post = _fetch_remote_post(quote_url, signer, session, _depth + 1)
+        if quoted_post:
+            quote_id = quoted_post.id
 
     _process_emoji_tags(obj.get("tag", []), session)
     session.flush()
@@ -1290,6 +1290,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
             elif att_type.startswith("video/"):
                 media_list.append({"url": cached, "type": "video"})
 
+    # 💡 Post 모델 생성 시 quote_id (또는 모델 설계에 맞춘 인용 필드명) 채워넣기
     post = Post(
         author_id=author.id,
         content=content,
@@ -1298,6 +1299,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         ap_id=ap_id,
         in_reply_to_ap_id=in_reply_to_ap,
         in_reply_to_id=in_reply_to_id,
+        quote_id=quote_id,  # 👈 [주의] 모델 컬럼명이 'quote_post_id' 등으로 되어있다면 수정해 주세요.
         mentioned_user_ids=mentioned_ids,
         media_attachments=media_list if media_list else None,
         is_sensitive=obj.get("sensitive", False),
@@ -1316,9 +1318,12 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         session.rollback()
         return session.query(Post).filter_by(ap_id=ap_id).first()
 
+    # 💡 만약 인용 글이 제대로 매칭되었다면 하단의 링크 미리보기(외부링크 상자) 연산을 건너뜁니다.
+    if post.quote_id:
+        return post
+
     # 원격 포스트에 포함된 URL의 링크 미리보기 fetch
     import re as _re
-    # 💡 [설명] URL 중간이나 끝에 /tags/ 가 들어가거나 # 기호가 들어간 링크는 매칭하지 않습니다.
     _url_match = _re.search(r'https?://(?:(?!/tags/)[^\s<>"\')\]#])+', content or "")
     if _url_match:
         _url = _url_match.group(0)
