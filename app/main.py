@@ -563,20 +563,32 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
     if not remote_actor or not remote_actor.public_key:
         return (False, None)
 
-    # Actor binding check (Fix 1) — verify the signer matches activity.actor
+    # Actor binding check — verify the signer matches activity.actor
     activity_actor = activity.get("actor")
     if isinstance(activity_actor, list):
         activity_actor = activity_actor[0]
     signer_uri = remote_actor.actor_uri() if not remote_actor.is_remote else remote_actor.remote_url
     print(f"[SIG] bind_check signer_uri={signer_uri} activity_actor={activity_actor}", flush=True)
-    if not activity_actor or signer_uri != activity_actor:
-        atype = activity.get("type", "")
-        if remote_actor.is_remote and atype not in ("Announce", "Create", "Update", "Undo", "Like", "Follow", "Accept", "Reject", "Block", "Flag", "Move", "Vote", "EmojiReact"):
-            print(f"[SIG] bind_check FAIL (remote, type={atype})", flush=True)
-            return (False, None)
-        elif remote_actor.is_remote:
-            print(f"[SIG] bind_check OK (relayed {atype}, signer={signer_uri})", flush=True)
+    if not activity_actor:
+        print(f"[SIG] bind_check FAIL (no activity_actor)", flush=True)
+        return (False, None)
+    if signer_uri != activity_actor:
+        print(f"[SIG] bind_check FAIL (signer != actor)", flush=True)
+        return (False, None)
     print(f"[SIG] bind_check OK", flush=True)
+
+    # Domain check — activity id must be from actor's domain
+    activity_id = activity.get("id", "")
+    if activity_id:
+        from urllib.parse import urlparse as _urlparse
+        try:
+            actor_domain = _urlparse(activity_actor).netloc
+            id_domain = _urlparse(activity_id).netloc
+            if actor_domain and id_domain and actor_domain != id_domain:
+                print(f"[SIG] domain_check FAIL (actor_domain={actor_domain} != id_domain={id_domain})", flush=True)
+                return (False, None)
+        except Exception:
+            pass
 
     # Date freshness check — 5분 window to prevent replay
     date_header = request.headers.get("Date", "")

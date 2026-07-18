@@ -2390,6 +2390,9 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
 
 
 def _handle_update(activity: dict) -> tuple[int, str]:
+    actor_url = activity.get("actor", "")
+    if isinstance(actor_url, list):
+        actor_url = actor_url[0]
     object_data = activity.get("object", {})
     if isinstance(object_data, str):
         try:
@@ -2410,6 +2413,9 @@ def _handle_update(activity: dict) -> tuple[int, str]:
             with get_session() as session:
                 post = session.query(Post).filter_by(ap_id=obj_id).first()
                 if post and not post.is_deleted:
+                    if post.author and post.author.remote_url != actor_url:
+                        print(f"[AP] _handle_update REJECTED: actor {actor_url} does not own post {obj_id}", flush=True)
+                        return (403, "Actor does not own this post")
                     # Update content/summary
                     new_content = object_data.get("content", "")
                     if new_content:
@@ -2474,6 +2480,9 @@ def _handle_update(activity: dict) -> tuple[int, str]:
     return (200, "Updated")
 
 def _handle_delete(activity: dict) -> tuple[int, str]:
+    actor_url = activity.get("actor", "")
+    if isinstance(actor_url, list):
+        actor_url = actor_url[0]
     object_url = activity.get("object", "")
     if isinstance(object_url, dict):
         object_url = object_url.get("id", "")
@@ -2484,6 +2493,9 @@ def _handle_delete(activity: dict) -> tuple[int, str]:
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
         if post:
+            if post.author and post.author.remote_url != actor_url:
+                print(f"[AP] _handle_delete REJECTED: actor {actor_url} does not own post {object_url} (author={post.author.remote_url})", flush=True)
+                return (403, "Actor does not own this post")
             post.is_deleted = True
             session.query(Notification).filter_by(post_id=post.id).delete()
             session.commit()
