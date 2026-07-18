@@ -10,10 +10,10 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '29696bcd0cf9'
-down_revision: Union[str, Sequence[str], None] = '0006'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+revision = "0013"
+down_revision = "0012"
+branch_labels = None
+depends_on = None
 
 def upgrade():
     # SQLite 등 일부 DB에서도 안전하게 외래키를 수정할 수 있도록 batch_alter_table을 사용합니다.
