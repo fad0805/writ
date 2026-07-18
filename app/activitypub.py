@@ -64,7 +64,7 @@ def _sanitize_html(html: str) -> str:
     }
     # 각 태그별로 허용할 속성 (XSS 방지를 위해 href는 https/http만 허용)
     allowed_attributes = {
-        "a": {"href", "rel", "target", "class"},
+        "a": {"href", "target", "class"},
         "span": {"class", "lang"},
     }
     # 스크립트, 스타일, 온클릭 이벤트 등을 전부 날려버리고 안전한 HTML만 반환
