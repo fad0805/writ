@@ -667,10 +667,8 @@ def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> 
     if not collection_url:
         return 0
     try:
-        import httpx
         headers = {"Accept": "application/activity+json, application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"", "User-Agent": WRIT_USER_AGENT}
         if sign_as:
-            import datetime, time, hashlib, base64
             from app.crypto_utils import sign_string, get_private_key
             from app.config import SECRET_KEY
             from urllib.parse import urlparse
@@ -1232,6 +1230,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     else:
         vis = "home"
 
+    instance_actor = session.query(User).filter_by(username='actor').first()
     in_reply_to_ap = obj.get("inReplyTo", "")
     if isinstance(in_reply_to_ap, dict):
         in_reply_to_ap = in_reply_to_ap.get("id", "")
@@ -1242,7 +1241,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         if parent:
             in_reply_to_id = parent.id
         else:
-            parent = _fetch_remote_post(in_reply_to_ap, signer, session, _depth + 1)
+            parent = _fetch_remote_post(in_reply_to_ap, instance_actor, session, _depth + 1)
             if parent:
                 in_reply_to_id = parent.id
 
@@ -1289,7 +1288,8 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         ap_id=ap_id,
         in_reply_to_ap_id=in_reply_to_ap,
         in_reply_to_id=in_reply_to_id,
-        quote_id=quote_id,  # 👈 [주의] 모델 컬럼명이 'quote_post_id' 등으로 되어있다면 수정해 주세요.
+        quote_of_id=quote_id,
+        quote_of_ap_id=quote_url,
         mentioned_user_ids=mentioned_ids,
         media_attachments=media_list if media_list else None,
         is_sensitive=obj.get("sensitive", False),
