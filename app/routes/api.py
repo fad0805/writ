@@ -4835,8 +4835,8 @@ def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
             parent_obj = parent_data.get("object", parent_data)
             _fetch_and_save_ap_object(parent_obj, user, _visited, _depth + 1)
 
-    from app.activitypub import _sanitize_html, _normalize_mentions
-    content = _normalize_mentions(_sanitize_html(obj.get("content", "")))
+    from app.activitypub import _sanitize_html, _convert_urls_and_handles
+    content = _convert_urls_and_handles(_sanitize_html(obj.get("content", "")))
     if not content:
         return None
 
