@@ -411,7 +411,11 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
                 s.commit()
             log_admin_action(db_user.id, db_user.username, "login", ip_address=client_ip)
             resp = JSONResponse(_user_json(db_user))
-            resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/")
+            from app.main import generate_csrf_token
+            from app.config import APP_ENV
+            secure = APP_ENV != "development"
+            resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/", secure=secure)
+            resp.set_cookie(key="csrf_token", value=generate_csrf_token(db_user.id), max_age=3600, httponly=False, samesite="lax", path="/", secure=secure)
             return resp
     except HTTPException:
         raise
@@ -633,6 +637,7 @@ def api_reset_password(request: Request, token: str = Form(...), password: str =
 def api_logout(request: Request):
     resp = JSONResponse({"ok": True})
     resp.delete_cookie("session")
+    resp.delete_cookie("csrf_token")
     return resp
 
 
@@ -4139,6 +4144,7 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
 
     resp = JSONResponse({"ok": True})
     resp.delete_cookie("session")
+    resp.delete_cookie("csrf_token")
     return resp
 
 

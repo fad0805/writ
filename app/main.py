@@ -2,9 +2,11 @@ import base64
 import datetime
 import email.utils
 import hashlib
+import hmac as _hmac
 import json
 import os
 import logging
+import secrets
 import threading
 import time
 from collections import defaultdict
@@ -225,6 +227,73 @@ async def debug_exception_handler(request: Request, exc: Exception):
     if isinstance(exc, HTTPException):
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
     return JSONResponse({"detail": "Internal server error"}, status_code=500)
+
+CSRF_EXEMPT_PREFIXES = ("/.well-known/", "/nodeinfo", "/webfinger", "/static/", "/uploads/", "/api/auth/")
+CSRF_EXEMPT_EXACT = ("/users/", "/posts/", "/activities/", "/@/")
+CSRF_EXEMPT_METHODS = ("GET", "HEAD", "OPTIONS")
+
+
+def generate_csrf_token(user_id: int) -> str:
+    expires = int(time.time()) + 3600
+    payload = f"{user_id}:{expires}"
+    sig = _hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+    return base64.urlsafe_b64encode(f"{payload}:{sig}".encode()).decode()
+
+
+def validate_csrf_token(token: str, session_token: str) -> bool:
+    if not token or not session_token:
+        return False
+    try:
+        decoded = base64.urlsafe_b64decode(token.encode()).decode()
+        parts = decoded.split(":")
+        user_id = int(parts[0])
+        expires = int(parts[1])
+        sig = parts[2]
+        expected = _hmac.new(SECRET_KEY.encode(), f"{user_id}:{expires}".encode(),
+                             hashlib.sha256).hexdigest()[:16]
+        if not _hmac.compare_digest(sig, expected) or expires <= time.time():
+            return False
+        session_decoded = base64.urlsafe_b64decode(session_token.encode()).decode()
+        session_user_id = int(session_decoded.split(":")[0])
+        return user_id == session_user_id
+    except Exception:
+        return False
+
+
+@app.middleware("http")
+async def csrf_protection(request: Request, call_next):
+    if request.method in CSRF_EXEMPT_METHODS:
+        return await call_next(request)
+    path = request.url.path
+    for prefix in CSRF_EXEMPT_PREFIXES:
+        if path.startswith(prefix):
+            return await call_next(request)
+    if path in CSRF_EXEMPT_EXACT or any(path.startswith(p) for p in CSRF_EXEMPT_EXACT):
+        return await call_next(request)
+    session_token = request.cookies.get("session", "")
+    csrf_token = request.headers.get("X-CSRF-Token", "")
+    origin = request.headers.get("Origin", "")
+    referer = request.headers.get("Referer", "")
+    if origin:
+        from urllib.parse import urlparse as _urlparse
+        try:
+            origin_host = _urlparse(origin).netloc
+        except Exception:
+            origin_host = ""
+        if origin_host and origin_host != request.url.netloc:
+            return JSONResponse({"detail": "CSRF origin mismatch"}, status_code=403)
+    elif referer:
+        from urllib.parse import urlparse as _urlparse
+        try:
+            referer_host = _urlparse(referer).netloc
+        except Exception:
+            referer_host = ""
+        if referer_host and referer_host != request.url.netloc:
+            return JSONResponse({"detail": "CSRF referer mismatch"}, status_code=403)
+    if not validate_csrf_token(csrf_token, session_token):
+        return JSONResponse({"detail": "CSRF token missing or invalid"}, status_code=403)
+    return await call_next(request)
+
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):

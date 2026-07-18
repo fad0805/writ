@@ -8,6 +8,7 @@ import KeyboardShortcuts from "@/components/KeyboardShortcuts";
 import NotifSound from "@/components/NotifSound";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import DeactivatedRedirect from "@/components/DeactivatedRedirect";
+import CsrfInit from "@/components/CsrfInit";
 
 const siteUrl = process.env.BASE_URL || "http://localhost:3000";
 const API_HOST = process.env.API_HOST || "http://localhost:8000";
@@ -75,6 +76,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <KeyboardShortcuts />
           <NotifSound />
           <DeactivatedRedirect />
+          <CsrfInit />
         </AuthProvider>
         <script dangerouslySetInnerHTML={{
           __html: `

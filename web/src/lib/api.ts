@@ -1,10 +1,22 @@
+function getCsrfToken(): string {
+  if (typeof document === "undefined") return "";
+  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30000);
   try {
+    const method = (options?.method || "GET").toUpperCase();
+    const headers: Record<string, string> = { "Content-Type": "application/json", ...options?.headers as Record<string, string> };
+    if (method !== "GET" && method !== "HEAD") {
+      const csrf = getCsrfToken();
+      if (csrf) headers["X-CSRF-Token"] = csrf;
+    }
     const res = await fetch(path, {
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...options?.headers },
+      headers,
       ...options,
       signal: controller.signal,
     });
@@ -26,10 +38,14 @@ async function formRequest<T>(path: string, data: Record<string, any>): Promise<
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
+    const csrf = getCsrfToken();
+    const headers: Record<string, string> = {};
+    if (csrf) headers["X-CSRF-Token"] = csrf;
     const res = await fetch(path, {
       method: "POST",
       credentials: "include",
       body: form,
+      headers,
       signal: controller.signal,
     });
     if (!res.ok) {
