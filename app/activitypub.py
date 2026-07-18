@@ -1622,18 +1622,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             quote_of_ap_id = ""
             quote_of_id = None
             if isinstance(obj, dict):
-                # Log all quote-related fields for debugging
-                _q_fields = {k: obj.get(k) for k in ("quote", "quoteUrl", "quoteUri", "_misskey_quote", "quote") if obj.get(k)}
-                _q_tag_quote = False
-                if isinstance(obj.get("tag"), list):
-                    for _t in obj["tag"]:
-                        if isinstance(_t, dict) and _t.get("type") == "Quote":
-                            _q_tag_quote = True
-                        if isinstance(_t, dict) and _t.get("type") == "Link" and _t.get("rel") == "https://misskey-hub.net/ns#_misskey_quote":
-                            _q_fields["_misskey_quote_tag"] = _t.get("href")
-                if _q_fields or _q_tag_quote:
-                    print(f"[_handle_create QUOTE FIELDS] post_id={post_id} fields={_q_fields} tag_quote={_q_tag_quote}", flush=True)
-
                 # FEP-044f primary field, plus legacy compat fields
                 quote_url = (
                     obj.get("quote")           # FEP-044f (Mastodon 4.4+)
@@ -1653,18 +1641,23 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             quote_url = _tag.get("href") or ""
                         if quote_url:
                             break
+                try:
+                    _q_fields = {k: obj.get(k) for k in ("quote", "quoteUrl", "quoteUri", "_misskey_quote") if obj.get(k)}
+                    if quote_url:
+                        print(f"[_handle_create QUOTE] post_id={post_id} url={quote_url} fields={_q_fields}", flush=True)
+                except Exception:
+                    pass
                 if quote_url and isinstance(quote_url, str):
                     quote_of_ap_id = quote_url
-                    print(f"[_handle_create QUOTE RESOLVE] url={quote_url} actor={actor.ap_id if actor else 'None'}", flush=True)
                     try:
                         quote_post = _fetch_remote_post(quote_url, actor, session)
                         if quote_post:
                             quote_of_id = quote_post.id
-                            print(f"[_handle_create QUOTE RESOLVED] post_id={quote_post.id} ap_id={quote_post.ap_id}", flush=True)
+                            print(f"[_handle_create QUOTE OK] post_id={quote_post.id}", flush=True)
                         else:
-                            print(f"[_handle_create QUOTE FETCH FAILED] url={quote_url}", flush=True)
+                            print(f"[_handle_create QUOTE FETCH FAIL] url={quote_url}", flush=True)
                     except Exception as e:
-                        print(f"[_handle_create QUOTE EXCEPTION] url={quote_url} error={e}", flush=True)
+                        print(f"[_handle_create QUOTE ERR] url={quote_url} {e}", flush=True)
 
             post = Post(
                 author_id=actor_id,

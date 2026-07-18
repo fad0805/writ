@@ -976,6 +976,15 @@ input:focus {
 
 /* ── Modal ── */
 
+/* Prevent background scroll/interaction when any modal overlay is open */
+body:has(.reply-modal-backdrop.active),
+body:has(.shortcut-help-backdrop.active),
+body:has(.mobile-composer-overlay),
+body:has(.mobile-more-overlay),
+body:has(.modal-overlay) {
+  overflow: hidden;
+}
+
 .reply-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -986,7 +995,7 @@ input:focus {
   background: rgba(0, 0, 0, 0.45);
   z-index: 1000;
 }
-.reply-modal-backdrop.active { display: flex; }
+.reply-modal-backdrop.active { display: flex; touch-action: none; }
 .reply-modal {
   width: min(560px, 100%);
   background: var(--bg-secondary);
