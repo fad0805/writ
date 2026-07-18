@@ -1447,6 +1447,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                 "ap_id": reply_to_post.ap_id or "", "media_attachments": reply_to_post.media_attachments or [],
                                 "poll_data": reply_to_post.poll_data, "my_vote": none, "reactions": {}, "my_reaction": none,
                                 "quote_of_id": reply_to_post.quote_of_id or None, "quote_of_ap_id": reply_to_post.quote_of_ap_id or "",
+                                "_emojis": _broadcast_emoji_list(session),
                             }, reply_to_post.author_id, reply_to_post.visibility or "public", false)
                         except Exception:
                             pass
@@ -1498,6 +1499,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         "id": poll_post.id,
                         "type": "update",
                         "poll_data": poll_post.poll_data,
+                        "_emojis": _broadcast_emoji_list(session),
                     }, poll_post.author_id, poll_post.visibility or "public", false)
                     return (200, "voted")
 
@@ -1792,20 +1794,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 logger.warning("broadcast failed: %s", e)
             try:
                 from app.timeline_stream import broadcast_post
-                from app.models import CustomEmoji as _CustomEmoji
+                _broadcast_emojis = _broadcast_emoji_list(session)
                 author = post.author
-                _ap_emoji_kws = set()
-                for _tag in (obj.get("tag", []) or []):
-                    if not isinstance(_tag, dict) or _tag.get("type") != "Emoji":
-                        continue
-                    _name = _tag.get("name", "")
-                    if _name.startswith(":") and _name.endswith(":"):
-                        _ap_emoji_kws.add(_name[1:-1].strip().lower().replace(" ", "_"))
-                _broadcast_emojis = []
-                if _ap_emoji_kws:
-                    for e in session.query(_CustomEmoji).filter(_CustomEmoji.keyword.in_(_ap_emoji_kws)).all():
-                        _sub = "remote" if e.domain or e.category == "remote" else "local"
-                        _broadcast_emojis.append({"keyword": e.keyword, "file_name": e.file_name, "url": f"/emojis/{_sub}/{e.file_name}", "aliases": e.aliases or []})
                 _reply_ctx = None
                 if reply_to_post and not getattr(reply_to_post, 'is_deleted', False):
                     _rp_author = reply_to_post.author
@@ -1873,6 +1863,12 @@ def _handle_create(activity: dict) -> tuple[int, str]:
 
         return (200, "Created")
     return (200, "OK")
+
+
+def _broadcast_emoji_list(session):
+    """Return ALL emojis from DB formatted for SSE broadcast payload."""
+    from app.routes.api import _load_emojis
+    return [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)]
 
 
 def _build_reactions(session, post_id: int) -> dict:
@@ -1996,6 +1992,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                     "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
                     "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
                     "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
+                    "_emojis": _broadcast_emoji_list(session),
                 }, post.author_id, post.visibility or "public", False)
             except Exception:
                 pass
@@ -2218,9 +2215,9 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                 "visibility": post.visibility or "public",
                 "created_at": post.created_at.isoformat() if post.created_at else "",
                 "author": _author_data,
-                "likes_count": likes_cnt,       # 안전하게 받아온 값 대입
-                "boosts_count": boosts_cnt,     # 안전하게 받아온 값 대입
-                "replies_count": replies_cnt,   # 안전하게 받아온 값 대입
+                "likes_count": likes_cnt,
+                "boosts_count": boosts_cnt,
+                "replies_count": replies_cnt,
                 "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
                 "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
                 "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
@@ -2230,6 +2227,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                 "boosted_by": _safe_user_json(_actor),
                 "mentioned_user_ids": [],
                 "quote_of_id": post.quote_of_id or None, "quote_of_ap_id": post.quote_of_ap_id or "",
+                "_emojis": _broadcast_emoji_list(session),
             }, actor_id, post.visibility or "public", False)
         except Exception as e:
             logger.warning("Failed to broadcast boost from AP: %s", e)
@@ -2382,6 +2380,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
                     "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
                     "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
                     "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
+                    "_emojis": _broadcast_emoji_list(session),
                 }, post.author_id, post.visibility or "public", False)
             except Exception:
                 pass
@@ -2443,6 +2442,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
                     "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
                     "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
                     "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
+                    "_emojis": _broadcast_emoji_list(session),
                 }, post.author_id, post.visibility or "public", False)
             except Exception:
                 pass
@@ -2570,6 +2570,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     "reactions": _build_reactions(session, post.id),
                     "my_reaction": None,
                             "type": "update",
+                            "_emojis": _broadcast_emoji_list(session),
             }, actor_id, post.visibility or "public", False)
                     except Exception:
                         pass

@@ -203,6 +203,12 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   const validMentions = useMemo(() => new Set(post.mentioned_handles || []), [post.mentioned_handles]);
   const buildContentHtml = () => {
     let html = post.content || "";
+    // Strip "RE: https://..." from quote posts (Misskey-style quote text)
+    if ((post as any).quote_of_id || (post as any).quote_of_ap_id) {
+      html = html.replace(/^(<p>\s*)?RE:\s*(<a[^>]*>[^<]*<\/a>|https?:\/\/\S+)\s*(<\/p>)?\s*/i, '');
+    }
+    // Strip "series: https://..." and "episode: https://..." (share link metadata)
+    html = html.replace(/(?:^|\n)\s*(?:series|episode):\s*https?:\/\/\S+\s*/gi, '');
     if (/<\/?[a-zA-Z]+[\s>]/.test(html) || /&[a-z]+;/.test(html)) {
       html = html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
     } else {

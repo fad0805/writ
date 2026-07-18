@@ -1500,6 +1500,7 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
                 "reactions": _build_reactions(s, post.id),
                 "my_reaction": None,
                 "type": "update",
+                "_emojis": [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(s)],
             }, post.author_id, post.visibility or "public", False)
         except Exception:
             pass
@@ -1882,6 +1883,7 @@ def api_boost_post(request: Request, post_id: int):
                     "reactions": {}, "my_reaction": None,
                     "mentioned_user_ids": [], "mentioned_handles": [],
                     "link_preview": None,
+                    "_emojis": [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(s)],
                 }
                 threading.Thread(target=_broadcast_timeline, args=(_og, user.id, post.visibility or "public", False), daemon=True).start()
             except Exception as e:
