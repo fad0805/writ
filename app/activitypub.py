@@ -1172,6 +1172,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
 
     has_mention_tag = False
     mentioned_ids = []
+    hashtag_list = []
     for t in tags:
         if not isinstance(t, dict):
             continue
@@ -1196,6 +1197,9 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
             except Exception as e:
                 # 멘션 유저 한 명 해결하다가 전체 글 수집이 터지지 않도록 예외 처리
                 print(f"[FETCH-POST] Failed to resolve mentioned actor={actor_href}: {e}", flush=True)
+        elif t.get('type') == "Hashtag":
+            tag_name = t.get("name", "") or ""
+            hashtag_list.append(Tag(tag_name))
     mentioned_ids = list(set(mentioned_ids))
 
     # 2. 공개 범위(Visibility) 판별 조건문
@@ -1262,6 +1266,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         mentioned_user_ids=mentioned_ids,
         media_attachments=media_list if media_list else None,
         is_sensitive=obj.get("sensitive", False),
+        tag_list=hashtag_list,
     )
     published = obj.get("published", "")
     if published:
