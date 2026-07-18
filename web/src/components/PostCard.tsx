@@ -33,9 +33,11 @@ function formatRelative(iso: string, now: number = Date.now()): string {
 export function rewriteLinks(text: string, validMentions?: Set<string>): string {
   // Convert remote hashtag links to local explore
   text = text.replace(
-    /<a\s+href="https?:\/\/[^"]*\/tags\/([^"/]+)"[^>]*>#(\w+)<\/a>/gi,
-    (_m: string, _tagPath: string, tag: string) =>
-      `<a href="/explore?q=%23${encodeURIComponent(tag)}" class="hashtag-link">#${tag}</a>`
+    /<a\s+[^>]*href="https?:\/\/[^"]*\/tags\/([^"/]+)"[^>]*>#?(?:<span>)?([\p{L}\p{N}_가-힣]+)(?:<\/span>)?<\/a>/gu,
+    (_m: string, _tagPath: string, tag: string) => {
+      // 💡 주소창 인코딩을 위해 encodeURIComponent 처리
+      return `<a href="/explore?q=%23${encodeURIComponent(tag)}" class="hashtag-link">#${tag}</a>`;
+    }
   );
 
   text = text.replace(
@@ -47,27 +49,33 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
     }
   );
 
-  text = text.replace(/(^|>|\s)@([a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?)/g, (_m, before, handle) => {
-    // If no domain in handle, check validMentions for a remote match
-    if (!handle.includes("@") && validMentions) {
-      const found = Array.from(validMentions).find((v: string) => v.startsWith(handle + "@"));
-      if (found) handle = found;
+  text = text.replace(/(?<!<[^>]*)(^|>|\s)@([a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?)/g, (_m, before, handle) => {
+      if (!handle.includes("@") && validMentions) {
+        const found = Array.from(validMentions).find((v: string) => v.startsWith(handle + "@"));
+        if (found) handle = found;
+      }
+      const parts = handle.split("@");
+      const localDomain = typeof window !== "undefined" ? window.location.host : "";
+      const display = parts.length === 2 && parts[1] === localDomain ? `@${parts[0]}` : `@${handle}`;
+      return `${before}<a href="/@${handle}" class="mention-link">${display}</a>`;
+    });
+
+  text = text.replace(
+    /(?<!<[^>]*)(^|>|\s)#([\p{L}\p{N}_]+)/gu, 
+    (_m, before, tag) => {
+      return `${before}<a href="/explore?q=%23${encodeURIComponent(tag)}" class="hashtag-link">#${tag}</a>`;
     }
-    const parts = handle.split("@");
-    const localDomain = typeof window !== "undefined" ? window.location.host : "";
-    const display = parts.length === 2 && parts[1] === localDomain ? `@${parts[0]}` : `@${handle}`;
-    return `${before}<a href="/@${handle}" class="mention-link">${display}</a>`;
-  });
+  );
 
-  text = text.replace(/(^|>|\s)#([\w_가-힣]+)/g, (_m, before, tag) => {
-    return `${before}<a href="/explore?q=%23${encodeURIComponent(tag)}" class="hashtag-link">#${tag}</a>`;
-  });
-
-  text = text.replace(/(^|>|　|\s)(https?:\/\/[^\s<>"')\]]+)(?![\s\S]*?<\/a>)/g, (_m: string, before: string, url: string) => {
-    const isLocal = typeof window !== "undefined" && url.startsWith(window.location.origin);
-    return `${before}<a href="${isLocal ? url.replace(window.location.origin, "") : url}"${isLocal ? "" : ' target="_blank" rel="noopener noreferrer"'}>${url}</a>`;
-  });
-
+  text = text.replace(
+    /(?<!<[^>]*)(?<!href=")(?<!src=")(^|>| |\s)(https?:\/\/[^\s<>"')\]]+)/g,
+    (_m: string, before: string, url: string) => {
+      // 만약 이미 다른 <a> 태그의 닫는 부분 직전이거나 내부라면 패스
+      const isLocal = typeof window !== "undefined" && url.startsWith(window.location.origin);
+      const targetUrl = isLocal ? url.replace(window.location.origin, "") : url;
+      return `${before}<a href="${targetUrl}"${isLocal ? "" : ' target="_blank" rel="noopener noreferrer"'}>${url}</a>`;
+    }
+  );
   return text;
 }
 
@@ -207,7 +215,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     let html = post.content || "";
     // Strip "RE: https://..." from quote posts (Misskey-style quote text)
     if ((post as any).quote_of_id || (post as any).quote_of_ap_id) {
-  html = html.replace(/(?:<span[^>]*>)?[\s\n]*RE:[\s\n]*(?:<a[^>]*>.*?<\/a>|https?:\/\/[^\s<>]+)[\s\n]*(?:<\/span>)?(?:[\s\n]*<br\s*\/?>)*/gi, '');
+      html = html.replace(/(?:<span[^>]*>)?[\s\n]*RE:[\s\n]*(?:<a[^>]*>.*?<\/a>|https?:\/\/[^\s<>]+)[\s\n]*(?:<\/span>)?(?:[\s\n]*<br\s*\/?>)*/gi, '');
     }
     // Strip "series: https://..." and "episode: https://..." (share link metadata)
     const seriesMatch = html.match(/(?:^|\n)\s*series:\s*(https?:\/\/\S+)/i);

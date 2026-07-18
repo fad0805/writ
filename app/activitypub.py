@@ -1508,7 +1508,9 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             mentioned_names = set()
             # Get actor domain for same-server mention resolution
             _actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
+
             # Extract from AP tag array
+            tag_list = []
             for tag in (obj.get("tag", []) or []):
                 if isinstance(tag, dict) and tag.get("type") == "Mention":
                     href = tag.get("href", "")
@@ -1517,6 +1519,15 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         mentioned_hrefs.add(href.rstrip("/"))
                     if name and name.startswith("@"):
                         mentioned_names.add(name.lstrip("@"))
+                if isinstance(tag, dict) and tag.get("type") == "Hashtag":
+                    tag_name = tag.get("name", "").lower()
+                    _existing = session.query(Tag).filter_by(name=tag_name).first()
+                    if not _existing:
+                        _existing = Tag(name=tag_name)
+                        session.add(_existing)
+                        session.flush()
+                    tag_list.append(_existing)
+
             # Also check `to` / `cc` for local user actor URIs (DMs from Mastodon)
             for _aud in all_audiences:
                 _a = _aud.rstrip("/")
@@ -1600,7 +1611,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     visibility = "home"
 
             # Process custom emoji tags and media BEFORE session (network I/O)
-            import json as _json
             raw_attachments = obj.get("attachment", []) if isinstance(obj, dict) else []
             media_list = []
             if isinstance(raw_attachments, list):
@@ -1719,13 +1729,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         pass
 
             # Parse #hashtags from content and sync with Tag model (so hashtag search includes remote posts)
-            for _t in re.findall(r'(?<!\w)#([\w_가-힣]+)', content or ""):
-                _existing = session.query(Tag).filter_by(name=_t.lower()).first()
-                if not _existing:
-                    _existing = Tag(name=_t.lower())
-                    session.add(_existing)
-                    session.flush()
-                post.tag_list.append(_existing)
+            post.tag_list = tag_list
 
             # Notify local users mentioned or replied to
             _notified = set()
@@ -2634,7 +2638,6 @@ def _send_delete_post(post: Post, sender: User):
 
 
 def _notify_admins(session, reporter, target_type, target_id, reason):
-    import json as _json
     _admins = session.query(User).filter(User.role.in_(["admin", "moderator", "owner"])).all()
     for _a in _admins:
         if _a.id == reporter.id:
@@ -2642,7 +2645,7 @@ def _notify_admins(session, reporter, target_type, target_id, reason):
         session.add(Notification(
             user_id=_a.id, from_user_id=reporter.id,
             notification_type="moderation",
-            metadata_json=_json.dumps({"type": "report", "target_type": target_type, "target_id": target_id, "target_label": "", "reason": (reason or "")[:200]}),
+            metadata_json=json.dumps({"type": "report", "target_type": target_type, "target_id": target_id, "target_label": "", "reason": (reason or "")[:200]}),
         ))
     session.flush()
     from app.push import send_push_to_user
@@ -2685,7 +2688,6 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
 
     if not reporter:
         try:
-            import httpx as _httpx, json as _json
             _r = _validated_get(actor_url, headers={"Accept": "application/activity+json"}, timeout=10)
             if _r.status_code == 200:
                 _d = _r.json()
