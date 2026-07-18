@@ -1632,7 +1632,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         if isinstance(_t, dict) and _t.get("type") == "Link" and _t.get("rel") == "https://misskey-hub.net/ns#_misskey_quote":
                             _q_fields["_misskey_quote_tag"] = _t.get("href")
                 if _q_fields or _q_tag_quote:
-                    print(f"[_handle_create QUOTE FIELDS] ap_id={ap_id} fields={_q_fields} tag_quote={_q_tag_quote}", flush=True)
+                    print(f"[_handle_create QUOTE FIELDS] post_id={post_id} fields={_q_fields} tag_quote={_q_tag_quote}", flush=True)
 
                 # FEP-044f primary field, plus legacy compat fields
                 quote_url = (
