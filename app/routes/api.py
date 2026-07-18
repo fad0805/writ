@@ -5240,6 +5240,14 @@ def _load_emojis(session):
     if _emoji_cache["data"] is not None and now - _emoji_cache["ts"] < _EMOJI_CACHE_TTL:
         return _emoji_cache["data"]
     emojis = session.query(CustomEmoji).order_by(desc(CustomEmoji.created_at)).all()
+    from sqlalchemy import case, desc
+    emojis = session.query(CustomEmoji).order_by(
+        case(
+            (CustomEmoji.category == "remote", 1),
+            else_=0
+        ),
+        desc(CustomEmoji.created_at) # 동일 조건 내에서는 최신순 정렬
+    ).all()
     result = [
         {
             "id": e.id,
