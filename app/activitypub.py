@@ -1313,7 +1313,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
 
 
 def _handle_create(activity: dict) -> tuple[int, str]:
-    import sys, json
+    import sys
     obj = activity.get("object", {})
     obj_type = obj.get("type") if isinstance(obj, dict) else ""
     if obj_type in ("Note", "Question"):
@@ -1336,7 +1336,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         actor_username = actor.username
         actor_uri = actor.actor_uri()
         actor_remote_url = actor.remote_url or ""
-
 
         # Verify attributedTo matches activity actor
         obj_attributed = obj.get("attributedTo", "")
@@ -1709,7 +1708,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
 
             # Fetch link preview for URLs in remote post content (skip if quote post)
             if not quote_of_ap_id:
-                _url_match_lp = re.search(r'https?://[^\s<>"\')\]]+', content or "")
+                # 💡 [설명] URL 중간이나 끝에 /tags/ 가 들어가거나 # 기호가 들어간 링크는 매칭하지 않습니다.
+                _url_match_lp = re.search(r'https?://(?:(?!/tags/)[^\s<>"\')\]#])+', content or "")
                 if _url_match_lp:
                     _url_lp = _url_match_lp.group(0)
                     try:
