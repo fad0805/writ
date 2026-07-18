@@ -843,6 +843,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             username=local_username,
             display_name=data.get("name", preferred_username),
             summary=data.get("summary", ""),
+            email=f"remote-{uuid.uuid4().hex}@remote.placeholder.invalid",
             password_hash="remote_user",
             private_key=encrypt_key(priv, SECRET_KEY),
             public_key=public_key_pem or pub,
