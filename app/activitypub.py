@@ -1055,11 +1055,14 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     if _depth > 3 or not url:
         return None
 
-    # Convert web URL /@username/id to AP URL /users/username/statuses/id
+    print(f"[FETCH-POST] url={url} signer={signer.ap_id if signer else 'None'} depth={_depth}", flush=True)
+
+    # Convert web URL /@username/id to AP URL /users/username/statuses/id (Mastodon)
     m = re.match(r'^(https?://[^/]+)/@(\w+(?:@\S+)?)/([a-f0-9]+)(\?.*)?$', url)
     if m:
         base, username, status_id, query = m.group(1), m.group(2), m.group(3), m.group(4) or ""
         url = f"{base}/users/{username}/statuses/{status_id}{query}"
+        print(f"[FETCH-POST] Mastodon URL converted to: {url}", flush=True)
 
     from urllib.parse import urlparse as _urlparse
     parsed = _urlparse(url)
@@ -1097,6 +1100,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     data = None
     try:
         resp = _validated_get(url, headers=headers, timeout=15)
+        print(f"[FETCH-POST] first attempt url={url} status={resp.status_code if resp else 'None'}", flush=True)
         if resp is not None and resp.status_code == 200:
             data = resp.json()
     except Exception as e:
@@ -1105,24 +1109,29 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     if data is None and signer:
         try:
             resp = _validated_get(url, headers={"Accept": "application/activity+json"}, timeout=15)
+            print(f"[FETCH-POST] retry url={url} status={resp.status_code if resp else 'None'}", flush=True)
             if resp is not None and resp.status_code == 200:
                 data = resp.json()
         except Exception as e:
             print(f"[FETCH-POST] retry url={url} error={e}", flush=True)
 
     if data is None:
+        print(f"[FETCH-POST] FAILED url={url}", flush=True)
         return None
 
     obj = data.get("object", data) if isinstance(data, dict) else {}
     if not isinstance(obj, dict):
+        print(f"[FETCH-POST] obj not dict url={url}", flush=True)
         return None
     obj_type = obj.get("type", "")
     if obj_type not in ("Note", "Question"):
+        print(f"[FETCH-POST] not Note/Question type={obj_type} url={url}", flush=True)
         return None
 
     ap_id = obj.get("id", url)
     existing = session.query(Post).filter_by(ap_id=ap_id).first()
     if existing and not existing.is_deleted:
+        print(f"[FETCH-POST] existing post id={existing.id} ap_id={ap_id}", flush=True)
         return existing
 
     attributed_to = obj.get("attributedTo", "")
@@ -1131,11 +1140,13 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     if isinstance(attributed_to, dict):
         attributed_to = attributed_to.get("id", "")
     if not attributed_to:
+        print(f"[FETCH-POST] no attributedTo url={url}", flush=True)
         return None
 
     _resolve_actor(attributed_to)
     author = session.query(User).filter_by(remote_url=attributed_to).first()
     if not author:
+        print(f"[FETCH-POST] author not found attributed_to={attributed_to}", flush=True)
         return None
 
     raw_content = obj.get("content", "") or ""
@@ -1611,6 +1622,18 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             quote_of_ap_id = ""
             quote_of_id = None
             if isinstance(obj, dict):
+                # Log all quote-related fields for debugging
+                _q_fields = {k: obj.get(k) for k in ("quote", "quoteUrl", "quoteUri", "_misskey_quote", "quote") if obj.get(k)}
+                _q_tag_quote = False
+                if isinstance(obj.get("tag"), list):
+                    for _t in obj["tag"]:
+                        if isinstance(_t, dict) and _t.get("type") == "Quote":
+                            _q_tag_quote = True
+                        if isinstance(_t, dict) and _t.get("type") == "Link" and _t.get("rel") == "https://misskey-hub.net/ns#_misskey_quote":
+                            _q_fields["_misskey_quote_tag"] = _t.get("href")
+                if _q_fields or _q_tag_quote:
+                    print(f"[_handle_create QUOTE FIELDS] ap_id={ap_id} fields={_q_fields} tag_quote={_q_tag_quote}", flush=True)
+
                 # FEP-044f primary field, plus legacy compat fields
                 quote_url = (
                     obj.get("quote")           # FEP-044f (Mastodon 4.4+)
@@ -1632,12 +1655,16 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             break
                 if quote_url and isinstance(quote_url, str):
                     quote_of_ap_id = quote_url
+                    print(f"[_handle_create QUOTE RESOLVE] url={quote_url} actor={actor.ap_id if actor else 'None'}", flush=True)
                     try:
                         quote_post = _fetch_remote_post(quote_url, actor, session)
                         if quote_post:
                             quote_of_id = quote_post.id
-                    except Exception:
-                        pass
+                            print(f"[_handle_create QUOTE RESOLVED] post_id={quote_post.id} ap_id={quote_post.ap_id}", flush=True)
+                        else:
+                            print(f"[_handle_create QUOTE FETCH FAILED] url={quote_url}", flush=True)
+                    except Exception as e:
+                        print(f"[_handle_create QUOTE EXCEPTION] url={quote_url} error={e}", flush=True)
 
             post = Post(
                 author_id=actor_id,
