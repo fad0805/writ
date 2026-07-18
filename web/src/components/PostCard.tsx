@@ -226,22 +226,25 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     html = rewriteLinks(html, validMentions);
     if (qUrl) {
       const escUrl = qUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const hasPrefix = new RegExp(`(RE:|series:|episode:)\\s*(<a[^>]*>\\s*)?${escUrl}`, 'i').test(html);
-      if (hasPrefix) {
-        // Remove the whole prefix + anchor block or bare URL
-        html = html.replace(new RegExp(`(RE:|series:|episode:|episode\\s*):?\\s*<a[^>]*>[\\s\\S]*?<\\/a>`, 'gi'), '');
-        html = html.replace(new RegExp(`(RE:|series:|episode:|episode\\s*):?\\s*${escUrl}`, 'gi'), '');
-        html = html.replace(new RegExp(escUrl, 'gi'), '');
+      const host = typeof window !== 'undefined' ? window.location.host : '';
+      const isLocal = host === (qUrl.match(/https?:\/\/([^/]+)/)?.[1]);
+      const linkHref = isLocal ? qUrl.replace(/https?:\/\/[^/]+/, '') : qUrl;
+      const linkTarget = isLocal ? '' : ' target="_blank" rel="noopener noreferrer"';
+      const rePrefixRe = new RegExp(`(^|<br>|\\n)(RE:|re:)\\s*(<a[^>]*>\\s*)?${escUrl}`, 'i');
+      if (rePrefixRe.test(html)) {
+        const linkHtml = `<a href="${linkHref}"${linkTarget}>${qUrl}</a>`;
+        html = html.replace(new RegExp(`(^|<br>|\\n)(RE:|re:)\\s*(<a[^>]*>[\\s\\S]*?<\\/a>|${escUrl})`, 'gi'), `$1<blockquote class="quote-inline-block">${linkHtml}</blockquote>`);
       } else {
-        const host = typeof window !== 'undefined' ? window.location.host : '';
-        const isLocal = host === (qUrl.match(/https?:\/\/([^/]+)/)?.[1]);
-        const linkHref = isLocal ? qUrl.replace(/https?:\/\/[^/]+/, '') : qUrl;
-        const linkTarget = isLocal ? '' : ' target="_blank" rel="noopener noreferrer"';
-        const inAnchorRe = new RegExp(`<a\\s+href="[^"]*${escUrl}[^"]*"[^>]*>[\\s\\S]*?<\\/a>`, 'gi');
-        if (inAnchorRe.test(html)) {
-          html = html.replace(new RegExp(`<a(\\s+)href="[^"]*${escUrl}[^"]*"`), `<a$1href="${linkHref}"${linkTarget}`);
+        const seriesEpRe = new RegExp(`(RE:|series:|episode:|episode\\s*):?\\s*(<a[^>]*>[\\s\\S]*?<\\/a>|${escUrl})`, 'gi');
+        if (seriesEpRe.test(html)) {
+          html = html.replace(seriesEpRe, '');
         } else {
-          html = html.replace(new RegExp(`(^|>|　|\\s)${escUrl}`, 'gi'), `$1<a href="${linkHref}"${linkTarget}>${qUrl}</a>`);
+          const inAnchorRe = new RegExp(`<a\\s+href="[^"]*${escUrl}[^"]*"[^>]*>[\\s\\S]*?<\\/a>`, 'gi');
+          if (inAnchorRe.test(html)) {
+            html = html.replace(new RegExp(`<a(\\s+)href="[^"]*${escUrl}[^"]*"`), `<a$1href="${linkHref}"${linkTarget}`);
+          } else {
+            html = html.replace(new RegExp(`(^|>|　|\\s)${escUrl}`, 'gi'), `$1<a href="${linkHref}"${linkTarget}>${qUrl}</a>`);
+          }
         }
       }
       html = html.replace(/<span class="quote-inline">\s*RE:\s*<\/span>/gi, '');

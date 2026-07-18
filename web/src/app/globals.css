@@ -709,6 +709,22 @@ input:focus {
   line-height: 1.7;
   word-wrap: break-word;
 }
+.post-content .quote-inline-block,
+.mini-post-body .quote-inline-block {
+  display: block;
+  border-left: 3px solid var(--accent);
+  padding-left: 12px;
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+.post-content .quote-inline-block a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.post-content .quote-inline-block a:hover {
+  text-decoration: underline;
+}
 .post-content pre, .episode-body pre {
   position: relative;
   background: var(--bg-tertiary);

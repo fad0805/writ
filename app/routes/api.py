@@ -415,7 +415,12 @@ def api_me(request: Request, s: Session = Depends(get_db)):
     _settings = _SS.get(s)
     if not _settings.enable_reactions:
         result["enable_reactions"] = False
-    return result
+    resp = JSONResponse(result)
+    from app.main import generate_csrf_token
+    from app.config import APP_ENV
+    secure = APP_ENV != "development"
+    resp.set_cookie(key="csrf_token", value=generate_csrf_token(user.id), max_age=30*86400, httponly=False, samesite="lax", path="/", secure=secure)
+    return resp
 
 
 @router.post("/auth/login")
