@@ -1708,8 +1708,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
 
             # Fetch link preview for URLs in remote post content (skip if quote post)
             if not quote_of_ap_id:
-                # 💡 [설명] URL 중간이나 끝에 /tags/ 가 들어가거나 # 기호가 들어간 링크는 매칭하지 않습니다.
-                _url_match_lp = re.search(r'https?://(?:(?!/tags/)[^\s<>"\')\]#])+', content or "")
+                # 💡 [해결] URL 전체를 미리 훑어봐서(?!.*/tags/) 중간에 /tags/가 들어가 있다면 아예 시작조차 안 하고 쳐냅니다.
+                _url_match_lp = re.search(r'https?://(?!.*/tags/)[^\s<>"\')\]#]+', content or "")
                 if _url_match_lp:
                     _url_lp = _url_match_lp.group(0)
                     try:
