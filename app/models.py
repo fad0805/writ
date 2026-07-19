@@ -463,7 +463,7 @@ class Post(Base):
                             obj["to"].append(_mu_uri)
                         else:
                             obj["cc"].append(_mu_uri)
-        is_sensitive = self.is_sensitive or getattr(self.author, 'is_sensitive', false) or false
+        is_sensitive = self.is_sensitive or getattr(self.author, 'is_sensitive', False) or False
         if self.summary:
             obj["summary"] = self.summary
             obj["sensitive"] = True
