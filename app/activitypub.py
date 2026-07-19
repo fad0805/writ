@@ -114,7 +114,7 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
         remote_match = re.match(r'^@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})$', text)
         if remote_match:
             a_tag.string = f"@{remote_match.group(1)}@{remote_match.group(2)}"
-            a_tag["href"] = f"/@{remote_match.group(1)}"
+            a_tag["href"] = f"/@{remote_match.group(1)}@{remote_match.group(2)}"
             a_tag["class"] = "mention"
             a_tag.attrs.pop("target", None)
             continue
