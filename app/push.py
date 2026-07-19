@@ -129,6 +129,21 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
             })
 
             from pywebpush import webpush, WebPushException
+            from cryptography.hazmat.primitives.serialization import load_pem_private_key
+            # Pre-load VAPID key once
+            _vapid_obj = None
+            try:
+                _priv_pem = vapid_key["privateKey"]
+                if isinstance(_priv_pem, str):
+                    _priv_pem = _priv_pem.encode()
+                _ec_key = load_pem_private_key(_priv_pem, password=None)
+                from py_vapid import Vapid as _Vapid
+                _vapid_obj = _Vapid()
+                _vapid_obj.private_key = _ec_key
+                print(f"[PUSH] VAPID key loaded OK type={type(_ec_key).__name__}", flush=True)
+            except Exception as _kerr:
+                print(f"[PUSH] VAPID key load FAILED: {_kerr}", flush=True)
+
             for sub in subs:
                 try:
                     print(f"[PUSH] sending to sub {sub.id}", flush=True)
@@ -138,7 +153,7 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
                             "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
                         },
                         data=payload,
-                        vapid_private_key=vapid_key["privateKey"],
+                        vapid_private_key=_vapid_obj or vapid_key["privateKey"],
                         vapid_claims={"sub": f"mailto:{VAPID_CLAIM_EMAIL}"},
                     )
                     print(f"[PUSH] OK sub {sub.id}", flush=True)
