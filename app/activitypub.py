@@ -86,11 +86,11 @@ def _html_to_newlines(html: str) -> str:
 
 def _extract_plain_text(sanitized_content: str, post=None) -> str:
     if not sanitized_content:
+        # 180°C 같은 온도가 아니라 단순 공백 처리이므로 일반 스트링 반환
         return ""
 
     from bs4 import BeautifulSoup, NavigableString
 
-    # Post 객체에서 tag_list 추출
     tags = []
     if post and hasattr(post, "tag_list") and post.tag_list:
         tags = [str(t) for t in post.tag_list if t]
@@ -110,15 +110,15 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
     # 2. 이미 존재하는 모든 <a> 태그를 찾아서 안전하게 리모델링
     for a_tag in soup.find_all("a"):
         text = a_tag.get_text().strip()
-        # 2-1. 텍스트가 원격 핸들 패턴인 경우
+        # 2-1. 원격 핸들 패턴인 경우
         remote_match = re.match(r'^@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})$', text)
         if remote_match:
             a_tag.string = f"@{remote_match.group(1)}@{remote_match.group(2)}"
-            a_tag["href"] = f"/@{remote_match.group(1)}@{remote_match.group(2)}"
+            a_tag["href"] = f"/@{remote_match.group(1)}@{remote_match.group(2)}"  # 도메인 유지
             a_tag["class"] = "mention"
             a_tag.attrs.pop("target", None)
             continue
-        # 2-2. 텍스트가 로컬 핸들 패턴인 경우
+        # 2-2. 로컬 핸들 패턴인 경우
         local_match = re.match(r'^@([A-Za-z0-9_.-]+)$', text)
         if local_match:
             a_tag.string = f"@{local_match.group(1)}"
@@ -127,7 +127,7 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
             a_tag.attrs.pop("target", None)
             continue
 
-        # 2-4. 텍스트가 해시태그 패턴일 때 처리
+        # 2-4. 해시태그 처리
         if text.startswith('#'):
             tag_name_match = re.search(r'#([^\s#@<]+)', text)
             if tag_name_match:
@@ -139,7 +139,7 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
                     a_tag.attrs.pop("target", None)
                     continue
 
-        # 2-3. 텍스트가 일반 URL인 경우
+        # 2-3. 일반 URL인 경우
         if text and re.match(r'^https?://', text):
             display = re.sub(r'^https?://', '', text)
             if len(display) > 40:
@@ -152,10 +152,10 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
             continue
 
         text_str = str(text_node)
-        # 쌩 원격 핸들 치환
+        # [수정] 원격 핸들 주소에 \2(도메인)까지 정확히 포함시킴
         new_text = re.sub(
             r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})',
-            r'<a href="/@\1" class="mention">@\1@\2</a>',
+            r'<a href="/@\1@\2" class="mention">@\1@\2</a>',
             text_str
         )
         # 쌩 로컬 핸들 치환
@@ -179,17 +179,16 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
                 text_node.insert_before(child.extract())
             text_node.extract()
 
-    # 줄바꿈 보존을 위한 변환 작업
+    # 줄바꿈 보존 작업
     for br in list(soup.find_all("br")):
         br.replace_with("\n")
     for tag in list(soup.find_all(["p", "div"])):
         tag.insert_before("\n")
         tag.insert_after("\n")
 
-    # 4. <a> 태그 빌드 및 안전한 HTML 직렬화 검증 기법 도입
+    # 4. 직렬화
     def _to_html(node):
         if isinstance(node, NavigableString):
-            # BeautifulSoup의 내장 이스케이프 메커니즘을 적용하여 특수문자 안전성 보장
             return node.output_ready()
         if node.name == "a":
             attrs_list = []
@@ -205,11 +204,9 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
             attrs_str = f" {' '.join(attrs_list)}" if attrs_list else ""
             children_str = "".join(_to_html(c) for c in list(node.children))
             return f"<a{attrs_str}>{children_str}</a>"
-        # <a> 태그가 아닌 일반 블록 태그는 껍데기를 버리고 자식 텍스트만 취합
         return "".join(_to_html(c) for c in list(node.children))
 
     result = "".join(_to_html(c) for c in list(soup.contents))
-    # 가독성을 해치는 연속된 공백 라인(\n\n\n+)을 최대 두 줄(\n\n)로 압축 및 정돈
     result = re.sub(r'\n{3,}', '\n\n', result)
     return result.strip()
 
