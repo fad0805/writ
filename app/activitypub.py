@@ -2136,7 +2136,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
         post = session.query(Post).filter_by(ap_id=object_url).first()
         _sign_as = session.query(User).get(post.author_id) if post else None
         if not _sign_as:
-            _sign_as = session.query(User).filter_by(is_remote=False).first()
+            _sign_as = _get_instance_actor(session)
     print(f"[ANNOUNCE] db_post={'found id='+str(post.id) if post else 'none'} signer={'id='+str(_sign_as.id) if _sign_as else 'none'}", flush=True)
     actor = _resolve_actor(actor_url, sign_as=_sign_as)
     if not actor:
@@ -2150,9 +2150,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
         post = session.query(Post).filter_by(ap_id=object_url).first()
         print(f"[ANNOUNCE] session2 post={'found id='+str(post.id) if post else 'none'}", flush=True)
         if not post:
-            _local_signer = session.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor_id, User.is_remote == False).first()
-            if not _local_signer:
-                _local_signer = session.query(User).filter_by(is_remote=False).first()
+            _local_signer = _get_instance_actor(session)
             try:
                 post = _fetch_remote_post(object_url, _local_signer, session)
                 print(f"[ANNOUNCE] fetch_remote_post result={'id='+str(post.id) if post else 'None'}", flush=True)
