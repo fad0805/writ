@@ -111,6 +111,7 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
         raw_href = raw_href.strip()
 
         mentioned_user_ids = []
+        print(f'============================ post : {post, typeof(post)}')
         if post and isinstance(post, dict):
             tags = post.get("tag")
             mentioned_user_ids = [tag.get("name") for tag in tags if tag.get("type") == "Mention"]
