@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import desc, or_, and_, func, String
 from sqlalchemy.orm import selectinload, Session
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PendingDelivery, PushSubscription, get_session
+from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PushSubscription, get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.log_utils import log_admin_action
 from app.activitypub import _fetch_remote_post
@@ -27,7 +27,7 @@ def _fmt_dt(dt: datetime.datetime | None) -> str | None:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=datetime.timezone.utc)
     return dt.astimezone(KST).isoformat()
-from app.activitypub import broadcast_to_followers, _post_to_inbox, _process_emoji_tags, _federation_allowed, _build_reactions
+from app.activitypub import broadcast_to_followers, _post_to_inbox, _federation_allowed, _build_reactions
 from app.database import get_db
 from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED
 from app.crypto_utils import encrypt_key, get_private_key
@@ -1024,6 +1024,7 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
         with get_session() as ap_s:
             user = ap_s.query(User).filter_by(id=user_id).first()
             post = ap_s.query(Post).filter_by(id=post_id).first()
+            print(user, post)
             if not user or not post:
                 logger.warning(f"Broadcast aborted: user_id={user_id} or post_id={post_id} not found")
                 return
