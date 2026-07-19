@@ -1213,7 +1213,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
                 print(f"[FETCH-POST] Failed to resolve mentioned actor={actor_href}: {e}", flush=True)
         elif t.get('type') == "Hashtag":
             tag_name = t.get("name", "") or ""
-            hashtag_list.append(Tag(tag_name))
+            hashtag_list.append(Tag(name=tag_name))
     mentioned_ids = list(set(mentioned_ids))
 
     if pub not in all_auds and has_mention_tag:
