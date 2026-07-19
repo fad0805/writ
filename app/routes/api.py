@@ -783,9 +783,9 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         deduped.append(p)
     posts = deduped
     print(f"[feed] after dedup: {len(posts)} posts", flush=True)
-    if following_ids:
+    if _following_ids:
         try:
-            posts = _timeline_filter(posts, session, user, tl_type, following_ids)
+            posts = _timeline_filter(posts, session, user, tl_type, _following_ids)
             print(f"[feed] after mention filter: {len(posts)} posts", flush=True)
         except Exception as e:
             print(f'[feed] mention filter error: {e}', flush=True)
