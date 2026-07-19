@@ -340,7 +340,7 @@ class Post(Base):
                     },
                 })
         if self.mentioned_user_ids:
-            from app.config import domain
+            from app.config import DOMAIN
             from urllib.parse import urlparse as _urlparse
             with get_session() as s:
                 users = s.query(user).filter(user.id.in_(self.mentioned_user_ids)).all()
