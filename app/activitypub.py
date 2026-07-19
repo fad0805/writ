@@ -2136,7 +2136,9 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
         _sign_as = session.query(User).get(post.author_id) if post else None
-    print(f"[ANNOUNCE] db_post={'found id='+str(post.id) if post else 'none'}", flush=True)
+        if not _sign_as:
+            _sign_as = session.query(User).filter_by(is_remote=False).first()
+    print(f"[ANNOUNCE] db_post={'found id='+str(post.id) if post else 'none'} signer={'id='+str(_sign_as.id) if _sign_as else 'none'}", flush=True)
     actor = _resolve_actor(actor_url, sign_as=_sign_as)
     if not actor:
         print("[ANNOUNCE] actor not found, returning 404", flush=True)

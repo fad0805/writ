@@ -234,7 +234,7 @@ async def debug_exception_handler(request: Request, exc: Exception):
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
     return JSONResponse({"detail": "Internal server error"}, status_code=500)
 
-CSRF_EXEMPT_PREFIXES = ("/.well-known/", "/nodeinfo", "/webfinger", "/static/", "/uploads/", "/api/auth/", "/inbox", "/outbox")
+CSRF_EXEMPT_PREFIXES = ("/.well-known/", "/nodeinfo", "/webfinger", "/static/", "/uploads/", "/api/auth/", "/api/push/", "/inbox", "/outbox")
 CSRF_EXEMPT_EXACT = ("/users/", "/posts/", "/activities/", "/@/")
 CSRF_EXEMPT_METHODS = ("GET", "HEAD", "OPTIONS")
 
