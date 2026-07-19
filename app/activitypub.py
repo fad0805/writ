@@ -89,18 +89,18 @@ def _extract_plain_text(sanitized_content: str) -> str:
         return ""
 
     from bs4 import BeautifulSoup
+    # -----------------------------------------------------------------
+    # 🔥 BeautifulSoup 등판: 깨진 괄호 지옥을 구원할 구세주
+    # -----------------------------------------------------------------
+    # 내부적으로 완벽한 HTML 트리 구조로 파싱합니다.
+    soup = BeautifulSoup(sanitized_content, "html.parser")
+
     # 1. 생짜 URL을 a 태그로 변환 (기존 유지)
     url_pattern = r'(?<!href=")(?<!src=")(?<!">)(https?://(?!.*/tags/)[^\s<>"\')\]#]+)'
     def _repl_raw_url(m):
         url = m.group(1)
         return f'<a href="{url}" target="_blank" rel="noopener noreferrer">{url}</a>'
     sanitized_content = re.sub(url_pattern, _repl_raw_url, sanitized_content)
-
-    # -----------------------------------------------------------------
-    # 🔥 BeautifulSoup 등판: 깨진 괄호 지옥을 구원할 구세주
-    # -----------------------------------------------------------------
-    # 내부적으로 완벽한 HTML 트리 구조로 파싱합니다.
-    soup = BeautifulSoup(sanitized_content, "html.parser")
 
     # 2. 이미 존재하는 모든 <a> 태그를 찾아서 안전하게 리모델링
     for a_tag in soup.find_all("a"):
@@ -152,8 +152,19 @@ def _extract_plain_text(sanitized_content: str) -> str:
     for tag in soup.find_all(["p", "div"]):
         tag.insert_before("\n")
         tag.insert_after("\n")
-    # HTML 내의 모든 태그를 걷어내고 텍스트만 추출합니다.
-    return soup.get_text().strip()
+
+    # <a> 태그를 보존하면서 나머지 태그는 텍스트만 추출
+    from bs4 import NavigableString
+    def _to_html(node):
+        if isinstance(node, NavigableString):
+            return str(node)
+        if node.name == "a":
+            attrs = " ".join(f'{k}="{v}"' for k, v in node.attrs.items())
+            inner = "".join(_to_html(c) for c in node.children)
+            return f"<a {attrs}>{inner}</a>"
+        return "".join(_to_html(c) for c in node.children)
+
+    return _to_html(soup).strip()
 
 
 _PRIVATE_SUBNETS = [
