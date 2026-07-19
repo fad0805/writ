@@ -81,5 +81,16 @@ export async function isSubscribed(): Promise<boolean> {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
   const reg = await navigator.serviceWorker.ready;
   const subscription = await reg.pushManager.getSubscription();
-  return subscription !== null;
+  if (!subscription) return false;
+  try {
+    const res = await fetch("/api/push/status", { credentials: "include" });
+    if (res.ok) {
+      const data = await res.json();
+      if (!data.subscribed) {
+        await subscription.unsubscribe().catch(() => {});
+        return false;
+      }
+    }
+  } catch {}
+  return true;
 }
