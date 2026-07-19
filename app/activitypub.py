@@ -134,11 +134,28 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
             raw_href = " ".join(raw_href)
         raw_href = raw_href.strip()
 
-        # 2-0. 언급된 유저 아이디와 이름 매칭
-        # 로그에 찍힌 것처럼 '@siarte@daydream.ink' 같은 풀 핸들이 들어오므로 완벽히 매칭됩니다.
-        if text in mentioned_user_ids or any(uid.lower() in [text.lower(), raw_href.lower()] for uid in mentioned_user_ids):
-            # 정확한 매칭 대상 검색
-            matched_uid = next((uid for uid in mentioned_user_ids if uid.lower() in [text.lower(), raw_href.lower()]), text)
+        # 멘션 매칭을 위한 방어적 텍스트 정제
+        raw_username = text.lstrip('@').lower()
+        href_lower = raw_href.lower()
+
+        # 2-0. 언급된 유저 목록(mentioned_user_ids)과 매칭 시도
+        is_mention_matched = False
+        matched_uid = None
+
+        for uid in mentioned_user_ids:
+            uid_lower = uid.lower()
+            # 풀 핸들에서 도메인을 떼어낸 순수 username 추출 (ex: @siarte@daydream.ink -> siarte)
+            pure_username = uid_lower.lstrip('@').split('@')[0]
+            # 조건 1: 태그 안의 텍스트가 풀 핸들과 같거나, 도메인이 없는 유저명과 같을 때
+            # 조건 2: 태그의 href 주소에 유저명이 포함되어 있거나 풀 핸들 자체가 매칭될 때
+            if (raw_username == pure_username or uid_lower == text.lower() or 
+                pure_username in href_lower or uid_lower in href_lower):
+                is_mention_matched = True
+                matched_uid = uid  # 원래 대소문자가 유지된 풀 핸들 선택
+                break
+
+        # 매칭 성공 시 우리 서비스 규격에 맞게 리모델링
+        if is_mention_matched and matched_uid:
             a_tag.clear()
             a_tag.string = matched_uid
             a_tag["href"] = f"/{matched_uid}"
@@ -146,7 +163,7 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
             a_tag.attrs.pop("target", None)
             continue
 
-        # [예외 방어] 데이터 바인딩이 누락되었으나 원격 주소인 경우를 위한 차선책
+        # [예외 방어] 데이터 바인딩이 누락되었으나 원격 주소 형태인 경우 (Fallback 1)
         if text.startswith('@') and raw_href.startswith('http'):
             remote_url_match = re.match(r'https?://([^/]+)/(?:@|users/)([A-Za-z0-9_.-]+)', raw_href, re.IGNORECASE)
             if remote_url_match:
@@ -159,18 +176,7 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
                 a_tag.attrs.pop("target", None)
                 continue
 
-        # 2-1. 기존 쌩 텍스트 기반 패턴 매칭 (Fallback)
-        raw_username = text.lstrip('@').lower()
-        if text.startswith('@') and any(raw_username in uid.lower() for uid in mentioned_user_ids):
-            matched_uid = next((uid for uid in mentioned_user_ids if raw_username in uid.lower()), text)
-            a_tag.clear()
-            a_tag.string = matched_uid
-            a_tag["href"] = f"/{matched_uid}"
-            a_tag["class"] = "mention"
-            a_tag.attrs.pop("target", None)
-            continue
-
-        # 2-4. 해시태그 처리
+        # 해시태그 처리
         if text.startswith('#'):
             tag_name_match = re.search(r'#([^\s#@<]+)', text)
             if tag_name_match:
@@ -183,7 +189,7 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
                     a_tag.attrs.pop("target", None)
                     continue
 
-        # 2-3. 일반 URL인 경우
+        # 일반 URL인 경우
         if text and re.match(r'^https?://', text):
             display = re.sub(r'^https?://', '', text)
             if len(display) > 40:
