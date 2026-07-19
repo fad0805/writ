@@ -85,7 +85,7 @@ def _html_to_newlines(html: str) -> str:
     return html.strip('\n')
 
 
-def _extract_plain_text(sanitized_content: str, post=None) -> str:
+def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
     if not sanitized_content:
         return ""
 
@@ -134,7 +134,6 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
         if text.startswith('@') and raw_href.startswith('http'):
             remote_url_match = re.match(r'https?://([^/]+)/(?:@|users/)([A-Za-z0-9_.-]+)', raw_href, re.IGNORECASE)
             if remote_url_match:
-                print(f'================ remote_url_match : {remote_url_match}')
                 domain = remote_url_match.group(1).lower()
                 username = remote_url_match.group(2)
                 a_tag.clear()
@@ -1345,7 +1344,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     raw_content = obj.get("content", "") or ""
     if len(raw_content) > 65536:
         raw_content = raw_content[:65536]
-    content = _html_to_newlines(_extract_plain_text(_sanitize_html(raw_content), post=obj))
+    content = _html_to_newlines(_extract_plain_text(_sanitize_html(raw_content), obj))
     summary = obj.get("summary", "")
 
     to = obj.get("to", [])
@@ -1554,7 +1553,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if len(raw_content) > 65536:
             raw_content = raw_content[:65536]
         post_id = obj.get("id", "")
-        content = _html_to_newlines(_extract_plain_text(_sanitize_html(raw_content), post=obj))
+        content = _html_to_newlines(_extract_plain_text(_sanitize_html(raw_content), obj))
         summary = obj.get("summary", "")
         in_reply_to = obj.get("inReplyTo", "")
 
@@ -2728,7 +2727,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     # Update content/summary
                     new_content = object_data.get("content", "")
                     if new_content:
-                        post.content = _html_to_newlines(_extract_plain_text(_sanitize_html(new_content), post=post))
+                        post.content = _html_to_newlines(_extract_plain_text(_sanitize_html(new_content), post))
                     if "summary" in object_data:
                         post.summary = object_data.get("summary", "")
                     # Update poll data
