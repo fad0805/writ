@@ -92,7 +92,6 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
     tags = []
     if post and hasattr(post, "tag_list") and post.tag_list:
         tags = [str(t) for t in post.tag_list if t]
-    print(f'============================================= tags : {tags}')
 
     # 1. 생짜 URL을 a 태그로 변환
     url_pattern = r'(?<!href=")(?<!src=")(?<!">)(https?://(?!.*/tags/)[^\s<>"\')\]#]+)'
@@ -116,10 +115,8 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
         raw_href = raw_href.strip()
 
         mentioned_user_ids = []
-        if post and tags:
-            for tag in tags:
-                if tag.get("type") == 'Mention':
-                    mentioned_user_ids.append(tag.get("name", ""))
+        if post and isinstance(post, dict):
+            mentioned_user_ids = [tag.get("name") for tag in tags if tag.get("type") == "Mention"]
         elif post:
             mentioned_user_ids = post.mentioned_user_ids
         else:
