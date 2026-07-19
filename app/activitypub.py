@@ -1266,6 +1266,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
             if not isinstance(att, dict):
                 continue
             att_type = att.get("mediaType", "")
+            att_as2_type = att.get("type", "")
             att_url = ""
             if isinstance(att.get("url"), str):
                 att_url = att["url"]
@@ -1274,9 +1275,12 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
             if not att_url:
                 continue
             cached = _cache_remote_media(att_url)
-            if att_type.startswith("image/"):
+            if att_type.startswith("image/") or att_as2_type == "Image":
                 media_list.append({"url": cached, "type": "image"})
-            elif att_type.startswith("video/"):
+            elif att_type.startswith("video/") or att_as2_type == "Video":
+                media_list.append({"url": cached, "type": "video"})
+            elif att_as2_type == "Document" or att_type.startswith("audio/"):
+                media_list.append({"url": cached, "type": "image"})
                 media_list.append({"url": cached, "type": "video"})
 
     # 💡 Post 모델 생성 시 quote_id (또는 모델 설계에 맞춘 인용 필드명) 채워넣기
@@ -1655,6 +1659,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     if not isinstance(att, dict):
                         continue
                     att_type = att.get("mediaType", "")
+                    att_as2_type = att.get("type", "")
                     url = ""
                     if isinstance(att.get("url"), str):
                         url = att["url"]
@@ -1663,10 +1668,12 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     if not url:
                         continue
                     cached = _cache_remote_media(url)
-                    if att_type.startswith("image/"):
+                    if att_type.startswith("image/") or att_as2_type == "Image":
                         media_list.append({"url": cached, "type": "image"})
-                    elif att_type.startswith("video/"):
+                    elif att_type.startswith("video/") or att_as2_type == "Video":
                         media_list.append({"url": cached, "type": "video"})
+                    elif att_as2_type == "Document" or att_type.startswith("audio/"):
+                        media_list.append({"url": cached, "type": "image"})
 
             # Extract quote reference from Note (FEP-044f / Mastodon / Misskey / Firefish compat)
             quote_of_ap_id = ""
