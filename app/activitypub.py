@@ -105,12 +105,6 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
 
     soup = BeautifulSoup(sanitized_content, "html.parser")
 
-    # 0. 멘션된 유저들의 메타데이터 맵 빌드
-    m_users = []
-    if post and hasattr(post, "mentioned_user_ids") and post.mentioned_user_ids:
-        with get_session() as s:
-            m_users = s.query(User).filter(User.id.in_(post.mentioned_user_ids)).all()
-
     # 2. 이미 존재하는 모든 <a> 태그를 찾아서 안전하게 리모델링
     for a_tag in soup.find_all("a"):
         text = a_tag.get_text().strip()
@@ -120,10 +114,11 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
             raw_href = " ".join(raw_href)
         raw_href = raw_href.strip()
         # [핵심] DB 멘션 데이터에 존재하는 유저인지 소문자 href(ap_id)로 먼저 낚아챕니다.
-        for mentioned_user in m_users:
+        print(f'========================= mentioned_user_ids: {post.mentioned_user_ids}')
+        for mentioned_user in post.mentioned_user_ids:
             a_tag.clear()  # 기존 내부 자식 태그들 안전하게 청소
-            a_tag.string = f"@{mentioned_user.username}"
-            a_tag["href"] = f"/@{mentioned_user.username}"
+            a_tag.string = f"@{mentioned_user}"
+            a_tag["href"] = f"/@{mentioned_user}"
             a_tag["class"] = "mention"
             a_tag.attrs.pop("target", None)
             continue
