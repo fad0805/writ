@@ -35,13 +35,13 @@ export default function NotifSound() {
       try {
         if (event.data === "refresh") return;
         const parsed = JSON.parse(event.data);
-        if (parsed && parsed.event === "notif") {
+          if (parsed && parsed.event === "notif") {
           if (parsed.unread !== undefined) {
             const badge = document.querySelector(".notif-badge");
             if (badge) badge.textContent = String(parsed.unread);
             if (typeof window !== "undefined") (window as any).__unreadNotifs = parsed.unread;
           }
-          if (parsed.unread !== undefined && parsed.unread > 0 && audioRef.current && isNotifSoundEnabled()) {
+          if ((parsed.sound || (parsed.unread !== undefined && parsed.unread > 0)) && audioRef.current && isNotifSoundEnabled()) {
             audioRef.current.currentTime = 0;
             audioRef.current.play().catch(() => {});
           }

@@ -181,7 +181,13 @@ def broadcast_refresh_notifs(target_user_id: int = 0):
 
 def broadcast_notif_sound(target_user_id: int):
     """Send a JSON event that triggers notification sound in the browser."""
-    broadcast_notif(json.dumps({"event": "notif"}), target_user_id)
+    try:
+        from sqlalchemy import func
+        with get_session() as s:
+            cnt = s.query(func.count(Notification.id)).filter_by(user_id=target_user_id, is_read=False).scalar()
+        broadcast_notif(json.dumps({"event": "notif", "unread": cnt, "sound": True}), target_user_id)
+    except Exception:
+        broadcast_notif(json.dumps({"event": "notif", "sound": True}), target_user_id)
 
 
 def broadcast_delete(post_id: int):
