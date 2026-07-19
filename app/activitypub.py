@@ -114,7 +114,7 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
         if post and isinstance(post, dict):
             tags = post.get("tag")
             mentioned_user_ids = [tag.get("name") for tag in tags if tag.get("type") == "Mention"]
-        elif post:
+        elif post and isinstance(post, Post):
             mentioned_user_ids = post.mentioned_user_ids
         else:
             raise ValueError(f"Can not detect post or actor object")
