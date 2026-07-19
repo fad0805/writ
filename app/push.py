@@ -130,6 +130,9 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
 
             from pywebpush import webpush, WebPushException
             private_key_pem = vapid_key["privateKey"]
+            if isinstance(private_key_pem, str):
+                # 💡 핵심: 두 번 치환되거나 꼬이지 않도록 공백 정리와 함께 진짜 줄바꿈으로 변경
+                private_key_pem = private_key_pem.strip().replace("\\n", "\n").replace("\\r", "")
             print(f"[PUSH] key type={type(private_key_pem).__name__} len={len(private_key_pem)} repr_first80={repr(private_key_pem[:80])}", flush=True)
 
             for sub in subs:
