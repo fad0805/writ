@@ -91,13 +91,8 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
                 return False
 
     # --- 2. 멘션 체크 (대원칙 1: 나한테 온 멘션은 무조건 통과) ---
-    is_mentioned_to_me = False
-    if post.mentioned_user_ids and user.id in post.mentioned_user_ids:
-        is_mentioned_to_me = True
-    if not is_mentioned_to_me and post.content and getattr(post, 'author', None) and post.author.is_remote:
-        my_username_lower = user.username.split('@')[0].lower()
-        if re.search(rf'@{my_username_lower}(?:@[\w.-]+)?\b', post.content.lower()):
-            is_mentioned_to_me = True
+    # mentioned_user_ids만 사용 (content 정규식은 텍스트 참조까지 잡아서 너무 넓음)
+    is_mentioned_to_me = bool(post.mentioned_user_ids and user.id in post.mentioned_user_ids)
     if is_mentioned_to_me:
         return True
 
