@@ -116,7 +116,7 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
         # [핵심] DB 멘션 데이터에 존재하는 유저인지 소문자 href(ap_id)로 먼저 낚아챕니다.
         mentioned_user_ids = []
         if post and isinstance(post, dict):
-            for tag in post.tag:
+            for tag in post.get("tag"):
                 mentioned_user_ids.append(tag.get("name", ""))
         elif post:
             mentioned_user_ids = post.mentioned_user_ids
