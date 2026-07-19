@@ -1,7 +1,7 @@
 import json
 import re
 
-from sqlalchemy.orm import selectinload, Session
+from sqlalchemy.orm import Session
 
 from app.models import Post, UserMute, UserBlock, SeriesMute, KeywordMute
 
@@ -104,17 +104,26 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
         if post.author_id not in allowed_authors:
             return False
 
-        # 답글 필터: 부모 글 작성자를 확인
+        # --- 3. 답글 필터: 캐시 데이터 기반으로 N+1 없이 칼같이 검사 ---
         if not is_boosted and (post.in_reply_to_id or post.in_reply_to_ap_id):
-            if post.in_reply_to_id:
-                parent = session.query(Post).filter_by(id=post.in_reply_to_id).first()
-                parent_author_id = parent.author_id if parent else None
-                if parent_author_id is None or (parent_author_id not in following_set and parent_author_id != user.id):
-                    return False
-            else:
-                # remote parent not in DB → hide
+            # 대원칙 A: DB에 연동된 로컬/원격 부모 ID가 아예 없는 '쌩 원격 답글'은 즉시 드롭
+            if not post.in_reply_to_id:
                 return False
 
+            # 대원션을 위해 콘텍스트에서 캐시된 부모 작성자 ID 매핑 가져오기
+            cached_parents = filter_ctx.get("parent_authors", {}) if filter_ctx else {}
+            # 캐시에 존재하면 가져오고, 배치 캐시가 누락된 단일 호출 환경이라면 폴백(Fallback)으로 DB 조회
+            if post.in_reply_to_id in cached_parents:
+                parent_author_id = cached_parents[post.in_reply_to_id]
+            else:
+                parent = session.query(Post).filter_by(id=post.in_reply_to_id).first()
+                parent_author_id = parent.author_id if parent else None
+
+            # 대원칙 B: 부모 글의 작성자를 알 수 없거나, (내가 팔로우하는 사람도 아니고 + 나 자신도 아니라면) 드롭
+            if parent_author_id is None:
+                return False
+            if parent_author_id not in following_set and parent_author_id != user.id:
+                return False
     return True
 
 
