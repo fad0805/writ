@@ -167,21 +167,21 @@ def add_notif_stream(user_id: int = 0) -> tuple[int, asyncio.Queue]:
     _notif_counter += 1
     q: asyncio.Queue = asyncio.Queue(maxsize=50)
     _notif_streams[_notif_counter] = {"queue": q, "user_id": user_id}
-    logger.info("add_notif_stream: sid=%s uid=%s total=%s", _notif_counter, user_id, len(_notif_streams))
+    print(f"[SSE] add_notif_stream: sid={_notif_counter} uid={user_id} total={len(_notif_streams)}", flush=True)
     return _notif_counter, q
 
 def remove_notif_stream(sid: int):
-    logger.info("remove_notif_stream: sid=%s remaining=%s", sid, len(_notif_streams) - 1)
+    print(f"[SSE] remove_notif_stream: sid={sid} remaining={len(_notif_streams) - 1}", flush=True)
     _notif_streams.pop(sid, None)
 
 def broadcast_notif(payload: str, target_user_id: int = 0):
-    logger.info("broadcast_notif: payload=%s target=%s streams=%s", payload, target_user_id, len(_notif_streams))
+    print(f"[SSE] broadcast_notif: target={target_user_id} streams={len(_notif_streams)}", flush=True)
     for info in list(_notif_streams.values()):
         if target_user_id == 0 or info.get("user_id") == target_user_id:
             _enqueue(info["queue"], payload)
 
 def broadcast_refresh_notifs(target_user_id: int = 0):
-    logger.info("broadcast_refresh_notifs called target=%s", target_user_id)
+    print(f"[SSE] broadcast_refresh_notifs target={target_user_id}", flush=True)
     broadcast_notif("refresh", target_user_id)
     if target_user_id != 0:
         try:

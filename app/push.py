@@ -116,7 +116,7 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
                     _p = s.query(_Po).get(post_id)
                     if _p and _p.content:
                         _preview = re.sub(r'<[^>]+>', ' ', _p.content).replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
-                _preview = re.sub(r'\s+', ' ', _preview).strip()[:80]
+                        _preview = re.sub(r'\s+', ' ', _preview).strip()[:80]
                         if _preview:
                             body += f"\n{_preview}"
                 except Exception:
