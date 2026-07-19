@@ -508,14 +508,18 @@ const localReactionEmojiMap = useMemo(() => {
             <strong dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.reply_context.author.display_name || post.reply_context.author.username, emojiList, 14)) }} />
             <span>@{post.reply_context.author.username}</span>
             <p dangerouslySetInnerHTML={{ __html: (() => {
-              const text = (post.reply_context.content || "").slice(0, 90);
+              const hasCw = !!(post.reply_context as any).summary;
+              const rawText = hasCw
+                ? (post.reply_context as any).summary
+                : (post.reply_context.content || "");
+              const text = rawText.slice(0, 90);
               let html = text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
               html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
               html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
               html = html.replace(/\n/g, '<br>');
               html = renderCustomEmojis(html, emojiList);
               html = rewriteLinks(html, validMentions);
-              if ((post.reply_context.content || "").length > 90) html += "...";
+              if (rawText.length > 90) html += "...";
               return sanitizePost(html);
             })() }} />
           </Link>
