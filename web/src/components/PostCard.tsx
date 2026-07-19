@@ -31,7 +31,6 @@ function formatRelative(iso: string, now: number = Date.now()): string {
 }
 
 export function rewriteLinks(text: string, validMentions?: Set<string>): string {
-  console.log(text);
   text = text.replace(
     /(?<!<[^>]*)(^|>|\s)#([\p{L}\p{N}_]+)/gu, 
     (_m, before, tag) => {
