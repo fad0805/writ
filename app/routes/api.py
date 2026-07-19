@@ -108,7 +108,7 @@ def _post_json(p, session, user, tl_type=None,
             latest_boost = session.query(Boost).filter_by(post_id=p.id).order_by(desc(Boost.created_at)).first()
             b = None
             if latest_boost:
-                if (datetime.datetime.now(_dt.timezone.utc) - latest_boost.created_at).total_seconds() > 10800:
+                if (datetime.datetime.now(datetime.timezone.utc) - latest_boost.created_at).total_seconds() > 10800:
                     b = session.query(User).get(latest_boost.user_id)
         if b and b.id != p.author_id:
             booster = b
@@ -810,7 +810,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         ).all()}
         # Batch load latest boost per post
         _booster_map = {}
-        _cutoff = datetime.datetime.now(_dt.timezone.utc) - _dt.timedelta(hours=3)
+        _cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3)
         for b in session.query(Boost).filter(
             Boost.post_id.in_(post_ids), Boost.created_at > _cutoff
         ).order_by(Boost.created_at.desc()).all():
@@ -1523,7 +1523,7 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
     if target_type not in ("post", "novel", "episode"):
         raise HTTPException(status_code=400, detail="Invalid target_type")
     if forward_to_remote:
-        _cutoff = datetime.datetime.now(_dt.timezone.utc) - _dt.timedelta(minutes=1)
+        _cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=1)
         with get_session() as _s:
             _recent = _s.query(Report).filter(
                 Report.reporter_id == user.id,
@@ -2845,9 +2845,9 @@ def _generate_poll_end_notifications(user_id: int, session):
         if not expires_at:
             continue
         try:
-            exp = _dt.datetime.fromisoformat(expires_at)
+            exp = datetime.datetime.fromisoformat(expires_at)
             if exp.tzinfo is None:
-                exp = exp.replace(tzinfo=_dt.timezone.utc)
+                exp = exp.replace(tzinfo=datetime.timezone.utc)
             if exp > now:
                 continue
         except (ValueError, TypeError):
