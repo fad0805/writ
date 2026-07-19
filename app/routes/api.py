@@ -7329,8 +7329,40 @@ def api_client_log(request: Request):
 
 @router.get("/push/vapid-public-key")
 def get_vapid_public_key():
-    from app.config import get_vapid_keys
-    _, key = get_vapid_keys()
+    key = None
+    try:
+        from app.models import ServerSetting
+        with get_session() as s:
+            ks = s.query(ServerSetting).filter(ServerSetting.key.in_(["vapid_public_key"])).all()
+            for k in ks:
+                if k.key == "vapid_public_key" and k.value:
+                    key = k.value
+    except Exception:
+        pass
+    if not key:
+        from app.config import get_vapid_keys
+        _, key = get_vapid_keys()
+    if not key:
+        # Auto-generate and persist
+        try:
+            from py_vapid import Vapid
+            from app.models import ServerSetting
+            v = Vapid()
+            v.generate_keys()
+            import base64 as _b64
+            raw_priv = v.private_pem().decode() if isinstance(v.private_pem(), bytes) else v.private_pem()
+            raw_pub = v.public_pem().decode() if isinstance(v.public_pem(), bytes) else v.public_pem()
+            with get_session() as s:
+                for k_val, k_key in [(raw_priv, "vapid_private_key"), (raw_pub, "vapid_public_key")]:
+                    existing = s.query(ServerSetting).filter_by(key=k_key).first()
+                    if existing:
+                        existing.value = k_val
+                    else:
+                        s.add(ServerSetting(key=k_key, value=k_val))
+                s.commit()
+            key = raw_pub
+        except Exception:
+            pass
     if not key:
         raise HTTPException(404, "Web Push not configured")
     # If PEM format, extract raw base64 key
