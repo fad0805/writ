@@ -1018,17 +1018,16 @@ def api_get_post(request: Request, post_id: int):
             traceback.print_exc()
             
     return result
-    return result
 
 
-def _broadcast_federation(user, post, visibility, plain_content = ''):
+def _broadcast_federation(user, post, visibility, plain_content='', actor_uri=''):
     """Deliver Create activity to remote followers (background thread)."""
     try:
         create_activity = {
             "@context": "https://www.w3.org/ns/activitystreams",
             "id": f"{BASE_URL}/activities/create/{post.id}",
             "type": "Create",
-            "actor": user.actor_uri(),
+            "actor": actor_uri if actor_uri else user.actor_uri(),
             "object": post.to_ap_note(plain_content),
         }
         if visibility == "mention":
@@ -1330,7 +1329,8 @@ def api_create_post(
                 _brn(parent.author_id)
 
         # Async federation broadcast (background thread so it doesn't block response)
-        threading.Thread(target=_broadcast_federation, args=(user, post, visibility, content), daemon=True).start()
+        actor_uri = user.actor_uri()
+        threading.Thread(target=_broadcast_federation, args=(user, post, visibility, content, actor_uri), daemon=True).start()
 
         try:
             broadcast("new_post", {"post_id": post.id, "author_id": user.id})
