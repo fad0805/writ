@@ -423,7 +423,6 @@ class Post(Base):
                 "hashtag": "as:hashtag",
                 "sensitive": "as:sensitive",
                 "emoji": "toot:emoji",
-                "emoji": "toot:emoji",
                 "quoteurl": "as:quoteurl",
                 "quote": {"@id": "https://w3id.org/fep/044f#quote", "@type": "@id"},
                 "quoteuri": "http://fedibird.com/ns#quoteuri",
