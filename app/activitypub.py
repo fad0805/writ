@@ -84,16 +84,19 @@ def _html_to_newlines(html: str) -> str:
     return html.strip('\n')
 
 
-def _extract_plain_text(sanitized_content: str) -> str:
+import re
+
+def _extract_plain_text(sanitized_content: str, post=None) -> str:
     if not sanitized_content:
         return ""
 
     from bs4 import BeautifulSoup
-    # -----------------------------------------------------------------
-    # 🔥 BeautifulSoup 등판: 깨진 괄호 지옥을 구원할 구세주
-    # -----------------------------------------------------------------
-    # 내부적으로 완벽한 HTML 트리 구조로 파싱합니다.
-    soup = BeautifulSoup(sanitized_content, "html.parser")
+
+    # 💡 Post 객체에서 tag_list 추출 (없거나 비어있으면 빈 리스트)
+    tags = []
+    if post and hasattr(post, "tag_list") and post.tag_list:
+        # 혹시 모를 ORM 객체나 커스텀 이터러블에 대응하기 위해 리스트 컴프리헨션으로 안전하게 파싱
+        tags = [str(t) for t in post.tag_list if t]
 
     # 1. 생짜 URL을 a 태그로 변환 (기존 유지)
     url_pattern = r'(?<!href=")(?<!src=")(?<!">)(https?://(?!.*/tags/)[^\s<>"\')\]#]+)'
@@ -105,10 +108,12 @@ def _extract_plain_text(sanitized_content: str) -> str:
         return f'<a href="{url}" target="_blank" rel="noopener noreferrer">{display}</a>'
     sanitized_content = re.sub(url_pattern, _repl_raw_url, sanitized_content)
 
+    # BeautifulSoup 파싱
+    soup = BeautifulSoup(sanitized_content, "html.parser")
+
     # 2. 이미 존재하는 모든 <a> 태그를 찾아서 안전하게 리모델링
     for a_tag in soup.find_all("a"):
-        # 태그 내부 텍스트(예: "@siarte@writ.daydream.ink")만 쏙 추출
-        text = a_tag.get_text()
+        text = a_tag.get_text().strip()
         # 2-1. 텍스트가 원격 핸들 패턴인 경우
         remote_match = re.match(r'^@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})$', text)
         if remote_match:
@@ -116,7 +121,7 @@ def _extract_plain_text(sanitized_content: str) -> str:
             a_tag.string = f"@{username}@{domain}"
             a_tag["href"] = f"/@{username}"
             a_tag["class"] = "mention"
-            if "target" in a_tag.attrs: del a_tag["attrs"]["target"]
+            if "target" in a_tag.attrs: del a_tag["target"]
             continue
         # 2-2. 텍스트가 로컬 핸들 패턴인 경우
         local_match = re.match(r'^@([A-Za-z0-9_.-]+)$', text)
@@ -125,23 +130,35 @@ def _extract_plain_text(sanitized_content: str) -> str:
             a_tag.string = f"@{username}"
             a_tag["href"] = f"/@{username}"
             a_tag["class"] = "mention"
+            if "target" in a_tag.attrs: del a_tag["target"]
             continue
-        # 2-3. 텍스트가 URL인 경우: http(s):// 제거 + 길이 제한
+
+        # 2-4. 텍스트가 해시태그 패턴이고, Post.tag_list에 존재하는 태그일 때만 처리
+        hashtag_match = re.match(r'^#([^\s#@]+)(?:@([A-Za-z0-9_.-]+\.[A-Za-z]{2,}))?$', text)
+        if hashtag_match:
+            tag_name = hashtag_match.group(1)
+            # 대소문자 구분 없이 비교
+            if tag_name.lower() in [t.lower() for t in tags]:
+                a_tag.string = f"#{tag_name}"
+                a_tag["href"] = f"/tags/{tag_name}"
+                a_tag["class"] = "hashtag"
+                if "target" in a_tag.attrs: del a_tag["target"]
+                continue
+        # 2-3. 텍스트가 일반 URL인 경우: http(s):// 제거 + 길이 제한
         if text and re.match(r'^https?://', text):
             display = re.sub(r'^https?://', '', text)
             if len(display) > 40:
                 display = display[:37] + "..."
             a_tag.string = display
 
-    # 3. <a> 태그 밖에 쌩으로 굴러다니는 핸들 텍스트 처리 (텍스트 노드만 탐색)
-    # (이미 <a> 태그 내부에 있던 글자들은 위에서 걸러졌으므로 밖의 글자만 안전하게 치환됩니다)
+    # 3. <a> 태그 밖에 쌩으로 굴러다니는 핸들 & 해시태그 텍스트 처리
     for text_node in soup.find_all(string=True):
         if text_node.parent.name == "a":
             continue  # 이미 <a> 태그 안에 있는 텍스트는 패스!
         # 쌩 원격 핸들 치환
         new_text = re.sub(
             r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})',
-            r'<a href="/@\1" class="mention">@\1@\2</a>', # 요구사항에 맞춰 /@username 혹은 외부 링크로 조정
+            r'<a href="/@\1" class="mention">@\1@\2</a>',
             text_node
         )
         # 쌩 로컬 핸들 치환
@@ -150,6 +167,16 @@ def _extract_plain_text(sanitized_content: str) -> str:
             r'<a href="/@\1" class="mention">@\1</a>',
             new_text
         )
+        # Post.tag_list 기반으로 쌩 텍스트 내 해시태그 치환 수행
+        if tags:
+            # 특수문자 이스케이프 및 매칭 꼬임 방지를 위해 글자 수가 긴 태그 순으로 정렬
+            escaped_tags = [re.escape(t) for t in sorted(tags, key=len, reverse=True)]
+            tags_pattern = r'(?<![A-Za-z0-9_.\-#])#(' + '|'.join(escaped_tags) + r')(?![A-Za-z0-9_.-])'
+            new_text = re.sub(
+                tags_pattern,
+                r'<a href="/tags/\1" class="hashtag">#\1</a>',
+                new_text
+            )
         # 바뀐 텍스트가 HTML 태그를 포함하므로, 문자열 노드를 실제 HTML 오브젝트로 변환하여 교체
         if new_text != text_node:
             new_soup = BeautifulSoup(new_text, "html.parser")
@@ -168,9 +195,13 @@ def _extract_plain_text(sanitized_content: str) -> str:
         if isinstance(node, NavigableString):
             return str(node)
         if node.name == "a":
-            attrs = " ".join(f'{k}="{v}"' for k, v in node.attrs.items())
+            attrs_list = []
+            for k, v in node.attrs.items():
+                val = " ".join(v) if isinstance(v, list) else v
+                attrs_list.append(f'{k}="{val}"')
+            attrs = " ".join(attrs_list)
             inner = "".join(_to_html(c) for c in node.children)
-            return f"<a {attrs}>{inner}</a>"
+            return f"<a {attrs}>{inner}</a>" if attrs else f"<a>{inner}</a>"
         return "".join(_to_html(c) for c in node.children)
 
     return _to_html(soup).strip()
@@ -1276,7 +1307,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     raw_content = obj.get("content", "") or ""
     if len(raw_content) > 65536:
         raw_content = raw_content[:65536]
-    content = _html_to_newlines(_extract_plain_text(_sanitize_html(raw_content)))
+    content = _html_to_newlines(_extract_plain_text(_sanitize_html(raw_content)), post=obj)
     summary = obj.get("summary", "")
 
     to = obj.get("to", [])
@@ -1485,7 +1516,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if len(raw_content) > 65536:
             raw_content = raw_content[:65536]
         post_id = obj.get("id", "")
-        content = _html_to_newlines(_extract_plain_text(_sanitize_html(raw_content)))
+        content = _html_to_newlines(_extract_plain_text(_sanitize_html(raw_content)), post=obj)
         summary = obj.get("summary", "")
         in_reply_to = obj.get("inReplyTo", "")
 
@@ -1725,7 +1756,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             if _c.id in _seen_ids:
                                 continue
                             if _c.remote_url:
-                                _p = _urlparse(_c.remote_url)
+                                _p = urlparse(_c.remote_url)
                                 if _p.hostname and _p.hostname.lower() == _dom.lower():
                                     mentioned_ids.append(_c.id)
                                     _seen_ids.add(_c.id)
@@ -2659,7 +2690,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     # Update content/summary
                     new_content = object_data.get("content", "")
                     if new_content:
-                        post.content = _html_to_newlines(_extract_plain_text(_sanitize_html(new_content)))
+                        post.content = _html_to_newlines(_extract_plain_text(_sanitize_html(new_content)), post=post)
                     if "summary" in object_data:
                         post.summary = object_data.get("summary", "")
                     # Update poll data
