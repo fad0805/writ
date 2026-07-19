@@ -1021,7 +1021,7 @@ def api_get_post(request: Request, post_id: int):
     return result
 
 
-def _broadcast_federation(user, post, visibility):
+def _broadcast_federation(user, post, visibility, plain_content = ''):
     """Deliver Create activity to remote followers (background thread)."""
     try:
         create_activity = {
@@ -1029,7 +1029,7 @@ def _broadcast_federation(user, post, visibility):
             "id": f"{BASE_URL}/activities/create/{post.id}",
             "type": "Create",
             "actor": user.actor_uri(),
-            "object": post.to_ap_note(),
+            "object": post.to_ap_note(plain_content),
         }
         if visibility == "mention":
             with get_session() as ap_s:
@@ -1226,9 +1226,9 @@ def api_create_post(
     content = content.strip('\n\r ')
 
     # 🌟 [추가] DB 저장 전에 로컬 쌩 텍스트 규칙으로 멘션/태그/URL을 HTML <a> 태그로 파싱!
-    content = _extract_plain_text(content, post=None)
+    content_html = _extract_plain_text(content, post=None)
 
-    if not content.strip() and not poll_options:
+    if not content_html.strip() and not poll_options:
         raise HTTPException(status_code=400, detail="Content cannot be empty")
     total_len = len(content) + len(summary)
     if total_len > MAX_POST_LENGTH:
@@ -1257,7 +1257,7 @@ def api_create_post(
         author_is_sensitive = getattr(user, 'is_sensitive', False) or False
         post = Post(
             author_id=user.id,
-            content=content,
+            content=content_html,
             summary=summary,
             visibility=visibility,
             in_reply_to_id=parent_id,
@@ -1330,7 +1330,7 @@ def api_create_post(
                 _brn(parent.author_id)
 
         # Async federation broadcast (background thread so it doesn't block response)
-        threading.Thread(target=_broadcast_federation, args=(user, post, visibility), daemon=True).start()
+        threading.Thread(target=_broadcast_federation, args=(user, post, visibility, content), daemon=True).start()
 
         try:
             broadcast("new_post", {"post_id": post.id, "author_id": user.id})

@@ -278,49 +278,51 @@ class Post(Base):
         except Exception:
             return 0
 
-    def to_ap_note(self):
+    def to_ap_note(self, plain_content = ''):
         from urllib.parse import urlparse
         content = self.content
+        if plain_content:
+            content = plain_content
 
-        # Extract code blocks with placeholders to protect from later transformations
+        # extract code blocks with placeholders to protect from later transformations
         code_blocks = []
         def _save_code_block(m):
             code_blocks.append(f'<pre><code>{m.group(2).rstrip()}</code></pre>')
-            return f'\x00CODEBLOCK_{len(code_blocks) - 1}\x00'
-        content = re.sub(r'```(\w*)\r?\n([\s\S]*?)```', _save_code_block, content)
+            return f'\x00codeblock_{len(code_blocks) - 1}\x00'
+        content = re.sub(r'```(\w*)\r?\n([\s\s]*?)```', _save_code_block, content)
         content = re.sub(r'```([^`\n]+?)```', lambda m: f'<pre><code>{m.group(1)}</code></pre>', content)
 
-        # Inline code (single backtick) — after code blocks so ``` aren't caught
+        # inline code (single backtick) — after code blocks so ``` aren't caught
         content = re.sub(r'`([^`\n]+?)`', r'<code>\1</code>', content)
 
         content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', content)
         content = re.sub(r'\*(.+?)\*', r'<em>\1</em>', content)
         content = content.replace('\n', '<br>')
 
-        # Restore code blocks
+        # restore code blocks
         for i, block in enumerate(code_blocks):
-            content = content.replace(f'\x00CODEBLOCK_{i}\x00', block)
+            content = content.replace(f'\x00codeblock_{i}\x00', block)
 
-        # Collect :emoji: shortcodes for tag array (content stays as :shortcode:)
+        # collect :emoji: shortcodes for tag array (content stays as :shortcode:)
         _emoji_pattern = re.compile(r':([a-z0-9_]{2,}):')
         _emoji_keywords = set(_emoji_pattern.findall(content))
         _emoji_map = {}
         if _emoji_keywords:
             def _get_emoji_url(file_name: str, domain: str = "", category: str = "") -> str:
                 sub = "remote" if domain or category == "remote" else "local"
-                from app.config import S3_ENABLED
-                if S3_ENABLED:
+                from app.config import s3_enabled
+                if s3_enabled:
                     from app.utils.storage import get_storage
                     try:
                         storage = get_storage()
                         return storage.url(f"emojis/{sub}/{file_name}")
-                    except Exception:
+                    except exception:
                         pass
-                return f"{BASE_URL}/emojis/{sub}/{file_name}"
+                return f"{base_url}/emojis/{sub}/{file_name}"
 
             with get_session() as _es:
                 for kw in _emoji_keywords:
-                    emoji = _es.query(CustomEmoji).filter_by(keyword=kw).first()
+                    emoji = _es.query(customemoji).filter_by(keyword=kw).first()
                     if emoji:
                         _emoji_map[kw] = (_get_emoji_url(emoji.file_name, emoji.domain or "", emoji.category or ""), emoji.keyword)
 
@@ -328,31 +330,31 @@ class Post(Base):
         if _emoji_map:
             for keyword, (url, _) in _emoji_map.items():
                 tags.append({
-                    "type": "Emoji",
-                    "id": f"{BASE_URL}/emojis/{keyword}",
+                    "type": "emoji",
+                    "id": f"{base_url}/emojis/{keyword}",
                     "name": f":{keyword}:",
                     "icon": {
-                        "type": "Image",
-                        "mediaType": "image/webp",
+                        "type": "image",
+                        "mediatype": "image/webp",
                         "url": url,
                     },
                 })
         if self.mentioned_user_ids:
-            from app.config import DOMAIN
+            from app.config import domain
             from urllib.parse import urlparse as _urlparse
             with get_session() as s:
-                users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
+                users = s.query(user).filter(user.id.in_(self.mentioned_user_ids)).all()
                 for u in users:
-                    web_href = getattr(u, 'profile_url', '') or f"{BASE_URL}/@{u.username}"
-                    # Actor URI (for Mention tag)
+                    web_href = getattr(u, 'profile_url', '') or f"{base_url}/@{u.username}"
+                    # actor uri (for mention tag)
                     actor_href = u.actor_uri()
-                    # Display name: just username (Mastodon expects @<span>username</span>)
+                    # display name: just username (mastodon expects @<span>username</span>)
                     short_username = u.username.split("@")[0] if u.is_remote else u.username
                     # tag name must be @user@domain for remote, @user for local
                     if u.is_remote:
                         tag_name = f"@{u.username}"  # username already has @domain
                     else:
-                        tag_name = f"@{u.username}@{DOMAIN}"
+                        tag_name = f"@{u.username}@{domain}"
                     mention_html = (
                         f'<span class="h-card" translate="no">'
                         f'<a href="{web_href}" class="u-url mention" rel="mention">'
@@ -361,24 +363,24 @@ class Post(Base):
                     )
                     short_name = f"@{u.username}"
                     content = re.sub(
-                        r'(?<!/)' + re.escape(short_name) + r'(?:@[a-zA-Z0-9.-]+)?(?![^\s<]*(?:</a>|">))',
+                        r'(?<!/)' + re.escape(short_name) + r'(?:@[a-za-z0-9.-]+)?(?![^\s<]*(?:</a>|">))',
                         mention_html,
                         content,
                     )
-                    tags.append({"type": "Mention", "href": actor_href, "name": tag_name})
+                    tags.append({"type": "mention", "href": actor_href, "name": tag_name})
 
-        # Wrap remaining @user@domain patterns as mentions + tag array entries
+        # wrap remaining @user@domain patterns as mentions + tag array entries
         def _actor_uri_for_handle(handle: str) -> str:
             if "@" in handle:
                 name, domain = handle.split("@", 1)
-                domain_uri = f"https://{domain}" if domain != urlparse(BASE_URL).hostname else BASE_URL
+                domain_uri = f"https://{domain}" if domain != urlparse(base_url).hostname else base_url
                 return f"{domain_uri}/users/{name}"
-            return f"{BASE_URL}/users/{handle}"
+            return f"{base_url}/users/{handle}"
         def _wrap_unknown_mention(m):
             handle = m.group(1)
             actor_uri = _actor_uri_for_handle(handle)
-            web_uri = f"{BASE_URL}/@{handle}"
-            tags.append({"type": "Mention", "href": actor_uri, "name": f"@{handle}"})
+            web_uri = f"{base_url}/@{handle}"
+            tags.append({"type": "mention", "href": actor_uri, "name": f"@{handle}"})
             return (
                 f'<span class="h-card" translate="no">'
                 f'<a href="{web_uri}" class="u-url mention" rel="mention">'
@@ -386,7 +388,7 @@ class Post(Base):
                 f'</a></span>'
             )
         content = re.sub(
-            r'(?<!/)(?:^|(?<=\s))@([a-zA-Z0-9_]+(?:@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*)?)(?=\s|$|<|\.|[,:;!?)\'"])',
+            r'(?<!/)(?:^|(?<=\s))@([a-za-z0-9_]+(?:@[a-za-z0-9-]+(?:\.[a-za-z0-9-]+)*)?)(?=\s|$|<|\.|[,:;!?)\'"])',
             _wrap_unknown_mention,
             content,
         )
@@ -400,47 +402,47 @@ class Post(Base):
         from urllib.parse import quote as _urlencode
         content = re.sub(
             r'(^|(?<=\s)|(?<=>))#([^\s<]+)',
-            lambda m: f'{m.group(1)}<a href="{BASE_URL}/explore?tag={_urlencode(m.group(2))}" class="mention hashtag" rel="tag">#{m.group(2)}</a>',
+            lambda m: f'{m.group(1)}<a href="{base_url}/explore?tag={_urlencode(m.group(2))}" class="mention hashtag" rel="tag">#{m.group(2)}</a>',
             content,
         )
 
         if self.tag_list:
             for t in self.tag_list:
-                tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={_urlencode(t.name)}", "name": f"#{t.name}"})
+                tags.append({"type": "hashtag", "href": f"{base_url}/explore?tag={_urlencode(t.name)}", "name": f"#{t.name}"})
 
-        content = re.sub(r'href="/', f'href="{BASE_URL}/', content)
+        content = re.sub(r'href="/', f'href="{base_url}/', content)
 
         _ap_context = [
             "https://www.w3.org/ns/activitystreams",
             "https://w3id.org/security/v1",
             {
-                "manuallyApprovesFollowers": "as:manuallyApprovesFollowers",
+                "manuallyapprovesfollowers": "as:manuallyapprovesfollowers",
                 "toot": "http://joinmastodon.org/ns#",
                 "misskey": "https://misskey-hub.net/ns#",
-                "Hashtag": "as:Hashtag",
+                "hashtag": "as:hashtag",
                 "sensitive": "as:sensitive",
-                "Emoji": "toot:Emoji",
                 "emoji": "toot:emoji",
-                "quoteUrl": "as:quoteUrl",
+                "emoji": "toot:emoji",
+                "quoteurl": "as:quoteurl",
                 "quote": {"@id": "https://w3id.org/fep/044f#quote", "@type": "@id"},
-                "quoteUri": "http://fedibird.com/ns#quoteUri",
+                "quoteuri": "http://fedibird.com/ns#quoteuri",
             },
         ]
-        obj_id = f"{BASE_URL}/@{self.author.username}/{self.number}" if self.number else self.ap_id
+        obj_id = f"{base_url}/@{self.author.username}/{self.number}" if self.number else self.ap_id
         obj = {
             "@context": _ap_context,
             "id": obj_id,
             "url": obj_id,
-            "type": "Note",
+            "type": "note",
             "published": self.created_at.isoformat() if self.created_at else "",
-            "attributedTo": self.author.actor_uri(),
+            "attributedto": self.author.actor_uri(),
             "content": content,
             "to": [],
             "cc": [],
             "tag": tags,
         }
         followers_uri = self.author.followers_uri()
-        public_uri = "https://www.w3.org/ns/activitystreams#Public"
+        public_uri = "https://www.w3.org/ns/activitystreams#public"
         if self.visibility == "public":
             obj["to"] = [followers_uri, public_uri]
         elif self.visibility == "home":
@@ -452,7 +454,7 @@ class Post(Base):
             obj["to"] = []
         if self.mentioned_user_ids:
             with get_session() as _ms:
-                _musers = _ms.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
+                _musers = _ms.query(user).filter(user.id.in_(self.mentioned_user_ids)).all()
                 for _mu in _musers:
                     _mu_uri = _mu.actor_uri()
                     if _mu_uri not in obj["to"] and _mu_uri not in obj["cc"]:
@@ -460,12 +462,12 @@ class Post(Base):
                             obj["to"].append(_mu_uri)
                         else:
                             obj["cc"].append(_mu_uri)
-        is_sensitive = self.is_sensitive or getattr(self.author, 'is_sensitive', False) or False
+        is_sensitive = self.is_sensitive or getattr(self.author, 'is_sensitive', false) or false
         if self.summary:
             obj["summary"] = self.summary
-            obj["sensitive"] = True
+            obj["sensitive"] = true
         elif is_sensitive:
-            obj["sensitive"] = True
+            obj["sensitive"] = true
         if self.media_attachments:
             from urllib.parse import urlparse
             attachments = []
