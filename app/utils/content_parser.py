@@ -29,7 +29,7 @@ def _sanitize_html(html: str) -> str:
     )
     return clean_html
 
-def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
+def _extract_plain_text(sanitized_content: str, post: dict | Post | None) -> str:
     if not sanitized_content:
         return ""
 

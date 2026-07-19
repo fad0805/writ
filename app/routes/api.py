@@ -18,6 +18,7 @@ from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.log_utils import log_admin_action
 from app.activitypub import _fetch_remote_post
 from app.utils.filter import _timeline_filter
+from app.utils.content_parser import _extract_plain_text
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
 
@@ -1226,6 +1227,10 @@ def api_create_post(
             content = content + "\n\nseries: " + share_url
     content = content.replace('\r\n', '\n').replace('\r', '\n')
     content = content.strip('\n\r ')
+
+    # 🌟 [추가] DB 저장 전에 로컬 쌩 텍스트 규칙으로 멘션/태그/URL을 HTML <a> 태그로 파싱!
+    content = _extract_plain_text(content, post=None)
+
     if not content.strip() and not poll_options:
         raise HTTPException(status_code=400, detail="Content cannot be empty")
     total_len = len(content) + len(summary)
@@ -1353,7 +1358,8 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
             raise HTTPException(status_code=403, detail="Cannot edit this post")
         if post.summary and post.summary.startswith("[관리자 강제] ") and not summary.startswith("[관리자 강제] "):
             raise HTTPException(status_code=403, detail="관리자가 강제한 CW는 수정할 수 없습니다")
-        post.content = content.replace('\r\n', '\n').replace('\r', '\n')
+        new_content = content.replace('\r\n', '\n').replace('\r', '\n')
+        post.content = _extract_plain_text(new_content, post=None)
         post.summary = summary
         s.commit()
 
