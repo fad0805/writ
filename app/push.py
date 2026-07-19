@@ -138,12 +138,22 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
             })
 
             from pywebpush import webpush, WebPushException
-            private_key_pem = vapid_key["privateKey"]
-            if isinstance(private_key_pem, str):
-                # 💡 핵심: 두 번 치환되거나 꼬이지 않도록 공백 정리와 함께 진짜 줄바꿈으로 변경
-                private_key_pem = private_key_pem.strip().replace("\\n", "\n").replace("\\r", "")
+            from py_vapid import Vapid as _Vapid
+            from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
-            print(f"[PUSH] key type={type(private_key_pem).__name__} len={len(private_key_pem)} repr_first80={repr(private_key_pem[:80])}", flush=True)
+            raw_pem = vapid_key["privateKey"]
+            if isinstance(raw_pem, str):
+                raw_pem = raw_pem.strip().replace("\\n", "\n").replace("\\r", "")
+
+            try:
+                _priv_key_obj = load_pem_private_key(raw_pem.encode("utf-8"), password=None)
+                _vapid_obj = _Vapid()
+                _vapid_obj.private_key = _priv_key_obj
+            except Exception as _kerr:
+                print(f"[PUSH] Failed to load VAPID key object: {_kerr}", flush=True)
+                return
+
+            print(f"[PUSH] VAPID key loaded OK type={type(_vapid_obj.private_key).__name__}", flush=True)
 
             for sub in subs:
                 try:
@@ -154,14 +164,12 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
                             "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
                         },
                         data=payload,
-                        vapid_private_key=private_key_pem,
+                        vapid_private_key=_vapid_obj,
                         vapid_claims={"sub": f"mailto:{VAPID_CLAIM_EMAIL}"},
                     )
                     print(f"[PUSH] OK sub {sub.id}", flush=True)
-                    print(f"[PUSH] OK sub {sub.id}", flush=True)
                 except (ValueError, TypeError) as _ke:
                     print(f"[PUSH] key error sub {sub.id}: {_ke}", flush=True)
-                    print(f"[PUSH] key error sub {sub.id}: {_ke} (key may have changed after restart)", flush=True)
                 except WebPushException as ex:
                     status_code = getattr(ex, "response", None)
                     if status_code is not None and hasattr(status_code, "status_code"):
