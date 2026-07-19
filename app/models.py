@@ -431,37 +431,50 @@ class Post(Base):
         obj_id = f"{BASE_URL}/@{self.author.username}/{self.number}" if self.number else self.ap_id
         obj = {
             "@context": _ap_context,
-            "id": obj_id,
-            "url": obj_id,
+            "id": f"{BASE_URL}/posts/{self.id}-{self.created_at.timestamp()}", # 유니크 ID 보장
+            "url": f"{BASE_URL}/posts/{self.id}",
             "type": "note",
             "published": self.created_at.isoformat() if self.created_at else "",
-            "attributedTo": self.author.actor_uri(),
+            "attributedTo": self.author.actor_uri().strip(),
             "content": content,
             "to": [],
             "cc": [],
             "tag": tags,
         }
-        followers_uri = self.author.followers_uri()
         public_uri = "https://www.w3.org/ns/activitystreams#public"
+        followers_uri = self.author.followers_uri()
+
+        # obj 딕셔너리 생성부 마지막에 추가
+        # 1. id 보장
+        obj["id"] = f"{BASE_URL}/posts/{self.id}" # 가장 단순하고 안전한 URL 구조
+        obj["url"] = f"{BASE_URL}/posts/{self.id}"
+        # 3. 작성자 URI 확인 (혹시 모를 공백 제거)
+        obj["attributedTo"] = self.author.actor_uri().strip()
+
+        # 멘션 대상자들 URI 미리 구하기
+        mentioned_uris = []
+        if self.mentioned_user_ids:
+            with get_session() as s:
+                users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
+                mentioned_uris = [u.actor_uri() for u in users]
+
+        # 2. 공개 글 권한 강제 보정 (가장 중요)
         if self.visibility == "public":
-            obj["to"] = [followers_uri, public_uri]
+            # 마스토돈이 가장 좋아하는 조합
+            obj["to"] = [public_uri]
+            obj["cc"] = [followers_uri]
         elif self.visibility == "home":
             obj["to"] = [followers_uri]
             obj["cc"] = [public_uri]
         elif self.visibility == "followers":
             obj["to"] = [followers_uri]
+            obj["cc"] = []
         elif self.visibility == "mention":
-            obj["to"] = []
-        if self.mentioned_user_ids:
-            with get_session() as _ms:
-                _musers = _ms.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
-                for _mu in _musers:
-                    _mu_uri = _mu.actor_uri()
-                    if _mu_uri not in obj["to"] and _mu_uri not in obj["cc"]:
-                        if self.is_dm:
-                            obj["to"].append(_mu_uri)
-                        else:
-                            obj["cc"].append(_mu_uri)
+            obj["to"] = mentioned_uris
+            obj["cc"] = []
+        # 추가로 본인도 to나 cc에 있어야 마스토돈이 잘 처리함 (선택사항)
+        if self.author.actor_uri() not in obj["to"]:
+            obj["cc"].append(self.author.actor_uri())
         is_sensitive = self.is_sensitive or getattr(self.author, 'is_sensitive', False) or False
         if self.summary:
             obj["summary"] = self.summary
@@ -523,7 +536,6 @@ class Post(Base):
         return obj
 
     def to_ap_create(self):
-        print(f'========== self.id {self.id}')
         note = self.to_ap_note()
         # 안전장치: to/cc가 비어있으면 안 됨
         to = note.get("to", [])
