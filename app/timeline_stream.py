@@ -67,6 +67,20 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
             if parent_author:
                 parent_author_id = parent_author.get("id")
 
+        # If not in JSON, look up from DB
+        _pid = post_json.get("id")
+        _is_reply = bool(post_json.get("in_reply_to_id") or post_json.get("in_reply_to_ap_id") or reply_ctx)
+        if not _is_reply and _pid:
+            try:
+                _db_post = s.query(Post).filter_by(id=_pid).first()
+                if _db_post and _db_post.in_reply_to_id:
+                    _is_reply = True
+                    _parent = s.query(Post).filter_by(id=_db_post.in_reply_to_id).first()
+                    if _parent:
+                        parent_author_id = _parent.author_id
+            except Exception:
+                pass
+
         with get_session() as s:
             post_id_for_boost = post_json.get("id")
             follower_ids = {f.follower_id for f in s.query(Follow).filter_by(
@@ -132,7 +146,7 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                     # [2] 답글(Reply) 필터링 (부모 글 작성자 미팔로우 방어)
                     if post_json.get("boosted_by"):
                         pass
-                    elif bool(post_json.get("in_reply_to_id") or post_json.get("in_reply_to_ap_id") or reply_ctx):
+                    elif _is_reply:
                         if parent_author_id is None:
                             print(f"Stream filter: dropped reply {post_json.get('id')} (parent author unverified)", flush=True)
                             continue
