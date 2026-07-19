@@ -460,6 +460,14 @@ class Post(Base):
 
         # 2. 공개 글 권한 강제 보정 (가장 중요)
         if self.visibility == "public":
+            # 1. 'to'에 public을 넣어야 마스토돈이 "이건 공개구나!"라고 처리함
+            obj["to"] = [public_uri]
+            obj["cc"] = [followers_uri]
+        elif self.visibility == "unlisted":
+            # 2. 'to'에 팔로워를 넣고 'cc'에 public을 넣어야 타임라인에 안 뜨는 공개 글이 됨
+            obj["to"] = [followers_uri]
+            obj["cc"] = [public_uri]
+        if self.visibility == "public":
             # 마스토돈이 가장 좋아하는 조합
             obj["to"] = [public_uri]
             obj["cc"] = [followers_uri]
@@ -533,6 +541,7 @@ class Post(Base):
                         obj["closed"] = expires_at
                 except Exception:
                     pass
+        print(obj)
         return obj
 
     def to_ap_create(self):
