@@ -672,17 +672,16 @@ def _cleanup_remote_data():
 
 def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url: str = "") -> str:
     """Download remote image. Keep GIF/PNG as-is, convert others (like JPG) to WebP."""
-    import uuid
-    from urllib.parse import urlparse
     from PIL import Image as PILImage
     from app.utils.storage import get_storage
 
     if not _validate_url(image_url):
         return ""
 
-    # URL 쿼리 스트링 제거 후 순수 확장자 추출
-    pure_path = urlparse(image_url).path
-    ext = pure_path.rsplit(".", 1)[-1].lower() if "." in pure_path else "jpg"
+    # 💡 [개선] 쿼리 스트링(?...)과 해시(#...)를 확실하게 날리고 순수 파일명에서 확장자 추출
+    pure_path = urlparse(image_url).path.split('?')[0].split('#')[0]
+    ext = pure_path.rsplit(".", 1)[-1].lower() if "." in pure_path else "webp"
+
     try:
         r = _validated_get(image_url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=15)
         if r.status_code != 200 or len(r.content) > 10 * 1024 * 1024:
@@ -690,38 +689,58 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
 
         data = r.content
         storage = get_storage()
+        content_type_header = r.headers.get("Content-Type", "").lower()
+        new_url = None
 
-        # 💡 [결단] GIF와 PNG는 구분하지 않고 '둘 다' 원본 바이너리 그대로 저장합니다.
-        if ext in ("gif", "png"):
-            filename = f"{uuid.uuid4().hex}.{ext}"
+        # 1차 필터: 대놓고 확장자나 헤더가 GIF/PNG인 경우 안전하게 원본 보존
+        if ext in ("gif", "png") or "gif" in content_type_header or "png" in content_type_header:
+            final_ext = "gif" if ("gif" in ext or "gif" in content_type_header) else "png"
+            filename = f"{uuid.uuid4().hex}.{final_ext}"
             key = f"{prefix}/remote/{filename}"
-            # Content-Type만 확장자에 맞게 매칭
-            content_type = "image/gif" if ext == "gif" else "image/png"
-            new_url = storage.save(key, data, content_type)
+            new_url = storage.save(key, data, f"image/{final_ext}")
         else:
-            # JPG, JPEG 등 일반 정지 이미지만 WebP로 변환하여 용량 최적화
-            img = PILImage.open(io.BytesIO(data))
-            if img.mode in ("RGBA", "P"):
-                bg = PILImage.new("RGB", img.size, (255, 255, 255))
-                bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
-                img = bg
-            out = io.BytesIO()
-            img.save(out, format="WEBP", quality=85)
-            filename = f"{uuid.uuid4().hex}.webp"
-            key = f"{prefix}/remote/{filename}"
-            new_url = storage.save(key, out.getvalue(), "image/webp")
+            # 2차 필터: 외관은 JPG 같지만 실제 파일 내부를 검사
+            try:
+                img = PILImage.open(io.BytesIO(data))
+                is_animated = getattr(img, "is_animated", False)
+                real_format = (img.format or "").lower()
+                if is_animated or real_format in ("gif", "png"):
+                    final_ext = real_format if real_format in ("gif", "png", "webp") else "webp"
+                    filename = f"{uuid.uuid4().hex}.{final_ext}"
+                    key = f"{prefix}/remote/{filename}"
+                    new_url = storage.save(key, data, f"image/{final_ext}")
+                else:
+                    # 3차 필터: 진짜 순수 정지 이미지(JPEG 등)인 경우에만 WebP 압축 최적화 진행
+                    if img.mode in ("RGBA", "P"):
+                        bg = PILImage.new("RGB", img.size, (255, 255, 255))
+                        bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
+                        img = bg
+                    out = io.BytesIO()
+                    img.save(out, format="WEBP", quality=85)
+                    filename = f"{uuid.uuid4().hex}.webp"
+                    key = f"{prefix}/remote/{filename}"
+                    new_url = storage.save(key, out.getvalue(), "image/webp")
 
-        if old_url:
+            except Exception as img_err:
+                # 이미지 파싱 자체가 안 되거나 Pillow가 지원하지 않는 특이 포맷은 안전하게 원본 바이너리 저장
+                logger.warning("Pillow could not process image %s, saving raw data. Error: %s", image_url, img_err)
+                filename = f"{uuid.uuid4().hex}.{ext}"
+                key = f"{prefix}/remote/{filename}"
+                new_url = storage.save(key, data, content_type_header or f"image/{ext}")
+
+        # 모든 필터를 거쳐 새로운 저장이 안전하게 끝났다면 구 버전 미디어 삭제
+        if new_url and old_url:
             try:
                 storage.delete(old_url)
             except Exception:
                 pass
 
-        return new_url
+        return new_url if new_url else image_url
 
     except Exception as e:
         logger.error("Failed to save remote %s %s. Error: %s", prefix, image_url, e, exc_info=True)
     return image_url
+
 
 def _save_remote_avatar(avatar_url: str, local_username: str, old_url: str = "") -> str:
     return _save_remote_image(avatar_url, "avatars", local_username, old_url)
@@ -755,7 +774,6 @@ def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> 
         if sign_as:
             from app.crypto_utils import sign_string, get_private_key
             from app.config import SECRET_KEY
-            from urllib.parse import urlparse
             parsed = urlparse(collection_url)
             date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
             created = int(time.time())
@@ -1171,8 +1189,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         url = f"{base}/users/{username}/statuses/{status_id}{query}"
         print(f"[FETCH-POST] Mastodon URL converted to: {url}", flush=True)
 
-    from urllib.parse import urlparse as _urlparse
-    parsed = _urlparse(url)
+    parsed = urlparse(url)
     headers = {"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}
 
     if not signer:
@@ -1419,8 +1436,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
                 _og_desc = _og("description")
                 _og_img = _og("image")
                 if _og_img and _og_img.startswith("/"):
-                    from urllib.parse import urlparse as _up
-                    _p = _up(_url)
+                    _p = urlparse(_url)
                     _og_img = f"{_p.scheme}://{_p.netloc}{_og_img}"
                 if _og_title:
                     post.link_preview = {"url": _url, "title": _og_title[:200], "description": _og_desc[:400] if _og_desc else "", "image": _og_img or ""}
@@ -1691,12 +1707,11 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 for _name in mentioned_names:
                     if '@' in _name:
                         _lp, _dom = _name.split('@', 1)
-                        from urllib.parse import urlparse as _urlparse
                         u = session.query(User).filter(
                             User.username == _lp, User.is_remote == True,
                         ).first()
                         if u and u.id not in _seen_ids and u.remote_url:
-                            _p = _urlparse(u.remote_url)
+                            _p = urlparse(u.remote_url)
                             if _p.hostname and _p.hostname.lower() == _dom.lower():
                                 mentioned_ids.append(u.id)
                                 _seen_ids.add(u.id)
@@ -1847,8 +1862,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             _og_desc_lp = _og_lp("description")
                             _og_img_lp = _og_lp("image")
                             if _og_img_lp and _og_img_lp.startswith("/"):
-                                from urllib.parse import urlparse as _up_lp
-                                _p_lp = _up_lp(_url_lp)
+                                _p_lp = urlparse(_url_lp)
                                 _og_img_lp = f"{_p_lp.scheme}://{_p_lp.netloc}{_og_img_lp}"
                             if _og_title_lp:
                                 post.link_preview = {"url": _url_lp, "title": _og_title_lp[:200], "description": _og_desc_lp[:400] if _og_desc_lp else "", "image": _og_img_lp or ""}
@@ -2391,8 +2405,7 @@ def _handle_block(activity: dict) -> tuple[int, str]:
             # Re-query both users in the SAME session to avoid detached instance issues
             remote = session.query(User).filter_by(remote_url=actor_url).first()
             if not remote:
-                from urllib.parse import urlparse as _up
-                p = _up(actor_url)
+                p = urlparse(actor_url)
                 if "/@" in p.path:
                     alt_url = f"{p.scheme}://{p.netloc}/users/{p.path.split('/@')[-1]}"
                     remote = session.query(User).filter_by(remote_url=alt_url).first()
