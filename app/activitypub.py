@@ -11,6 +11,7 @@ import time
 import uuid
 from typing import Optional
 from urllib.parse import urlparse, quote, unquote
+from bs4 import BeautifulSoup, NavigableString
 
 import httpx
 import nh3
@@ -86,10 +87,7 @@ def _html_to_newlines(html: str) -> str:
 
 def _extract_plain_text(sanitized_content: str, post=None) -> str:
     if not sanitized_content:
-        # 180°C 같은 온도가 아니라 단순 공백 처리이므로 일반 스트링 반환
         return ""
-
-    from bs4 import BeautifulSoup, NavigableString
 
     tags = []
     if post and hasattr(post, "tag_list") and post.tag_list:
@@ -107,22 +105,64 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
 
     soup = BeautifulSoup(sanitized_content, "html.parser")
 
+    # 0. 멘션된 유저들의 메타데이터 맵 빌드
+    mention_map = {}  # { url/href: user_object, username: user_object }
+    if post and hasattr(post, "mentioned_user_ids") and post.mentioned_user_ids:
+        with get_session() as s:
+            m_users = s.query(User).filter(User.id.in_(post.mentioned_user_ids)).all()
+            for u in m_users:
+                if u.ap_id:
+                    mention_map[u.ap_id.strip().lower()] = u
+                if u.username:
+                    mention_map[u.username.strip().lower()] = u
+
     # 2. 이미 존재하는 모든 <a> 태그를 찾아서 안전하게 리모델링
     for a_tag in soup.find_all("a"):
         text = a_tag.get_text().strip()
-        # 2-1. 원격 핸들 패턴인 경우
-        remote_match = re.match(r'^@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})$', text)
-        if remote_match:
-            a_tag.string = f"@{remote_match.group(1)}@{remote_match.group(2)}"
-            a_tag["href"] = f"/@{remote_match.group(1)}@{remote_match.group(2)}"  # 도메인 유지
+        # href가 리스트로 올 경우를 대비한 안전한 문자열 변환
+        raw_href = a_tag.get("href", "")
+        if isinstance(raw_href, list):
+            raw_href = " ".join(raw_href)
+        raw_href = raw_href.strip()
+        href_lookup = raw_href.lower()            # 맵 검색용 소문자 href
+        # [핵심] DB 멘션 데이터에 존재하는 유저인지 소문자 href(ap_id)로 먼저 낚아챕니다.
+        if href_lookup in mention_map:
+            u = mention_map[href_lookup]
+            a_tag.clear()  # 기존 내부 자식 태그들 안전하게 청소
+            if u.is_remote:
+                a_tag.string = f"@{u.username}@{u.domain}"
+                a_tag["href"] = f"/@{u.username}@{u.domain}"
+            else:
+                a_tag.string = f"@{u.username}"
+                a_tag["href"] = f"/@{u.username}"
             a_tag["class"] = "mention"
             a_tag.attrs.pop("target", None)
             continue
-        # 2-2. 로컬 핸들 패턴인 경우
-        local_match = re.match(r'^@([A-Za-z0-9_.-]+)$', text)
-        if local_match:
-            a_tag.string = f"@{local_match.group(1)}"
-            a_tag["href"] = f"/@{local_match.group(1)}"
+
+        # [예외 방어] 데이터 바인딩이 누락되었으나 원격 주소인 경우를 위한 차선책
+        if text.startswith('@') and raw_href.startswith('http'):
+            remote_url_match = re.match(r'https?://([^/]+)/(?:@|users/)([A-Za-z0-9_.-]+)', raw_href, re.IGNORECASE)
+            if remote_url_match:
+                domain = remote_url_match.group(1).lower()
+                username = remote_url_match.group(2)
+                a_tag.clear()
+                a_tag.string = f"@{username}@{domain}"
+                a_tag["href"] = f"/@{username}@{domain}"
+                a_tag["class"] = "mention"
+                a_tag.attrs.pop("target", None)
+                continue
+
+        # 2-1. 기존 쌩 텍스트 기반 패턴 매칭 (데이터 맵에 없는 경우를 위한 Fallback)
+        raw_username = text.lstrip('@').lower()
+        if text.startswith('@') and raw_username in mention_map:
+            u = mention_map[raw_username]
+            a_tag.clear()
+            if u.is_remote:
+                a_tag.string = f"@{u.username}@{u.domain}"
+                a_tag["href"] = f"/@{u.username}@{u.domain}"
+            else:
+                a_tag.string = f"@{u.username}"
+                a_tag["href"] = f"/@{u.username}"
             a_tag["class"] = "mention"
             a_tag.attrs.pop("target", None)
             continue
@@ -133,6 +173,7 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
             if tag_name_match:
                 tag_name = tag_name_match.group(1)
                 if not tags or tag_name.lower() in [t.lower() for t in tags]:
+                    a_tag.clear()
                     a_tag.string = f"#{tag_name}"
                     a_tag["href"] = f"/explore?q={quote(f'#{tag_name}')}"
                     a_tag["class"] = "hashtag"
@@ -144,27 +185,28 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
             display = re.sub(r'^https?://', '', text)
             if len(display) > 40:
                 display = display[:37] + "..."
+            a_tag.clear()
             a_tag.string = display
 
     # 3. <a> 태그 밖에 쌩으로 굴러다니는 핸들 & 해시태그 텍스트 처리
     for text_node in list(soup.find_all(string=True)):
+        # 트리 변형으로 인해 노드가 공중에 떴거나 이미 부모가 없는 경우 방어
+        if not text_node.parent:
+            continue
         if text_node.find_parent("a"):
             continue
 
         text_str = str(text_node)
-        # [수정] 원격 핸들 주소에 \2(도메인)까지 정확히 포함시킴
         new_text = re.sub(
             r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})',
             r'<a href="/@\1@\2" class="mention">@\1@\2</a>',
             text_str
         )
-        # 쌩 로컬 핸들 치환
         new_text = re.sub(
             r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)(?!@)',
             r'<a href="/@\1" class="mention">@\1</a>',
             new_text
         )
-        # Post.tag_list 기반 해시태그 치환
         if tags:
             escaped_tags = [re.escape(t) for t in sorted(tags, key=len, reverse=True)]
             tags_pattern = r'(?<![A-Za-z0-9_.-])#(' + '|'.join(escaped_tags) + r')(?![A-Za-z0-9_.-])'
@@ -198,7 +240,7 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
                     try:
                         base, query = val.split("/explore?q=", 1)
                         val = f"/explore?q={quote(unquote(query))}"
-                    except ValueError:
+                    except Exception:
                         pass
                 attrs_list.append(f'{k}="{val}"')
             attrs_str = f" {' '.join(attrs_list)}" if attrs_list else ""
