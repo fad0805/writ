@@ -1327,7 +1327,7 @@ def api_create_post(
 
         # Async federation broadcast (background thread so it doesn't block response)
         actor_uri = user.actor_uri()
-        threading.Thread(target=_broadcast_federation, args=(user.id, post.id, visibility, content, actor_uri), daemon=True).start()
+        threading.Thread(target=_broadcast_federation, args=(user.id, post.id, visibility, content), daemon=True).start()
 
         try:
             broadcast("new_post", {"post_id": post.id, "author_id": user.id})
