@@ -4635,6 +4635,10 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                     if author_user:
                         q_posts = q_posts.filter(Post.author_id == author_user.id)
                 posts = q_posts.order_by(desc(Post.created_at)).limit(20).all()
+            else:
+                # 태그가 디비에 없으면 둘 다 깔끔하게 빈 리스트 처리
+                posts = []
+            if tag:
                 # 2. 소설(Novel) 쿼리 💡 (오류 방지를 위해 tag가 확실히 있을 때만 돌도록 안으로 이동)
                 novels = s.query(Novel).options(selectinload(Novel.author)).filter(
                     Novel.tag_list.any(name=tag.name),
@@ -4643,7 +4647,6 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 ).order_by(desc(Novel.updated_at)).limit(20).all()
             else:
                 # 태그가 디비에 없으면 둘 다 깔끔하게 빈 리스트 처리
-                posts = []
                 novels = []
         else:
             posts = s.query(Post).options(selectinload(Post.author)).filter(
