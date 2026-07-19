@@ -49,16 +49,6 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
       return `${before}<a href="${targetUrl}"${isLocal ? "" : ' target="_blank" rel="noopener noreferrer"'}>${display}</a>`;
     }
   );
-
-  text = text.replace(
-    /(?<!<[^>]*)(?<!["'])@([a-zA-Z0-9_]+(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?)/g,
-    (_m: string, handle: string) => {
-      const localPart = handle.split("@")[0];
-      const href = `/@${localPart}`;
-      return `<a href="${href}" class="mention" rel="mention">@${handle}</a>`;
-    }
-  );
-
   return text;
 }
 
