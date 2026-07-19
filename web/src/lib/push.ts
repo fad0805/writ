@@ -36,7 +36,6 @@ export async function subscribePush(): Promise<boolean> {
 
   const reg = await navigator.serviceWorker.ready;
   const vapidKey = await getVapidKey();
-  console.log("[push] VAPID key length:", vapidKey.length, "first10:", vapidKey.slice(0, 10));
   const applicationServerKey = urlBase64ToUint8Array(vapidKey);
 
   const subscription = await reg.pushManager.subscribe({
@@ -50,7 +49,6 @@ export async function subscribePush(): Promise<boolean> {
   form.append("p256dh", sub.keys?.p256dh || "");
   form.append("auth", sub.keys?.auth || "");
 
-  console.log("[push] POST /api/push/subscribe endpoint:", (sub.endpoint || "").slice(0, 60));
   const res = await fetch("/api/push/subscribe", {
     method: "POST",
     credentials: "include",
