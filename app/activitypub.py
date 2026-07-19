@@ -106,15 +106,10 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
     soup = BeautifulSoup(sanitized_content, "html.parser")
 
     # 0. 멘션된 유저들의 메타데이터 맵 빌드
-    mention_map = {}  # { url/href: user_object, username: user_object }
+    m_users = []
     if post and hasattr(post, "mentioned_user_ids") and post.mentioned_user_ids:
         with get_session() as s:
             m_users = s.query(User).filter(User.id.in_(post.mentioned_user_ids)).all()
-            for u in m_users:
-                if u.ap_id:
-                    mention_map[u.ap_id.strip().lower()] = u
-                if u.username:
-                    mention_map[u.username.strip().lower()] = u
 
     # 2. 이미 존재하는 모든 <a> 태그를 찾아서 안전하게 리모델링
     for a_tag in soup.find_all("a"):
@@ -124,17 +119,11 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
         if isinstance(raw_href, list):
             raw_href = " ".join(raw_href)
         raw_href = raw_href.strip()
-        href_lookup = raw_href.lower()            # 맵 검색용 소문자 href
         # [핵심] DB 멘션 데이터에 존재하는 유저인지 소문자 href(ap_id)로 먼저 낚아챕니다.
-        if href_lookup in mention_map:
-            u = mention_map[href_lookup]
+        if user in m_users:
             a_tag.clear()  # 기존 내부 자식 태그들 안전하게 청소
-            if u.is_remote:
-                a_tag.string = f"@{u.username}@{u.domain}"
-                a_tag["href"] = f"/@{u.username}@{u.domain}"
-            else:
-                a_tag.string = f"@{u.username}"
-                a_tag["href"] = f"/@{u.username}"
+            a_tag.string = f"@{user.username}"
+            a_tag["href"] = f"/@{user.username}"
             a_tag["class"] = "mention"
             a_tag.attrs.pop("target", None)
             continue
