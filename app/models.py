@@ -344,7 +344,7 @@ class Post(Base):
                 })
         if self.mentioned_user_ids:
             with get_session() as s:
-                users = s.query(User).filter(user.id.in_(self.mentioned_user_ids)).all()
+                users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
                 for u in users:
                     web_href = getattr(u, 'profile_url', '') or f"{base_url}/@{u.username}"
                     # actor uri (for mention tag)
@@ -455,7 +455,7 @@ class Post(Base):
             obj["to"] = []
         if self.mentioned_user_ids:
             with get_session() as _ms:
-                _musers = _ms.query(User).filter(user.id.in_(self.mentioned_user_ids)).all()
+                _musers = _ms.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
                 for _mu in _musers:
                     _mu_uri = _mu.actor_uri()
                     if _mu_uri not in obj["to"] and _mu_uri not in obj["cc"]:
