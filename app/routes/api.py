@@ -1017,17 +1017,15 @@ def api_get_post(request: Request, post_id: int):
     return result
 
 
-def _broadcast_federation(user_id, post_id, visibility, plain_content = ''):
+def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
     """Deliver Create activity to remote followers (background thread)."""
+    # 🌟 함수 전체를 감싸서 외부 변수 간섭을 완전히 차단합니다.
     try:
-        # 🌟 백그라운드 스레드 전용 독립 세션을 새로 엽니다.
         with get_session() as ap_s:
-            # 스레드 안에서 안전하게 다시 조회 (Lazy Loading 에러 원천 차단)
             user = ap_s.query(User).filter_by(id=user_id).first()
             post = ap_s.query(Post).filter_by(id=post_id).first()
-            print(user, post)
             if not user or not post:
-                logger.warning("Broadcast failed: User %s or Post %s not found", user_id, post_id)
+                logger.warning(f"Broadcast aborted: user_id={user_id} or post_id={post_id} not found")
                 return
 
             create_activity = {
@@ -1048,8 +1046,8 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content = ''):
                         if domain and not _federation_allowed(domain):
                             continue
                         _post_to_inbox(inbox, create_activity, user)
-                # Also deliver to @user@domain mentions parsed from content
-                remote_handles = set(re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', post.content or ""))
+                import re as _re
+                remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', post.content or ""))
                 _resolved_handles = []
                 for handle in remote_handles:
                     remote_user = ap_s.query(User).filter(
@@ -1171,6 +1169,7 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content = ''):
                     _post_to_inbox(inbox, create_activity, user)
                     delivered_domains.add(domain)
     except Exception as e:
+        # 🌟 여기에 user 관련 변수가 절대 들어가지 않도록 에러 자체만 깔끔하게 출력합니다.
         logger.warning("Failed to broadcast federation activity: %s", e)
 
 
