@@ -4709,6 +4709,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
         return result
 
 
+import traceback
 
 def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
     """Fetch a remote AP object, resolve its author, save to DB, return post.
@@ -4718,7 +4719,7 @@ def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
     if _visited is None:
         _visited = set()
 
-    # First, recursively fetch parent posts if this is a reply
+    # 1. 스레드 상위 글 역추적 로직 안전하게 실행
     in_reply_to = obj.get("inReplyTo", "")
     if isinstance(in_reply_to, dict):
         in_reply_to = in_reply_to.get("id", "")
@@ -4727,16 +4728,27 @@ def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
         parent_data = _ap_fetch(in_reply_to, user)
         if parent_data:
             parent_obj = parent_data.get("object", parent_data)
-            _fetch_and_save_ap_object(parent_obj, user, _visited, _depth + 1)
+            # 💡 재귀 함수가 안전하게 마칠 수 있도록 단독 실행 확보
+            try:
+                _fetch_and_save_ap_object(parent_obj, user, _visited, _depth + 1)
+            except Exception as e:
+                print(f"[WARN] Failed to process parent post {in_reply_to}: {e}", flush=True)
 
     actor_url = obj.get("id")
-
     post = None
+    # 2. 본문 페치 및 DB 저장 로직 수행
     with get_session() as session:
         try:
             post = _fetch_remote_post(actor_url, user, session, _depth)
+            # 💡 페치가 성공했을 때만 확실하게 DB 세션 커밋을 보장
+            if post:
+                session.commit()
         except Exception as e:
+            # 💡 단순 print 대신 에러가 발생한 정확한 라인과 원인을 추적하기 위해 traceback 추가
             print(f"[ERROR] Failed to fetch remote post from {actor_url}: {e}", flush=True)
+            traceback.print_exc() 
+            return None # 껍데기를 만들지 않도록 에러 시 None 리턴 구조로 방어
+
         return _post_json(post, session, user)
 
 
