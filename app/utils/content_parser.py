@@ -123,13 +123,13 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post | None) -> str
             tag_name_match = re.search(r'#([^\s#@<]+)', text)
             if tag_name_match:
                 tag_name = tag_name_match.group(1)
-                if not tag_names or tag_name.lower() in [t.lower() for t in tag_names]:
-                    a_tag.clear()
-                    a_tag.string = f"#{tag_name}"
-                    a_tag["href"] = f"/explore?q={quote(f'#{tag_name}')}"
-                    a_tag["class"] = "hashtag"
-                    a_tag.attrs.pop("target", None)
-                    continue
+
+                a_tag.clear()
+                a_tag.string = f"#{tag_name}"
+                a_tag["href"] = f"/explore?q={quote(f'#{tag_name}')}"
+                a_tag["class"] = "hashtag"
+                a_tag.attrs.pop("target", None)
+                continue
 
         # 일반 URL인 경우
         if text and re.match(r'^https?://', text):
@@ -160,14 +160,14 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post | None) -> str
             r'<a href="/@\1" class="mention">@\1</a>',
             new_text
         )
-        if tag_names:
-            escaped_tags = [re.escape(t) for t in sorted(tag_names, key=len, reverse=True)]
-            tags_pattern = r'(?<![A-Za-z0-9_.-])#(' + '|'.join(escaped_tags) + r')(?![A-Za-z0-9_.-])'
-            new_text = re.sub(
-                tags_pattern,
-                lambda m: f'<a href="/explore?q={quote(f"#{m.group(1)}")}" class="hashtag">#{m.group(1)}</a>',
-                new_text
-            )
+
+        # HashTag
+        general_tags_pattern = r'(?<![A-Za-z0-9_.-])#([A-Za-z0-9가-힣_]+)(?![A-Za-z0-9_.-])'
+        new_text = re.sub(
+            general_tags_pattern,
+            lambda m: f'<a href="/explore?q={quote(f"#{m.group(1)}")}" class="hashtag">#{m.group(1)}</a>',
+            new_text
+        )
         if new_text != text_str:
             new_soup = BeautifulSoup(new_text, "html.parser")
             for child in list(new_soup.contents):
