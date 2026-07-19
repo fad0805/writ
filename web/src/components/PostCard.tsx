@@ -200,18 +200,18 @@ const localReactionEmojiMap = useMemo(() => {
   })() : "";
 
   const validMentions = useMemo(() => new Set(post.mentioned_handles || []), [post.mentioned_handles]);
+  // 2. 순수한 HTML 변환 함수 (Setter 함수들 완전 제거)
   const buildContentHtml = () => {
     let html = post.content || "";
-    // Strip "RE: https://..." from quote posts (Misskey-style quote text)
+
+    // Strip "RE: https://..." from quote posts
     if ((post as any).quote_of_id || (post as any).quote_of_ap_id) {
       html = html.replace(/(?:<span[^>]*>)?[\s\n]*RE:[\s\n]*(?:<a[^>]*>.*?<\/a>|https?:\/\/[^\s<>]+)[\s\n]*(?:<\/span>)?(?:[\s\n]*<br\s*\/?>)*/gi, '');
     }
-    // Strip "series: https://..." and "episode: https://..." (share link metadata)
-    const seriesMatch = html.match(/(?:^|\n)\s*series:\s*(https?:\/\/\S+)/i);
-    const episodeMatch = html.match(/(?:^|\n)\s*episode:\s*(https?:\/\/\S+)/i);
-    setSeriesMatch(seriesMatch);
-    setEpisodeMatch(episodeMatch);
-    html = html.replace(/(?:^|\n)\s*(?:series|episode):\s*https?:\/\/\S+\s*/gi, '');
+
+    // 본문에서 series, episode 라인을 앞뒤 공백/줄바꿈 포함하여 완전히 삭제
+    html = html.replace(/(?:<br\s*\/?>|\n|^)\s*(?:series|episode):\s*(?:<a[^>]*>.*?<\/a>|https?:\/\/[^\s<>]+)\s*(?:<br\s*\/?>|\n|$)/gi, '\n');
+
     if (/<\/?[a-zA-Z]+[\s\/>]/.test(html) || /&[a-z]+;/.test(html)) {
       html = html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
     } else {
@@ -234,11 +234,33 @@ const localReactionEmojiMap = useMemo(() => {
     html = rewriteLinks(html, validMentions);
     return html;
   };
-  const [contentHtml, setContentHtml] = useState(() => sanitizePost(buildContentHtml()));
 
+  // useState 초기화 시점에는 빈 문자열 세팅 (어차피 useEffect가 즉시 실행되어 채워줌)
+  const [contentHtml, setContentHtml] = useState("");
+
+  // 3. 포스트 렌더링 및 데이터 추출용 Effect
   useEffect(() => {
+    // 1️⃣ [가장 먼저 수행] 아직 아무것도 지워지지 않은 원본 컨텐츠를 확보합니다.
+    const rawContent = post.content || "";
+
+    // 2️⃣ 원본 텍스트 상태에서 정규식 매칭을 시도합니다.
+    const seriesMatches = rawContent.match(/(?:<br\s*\/?>|\n|^)\s*(series):\s*(?:<a[^>]*href="([^"]+)"[^>]*>.*?<\/a>|(https?:\/\/[^\s<>]+))/i);
+    const episodeMatches = rawContent.match(/(?:<br\s*\/?>|\n|^)\s*(episode):\s*(?:<a[^>]*href="([^"]+)"[^>]*>.*?<\/a>|(https?:\/\/[^\s<>]+))/i);
+
+    // 3️⃣ 정확한 그룹 인덱스([2]번 혹은 [3]번)로 순수 URL 주소를 상태에 넣어줍니다.
+    // 원래 코드 대신, 조건에 맞으면 정규식 결과 배열(seriesMatches)을 통째로 넘겨줍니다.
+    setSeriesMatch(seriesMatches && (seriesMatches[2] || seriesMatches[3]) ? seriesMatches : null);
+    setEpisodeMatch(episodeMatches && (episodeMatches[2] || episodeMatches[3]) ? episodeMatches : null);
+
+    // 4️⃣ [그 다음 수행] 주소 추출이 끝났으므로 안심하고 본문을 파싱하고 도려냅니다.
     setContentHtml(sanitizePost(buildContentHtml()));
+    
+    // 💡 (만약 기존 프로젝트에서 이 useEffect 내부에 기존 fetch 함수나 
+    // ID를 추출해 갱신하는 코드가 들어있었다면 바로 여기에 위치하면 됩니다!)
+
   }, [post.id, post.content, post.summary, emojiList]);
+
+  // 4. 코드 복사 버튼 플러그인 Effect (기존 코드 그대로 유지)
   useEffect(() => {
     if (cardRef.current) installCodeCopyButtons(cardRef.current);
   }, [contentHtml, post.content]);
@@ -369,14 +391,25 @@ const localReactionEmojiMap = useMemo(() => {
     }
   }, [post.id, (post as any).quote_of_id, (post as any).quote_of_ap_id]);
 
-  // Detect series/episode share URLs in content (e.g. "series: https://.../series/123")
+// Detect series/episode share URLs in content (e.g. "series: https://.../series/123")
   useEffect(() => {
-    if (quotedPost || quotedSeries || quotedEpisode || loadingQuote) return;
+    // 🌟 [추가] 중요: 포스트가 새로 바뀌었을 때(또는 주소가 없을 때) 이전 포스트의 카드 데이터를 초기화합니다.
     const match = seriesMatch || episodeMatch;
-    if (!match) return;
-    const url = match[1];
+    if (!match) {
+      setQuotedSeries(null);
+      setQuotedEpisode(null);
+      return;
+    }
+
+    if (loadingQuote) return;
+
+    const url = typeof match === 'string' ? match : (match[2] || match[3] || match[0]); 
+    if (!url) return;
+    // 🌟 [정규식 수정] 실제 주소 스펙에 맞춤
+    // 1. 에피소드 주소 (ex: /series/1/episodes/5)
     const epMatch = url.match(/\/series\/(\d+)\/episodes\/(\d+)/);
-    const seriesOnlyMatch = url.match(/\/series\/by-number\/([^\/]+)\/([^\/]+)\/?$/);
+    // 2. 시리즈 단독 주소 (ex: /series/1)
+    const seriesOnlyMatch = url.match(/\/series\/(\d+)\/?$/);
     if (epMatch) {
       const novelId = parseInt(epMatch[1]);
       const episodeId = parseInt(epMatch[2]);
@@ -391,12 +424,10 @@ const localReactionEmojiMap = useMemo(() => {
         })
         .catch(() => setLoadingQuote(false));
     } else if (seriesOnlyMatch) {
-      // 💡 백엔드 라우터 규격에 맞춰 FormData 객체를 생성합니다.
+      setLoadingQuote(true); // 🌟 누락되었던 로딩 시작 세팅 추가
       const form = new FormData();
       form.append("url", url);
 
-      // 백엔드의 @router.post("/fetch-series") 엔드포인트로 POST 요청을 보냅니다.
-      // (만약 prefix가 다르면 /api/fetch-series 등으로 주소를 맞춰주세요)
       fetch("/api/fetch-series", {
         method: "POST",
         credentials: "include",
@@ -404,12 +435,10 @@ const localReactionEmojiMap = useMemo(() => {
       })
       .then((r) => {
         if (!r.ok) throw new Error("Series not found");
-        return r.json(); // 이제 백엔드가 HTML이 아닌 진짜 깔끔한 JSON을 줍니다!
+        return r.json();
       })
       .then((d) => {
         if (!d) return;
-
-        // 백엔드가 리턴해 준 {"type": "series", "novel": ..., "author": ...} 데이터 바인딩
         if (d.type === "series" && d.novel) {
           setQuotedSeries({
             type: 'series',
@@ -424,7 +453,9 @@ const localReactionEmojiMap = useMemo(() => {
         setLoadingQuote(false);
       });
     }
-  }, [post.id, post.content]);
+  // 🌟 의존성 배열에 seriesMatch와 episodeMatch를 추가해 주어야 
+  // 주소가 먼저 파싱되어 나왔을 때 이 이펙트가 기민하게 감지하고 fetch를 쏩니다.
+  }, [post.id, seriesMatch, episodeMatch]);
 
   const handleContentClick = (e: React.MouseEvent) => {
     const anchor = (e.target as HTMLElement).closest('a');
