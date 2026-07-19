@@ -433,7 +433,7 @@ class Post(Base):
             "@context": _ap_context,
             "id": f"{BASE_URL}/posts/{self.id}-{self.created_at.timestamp()}", # 유니크 ID 보장
             "url": f"{BASE_URL}/posts/{self.id}",
-            "type": "note",
+            "type": "Note",
             "published": self.created_at.isoformat() if self.created_at else "",
             "attributedTo": self.author.actor_uri().strip(),
             "content": content,
