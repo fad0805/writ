@@ -120,10 +120,10 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
             raw_href = " ".join(raw_href)
         raw_href = raw_href.strip()
         # [핵심] DB 멘션 데이터에 존재하는 유저인지 소문자 href(ap_id)로 먼저 낚아챕니다.
-        if user in m_users:
+        for mentioned_user in m_users:
             a_tag.clear()  # 기존 내부 자식 태그들 안전하게 청소
-            a_tag.string = f"@{user.username}"
-            a_tag["href"] = f"/@{user.username}"
+            a_tag.string = f"@{mentioned_user.username}"
+            a_tag["href"] = f"/@{mentioned_user.username}"
             a_tag["class"] = "mention"
             a_tag.attrs.pop("target", None)
             continue
