@@ -321,7 +321,7 @@ class Post(Base):
                         return storage.url(f"emojis/{sub}/{file_name}")
                     except Exception:
                         pass
-                return f"{base_url}/emojis/{sub}/{file_name}"
+                return f"{BASE_URL}/emojis/{sub}/{file_name}"
 
             with get_session() as _es:
                 for kw in _emoji_keywords:
