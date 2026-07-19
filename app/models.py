@@ -464,8 +464,8 @@ class Post(Base):
             obj["to"] = [public_uri]
             obj["cc"] = [followers_uri]
         elif self.visibility == "home":
-            obj["to"] = [followers_uri]
-            obj["cc"] = [public_uri]
+            obj["to"] = [public_uri]
+            obj["cc"] = [followers_uri]
             obj["toot:visibility"] = "unlisted"
         elif self.visibility == "followers":
             obj["to"] = [followers_uri]
