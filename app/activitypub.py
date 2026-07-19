@@ -2634,12 +2634,8 @@ def _send_delete_post(post: Post, sender: User):
         "id": f"{sender.actor_uri()}#delete/{post.id}",
         "type": "Delete",
         "actor": sender.actor_uri(),
-        "object": {
-            "id": post.ap_id,
-            "type": "Note",
-        },
+        "object": post.ap_id  # 객체 대신 삭제 대상 URL(문자열)로 변경
     }
-    from app.activitypub import broadcast_to_followers
     try:
         broadcast_to_followers(sender, delete)
     except Exception as e:
