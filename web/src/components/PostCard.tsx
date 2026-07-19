@@ -220,7 +220,7 @@ const localReactionEmojiMap = useMemo(() => {
     setSeriesMatch(seriesMatch);
     setEpisodeMatch(episodeMatch);
     html = html.replace(/(?:^|\n)\s*(?:series|episode):\s*https?:\/\/\S+\s*/gi, '');
-    if (/<\/?[a-zA-Z]+[\s>]/.test(html) || /&[a-z]+;/.test(html)) {
+    if (/<\/?[a-zA-Z]+[\s\/>]/.test(html) || /&[a-z]+;/.test(html)) {
       html = html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
     } else {
       html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
