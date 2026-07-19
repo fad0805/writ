@@ -32,51 +32,6 @@ function formatRelative(iso: string, now: number = Date.now()): string {
 
 export function rewriteLinks(text: string, validMentions?: Set<string>): string {
   console.log(text);
-  // Convert remote hashtag links to local explore
-  text = text.replace(
-    /<a\s+[^>]*href="https?:\/\/[^"]*\/tags\/([^"/]+)"[^>]*>#?(?:<span>)?([\p{L}\p{N}_가-힣]+)(?:<\/span>)?<\/a>/gu,
-    (_m: string, _tagPath: string, tag: string) => {
-      // 💡 주소창 인코딩을 위해 encodeURIComponent 처리
-      return `<a href="/explore?q=%23${encodeURIComponent(tag)}" class="hashtag-link">#${tag}</a>`;
-    }
-  );
-
-  // 3. [완성] 순수 텍스트 상태의 @멘션 처리 (HTML 태그 직후에 붙은 멘션도 완벽 대응)
-  text = text.replace(
-    /(<[^>]+>)|((?:^|>|\s|[^a-zA-Z0-9_]))@([a-zA-Z0-9_]+)(?:@([a-zA-Z0-9.-]+\.[a-zA-Z0-9-]+))?/g,
-    (match, htmlTag, before, username, domain) => {
-      if (htmlTag) return match; // HTML 태그 내부는 그대로 통과
-
-      // 도메인이 존재하면 '유저@도메인', 없으면 그냥 '유저'로 handle 조립
-      let handle = domain ? `${username}@${domain}` : username;
-
-      if (!domain && validMentions) {
-        const found = Array.from(validMentions).find((v) => v.startsWith(handle + "@"));
-        if (found) handle = found;
-      }
-
-      const parts = handle.split("@");
-      const localDomain = typeof window !== "undefined" ? window.location.host : "";
-
-      // 도메인이 현재 내 서버와 일치하면 호스트명을 떼고 간결하게 표시
-      const display = parts.length === 2 && parts[1].toLowerCase() === localDomain.toLowerCase() 
-        ? `@${parts[0]}` 
-        : `@${handle}`;
-
-      const prefix = before || "";
-      return `${prefix}<a href="/@${handle}" class="mention-link">${display}</a>`;
-    }
-  );
-
-  text = text.replace(
-    /<a\s+href="https?:\/\/([^"/]+)\/@([a-zA-Z_][a-zA-Z0-9_]*)"[^>]*>@?\w*<\/a>/gi,
-    (_m: string, domain: string, user: string) => {
-      const localDomain = typeof window !== "undefined" ? window.location.host : "";
-      const display = domain === localDomain ? `@${user}` : `@${user}@${domain}`;
-      return `<a href="/@${user}@${domain}" class="mention-link">${display}</a>`;
-    }
-  );
-
   text = text.replace(
     /(?<!<[^>]*)(^|>|\s)#([\p{L}\p{N}_]+)/gu, 
     (_m, before, tag) => {

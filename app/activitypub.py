@@ -78,47 +78,67 @@ def _sanitize_html(html: str) -> str:
 
 
 def _convert_urls_and_handles(sanitized_content: str) -> str:
+    from bs4 import BeautifulSoup
+    # 1. 생짜 URL을 a 태그로 변환 (기존 유지)
     url_pattern = r'(?<!href=")(?<!src=")(?<!">)(https?://(?!.*/tags/)[^\s<>"\')\]#]+)'
     def _repl_raw_url(m):
         url = m.group(1)
         return f'<a href="{url}" target="_blank" rel="noopener noreferrer">{url}</a>'
-
     sanitized_content = re.sub(url_pattern, _repl_raw_url, sanitized_content)
 
-    def _repl_remote_handle(m):
-        full_text = m.group(0)
-        # 앞부분에 문자가 있거나 이메일 포맷 구조, 혹은 html 속성 내부 느낌이면 패스
-        username = m.group(1)
-        domain = m.group(2)
-        # 원격 유저 인스턴스 주소 추정 (플랫폼에 맞게 조정 가능, 보통 https://domain/@user 또는 https://domain/users/user)
-        user_url = f"https://{domain}/@{username}" 
-        return f'<a href="{user_url}" class="mention" target="_blank" rel="noopener noreferrer">@{username}@{domain}</a>'
+    # -----------------------------------------------------------------
+    # 🔥 BeautifulSoup 등판: 깨진 괄호 지옥을 구원할 구세주
+    # -----------------------------------------------------------------
+    # 내부적으로 완벽한 HTML 트리 구조로 파싱합니다.
+    soup = BeautifulSoup(sanitized_content, "html.parser")
+    print(f'==================== {soup}')
 
-    # 💡 조건 추가: [(?<!href=") 속성 내부 차단] [(?<!">) 이미 a태그 텍스트인 경우 차단]
-    remote_handle_pattern = (
-        r'(?<![A-Za-z0-9_.-])'         # 기존: 문자 흐름 중간 차단
-        r'(?<!href=")(?<!src=")'       # 추가: 태그 속성 내부 차단
-        r'(?<!">)(?<!</a>)'            # 추가: 이미 a태그로 감싸진 텍스트 내부 차단
-        r'@([A-Za-z0-9_.-]+)'
-        r'@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})'
-    )
-    sanitized_content = re.sub(remote_handle_pattern, _repl_remote_handle, sanitized_content)
+    # 2. 이미 존재하는 모든 <a> 태그를 찾아서 안전하게 리모델링
+    for a_tag in soup.find_all("a"):
+        # 태그 내부 텍스트(예: "@siarte@writ.daydream.ink")만 쏙 추출
+        text = a_tag.get_text()
+        # 2-1. 텍스트가 원격 핸들 패턴인 경우
+        remote_match = re.match(r'^@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})$', text)
+        if remote_match:
+            username, domain = remote_match.groups()
+            # 텍스트와 href 속성을 깔끔하게 초기화 및 재설정
+            a_tag.string = f"@{username}@{domain}"
+            a_tag["href"] = f"/@{username}"  # 로컬 링크로 변환 원치 않으시면 기호에 맞게 수정 가능!
+            a_tag["class"] = "mention"
+            if "target" in a_tag.attrs: del a_tag["attrs"]["target"] # 새창 열기 제거 원할 시
+            continue
+        # 2-2. 텍스트가 로컬 핸들 패턴인 경우
+        local_match = re.match(r'^@([A-Za-z0-9_.-]+)$', text)
+        if local_match:
+            username = local_match.group(1)
+            a_tag.string = f"@{username}"
+            a_tag["href"] = f"/@{username}"
+            a_tag["class"] = "mention"
 
-    # 로컬 핸들 변환 (@user) - 이미 위에서 원격이 치환되었으므로 남은 단독 @user 처리
-    def _repl_local_handle(m):
-        username = m.group(1)
-        return f'<a href="/@{username}" class="mention">@{username}</a>'
-    # 💡 조건 추가: 로컬 핸들도 동일하게 이미 링크 내부에 있으면 패스하도록 방어선 구축
-    local_handle_pattern = (
-        r'(?<![A-Za-z0-9_.-])'
-        r'(?<!href=")(?<!src=")'
-        r'(?<!">)(?<!</a>)'
-        r'@([A-Za-z0-9_.-]+)'
-        r'(?!@)'
-    )
-    sanitized_content = re.sub(local_handle_pattern, _repl_local_handle, sanitized_content)
+    # 3. <a> 태그 밖에 쌩으로 굴러다니는 핸들 텍스트 처리 (텍스트 노드만 탐색)
+    # (이미 <a> 태그 내부에 있던 글자들은 위에서 걸러졌으므로 밖의 글자만 안전하게 치환됩니다)
+    for text_node in soup.find_all(string=True):
+        if text_node.parent.name == "a":
+            continue  # 이미 <a> 태그 안에 있는 텍스트는 패스!
+        # 쌩 원격 핸들 치환
+        new_text = re.sub(
+            r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})',
+            r'<a href="/@\1" class="mention">@\1@\2</a>', # 요구사항에 맞춰 /@username 혹은 외부 링크로 조정
+            text_node
+        )
+        # 쌩 로컬 핸들 치환
+        new_text = re.sub(
+            r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)(?!@)',
+            r'<a href="/@\1" class="mention">@\1</a>',
+            new_text
+        )
+        # 바뀐 텍스트가 HTML 태그를 포함하므로, 문자열 노드를 실제 HTML 오브젝트로 변환하여 교체
+        if new_text != text_node:
+            new_soup = BeautifulSoup(new_text, "html.parser")
+            text_node.replace_with(new_soup)
 
-    return sanitized_content
+    # 파싱 트리를 다시 깨끗한 문자열로 뽑아냅니다.
+    return str(soup)
 
 
 _PRIVATE_SUBNETS = [
