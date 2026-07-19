@@ -14,7 +14,7 @@ import EmojiPicker from "./EmojiPicker";
 import { useAuth } from "@/lib/auth";
 import ShareButton from "@/components/ShareButton";
 import { hashColor } from "@/lib/avatar";
-import { getCustomEmojis, renderCustomEmojis, injectEmojis, CustomEmoji, subscribeEmojis } from "@/lib/emojis";
+import { renderCustomEmojis, injectEmojis, CustomEmoji, subscribeEmojis } from "@/lib/emojis";
 import { sanitizePost, sanitizeName } from "@/lib/sanitize";
 import { installCodeCopyButtons } from "@/lib/codeCopy";
 
@@ -44,7 +44,9 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
     (_m: string, before: string, url: string) => {
       const isLocal = typeof window !== "undefined" && url.startsWith(window.location.origin);
       const targetUrl = isLocal ? url.replace(window.location.origin, "") : url;
-      return `${before}<a href="${targetUrl}"${isLocal ? "" : ' target="_blank" rel="noopener noreferrer"'}>${url}</a>`;
+      let display = url.replace(/^https?:\/\//, "");
+      if (display.length > 40) display = display.slice(0, 37) + "...";
+      return `${before}<a href="${targetUrl}"${isLocal ? "" : ' target="_blank" rel="noopener noreferrer"'}>${display}</a>`;
     }
   );
 
@@ -220,7 +222,7 @@ const localReactionEmojiMap = useMemo(() => {
     setSeriesMatch(seriesMatch);
     setEpisodeMatch(episodeMatch);
     html = html.replace(/(?:^|\n)\s*(?:series|episode):\s*https?:\/\/\S+\s*/gi, '');
-    if (/<\/?[a-zA-Z]+[\s>]/.test(html) || /&[a-z]+;/.test(html)) {
+    if (/<\/?[a-zA-Z]+[\s\/>]/.test(html) || /&[a-z]+;/.test(html)) {
       html = html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
     } else {
       html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -508,14 +510,18 @@ const localReactionEmojiMap = useMemo(() => {
             <strong dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.reply_context.author.display_name || post.reply_context.author.username, emojiList, 14)) }} />
             <span>@{post.reply_context.author.username}</span>
             <p dangerouslySetInnerHTML={{ __html: (() => {
-              const text = (post.reply_context.content || "").slice(0, 90);
+              const hasCw = !!(post.reply_context as any).summary;
+              const rawText = hasCw
+                ? (post.reply_context as any).summary
+                : (post.reply_context.content || "");
+              const text = rawText.slice(0, 90);
               let html = text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
               html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
               html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
               html = html.replace(/\n/g, '<br>');
               html = renderCustomEmojis(html, emojiList);
               html = rewriteLinks(html, validMentions);
-              if ((post.reply_context.content || "").length > 90) html += "...";
+              if (rawText.length > 90) html += "...";
               return sanitizePost(html);
             })() }} />
           </Link>
@@ -525,6 +531,21 @@ const localReactionEmojiMap = useMemo(() => {
             <summary onClick={(e) => e.stopPropagation()}>⚠️ {post.summary}</summary>
             <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
             {(post as any).media_attachments?.length > 0 && _renderMedia()}
+            {post.link_preview && !(post as any).quote_of_id && !(post as any).quote_of_ap_id && (() => {
+                const lp = post.link_preview!;
+                const isLocalLink = (() => { try { return new URL(lp.url).hostname === window.location.hostname; } catch { return false; } })();
+                const lpImage = isLocalLink ? ((window as any).__serverLogo || lp.image) : lp.image;
+                return (
+              <a href={lp.url} target="_blank" rel="noopener noreferrer" className="link-preview-card" onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: 12, marginTop: 8, padding: 10, borderRadius: 8, border: "1px solid var(--border)", textDecoration: "none", color: "inherit" }}>
+                {lpImage && <img src={lpImage} alt="" style={{ width: 80, height: 80, borderRadius: isLocalLink ? 16 : 6, objectFit: "contain", flexShrink: 0, background: isLocalLink ? "var(--bg-tertiary)" : undefined }} onError={(e) => (e.target as HTMLElement).style.display = "none"} />}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lp.title}</div>
+                  {lp.description && <div style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{lp.description}</div>}
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{(() => { try { return new URL(lp.url).hostname; } catch { return ""; } })()}</div>
+                </div>
+              </a>
+                );
+              })()}
           </details>
         ) : (
           <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
@@ -635,7 +656,7 @@ const localReactionEmojiMap = useMemo(() => {
             </div>
           </div>
         )}
-        {post.link_preview && !(post as any).quote_of_id && !(post as any).quote_of_ap_id && (() => {
+        {!post.summary && post.link_preview && !(post as any).quote_of_id && !(post as any).quote_of_ap_id && (() => {
             const lp = post.link_preview!;
             const isLocalLink = (() => { try { return new URL(lp.url).hostname === window.location.hostname; } catch { return false; } })();
             const lpImage = isLocalLink ? ((window as any).__serverLogo || lp.image) : lp.image;

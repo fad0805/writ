@@ -624,7 +624,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{linkPreview.title}</div>
                 {linkPreview.description && <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{linkPreview.description}</div>}
-                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>{(() => { try { return new URL(linkPreview.url).hostname; } catch { return ""; } })()}</div>
+                <a href={linkPreview.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3, textDecoration: "none" }}>{(() => { try { return new URL(linkPreview.url).hostname; } catch { return ""; } })()}</a>
               </div>
               <button type="button" onClick={() => setLinkPreview(null)} style={{ position: "absolute", top: 4, right: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>×</button>
             </>

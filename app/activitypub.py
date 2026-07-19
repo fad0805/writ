@@ -10,7 +10,8 @@ import socket
 import time
 import uuid
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote, unquote
+from bs4 import BeautifulSoup, NavigableString
 
 import httpx
 import nh3
@@ -77,67 +78,171 @@ def _sanitize_html(html: str) -> str:
     return clean_html
 
 
-def _convert_urls_and_handles(sanitized_content: str) -> str:
-    from bs4 import BeautifulSoup
-    # 1. 생짜 URL을 a 태그로 변환 (기존 유지)
+def _html_to_newlines(html: str) -> str:
+    """Convert HTML line breaks/paragraphs to \\n for consistent storage."""
+    html = re.sub(r'<br\s*/?>', '\n', html, flags=re.I)
+    html = re.sub(r'</?p>', '\n', html, flags=re.I)
+    return html.strip('\n')
+
+
+def _extract_plain_text(sanitized_content: str, post=None) -> str:
+    if not sanitized_content:
+        return ""
+
+    tags = []
+    if post and hasattr(post, "tag_list") and post.tag_list:
+        tags = [str(t) for t in post.tag_list if t]
+
+    # 1. 생짜 URL을 a 태그로 변환
     url_pattern = r'(?<!href=")(?<!src=")(?<!">)(https?://(?!.*/tags/)[^\s<>"\')\]#]+)'
     def _repl_raw_url(m):
         url = m.group(1)
-        return f'<a href="{url}" target="_blank" rel="noopener noreferrer">{url}</a>'
+        display = re.sub(r'^https?://', '', url)
+        if len(display) > 40:
+            display = display[:37] + "..."
+        return f'<a href="{url}" target="_blank" rel="noopener noreferrer">{display}</a>'
     sanitized_content = re.sub(url_pattern, _repl_raw_url, sanitized_content)
 
-    # -----------------------------------------------------------------
-    # 🔥 BeautifulSoup 등판: 깨진 괄호 지옥을 구원할 구세주
-    # -----------------------------------------------------------------
-    # 내부적으로 완벽한 HTML 트리 구조로 파싱합니다.
     soup = BeautifulSoup(sanitized_content, "html.parser")
 
     # 2. 이미 존재하는 모든 <a> 태그를 찾아서 안전하게 리모델링
     for a_tag in soup.find_all("a"):
-        # 태그 내부 텍스트(예: "@siarte@writ.daydream.ink")만 쏙 추출
-        text = a_tag.get_text()
-        # 2-1. 텍스트가 원격 핸들 패턴인 경우
-        remote_match = re.match(r'^@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})$', text)
-        if remote_match:
-            username, domain = remote_match.groups()
-            # 텍스트와 href 속성을 깔끔하게 초기화 및 재설정
-            a_tag.string = f"@{username}@{domain}"
-            a_tag["href"] = f"/@{username}"  # 로컬 링크로 변환 원치 않으시면 기호에 맞게 수정 가능!
-            a_tag["class"] = "mention"
-            if "target" in a_tag.attrs: del a_tag["attrs"]["target"] # 새창 열기 제거 원할 시
-            continue
-        # 2-2. 텍스트가 로컬 핸들 패턴인 경우
-        local_match = re.match(r'^@([A-Za-z0-9_.-]+)$', text)
-        if local_match:
-            username = local_match.group(1)
-            a_tag.string = f"@{username}"
-            a_tag["href"] = f"/@{username}"
-            a_tag["class"] = "mention"
+        text = a_tag.get_text().strip()
+        # href가 리스트로 올 경우를 대비한 안전한 문자열 변환
+        raw_href = a_tag.get("href", "")
+        if isinstance(raw_href, list):
+            raw_href = " ".join(raw_href)
+        raw_href = raw_href.strip()
+        # [핵심] DB 멘션 데이터에 존재하는 유저인지 소문자 href(ap_id)로 먼저 낚아챕니다.
+        mentioned_user_ids = []
+        if post and isinstance(post, dict):
+            for tag in post.get("tag"):
+                if tag.get("type") == 'Mention':
+                    mentioned_user_ids.append(tag.get("name", ""))
+        elif post:
+            mentioned_user_ids = post.mentioned_user_ids
 
-    # 3. <a> 태그 밖에 쌩으로 굴러다니는 핸들 텍스트 처리 (텍스트 노드만 탐색)
-    # (이미 <a> 태그 내부에 있던 글자들은 위에서 걸러졌으므로 밖의 글자만 안전하게 치환됩니다)
-    for text_node in soup.find_all(string=True):
-        if text_node.parent.name == "a":
-            continue  # 이미 <a> 태그 안에 있는 텍스트는 패스!
-        # 쌩 원격 핸들 치환
+        for mentioned_user in mentioned_user_ids:
+            a_tag.clear()  # 기존 내부 자식 태그들 안전하게 청소
+            a_tag.string = f"@{mentioned_user}"
+            a_tag["href"] = f"/@{mentioned_user}"
+            a_tag["class"] = "mention"
+            a_tag.attrs.pop("target", None)
+            continue
+
+        # [예외 방어] 데이터 바인딩이 누락되었으나 원격 주소인 경우를 위한 차선책
+        if text.startswith('@') and raw_href.startswith('http'):
+            remote_url_match = re.match(r'https?://([^/]+)/(?:@|users/)([A-Za-z0-9_.-]+)', raw_href, re.IGNORECASE)
+            if remote_url_match:
+                print(f'================ remote_url_match : {remote_url_match}')
+                domain = remote_url_match.group(1).lower()
+                username = remote_url_match.group(2)
+                a_tag.clear()
+                a_tag.string = f"@{username}@{domain}"
+                a_tag["href"] = f"/@{username}@{domain}"
+                a_tag["class"] = "mention"
+                a_tag.attrs.pop("target", None)
+                continue
+
+        # 2-1. 기존 쌩 텍스트 기반 패턴 매칭 (데이터 맵에 없는 경우를 위한 Fallback)
+        raw_username = text.lstrip('@').lower()
+        if text.startswith('@') and raw_username in mention_map:
+            u = mention_map[raw_username]
+            a_tag.clear()
+            if u.is_remote:
+                a_tag.string = f"@{u.username}@{u.domain}"
+                a_tag["href"] = f"/@{u.username}@{u.domain}"
+            else:
+                a_tag.string = f"@{u.username}"
+                a_tag["href"] = f"/@{u.username}"
+            a_tag["class"] = "mention"
+            a_tag.attrs.pop("target", None)
+            continue
+
+        # 2-4. 해시태그 처리
+        if text.startswith('#'):
+            tag_name_match = re.search(r'#([^\s#@<]+)', text)
+            if tag_name_match:
+                tag_name = tag_name_match.group(1)
+                if not tags or tag_name.lower() in [t.lower() for t in tags]:
+                    a_tag.clear()
+                    a_tag.string = f"#{tag_name}"
+                    a_tag["href"] = f"/explore?q={quote(f'#{tag_name}')}"
+                    a_tag["class"] = "hashtag"
+                    a_tag.attrs.pop("target", None)
+                    continue
+
+        # 2-3. 일반 URL인 경우
+        if text and re.match(r'^https?://', text):
+            display = re.sub(r'^https?://', '', text)
+            if len(display) > 40:
+                display = display[:37] + "..."
+            a_tag.clear()
+            a_tag.string = display
+
+    # 3. <a> 태그 밖에 쌩으로 굴러다니는 핸들 & 해시태그 텍스트 처리
+    for text_node in list(soup.find_all(string=True)):
+        # 트리 변형으로 인해 노드가 공중에 떴거나 이미 부모가 없는 경우 방어
+        if not text_node.parent:
+            continue
+        if text_node.find_parent("a"):
+            continue
+
+        text_str = str(text_node)
         new_text = re.sub(
             r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})',
-            r'<a href="/@\1" class="mention">@\1@\2</a>', # 요구사항에 맞춰 /@username 혹은 외부 링크로 조정
-            text_node
+            r'<a href="/@\1@\2" class="mention">@\1@\2</a>',
+            text_str
         )
-        # 쌩 로컬 핸들 치환
         new_text = re.sub(
             r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)(?!@)',
             r'<a href="/@\1" class="mention">@\1</a>',
             new_text
         )
-        # 바뀐 텍스트가 HTML 태그를 포함하므로, 문자열 노드를 실제 HTML 오브젝트로 변환하여 교체
-        if new_text != text_node:
+        if tags:
+            escaped_tags = [re.escape(t) for t in sorted(tags, key=len, reverse=True)]
+            tags_pattern = r'(?<![A-Za-z0-9_.-])#(' + '|'.join(escaped_tags) + r')(?![A-Za-z0-9_.-])'
+            new_text = re.sub(
+                tags_pattern,
+                lambda m: f'<a href="/explore?q={quote(f"#{m.group(1)}")}" class="hashtag">#{m.group(1)}</a>',
+                new_text
+            )
+        if new_text != text_str:
             new_soup = BeautifulSoup(new_text, "html.parser")
-            text_node.replace_with(new_soup)
+            for child in list(new_soup.contents):
+                text_node.insert_before(child.extract())
+            text_node.extract()
 
-    # 파싱 트리를 다시 깨끗한 문자열로 뽑아냅니다.
-    return str(soup)
+    # 줄바꿈 보존 작업
+    for br in list(soup.find_all("br")):
+        br.replace_with("\n")
+    for tag in list(soup.find_all(["p", "div"])):
+        tag.insert_before("\n")
+        tag.insert_after("\n")
+
+    # 4. 직렬화
+    def _to_html(node):
+        if isinstance(node, NavigableString):
+            return node.output_ready()
+        if node.name == "a":
+            attrs_list = []
+            for k, v in node.attrs.items():
+                val = " ".join(v) if isinstance(v, list) else v
+                if k == "href" and "/explore?q=" in val:
+                    try:
+                        base, query = val.split("/explore?q=", 1)
+                        val = f"/explore?q={quote(unquote(query))}"
+                    except Exception:
+                        pass
+                attrs_list.append(f'{k}="{val}"')
+            attrs_str = f" {' '.join(attrs_list)}" if attrs_list else ""
+            children_str = "".join(_to_html(c) for c in list(node.children))
+            return f"<a{attrs_str}>{children_str}</a>"
+        return "".join(_to_html(c) for c in list(node.children))
+
+    result = "".join(_to_html(c) for c in list(soup.contents))
+    result = re.sub(r'\n{3,}', '\n\n', result)
+    return result.strip()
 
 
 _PRIVATE_SUBNETS = [
@@ -636,17 +741,16 @@ def _cleanup_remote_data():
 
 def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url: str = "") -> str:
     """Download remote image. Keep GIF/PNG as-is, convert others (like JPG) to WebP."""
-    import uuid
-    from urllib.parse import urlparse
     from PIL import Image as PILImage
     from app.utils.storage import get_storage
 
     if not _validate_url(image_url):
         return ""
 
-    # URL 쿼리 스트링 제거 후 순수 확장자 추출
-    pure_path = urlparse(image_url).path
-    ext = pure_path.rsplit(".", 1)[-1].lower() if "." in pure_path else "jpg"
+    # 💡 [개선] 쿼리 스트링(?...)과 해시(#...)를 확실하게 날리고 순수 파일명에서 확장자 추출
+    pure_path = urlparse(image_url).path.split('?')[0].split('#')[0]
+    ext = pure_path.rsplit(".", 1)[-1].lower() if "." in pure_path else "webp"
+
     try:
         r = _validated_get(image_url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=15)
         if r.status_code != 200 or len(r.content) > 10 * 1024 * 1024:
@@ -654,38 +758,58 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
 
         data = r.content
         storage = get_storage()
+        content_type_header = r.headers.get("Content-Type", "").lower()
+        new_url = None
 
-        # 💡 [결단] GIF와 PNG는 구분하지 않고 '둘 다' 원본 바이너리 그대로 저장합니다.
-        if ext in ("gif", "png"):
-            filename = f"{uuid.uuid4().hex}.{ext}"
+        # 1차 필터: 대놓고 확장자나 헤더가 GIF/PNG인 경우 안전하게 원본 보존
+        if ext in ("gif", "png") or "gif" in content_type_header or "png" in content_type_header:
+            final_ext = "gif" if ("gif" in ext or "gif" in content_type_header) else "png"
+            filename = f"{uuid.uuid4().hex}.{final_ext}"
             key = f"{prefix}/remote/{filename}"
-            # Content-Type만 확장자에 맞게 매칭
-            content_type = "image/gif" if ext == "gif" else "image/png"
-            new_url = storage.save(key, data, content_type)
+            new_url = storage.save(key, data, f"image/{final_ext}")
         else:
-            # JPG, JPEG 등 일반 정지 이미지만 WebP로 변환하여 용량 최적화
-            img = PILImage.open(io.BytesIO(data))
-            if img.mode in ("RGBA", "P"):
-                bg = PILImage.new("RGB", img.size, (255, 255, 255))
-                bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
-                img = bg
-            out = io.BytesIO()
-            img.save(out, format="WEBP", quality=85)
-            filename = f"{uuid.uuid4().hex}.webp"
-            key = f"{prefix}/remote/{filename}"
-            new_url = storage.save(key, out.getvalue(), "image/webp")
+            # 2차 필터: 외관은 JPG 같지만 실제 파일 내부를 검사
+            try:
+                img = PILImage.open(io.BytesIO(data))
+                is_animated = getattr(img, "is_animated", False)
+                real_format = (img.format or "").lower()
+                if is_animated or real_format in ("gif", "png"):
+                    final_ext = real_format if real_format in ("gif", "png", "webp") else "webp"
+                    filename = f"{uuid.uuid4().hex}.{final_ext}"
+                    key = f"{prefix}/remote/{filename}"
+                    new_url = storage.save(key, data, f"image/{final_ext}")
+                else:
+                    # 3차 필터: 진짜 순수 정지 이미지(JPEG 등)인 경우에만 WebP 압축 최적화 진행
+                    if img.mode in ("RGBA", "P"):
+                        bg = PILImage.new("RGB", img.size, (255, 255, 255))
+                        bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
+                        img = bg
+                    out = io.BytesIO()
+                    img.save(out, format="WEBP", quality=85)
+                    filename = f"{uuid.uuid4().hex}.webp"
+                    key = f"{prefix}/remote/{filename}"
+                    new_url = storage.save(key, out.getvalue(), "image/webp")
 
-        if old_url:
+            except Exception as img_err:
+                # 이미지 파싱 자체가 안 되거나 Pillow가 지원하지 않는 특이 포맷은 안전하게 원본 바이너리 저장
+                logger.warning("Pillow could not process image %s, saving raw data. Error: %s", image_url, img_err)
+                filename = f"{uuid.uuid4().hex}.{ext}"
+                key = f"{prefix}/remote/{filename}"
+                new_url = storage.save(key, data, content_type_header or f"image/{ext}")
+
+        # 모든 필터를 거쳐 새로운 저장이 안전하게 끝났다면 구 버전 미디어 삭제
+        if new_url and old_url:
             try:
                 storage.delete(old_url)
             except Exception:
                 pass
 
-        return new_url
+        return new_url if new_url else image_url
 
     except Exception as e:
         logger.error("Failed to save remote %s %s. Error: %s", prefix, image_url, e, exc_info=True)
     return image_url
+
 
 def _save_remote_avatar(avatar_url: str, local_username: str, old_url: str = "") -> str:
     return _save_remote_image(avatar_url, "avatars", local_username, old_url)
@@ -719,7 +843,6 @@ def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> 
         if sign_as:
             from app.crypto_utils import sign_string, get_private_key
             from app.config import SECRET_KEY
-            from urllib.parse import urlparse
             parsed = urlparse(collection_url)
             date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
             created = int(time.time())
@@ -1135,8 +1258,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         url = f"{base}/users/{username}/statuses/{status_id}{query}"
         print(f"[FETCH-POST] Mastodon URL converted to: {url}", flush=True)
 
-    from urllib.parse import urlparse as _urlparse
-    parsed = _urlparse(url)
+    parsed = urlparse(url)
     headers = {"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}
 
     if not signer:
@@ -1223,7 +1345,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     raw_content = obj.get("content", "") or ""
     if len(raw_content) > 65536:
         raw_content = raw_content[:65536]
-    content = _convert_urls_and_handles(_sanitize_html(raw_content))
+    content = _html_to_newlines(_extract_plain_text(_sanitize_html(raw_content), post=obj))
     summary = obj.get("summary", "")
 
     to = obj.get("to", [])
@@ -1383,8 +1505,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
                 _og_desc = _og("description")
                 _og_img = _og("image")
                 if _og_img and _og_img.startswith("/"):
-                    from urllib.parse import urlparse as _up
-                    _p = _up(_url)
+                    _p = urlparse(_url)
                     _og_img = f"{_p.scheme}://{_p.netloc}{_og_img}"
                 if _og_title:
                     post.link_preview = {"url": _url, "title": _og_title[:200], "description": _og_desc[:400] if _og_desc else "", "image": _og_img or ""}
@@ -1392,8 +1513,6 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
             pass
 
     return post
-
-
 
 
 def _handle_create(activity: dict) -> tuple[int, str]:
@@ -1435,7 +1554,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if len(raw_content) > 65536:
             raw_content = raw_content[:65536]
         post_id = obj.get("id", "")
-        content = _convert_urls_and_handles(_sanitize_html(raw_content))
+        content = _html_to_newlines(_extract_plain_text(_sanitize_html(raw_content), post=obj))
         summary = obj.get("summary", "")
         in_reply_to = obj.get("inReplyTo", "")
 
@@ -1657,12 +1776,11 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 for _name in mentioned_names:
                     if '@' in _name:
                         _lp, _dom = _name.split('@', 1)
-                        from urllib.parse import urlparse as _urlparse
                         u = session.query(User).filter(
                             User.username == _lp, User.is_remote == True,
                         ).first()
                         if u and u.id not in _seen_ids and u.remote_url:
-                            _p = _urlparse(u.remote_url)
+                            _p = urlparse(u.remote_url)
                             if _p.hostname and _p.hostname.lower() == _dom.lower():
                                 mentioned_ids.append(u.id)
                                 _seen_ids.add(u.id)
@@ -1676,7 +1794,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             if _c.id in _seen_ids:
                                 continue
                             if _c.remote_url:
-                                _p = _urlparse(_c.remote_url)
+                                _p = urlparse(_c.remote_url)
                                 if _p.hostname and _p.hostname.lower() == _dom.lower():
                                     mentioned_ids.append(_c.id)
                                     _seen_ids.add(_c.id)
@@ -1783,11 +1901,11 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             # Strip "RE: https://..." from quote post content
             if quote_of_ap_id and post.content:
                 post.content = re.sub(
-                    r'^(<p>\s*)?RE:\s*<a[^>]*>[^<]*</a>\s*(</p>)?\s*',
+                    r'^[\s\n]*RE:\s*<a[^>]*>[^<]*</a>\s*[\n\s]*',
                     '', post.content, count=1, flags=re.I
                 )
                 post.content = re.sub(
-                    r'^(<p>\s*)?RE:\s*https?://\S+\s*(</p>)?\s*',
+                    r'^[\s\n]*RE:\s*https?://\S+\s*[\n\s]*',
                     '', post.content, count=1, flags=re.I
                 )
             session.add(post)
@@ -1813,8 +1931,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             _og_desc_lp = _og_lp("description")
                             _og_img_lp = _og_lp("image")
                             if _og_img_lp and _og_img_lp.startswith("/"):
-                                from urllib.parse import urlparse as _up_lp
-                                _p_lp = _up_lp(_url_lp)
+                                _p_lp = urlparse(_url_lp)
                                 _og_img_lp = f"{_p_lp.scheme}://{_p_lp.netloc}{_og_img_lp}"
                             if _og_title_lp:
                                 post.link_preview = {"url": _url_lp, "title": _og_title_lp[:200], "description": _og_desc_lp[:400] if _og_desc_lp else "", "image": _og_img_lp or ""}
@@ -2357,8 +2474,7 @@ def _handle_block(activity: dict) -> tuple[int, str]:
             # Re-query both users in the SAME session to avoid detached instance issues
             remote = session.query(User).filter_by(remote_url=actor_url).first()
             if not remote:
-                from urllib.parse import urlparse as _up
-                p = _up(actor_url)
+                p = urlparse(actor_url)
                 if "/@" in p.path:
                     alt_url = f"{p.scheme}://{p.netloc}/users/{p.path.split('/@')[-1]}"
                     remote = session.query(User).filter_by(remote_url=alt_url).first()
@@ -2612,7 +2728,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     # Update content/summary
                     new_content = object_data.get("content", "")
                     if new_content:
-                        post.content = _convert_urls_and_handles(_sanitize_html(new_content))
+                        post.content = _html_to_newlines(_extract_plain_text(_sanitize_html(new_content), post=post))
                     if "summary" in object_data:
                         post.summary = object_data.get("summary", "")
                     # Update poll data

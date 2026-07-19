@@ -3,6 +3,7 @@ import asyncio
 import logging
 import traceback
 from app.models import get_session, Post, Follow, User, Boost
+from app.utils.filter import should_deliver_post, _load_user_filters
 
 logger = logging.getLogger(__name__)
 
@@ -108,51 +109,23 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                 for f in s.query(Follow).filter(Follow.follower_id.in_(home_uids), Follow.accepted == True).all():
                     home_follows.setdefault(f.follower_id, set()).add(f.following_id)
 
+            # Pre-load Post ORM object and per-user filter context for home/social
+            _db_post = s.query(Post).filter_by(id=post_json.get("id")).first()
+            _filter_cache: dict[int, dict | None] = {}
+
             for _, info in list(_streams.items()):
                 uid = info["user_id"]
                 tl = info["tl_type"]
                 if not _should_deliver_fast(uid, tl, post_author_id, post_visibility, follower_ids, booster_ids, author_is_local, mentioned_ids):
                     continue
-                # Additional filtering for home/social timeline (skip for mention visibility - targeted delivery)
+                # Home/social: use unified filter (mention, reply, mute/block, keyword)
                 if tl in ("home", "social") and post_visibility != "mention":
-                    # 멘션 대상이면 무조건 전달, 필터 무시
-                    if mentioned_ids and uid in mentioned_ids:
-                        _enqueue(info["queue"], payload)
+                    if uid not in _filter_cache:
+                        _filter_cache[uid] = _load_user_filters(s, stream_users.get(uid))
+                    viewer = stream_users.get(uid)
+                    following_set = home_follows.get(uid, set()) | {uid}
+                    if _db_post and not should_deliver_post(_db_post, s, viewer, tl, following_set, _filter_cache[uid]):
                         continue
-                    user_follows = home_follows.get(uid, set()) | {uid}
-                    content = post_json.get("content") or ""
-                    # [1] 멘션 필터링 (DB ID 기반)
-                    skip_mention = False
-                    # 1-A. 페이로드에 명시된 멘션 ID 목록 검사
-                    # 내가 멘션된 게 아니고, 글 작성자가 내가 팔로우하는 사람도 아니라면 (모르는 원격 유저의 글 등)
-                    if (not mentioned_ids or uid not in mentioned_ids) and post_author_id not in user_follows:
-                        # 이 멘션 글이 "내가 팔로우하는 누군가"에게 가는 대화인지 확인합니다.
-                        # 멘션 대상자(mentioned_ids) 중 나와 관계있는 사람(내가 팔로우하는 사람)이 단 한 명도 없다면 내 홈에서 제외합니다.
-                        if mentioned_ids:
-                            has_followed_mention = any(muid in user_follows for muid in mentioned_ids)
-                            if not has_followed_mention:
-                                skip_mention = True
-                        else:
-                            # 1-B. 원격 글 등 mentioned_ids가 아예 비어있고 작성자도 미팔로우 상태라면 
-                            # 멘션 성격의 글(콘텐츠에 @가 포함됨)인지 확인하여 안전하게 필터링합니다.
-                            if "@" in content and post_visibility in ("unlisted", "private"):
-                                skip_mention = True
-
-                    # 1-B. 리모트 글은 mentioned_ids가 비어있어 HTML로 판별 불가 → 필터 스킵
-                    if skip_mention:
-                        print(f"Stream filter: dropped post {post_json.get('id')} from uid={uid} (mention not followed)", flush=True)
-                        continue
-
-                    # [2] 답글(Reply) 필터링 (부모 글 작성자 미팔로우 방어)
-                    if post_json.get("boosted_by"):
-                        pass
-                    elif _is_reply:
-                        if parent_author_id is None:
-                            print(f"Stream filter: dropped reply {post_json.get('id')} (parent author unverified)", flush=True)
-                            continue
-                        if parent_author_id != uid and parent_author_id not in user_follows and uid != post_author_id:
-                            print(f"Stream filter: dropped reply {post_json.get('id')} (parent author {parent_author_id} not followed)", flush=True)
-                            continue
                 _enqueue(info["queue"], payload)
     except Exception as e:
         print("!!! BROADCAST_POST ERROR !!!", flush=True)
