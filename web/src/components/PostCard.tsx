@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import EditModal from "./EditModal";
 import ReplyModal from "./ReplyModal";
 import ClickableCover from "./ClickableCover";
+import PostForm from "./PostForm";
 import Icon from "./Icon";
 import Avatar from "./Avatar";
 import MiniPostCard from "./MiniPostCard";
@@ -65,6 +66,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   const [showReply, setShowReply] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const [showRewrite, setShowRewrite] = useState(false);
   const [showPollResults, setShowPollResults] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [reportReason, setReportReason] = useState("");
@@ -775,6 +777,11 @@ const localReactionEmojiMap = useMemo(() => {
                       <Icon name="edit" /> 수정
                     </button>
                   )}
+                  {post.is_mine && (
+                    <button onClick={() => { setShowMoreActions(false); setShowRewrite(true); }} className="post-actions-dropdown-item">
+                      <Icon name="edit" /> 지우고 다시 쓰기
+                    </button>
+                  )}
                   {(post.is_mine || currentUser?.is_admin) && (
                     <button onClick={() => { setShowMoreActions(false); handleDelete(); }} className="post-actions-dropdown-item post-actions-dropdown-danger">
                       <Icon name="trash" /> 삭제
@@ -859,6 +866,21 @@ const localReactionEmojiMap = useMemo(() => {
                 <img ref={viewerImgRef} src={m.url} alt={m.alt || ""} draggable={false} onDoubleClick={handleViewerDblClick} style={{ maxWidth: viewerZoom > 1 ? "none" : "100%", maxHeight: viewerZoom > 1 ? "none" : "85vh", borderRadius: viewerZoom > 1 ? 0 : 8, objectFit: "contain", transform: `scale(${viewerZoom}) translate(${viewerPan.x / viewerZoom}px, ${viewerPan.y / viewerZoom}px)`, transition: isPanning.current ? "none" : "transform 0.15s ease", userSelect: "none" }} />
               );
             })()}
+          </div>
+        </div>
+      )}
+      {!readonly && showRewrite && (
+        <div className="reply-modal-backdrop active" onClick={() => setShowRewrite(false)}>
+          <div className="reply-modal modal-form" onClick={(e) => e.stopPropagation()}>
+            <button className="reply-modal-close" onClick={() => setShowRewrite(false)}>×</button>
+            <h3>지우고 다시 쓰기</h3>
+            <PostForm onDone={async (newPost) => {
+              setShowRewrite(false);
+              if (!newPost) return;
+              try { await api.deletePost(post.id); } catch {}
+              if (onDelete) onDelete();
+              else if (onUpdate) onUpdate();
+            }} initialContent={(post.content || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")} initialVisibility={post.visibility} />
           </div>
         </div>
       )}
