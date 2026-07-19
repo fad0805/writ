@@ -409,7 +409,7 @@ const localReactionEmojiMap = useMemo(() => {
     // 1. 에피소드 주소 (ex: /series/1/episodes/5)
     const epMatch = url.match(/\/series\/(\d+)\/episodes\/(\d+)/);
     // 2. 시리즈 단독 주소 (ex: /series/1)
-    const seriesOnlyMatch = url.match(/\/series\/(\d+)\/?$/);
+    const seriesOnlyMatch = url.match(/\/series\/(?:by-number\/[^/]+\/)?([a-zA-Z0-9]+)(?:\?.*)?$/);
     if (epMatch) {
       const novelId = parseInt(epMatch[1]);
       const episodeId = parseInt(epMatch[2]);
