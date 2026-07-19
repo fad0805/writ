@@ -44,7 +44,9 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
     (_m: string, before: string, url: string) => {
       const isLocal = typeof window !== "undefined" && url.startsWith(window.location.origin);
       const targetUrl = isLocal ? url.replace(window.location.origin, "") : url;
-      return `${before}<a href="${targetUrl}"${isLocal ? "" : ' target="_blank" rel="noopener noreferrer"'}>${url}</a>`;
+      let display = url.replace(/^https?:\/\//, "");
+      if (display.length > 40) display = display.slice(0, 37) + "...";
+      return `${before}<a href="${targetUrl}"${isLocal ? "" : ' target="_blank" rel="noopener noreferrer"'}>${display}</a>`;
     }
   );
 
