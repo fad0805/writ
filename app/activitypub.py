@@ -92,6 +92,7 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
     tags = []
     if post and hasattr(post, "tag_list") and post.tag_list:
         tags = [str(t) for t in post.tag_list if t]
+    print(f'============================================= tags : {tags}')
 
     # 1. 생짜 URL을 a 태그로 변환
     url_pattern = r'(?<!href=")(?<!src=")(?<!">)(https?://(?!.*/tags/)[^\s<>"\')\]#]+)'
@@ -114,10 +115,9 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
             raw_href = " ".join(raw_href)
         raw_href = raw_href.strip()
 
-        print(f'================================== post : {post}')
         mentioned_user_ids = []
-        if post and isinstance(post, dict):
-            for tag in post.get("tag"):
+        if post and tags:
+            for tag in tags:
                 if tag.get("type") == 'Mention':
                     mentioned_user_ids.append(tag.get("name", ""))
         elif post:
@@ -125,7 +125,6 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
         else:
             raise ValueError(f"Can not detect post or actor object")
 
-        print(f'================================== mentioned_user_ids : {mentioned_user_ids}')
         for mentioned_user in mentioned_user_ids:
             a_tag.clear()  # 기존 내부 자식 태그들 안전하게 청소
             a_tag.string = f"@{mentioned_user}"
@@ -137,7 +136,6 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
         # [예외 방어] 데이터 바인딩이 누락되었으나 원격 주소인 경우를 위한 차선책
         if text.startswith('@') and raw_href.startswith('http'):
             remote_url_match = re.match(r'https?://([^/]+)/(?:@|users/)([A-Za-z0-9_.-]+)', raw_href, re.IGNORECASE)
-            print(f'================================== remote_url_match: {remote_url_match.group(1), remote_url_match.group(2)}')
             if remote_url_match:
                 domain = remote_url_match.group(1).lower()
                 username = remote_url_match.group(2)
@@ -151,7 +149,6 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
         # 2-1. 기존 쌩 텍스트 기반 패턴 매칭 (데이터 맵에 없는 경우를 위한 Fallback)
         raw_username = text.lstrip('@').lower()
         if text.startswith('@') and raw_username in mentioned_user_ids:
-            print(f'================================== raw_username : {raw_username}')
             a_tag.clear()
             a_tag.string = f"@{raw_username}"
             a_tag["href"] = f"/@{raw_username}"
