@@ -2,46 +2,16 @@
 
 import { useEditorActions, useEditorInit } from "@/hooks/useEditorAction";
 import { EditorContent } from "@tiptap/react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import ColorPicker from "./ColorPicker";
 
 export default function EpisodeEditor({ value, onChange }: { value: string; onChange: (html: string) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const colorPickerRef = useRef<HTMLDivElement>(null);
-  const recentColorsRef = useRef<string[]>([]);
 
   const editor = useEditorInit({ value, onChange })
   const editorFn = useEditorActions(editor);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("writ:recent-colors");
-      if (saved) recentColorsRef.current = JSON.parse(saved);
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    if (!showColorPicker) return;
-    const close = (e: MouseEvent) => {
-      if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) setShowColorPicker(false);
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [showColorPicker]);
-
-  const saveRecentColor = (color: string) => {
-    const list = recentColorsRef.current.filter((c) => c !== color);
-    list.unshift(color);
-    if (list.length > 5) list.length = 5;
-    recentColorsRef.current = list;
-    try { localStorage.setItem("writ:recent-colors", JSON.stringify(list)); } catch {}
-  };
-
-  const applyColor = (color: string) => {
-    editor?.chain().focus().setColor(color).run();
-    saveRecentColor(color);
-    setShowColorPicker(false);
-  };
 
   return (
     <div className="episode-editor">
@@ -56,27 +26,10 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
           <div style={{ position: "relative", display: "inline-block" }}>
             <button type="button" onClick={() => setShowColorPicker(!showColorPicker)} style={{ color: editor?.getAttributes("textStyle").color || "inherit", fontWeight: 600 }}>A</button>
             {showColorPicker && (
-              <div ref={colorPickerRef} className="episode-editor-colorpicker" onClick={(e) => e.stopPropagation()}>
-                {recentColorsRef.current.length > 0 && (
-                  <>
-                    {recentColorsRef.current.map((c) => (
-                      <button key={`r-${c}`} type="button" title={`${c} (최근)`} style={{ width: 20, height: 20, border: `2px solid var(--accent)`, borderRadius: 3, cursor: "pointer", background: c, display: "inline-block", margin: 1 }} onClick={() => applyColor(c)} />
-                    ))}
-                    <div style={{ gridColumn: "1 / -1", height: 1, background: "var(--border)", margin: "3px 0" }} />
-                  </>
-                )}
-                {["#000000","#434343","#666666","#999999","#b7b7b7","#cccccc","#d9d9d9","#efefef","#f3f3f3","#ffffff",
-                  "#980000","#ff0000","#ff9900","#ffff00","#00ff00","#00ffff","#4a86e8","#0000ff","#9900ff","#ff00ff",
-                  "#e6b8af","#f4cccc","#fce5cd","#fff2cc","#d9ead3","#d0e0e3","#c9daf8","#cfe2f3","#d9d2e9","#ead1dc",
-                  "#dd7e6b","#ea9999","#f9cb9c","#ffe599","#b6d7a8","#a2c4c9","#a4c2f4","#9fc5e8","#b4a7d6","#d5a6bd",
-                  "#cc4125","#e06666","#f6b26b","#ffd966","#93c47d","#76a5af","#6d9eeb","#6fa8dc","#8e7cc3","#c27ba0",
-                  "#a61c00","#cc0000","#e69138","#f1c232","#6aa84f","#45818e","#3c78d8","#3d85c6","#674ea7","#a64d79",
-                  "#85200c","#990000","#b45f06","#bf9000","#38761d","#134f5c","#1155cc","#0b5394","#351c75","#741b47",
-                  "#5b0f00","#660000","#783f04","#7f6000","#274e13","#0c343d","#1c4587","#073763","#20124d","#4c1130"
-                ].map((c) => (
-                    <button key={c} type="button" title={c} style={{ width: 20, height: 20, border: "1px solid var(--border)", borderRadius: 3, cursor: "pointer", background: c, display: "inline-block", margin: 1 }} onClick={() => applyColor(c)} />
-                  ))}
-              </div>
+              <ColorPicker
+                onClose={setShowColorPicker}
+                ref={colorPickerRef}
+                editor={editor}/>
             )}
           </div>
         </div>
@@ -105,11 +58,6 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
       </div>
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={editorFn?.handleImgUpload} />
       <EditorContent editor={editor} className="episode-editor-content" />
-      <style>{`
-        .episode-editor-content img.ProseMirror-selectednode { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
-        .toolbar-sep { color: var(--text-dim); margin: 0 2px; font-size: 0.85em; vertical-align: middle; }
-        .episode-editor-colorpicker { position: absolute; top: 100%; left: 0; z-index: 50; display: grid; grid-template-columns: repeat(10, 20px); gap: 1px; padding: 6px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); margin-top: 4px; }
-      `}</style>
     </div>
   );
 }
