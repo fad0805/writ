@@ -4121,8 +4121,9 @@ def _domain_from_actor(u) -> str:
     if u.is_remote and u.remote_url:
         from urllib.parse import urlparse
         return urlparse(u.remote_url).hostname or ""
-    from app.config import DOMAIN
-    return DOMAIN
+    # 🌟 app.config 임포트를 제거하고, 이미 전역에 정의된 BASE_URL을 안전하게 파싱!
+    from urllib.parse import urlparse
+    return urlparse(BASE_URL).hostname or ""
 
 
 @router.get("/settings/export/{export_type}")
