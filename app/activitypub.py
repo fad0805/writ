@@ -77,6 +77,13 @@ def _sanitize_html(html: str) -> str:
     return clean_html
 
 
+def _html_to_newlines(html: str) -> str:
+    """Convert HTML line breaks/paragraphs to \\n for consistent storage."""
+    html = re.sub(r'<br\s*/?>', '\n', html, flags=re.I)
+    html = re.sub(r'</?p>', '\n', html, flags=re.I)
+    return html.strip('\n')
+
+
 def _convert_urls_and_handles(sanitized_content: str) -> str:
     from bs4 import BeautifulSoup
     # 1. 생짜 URL을 a 태그로 변환 (기존 유지)
@@ -1223,7 +1230,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     raw_content = obj.get("content", "") or ""
     if len(raw_content) > 65536:
         raw_content = raw_content[:65536]
-    content = _convert_urls_and_handles(_sanitize_html(raw_content))
+    content = _html_to_newlines(_convert_urls_and_handles(_sanitize_html(raw_content)))
     summary = obj.get("summary", "")
 
     to = obj.get("to", [])
@@ -1435,7 +1442,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if len(raw_content) > 65536:
             raw_content = raw_content[:65536]
         post_id = obj.get("id", "")
-        content = _convert_urls_and_handles(_sanitize_html(raw_content))
+        content = _html_to_newlines(_convert_urls_and_handles(_sanitize_html(raw_content)))
         summary = obj.get("summary", "")
         in_reply_to = obj.get("inReplyTo", "")
 
@@ -1783,11 +1790,11 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             # Strip "RE: https://..." from quote post content
             if quote_of_ap_id and post.content:
                 post.content = re.sub(
-                    r'^(<p>\s*)?RE:\s*<a[^>]*>[^<]*</a>\s*(</p>)?\s*',
+                    r'^[\s\n]*RE:\s*<a[^>]*>[^<]*</a>\s*[\n\s]*',
                     '', post.content, count=1, flags=re.I
                 )
                 post.content = re.sub(
-                    r'^(<p>\s*)?RE:\s*https?://\S+\s*(</p>)?\s*',
+                    r'^[\s\n]*RE:\s*https?://\S+\s*[\n\s]*',
                     '', post.content, count=1, flags=re.I
                 )
             session.add(post)
@@ -2612,7 +2619,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     # Update content/summary
                     new_content = object_data.get("content", "")
                     if new_content:
-                        post.content = _convert_urls_and_handles(_sanitize_html(new_content))
+                        post.content = _html_to_newlines(_convert_urls_and_handles(_sanitize_html(new_content)))
                     if "summary" in object_data:
                         post.summary = object_data.get("summary", "")
                     # Update poll data
