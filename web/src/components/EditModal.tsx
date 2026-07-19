@@ -10,29 +10,36 @@ export default function EditModal({ post, onClose, onDone }: { post: PostData; o
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // 🌟 [수정 포인트] HTML을 Plain Text로 복원할 때, <a> 태그는 href 주소로 치환합니다.
   const [content, setContent] = useState(() => {
     if (typeof window === "undefined") return post.content;
-    
-    // 임시 DOM 엘리먼트를 만들어 HTML 파싱을 브라우저에 맡깁니다.
     const div = document.createElement("div");
     div.innerHTML = post.content;
 
-    // 1. 모든 <a> 태그를 찾아 겉보기 text 대신 진짜 주소(href)로 교체합니다.
+    // 모든 <a> 태그를 대상으로 복구 작업 시작
     const links = div.querySelectorAll("a");
     links.forEach((link) => {
-      const href = link.getAttribute("href");
-      if (href) {
-        // 원래 텍스트 노드를 href 주소 값으로 바꿔치기
+      const href = link.getAttribute("href") || "";
+      // 1️⃣ 해시태그 검사: 클래스명에 hashtag가 있거나, 주소에 /explore가 포함된 경우
+      const isHashtag = link.classList.contains("hashtag") || href.includes("/explore");
+
+      if (isHashtag) {
+        // 해시태그는 주소로 바꾸지 않고 원래 텍스트(#ActivityPub)를 그대로 둡니다.
+        if (!link.textContent?.startsWith("#")) {
+          const match = href.match(/[?&]q=%23([^&]+)/);
+          if (match) link.textContent = `#${decodeURIComponent(match[1])}`;
+        }
+      } else if (href) {
+        // 2️⃣ [일반 URL + 시리즈/에피소드 주소 일괄 복구]
+        // 해시태그가 아닌 모든 <a> 태그는 말줄임표(...)를 지우고 href의 진짜 원본 주소로 채워 넣습니다.
         link.textContent = href;
       }
     });
 
-    // 2. <br> 태그는 줄바꿈(\n)으로 미리 치환합니다.
+    // <br> 태그를 줄바꿈(\n)으로 치환
     const htmlWithNewlines = div.innerHTML.replace(/<br\s*\/?>/gi, "\n");
     div.innerHTML = htmlWithNewlines;
 
-    // 3. 최종적으로 태그가 다 벗겨진 순수 텍스트만 안전하게 가져옵니다.
+    // 최종적으로 태그를 다 벗겨낸 온전한 텍스트를 반환합니다.
     return div.textContent || div.innerText || "";
   });
 
