@@ -121,6 +121,8 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
                     mentioned_user_ids.append(tag.get("name", ""))
         elif post:
             mentioned_user_ids = post.mentioned_user_ids
+        else:
+            raise ValueError(f"Can not detect post or actor object")
 
         for mentioned_user in mentioned_user_ids:
             a_tag.clear()  # 기존 내부 자식 태그들 안전하게 청소
