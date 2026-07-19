@@ -435,7 +435,7 @@ class Post(Base):
             "url": obj_id,
             "type": "note",
             "published": self.created_at.isoformat() if self.created_at else "",
-            "attributedto": self.author.actor_uri(),
+            "attributedTo": self.author.actor_uri(),
             "content": content,
             "to": [],
             "cc": [],
@@ -523,15 +523,23 @@ class Post(Base):
         return obj
 
     def to_ap_create(self):
+        print(f'========== self.id {self.id}')
         note = self.to_ap_note()
+        # 안전장치: to/cc가 비어있으면 안 됨
+        to = note.get("to", [])
+        cc = note.get("cc", [])
+        # 만약 아무것도 없다면(테스트시) 강제로 public 추가
+        if not to and not cc:
+            public_uri = "https://www.w3.org/ns/activitystreams#public"
+            to = [public_uri]
         return {
             "@context": note.get("@context", "https://www.w3.org/ns/activitystreams"),
             "id": f"{BASE_URL}/activities/create/{self.id}",
             "type": "Create",
             "actor": self.author.actor_uri(),
             "published": self.created_at.isoformat() if self.created_at else "",
-            "to": note.get("to", []),
-            "cc": note.get("cc", []),
+            "to": to,
+            "cc": cc,
             "object": note,
         }
 
