@@ -117,7 +117,8 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
         mentioned_user_ids = []
         if post and isinstance(post, dict):
             for tag in post.get("tag"):
-                mentioned_user_ids.append(tag.get("name", ""))
+                if tag.get("type") == 'Mention':
+                    mentioned_user_ids.append(tag.get("name", ""))
         elif post:
             mentioned_user_ids = post.mentioned_user_ids
 
