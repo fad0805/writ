@@ -17,6 +17,7 @@ from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notifica
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.log_utils import log_admin_action
 from app.activitypub import _fetch_remote_post
+from app.utils.filter import _timeline_filter
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
 
@@ -781,129 +782,12 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         deduped.append(p)
     posts = deduped
     print(f"[feed] after dedup: {len(posts)} posts", flush=True)
-    # Filter replies: hide if direct parent author is not followed
-    # Only for home/social timeline, not local/federated
-    if user and tl_type in ("home", "social") and _following_ids:
-        parent_ids = {p.in_reply_to_id for p in posts if p.author_id != user.id and p.in_reply_to_id}
-        parent_authors = {}
-        if parent_ids:
-            for pp in session.query(Post).options(selectinload(Post.author)).filter(Post.id.in_(parent_ids)).all():
-                parent_authors[pp.id] = pp.author_id
-        reply_filtered = []
-        for p in posts:
-            if p.author_id != user.id and (p.in_reply_to_id or p.in_reply_to_ap_id):
-                if p.in_reply_to_id:
-                    parent_author_id = parent_authors.get(p.in_reply_to_id)
-                    if parent_author_id is None or (parent_author_id not in _following_ids and parent_author_id != user.id):
-                        continue
-                else:
-                    # remote parent not in DB → hide (can't verify parent author)
-                    continue
-            reply_filtered.append(p)
-        posts = reply_filtered
-    print(f"[feed] after reply filter: {len(posts)} posts", flush=True)
-    # Apply user mutes, blocks, and keyword mutes
-    if user:
-        muted_user_ids = {row[0] for row in session.query(UserMute.target_user_id).filter_by(user_id=user.id).all()}
-        blocked_ids = {row[0] for row in session.query(UserBlock.target_user_id).filter_by(user_id=user.id).all()}
-        blocked_by_ids = {row[0] for row in session.query(UserBlock.user_id).filter_by(target_user_id=user.id).all()}
-        muted_series_ids = {row[0] for row in session.query(SeriesMute.novel_id).filter_by(user_id=user.id).all()}
-        hidden_ids = muted_user_ids | blocked_ids | blocked_by_ids
-        kw_mutes = session.query(KeywordMute).filter_by(user_id=user.id).all()
-        # Pre-parse keyword mutes
-        parsed_kw = []
-        for kw in kw_mutes:
-            if kw.is_regex:
-                parsed_kw.append(("regex", kw.keyword, kw.mode, None))
-            else:
-                try:
-                    keywords = json.loads(kw.keyword)
-                    if isinstance(keywords, str):
-                        keywords = [keywords]
-                except (json.JSONDecodeError, TypeError):
-                    keywords = [kw.keyword]
-                keywords = [k.strip().lower() for k in keywords if k.strip()]
-                parsed_kw.append(("text", None, kw.mode, keywords))
-        import re
-        filtered = []
-        for p in posts:
-            if p.author_id in hidden_ids:
-                continue
-            if p.novel_id and p.novel_id in muted_series_ids:
-                continue
-            if parsed_kw:
-                content_lower = (p.content or "").lower()
-                matched = False
-                for kw_type, pattern, mode, keywords in parsed_kw:
-                    if kw_type == "regex":
-                        try:
-                            if re.search(pattern, content_lower):
-                                matched = True
-                                break
-                        except re.error:
-                            pass
-                    else:
-                        if mode == "and":
-                            if all(k in content_lower for k in keywords):
-                                matched = True
-                                break
-                        else:
-                            if any(k in content_lower for k in keywords):
-                                matched = True
-                                break
-                if matched:
-                    continue
-            filtered.append(p)
-        posts = filtered
-        print(f"[feed] after mute/block/keyword filter: {len(posts)} posts", flush=True)
-        # Hide posts that mention someone the user doesn't follow (home/social only)
-        if user and tl_type in ("home", "social"):
-            _following_ids_set = set(_following_ids) if _following_ids else set()
-            mention_filtered = []
-            # 내가 팔로우하는 사람 + 나 자신
-            allowed_authors = _following_ids_set | {user.id}
-
-            for p in posts:
-                # [대원칙 1] 내가 직접 언급된 글(DB ID 기반 또는 원격 감지)은 무조건 무사 통과!
-                is_mentioned_to_me = False
-                if p.mentioned_user_ids and user.id in p.mentioned_user_ids:
-                    is_mentioned_to_me = True
-                # DB에 멘션 ID가 기록 안 된 원격 글일 경우, 본문 텍스트에서 내 멘션이 있는지 검사
-                if not is_mentioned_to_me and p.content and p.author and p.author.is_remote:
-                    import re as _re
-                    my_username_lower = user.username.split('@')[0].lower()
-                    # 본문에 @내아이디@도메인 또는 @내아이디 형태가 있는지 확인
-                    if _re.search(rf'@{my_username_lower}(?:@[\w.-]+)?\b', p.content.lower()):
-                        is_mentioned_to_me = True
-
-                # 나한테 온 멘션글이라면 작성자가 누구든 묻지도 따지지도 않고 타임라인에 포함
-                if is_mentioned_to_me:
-                    mention_filtered.append(p)
-                    continue
-
-                # 🚨 [대원칙 2] 나한테 온 멘션이 아니라면, 글 작성자가 반드시 '내가 팔로우하는 사람'이어야 함!
-                if p.author_id not in allowed_authors:
-                    # 내가 팔로우하지도 않는 사람이 쓴 글이 홈에 들어왔으므로 드롭
-                    continue
-
-                # -------------------------------------------------------------
-                # 여기서부터는 작성자가 '내가 팔로우하는 사람'일 때의 추가 필터링 (답글 방어)
-                # -------------------------------------------------------------
-                skip = False
-
-                # 부모 글(답장 대상)이 DB에 없는 원격 글일 때 
-                # (내가 팔로우하는 사람이 엉뚱한 원격 유저에게 보내는 답글 찌꺼기 방어)
-                if p.in_reply_to_ap_id and not p.in_reply_to_id:
-                    # 굳이 안 봐도 되는 남들의 대화 타래라면 스킵
-                    # (부모 작성자를 DB에서 알 수 없으므로 안전하게 스킵 처리)
-                    skip = True
-
-                if skip:
-                    continue
-
-                mention_filtered.append(p)
-            posts = mention_filtered # 필터링된 목록으로 갱신
+    if following_ids:
+        try:
+            posts = _timeline_filter(posts, session, user, tl_type, following_ids)
             print(f"[feed] after mention filter: {len(posts)} posts", flush=True)
+        except Exception as e:
+            print(f'[feed] mention filter error: {e}', flush=True)
     has_more = raw_total > limit
     print(f"[feed] has_more={has_more} (raw_total={raw_total}, after_filter={len(posts)}, limit={limit})", flush=True)
     posts = posts[:limit]

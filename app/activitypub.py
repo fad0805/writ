@@ -84,7 +84,10 @@ def _html_to_newlines(html: str) -> str:
     return html.strip('\n')
 
 
-def _convert_urls_and_handles(sanitized_content: str) -> str:
+def _extract_plain_text(sanitized_content: str) -> str:
+    if not sanitized_content:
+        return ""
+
     from bs4 import BeautifulSoup
     # 1. 생짜 URL을 a 태그로 변환 (기존 유지)
     url_pattern = r'(?<!href=")(?<!src=")(?<!">)(https?://(?!.*/tags/)[^\s<>"\')\]#]+)'
@@ -1230,7 +1233,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     raw_content = obj.get("content", "") or ""
     if len(raw_content) > 65536:
         raw_content = raw_content[:65536]
-    content = _html_to_newlines(_convert_urls_and_handles(_sanitize_html(raw_content)))
+    content = _html_to_newlines(_extract_plain_text(_sanitize_html(raw_content)))
     summary = obj.get("summary", "")
 
     to = obj.get("to", [])
@@ -1401,8 +1404,6 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     return post
 
 
-
-
 def _handle_create(activity: dict) -> tuple[int, str]:
     import sys
     obj = activity.get("object", {})
@@ -1442,7 +1443,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if len(raw_content) > 65536:
             raw_content = raw_content[:65536]
         post_id = obj.get("id", "")
-        content = _html_to_newlines(_convert_urls_and_handles(_sanitize_html(raw_content)))
+        content = _html_to_newlines(_extract_plain_text(_sanitize_html(raw_content)))
         summary = obj.get("summary", "")
         in_reply_to = obj.get("inReplyTo", "")
 
@@ -2619,7 +2620,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     # Update content/summary
                     new_content = object_data.get("content", "")
                     if new_content:
-                        post.content = _html_to_newlines(_convert_urls_and_handles(_sanitize_html(new_content)))
+                        post.content = _html_to_newlines(_extract_plain_text(_sanitize_html(new_content)))
                     if "summary" in object_data:
                         post.summary = object_data.get("summary", "")
                     # Update poll data
