@@ -1025,6 +1025,7 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content = ''):
             # 스레드 안에서 안전하게 다시 조회 (Lazy Loading 에러 원천 차단)
             user = ap_s.query(User).filter_by(id=user_id).first()
             post = ap_s.query(Post).filter_by(id=post_id).first()
+            print(user, post)
             if not user or not post:
                 logger.warning("Broadcast failed: User %s or Post %s not found", user_id, post_id)
                 return
@@ -1048,8 +1049,7 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content = ''):
                             continue
                         _post_to_inbox(inbox, create_activity, user)
                 # Also deliver to @user@domain mentions parsed from content
-                import re as _re
-                remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', post.content or ""))
+                remote_handles = set(re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', post.content or ""))
                 _resolved_handles = []
                 for handle in remote_handles:
                     remote_user = ap_s.query(User).filter(
@@ -1326,7 +1326,6 @@ def api_create_post(
                 _brn(parent.author_id)
 
         # Async federation broadcast (background thread so it doesn't block response)
-        actor_uri = user.actor_uri()
         threading.Thread(target=_broadcast_federation, args=(user.id, post.id, visibility, content), daemon=True).start()
 
         try:
