@@ -55,7 +55,7 @@ export async function subscribePush(): Promise<boolean> {
     body: form,
   });
   const body = await res.text().catch(() => "");
-  if (!res.ok) throw new Error(`Failed to save subscription (${res.status}): ${body}`);
+  if (!res.ok) throw new Error("Failed to save subscription");
   return true;
 }
 

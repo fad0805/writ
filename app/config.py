@@ -101,5 +101,18 @@ if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
                 serialization.PublicFormat.UncompressedPoint,
             )
             VAPID_PUBLIC_KEY = base64.urlsafe_b64encode(_raw_pub).rstrip(b"=").decode()
+
+        os.environ["VAPID_PRIVATE_KEY"] = VAPID_PRIVATE_KEY
+        os.environ["VAPID_PUBLIC_KEY"] = VAPID_PUBLIC_KEY
+
+        try:
+            from app.models import ServerSetting, get_session
+            with get_session() as _s:
+                _ss = ServerSetting.get(_s)
+                _ss.vapid_private_key = VAPID_PRIVATE_KEY
+                _ss.vapid_public_key = VAPID_PUBLIC_KEY
+                _s.commit()
+        except Exception:
+            pass
     except Exception:
         pass

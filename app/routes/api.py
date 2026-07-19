@@ -7329,53 +7329,31 @@ def api_client_log(request: Request):
 
 @router.get("/push/vapid-public-key")
 def get_vapid_public_key():
-    key = None
-    try:
-        from app.models import ServerSetting
-        with get_session() as s:
-            ks = s.query(ServerSetting).filter(ServerSetting.key.in_(["vapid_public_key"])).all()
-            for k in ks:
-                if k.key == "vapid_public_key" and k.value:
-                    key = k.value
-    except Exception:
-        pass
+    import base64
+    from app.config import VAPID_PUBLIC_KEY
+    key = VAPID_PUBLIC_KEY
     if not key:
-        from app.config import get_vapid_keys
-        _, key = get_vapid_keys()
-    if not key:
-        # Auto-generate and persist
         try:
-            from py_vapid import Vapid
-            from app.models import ServerSetting
-            v = Vapid()
-            v.generate_keys()
-            import base64 as _b64
-            raw_priv = v.private_pem().decode() if isinstance(v.private_pem(), bytes) else v.private_pem()
-            raw_pub = v.public_pem().decode() if isinstance(v.public_pem(), bytes) else v.public_pem()
-            with get_session() as s:
-                for k_val, k_key in [(raw_priv, "vapid_private_key"), (raw_pub, "vapid_public_key")]:
-                    existing = s.query(ServerSetting).filter_by(key=k_key).first()
-                    if existing:
-                        existing.value = k_val
-                    else:
-                        s.add(ServerSetting(key=k_key, value=k_val))
-                s.commit()
-            key = raw_pub
-        except Exception:
-            pass
-    if not key:
-        raise HTTPException(404, "Web Push not configured")
-    # If PEM format, extract raw base64 key
-    if key.startswith("-----"):
-        import base64, re
-        b64 = "".join(re.findall(r"base64,[\s]*([A-Za-z0-9+/=]+)", key)) or "".join(re.findall(r"([A-Za-z0-9+/=]{40,})", key.replace("\n","")))
-        if b64:
-            from cryptography.hazmat.primitives.serialization import load_pem_public_key, Encoding, PublicFormat
             from cryptography.hazmat.primitives.asymmetric import ec
-            pub = load_pem_public_key(key.encode())
-            if isinstance(pub, ec.EllipticCurvePublicKey):
-                raw = pub.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
-                key = base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+            from cryptography.hazmat.primitives import serialization
+            _k = ec.generate_private_key(ec.SECP256R1())
+            _priv_pem = _k.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode()
+            _raw_pub = _k.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+            key = base64.urlsafe_b64encode(_raw_pub).rstrip(b"=").decode()
+            import os
+            os.environ["VAPID_PRIVATE_KEY"] = _priv_pem
+            os.environ["VAPID_PUBLIC_KEY"] = key
+            logger.info("[PUSH] Auto-generated VAPID keys")
+        except Exception as e:
+            logger.error("[PUSH] Failed to generate VAPID key: %s", e)
+            raise HTTPException(500, "Web Push configuration error")
+    if key.startswith("-----"):
+        from cryptography.hazmat.primitives.serialization import load_pem_public_key, Encoding, PublicFormat
+        from cryptography.hazmat.primitives.asymmetric import ec
+        pub = load_pem_public_key(key.encode())
+        if isinstance(pub, ec.EllipticCurvePublicKey):
+            raw = pub.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+            key = base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
     return {"publicKey": key}
 
 

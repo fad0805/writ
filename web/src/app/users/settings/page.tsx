@@ -99,7 +99,7 @@ export default function SettingsPage() {
           }
           setPushInitial(pushEnabled);
         } catch (e: any) {
-          alert(`브라우저 알림 설정 중 오류: ${e.message || e}`);
+          alert("알림 설정 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.");
           setPushEnabled(pushInitial);
         }
       }
