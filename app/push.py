@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import threading
 
 from app.config import VAPID_CLAIM_EMAIL, get_vapid_keys
@@ -114,7 +115,8 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
                     from app.models import Post as _Po
                     _p = s.query(_Po).get(post_id)
                     if _p and _p.content:
-                        _preview = _p.content.replace("<br>", " ").replace("\n", " ").strip()[:80]
+                        _preview = re.sub(r'<[^>]+>', ' ', _p.content).replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+                _preview = re.sub(r'\s+', ' ', _preview).strip()[:80]
                         if _preview:
                             body += f"\n{_preview}"
                 except Exception:
