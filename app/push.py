@@ -25,6 +25,13 @@ def _get_vapid_key():
     priv, pub = get_vapid_keys()
     if not priv or not pub:
         return None
+    # Re-serialize PEM to ensure correct format (fixes env_file multi-line issues)
+    try:
+        from cryptography.hazmat.primitives.serialization import load_pem_private_key, Encoding, PrivateFormat, NoEncryption
+        key = load_pem_private_key(priv.encode(), password=None)
+        priv = key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode()
+    except Exception as e:
+        logger.warning("VAPID private key re-serialization failed: %s", e)
     return {
         "privateKey": priv,
         "publicKey": pub,
