@@ -1128,9 +1128,9 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     except Exception as e:
         print(f"[FETCH-POST] url={url} error={e}", flush=True)
 
-    if data is None and signer:
+    if data is None:
         try:
-            resp = _validated_get(url, headers={"Accept": "application/activity+json"}, timeout=15)
+            resp = _validated_get(url, headers=headers, timeout=15)
             print(f"[FETCH-POST] retry url={url} status={resp.status_code if resp else 'None'}", flush=True)
             if resp is not None and resp.status_code == 200:
                 data = resp.json()
