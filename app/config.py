@@ -81,6 +81,21 @@ def get_vapid_keys():
 # Auto-generate VAPID keys if not configured
 if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
     try:
+        from app.models import ServerSetting, get_session
+        with get_session() as _s:
+            _ss = ServerSetting.get(_s)
+            _db_priv = getattr(_ss, 'vapid_private_key', '') or ''
+            _db_pub = getattr(_ss, 'vapid_public_key', '') or ''
+            if _db_priv and _db_pub:
+                VAPID_PRIVATE_KEY = _db_priv
+                VAPID_PUBLIC_KEY = _db_pub
+                os.environ["VAPID_PRIVATE_KEY"] = _db_priv
+                os.environ["VAPID_PUBLIC_KEY"] = _db_pub
+    except Exception:
+        pass
+
+if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
+    try:
         import base64
         from cryptography.hazmat.primitives.asymmetric import ec
         from cryptography.hazmat.primitives import serialization

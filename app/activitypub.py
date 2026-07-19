@@ -353,7 +353,7 @@ def get_featured(username: str, page: Optional[int] = None):
         if page is not None:
             offset = (page - 1) * 20
             page_posts = ordered[offset:offset + 20]
-            items = [p.to_ap_create() for p in page_posts]
+            items = [p.to_ap_note() for p in page_posts]
             return {
                 "@context": "https://www.w3.org/ns/activitystreams",
                 "id": f"{featured_url}?page={page}",

@@ -142,7 +142,6 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
                     )
                 except (ValueError, TypeError) as _ke:
                     logger.warning("Push key error for sub %s: %s (key may have changed after restart)", sub.id, _ke)
-                    s.delete(sub)
                 except WebPushException as ex:
                     status_code = getattr(ex, "response", None)
                     if status_code is not None and hasattr(status_code, "status_code"):
