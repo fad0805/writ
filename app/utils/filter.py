@@ -57,7 +57,7 @@ def _match_keyword_mute(content_lower: str, parsed_kw: list) -> bool:
 
 
 def should_deliver_post(post, session: Session, user, tl_type: str,
-                         following_ids: set | list | None,
+                         following_ids: set | list | [],
                          filter_ctx: dict | None = None,
                          is_boosted: bool = False) -> bool:
     """Decide whether a single post should be shown to the given user.
