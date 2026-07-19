@@ -1056,9 +1056,6 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                     domain = mu.actor_uri().split("/")[2] if "//" in mu.actor_uri() else ""
                     if domain and not _federation_allowed(domain):
                         continue
-                    # 서명하기 직전 확인
-                    print(f"DEBUG_SENDER_URI: {sender.actor_uri()}")
-                    print(f"DEBUG_PRIVATE_KEY_PREVIEW: {get_private_key(sender, SECRET_KEY)[:20]}...")
                     _post_to_inbox(inbox, create_activity, user)
             import re as _re
             remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', plain_content or ""))
@@ -1107,9 +1104,6 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                 domain = remote_user.actor_uri().split("/")[2] if "//" in remote_user.actor_uri() else ""
                 if domain and not _federation_allowed(domain):
                     continue
-                # 서명하기 직전 확인
-                print(f"DEBUG_SENDER_URI: {sender.actor_uri()}")
-                print(f"DEBUG_PRIVATE_KEY_PREVIEW: {get_private_key(sender, SECRET_KEY)[:20]}...")
                 _post_to_inbox(inbox, create_activity, user)
         else:
             broadcast_to_followers(user, create_activity)
@@ -1130,9 +1124,6 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                         domain = mu.actor_uri().split("/")[2] if "//" in mu.actor_uri() else ""
                         if domain and not _federation_allowed(domain):
                             continue
-                        # 서명하기 직전 확인
-                        print(f"DEBUG_SENDER_URI: {mu.actor_uri()}")
-                        print(f"DEBUG_PRIVATE_KEY_PREVIEW: {get_private_key(mu, SECRET_KEY)[:20]}...")
                         _post_to_inbox(inbox, create_activity, user)
                         delivered_domains.add(domain)
 
@@ -1186,9 +1177,6 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                 domain = remote_user.actor_uri().split("/")[2] if "//" in remote_user.actor_uri() else ""
                 if domain and not _federation_allowed(domain):
                     continue
-                # 서명하기 직전 확인
-                print(f"DEBUG_SENDER_URI: {sender.actor_uri()}")
-                print(f"DEBUG_PRIVATE_KEY_PREVIEW: {get_private_key(sender, SECRET_KEY)[:20]}...")
                 _post_to_inbox(inbox, create_activity, user)
                 delivered_domains.add(domain)
 

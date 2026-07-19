@@ -368,7 +368,7 @@ class Post(Base):
                         mention_html,
                         content,
                     )
-                    tags.append({"type": "mention", "href": actor_href, "name": tag_name})
+                    tags.append({"type": "Mention", "href": actor_href, "name": tag_name})
 
         # wrap remaining @user@domain patterns as mentions + tag array entries
         def _actor_uri_for_handle(handle: str) -> str:
@@ -381,7 +381,7 @@ class Post(Base):
             handle = m.group(1)
             actor_uri = _actor_uri_for_handle(handle)
             web_uri = f"{BASE_URL}/@{handle}"
-            tags.append({"type": "mention", "href": actor_uri, "name": f"@{handle}"})
+            tags.append({"type": "Mention", "href": actor_uri, "name": f"@{handle}"})
             return (
                 f'<span class="h-card" translate="no">'
                 f'<a href="{web_uri}" class="u-url mention" rel="mention">'
@@ -409,7 +409,7 @@ class Post(Base):
 
         if self.tag_list:
             for t in self.tag_list:
-                tags.append({"type": "hashtag", "href": f"{BASE_URL}/explore?tag={_urlencode(t.name)}", "name": f"#{t.name}"})
+                tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={_urlencode(t.name)}", "name": f"#{t.name}"})
 
         content = re.sub(r'href="/', f'href="{BASE_URL}/', content)
 
