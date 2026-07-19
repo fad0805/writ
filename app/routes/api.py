@@ -9,8 +9,7 @@ import logging
 import threading
 from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import desc, or_, and_, func, cast, String
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import desc, or_, and_, func, String
 from sqlalchemy.orm import selectinload, Session
 
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PendingDelivery, PushSubscription, get_session
@@ -109,8 +108,7 @@ def _post_json(p, session, user, tl_type=None,
             latest_boost = session.query(Boost).filter_by(post_id=p.id).order_by(desc(Boost.created_at)).first()
             b = None
             if latest_boost:
-                import datetime as _dt
-                if (_dt.datetime.now(_dt.timezone.utc) - latest_boost.created_at).total_seconds() > 10800:
+                if (datetime.datetime.now(_dt.timezone.utc) - latest_boost.created_at).total_seconds() > 10800:
                     b = session.query(User).get(latest_boost.user_id)
         if b and b.id != p.author_id:
             booster = b
@@ -812,8 +810,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         ).all()}
         # Batch load latest boost per post
         _booster_map = {}
-        import datetime as _dt
-        _cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(hours=3)
+        _cutoff = datetime.datetime.now(_dt.timezone.utc) - _dt.timedelta(hours=3)
         for b in session.query(Boost).filter(
             Boost.post_id.in_(post_ids), Boost.created_at > _cutoff
         ).order_by(Boost.created_at.desc()).all():
@@ -1359,7 +1356,8 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
         if post.summary and post.summary.startswith("[관리자 강제] ") and not summary.startswith("[관리자 강제] "):
             raise HTTPException(status_code=403, detail="관리자가 강제한 CW는 수정할 수 없습니다")
         new_content = content.replace('\r\n', '\n').replace('\r', '\n')
-        post.content = _extract_plain_text(new_content, post=None)
+        # 본문 파싱 및 시리즈/에피소드 외래키 자동 추출 연동
+        post.content = _extract_plain_text(new_content, post=post)
         post.summary = summary
         s.commit()
 
@@ -1402,10 +1400,8 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
         if post.ap_id:
             try:
                 note_data = post.to_ap_note()
-                # Strip @context from Note (it goes on the Activity only)
                 note_data.pop("@context", None)
                 note_data.pop("url", None)
-                # Add required fields matching Mastodon format
                 note_data["atomUri"] = post.ap_id
                 note_data["updated"] = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
                 note_data.setdefault("summary", None)
@@ -1426,15 +1422,16 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
                     "cc": note_data.get("cc", []),
                     "object": note_data,
                 }
-                import json as _json
                 def _send_update():
                     try:
                         broadcast_to_followers(user, update_activity)
                     except Exception as e:
-                        logger.warning("Update federation failed: %s", e)
+                        # 🌟 logger.warning 대신 즉시 출력되도록 print flush 적용
+                        print(f"[Warning] Update federation failed: {e}", file=sys.stderr, flush=True)
                 threading.Thread(target=_send_update, daemon=True).start()
             except Exception as e:
-                logger.warning("Update activity build failed: %s", e)
+                # 🌟 에러 로그 즉시 출력
+                print(f"[Warning] Update activity build failed: {e}", file=sys.stderr, flush=True)
 
         return _post_json(post, s, user)
 
@@ -1526,8 +1523,7 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
     if target_type not in ("post", "novel", "episode"):
         raise HTTPException(status_code=400, detail="Invalid target_type")
     if forward_to_remote:
-        import datetime as _dt
-        _cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(minutes=1)
+        _cutoff = datetime.datetime.now(_dt.timezone.utc) - _dt.timedelta(minutes=1)
         with get_session() as _s:
             _recent = _s.query(Report).filter(
                 Report.reporter_id == user.id,
@@ -2408,9 +2404,8 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                     _reactions_map[pid] = {}
                 _reactions_map[pid][react] = cnt
             # Batch-load booster info to avoid N+1 queries in _post_json
-            import datetime as _dt
             _booster_map = {}
-            _three_hours_ago = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(seconds=10800)
+            _three_hours_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=10800)
             _boost_rows = s.query(Boost).filter(
                 Boost.post_id.in_(_all_post_ids),
                 Boost.created_at > _three_hours_ago,
@@ -2814,8 +2809,7 @@ def api_direct_threads(request: Request):
 
 
 def _generate_poll_end_notifications(user_id: int, session):
-    import datetime as _dt
-    now = _dt.datetime.now(_dt.timezone.utc)
+    now = datetime.datetime.now(datetime.timezone.utc)
     # 빠른 확인: 사용자의 poll이 없으면 skip
     has_any_poll = session.query(Post.id).filter(
         Post.poll_data.isnot(None), Post.is_deleted == False,
@@ -3427,7 +3421,6 @@ def api_get_episode(request: Request, novel_id: int, episode_id: int):
             next_ep = next_ep.filter(Episode.is_published == True)
         next_ep = next_ep.order_by(Episode.episode_number).first()
         if user and not is_mine:
-            from datetime import datetime, timedelta
             today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
             existing_view = s.query(EpisodeView).filter(
                 EpisodeView.user_id == user.id,
@@ -4902,7 +4895,7 @@ def _background_fetch_outbox(url: str, user_id: int, actor_id: int):
         try:
             outbox_url = getattr(actor, "outbox_url", None) or getattr(actor, "endpoints", {}).get("sharedInbox", "")
             if not outbox_url:
-                import datetime, time
+                import time
                 from app.crypto_utils import sign_string, get_private_key
                 from urllib.parse import urlparse as _up
                 date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
@@ -4917,7 +4910,7 @@ def _background_fetch_outbox(url: str, user_id: int, actor_id: int):
                 if r:
                     outbox_url = r.json().get("outbox", "")
             if outbox_url:
-                import datetime, time
+                import time
                 from app.crypto_utils import sign_string, get_private_key
                 from urllib.parse import urlparse as _up
                 parsed2 = _up(outbox_url)
