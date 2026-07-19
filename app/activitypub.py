@@ -199,17 +199,19 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
             continue
 
         text_str = str(text_node)
+        # 1) 풀 핸들 변환: 뒤에 도메인이 확실히 붙어있는 경우
         new_text = re.sub(
             r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})',
             r'<a href="/@\1@\2" class="mention">@\1@\2</a>',
             text_str
         )
+        # 2) 단축 핸들 변환: 'href="/@' 내부에 있거나 이미 변환된 풀 핸들의 일부가 아닌 녀석만 골라냅니다.
+        # (?!@[A-Za-z0-9_.-]+\.) 패턴을 넣어 뒤에 도메인이 이어지는 구조를 원천 차단합니다.
         new_text = re.sub(
-            r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)(?!@)',
+            r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)(?!@[A-Za-z0-9_.-]+\.)(?!@)',
             r'<a href="/@\1" class="mention">@\1</a>',
             new_text
         )
-        # [수정 포인트 2] 정제된 문자열 리스트인 tag_names를 사용하여 안전하게 매칭합니다.
         if tag_names:
             escaped_tags = [re.escape(t) for t in sorted(tag_names, key=len, reverse=True)]
             tags_pattern = r'(?<![A-Za-z0-9_.-])#(' + '|'.join(escaped_tags) + r')(?![A-Za-z0-9_.-])'
