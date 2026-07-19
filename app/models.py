@@ -900,6 +900,8 @@ class ServerSetting(Base):
     admin_email = Column(String(255), default="")
     federation_mode = Column(String(16), default="blacklist")
     enable_reactions = Column(Boolean, default=True)
+    vapid_private_key = Column(Text, default="")
+    vapid_public_key = Column(Text, default="")
 
     @classmethod
     def get(cls, session):
