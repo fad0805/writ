@@ -3421,6 +3421,7 @@ def api_get_episode(request: Request, novel_id: int, episode_id: int):
             next_ep = next_ep.filter(Episode.is_published == True)
         next_ep = next_ep.order_by(Episode.episode_number).first()
         if user and not is_mine:
+            from datetime import datetime
             today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
             existing_view = s.query(EpisodeView).filter(
                 EpisodeView.user_id == user.id,
