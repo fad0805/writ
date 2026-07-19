@@ -7343,9 +7343,9 @@ def get_vapid_public_key():
             import os
             os.environ["VAPID_PRIVATE_KEY"] = _priv_pem
             os.environ["VAPID_PUBLIC_KEY"] = key
-            logger.info("[PUSH] Auto-generated VAPID keys")
+            print("[PUSH] Auto-generated VAPID keys", flush=True)
         except Exception as e:
-            logger.error("[PUSH] Failed to generate VAPID key: %s", e)
+            print(f"[PUSH] Failed to generate VAPID key: {e}", flush=True)
             raise HTTPException(500, "Web Push configuration error")
     if key.startswith("-----"):
         from cryptography.hazmat.primitives.serialization import load_pem_public_key, Encoding, PublicFormat

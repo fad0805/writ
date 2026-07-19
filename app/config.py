@@ -67,6 +67,23 @@ def _sanitize_pem(val: str) -> str:
     val = val.replace("\\n", "\n").replace("\\r", "")
     return val
 
+
+def _is_valid_pem_private_key(pem: str) -> bool:
+    """Check that a PEM string is a plausible private key (not truncated/corrupted)."""
+    if not pem:
+        return False
+    if not pem.startswith("-----BEGIN ") or not pem.rstrip().endswith("-----"):
+        return False
+    # PKCS8 EC P-256 PEM is always > 270 chars; a valid RSA-2048 is > 1700
+    if len(pem) < 270:
+        return False
+    try:
+        from cryptography.hazmat.primitives.serialization import load_pem_private_key
+        load_pem_private_key(pem.encode("utf-8"), password=None)
+        return True
+    except Exception:
+        return False
+
 VAPID_PRIVATE_KEY = _sanitize_pem(os.environ.get("VAPID_PRIVATE_KEY", ""))
 VAPID_PUBLIC_KEY = _sanitize_pem(os.environ.get("VAPID_PUBLIC_KEY", ""))
 VAPID_CLAIM_EMAIL = os.environ.get("VAPID_CLAIM_EMAIL", f"admin@{DOMAIN}")
@@ -86,8 +103,9 @@ if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
             _ss = ServerSetting.get(_s)
             _db_priv = getattr(_ss, 'vapid_private_key', '') or ''
             _db_pub = getattr(_ss, 'vapid_public_key', '') or ''
-            if _db_priv and _db_pub:
-                VAPID_PRIVATE_KEY = _sanitize_pem(_db_priv)
+            _db_priv_san = _sanitize_pem(_db_priv)
+            if _db_priv_san and _db_pub and _is_valid_pem_private_key(_db_priv_san):
+                VAPID_PRIVATE_KEY = _db_priv_san
                 VAPID_PUBLIC_KEY = _sanitize_pem(_db_pub)
                 os.environ["VAPID_PRIVATE_KEY"] = VAPID_PRIVATE_KEY
                 os.environ["VAPID_PUBLIC_KEY"] = VAPID_PUBLIC_KEY
@@ -99,6 +117,15 @@ if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
                         _s.commit()
                     except Exception:
                         pass
+            elif _db_priv_san and _db_pub:
+                # DB has keys but they're invalid/corrupted — clear them so we regenerate
+                print(f"[VAPID] DB key invalid (len={len(_db_priv_san)}), regenerating...", flush=True)
+                try:
+                    _ss.vapid_private_key = ''
+                    _ss.vapid_public_key = ''
+                    _s.commit()
+                except Exception:
+                    pass
     except Exception:
         pass
 

@@ -180,9 +180,11 @@ async def lifespan(app: FastAPI):
                 _ss = ServerSetting.get(_s)
                 _db_priv = getattr(_ss, 'vapid_private_key', '') or ''
                 _db_pub = getattr(_ss, 'vapid_public_key', '') or ''
-                if _db_priv and _db_pub:
+                from app.config import _is_valid_pem_private_key, _sanitize_pem as _spm
+                _db_priv_san = _spm(_db_priv)
+                if _db_priv and _db_pub and _is_valid_pem_private_key(_db_priv_san):
                     import os as _os
-                    _os.environ.setdefault("VAPID_PRIVATE_KEY", _db_priv)
+                    _os.environ.setdefault("VAPID_PRIVATE_KEY", _db_priv_san)
                     _os.environ.setdefault("VAPID_PUBLIC_KEY", _db_pub)
                 else:
                     import py_vapid, base64

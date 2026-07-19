@@ -22,7 +22,7 @@ NOTIF_LABELS = {
 
 
 def _get_vapid_key():
-    from app.config import _sanitize_pem
+    from app.config import _sanitize_pem, _is_valid_pem_private_key
     # 1. Try DB first (authoritative source)
     try:
         from app.models import ServerSetting, get_session
@@ -30,8 +30,10 @@ def _get_vapid_key():
             ss = ServerSetting.get(s)
             db_priv = _sanitize_pem(getattr(ss, 'vapid_private_key', '') or '')
             db_pub = _sanitize_pem(getattr(ss, 'vapid_public_key', '') or '')
-            if db_priv and db_pub:
+            if db_priv and db_pub and _is_valid_pem_private_key(db_priv):
                 return {"privateKey": db_priv, "publicKey": db_pub}
+            if (db_priv or db_pub) and not _is_valid_pem_private_key(db_priv):
+                print(f"[PUSH] DB VAPID key invalid (len={len(db_priv)}), will regenerate", flush=True)
     except Exception:
         pass
 
@@ -70,10 +72,10 @@ def _get_vapid_key():
         os.environ["VAPID_PRIVATE_KEY"] = _priv_pem
         os.environ["VAPID_PUBLIC_KEY"] = _pub_b64
 
-        logger.info("Auto-generated new VAPID keys and saved to DB")
+        print("[PUSH] Auto-generated new VAPID keys and saved to DB", flush=True)
         return {"privateKey": _priv_pem, "publicKey": _pub_b64}
     except Exception as e:
-        logger.warning("Failed to auto-generate VAPID keys: %s", e)
+        print(f"[PUSH] Failed to auto-generate VAPID keys: {e}", flush=True)
 
     return None
 
@@ -152,21 +154,20 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
                     print(f"[PUSH] OK sub {sub.id}", flush=True)
                 except (ValueError, TypeError) as _ke:
                     print(f"[PUSH] key error sub {sub.id}: {_ke}", flush=True)
-                    logger.warning("Push key error for sub %s: %s (key may have changed after restart)", sub.id, _ke)
+                    print(f"[PUSH] key error sub {sub.id}: {_ke} (key may have changed after restart)", flush=True)
                 except WebPushException as ex:
                     status_code = getattr(ex, "response", None)
                     if status_code is not None and hasattr(status_code, "status_code"):
                         status_code = status_code.status_code
                     print(f"[PUSH] WebPushException sub {sub.id} status={status_code}: {ex}", flush=True)
                     if status_code in (404, 410):
-                        logger.info("Removing expired push subscription %s for user %s", sub.id, user_id)
+                        print(f"[PUSH] Removing expired push subscription {sub.id} for user {user_id}", flush=True)
                         s.delete(sub)
                     else:
-                        logger.warning("Push send failed for sub %s: %s", sub.id, ex)
+                        print(f"[PUSH] WebPushException sub {sub.id} (not 404/410): {ex}", flush=True)
                 except Exception as ex:
                     print(f"[PUSH] error sub {sub.id}: {ex}", flush=True)
-                    logger.warning("Push send error for sub %s: %s", sub.id, ex)
 
             s.commit()
     except Exception as ex:
-        logger.warning("send_push_to_user error: %s", ex)
+        print(f"[PUSH] send_push_to_user error: {ex}", flush=True)
