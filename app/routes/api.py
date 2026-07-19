@@ -3623,6 +3623,9 @@ def api_delete_episode(request: Request, novel_id: int, episode_id: int):
         # Log admin action
         if episode.novel.author_id != user.id:
             log_admin_action(user.id, user.username, "delete_episode", target_type="episode", target_id=episode_id, target_username=episode.novel.author.username if episode.novel else "", details=episode.title, ip_address=request.client.host if request.client else "")
+        for p in s.query(Post).filter(Post.episode_id == episode_id).all():
+            p.episode_id = None
+        s.flush()
         s.delete(episode)
         s.commit()
     return {"ok": True}
@@ -3635,6 +3638,8 @@ def api_delete_novel(request: Request, novel_id: int):
         novel = s.query(Novel).filter_by(id=novel_id, author_id=user.id).first()
         if not novel:
             raise HTTPException(status_code=404, detail="Novel not found")
+        s.query(Post).filter(Post.novel_id == novel.id).update({Post.novel_id: None})
+        s.query(Episode).filter(Episode.novel_id == novel.id).update({Episode.novel_id: None})
         s.delete(novel)
         s.commit()
     return {"ok": True}

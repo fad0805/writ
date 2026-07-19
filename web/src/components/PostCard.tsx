@@ -60,7 +60,7 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
   return text;
 }
 
-export default function PostCard({ post, onUpdate, onDelete, onReply, current, hideContext, selected, readonly }: { post: PostData; onUpdate?: (updated?: PostData) => void; onDelete?: () => void; onReply?: (newPost?: PostData) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean }) {
+export default function PostCard({ post, onUpdate, onDelete, onReply, onRewrite, current, hideContext, selected, readonly }: { post: PostData; onUpdate?: (updated?: PostData) => void; onDelete?: () => void; onReply?: (newPost?: PostData) => void; onRewrite?: (content: string, visibility: string) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean }) {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const [showReply, setShowReply] = useState(false);
@@ -785,10 +785,12 @@ const localReactionEmojiMap = useMemo(() => {
                   {post.is_mine && (
                     <button onClick={async () => {
                       setShowMoreActions(false);
+                      const stripped = (post.content || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
                       try { await api.deletePost(post.id); } catch {}
                       if (onDelete) onDelete();
                       else if (onUpdate) onUpdate();
-                      setShowRewrite(true);
+                      if (onRewrite) onRewrite(stripped, post.visibility);
+                      else setShowRewrite(true);
                     }} className="post-actions-dropdown-item">
                       <Icon name="trash" /> 지우고 다시 쓰기
                     </button>

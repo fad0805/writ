@@ -35,6 +35,8 @@ export default function TimelinePage() {
   const [selectedIdx, setSelectedIdx] = useState(-1);
   const [replyPost, setReplyPost] = useState<PostData | null>(null);
   const [showComposer, setShowComposer] = useState(false);
+  const [rewriteContent, setRewriteContent] = useState<string | null>(null);
+  const [rewriteVisibility, setRewriteVisibility] = useState<string | undefined>(undefined);
   
   // 💡 상태 변경 비동기 문제를 해결하기 위해 offset을 최신 ref로 관리합니다.
   const offsetRef = useRef(0);
@@ -275,14 +277,16 @@ export default function TimelinePage() {
   return (
     <>
       <div className="post-form post-form-desktop">
-        <PostForm onDone={(newPost) => {
+        <PostForm key={rewriteContent ? `rewrite-${Date.now()}` : "main"} onDone={(newPost) => {
           if (newPost) {
             setPosts((prev) => {
               if (prev.some((p) => p.id === newPost.id)) return prev;
               return [newPost, ...prev];
             });
           }
-        }} />
+          setRewriteContent(null);
+          setRewriteVisibility(undefined);
+        }} initialContent={rewriteContent ?? undefined} initialVisibility={rewriteVisibility} />
       </div>
       <div className="timeline-tabs">
         {TABS.map((t) => (
@@ -332,6 +336,10 @@ export default function TimelinePage() {
                         }); 
                       } 
                     }} 
+                    onRewrite={(content, visibility) => {
+                      setRewriteContent(content);
+                      setRewriteVisibility(visibility);
+                    }}
                     selected={i === selectedIdx} 
                   />
                 </div>
