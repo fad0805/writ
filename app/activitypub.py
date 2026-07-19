@@ -2912,9 +2912,8 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     body = json.dumps(activity, ensure_ascii=False, sort_keys=True).encode("utf-8")
     import base64 as _b64
     digest = _b64.b64encode(hashlib.sha256(body).digest()).decode()
-    date = datetime.datetime.now(datetime.timezone.utc).strftime(
-        "%a, %d %b %Y %H:%M:%S GMT"
-    )
+    now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+    date = now.strftime("%a, %d %b %Y %H:%M:%S GMT")
 
     parsed = urlparse(inbox_url)
     path = parsed.path or "/"
