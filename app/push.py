@@ -175,11 +175,11 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
                     if status_code is not None and hasattr(status_code, "status_code"):
                         status_code = status_code.status_code
                     print(f"[PUSH] WebPushException sub {sub.id} status={status_code}: {ex}", flush=True)
-                    if status_code in (404, 410):
-                        print(f"[PUSH] Removing expired push subscription {sub.id} for user {user_id}", flush=True)
+                    if status_code in (404, 410, 401, 403):
+                        print(f"[PUSH] Removing stale subscription {sub.id} (status={status_code}, VAPID key changed)", flush=True)
                         s.delete(sub)
                     else:
-                        print(f"[PUSH] WebPushException sub {sub.id} (not 404/410): {ex}", flush=True)
+                        print(f"[PUSH] WebPushException sub {sub.id} (not 404/410/401/403): {ex}", flush=True)
                 except Exception as ex:
                     print(f"[PUSH] error sub {sub.id}: {ex}", flush=True)
 

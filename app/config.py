@@ -164,6 +164,15 @@ if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
                 _ss.vapid_public_key = VAPID_PUBLIC_KEY
                 _s.commit()
                 print(f"[VAPID] Auto-generated and saved new key (priv len={len(VAPID_PRIVATE_KEY)})", flush=True)
+                # VAPID key changed — invalidate all existing push subscriptions
+                try:
+                    from app.models import PushSubscription
+                    _deleted = _s.query(PushSubscription).delete()
+                    _s.commit()
+                    if _deleted:
+                        print(f"[VAPID] Cleared {_deleted} stale push subscriptions (users must re-subscribe)", flush=True)
+                except Exception as _e:
+                    print(f"[VAPID] Failed to clear push subscriptions: {_e}", flush=True)
         except Exception as _e:
             print(f"[VAPID] Failed to save auto-generated key to DB: {_e}", flush=True)
     except Exception as _e:
