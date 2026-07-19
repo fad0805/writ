@@ -55,8 +55,6 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post | None) -> str
         mentioned_user_ids = getattr(post, "mentioned_user_ids", []) or []
         raw_tags = getattr(post, "tag_list", []) or []
         tag_names = [str(t) for t in raw_tags if t]
-    else:
-        raise ValueError("Can not detect post or actor object")
 
     # 1. 생짜 URL을 a 태그로 변환
     url_pattern = r'(?<!href=")(?<!src=")(?<!">)(https?://(?!.*/tags/)[^\s<>"\')\]#]+)'
