@@ -27,7 +27,7 @@ export default function ShareButton({ url, className = "action-btn" }: { url: st
 
   return (
     <button onClick={handleClick} className={className} title={copied ? "복사됨!" : "링크 복사"}>
-      <Icon name={copied ? "check" : "link"} />
+      <Icon name={copied ? "check" : "link"} /> 공유
     </button>
   );
 }

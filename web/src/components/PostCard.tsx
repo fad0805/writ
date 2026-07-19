@@ -785,7 +785,7 @@ const localReactionEmojiMap = useMemo(() => {
                       else if (onUpdate) onUpdate();
                       setShowRewrite(true);
                     }} className="post-actions-dropdown-item">
-                      <Icon name="edit" /> 지우고 다시 쓰기
+                      <Icon name="trash" /> 지우고 다시 쓰기
                     </button>
                   )}
                   {(post.is_mine || currentUser?.is_admin) && (
