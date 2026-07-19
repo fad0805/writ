@@ -1020,20 +1020,6 @@ def api_get_post(request: Request, post_id: int):
 def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
     """Deliver Create activity to remote followers (background thread)."""
     # 🌟 함수 전체를 감싸서 외부 변수 간섭을 완전히 차단합니다.
-
-    # 🌟 공통 헬퍼: inbox를 확실하게 정제합니다.
-    def get_safe_inbox(user_obj):
-        inbox = user_obj.inbox_url or user_obj.inbox_uri()
-        if not inbox:
-            return None, None
-        # 도메인이 없으면 actor_uri에서 추출해서 붙임
-        if not inbox.startswith("http"):
-            domain = user_obj.actor_uri().split("/")[2] if "//" in user_obj.actor_uri() else ""
-            inbox = f"https://{domain}{inbox}" if domain else None
-        # 도메인 추출
-        domain = inbox.split("/")[2] if "//" in inbox else ""
-        return inbox, domain
-
     with get_session() as ap_s:
         user = ap_s.query(User).filter_by(id=user_id).first()
         post = ap_s.query(Post).filter_by(id=post_id).first()
@@ -1054,13 +1040,13 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                     User.id.in_(post.mentioned_user_ids), User.is_remote == True
                 ).all()
                 for mu in mu_users:
-                    inbox, domain = get_safe_inbox(mu)
-                    print(f'inbox: {inbox}, domain: {domain}')
-                    if not inbox or (domain and not _federation_allowed(domain)):
+                    inbox = mu.inbox_url or mu.inbox_uri()
+                    domain = mu.actor_uri().split("/")[2] if "//" in mu.actor_uri() else ""
+                    if domain and not _federation_allowed(domain):
                         continue
                     _post_to_inbox(inbox, create_activity, user)
             import re as _re
-            remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', post.content or ""))
+            remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', plain_content or ""))
             _resolved_handles = []
             for handle in remote_handles:
                 remote_user = ap_s.query(User).filter(
@@ -1130,7 +1116,7 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                         delivered_domains.add(domain)
 
             import re as _re
-            remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', post.content or ""))
+            remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', plain_content or ""))
             for handle in remote_handles:
                 remote_user = ap_s.query(User).filter(
                     User.username == handle, User.is_remote == True
