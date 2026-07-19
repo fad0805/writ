@@ -464,9 +464,8 @@ class Post(Base):
             obj["to"] = [public_uri]
             obj["cc"] = [followers_uri]
         elif self.visibility == "home":
-            obj["to"] = [public_uri]
-            obj["cc"] = [followers_uri]
-            obj["toot:visibility"] = "unlisted"
+            obj["to"] = [followers_uri]  # 주 수신자는 팔로워들
+            obj["cc"] = [public_uri]     # 참조(cc)에 Public을 넣어 '공개 게시물'임을 명시
         elif self.visibility == "followers":
             obj["to"] = [followers_uri]
             obj["cc"] = []
