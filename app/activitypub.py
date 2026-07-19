@@ -121,6 +121,8 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
         else:
             raise ValueError(f"Can not detect post or actor object")
 
+        print(f'=============================================== mentioned_user_ids : {mentioned_user_ids}')
+
         for mentioned_user in mentioned_user_ids:
             a_tag.clear()  # 기존 내부 자식 태그들 안전하게 청소
             a_tag.string = f"@{mentioned_user}"
