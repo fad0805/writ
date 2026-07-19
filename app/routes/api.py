@@ -905,6 +905,18 @@ def api_timeline(request: Request, tl_type: str, limit: int = Query(10), offset:
 
 @router.get("/posts/{post_id}")
 def api_get_post(request: Request, post_id: int):
+    # --- [추가 시작] ActivityPub 전용 처리 ---
+    accept_header = request.headers.get("Accept", "")
+    is_activitypub = "application/activity+json" in accept_header or "application/ld+json" in accept_header
+    if is_activitypub:
+        with get_session() as s:
+            post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
+            if not post:
+                raise HTTPException(status_code=404, detail="Not Found")
+            # 여기서 ActivityPub 규격에 맞는 JSON을 바로 반환해야 합니다.
+            # _post_json 함수가 일반 웹용이라면, ActivityPub 전용 포맷터(예: _to_activitypub_json)가 필요합니다.
+            return _to_activitypub_json(post) 
+    # --- [추가 끝] ---
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
