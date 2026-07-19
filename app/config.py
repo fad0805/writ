@@ -87,10 +87,18 @@ if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
             _db_priv = getattr(_ss, 'vapid_private_key', '') or ''
             _db_pub = getattr(_ss, 'vapid_public_key', '') or ''
             if _db_priv and _db_pub:
-                VAPID_PRIVATE_KEY = _db_priv
-                VAPID_PUBLIC_KEY = _db_pub
-                os.environ["VAPID_PRIVATE_KEY"] = _db_priv
-                os.environ["VAPID_PUBLIC_KEY"] = _db_pub
+                VAPID_PRIVATE_KEY = _sanitize_pem(_db_priv)
+                VAPID_PUBLIC_KEY = _sanitize_pem(_db_pub)
+                os.environ["VAPID_PRIVATE_KEY"] = VAPID_PRIVATE_KEY
+                os.environ["VAPID_PUBLIC_KEY"] = VAPID_PUBLIC_KEY
+                # Fix bad PEM in DB (literal \n -> real newlines)
+                if VAPID_PRIVATE_KEY != _db_priv or VAPID_PUBLIC_KEY != _db_pub:
+                    try:
+                        _ss.vapid_private_key = VAPID_PRIVATE_KEY
+                        _ss.vapid_public_key = VAPID_PUBLIC_KEY
+                        _s.commit()
+                    except Exception:
+                        pass
     except Exception:
         pass
 

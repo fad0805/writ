@@ -22,13 +22,14 @@ NOTIF_LABELS = {
 
 
 def _get_vapid_key():
+    from app.config import _sanitize_pem
     # 1. Try DB first (authoritative source)
     try:
         from app.models import ServerSetting, get_session
         with get_session() as s:
             ss = ServerSetting.get(s)
-            db_priv = getattr(ss, 'vapid_private_key', '') or ''
-            db_pub = getattr(ss, 'vapid_public_key', '') or ''
+            db_priv = _sanitize_pem(getattr(ss, 'vapid_private_key', '') or '')
+            db_pub = _sanitize_pem(getattr(ss, 'vapid_public_key', '') or '')
             if db_priv and db_pub:
                 return {"privateKey": db_priv, "publicKey": db_pub}
     except Exception:
