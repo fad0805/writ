@@ -89,6 +89,31 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
     if not sanitized_content:
         return ""
 
+    # [수정 포인트 1] 무거운 객체 검사 및 데이터 추출은 루프 밖에서 딱 '한 번만' 수행합니다.
+    mentioned_user_ids = []
+    tag_names = []  # 순수 해시태그 문자열만 담을 리스트
+
+    if post and isinstance(post, dict):
+        # 액티비티펍 인박스 웹훅 대응 (내부에 object가 있으면 언패킹)
+        obj_data = post.get("object", post) if isinstance(post.get("object"), dict) else post
+        raw_tags = obj_data.get("tag", []) or []
+        # 딕셔너리 구조에서 필요한 값만 정확히 매핑
+        for t in raw_tags:
+            if not isinstance(t, dict):
+                continue
+            t_type = t.get("type")
+            t_name = t.get("name", "")
+            if t_type == "Mention" and t_name:
+                mentioned_user_ids.append(t_name.strip())
+            elif t_type == "Hashtag" and t_name:
+                tag_names.append(t_name.replace("#", "").strip())
+    elif post and hasattr(post, "mentioned_user_ids"):  # SQLAlchemy Post 모델 대응
+        mentioned_user_ids = getattr(post, "mentioned_user_ids", []) or []
+        raw_tags = getattr(post, "tag_list", []) or []
+        tag_names = [str(t) for t in raw_tags if t]
+    else:
+        raise ValueError("Can not detect post or actor object")
+
     # 1. 생짜 URL을 a 태그로 변환
     url_pattern = r'(?<!href=")(?<!src=")(?<!">)(https?://(?!.*/tags/)[^\s<>"\')\]#]+)'
     def _repl_raw_url(m):
@@ -104,29 +129,19 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
     # 2. 이미 존재하는 모든 <a> 태그를 찾아서 안전하게 리모델링
     for a_tag in soup.find_all("a"):
         text = a_tag.get_text().strip()
-        # href가 리스트로 올 경우를 대비한 안전한 문자열 변환
         raw_href = a_tag.get("href", "")
         if isinstance(raw_href, list):
             raw_href = " ".join(raw_href)
         raw_href = raw_href.strip()
 
-        mentioned_user_ids = []
-        tags = []
-        if post and isinstance(post, dict):
-            tags = post.get("tag")
-            mentioned_user_ids = [tag.get("name") for tag in tags if tag.get("type") == "Mention"]
-        elif post and isinstance(post, Post):
-            tags = post.tag_list
-            mentioned_user_ids = post.mentioned_user_ids
-        else:
-            raise ValueError(f"Can not detect post or actor object")
-
-        print(f'=============================================== mentioned_user_ids : {mentioned_user_ids}')
-
-        for mentioned_user in mentioned_user_ids:
-            a_tag.clear()  # 기존 내부 자식 태그들 안전하게 청소
-            a_tag.string = f"@{mentioned_user}"
-            a_tag["href"] = f"/@{mentioned_user}"
+        # 2-0. 언급된 유저 아이디와 이름 매칭
+        # 로그에 찍힌 것처럼 '@siarte@daydream.ink' 같은 풀 핸들이 들어오므로 완벽히 매칭됩니다.
+        if text in mentioned_user_ids or any(uid.lower() in [text.lower(), raw_href.lower()] for uid in mentioned_user_ids):
+            # 정확한 매칭 대상 검색
+            matched_uid = next((uid for uid in mentioned_user_ids if uid.lower() in [text.lower(), raw_href.lower()]), text)
+            a_tag.clear()
+            a_tag.string = matched_uid
+            a_tag["href"] = f"/{matched_uid}"
             a_tag["class"] = "mention"
             a_tag.attrs.pop("target", None)
             continue
@@ -144,12 +159,13 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
                 a_tag.attrs.pop("target", None)
                 continue
 
-        # 2-1. 기존 쌩 텍스트 기반 패턴 매칭 (데이터 맵에 없는 경우를 위한 Fallback)
+        # 2-1. 기존 쌩 텍스트 기반 패턴 매칭 (Fallback)
         raw_username = text.lstrip('@').lower()
-        if text.startswith('@') and raw_username in mentioned_user_ids:
+        if text.startswith('@') and any(raw_username in uid.lower() for uid in mentioned_user_ids):
+            matched_uid = next((uid for uid in mentioned_user_ids if raw_username in uid.lower()), text)
             a_tag.clear()
-            a_tag.string = f"@{raw_username}"
-            a_tag["href"] = f"/@{raw_username}"
+            a_tag.string = matched_uid
+            a_tag["href"] = f"/{matched_uid}"
             a_tag["class"] = "mention"
             a_tag.attrs.pop("target", None)
             continue
@@ -159,7 +175,7 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
             tag_name_match = re.search(r'#([^\s#@<]+)', text)
             if tag_name_match:
                 tag_name = tag_name_match.group(1)
-                if not tags or tag_name.lower() in [t.lower() for t in tags]:
+                if not tag_names or tag_name.lower() in [t.lower() for t in tag_names]:
                     a_tag.clear()
                     a_tag.string = f"#{tag_name}"
                     a_tag["href"] = f"/explore?q={quote(f'#{tag_name}')}"
@@ -177,7 +193,6 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
 
     # 3. <a> 태그 밖에 쌩으로 굴러다니는 핸들 & 해시태그 텍스트 처리
     for text_node in list(soup.find_all(string=True)):
-        # 트리 변형으로 인해 노드가 공중에 떴거나 이미 부모가 없는 경우 방어
         if not text_node.parent:
             continue
         if text_node.find_parent("a"):
@@ -194,8 +209,9 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
             r'<a href="/@\1" class="mention">@\1</a>',
             new_text
         )
-        if tags:
-            escaped_tags = [re.escape(t) for t in sorted(tags, key=len, reverse=True)]
+        # [수정 포인트 2] 정제된 문자열 리스트인 tag_names를 사용하여 안전하게 매칭합니다.
+        if tag_names:
+            escaped_tags = [re.escape(t) for t in sorted(tag_names, key=len, reverse=True)]
             tags_pattern = r'(?<![A-Za-z0-9_.-])#(' + '|'.join(escaped_tags) + r')(?![A-Za-z0-9_.-])'
             new_text = re.sub(
                 tags_pattern,
