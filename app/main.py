@@ -93,7 +93,7 @@ def _delivery_worker():
                             item.last_error = "Sender not found"
                             continue
                         activity = json.loads(item.activity_json)
-                        body = json.dumps(activity, ensure_ascii=False).encode("utf-8")
+                        body = json.dumps(activity, ensure_ascii=True, sort_keys=True).encode("utf-8")
                         digest = base64.b64encode(hashlib.sha256(body).digest()).decode()
                         date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
                         parsed = urlparse(item.inbox_url)
