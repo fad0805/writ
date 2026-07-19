@@ -130,7 +130,7 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
             from pywebpush import webpush, WebPushException
             for sub in subs:
                 try:
-                    print(f"[PUSH] sending to sub {sub.id} key_len={len(vapid_key['privateKey'])} key_start={repr(vapid_key['privateKey'][:30])}", flush=True)
+                    print(f"[PUSH] sending to sub {sub.id}", flush=True)
                     webpush(
                         subscription_info={
                             "endpoint": sub.endpoint,
@@ -140,18 +140,22 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
                         vapid_private_key=vapid_key["privateKey"],
                         vapid_claims={"sub": f"mailto:{VAPID_CLAIM_EMAIL}"},
                     )
+                    print(f"[PUSH] OK sub {sub.id}", flush=True)
                 except (ValueError, TypeError) as _ke:
+                    print(f"[PUSH] key error sub {sub.id}: {_ke}", flush=True)
                     logger.warning("Push key error for sub %s: %s (key may have changed after restart)", sub.id, _ke)
                 except WebPushException as ex:
                     status_code = getattr(ex, "response", None)
                     if status_code is not None and hasattr(status_code, "status_code"):
                         status_code = status_code.status_code
+                    print(f"[PUSH] WebPushException sub {sub.id} status={status_code}: {ex}", flush=True)
                     if status_code in (404, 410):
                         logger.info("Removing expired push subscription %s for user %s", sub.id, user_id)
                         s.delete(sub)
                     else:
                         logger.warning("Push send failed for sub %s: %s", sub.id, ex)
                 except Exception as ex:
+                    print(f"[PUSH] error sub {sub.id}: {ex}", flush=True)
                     logger.warning("Push send error for sub %s: %s", sub.id, ex)
 
             s.commit()
