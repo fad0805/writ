@@ -136,6 +136,7 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
         # 2-4. 텍스트가 해시태그 패턴이고, Post.tag_list에 존재하는 태그일 때만 처리
         hashtag_match = re.match(r'^#([^\s#@]+)(?:@([A-Za-z0-9_.-]+\.[A-Za-z]{2,}))?$', text)
         if hashtag_match:
+            tag_name = hashtag_match.group(1)
             # 대소문자 구분 없이 비교
             if tag_name.lower() in [t.lower() for t in tags]:
                 from urllib.parse import quote
