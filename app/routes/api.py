@@ -4737,7 +4737,11 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 posts = q_posts.order_by(desc(Post.created_at)).limit(20).all()
             else:
                 posts = []
-            novels = []
+            novels = s.query(Novel).options(selectinload(Novel.author)).filter(
+                Novel.tag_list.any(name=tag.name),
+                Novel.is_published == True,
+                Novel.visibility == "public",
+            ).order_by(desc(Novel.updated_at)).limit(20).all()
         else:
             posts = s.query(Post).options(selectinload(Post.author)).filter(
                 Post.content.ilike(pattern),
