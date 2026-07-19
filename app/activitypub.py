@@ -2910,6 +2910,8 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     if not _validate_url(inbox_url):
         return
     body = json.dumps(activity, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    print(f"DEBUG_BODY_LENGTH: {len(body)}")
+    print(f"DEBUG_BODY: {body.decode('utf-8')}") # 실제 전송되는 JSON
     import base64 as _b64
     digest = _b64.b64encode(hashlib.sha256(body).digest()).decode()
     now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
@@ -2919,6 +2921,7 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     path = parsed.path or "/"
     created = int(time.time())
     signed_string = f"(request-target): post {path}\nhost: {parsed.netloc}\ndate: {date}\ndigest: SHA-256={digest}\n(created): {created}"
+    print(f"DEBUG_SIGNED_STRING: {repr(signed_string)}") # \n 같은 제어문자까지 다 보게 repr() 사용
 
     signature = sign_string(signed_string, get_private_key(sender, SECRET_KEY))
     signature_header = (

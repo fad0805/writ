@@ -1023,7 +1023,6 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
     with get_session() as ap_s:
         user = ap_s.query(User).filter_by(id=user_id).first()
         post = ap_s.query(Post).filter_by(id=post_id).first()
-        print(user, post)
         if not user or not post:
             logger.warning(f"Broadcast aborted: user_id={user_id} or post_id={post_id} not found")
             return
