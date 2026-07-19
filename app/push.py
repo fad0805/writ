@@ -84,6 +84,7 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
             from pywebpush import webpush, WebPushException
             for sub in subs:
                 try:
+                    print(f"[PUSH] sending to sub {sub.id} key_len={len(vapid_key['privateKey'])} key_start={repr(vapid_key['privateKey'][:30])}", flush=True)
                     webpush(
                         subscription_info={
                             "endpoint": sub.endpoint,

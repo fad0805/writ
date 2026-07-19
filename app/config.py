@@ -60,15 +60,22 @@ S3_BUCKET = os.environ.get("S3_BUCKET", "")
 S3_PUBLIC_URL = os.environ.get("S3_PUBLIC_URL", "")
 
 # Web Push / VAPID
-VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "").replace("\\n", "\n")
-VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "").replace("\\n", "\n")
+def _sanitize_pem(val: str) -> str:
+    if not val:
+        return val
+    val = val.strip().strip('"').strip("'")
+    val = val.replace("\\n", "\n").replace("\\r", "")
+    return val
+
+VAPID_PRIVATE_KEY = _sanitize_pem(os.environ.get("VAPID_PRIVATE_KEY", ""))
+VAPID_PUBLIC_KEY = _sanitize_pem(os.environ.get("VAPID_PUBLIC_KEY", ""))
 VAPID_CLAIM_EMAIL = os.environ.get("VAPID_CLAIM_EMAIL", f"admin@{DOMAIN}")
 
 
 def get_vapid_keys():
     """VAPID 키를 즉시 조회 (lifespan에서 env 업데이트 후 재조회 가능)."""
-    priv = os.environ.get("VAPID_PRIVATE_KEY", "").replace("\\n", "\n")
-    pub = os.environ.get("VAPID_PUBLIC_KEY", "").replace("\\n", "\n")
+    priv = _sanitize_pem(os.environ.get("VAPID_PRIVATE_KEY", ""))
+    pub = _sanitize_pem(os.environ.get("VAPID_PUBLIC_KEY", ""))
     return priv, pub
 
 # Auto-generate VAPID keys if not configured
