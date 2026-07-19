@@ -2912,8 +2912,9 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     body = json.dumps(activity, ensure_ascii=True, sort_keys=True).encode("utf-8")
     print(f"DEBUG_BODY_LENGTH: {len(body)}")
     print(f"DEBUG_BODY: {body.decode('utf-8')}") # 실제 전송되는 JSON
-    import base64 as _b64
-    digest = _b64.b64encode(hashlib.sha256(body).digest()).decode()
+    import base64
+    digest = base64.b64encode(hashlib.sha256(body).digest()).decode()
+    digest_header = f"SHA-256={digest}" # 공백 없음 확인
     now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
     date = now.strftime("%a, %d %b %Y %H:%M:%S GMT")
 
@@ -2921,15 +2922,19 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     path = parsed.path or "/"
     created = int(time.time())
     print(f"DEBUG_VERIFY: incoming_inbox={inbox_url}, parsed_host={parsed.netloc}")
-    signed_string = f"(request-target): post {path}\nhost: {parsed.netloc}\ndate: {date}\ndigest: SHA-256={digest}\n(created): {created}"
+    signed_string = (
+        f"(request-target): post {path}\n"
+        f"host: {parsed.netloc}\n"
+        f"date: {date}\n"
+        f"digest: {digest_header}"
+    )
     print(f"DEBUG_SIGNED_STRING: {repr(signed_string)}") # \n 같은 제어문자까지 다 보게 repr() 사용
 
     signature = sign_string(signed_string, get_private_key(sender, SECRET_KEY))
     signature_header = (
         f'keyId="{sender.actor_uri()}#main-key",'
-        f'algorithm="hs2019",'
-        f'created="{created}",'
-        f'headers="(request-target) host date digest (created)",'
+        f'algorithm="rsa-sha256",'
+        f'headers="(request-target) host date digest",'
         f'signature="{signature}"'
     )
 
@@ -2937,7 +2942,7 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
         "Content-Type": "application/activity+json",
         "Signature": signature_header,
         "Date": date,
-        "Digest": f"SHA-256={digest}",
+        "Digest": digest_header,
         "Host": parsed.netloc,
     }
 
