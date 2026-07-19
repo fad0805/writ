@@ -3,7 +3,7 @@ import re
 import uuid
 from sqlalchemy import (
     create_engine, Column, Integer, String, Text, DateTime, Boolean,
-    ForeignKey, JSON, Index, event, text, Table
+    ForeignKey, JSON, text, Table
 )
 from sqlalchemy.orm import DeclarativeBase, relationship, Session
 
@@ -334,7 +334,7 @@ class Post(Base):
             for keyword, (url, _) in _emoji_map.items():
                 tags.append({
                     "type": "emoji",
-                    "id": f"{base_url}/emojis/{keyword}",
+                    "id": f"{BASE_URL}/emojis/{keyword}",
                     "name": f":{keyword}:",
                     "icon": {
                         "type": "image",
@@ -346,7 +346,7 @@ class Post(Base):
             with get_session() as s:
                 users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
                 for u in users:
-                    web_href = getattr(u, 'profile_url', '') or f"{base_url}/@{u.username}"
+                    web_href = getattr(u, 'profile_url', '') or f"{BASE_URL}/@{u.username}"
                     # actor uri (for mention tag)
                     actor_href = u.actor_uri()
                     # display name: just username (mastodon expects @<span>username</span>)
@@ -374,13 +374,13 @@ class Post(Base):
         def _actor_uri_for_handle(handle: str) -> str:
             if "@" in handle:
                 name, domain = handle.split("@", 1)
-                domain_uri = f"https://{domain}" if domain != urlparse(base_url).hostname else base_url
+                domain_uri = f"https://{domain}" if domain != urlparse(BASE_URL).hostname else BASE_URL
                 return f"{domain_uri}/users/{name}"
-            return f"{base_url}/users/{handle}"
+            return f"{BASE_URL}/users/{handle}"
         def _wrap_unknown_mention(m):
             handle = m.group(1)
             actor_uri = _actor_uri_for_handle(handle)
-            web_uri = f"{base_url}/@{handle}"
+            web_uri = f"{BASE_URL}/@{handle}"
             tags.append({"type": "mention", "href": actor_uri, "name": f"@{handle}"})
             return (
                 f'<span class="h-card" translate="no">'
@@ -403,15 +403,15 @@ class Post(Base):
         from urllib.parse import quote as _urlencode
         content = re.sub(
             r'(^|(?<=\s)|(?<=>))#([^\s<]+)',
-            lambda m: f'{m.group(1)}<a href="{base_url}/explore?tag={_urlencode(m.group(2))}" class="mention hashtag" rel="tag">#{m.group(2)}</a>',
+            lambda m: f'{m.group(1)}<a href="{BASE_URL}/explore?tag={_urlencode(m.group(2))}" class="mention hashtag" rel="tag">#{m.group(2)}</a>',
             content,
         )
 
         if self.tag_list:
             for t in self.tag_list:
-                tags.append({"type": "hashtag", "href": f"{base_url}/explore?tag={_urlencode(t.name)}", "name": f"#{t.name}"})
+                tags.append({"type": "hashtag", "href": f"{BASE_URL}/explore?tag={_urlencode(t.name)}", "name": f"#{t.name}"})
 
-        content = re.sub(r'href="/', f'href="{base_url}/', content)
+        content = re.sub(r'href="/', f'href="{BASE_URL}/', content)
 
         _ap_context = [
             "https://www.w3.org/ns/activitystreams",
@@ -429,7 +429,7 @@ class Post(Base):
                 "quoteuri": "http://fedibird.com/ns#quoteuri",
             },
         ]
-        obj_id = f"{base_url}/@{self.author.username}/{self.number}" if self.number else self.ap_id
+        obj_id = f"{BASE_URL}/@{self.author.username}/{self.number}" if self.number else self.ap_id
         obj = {
             "@context": _ap_context,
             "id": obj_id,
