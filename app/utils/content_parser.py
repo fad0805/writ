@@ -4,6 +4,7 @@ from urllib.parse import quote, unquote
 import nh3
 from bs4 import BeautifulSoup, NavigableString
 
+from app.models import Post
 
 def _sanitize_html(html: str) -> str:
     """Strip dangerous HTML tags/attributes, keep only safe ones."""
