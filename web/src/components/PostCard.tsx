@@ -551,21 +551,6 @@ const localReactionEmojiMap = useMemo(() => {
           <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
         )}
         {!post.summary && (post as any).media_attachments?.length > 0 && _renderMedia()}
-        {!post.summary && post.link_preview && !(post as any).quote_of_id && !(post as any).quote_of_ap_id && (() => {
-            const lp = post.link_preview!;
-            const isLocalLink = (() => { try { return new URL(lp.url).hostname === window.location.hostname; } catch { return false; } })();
-            const lpImage = isLocalLink ? ((window as any).__serverLogo || lp.image) : lp.image;
-            return (
-          <a href={lp.url} target="_blank" rel="noopener noreferrer" className="link-preview-card" onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: 12, marginTop: 8, padding: 10, borderRadius: 8, border: "1px solid var(--border)", textDecoration: "none", color: "inherit" }}>
-            {lpImage && <img src={lpImage} alt="" style={{ width: 80, height: 80, borderRadius: isLocalLink ? 16 : 6, objectFit: "contain", flexShrink: 0, background: isLocalLink ? "var(--bg-tertiary)" : undefined }} onError={(e) => (e.target as HTMLElement).style.display = "none"} />}
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lp.title}</div>
-              {lp.description && <div style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{lp.description}</div>}
-              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{(() => { try { return new URL(lp.url).hostname; } catch { return ""; } })()}</div>
-            </div>
-          </a>
-            );
-          })()}
         {post.poll_data && (
           (() => {
             const total = post.poll_data!.options.reduce((s, o) => s + (o.votes_count || 0), 0);
