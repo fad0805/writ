@@ -22,20 +22,59 @@ NOTIF_LABELS = {
 
 
 def _get_vapid_key():
-    priv, pub = get_vapid_keys()
-    if not priv or not pub:
-        return None
-    # Re-serialize PEM to ensure correct format (fixes env_file multi-line issues)
+    # 1. Try DB first (authoritative source)
     try:
-        from cryptography.hazmat.primitives.serialization import load_pem_private_key, Encoding, PrivateFormat, NoEncryption
-        key = load_pem_private_key(priv.encode(), password=None)
-        priv = key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode()
+        from app.models import ServerSetting, get_session
+        with get_session() as s:
+            ss = ServerSetting.get(s)
+            db_priv = getattr(ss, 'vapid_private_key', '') or ''
+            db_pub = getattr(ss, 'vapid_public_key', '') or ''
+            if db_priv and db_pub:
+                return {"privateKey": db_priv, "publicKey": db_pub}
+    except Exception:
+        pass
+
+    # 2. Try env vars
+    priv, pub = get_vapid_keys()
+    if priv and pub:
+        return {"privateKey": priv, "publicKey": pub}
+
+    # 3. Auto-generate and persist to DB
+    try:
+        import base64
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.hazmat.primitives import serialization
+        from app.models import ServerSetting, get_session
+
+        _key = ec.generate_private_key(ec.SECP256R1())
+        _priv_pem = _key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        ).decode()
+        _raw_pub = _key.public_key().public_bytes(
+            serialization.Encoding.X962,
+            serialization.PublicFormat.UncompressedPoint,
+        )
+        _pub_b64 = base64.urlsafe_b64encode(_raw_pub).rstrip(b"=").decode()
+
+        with get_session() as s:
+            ss = ServerSetting.get(s)
+            ss.vapid_private_key = _priv_pem
+            ss.vapid_public_key = _pub_b64
+            s.commit()
+
+        # Update env for the rest of this process
+        import os
+        os.environ["VAPID_PRIVATE_KEY"] = _priv_pem
+        os.environ["VAPID_PUBLIC_KEY"] = _pub_b64
+
+        logger.info("Auto-generated new VAPID keys and saved to DB")
+        return {"privateKey": _priv_pem, "publicKey": _pub_b64}
     except Exception as e:
-        logger.warning("VAPID private key re-serialization failed: %s", e)
-    return {
-        "privateKey": priv,
-        "publicKey": pub,
-    }
+        logger.warning("Failed to auto-generate VAPID keys: %s", e)
+
+    return None
 
 
 def send_push_to_user(user_id: int, notification_type: str, from_username: str = "", post_id: int = None, metadata: dict = None):
