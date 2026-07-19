@@ -325,7 +325,7 @@ class Post(Base):
 
             with get_session() as _es:
                 for kw in _emoji_keywords:
-                    emoji = _es.query(customemoji).filter_by(keyword=kw).first()
+                    emoji = _es.query(CustomEmoji).filter_by(keyword=kw).first()
                     if emoji:
                         _emoji_map[kw] = (_get_emoji_url(emoji.file_name, emoji.domain or "", emoji.category or ""), emoji.keyword)
 
@@ -344,7 +344,7 @@ class Post(Base):
                 })
         if self.mentioned_user_ids:
             with get_session() as s:
-                users = s.query(user).filter(user.id.in_(self.mentioned_user_ids)).all()
+                users = s.query(User).filter(user.id.in_(self.mentioned_user_ids)).all()
                 for u in users:
                     web_href = getattr(u, 'profile_url', '') or f"{base_url}/@{u.username}"
                     # actor uri (for mention tag)
@@ -455,7 +455,7 @@ class Post(Base):
             obj["to"] = []
         if self.mentioned_user_ids:
             with get_session() as _ms:
-                _musers = _ms.query(user).filter(user.id.in_(self.mentioned_user_ids)).all()
+                _musers = _ms.query(User).filter(user.id.in_(self.mentioned_user_ids)).all()
                 for _mu in _musers:
                     _mu_uri = _mu.actor_uri()
                     if _mu_uri not in obj["to"] and _mu_uri not in obj["cc"]:
