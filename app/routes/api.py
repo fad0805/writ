@@ -1131,8 +1131,8 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                         if domain and not _federation_allowed(domain):
                             continue
                         # 서명하기 직전 확인
-                        print(f"DEBUG_SENDER_URI: {sender.actor_uri()}")
-                        print(f"DEBUG_PRIVATE_KEY_PREVIEW: {get_private_key(sender, SECRET_KEY)[:20]}...")
+                        print(f"DEBUG_SENDER_URI: {mu.actor_uri()}")
+                        print(f"DEBUG_PRIVATE_KEY_PREVIEW: {get_private_key(mu, SECRET_KEY)[:20]}...")
                         _post_to_inbox(inbox, create_activity, user)
                         delivered_domains.add(domain)
 
