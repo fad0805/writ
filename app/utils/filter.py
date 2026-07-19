@@ -63,15 +63,13 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
     """Decide whether a single post should be shown to the given user.
 
     Args:
-        post: Post ORM object (must have .author_id, .in_reply_to_id,
-              .in_reply_to_ap_id, .content, .mentioned_user_ids, .novel_id,
-              .author relationship with .is_remote)
+        post: Post ORM object
         session: DB session
         user: The viewer (User ORM object)
         tl_type: "home", "social", "local", or "federated"
         following_ids: Set of user IDs that `user` follows
         filter_ctx: Pre-loaded filter data from _load_user_filters() (optional)
-        is_boosted: If True, skip reply filtering (boosted posts bypass reply rules)
+        is_boosted: If True, skip reply filtering
 
     Returns True if the post should be delivered, False to hide it.
     """
@@ -81,19 +79,7 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
     following_set = set(following_ids) if following_ids else set()
     is_self = post.author_id == user.id
 
-    # --- 1. Mention check (대원칙 1: 나한테 온 멘션은 무조건 통과) ---
-    is_mentioned_to_me = False
-    if post.mentioned_user_ids and user.id in post.mentioned_user_ids:
-        is_mentioned_to_me = True
-    if not is_mentioned_to_me and post.content and getattr(post, 'author', None) and post.author.is_remote:
-        my_username_lower = user.username.split('@')[0].lower()
-        if re.search(rf'@{my_username_lower}(?:@[\w.-]+)?\b', post.content.lower()):
-            is_mentioned_to_me = True
-
-    if is_mentioned_to_me:
-        return True
-
-    # --- 2. Mute/block/keyword filter ---
+    # --- 1. 블록/뮤트/키워드 (최우선 — 멘션보다 우선) ---
     if filter_ctx:
         if post.author_id in filter_ctx["hidden_ids"]:
             return False
@@ -104,8 +90,26 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
             if _match_keyword_mute(content_lower, filter_ctx["parsed_kw"]):
                 return False
 
-    # --- 3. Reply filter (home/social only) ---
+    # --- 2. 멘션 체크 (대원칙 1: 나한테 온 멘션은 무조건 통과) ---
+    is_mentioned_to_me = False
+    if post.mentioned_user_ids and user.id in post.mentioned_user_ids:
+        is_mentioned_to_me = True
+    if not is_mentioned_to_me and post.content and getattr(post, 'author', None) and post.author.is_remote:
+        my_username_lower = user.username.split('@')[0].lower()
+        if re.search(rf'@{my_username_lower}(?:@[\w.-]+)?\b', post.content.lower()):
+            is_mentioned_to_me = True
+    if is_mentioned_to_me:
+        return True
+
+    # --- 3. home/social 전용 필터 ---
     if tl_type in ("home", "social"):
+        allowed_authors = following_set | {user.id}
+
+        # 작성자가 팔로우 대상이 아니면 드롭
+        if post.author_id not in allowed_authors:
+            return False
+
+        # 답글 필터: 부모 글 작성자를 확인
         if not is_boosted and (post.in_reply_to_id or post.in_reply_to_ap_id):
             if post.in_reply_to_id:
                 parent = session.query(Post).filter_by(id=post.in_reply_to_id).first()
@@ -115,15 +119,6 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
             else:
                 # remote parent not in DB → hide
                 return False
-
-        # 원격 답글 방어: 부모가 DB에 없는 원격 글
-        if post.in_reply_to_ap_id and not post.in_reply_to_id:
-            return False
-
-        # --- 4. Author must be followed (대원칙 2) ---
-        allowed_authors = following_set | {user.id}
-        if post.author_id not in allowed_authors:
-            return False
 
     return True
 
@@ -146,11 +141,6 @@ def _timeline_filter(posts, session: Session, user, tl_type, following_ids):
 
     filtered = []
     for p in posts:
-        # Inline parent author lookup for reply filter (avoid N+1 in should_deliver_post)
-        if tl_type in ("home", "social") and p.in_reply_to_id and p.in_reply_to_id in parent_authors:
-            # Temporarily set a flag so should_deliver_post can use cached data
-            pass  # should_deliver_post does its own lookup; batch optimization is minimal here
-
         if should_deliver_post(p, session, user, tl_type, following_set, filter_ctx):
             filtered.append(p)
 
