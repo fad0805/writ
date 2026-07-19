@@ -2909,7 +2909,7 @@ def _deliver_sync(inbox_url: str, body: bytes, headers: dict) -> bool:
 def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     if not _validate_url(inbox_url):
         return
-    body = json.dumps(activity, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    body = json.dumps(activity, ensure_ascii=True, sort_keys=True).encode("utf-8")
     print(f"DEBUG_BODY_LENGTH: {len(body)}")
     print(f"DEBUG_BODY: {body.decode('utf-8')}") # 실제 전송되는 JSON
     import base64 as _b64
@@ -2950,7 +2950,7 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     with get_session() as session:
         session.add(PendingDelivery(
             inbox_url=inbox_url,
-            activity_json=json.dumps(activity, ensure_ascii=False, sort_keys=True),
+            activity_json=json.dumps(activity, ensure_ascii=True, sort_keys=True),
             sender_id=sender.id,
             status="pending",
         ))
