@@ -2947,7 +2947,7 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     with get_session() as session:
         session.add(PendingDelivery(
             inbox_url=inbox_url,
-            activity_json=json.dumps(activity, ensure_ascii=False),
+            activity_json=json.dumps(activity, ensure_ascii=False, sort_keys=True),
             sender_id=sender.id,
             status="pending",
         ))
