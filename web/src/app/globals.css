@@ -825,7 +825,7 @@ input:focus {
   position: absolute;
   bottom: 100%;
   right: 0;
-  min-width: 140px;
+  min-width: 180px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 8px;

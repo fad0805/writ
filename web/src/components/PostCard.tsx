@@ -778,7 +778,13 @@ const localReactionEmojiMap = useMemo(() => {
                     </button>
                   )}
                   {post.is_mine && (
-                    <button onClick={() => { setShowMoreActions(false); setShowRewrite(true); }} className="post-actions-dropdown-item">
+                    <button onClick={async () => {
+                      setShowMoreActions(false);
+                      try { await api.deletePost(post.id); } catch {}
+                      if (onDelete) onDelete();
+                      else if (onUpdate) onUpdate();
+                      setShowRewrite(true);
+                    }} className="post-actions-dropdown-item">
                       <Icon name="edit" /> 지우고 다시 쓰기
                     </button>
                   )}
@@ -874,12 +880,8 @@ const localReactionEmojiMap = useMemo(() => {
           <div className="reply-modal modal-form" onClick={(e) => e.stopPropagation()}>
             <button className="reply-modal-close" onClick={() => setShowRewrite(false)}>×</button>
             <h3>지우고 다시 쓰기</h3>
-            <PostForm onDone={async (newPost) => {
+            <PostForm onDone={(newPost) => {
               setShowRewrite(false);
-              if (!newPost) return;
-              try { await api.deletePost(post.id); } catch {}
-              if (onDelete) onDelete();
-              else if (onUpdate) onUpdate();
             }} initialContent={(post.content || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")} initialVisibility={post.visibility} />
           </div>
         </div>
