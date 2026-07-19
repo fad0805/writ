@@ -115,6 +115,7 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
         raw_href = raw_href.strip()
         # [핵심] DB 멘션 데이터에 존재하는 유저인지 소문자 href(ap_id)로 먼저 낚아챕니다.
         mentioned_user_ids = []
+        print(f'================ post : {post}')
         if post and isinstance(post, dict):
             for tag in post.get("tag"):
                 if tag.get("type") == 'Mention':
