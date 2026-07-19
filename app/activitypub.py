@@ -113,7 +113,8 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
         if isinstance(raw_href, list):
             raw_href = " ".join(raw_href)
         raw_href = raw_href.strip()
-        # [핵심] DB 멘션 데이터에 존재하는 유저인지 소문자 href(ap_id)로 먼저 낚아챕니다.
+
+        print(f'================================== post : {post}')
         mentioned_user_ids = []
         if post and isinstance(post, dict):
             for tag in post.get("tag"):
@@ -124,6 +125,7 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
         else:
             raise ValueError(f"Can not detect post or actor object")
 
+        print(f'================================== mentioned_user_ids : {mentioned_user_ids}')
         for mentioned_user in mentioned_user_ids:
             a_tag.clear()  # 기존 내부 자식 태그들 안전하게 청소
             a_tag.string = f"@{mentioned_user}"
@@ -135,6 +137,7 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
         # [예외 방어] 데이터 바인딩이 누락되었으나 원격 주소인 경우를 위한 차선책
         if text.startswith('@') and raw_href.startswith('http'):
             remote_url_match = re.match(r'https?://([^/]+)/(?:@|users/)([A-Za-z0-9_.-]+)', raw_href, re.IGNORECASE)
+            print(f'================================== remote_url_match: {remote_url_match.group(1), remote_url_match.group(2)}')
             if remote_url_match:
                 domain = remote_url_match.group(1).lower()
                 username = remote_url_match.group(2)
@@ -147,15 +150,11 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post) -> str:
 
         # 2-1. 기존 쌩 텍스트 기반 패턴 매칭 (데이터 맵에 없는 경우를 위한 Fallback)
         raw_username = text.lstrip('@').lower()
-        if text.startswith('@') and raw_username in mention_map:
-            u = mention_map[raw_username]
+        if text.startswith('@') and raw_username in mentioned_user_ids:
+            print(f'================================== raw_username : {raw_username}')
             a_tag.clear()
-            if u.is_remote:
-                a_tag.string = f"@{u.username}@{u.domain}"
-                a_tag["href"] = f"/@{u.username}@{u.domain}"
-            else:
-                a_tag.string = f"@{u.username}"
-                a_tag["href"] = f"/@{u.username}"
+            a_tag.string = f"@{raw_username}"
+            a_tag["href"] = f"/@{raw_username}"
             a_tag["class"] = "mention"
             a_tag.attrs.pop("target", None)
             continue
