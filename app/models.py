@@ -292,9 +292,12 @@ class Post(Base):
         content = re.sub(r'```(\w*)\r?\n([\s\s]*?)```', _save_code_block, content)
         content = re.sub(r'```([^`\n]+?)```', lambda m: f'<pre><code>{m.group(1)}</code></pre>', content)
 
-        # inline code (single backtick) — after code blocks so ``` aren't caught
-        content = re.sub(r'`([^`\n]+?)`', r'<code>\1</code>', content)
+        # \s\s -> \s\S 로 수정 (줄바꿈 포함 모든 문자 매칭)
+        content = re.sub(r'```(\w*)\r?\n([\s\S]*?)```', _save_code_block, content)
+        content = re.sub(r'```([^`\n]+?)```', lambda m: f'<pre><code>{m.group(1)}</code></pre>', content)
 
+        # inline code
+        content = re.sub(r'`([^`\n]+?)`', r'<code>\1</code>', content)
         content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', content)
         content = re.sub(r'\*(.+?)\*', r'<em>\1</em>', content)
         content = content.replace('\n', '<br>')
@@ -316,7 +319,7 @@ class Post(Base):
                     try:
                         storage = get_storage()
                         return storage.url(f"emojis/{sub}/{file_name}")
-                    except exception:
+                    except Exception:
                         pass
                 return f"{base_url}/emojis/{sub}/{file_name}"
 
@@ -340,8 +343,6 @@ class Post(Base):
                     },
                 })
         if self.mentioned_user_ids:
-            from app.config import DOMAIN
-            from urllib.parse import urlparse as _urlparse
             with get_session() as s:
                 users = s.query(user).filter(user.id.in_(self.mentioned_user_ids)).all()
                 for u in users:
@@ -465,9 +466,9 @@ class Post(Base):
         is_sensitive = self.is_sensitive or getattr(self.author, 'is_sensitive', false) or false
         if self.summary:
             obj["summary"] = self.summary
-            obj["sensitive"] = true
+            obj["sensitive"] = True
         elif is_sensitive:
-            obj["sensitive"] = true
+            obj["sensitive"] = True
         if self.media_attachments:
             from urllib.parse import urlparse
             attachments = []
