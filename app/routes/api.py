@@ -6646,14 +6646,13 @@ def api_admin_remote_server_purge(domain: str, request: Request):
             s.query(Bookmark).filter(Bookmark.user_id.in_(user_ids)).delete(synchronize_session=False)
             s.query(Vote).filter(Vote.user_id.in_(user_ids)).delete(synchronize_session=False)
             # Convert mentions to the purged domain to plain text in local posts
-            import re as _re
-            _esc = _re.escape(domain)
-            _mention_re = _re.compile(
+            _esc = re.escape(domain)
+            _mention_re = re.compile(
                 r'<span class="h-card"[^>]*>'
                 r'<a href="[^"]*' + _esc + r'[^"]*" class="u-url mention">'
                 r'@<span>([^<]+)</span></a></span>'
             )
-            _mention_re2 = _re.compile(
+            _mention_re2 = re.compile(
                 r'<a href="[^"]*' + _esc + r'[^"]*" class="mention">@([^<]+)</a>'
             )
             for _p in s.query(Post).filter(Post.author_id.notin_(user_ids), Post.content.contains(domain)).all():

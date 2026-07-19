@@ -10,7 +10,7 @@ import socket
 import time
 import uuid
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote, unquote
 
 import httpx
 import nh3
@@ -84,21 +84,18 @@ def _html_to_newlines(html: str) -> str:
     return html.strip('\n')
 
 
-import re
-
 def _extract_plain_text(sanitized_content: str, post=None) -> str:
     if not sanitized_content:
         return ""
 
-    from bs4 import BeautifulSoup
+    from bs4 import BeautifulSoup, NavigableString
 
-    # 💡 Post 객체에서 tag_list 추출 (없거나 비어있으면 빈 리스트)
+    # Post 객체에서 tag_list 추출
     tags = []
     if post and hasattr(post, "tag_list") and post.tag_list:
-        # 혹시 모를 ORM 객체나 커스텀 이터러블에 대응하기 위해 리스트 컴프리헨션으로 안전하게 파싱
         tags = [str(t) for t in post.tag_list if t]
 
-    # 1. 생짜 URL을 a 태그로 변환 (기존 유지)
+    # 1. 생짜 URL을 a 태그로 변환
     url_pattern = r'(?<!href=")(?<!src=")(?<!">)(https?://(?!.*/tags/)[^\s<>"\')\]#]+)'
     def _repl_raw_url(m):
         url = m.group(1)
@@ -108,7 +105,6 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
         return f'<a href="{url}" target="_blank" rel="noopener noreferrer">{display}</a>'
     sanitized_content = re.sub(url_pattern, _repl_raw_url, sanitized_content)
 
-    # BeautifulSoup 파싱
     soup = BeautifulSoup(sanitized_content, "html.parser")
 
     # 2. 이미 존재하는 모든 <a> 태그를 찾아서 안전하게 리모델링
@@ -117,37 +113,33 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
         # 2-1. 텍스트가 원격 핸들 패턴인 경우
         remote_match = re.match(r'^@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})$', text)
         if remote_match:
-            username, domain = remote_match.groups()
-            a_tag.string = f"@{username}@{domain}"
-            a_tag["href"] = f"/@{username}"
+            a_tag.string = f"@{remote_match.group(1)}@{remote_match.group(2)}"
+            a_tag["href"] = f"/@{remote_match.group(1)}"
             a_tag["class"] = "mention"
-            if "target" in a_tag.attrs: del a_tag["target"]
+            a_tag.attrs.pop("target", None)
             continue
         # 2-2. 텍스트가 로컬 핸들 패턴인 경우
         local_match = re.match(r'^@([A-Za-z0-9_.-]+)$', text)
         if local_match:
-            username = local_match.group(1)
-            a_tag.string = f"@{username}"
-            a_tag["href"] = f"/@{username}"
+            a_tag.string = f"@{local_match.group(1)}"
+            a_tag["href"] = f"/@{local_match.group(1)}"
             a_tag["class"] = "mention"
-            if "target" in a_tag.attrs: del a_tag["target"]
+            a_tag.attrs.pop("target", None)
             continue
 
-        # 2-4. 텍스트가 해시태그 패턴이고, Post.tag_list에 존재하는 태그일 때만 처리
-        hashtag_match = re.match(r'^#([^\s#@]+)(?:@([A-Za-z0-9_.-]+\.[A-Za-z]{2,}))?$', text)
-        if hashtag_match:
-            tag_name = hashtag_match.group(1)
-            # 대소문자 구분 없이 비교
-            if tag_name.lower() in [t.lower() for t in tags]:
-                from urllib.parse import quote
-                # 💡 # 기호(%23)와 태그명을 안전하게 URL 인코딩 처리합니다.
-                encoded_query = quote(f"#{tag_name}")
-                a_tag.string = f"#{tag_name}"
-                a_tag["href"] = f"/explore?q={encoded_query}"
-                a_tag["class"] = "hashtag"
-                if "target" in a_tag.attrs: del a_tag["target"]
-                continue
-        # 2-3. 텍스트가 일반 URL인 경우: http(s):// 제거 + 길이 제한
+        # 2-4. 텍스트가 해시태그 패턴일 때 처리
+        if text.startswith('#'):
+            tag_name_match = re.search(r'#([^\s#@<]+)', text)
+            if tag_name_match:
+                tag_name = tag_name_match.group(1)
+                if not tags or tag_name.lower() in [t.lower() for t in tags]:
+                    a_tag.string = f"#{tag_name}"
+                    a_tag["href"] = f"/explore?q={quote(f'#{tag_name}')}"
+                    a_tag["class"] = "hashtag"
+                    a_tag.attrs.pop("target", None)
+                    continue
+
+        # 2-3. 텍스트가 일반 URL인 경우
         if text and re.match(r'^https?://', text):
             display = re.sub(r'^https?://', '', text)
             if len(display) > 40:
@@ -155,14 +147,16 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
             a_tag.string = display
 
     # 3. <a> 태그 밖에 쌩으로 굴러다니는 핸들 & 해시태그 텍스트 처리
-    for text_node in soup.find_all(string=True):
-        if text_node.parent.name == "a":
-            continue  # 이미 <a> 태그 안에 있는 텍스트는 패스!
+    for text_node in list(soup.find_all(string=True)):
+        if text_node.find_parent("a"):
+            continue
+
+        text_str = str(text_node)
         # 쌩 원격 핸들 치환
         new_text = re.sub(
             r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})',
             r'<a href="/@\1" class="mention">@\1@\2</a>',
-            text_node
+            text_str
         )
         # 쌩 로컬 핸들 치환
         new_text = re.sub(
@@ -170,44 +164,54 @@ def _extract_plain_text(sanitized_content: str, post=None) -> str:
             r'<a href="/@\1" class="mention">@\1</a>',
             new_text
         )
-        # Post.tag_list 기반으로 쌩 텍스트 내 해시태그 치환 수행
+        # Post.tag_list 기반 해시태그 치환
         if tags:
-            # 특수문자 이스케이프 및 매칭 꼬임 방지를 위해 글자 수가 긴 태그 순으로 정렬
             escaped_tags = [re.escape(t) for t in sorted(tags, key=len, reverse=True)]
-            tags_pattern = r'(?<![A-Za-z0-9_.\-#])#(' + '|'.join(escaped_tags) + r')(?![A-Za-z0-9_.-])'
+            tags_pattern = r'(?<![A-Za-z0-9_.-])#(' + '|'.join(escaped_tags) + r')(?![A-Za-z0-9_.-])'
             new_text = re.sub(
                 tags_pattern,
-                r'<a href="/tags/\1" class="hashtag">#\1</a>',
+                lambda m: f'<a href="/explore?q={quote(f"#{m.group(1)}")}" class="hashtag">#{m.group(1)}</a>',
                 new_text
             )
-        # 바뀐 텍스트가 HTML 태그를 포함하므로, 문자열 노드를 실제 HTML 오브젝트로 변환하여 교체
-        if new_text != text_node:
+        if new_text != text_str:
             new_soup = BeautifulSoup(new_text, "html.parser")
-            text_node.replace_with(new_soup)
+            for child in list(new_soup.contents):
+                text_node.insert_before(child.extract())
+            text_node.extract()
 
-    # <br> → \n, <p>/<div> → \n\n 으로 변환하여 줄바꿈 보존
-    for br in soup.find_all("br"):
+    # 줄바꿈 보존을 위한 변환 작업
+    for br in list(soup.find_all("br")):
         br.replace_with("\n")
-    for tag in soup.find_all(["p", "div"]):
+    for tag in list(soup.find_all(["p", "div"])):
         tag.insert_before("\n")
         tag.insert_after("\n")
 
-    # <a> 태그를 보존하면서 나머지 태그는 텍스트만 추출
-    from bs4 import NavigableString
+    # 4. <a> 태그 빌드 및 안전한 HTML 직렬화 검증 기법 도입
     def _to_html(node):
         if isinstance(node, NavigableString):
-            return str(node)
+            # BeautifulSoup의 내장 이스케이프 메커니즘을 적용하여 특수문자 안전성 보장
+            return node.output_ready()
         if node.name == "a":
             attrs_list = []
             for k, v in node.attrs.items():
                 val = " ".join(v) if isinstance(v, list) else v
+                if k == "href" and "/explore?q=" in val:
+                    try:
+                        base, query = val.split("/explore?q=", 1)
+                        val = f"/explore?q={quote(unquote(query))}"
+                    except ValueError:
+                        pass
                 attrs_list.append(f'{k}="{val}"')
-            attrs = " ".join(attrs_list)
-            inner = "".join(_to_html(c) for c in node.children)
-            return f"<a {attrs}>{inner}</a>" if attrs else f"<a>{inner}</a>"
-        return "".join(_to_html(c) for c in node.children)
+            attrs_str = f" {' '.join(attrs_list)}" if attrs_list else ""
+            children_str = "".join(_to_html(c) for c in list(node.children))
+            return f"<a{attrs_str}>{children_str}</a>"
+        # <a> 태그가 아닌 일반 블록 태그는 껍데기를 버리고 자식 텍스트만 취합
+        return "".join(_to_html(c) for c in list(node.children))
 
-    return _to_html(soup).strip()
+    result = "".join(_to_html(c) for c in list(soup.contents))
+    # 가독성을 해치는 연속된 공백 라인(\n\n\n+)을 최대 두 줄(\n\n)로 압축 및 정돈
+    result = re.sub(r'\n{3,}', '\n\n', result)
+    return result.strip()
 
 
 _PRIVATE_SUBNETS = [
