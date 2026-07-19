@@ -33,7 +33,14 @@ def _get_vapid_key():
             if db_priv and db_pub and _is_valid_pem_private_key(db_priv):
                 return {"privateKey": db_priv, "publicKey": db_pub}
             if (db_priv or db_pub) and not _is_valid_pem_private_key(db_priv):
-                print(f"[PUSH] DB VAPID key invalid (len={len(db_priv)}), will regenerate", flush=True)
+                print(f"[PUSH] DB VAPID key invalid (len={len(db_priv)}), clearing and regenerating", flush=True)
+                try:
+                    ss.vapid_private_key = ''
+                    ss.vapid_public_key = ''
+                    s.commit()
+                    print("[PUSH] Cleared invalid VAPID key from DB", flush=True)
+                except Exception as ce:
+                    print(f"[PUSH] Failed to clear DB key: {ce}", flush=True)
     except Exception:
         pass
 

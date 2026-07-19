@@ -187,11 +187,19 @@ async def lifespan(app: FastAPI):
                     _os.environ.setdefault("VAPID_PRIVATE_KEY", _db_priv_san)
                     _os.environ.setdefault("VAPID_PUBLIC_KEY", _db_pub)
                 else:
-                    import py_vapid, base64
-                    _v = py_vapid.Vapid()
-                    _v.generate_keys()
-                    _priv_pem = _v.private_pem().decode().strip()
-                    _pub_b64 = base64.urlsafe_b64encode(_v.public_key).rstrip(b"=").decode()
+                    import base64
+                    from cryptography.hazmat.primitives.asymmetric import ec
+                    from cryptography.hazmat.primitives import serialization as _ser
+                    _vkey = ec.generate_private_key(ec.SECP256R1())
+                    _priv_pem = _vkey.private_bytes(
+                        _ser.Encoding.PEM, _ser.PrivateFormat.PKCS8, _ser.NoEncryption()
+                    ).decode()
+                    _pub_b64 = base64.urlsafe_b64encode(
+                        _vkey.public_key().public_bytes(
+                            _ser.Encoding.X962, _ser.PublicFormat.UncompressedPoint
+                        )
+                    ).rstrip(b"=").decode()
+                    print(f"[VAPID] Lifespan: generated new key (priv len={len(_priv_pem)})", flush=True)
                     try:
                         from sqlalchemy import Column, String
                         if not hasattr(ServerSetting, 'vapid_private_key'):
@@ -208,8 +216,8 @@ async def lifespan(app: FastAPI):
                         _ss.vapid_public_key = _pub_b64
                         _s.commit()
                     import os as _os
-                    _os.environ.setdefault("VAPID_PRIVATE_KEY", _priv_pem)
-                    _os.environ.setdefault("VAPID_PUBLIC_KEY", _pub_b64)
+                    _os.environ["VAPID_PRIVATE_KEY"] = _priv_pem
+                    _os.environ["VAPID_PUBLIC_KEY"] = _pub_b64
     except Exception:
         pass
     t = threading.Thread(target=_delivery_worker, daemon=True)

@@ -124,10 +124,11 @@ if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
                     _ss.vapid_private_key = ''
                     _ss.vapid_public_key = ''
                     _s.commit()
-                except Exception:
-                    pass
-    except Exception:
-        pass
+                    print("[VAPID] Cleared invalid key from DB", flush=True)
+                except Exception as _e:
+                    print(f"[VAPID] Failed to clear DB key: {_e}", flush=True)
+    except Exception as _e:
+        print(f"[VAPID] DB read error: {_e}", flush=True)
 
 if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
     try:
@@ -162,7 +163,8 @@ if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
                 _ss.vapid_private_key = VAPID_PRIVATE_KEY
                 _ss.vapid_public_key = VAPID_PUBLIC_KEY
                 _s.commit()
-        except Exception:
-            pass
-    except Exception:
-        pass
+                print(f"[VAPID] Auto-generated and saved new key (priv len={len(VAPID_PRIVATE_KEY)})", flush=True)
+        except Exception as _e:
+            print(f"[VAPID] Failed to save auto-generated key to DB: {_e}", flush=True)
+    except Exception as _e:
+        print(f"[VAPID] Auto-generate error: {_e}", flush=True)
