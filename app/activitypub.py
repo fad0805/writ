@@ -1166,7 +1166,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         print(f"[FETCH-POST] no attributedTo url={url}", flush=True)
         return None
 
-    _resolve_actor(attributed_to)
+    _resolve_actor(attributed_to, sign_as=signer)
     author = session.query(User).filter_by(remote_url=attributed_to).first()
     if not author:
         print(f"[FETCH-POST] author not found attributed_to={attributed_to}", flush=True)
