@@ -146,10 +146,12 @@ def _extract_plain_text(sanitized_content: str) -> str:
             new_soup = BeautifulSoup(new_text, "html.parser")
             text_node.replace_with(new_soup)
 
-    # <br>, <p>, <div> 등 줄바꿈 역할을 하는 태그 뒤에 공백을 강제로 삽입하여 
-    # 단어가 서로 달라붙어 키워드 매칭이 씹히는 현상을 방지합니다.
-    for break_tag in soup.find_all(["br", "p", "div", "blockquote"]):
-        break_tag.insert_after(" ")
+    # <br> → \n, <p>/<div> → \n\n 으로 변환하여 줄바꿈 보존
+    for br in soup.find_all("br"):
+        br.replace_with("\n")
+    for tag in soup.find_all(["p", "div"]):
+        tag.insert_before("\n")
+        tag.insert_after("\n")
     # HTML 내의 모든 태그를 걷어내고 텍스트만 추출합니다.
     return soup.get_text().strip()
 
