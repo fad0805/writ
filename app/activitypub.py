@@ -2909,7 +2909,7 @@ def _deliver_sync(inbox_url: str, body: bytes, headers: dict) -> bool:
 def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     if not _validate_url(inbox_url):
         return
-    body = json.dumps(activity, ensure_ascii=False).encode("utf-8")
+    body = json.dumps(activity, ensure_ascii=False, sort_keys=True).encode("utf-8")
     import base64 as _b64
     digest = _b64.b64encode(hashlib.sha256(body).digest()).decode()
     date = datetime.datetime.now(datetime.timezone.utc).strftime(
