@@ -961,7 +961,6 @@ def api_get_post(request: Request, post_id: int):
             descendants = []
         reply_id_set = set(reply_ids)
         _reply_liked_ids = _reply_boosted_ids = _reply_bookmarked_ids = set()
-        _reply_reactions = {}
         _reply_booster_map = {}
         if user and reply_id_set:
             _reply_liked_ids = set(r[0] for r in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(reply_id_set)).all())
@@ -1005,7 +1004,6 @@ def api_get_post(request: Request, post_id: int):
         try:
             with get_session() as remote_s:
                 remote_parent = _fetch_remote_post(fetch_remote_url, user, remote_s)
-                
                 # 💡 remote_parent가 정확히 존재하고(None이 아니고) 부모 게시글 객체일 때만 파싱하도록 방어막을 칩니다.
                 if remote_parent is not None:
                     result["ancestors"] = [_post_json(remote_parent, remote_s, user)]
@@ -1016,22 +1014,29 @@ def api_get_post(request: Request, post_id: int):
             print(f"[ERROR] Failed to fetch or process remote parent: {e}", flush=True)
             import traceback
             traceback.print_exc()
-            
     return result
 
 
-def _broadcast_federation(user, post, visibility, plain_content='', actor_uri=''):
+def _broadcast_federation(user_id, post_id, visibility, plain_content = ''):
     """Deliver Create activity to remote followers (background thread)."""
     try:
-        create_activity = {
-            "@context": "https://www.w3.org/ns/activitystreams",
-            "id": f"{BASE_URL}/activities/create/{post.id}",
-            "type": "Create",
-            "actor": actor_uri if actor_uri else user.actor_uri(),
-            "object": post.to_ap_note(plain_content),
-        }
-        if visibility == "mention":
-            with get_session() as ap_s:
+        # 🌟 백그라운드 스레드 전용 독립 세션을 새로 엽니다.
+        with get_session() as ap_s:
+            # 스레드 안에서 안전하게 다시 조회 (Lazy Loading 에러 원천 차단)
+            user = ap_s.query(User).filter_by(id=user_id).first()
+            post = ap_s.query(Post).filter_by(id=post_id).first()
+            if not user or not post:
+                logger.warning("Broadcast failed: User %s or Post %s not found", user_id, post_id)
+                return
+
+            create_activity = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": f"{BASE_URL}/activities/create/{post.id}",
+                "type": "Create",
+                "actor": user.actor_uri(),
+                "object": post.to_ap_note(plain_content),
+            }
+            if visibility == "mention":
                 if post.mentioned_user_ids:
                     mu_users = ap_s.query(User).filter(
                         User.id.in_(post.mentioned_user_ids), User.is_remote == True
@@ -1045,7 +1050,6 @@ def _broadcast_federation(user, post, visibility, plain_content='', actor_uri=''
                 # Also deliver to @user@domain mentions parsed from content
                 import re as _re
                 remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', post.content or ""))
-                # Resolve remote handles OUTSIDE session (network I/O)
                 _resolved_handles = []
                 for handle in remote_handles:
                     remote_user = ap_s.query(User).filter(
@@ -1081,7 +1085,6 @@ def _broadcast_federation(user, post, visibility, plain_content='', actor_uri=''
                                             resolved = _resolve_actor(href, sign_as=user)
                                             break
                         if resolved:
-                            # Re-query in case resolved is detached
                             remote_user = ap_s.query(User).get(resolved.id)
                     except Exception:
                         pass
@@ -1093,14 +1096,11 @@ def _broadcast_federation(user, post, visibility, plain_content='', actor_uri=''
                     if domain and not _federation_allowed(domain):
                         continue
                     _post_to_inbox(inbox, create_activity, user)
-        else:
-            broadcast_to_followers(user, create_activity)
-            delivered_domains = set()
-            # Collect known users and handles from DB first
-            _known_handles = {}
-            _unknown_handles = set()
-            with get_session() as ap_s:
-                # Deliver to mentioned remote users from mentioned_user_ids
+            else:
+                broadcast_to_followers(user, create_activity)
+                delivered_domains = set()
+                _known_handles = {}
+                _unknown_handles = set()
                 if post.mentioned_user_ids:
                     follower_ids = {f.following_id for f in ap_s.query(Follow).filter(
                         Follow.following_id == user.id,
@@ -1118,7 +1118,6 @@ def _broadcast_federation(user, post, visibility, plain_content='', actor_uri=''
                             _post_to_inbox(inbox, create_activity, user)
                             delivered_domains.add(domain)
 
-                # Collect @user@domain mentions
                 import re as _re
                 remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', post.content or ""))
                 for handle in remote_handles:
@@ -1130,49 +1129,47 @@ def _broadcast_federation(user, post, visibility, plain_content='', actor_uri=''
                     else:
                         _unknown_handles.add(handle)
 
-            # Resolve unknown handles OUTSIDE session (network I/O)
-            if _unknown_handles:
-                from app.activitypub import _resolve_actor
-                for handle in _unknown_handles:
-                    try:
-                        r_name, r_domain = handle.split("@", 1)
-                        if not _federation_allowed(r_domain):
-                            continue
-                        resolved = None
-                        for url in [f"https://{r_domain}/@{r_name}", f"https://{r_domain}/users/{r_name}"]:
-                            try:
-                                resolved = _resolve_actor(url, sign_as=user)
-                                if resolved:
-                                    break
-                            except Exception:
+                if _unknown_handles:
+                    from app.activitypub import _resolve_actor
+                    for handle in _unknown_handles:
+                        try:
+                            r_name, r_domain = handle.split("@", 1)
+                            if not _federation_allowed(r_domain):
                                 continue
-                        if not resolved:
-                            import httpx as _httpx
-                            wf = _httpx.get(
-                                f"https://{r_domain}/.well-known/webfinger?resource=acct:{handle}",
-                                timeout=5,
-                            )
-                            if wf.status_code == 200:
-                                for link in wf.json().get("links", []):
-                                    if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
-                                        href = link.get("href", "")
-                                        if href:
-                                            resolved = _resolve_actor(href, sign_as=user)
-                                            break
-                        if resolved:
-                            with get_session() as ap_s2:
-                                remote_user = ap_s2.query(User).get(resolved.id)
+                            resolved = None
+                            for url in [f"https://{r_domain}/@{r_name}", f"https://{r_domain}/users/{r_name}"]:
+                                try:
+                                    resolved = _resolve_actor(url, sign_as=user)
+                                    if resolved:
+                                        break
+                                except Exception:
+                                    continue
+                            if not resolved:
+                                import httpx as _httpx
+                                wf = _httpx.get(
+                                    f"https://{r_domain}/.well-known/webfinger?resource=acct:{handle}",
+                                    timeout=5,
+                                )
+                                if wf.status_code == 200:
+                                    for link in wf.json().get("links", []):
+                                        if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
+                                            href = link.get("href", "")
+                                            if href:
+                                                resolved = _resolve_actor(href, sign_as=user)
+                                                break
+                            if resolved:
+                                remote_user = ap_s.query(User).get(resolved.id)
                                 if remote_user:
                                     _known_handles[handle] = remote_user
-                    except Exception:
-                        pass
-            for handle, remote_user in _known_handles.items():
-                inbox = remote_user.inbox_url or remote_user.inbox_uri()
-                domain = remote_user.actor_uri().split("/")[2] if "//" in remote_user.actor_uri() else ""
-                if domain and not _federation_allowed(domain):
-                    continue
-                _post_to_inbox(inbox, create_activity, user)
-                delivered_domains.add(domain)
+                        except Exception:
+                            pass
+                for handle, remote_user in _known_handles.items():
+                    inbox = remote_user.inbox_url or remote_user.inbox_uri()
+                    domain = remote_user.actor_uri().split("/")[2] if "//" in remote_user.actor_uri() else ""
+                    if domain and not _federation_allowed(domain):
+                        continue
+                    _post_to_inbox(inbox, create_activity, user)
+                    delivered_domains.add(domain)
     except Exception as e:
         logger.warning("Failed to broadcast federation activity: %s", e)
 
@@ -1330,7 +1327,7 @@ def api_create_post(
 
         # Async federation broadcast (background thread so it doesn't block response)
         actor_uri = user.actor_uri()
-        threading.Thread(target=_broadcast_federation, args=(user, post, visibility, content, actor_uri), daemon=True).start()
+        threading.Thread(target=_broadcast_federation, args=(user.id, post.id, visibility, content, actor_uri), daemon=True).start()
 
         try:
             broadcast("new_post", {"post_id": post.id, "author_id": user.id})
