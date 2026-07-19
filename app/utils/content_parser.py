@@ -148,26 +148,30 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post | None) -> str
 
         text_str = str(text_node)
         # 1) 풀 핸들 변환: 뒤에 도메인이 확실히 붙어있는 경우
+        # [방어 보강] href=" 또는 src=" 등의 속성 내부나 문자열 중간에 낀 패턴을 원천 차단
         new_text = re.sub(
-            r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})',
+            r'(?<![A-Za-z0-9_.-="])@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})(?![A-Za-z0-9_.-])',
             r'<a href="/@\1@\2" class="mention">@\1@\2</a>',
             text_str
         )
-        # 2) 단축 핸들 변환: 'href="/@' 내부에 있거나 이미 변환된 풀 핸들의 일부가 아닌 녀석만 골라냅니다.
-        # (?!@[A-Za-z0-9_.-]+\.) 패턴을 넣어 뒤에 도메인이 이어지는 구조를 원천 차단합니다.
+        # 2) 단축 핸들 변환: 풀 핸들이나 기존 HTML 태그 속성 내부와 매칭되지 않도록 방어막 구축
+        # 텍스트 노드가 이미 위에서 풀 핸들로 변환되어 <a> 태그가 생겼다면, 
+        # html.parser 특성상 다음 루프나 온전한 노드로 분리되지만, 문자열 상태에서 한 번 더 돌기 때문에 
+        # href="/@ 이 주소 부분을 건드리지 못하도록 부정 후방 탐색(?<!href="/)(?<!/) 조건을 명확히 추가합니다.
         new_text = re.sub(
-            r'(?<![A-Za-z0-9_.-])@([A-Za-z0-9_.-]+)(?!@[A-Za-z0-9_.-]+\.)(?!@)',
+            r'(?<![A-Za-z0-9_.-="/])@([A-Za-z0-9_.-]+)(?!@[A-Za-z0-9_.-]+\.)(?!@)(?![A-Za-z0-9_.-])',
             r'<a href="/@\1" class="mention">@\1</a>',
             new_text
         )
 
         # HashTag
-        general_tags_pattern = r'(?<![A-Za-z0-9_.-])#([A-Za-z0-9가-힣_]+)(?![A-Za-z0-9_.-])'
+        general_tags_pattern = r'(?<![A-Za-z0-9_.-="])#([A-Za-z0-9가-힣_]+)(?![A-Za-z0-9_.-])'
         new_text = re.sub(
             general_tags_pattern,
             lambda m: f'<a href="/explore?q={quote(f"#{m.group(1)}")}" class="hashtag">#{m.group(1)}</a>',
             new_text
         )
+        
         if new_text != text_str:
             new_soup = BeautifulSoup(new_text, "html.parser")
             for child in list(new_soup.contents):
