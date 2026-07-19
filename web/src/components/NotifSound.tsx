@@ -41,7 +41,7 @@ export default function NotifSound() {
             if (badge) badge.textContent = String(parsed.unread);
             if (typeof window !== "undefined") (window as any).__unreadNotifs = parsed.unread;
           }
-          if (audioRef.current && isNotifSoundEnabled()) {
+          if (parsed.unread !== undefined && parsed.unread > 0 && audioRef.current && isNotifSoundEnabled()) {
             audioRef.current.currentTime = 0;
             audioRef.current.play().catch(() => {});
           }
