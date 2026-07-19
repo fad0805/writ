@@ -63,7 +63,7 @@ S3_PUBLIC_URL = os.environ.get("S3_PUBLIC_URL", "")
 def _sanitize_pem(val: str) -> str:
     if not val:
         return val
-    val = val.strip().strip('"').strip("'")
+    val = val.strip()
     val = val.replace("\\n", "\n").replace("\\r", "")
     return val
 
