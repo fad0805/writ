@@ -51,7 +51,7 @@ export default function Sidebar() {
   }, []);
   useEffect(() => {
     if (typeof localStorage !== "undefined") setTimelineTab(localStorage.getItem("lastTimelineTab") || "home");
-  }, []);
+  }, [pathname]);
   useEffect(() => {
     if (!user) return;
     const update = () => {
