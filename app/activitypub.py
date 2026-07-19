@@ -113,11 +113,10 @@ def _extract_plain_text(sanitized_content: str) -> str:
         remote_match = re.match(r'^@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})$', text)
         if remote_match:
             username, domain = remote_match.groups()
-            # 텍스트와 href 속성을 깔끔하게 초기화 및 재설정
             a_tag.string = f"@{username}@{domain}"
-            a_tag["href"] = f"/@{username}"  # 로컬 링크로 변환 원치 않으시면 기호에 맞게 수정 가능!
+            a_tag["href"] = f"/@{username}"
             a_tag["class"] = "mention"
-            if "target" in a_tag.attrs: del a_tag["attrs"]["target"] # 새창 열기 제거 원할 시
+            if "target" in a_tag.attrs: del a_tag["attrs"]["target"]
             continue
         # 2-2. 텍스트가 로컬 핸들 패턴인 경우
         local_match = re.match(r'^@([A-Za-z0-9_.-]+)$', text)
@@ -126,6 +125,13 @@ def _extract_plain_text(sanitized_content: str) -> str:
             a_tag.string = f"@{username}"
             a_tag["href"] = f"/@{username}"
             a_tag["class"] = "mention"
+            continue
+        # 2-3. 텍스트가 URL인 경우: http(s):// 제거 + 길이 제한
+        if text and re.match(r'^https?://', text):
+            display = re.sub(r'^https?://', '', text)
+            if len(display) > 40:
+                display = display[:37] + "..."
+            a_tag.string = display
 
     # 3. <a> 태그 밖에 쌩으로 굴러다니는 핸들 텍스트 처리 (텍스트 노드만 탐색)
     # (이미 <a> 태그 내부에 있던 글자들은 위에서 걸러졌으므로 밖의 글자만 안전하게 치환됩니다)
