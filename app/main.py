@@ -451,7 +451,7 @@ def user_following(request: Request, username: str, page: int = None):
 
 @app.get("/users/{username}/featured")
 def user_featured(request: Request, username: str, page: int = None):
-    from activitypub import get_featured
+    from app.activitypub import get_featured
     if not _check_collection_access(username, request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     result = get_featured(username, page)
