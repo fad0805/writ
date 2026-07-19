@@ -2920,7 +2920,6 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
 
     parsed = urlparse(inbox_url)
     path = parsed.path or "/"
-    created = int(time.time())
     print(f"DEBUG_VERIFY: incoming_inbox={inbox_url}, parsed_host={parsed.netloc}")
     signed_string = (
         f"(request-target): post {path}\n"
