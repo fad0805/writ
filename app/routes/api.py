@@ -1007,10 +1007,19 @@ def api_get_post(request: Request, post_id: int):
         try:
             with get_session() as remote_s:
                 remote_parent = _fetch_remote_post(fetch_remote_url, user, remote_s)
-                if remote_parent:
+                
+                # 💡 remote_parent가 정확히 존재하고(None이 아니고) 부모 게시글 객체일 때만 파싱하도록 방어막을 칩니다.
+                if remote_parent is not None:
                     result["ancestors"] = [_post_json(remote_parent, remote_s, user)]
-        except Exception:
-            pass
+                else:
+                    print(f"[WARN] Remote parent fetch returned None for URL: {fetch_remote_url}", flush=True)
+        except Exception as e:
+            # 💡 pass로 에러를 완전히 지우지 말고, 개발 중에는 최소한 어떤 에러인지 로그를 남겨줍니다.
+            print(f"[ERROR] Failed to fetch or process remote parent: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            
+    return result
     return result
 
 
