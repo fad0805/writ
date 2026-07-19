@@ -99,7 +99,10 @@ def _extract_plain_text(sanitized_content: str) -> str:
     url_pattern = r'(?<!href=")(?<!src=")(?<!">)(https?://(?!.*/tags/)[^\s<>"\')\]#]+)'
     def _repl_raw_url(m):
         url = m.group(1)
-        return f'<a href="{url}" target="_blank" rel="noopener noreferrer">{url}</a>'
+        display = re.sub(r'^https?://', '', url)
+        if len(display) > 40:
+            display = display[:37] + "..."
+        return f'<a href="{url}" target="_blank" rel="noopener noreferrer">{display}</a>'
     sanitized_content = re.sub(url_pattern, _repl_raw_url, sanitized_content)
 
     # 2. 이미 존재하는 모든 <a> 태그를 찾아서 안전하게 리모델링
