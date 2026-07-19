@@ -1307,7 +1307,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     raw_content = obj.get("content", "") or ""
     if len(raw_content) > 65536:
         raw_content = raw_content[:65536]
-    content = _html_to_newlines(_extract_plain_text(_sanitize_html(raw_content)), post=obj)
+    content = _html_to_newlines(_extract_plain_text(_sanitize_html(raw_content), post=obj))
     summary = obj.get("summary", "")
 
     to = obj.get("to", [])
@@ -1516,7 +1516,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if len(raw_content) > 65536:
             raw_content = raw_content[:65536]
         post_id = obj.get("id", "")
-        content = _html_to_newlines(_extract_plain_text(_sanitize_html(raw_content)), post=obj)
+        content = _html_to_newlines(_extract_plain_text(_sanitize_html(raw_content), post=obj))
         summary = obj.get("summary", "")
         in_reply_to = obj.get("inReplyTo", "")
 
@@ -2690,7 +2690,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     # Update content/summary
                     new_content = object_data.get("content", "")
                     if new_content:
-                        post.content = _html_to_newlines(_extract_plain_text(_sanitize_html(new_content)), post=post)
+                        post.content = _html_to_newlines(_extract_plain_text(_sanitize_html(new_content), post=post))
                     if "summary" in object_data:
                         post.summary = object_data.get("summary", "")
                     # Update poll data
