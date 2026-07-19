@@ -116,6 +116,9 @@ class User(Base):
     def outbox_uri(self):
         return f"{BASE_URL}/users/{self.username}/outbox"
 
+    def featured_uri(self):
+        return f"{BASE_URL}/users/{self.username}/featured"
+
     def to_ap_actor(self):
         tags = []
         for ht in (getattr(self, 'profile_hashtags', None) or []):
@@ -134,6 +137,7 @@ class User(Base):
             "url": f"{BASE_URL}/@{self.username}",
             "inbox": self.inbox_uri(),
             "outbox": self.outbox_uri(),
+            "featured": self.featured_uri(),
             "followers": self.followers_uri(),
             "following": self.following_uri(),
             "publicKey": {

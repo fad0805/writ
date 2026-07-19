@@ -449,6 +449,17 @@ def user_following(request: Request, username: str, page: int = None):
     return JSONResponse(content=result, media_type="application/activity+json")
 
 
+@app.get("/users/{username}/featured")
+def user_featured(request: Request, username: str, page: int = None):
+    from activitypub import get_featured
+    if not _check_collection_access(username, request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    result = get_featured(username, page)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return JSONResponse(content=result, media_type="application/activity+json")
+
+
 def _ap_post_visible(post, request, session):
     """Check if an AP post is visible to the requester.
     For non-AP requests, redirect to frontend handles visibility.
