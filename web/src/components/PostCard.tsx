@@ -14,7 +14,7 @@ import EmojiPicker from "./EmojiPicker";
 import { useAuth } from "@/lib/auth";
 import ShareButton from "@/components/ShareButton";
 import { hashColor } from "@/lib/avatar";
-import { getCustomEmojis, renderCustomEmojis, injectEmojis, CustomEmoji, subscribeEmojis } from "@/lib/emojis";
+import { renderCustomEmojis, injectEmojis, CustomEmoji, subscribeEmojis } from "@/lib/emojis";
 import { sanitizePost, sanitizeName } from "@/lib/sanitize";
 import { installCodeCopyButtons } from "@/lib/codeCopy";
 
