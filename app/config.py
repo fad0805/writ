@@ -69,13 +69,10 @@ def _sanitize_pem(val: str) -> str:
 
 
 def _is_valid_pem_private_key(pem: str) -> bool:
-    """Check that a PEM string is a plausible private key (not truncated/corrupted)."""
+    """Check that a PEM string is a real private key by actually parsing it."""
     if not pem:
         return False
     if not pem.startswith("-----BEGIN ") or not pem.rstrip().endswith("-----"):
-        return False
-    # PKCS8 EC P-256 PEM is always > 270 chars; a valid RSA-2048 is > 1700
-    if len(pem) < 270:
         return False
     try:
         from cryptography.hazmat.primitives.serialization import load_pem_private_key
