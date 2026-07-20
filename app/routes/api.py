@@ -6816,7 +6816,8 @@ def api_unblock_user(request: Request, target_user_id: int):
         target = s.query(User).get(target_user_id)
         if target:
             target_remote_url = target.remote_url
-            target_shared_inbox = target.shared_inbox_url or target.inbox_url            target_id = target.id
+            target_shared_inbox = target.shared_inbox_url or target.inbox_url
+            target_id = target.id
         s.query(UserBlock).filter_by(user_id=user.id, target_user_id=target_user_id).delete()
         s.commit()
     if target_remote_url:
