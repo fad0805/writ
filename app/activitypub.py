@@ -2667,11 +2667,13 @@ def _send_delete_post(post: Post, sender: User):
     note_id = f"{BASE_URL}/posts/{post.id}"
     delete = {
         "@context": "https://www.w3.org/ns/activitystreams",
-        "id": f"{sender.actor_uri()}#delete/{post.id}",
         "type": "Delete",
         "actor": sender.actor_uri(),
-        "to": [f"https://www.w3.org/ns/activitystreams#Public"],
-        "object": note_id,
+        "to": ["https://www.w3.org/ns/activitystreams#Public"],
+        "object": {
+            "type": "Tombstone",
+            "id": note_id
+        }
     }
     try:
         broadcast_to_followers(sender, delete)
