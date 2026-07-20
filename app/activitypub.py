@@ -2961,21 +2961,24 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
 
 def send_to_shared_inbox(user: User, activity: dict):
     with get_session() as session:
-        followers = session.query(Follow).filter(
+        from sqlalchemy.orm import selectinload
+        followers = session.query(Follow).options(
+            selectinload(Follow.following)
+        ).filter(
             Follow.follower_id == user.id,
             Follow.following.has(is_remote=True),
         ).all()
 
-    sent = set()
-    for f in followers:
-        target = f.following
-        inbox = target.shared_inbox_url or target.inbox_url
-        if not inbox:
-            continue
-        if inbox in sent:
-            continue
-        sent.add(inbox)
-        _post_to_inbox(inbox, activity, user)
+        sent = set()
+        for f in followers:
+            target = f.following
+            inbox = target.shared_inbox_url or target.inbox_url
+            if not inbox:
+                continue
+            if inbox in sent:
+                continue
+            sent.add(inbox)
+            _post_to_inbox(inbox, activity, user)
 
 
 def _background_import_emoji(url: str, keyword: str, domain: str):
@@ -3137,21 +3140,24 @@ def _process_emoji_tags(tags: list, session):
 
 def broadcast_to_followers(user: User, activity: dict):
     with get_session() as session:
-        followers = session.query(Follow).filter(
+        from sqlalchemy.orm import selectinload
+        followers = session.query(Follow).options(
+            selectinload(Follow.follower)
+        ).filter(
             Follow.following_id == user.id,
             Follow.follower.has(is_remote=True),
         ).all()
 
-    sent = set()
-    for f in followers:
-        follower = f.follower
-        inbox = follower.shared_inbox_url or follower.inbox_url
-        if not inbox:
-            continue
-        if inbox in sent:
-            continue
-        domain = urlparse(inbox).hostname or ""
-        if not _federation_allowed(domain):
-            continue
-        sent.add(inbox)
-        _post_to_inbox(inbox, activity, user)
+        sent = set()
+        for f in followers:
+            follower = f.follower
+            inbox = follower.shared_inbox_url or follower.inbox_url
+            if not inbox:
+                continue
+            if inbox in sent:
+                continue
+            domain = urlparse(inbox).hostname or ""
+            if not _federation_allowed(domain):
+                continue
+            sent.add(inbox)
+            _post_to_inbox(inbox, activity, user)
