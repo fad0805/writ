@@ -362,13 +362,16 @@ class Post(Base):
                     # tag name must be @user@domain for remote, @user for local
                     if u.is_remote:
                         tag_name = f"@{u.username}"  # username already has @domain
+                        domain_part = u.username.split("@")[1] if "@" in u.username else ""
                     else:
-                        tag_name = f"@{u.username}@{urlparse(BASE_URL).hostname}"
+                        domain_part = urlparse(BASE_URL).hostname or ""
+                        tag_name = f"@{u.username}@{domain_part}"
                     mention_html = (
                         f'<span class="h-card" translate="no">'
                         f'<a href="{actor_href}" class="u-url mention" rel="mention">'
                         f'@<span>{short_username}</span>'
-                        f'</a></span>'
+                        + (f'@<span>{domain_part}</span>' if domain_part else '')
+                        + f'</a></span>'
                     )
                     short_name = f"@{u.username}"
                     content = re.sub(
@@ -388,12 +391,16 @@ class Post(Base):
         def _wrap_unknown_mention(m):
             handle = m.group(1)
             actor_uri = _actor_uri_for_handle(handle)
+            _parts = handle.split("@", 1)
+            _handle_name = _parts[0]
+            _handle_domain = _parts[1] if len(_parts) > 1 else ""
             tags.append({"type": "Mention", "href": actor_uri, "name": f"@{handle}"})
             return (
                 f'<span class="h-card" translate="no">'
                 f'<a href="{actor_uri}" class="u-url mention" rel="mention">'
-                f'@<span>{handle.split("@")[0]}</span>'
-                f'</a></span>'
+                f'@<span>{_handle_name}</span>'
+                + (f'@<span>{_handle_domain}</span>' if _handle_domain else '')
+                + f'</a></span>'
             )
         content = re.sub(
             r'(?<!/)(?:^|(?<=\s))@([a-za-z0-9_]+(?:@[a-za-z0-9-]+(?:\.[a-za-z0-9-]+)*)?)(?=\s|$|<|\.|[,:;!?)\'"])',
