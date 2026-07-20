@@ -184,26 +184,40 @@ def process_local_post(text: str) -> str:
     if not text:
         return ""
 
-    # 2. 이후 파싱 로직 시작
-    # 1. 생짜 URL 링크화
+    # 2. 코드 블록 보호 (플레이스홀더 사용)
+    code_blocks = []
+    def _save_code_block(m):
+        code_blocks.append(f'<pre><code>{m.group(2).rstrip()}</code></pre>')
+        return f'\x00codeblock_{len(code_blocks) - 1}\x00'
+
+    # 2.1 마크다운 코드 블록 처리
+    text = re.sub(r'```(\w*)\r?\n([\s\S]*?)```', _save_code_block, text)
+    text = re.sub(r'```([^`\n]+?)```', lambda m: f'<pre><code>{m.group(1)}</code></pre>', text)
+
+    # 3. 생짜 URL 링크화 (코드 블록은 이미 보호됨)
     url_pattern = r'(?<!href=")(?<!src=")(?<!">)(https?://(?!.*/tags/)[^\s<>"\')\]#]+)'
     text = re.sub(url_pattern, r'<a href="\1" class="u-url" target="_blank" rel="noopener noreferrer">\1</a>', text)
 
+    # 4. 나머지 마크다운 문법 변환
+    text = re.sub(r'`([^`\n]+?)`', r'<code>\1</code>', text)
+    text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+    text = re.sub(r'\*(.+?)\*', r'<em>\1</em>', text)
+    text = text.replace('\n', '<br>')
+
+    # 5. BeautifulSoup을 이용한 멘션/해시태그 파싱
     soup = BeautifulSoup(text, "html.parser")
 
-    # 2. 텍스트 노드 탐색 및 변환
     for text_node in list(soup.find_all(string=True)):
-        if not text_node.parent or text_node.find_parent("a"):
+        # 이미 링크 안이거나, 코드 블록 내부 보호문자열이면 건너뜀
+        if not text_node.parent or text_node.find_parent("a") or text_node.find_parent("code") or text_node.find_parent("pre"):
             continue
 
         text_str = str(text_node)
-        # 풀 핸들 변환
+        # 멘션/태그 정규식
         new_text = re.sub(r'(?<![A-Za-z0-9_.-="])@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})(?![A-Za-z0-9_.-])',
                           r'<a href="/@\1@\2" class="u-url mention">@\1@\2</a>', text_str)
-        # 단축 핸들 변환
         new_text = re.sub(r'(?<![A-Za-z0-9_.-="/])@([A-Za-z0-9_.-]+)(?!@[A-Za-z0-9_.-]+\.)(?!@)(?![A-Za-z0-9_.-])',
                           r'<a href="/@\1" class="u-url mention">@\1</a>', new_text)
-        # 해시태그 변환
         new_text = re.sub(r'(?<![A-Za-z0-9_.-="])#([A-Za-z0-9가-힣_]+)(?![A-Za-z0-9_.-])',
                           lambda m: f'<a href="/explore?q={quote(f"#{m.group(1)}")}" class="hashtag">#{m.group(1)}</a>', new_text)
         if new_text != text_str:
@@ -212,6 +226,13 @@ def process_local_post(text: str) -> str:
                 text_node.insert_before(child.extract())
             text_node.extract()
 
+    # 6. 복원: 보호했던 코드 블록 다시 삽입
+    final_html = str(soup)
+    for i, block in enumerate(code_blocks):
+        final_html = final_html.replace(f'\x00codeblock_{i}\x00', block)
+
+    # 7. 최종 마무리
+    soup = BeautifulSoup(final_html, "html.parser")
     _finalize_html(soup)
     return _serialize_html(soup)
 

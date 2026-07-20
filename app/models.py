@@ -286,184 +286,73 @@ class Post(Base):
         except Exception:
             return 0
 
-    def to_ap_note(self, plain_content = ''):
-        from urllib.parse import urlparse
+    def to_ap_note(self):
         content = self.content
-        if plain_content:
-            content = plain_content
+        tags = []
+        mentioned_uris = []
 
-        # extract code blocks with placeholders to protect from later transformations
-        code_blocks = []
-        def _save_code_block(m):
-            code_blocks.append(f'<pre><code>{m.group(2).rstrip()}</code></pre>')
-            return f'\x00codeblock_{len(code_blocks) - 1}\x00'
-        content = re.sub(r'```(\w*)\r?\n([\s\s]*?)```', _save_code_block, content)
-        content = re.sub(r'```([^`\n]+?)```', lambda m: f'<pre><code>{m.group(1)}</code></pre>', content)
+        # 1. 멘션 및 해시태그 구축
+        with get_session() as s:
+            if self.mentioned_user_ids:
+                users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
+                for u in users:
+                    actor_uri = u.actor_uri()
+                    mentioned_uris.append(actor_uri)
+                    tag_name = f"@{u.username}" if u.is_remote else f"@{u.username}@{urlparse(BASE_URL).hostname}"
+                    tags.append({"type": "Mention", "href": actor_uri, "name": tag_name})
 
-        # \s\s -> \s\S 로 수정 (줄바꿈 포함 모든 문자 매칭)
-        content = re.sub(r'```(\w*)\r?\n([\s\S]*?)```', _save_code_block, content)
-        content = re.sub(r'```([^`\n]+?)```', lambda m: f'<pre><code>{m.group(1)}</code></pre>', content)
+            if self.tag_list:
+                for t in self.tag_list:
+                    tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={_urlencode(t.name)}", "name": f"#{t.name}"})
 
-        # inline code
-        content = re.sub(r'`([^`\n]+?)`', r'<code>\1</code>', content)
-        content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', content)
-        content = re.sub(r'\*(.+?)\*', r'<em>\1</em>', content)
-        content = content.replace('\n', '<br>')
-
-        # restore code blocks
-        for i, block in enumerate(code_blocks):
-            content = content.replace(f'\x00codeblock_{i}\x00', block)
-
-        # collect :emoji: shortcodes for tag array (content stays as :shortcode:)
+        # 2. 이모지 구축
         _emoji_pattern = re.compile(r':([a-z0-9_]{2,}):')
         _emoji_keywords = set(_emoji_pattern.findall(content))
-        _emoji_map = {}
+        
         if _emoji_keywords:
-            def _get_emoji_url(file_name: str, domain: str = "", category: str = "") -> str:
+            def _get_emoji_url(file_name, domain="", category=""):
                 sub = "remote" if domain or category == "remote" else "local"
                 from app.config import s3_enabled
                 if s3_enabled:
                     from app.utils.storage import get_storage
-                    try:
-                        storage = get_storage()
-                        return storage.url(f"emojis/{sub}/{file_name}")
-                    except Exception:
-                        pass
+                    try: return get_storage().url(f"emojis/{sub}/{file_name}")
+                    except Exception: pass
                 return f"{BASE_URL}/emojis/{sub}/{file_name}"
 
             with get_session() as _es:
                 for kw in _emoji_keywords:
                     emoji = _es.query(CustomEmoji).filter_by(keyword=kw).first()
                     if emoji:
-                        _emoji_map[kw] = (_get_emoji_url(emoji.file_name, emoji.domain or "", emoji.category or ""), emoji.keyword)
+                        url = _get_emoji_url(emoji.file_name, emoji.domain or "", emoji.category or "")
+                        tags.append({
+                            "type": "Emoji",
+                            "id": f"{BASE_URL}/emojis/{kw}",
+                            "name": f":{kw}:",
+                            "icon": {
+                                "type": "Image",
+                                "mediaType": "image/webp",
+                                "url": url,
+                            },
+                        })
 
-        tags = []
-        if _emoji_map:
-            for keyword, (url, _) in _emoji_map.items():
-                tags.append({
-                    "type": "emoji",
-                    "id": f"{BASE_URL}/emojis/{keyword}",
-                    "name": f":{keyword}:",
-                    "icon": {
-                        "type": "image",
-                        "mediatype": "image/webp",
-                        "url": url,
-                    },
-                })
-        # Strip existing mention <a> tags to plain text so the regex below can
-        # re-match and rewrite them with correct actor_href + <span class="h-card">
-        content = re.sub(
-            r'<a\s[^>]*class="[^"]*mention[^"]*"[^>]*>(.*?)</a>',
-            r'\1',
-            content,
-            flags=re.I,
-        )
-        # Also strip any leftover <span class="h-card"> wrappers from stored content
-        content = re.sub(r'<span\s+class="h-card"[^>]*>\s*', '', content, flags=re.I)
-        content = re.sub(r'\s*</span>\s*(?=<)', '', content)
-
-        if self.mentioned_user_ids:
-            with get_session() as s:
-                users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
-                for u in users:
-                    web_href = getattr(u, 'profile_url', '') or f"{BASE_URL}/@{u.username}"
-                    # actor uri (for mention tag)
-                    actor_href = u.actor_uri()
-                    # display name: just username (mastodon expects @<span>username</span>)
-                    short_username = u.username.split("@")[0] if u.is_remote else u.username
-                    # tag name must be @user@domain for remote, @user for local
-                    if u.is_remote:
-                        tag_name = f"@{u.username}"  # username already has @domain
-                        domain_part = u.username.split("@")[1] if "@" in u.username else ""
-                    else:
-                        domain_part = urlparse(BASE_URL).hostname or ""
-                        tag_name = f"@{u.username}@{domain_part}"
-                    mention_html = (
-                        f'<span class="h-card" translate="no">'
-                        f'<a href="{web_href}" class="u-url mention" rel="mention">'
-                        f'@<span>{short_username}</span>'
-                        + (f'@<span>{domain_part}</span>' if domain_part else '')
-                        + f'</a></span>'
-                    )
-                    short_name = f"@{u.username}"
-                    content = re.sub(
-                        r'(?<!/)' + re.escape(short_name) + r'(?:@[a-za-z0-9.-]+)?(?![^\s<]*(?:</a>|">))',
-                        mention_html,
-                        content,
-                    )
-                    tags.append({"type": "Mention", "href": actor_href, "name": tag_name})
-
-        # wrap remaining @user@domain patterns as mentions + tag array entries
-        def _actor_uri_for_handle(handle: str) -> str:
-            if "@" in handle:
-                name, domain = handle.split("@", 1)
-                domain_uri = f"https://{domain}" if domain != urlparse(BASE_URL).hostname else BASE_URL
-                return f"{domain_uri}/users/{name}"
-            return f"{BASE_URL}/users/{handle}"
-        def _web_profile_for_handle(handle: str) -> str:
-            if "@" in handle:
-                name, domain = handle.split("@", 1)
-                domain_url = f"https://{domain}" if domain != urlparse(BASE_URL).hostname else BASE_URL
-                return f"{domain_url}/@{name}"
-            return f"{BASE_URL}/@{handle}"
-        def _wrap_unknown_mention(m):
-            handle = m.group(1)
-            actor_uri = _actor_uri_for_handle(handle)
-            web_url = _web_profile_for_handle(handle)
-            _parts = handle.split("@", 1)
-            _handle_name = _parts[0]
-            _handle_domain = _parts[1] if len(_parts) > 1 else ""
-            tags.append({"type": "Mention", "href": actor_uri, "name": f"@{handle}"})
-            return (
-                f'<span class="h-card" translate="no">'
-                f'<a href="{web_url}" class="u-url mention" rel="mention">'
-                f'@<span>{_handle_name}</span>'
-                + (f'@<span>{_handle_domain}</span>' if _handle_domain else '')
-                + f'</a></span>'
-            )
-        content = re.sub(
-            r'(?<!/)(?:^|(?<=\s))@([a-za-z0-9_]+(?:@[a-za-z0-9-]+(?:\.[a-za-z0-9-]+)*)?)(?=\s|$|<|\.|[,:;!?)\'"])',
-            _wrap_unknown_mention,
-            content,
-        )
-
-        content = re.sub(
-            r'(^|>|　|\s)(https?://[^\s<>"\')\]]+)(?![^<]*</a>)',
-            lambda m: f'{m.group(1)}<a href="{m.group(2)}">{m.group(2)}</a>',
-            content,
-        )
-
-        from urllib.parse import quote as _urlencode
-        content = re.sub(
-            r'(^|(?<=\s)|(?<=>))#([^\s<]+)',
-            lambda m: f'{m.group(1)}<a href="{BASE_URL}/explore?tag={_urlencode(m.group(2))}" class="mention hashtag" rel="tag">#{m.group(2)}</a>',
-            content,
-        )
-
-        if self.tag_list:
-            for t in self.tag_list:
-                tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={_urlencode(t.name)}", "name": f"#{t.name}"})
-
-        content = re.sub(r'href="/', f'href="{BASE_URL}/', content)
-
-        _ap_context = [
-            "https://www.w3.org/ns/activitystreams",
-            "https://w3id.org/security/v1",
-            {
-                "manuallyapprovesfollowers": "as:manuallyapprovesfollowers",
-                "toot": "http://joinmastodon.org/ns#",
-                "misskey": "https://misskey-hub.net/ns#",
-                "hashtag": "as:hashtag",
-                "mention": "as:mention",
-                "sensitive": "as:sensitive",
-                "emoji": "toot:emoji",
-                "quoteurl": "as:quoteurl",
-                "quote": {"@id": "https://w3id.org/fep/044f#quote", "@type": "@id"},
-                "quoteuri": "http://fedibird.com/ns#quoteuri",
-            },
-        ]
+        # 3. 객체 생성 및 권한 설정
         obj = {
-            "@context": _ap_context,
+            "@context": [
+                "https://www.w3.org/ns/activitystreams",
+                "https://w3id.org/security/v1",
+                {
+                    "manuallyapprovesfollowers": "as:manuallyapprovesfollowers",
+                    "toot": "http://joinmastodon.org/ns#",
+                    "misskey": "https://misskey-hub.net/ns#",
+                    "hashtag": "as:hashtag",
+                    "mention": "as:mention",
+                    "sensitive": "as:sensitive",
+                    "emoji": "toot:emoji",
+                    "quoteurl": "as:quoteurl",
+                    "quote": {"@id": "https://w3id.org/fep/044f#quote", "@type": "@id"},
+                    "quoteuri": "http://fedibird.com/ns#quoteuri",
+                },
+            ],
             "id": f"{BASE_URL}/posts/{self.id}",
             "url": f"{BASE_URL}/posts/{self.id}",
             "type": "Note",
@@ -471,7 +360,7 @@ class Post(Base):
             "attributedTo": self.author.actor_uri().strip(),
             "content": f"<p>{content}</p>" if not content.strip().startswith("<p>") else content,
             "mediaType": "text/html",
-            "to": [],
+            "to": list(set(mentioned_uris)), # 중복 방지
             "cc": [],
             "tag": tags,
         }
@@ -568,25 +457,25 @@ class Post(Base):
                         obj["closed"] = expires_at
                 except Exception:
                     pass
+        # 마지막 정제: 중복 URI 제거 및 교집합 정리
+        to_set = set(obj.get("to", []))
+        cc_set = set(obj.get("cc", []))
+        # cc에 있는 것이 to에도 있다면 cc에서는 제거 (중복 방지)
+        cc_set -= to_set
+        obj["to"] = list(to_set)
+        obj["cc"] = list(cc_set)
         return obj
 
     def to_ap_create(self):
         note = self.to_ap_note()
-        # 안전장치: to/cc가 비어있으면 안 됨
-        to = note.get("to", [])
-        cc = note.get("cc", [])
-        # 만약 아무것도 없다면(테스트시) 강제로 public 추가
-        if not to and not cc:
-            public_uri = "https://www.w3.org/ns/activitystreams#Public"
-            to = [public_uri]
         return {
-            "@context": note.get("@context", "https://www.w3.org/ns/activitystreams"),
+            "@context": note.get("@context"),
             "id": f"{BASE_URL}/activities/create/{self.id}",
             "type": "Create",
             "actor": self.author.actor_uri(),
-            "published": _ap_datetime(self.created_at),
-            "to": to,
-            "cc": cc,
+            "published": note.get("published"),
+            "to": note.get("to", []),
+            "cc": note.get("cc", []),
             "object": note,
         }
 
