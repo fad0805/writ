@@ -360,6 +360,11 @@ class Post(Base):
         elif self.visibility == "followers":
             to_list.append(followers_uri)
 
+        # [수정] 본인에게 보내는 답글일 경우, to_list에 본인을 포함
+        if self.in_reply_to_ap_id and self.parent and self.parent.author_id == self.author_id:
+            if self.author.actor_uri().strip() not in to_list:
+                to_list.append(self.author.actor_uri().strip())
+
         # 5. 미디어, 인용, 설문 처리
         if self.media_attachments:
             obj["attachment"] = [{"type": "Video" if m.get("type")=="video" else "Image", 
