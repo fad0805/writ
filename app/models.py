@@ -356,7 +356,11 @@ class Post(Base):
             to_list.append(public_uri)
             cc_list.append(followers_uri)
         elif self.visibility == "home":
-            cc_list.extend([public_uri, followers_uri])
+            # 홈공개는 '팔로워에게 전달(to)'하고 '공개(cc)'로 처리해야 미스키에서 보임
+            if followers_uri not in to_list:
+                to_list.append(followers_uri)
+            if public_uri not in cc_list:
+                cc_list.append(public_uri)
         elif self.visibility == "followers":
             to_list.append(followers_uri)
 
