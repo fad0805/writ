@@ -1670,7 +1670,7 @@ def api_like_post(request: Request, post_id: int, reaction: str = "★"):
                 send_push_to_user(post.author_id, "like", user.username, post_id)
                 broadcast_notif_sound(post.author_id)
         if post.author.is_remote and post.author.shared_inbox_url:
-            like_id = f"{base_url}/likes/{uuid.uuid4()}"
+            like_id = f"{BASE_URL}/likes/{uuid.uuid4()}"
             like_rec = existing or s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
             if like_rec:
                 like_rec.ap_id = like_id
