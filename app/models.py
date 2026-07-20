@@ -464,8 +464,10 @@ class Post(Base):
             obj["to"] = [public_uri]
             obj["cc"] = [followers_uri]
         elif self.visibility == "home":
-            obj["to"] = [public_uri]      # '공개 범위'에 들어갔음을 명시
-            obj["cc"] = [followers_uri]   # 팔로워들에게 알림
+            # unlisted: public을 cc에만 넣어야 Mastodon이 " bąd만 공개"로 처리
+            # to에 public이 있으면 Mastodon이 "공개"로 해석함
+            obj["to"] = []
+            obj["cc"] = [public_uri, followers_uri]
         elif self.visibility == "followers":
             obj["to"] = [followers_uri]
             obj["cc"] = []
