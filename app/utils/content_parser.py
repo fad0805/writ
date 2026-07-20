@@ -63,7 +63,7 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post | None) -> str
         display = re.sub(r'^https?://', '', url)
         if len(display) > 40:
             display = display[:37] + "..."
-        return f'<a href="{url}" target="_blank" rel="noopener noreferrer">{display}</a>'
+        return f'<a href="{url}" class="u-url mention" target="_blank" rel="noopener noreferrer">{display}</a>'
     sanitized_content = re.sub(url_pattern, _repl_raw_url, sanitized_content)
 
     soup = BeautifulSoup(sanitized_content, "html.parser")
@@ -151,7 +151,7 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post | None) -> str
         # [방어 보강] href=" 또는 src=" 등의 속성 내부나 문자열 중간에 낀 패턴을 원천 차단
         new_text = re.sub(
             r'(?<![A-Za-z0-9_.-="])@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})(?![A-Za-z0-9_.-])',
-            r'<a href="/@\1@\2" class="mention">@\1@\2</a>',
+            r'<a href="/@\1@\2" class="u-url mention">@\1@\2</a>',
             text_str
         )
         # 2) 단축 핸들 변환: 풀 핸들이나 기존 HTML 태그 속성 내부와 매칭되지 않도록 방어막 구축
@@ -160,7 +160,7 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post | None) -> str
         # href="/@ 이 주소 부분을 건드리지 못하도록 부정 후방 탐색(?<!href="/)(?<!/) 조건을 명확히 추가합니다.
         new_text = re.sub(
             r'(?<![A-Za-z0-9_.-="/])@([A-Za-z0-9_.-]+)(?!@[A-Za-z0-9_.-]+\.)(?!@)(?![A-Za-z0-9_.-])',
-            r'<a href="/@\1" class="mention">@\1</a>',
+            r'<a href="/@\1" class="u-url mention">@\1</a>',
             new_text
         )
 
