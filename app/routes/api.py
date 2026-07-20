@@ -16,7 +16,7 @@ from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notifica
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.log_utils import log_admin_action
 from app.activitypub import _fetch_remote_post
-from app.db import resolve_handles_to_ids
+from app.db.mention_resolver import resolve_handles_to_ids
 from app.utils.filter import _timeline_filter
 from app.utils.content_parser import process_post_content, extract_mentions
 
