@@ -360,35 +360,36 @@ class Post(Base):
             "attributedTo": self.author.actor_uri().strip(),
             "content": f"<p>{content}</p>" if not content.strip().startswith("<p>") else content,
             "mediaType": "text/html",
-            "to": list(set(mentioned_uris)), # 중복 방지
+            "to": [],
             "cc": [],
             "tag": tags,
         }
+        # 3. 공개 범위에 따른 권한 설정 로직 (여기서 to, cc를 결정)
         public_uri = "https://www.w3.org/ns/activitystreams#Public"
         followers_uri = self.author.followers_uri()
+        author_uri = self.author.actor_uri().strip()
 
-        obj["to"] = list(mentioned_uris) if mentioned_uris else []
+        # 기본 수신자 설정 (멘션)
+        to_list = list(set(mentioned_uris))
+        cc_list = []
 
-        # 2. 공개 글 권한 강제 보정 (가장 중요)
         if self.visibility == "public":
-            # 마스토돈이 가장 좋아하는 조합
-            obj["to"].append(public_uri)
-            obj["cc"] = [followers_uri]
+            to_list.append(public_uri)
+            cc_list.append(followers_uri)
         elif self.visibility == "home":
-            # unlisted: public을 cc에만 넣어야 Mastodon이 " bąd만 공개"로 처리
-            # to에 public이 있으면 Mastodon이 "공개"로 해석함
-            # But mentioned users must still be in 'to' for Mastodon mention rendering
-            obj["to"] = list(mentioned_uris) if mentioned_uris else []
-            obj["cc"] = [public_uri, followers_uri]
+            cc_list.extend([public_uri, followers_uri])
         elif self.visibility == "followers":
-            obj["to"].append(followers_uri)
-            obj["cc"] = []
+            to_list.append(followers_uri)
         elif self.visibility == "mention":
-            obj["to"] = mentioned_uris if mentioned_uris else []
-            obj["cc"] = []
-        # 추가로 본인도 to나 cc에 있어야 마스토돈이 잘 처리함 (선택사항)
-        if self.author.actor_uri() not in obj["to"]:
-            obj["cc"].append(self.author.actor_uri())
+            pass # 멘션 대상자만 to에 포함됨
+
+        # 본인 추가 (마스토돈 호환성)
+        if author_uri not in to_list and author_uri not in cc_list:
+            cc_list.append(author_uri)
+        # 4. 최종 할당
+        obj["to"] = to_list
+        obj["cc"] = cc_list
+
         is_sensitive = self.is_sensitive or getattr(self.author, 'is_sensitive', False) or False
         if self.summary:
             obj["summary"] = self.summary
