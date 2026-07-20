@@ -367,13 +367,6 @@ class Post(Base):
         public_uri = "https://www.w3.org/ns/activitystreams#Public"
         followers_uri = self.author.followers_uri()
 
-        # 멘션 대상자들 URI 미리 구하기
-        mentioned_uris = []
-        if self.mentioned_user_ids:
-            with get_session() as s:
-                users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
-                mentioned_uris = [u.actor_uri() for u in users]
-
         obj["to"] = list(mentioned_uris) if mentioned_uris else []
 
         # 2. 공개 글 권한 강제 보정 (가장 중요)
