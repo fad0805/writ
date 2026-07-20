@@ -366,7 +366,7 @@ class Post(Base):
                         tag_name = f"@{u.username}@{urlparse(BASE_URL).hostname}"
                     mention_html = (
                         f'<span class="h-card" translate="no">'
-                        f'<a href="{web_href}" class="u-url mention" rel="mention">'
+                        f'<a href="{actor_href}" class="u-url mention" rel="mention">'
                         f'@<span>{short_username}</span>'
                         f'</a></span>'
                     )
@@ -388,11 +388,10 @@ class Post(Base):
         def _wrap_unknown_mention(m):
             handle = m.group(1)
             actor_uri = _actor_uri_for_handle(handle)
-            web_uri = f"{BASE_URL}/@{handle}"
             tags.append({"type": "Mention", "href": actor_uri, "name": f"@{handle}"})
             return (
                 f'<span class="h-card" translate="no">'
-                f'<a href="{web_uri}" class="u-url mention" rel="mention">'
+                f'<a href="{actor_uri}" class="u-url mention" rel="mention">'
                 f'@<span>{handle.split("@")[0]}</span>'
                 f'</a></span>'
             )
@@ -474,7 +473,7 @@ class Post(Base):
             obj["to"] = [followers_uri]
             obj["cc"] = []
         elif self.visibility == "mention":
-            obj["to"] = mentioned_uris
+            obj["to"] = mentioned_uris if mentioned_uris else [followers_uri]
             obj["cc"] = []
         # 추가로 본인도 to나 cc에 있어야 마스토돈이 잘 처리함 (선택사항)
         if self.author.actor_uri() not in obj["to"]:
