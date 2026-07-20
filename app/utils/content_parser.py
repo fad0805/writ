@@ -5,6 +5,48 @@ import nh3
 from bs4 import BeautifulSoup, NavigableString
 
 from app.models import Post
+from app.config import BASE_URL
+
+
+def process_post_content(sanitized_content: str, post: dict | Post | None) -> str:
+    if not sanitized_content:
+        return ""
+
+    # 1. 로컬 포스트인지 리모트 포스트인지 판별
+    # post가 Post 모델이거나 dict 타입 내부에 ap_id가 존재하면 리모트로 간주
+    is_remote = False
+    if isinstance(post, dict):
+        # dict일 경우 id나 attributedTo가 있으면 리모트
+        if post.get("id") or post.get("attributedTo"):
+            is_remote = True
+    elif post and hasattr(post, "is_remote"):
+        is_remote = post.is_remote
+    elif post and hasattr(post, "ap_id") and post.ap_id:
+        # 모델에 ap_id가 있다면 리모트일 확률이 높음
+        is_remote = True
+
+    # 2. 판별된 타입에 따라 함수 호출
+    if is_remote:
+        # 리모트 포스트는 dict 타입으로 변환하거나 그대로 전달
+        post_data = post if isinstance(post, dict) else {"object": post}
+        return process_remote_post(sanitized_content, post_data)
+    else:
+        return process_local_post(sanitized_content)
+
+
+def extract_mentions(post_content: str, post: dict | Post | None) -> list[str]:
+    # 1. 리모트/로컬 판별 (기존 로직 재사용)
+    is_remote = False
+    if isinstance(post, dict):
+        is_remote = bool(post.get("id") or post.get("attributedTo"))
+    elif post and hasattr(post, "is_remote"):
+        is_remote = post.is_remote
+    # 2. 판별된 타입에 따라 빠른 경로 선택
+    if is_remote:
+        return extract_mentions_from_remote(post if isinstance(post, dict) else {"object": post})
+    else:
+        return extract_mentions_from_local(post_content)
+
 
 def _sanitize_html(html: str) -> str:
     """Strip dangerous HTML tags/attributes, keep only safe ones."""
@@ -29,74 +71,67 @@ def _sanitize_html(html: str) -> str:
     )
     return clean_html
 
-def _extract_plain_text(sanitized_content: str, post: dict | Post | None) -> str:
-    if not sanitized_content:
-        return ""
 
-    # [수정 포인트 1] 무거운 객체 검사 및 데이터 추출은 루프 밖에서 딱 '한 번만' 수행합니다.
+def _finalize_html(soup):
+    for br in list(soup.find_all("br")):
+        br.replace_with("\n")
+    for tag in list(soup.find_all(["p", "div"])):
+        tag.insert_before("\n")
+        tag.insert_after("\n")
+
+def _serialize_html(soup):
+    def _to_html(node):
+        if isinstance(node, NavigableString):
+            return node.output_ready()
+        if node.name == "a":
+            attrs_list = []
+            for k, v in node.attrs.items():
+                val = " ".join(v) if isinstance(v, list) else v
+                if k == "href" and "/explore?q=" in val:
+                    try:
+                        _, query = val.split("/explore?q=", 1)
+                        val = f"/explore?q={quote(unquote(query))}"
+                    except Exception: pass
+                attrs_list.append(f'{k}="{val}"')
+            attrs_str = f" {' '.join(attrs_list)}" if attrs_list else ""
+            children_str = "".join(_to_html(c) for c in list(node.children))
+            return f"<a{attrs_str}>{children_str}</a>"
+        return "".join(_to_html(c) for c in list(node.children))
+
+    result = "".join(_to_html(c) for c in list(soup.contents))
+    return re.sub(r'\n{3,}', '\n\n', result).strip()
+
+
+def process_remote_post(sanitized_content: str, post: dict) -> str:
+    # 1. 메타데이터 추출
+    obj_data = post.get("object", post) if isinstance(post.get("object"), dict) else post
+    raw_tags = obj_data.get("tag", []) or []
     mentioned_user_ids = []
-    tag_names = []  # 순수 해시태그 문자열만 담을 리스트
-
-    if post and isinstance(post, dict):
-        # 액티비티펍 인박스 웹훅 대응 (내부에 object가 있으면 언패킹)
-        obj_data = post.get("object", post) if isinstance(post.get("object"), dict) else post
-        raw_tags = obj_data.get("tag", []) or []
-        # 딕셔너리 구조에서 필요한 값만 정확히 매핑
-        for t in raw_tags:
-            if not isinstance(t, dict):
-                continue
-            t_type = t.get("type")
-            t_name = t.get("name", "")
-            if t_type == "Mention" and t_name:
-                mentioned_user_ids.append(t_name.strip())
-            elif t_type == "Hashtag" and t_name:
-                tag_names.append(t_name.replace("#", "").strip())
-    elif post and hasattr(post, "mentioned_user_ids"):  # SQLAlchemy Post 모델 대응
-        mentioned_user_ids = getattr(post, "mentioned_user_ids", []) or []
-        raw_tags = getattr(post, "tag_list", []) or []
-        tag_names = [str(t) for t in raw_tags if t]
-
-    # 1. 생짜 URL을 a 태그로 변환
-    url_pattern = r'(?<!href=")(?<!src=")(?<!">)(https?://(?!.*/tags/)[^\s<>"\')\]#]+)'
-    def _repl_raw_url(m):
-        url = m.group(1)
-        display = re.sub(r'^https?://', '', url)
-        if len(display) > 40:
-            display = display[:37] + "..."
-        return f'<a href="{url}" class="u-url mention" target="_blank" rel="noopener noreferrer">{display}</a>'
-    sanitized_content = re.sub(url_pattern, _repl_raw_url, sanitized_content)
+    for t in raw_tags:
+        if isinstance(t, dict) and t.get("type") == "Mention" and t.get("name"):
+            mentioned_user_ids.append(t.get("name").strip())
 
     soup = BeautifulSoup(sanitized_content, "html.parser")
 
-    # 2. 이미 존재하는 모든 <a> 태그를 찾아서 안전하게 리모델링
+    # 2. 기존 <a> 태그 리모델링
     for a_tag in soup.find_all("a"):
         text = a_tag.get_text().strip()
-        raw_href = a_tag.get("href", "")
-        if isinstance(raw_href, list):
-            raw_href = " ".join(raw_href)
-        raw_href = raw_href.strip()
-
-        # 멘션 매칭을 위한 방어적 텍스트 정제
+        raw_href = a_tag.get("href", "").strip()
         raw_username = text.lstrip('@').lower()
         href_lower = raw_href.lower()
 
-        # 2-0. 언급된 유저 목록(mentioned_user_ids)과 매칭 시도
+        # 멘션 매칭
         is_mention_matched = False
         matched_uid = None
-
         for uid in mentioned_user_ids:
             uid_lower = uid.lower()
-            # 풀 핸들에서 도메인을 떼어낸 순수 username 추출 (ex: @siarte@daydream.ink -> siarte)
             pure_username = uid_lower.lstrip('@').split('@')[0]
-            # 조건 1: 태그 안의 텍스트가 풀 핸들과 같거나, 도메인이 없는 유저명과 같을 때
-            # 조건 2: 태그의 href 주소에 유저명이 포함되어 있거나 풀 핸들 자체가 매칭될 때
             if (raw_username == pure_username or uid_lower == text.lower() or 
                 pure_username in href_lower or uid_lower in href_lower):
                 is_mention_matched = True
-                matched_uid = uid  # 원래 대소문자가 유지된 풀 핸들 선택
+                matched_uid = uid
                 break
 
-        # 매칭 성공 시 우리 서비스 규격에 맞게 리모델링
         if is_mention_matched and matched_uid:
             a_tag.clear()
             a_tag.string = matched_uid
@@ -105,7 +140,7 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post | None) -> str
             a_tag.attrs.pop("target", None)
             continue
 
-        # [예외 방어] 데이터 바인딩이 누락되었으나 원격 주소 형태인 경우 (Fallback 1)
+        # 예외 방어 (Fallback)
         if text.startswith('@') and raw_href.startswith('http'):
             remote_url_match = re.match(r'https?://([^/]+)/(?:@|users/)([A-Za-z0-9_.-]+)', raw_href, re.IGNORECASE)
             if remote_url_match:
@@ -123,7 +158,6 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post | None) -> str
             tag_name_match = re.search(r'#([^\s#@<]+)', text)
             if tag_name_match:
                 tag_name = tag_name_match.group(1)
-
                 a_tag.clear()
                 a_tag.string = f"#{tag_name}"
                 a_tag["href"] = f"/explore?q={quote(f'#{tag_name}')}"
@@ -131,7 +165,7 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post | None) -> str
                 a_tag.attrs.pop("target", None)
                 continue
 
-        # 일반 URL인 경우
+        # 일반 URL
         if text and re.match(r'^https?://', text):
             display = re.sub(r'^https?://', '', text)
             if len(display) > 40:
@@ -139,72 +173,100 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post | None) -> str
             a_tag.clear()
             a_tag.string = display
 
-    # 3. <a> 태그 밖에 쌩으로 굴러다니는 핸들 & 해시태그 텍스트 처리
+    # 줄바꿈 및 직렬화 과정(기존 로직 동일)
+    _finalize_html(soup)
+    return _serialize_html(soup)
+
+
+def process_local_post(text: str) -> str:
+    # 1. 텍스트 정제
+    text = text.replace('\r\n', '\n').replace('\r', '\n').strip('\n\r ')
+    if not text:
+        return ""
+
+    # 2. 이후 파싱 로직 시작
+    # 1. 생짜 URL 링크화
+    url_pattern = r'(?<!href=")(?<!src=")(?<!">)(https?://(?!.*/tags/)[^\s<>"\')\]#]+)'
+    text = re.sub(url_pattern, r'<a href="\1" class="u-url" target="_blank" rel="noopener noreferrer">\1</a>', text)
+
+    soup = BeautifulSoup(text, "html.parser")
+
+    # 2. 텍스트 노드 탐색 및 변환
     for text_node in list(soup.find_all(string=True)):
-        if not text_node.parent:
-            continue
-        if text_node.find_parent("a"):
+        if not text_node.parent or text_node.find_parent("a"):
             continue
 
         text_str = str(text_node)
-        # 1) 풀 핸들 변환: 뒤에 도메인이 확실히 붙어있는 경우
-        # [방어 보강] href=" 또는 src=" 등의 속성 내부나 문자열 중간에 낀 패턴을 원천 차단
-        new_text = re.sub(
-            r'(?<![A-Za-z0-9_.-="])@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})(?![A-Za-z0-9_.-])',
-            r'<a href="/@\1@\2" class="u-url mention">@\1@\2</a>',
-            text_str
-        )
-        # 2) 단축 핸들 변환: 풀 핸들이나 기존 HTML 태그 속성 내부와 매칭되지 않도록 방어막 구축
-        # 텍스트 노드가 이미 위에서 풀 핸들로 변환되어 <a> 태그가 생겼다면, 
-        # html.parser 특성상 다음 루프나 온전한 노드로 분리되지만, 문자열 상태에서 한 번 더 돌기 때문에 
-        # href="/@ 이 주소 부분을 건드리지 못하도록 부정 후방 탐색(?<!href="/)(?<!/) 조건을 명확히 추가합니다.
-        new_text = re.sub(
-            r'(?<![A-Za-z0-9_.-="/])@([A-Za-z0-9_.-]+)(?!@[A-Za-z0-9_.-]+\.)(?!@)(?![A-Za-z0-9_.-])',
-            r'<a href="/@\1" class="u-url mention">@\1</a>',
-            new_text
-        )
-
-        # HashTag
-        general_tags_pattern = r'(?<![A-Za-z0-9_.-="])#([A-Za-z0-9가-힣_]+)(?![A-Za-z0-9_.-])'
-        new_text = re.sub(
-            general_tags_pattern,
-            lambda m: f'<a href="/explore?q={quote(f"#{m.group(1)}")}" class="hashtag">#{m.group(1)}</a>',
-            new_text
-        )
-        
+        # 풀 핸들 변환
+        new_text = re.sub(r'(?<![A-Za-z0-9_.-="])@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})(?![A-Za-z0-9_.-])',
+                          r'<a href="/@\1@\2" class="u-url mention">@\1@\2</a>', text_str)
+        # 단축 핸들 변환
+        new_text = re.sub(r'(?<![A-Za-z0-9_.-="/])@([A-Za-z0-9_.-]+)(?!@[A-Za-z0-9_.-]+\.)(?!@)(?![A-Za-z0-9_.-])',
+                          r'<a href="/@\1" class="u-url mention">@\1</a>', new_text)
+        # 해시태그 변환
+        new_text = re.sub(r'(?<![A-Za-z0-9_.-="])#([A-Za-z0-9가-힣_]+)(?![A-Za-z0-9_.-])',
+                          lambda m: f'<a href="/explore?q={quote(f"#{m.group(1)}")}" class="hashtag">#{m.group(1)}</a>', new_text)
         if new_text != text_str:
             new_soup = BeautifulSoup(new_text, "html.parser")
             for child in list(new_soup.contents):
                 text_node.insert_before(child.extract())
             text_node.extract()
 
-    # 줄바꿈 보존 작업
-    for br in list(soup.find_all("br")):
-        br.replace_with("\n")
-    for tag in list(soup.find_all(["p", "div"])):
-        tag.insert_before("\n")
-        tag.insert_after("\n")
+    _finalize_html(soup)
+    return _serialize_html(soup)
 
-    # 4. 직렬화
-    def _to_html(node):
-        if isinstance(node, NavigableString):
-            return node.output_ready()
-        if node.name == "a":
-            attrs_list = []
-            for k, v in node.attrs.items():
-                val = " ".join(v) if isinstance(v, list) else v
-                if k == "href" and "/explore?q=" in val:
-                    try:
-                        _, query = val.split("/explore?q=", 1)
-                        val = f"/explore?q={quote(unquote(query))}"
-                    except Exception:
-                        pass
-                attrs_list.append(f'{k}="{val}"')
-            attrs_str = f" {' '.join(attrs_list)}" if attrs_list else ""
-            children_str = "".join(_to_html(c) for c in list(node.children))
-            return f"<a{attrs_str}>{children_str}</a>"
-        return "".join(_to_html(c) for c in list(node.children))
 
-    result = "".join(_to_html(c) for c in list(soup.contents))
-    result = re.sub(r'\n{3,}', '\n\n', result)
-    return result.strip()
+def extract_mentions_from_remote(post: dict) -> list[dict]:
+    """ActivityPub 데이터에서 멘션된 유저의 handle과 href 정보를 추출합니다."""
+    obj_data = post.get("object", post) if isinstance(post.get("object"), dict) else post
+    raw_tags = obj_data.get("tag", []) or []
+
+    mentions = []
+    # 중복 방지를 위한 딕셔너리 키 기반 관리
+    seen_handles = set()
+
+    for t in raw_tags:
+        if isinstance(t, dict) and t.get("type") == "Mention":
+            handle = t.get("name")
+            href = t.get("href")
+            if handle and href and handle not in seen_handles:
+                mentions.append({
+                    "handle": handle.strip(),
+                    "href": href.strip()
+                })
+                seen_handles.add(handle)
+    return mentions
+
+
+def extract_mentions_from_local(text: str) -> list[dict]:
+    # 1. 풀 핸들: @user@domain (우선순위 높음)
+    full_pattern = r'@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})'
+    # 2. 단축 핸들: @user (도메인 형식이 뒤에 붙지 않는 경우만 매칭)
+    # (?!...) : 뒤에 @domain 형태가 오지 않아야 함
+    short_pattern = r'(?<![A-Za-z0-9_./])@([A-Za-z0-9_.-]+)(?!@[A-Za-z0-9_.-]+\.[A-Za-z]{2,})'
+
+    mentions = []
+    seen_handles = set()
+
+    # 풀 핸들 매칭
+    for m in re.finditer(full_pattern, text):
+        handle = f"@{m.group(1)}@{m.group(2)}"
+        if handle not in seen_handles:
+            mentions.append({
+                "handle": handle,
+                "href": f'https://{m.group(2)}/users/{m.group(1)}'
+            })
+            seen_handles.add(handle)
+
+    # 단축 핸들 매칭
+    for m in re.finditer(short_pattern, text):
+        user_part = m.group(1) # @ 제외한 순수 유저명
+        handle = f"@{user_part}"
+        if handle not in seen_handles:
+            mentions.append({
+                "handle": f"@{user_part}@{BASE_URL}",
+                "href": f'https://{BASE_URL}/users/{user_part}'
+            })
+            seen_handles.add(handle)
+    return mentions
+

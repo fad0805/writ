@@ -16,8 +16,9 @@ from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notifica
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.log_utils import log_admin_action
 from app.activitypub import _fetch_remote_post
+from app.db import resolve_handles_to_ids
 from app.utils.filter import _timeline_filter
-from app.utils.content_parser import _extract_plain_text
+from app.utils.content_parser import process_post_content, extract_mentions
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
 
@@ -339,52 +340,6 @@ def _json_array_has_user(column, user_id):
         return column.cast(String).like(f'%{user_id}%')
 
 
-def _parse_mentions(content):
-    mentioned = set(re.findall(r'@([a-zA-Z0-9_]+(?:@[a-zA-Z0-9.-]+)?)', content))
-    print(f"[_parse_mentions] content[:200]={content[:200]!r} handles={mentioned}", flush=True)
-    if not mentioned:
-        return []
-    with get_session() as s:
-        user_ids = []
-        for handle in mentioned:
-            if '@' in handle:
-                local_part, domain = handle.split('@', 1)
-                from urllib.parse import urlparse as _urlparse
-                u = s.query(User).filter(
-                    User.username == local_part,
-                    User.is_remote == True,
-                ).first()
-                if u and u.remote_url:
-                    parsed = _urlparse(u.remote_url)
-                    if parsed.hostname and parsed.hostname.lower() == domain.lower():
-                        user_ids.append(u.id)
-                        print(f"[_parse_mentions] REMOTE OK: handle={handle} -> uid={u.id} username={u.username}", flush=True)
-                        continue
-                # username may contain @domain, try like + domain check
-                candidates = s.query(User).filter(
-                    User.username.like(f"{local_part}@%"),
-                    User.is_remote == True,
-                ).all()
-                for _c in candidates:
-                    if _c.remote_url:
-                        _p = _urlparse(_c.remote_url)
-                        if _p.hostname and _p.hostname.lower() == domain.lower():
-                            user_ids.append(_c.id)
-                            print(f"[_parse_mentions] REMOTE CANDIDATE: handle={handle} -> uid={_c.id} username={_c.username}", flush=True)
-                            break
-                else:
-                    print(f"[_parse_mentions] REMOTE MISS: handle={handle} (local_part={local_part} domain={domain})", flush=True)
-            else:
-                u = s.query(User).filter(User.username == handle, User.is_remote == False).first()
-                if u:
-                    user_ids.append(u.id)
-                    print(f"[_parse_mentions] LOCAL OK: handle={handle} -> uid={u.id} username={u.username}", flush=True)
-                else:
-                    print(f"[_parse_mentions] LOCAL MISS: handle={handle}", flush=True)
-        print(f"[_parse_mentions] RESULT: user_ids={user_ids}", flush=True)
-        return user_ids
-
-
 def _sync_post_tags(post, s):
     """Parse #hashtags from post content and sync with Tag model."""
     tags = set(re.findall(r'(?<!\w)#([\w_가-힣]+)', post.content))
@@ -528,7 +483,6 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
                  display_name: str = Form(""), email: str = Form(...)):
     from app.routes.auth import hash_password
     from app.crypto_utils import generate_keypair
-    import secrets
     display_handle = username
     username = username.lower()
     if username in RESERVED_HANDLES:
@@ -1230,11 +1184,17 @@ def api_create_post(
             content = content + "\n\nepisode: " + share_url
         else:
             content = content + "\n\nseries: " + share_url
-    content = content.replace('\r\n', '\n').replace('\r', '\n')
-    content = content.strip('\n\r ')
-
     # 🌟 [추가] DB 저장 전에 로컬 쌩 텍스트 규칙으로 멘션/태그/URL을 HTML <a> 태그로 파싱!
-    content_html = _extract_plain_text(content, post=None)
+    content_html = process_post_content(content, None)
+    mentions = extract_mentions(content, None)
+    mentioned_handles = [m["handle"] for m in mentions]
+
+    # 2. 핸들을 ID로 변환
+    mentioned_ids = resolve_handles_to_ids(mentioned_handles)
+    if dm_target_id:
+        mentioned_ids.append(dm_target_id)
+    # 중복 제거 후 리스트로 변환 (알림 발송 루프를 위해 리스트 상태 유지)
+    mentioned_ids = list(set(mentioned_ids))
 
     if not content_html.strip() and not poll_options:
         raise HTTPException(status_code=400, detail="Content cannot be empty")
@@ -1256,9 +1216,6 @@ def api_create_post(
                 if vis_order.get(parent_vis, 0) > vis_order.get(visibility, 0):
                     visibility = parent_vis
 
-    mentioned_ids = _parse_mentions(content)
-    if dm_target_id and dm_target_id not in mentioned_ids:
-        mentioned_ids.append(dm_target_id)
     with get_session() as s:
         import secrets
         post_number = secrets.token_hex(4)
@@ -1365,7 +1322,7 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
             raise HTTPException(status_code=403, detail="관리자가 강제한 CW는 수정할 수 없습니다")
         new_content = content.replace('\r\n', '\n').replace('\r', '\n')
         # 본문 파싱 및 시리즈/에피소드 외래키 자동 추출 연동
-        post.content = _extract_plain_text(new_content, post=post)
+        post.content = process_post_content(new_content, post=post)
         post.summary = summary
         s.commit()
 
