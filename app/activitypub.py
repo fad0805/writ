@@ -412,7 +412,8 @@ def _cache_remote_media(remote_url: str) -> str:
         if not resp:
             return remote_url
         data = resp.content
-        orig_ext = remote_url.rsplit(".", 1)[-1].lower() if "." in remote_url else "bin"
+        clean_url = remote_url.split("?")[0].split("#")[0]
+        orig_ext = clean_url.rsplit(".", 1)[-1].lower() if "." in clean_url else "bin"
         ext = orig_ext
         is_image = orig_ext in ("jpg", "jpeg", "png", "gif", "webp")
 
