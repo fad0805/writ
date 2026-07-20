@@ -1187,6 +1187,7 @@ def api_create_post(
     # 🌟 [추가] DB 저장 전에 로컬 쌩 텍스트 규칙으로 멘션/태그/URL을 HTML <a> 태그로 파싱!
     content_html = process_post_content(content, None)
     mentions = extract_mentions(content, None)
+    print(f"DEBUG: Extracted mentions={mentions}")
     mentioned_handles = [m["handle"] for m in mentions]
 
     # 2. 핸들을 ID로 변환
@@ -1195,6 +1196,7 @@ def api_create_post(
         mentioned_ids.append(dm_target_id)
     # 중복 제거 후 리스트로 변환 (알림 발송 루프를 위해 리스트 상태 유지)
     mentioned_ids = list(set(mentioned_ids))
+    print(f"DEBUG: Resolved IDs={mentioned_ids}")
 
     if not content_html.strip() and not poll_options:
         raise HTTPException(status_code=400, detail="Content cannot be empty")
