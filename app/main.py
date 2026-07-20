@@ -983,11 +983,14 @@ def get_post_by_handle(request: Request, username: str, number: str):
         user = session.query(User).filter_by(username=username, is_remote=False).first()
         if not user:
             raise HTTPException(status_code=404, detail="Not found")
-        post = session.query(Post).filter_by(author_id=user.id, number=number, is_deleted=False).first()
+        post = session.query(Post).filter_by(author_id=user.id, number=number).first()
         if not post:
             raise HTTPException(status_code=404, detail="Not found")
 
         if "application/activity+json" in accept or "application/ld+json" in accept:
+            if post.is_deleted:
+                return JSONResponse(content=post.to_ap_note(),
+                                    media_type="application/activity+json")
             if not _ap_post_visible(post, request, session):
                 raise HTTPException(status_code=404, detail="Not found")
             return JSONResponse(content=post.to_ap_note(),

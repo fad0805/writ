@@ -910,7 +910,7 @@ def api_get_post(request: Request, post_id: int):
     is_activitypub = "application/activity+json" in accept_header or "application/ld+json" in accept_header
     if is_activitypub:
         with get_session() as s:
-            post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
+            post = s.query(Post).filter_by(id=post_id).first()
             if not post:
                 raise HTTPException(status_code=404, detail="Not Found")
             note = post.to_ap_note()
@@ -1520,8 +1520,11 @@ def api_delete_post(request: Request, post_id: int):
                         p = _s.query(_Po).get(_pid)
                         if p:
                             _send_delete_post(p, _user)
-                except Exception:
-                    pass
+                        else:
+                            print(f"DELETE_FAIL: post {_pid} not found in DB")
+                except Exception as e:
+                    print(f"DELETE_FAIL: {e}")
+                    import traceback; traceback.print_exc()
         threading.Thread(target=_background, daemon=True).start()
     return {"ok": True}
 

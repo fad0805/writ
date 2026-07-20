@@ -2634,7 +2634,8 @@ def _send_delete_post(post: Post, sender: User):
         "id": f"{sender.actor_uri()}#delete/{post.id}",
         "type": "Delete",
         "actor": sender.actor_uri(),
-        "object": post.ap_id  # 객체 대신 삭제 대상 URL(문자열)로 변경
+        "to": [f"https://www.w3.org/ns/activitystreams#Public"],
+        "object": post.ap_id,
     }
     try:
         broadcast_to_followers(sender, delete)
