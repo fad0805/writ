@@ -443,7 +443,7 @@ class Post(Base):
             "type": "Note",
             "published": _ap_datetime(self.created_at),
             "attributedTo": self.author.actor_uri().strip(),
-            "content": content,
+            "content": f"<p>{content}</p>" if not content.strip().startswith("<p>") else content,
             "mediaType": "text/html",
             "to": [],
             "cc": [],
