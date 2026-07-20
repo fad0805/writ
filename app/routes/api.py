@@ -1038,13 +1038,7 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
             logger.warning(f"Broadcast aborted: user_id={user_id} or post_id={post_id} not found")
             return
 
-        create_activity = {
-            "@context": "https://www.w3.org/ns/activitystreams",
-            "id": f"{BASE_URL}/activities/create/{post.id}",
-            "type": "Create",
-            "actor": user.actor_uri(),
-            "object": post.to_ap_note(plain_content),
-        }
+        create_activity = post.to_ap_create()
         if visibility == "mention":
             if post.mentioned_user_ids:
                 mu_users = ap_s.query(User).filter(

@@ -2629,13 +2629,14 @@ def _handle_delete(activity: dict) -> tuple[int, str]:
 
 
 def _send_delete_post(post: Post, sender: User):
+    note_id = f"{BASE_URL}/posts/{post.id}"
     delete = {
         "@context": "https://www.w3.org/ns/activitystreams",
         "id": f"{sender.actor_uri()}#delete/{post.id}",
         "type": "Delete",
         "actor": sender.actor_uri(),
         "to": [f"https://www.w3.org/ns/activitystreams#Public"],
-        "object": post.ap_id,
+        "object": note_id,
     }
     try:
         broadcast_to_followers(sender, delete)
