@@ -287,6 +287,10 @@ class Post(Base):
             return 0
 
     def to_ap_note(self):
+        # 1. 디버깅 로그 추가
+        print(f"DEBUG: Post ID={self.id}")
+        print(f"DEBUG: mentioned_user_ids={self.mentioned_user_ids}")
+        print(f"DEBUG: tag_list={self.tag_list}")
         content = self.content
         tags = []
         mentioned_uris = []
@@ -308,7 +312,6 @@ class Post(Base):
         # 2. 이모지 구축
         _emoji_pattern = re.compile(r':([a-z0-9_]{2,}):')
         _emoji_keywords = set(_emoji_pattern.findall(content))
-        
         if _emoji_keywords:
             def _get_emoji_url(file_name, domain="", category=""):
                 sub = "remote" if domain or category == "remote" else "local"
