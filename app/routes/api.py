@@ -1040,6 +1040,7 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
 
         create_activity = post.to_ap_create()
         if visibility == "mention":
+            _remote_mentioned = False
             if post.mentioned_user_ids:
                 mu_users = ap_s.query(User).filter(
                     User.id.in_(post.mentioned_user_ids), User.is_remote == True
@@ -1052,6 +1053,9 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                     if domain and not _federation_allowed(domain):
                         continue
                     _post_to_inbox(inbox, create_activity, user)
+                    _remote_mentioned = True
+            if not _remote_mentioned:
+                broadcast_to_followers(user, create_activity)
             import re as _re
             remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', plain_content or ""))
             _resolved_handles = []

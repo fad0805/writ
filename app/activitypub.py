@@ -1435,6 +1435,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     alt_url = in_reply_to.replace("https://", "http://") if "https://" in in_reply_to else in_reply_to.replace("http://", "https://")
                     reply_to_post = session.query(Post).filter_by(ap_id=alt_url).first()
                 if not reply_to_post:
+                    _posts_match = re.match(r'https?://[^/]+/posts/(\d+)', in_reply_to)
+                    if _posts_match:
+                        reply_to_post = session.query(Post).filter_by(id=int(_posts_match.group(1)), is_deleted=False).first()
+                if not reply_to_post:
                     _local_signer = session.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor_id, User.is_remote == False).first()
                     if not _local_signer:
                         _local_signer = _get_instance_actor(session)
