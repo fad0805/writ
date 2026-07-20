@@ -288,9 +288,6 @@ class Post(Base):
 
     def to_ap_note(self):
         # 1. 디버깅 로그 추가
-        print(f"DEBUG: Post ID={self.id}")
-        print(f"DEBUG: mentioned_user_ids={self.mentioned_user_ids}")
-        print(f"DEBUG: tag_list={self.tag_list}")
         content = self.content
         tags = []
         mentioned_uris = []
@@ -304,6 +301,9 @@ class Post(Base):
                     mentioned_uris.append(actor_uri)
                     tag_name = f"@{u.username}" if u.is_remote else f"@{u.username}@{urlparse(BASE_URL).hostname}"
                     tags.append({"type": "Mention", "href": actor_uri, "name": tag_name})
+                    target_rel = f"href=\"/@{u.username}\""
+                    target_abs = f"href=\"{u.actor_uri()}\""
+                    content_html = content_html.replace(target_rel, target_abs)
 
             if self.tag_list:
                 for t in self.tag_list:
