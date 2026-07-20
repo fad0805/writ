@@ -444,6 +444,7 @@ class Post(Base):
             "published": _ap_datetime(self.created_at),
             "attributedTo": self.author.actor_uri().strip(),
             "content": content,
+            "mediaType": "text/html",
             "to": [],
             "cc": [],
             "tag": tags,
