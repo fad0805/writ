@@ -485,7 +485,7 @@ class Post(Base):
                 users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
                 mentioned_uris = [u.actor_uri() for u in users]
 
-        obj['to'] = mentioned_uris
+        obj["to"] = list(mentioned_uris) if mentioned_uris else []
 
         # 2. 공개 글 권한 강제 보정 (가장 중요)
         if self.visibility == "public":
@@ -502,7 +502,7 @@ class Post(Base):
             obj["to"].append(followers_uri)
             obj["cc"] = []
         elif self.visibility == "mention":
-            obj["to"] = mentioned_uris if mentioned_uris else [followers_uri]
+            obj["to"] = mentioned_uris if mentioned_uris else []
             obj["cc"] = []
         # 추가로 본인도 to나 cc에 있어야 마스토돈이 잘 처리함 (선택사항)
         if self.author.actor_uri() not in obj["to"]:
