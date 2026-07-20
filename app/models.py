@@ -509,7 +509,10 @@ class Post(Base):
             if attachments:
                 obj["attachment"] = attachments
         if self.in_reply_to_ap_id:
-            obj["inReplyTo"] = self.in_reply_to_ap_id
+            if self.in_reply_to_id:
+                obj["inReplyTo"] = f"{BASE_URL}/posts/{self.in_reply_to_id}"
+            else:
+                obj["inReplyTo"] = self.in_reply_to_ap_id
         if self.quote_of_ap_id:
             obj["quoteUrl"] = self.quote_of_ap_id
             obj["quote"] = self.quote_of_ap_id
