@@ -6,10 +6,8 @@ from sqlalchemy import (
     ForeignKey, JSON, text, Table
 )
 from sqlalchemy.orm import DeclarativeBase, relationship, Session
-from urllib.parse import urlparse
 
 from app.config import DATABASE_URL, BASE_URL
-from app.utils.content_parser import extract_mentions_from_local
 
 _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 if DATABASE_URL.startswith("sqlite"):
