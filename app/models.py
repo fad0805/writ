@@ -480,6 +480,7 @@ class Post(Base):
 
         # 멘션 대상자들 URI 미리 구하기
         mentioned_uris = []
+        print(f'==================== mentioned_user_ids: {self.mentioned_user_ids}')
         if self.mentioned_user_ids:
             with get_session() as s:
                 users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
