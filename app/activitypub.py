@@ -2667,6 +2667,7 @@ def _send_delete_post(post: Post, sender: User):
     note_id = post.ap_id
     delete = {
         "@context": "https://www.w3.org/ns/activitystreams",
+        "id": f"{sender.actor_uri()}/deletes/{post.id}",
         "type": "Delete",
         "actor": sender.actor_uri(),
         "to": ["https://www.w3.org/ns/activitystreams#Public"],
