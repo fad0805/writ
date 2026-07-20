@@ -6,8 +6,10 @@ from sqlalchemy import (
     ForeignKey, JSON, text, Table
 )
 from sqlalchemy.orm import DeclarativeBase, relationship, Session
+from urllib.parse import urlparse
 
 from app.config import DATABASE_URL, BASE_URL
+from app.utils.content_parser import extract_mentions_from_local
 
 _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 if DATABASE_URL.startswith("sqlite"):
@@ -302,7 +304,14 @@ class Post(Base):
                     tag_name = f"@{u.username}" if u.is_remote else f"@{u.username}@{urlparse(BASE_URL).hostname}"
                     tags.append({"type": "Mention", "href": actor_uri, "name": tag_name})
                     target_rel = f"href=\"/@{u.username}\""
-                    target_abs = f"href=\"{u.actor_uri()}\""
+                    if '@' in u.username:
+                        username, domain = u.username.split('@', 1)
+                        abs_uri = f"https://{domain}/@{username}"
+                    else:
+                        domain = urlparse(BASE_URL).netloc
+                        abs_uri = f"https://{domain}/@{u.username}"
+                    target_abs = f'href="{abs_uri}"'
+                    # 3. 치환
                     content = content.replace(target_rel, target_abs)
 
             if self.tag_list:
