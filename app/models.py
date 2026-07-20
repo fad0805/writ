@@ -559,7 +559,6 @@ class Post(Base):
                         obj["closed"] = expires_at
                 except Exception:
                     pass
-        print(obj)
         return obj
 
     def to_ap_create(self):
