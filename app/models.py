@@ -350,6 +350,18 @@ class Post(Base):
                         "url": url,
                     },
                 })
+        # Strip existing mention <a> tags to plain text so the regex below can
+        # re-match and rewrite them with correct actor_href + <span class="h-card">
+        content = re.sub(
+            r'<a\s[^>]*class="[^"]*mention[^"]*"[^>]*>(.*?)</a>',
+            r'\1',
+            content,
+            flags=re.I,
+        )
+        # Also strip any leftover <span class="h-card"> wrappers from stored content
+        content = re.sub(r'<span\s+class="h-card"[^>]*>\s*', '', content, flags=re.I)
+        content = re.sub(r'\s*</span>\s*(?=<)', '', content)
+
         if self.mentioned_user_ids:
             with get_session() as s:
                 users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
