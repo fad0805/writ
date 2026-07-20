@@ -905,12 +905,13 @@ input:focus {
 .cw-box summary {
   cursor: pointer;
   color: var(--accent);
-  font-size: 0.9em;
-  padding: 4px 8px;
-  border-radius: 4px;
+  font-size: 0.95em;
+  padding: 12px 14px;
+  border-radius: 8px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
   user-select: none;
+  line-height: 1.4;
 }
 .cw-box summary:hover { background: var(--border); }
 .cw-box[open] summary {
