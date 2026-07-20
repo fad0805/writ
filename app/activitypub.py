@@ -2664,7 +2664,7 @@ def _handle_delete(activity: dict) -> tuple[int, str]:
 
 
 def _send_delete_post(post: Post, sender: User):
-    note_id = f"{BASE_URL}/posts/{post.id}"
+    note_id = f"post.ap_id"
     delete = {
         "@context": "https://www.w3.org/ns/activitystreams",
         "type": "Delete",
