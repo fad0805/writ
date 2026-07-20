@@ -3074,6 +3074,22 @@ def api_my_novels(request: Request, limit: int = Query(12), offset: int = Query(
         return {"novels": novels, "total": total, "page": offset // limit + 1, "pages": max(1, (total + limit - 1) // limit)}
 
 
+@router.get("/series/followed")
+def api_followed_novels(request: Request, limit: int = Query(12), offset: int = Query(0)):
+    user = require_auth(request)
+    with get_session() as s:
+        follow_ids = [f.novel_id for f in s.query(SeriesFollow).filter_by(user_id=user.id).all()]
+        if not follow_ids:
+            return {"novels": [], "total": 0, "page": 1, "pages": 1}
+        q = _apply_latest_activity_order(
+            s.query(Novel).filter(Novel.id.in_(follow_ids), Novel.is_published == True), s
+        )
+        total = q.count()
+        raw = q.offset(offset).limit(limit).all()
+        novels = [_novel_json(n, s) for n in raw]
+        return {"novels": novels, "total": total, "page": offset // limit + 1, "pages": max(1, (total + limit - 1) // limit)}
+
+
 def _sync_tags(n, s):
     raw = n.tags or ""
     desired = set(t for t in raw.replace(",", " ").split() if t)
