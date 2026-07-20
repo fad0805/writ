@@ -486,7 +486,8 @@ class Post(Base):
         elif self.visibility == "home":
             # unlisted: public을 cc에만 넣어야 Mastodon이 " bąd만 공개"로 처리
             # to에 public이 있으면 Mastodon이 "공개"로 해석함
-            obj["to"] = []
+            # But mentioned users must still be in 'to' for Mastodon mention rendering
+            obj["to"] = list(mentioned_uris) if mentioned_uris else []
             obj["cc"] = [public_uri, followers_uri]
         elif self.visibility == "followers":
             obj["to"] = [followers_uri]
