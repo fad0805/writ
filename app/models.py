@@ -363,7 +363,7 @@ class Post(Base):
                     if u.is_remote:
                         tag_name = f"@{u.username}"  # username already has @domain
                     else:
-                        tag_name = f"@{u.username}@{domain}"
+                        tag_name = f"@{u.username}@{urlparse(BASE_URL).hostname}"
                     mention_html = (
                         f'<span class="h-card" translate="no">'
                         f'<a href="{web_href}" class="u-url mention" rel="mention">'
@@ -429,6 +429,7 @@ class Post(Base):
                 "toot": "http://joinmastodon.org/ns#",
                 "misskey": "https://misskey-hub.net/ns#",
                 "hashtag": "as:hashtag",
+                "mention": "as:mention",
                 "sensitive": "as:sensitive",
                 "emoji": "toot:emoji",
                 "quoteurl": "as:quoteurl",
