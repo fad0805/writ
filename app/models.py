@@ -380,7 +380,7 @@ class Post(Base):
                         tag_name = f"@{u.username}@{domain_part}"
                     mention_html = (
                         f'<span class="h-card" translate="no">'
-                        f'<a href="{actor_href}" class="u-url mention" rel="mention">'
+                        f'<a href="{web_href}" class="u-url mention" rel="mention">'
                         f'@<span>{short_username}</span>'
                         + (f'@<span>{domain_part}</span>' if domain_part else '')
                         + f'</a></span>'
@@ -400,16 +400,23 @@ class Post(Base):
                 domain_uri = f"https://{domain}" if domain != urlparse(BASE_URL).hostname else BASE_URL
                 return f"{domain_uri}/users/{name}"
             return f"{BASE_URL}/users/{handle}"
+        def _web_profile_for_handle(handle: str) -> str:
+            if "@" in handle:
+                name, domain = handle.split("@", 1)
+                domain_url = f"https://{domain}" if domain != urlparse(BASE_URL).hostname else BASE_URL
+                return f"{domain_url}/@{name}"
+            return f"{BASE_URL}/@{handle}"
         def _wrap_unknown_mention(m):
             handle = m.group(1)
             actor_uri = _actor_uri_for_handle(handle)
+            web_url = _web_profile_for_handle(handle)
             _parts = handle.split("@", 1)
             _handle_name = _parts[0]
             _handle_domain = _parts[1] if len(_parts) > 1 else ""
             tags.append({"type": "Mention", "href": actor_uri, "name": f"@{handle}"})
             return (
                 f'<span class="h-card" translate="no">'
-                f'<a href="{actor_uri}" class="u-url mention" rel="mention">'
+                f'<a href="{web_url}" class="u-url mention" rel="mention">'
                 f'@<span>{_handle_name}</span>'
                 + (f'@<span>{_handle_domain}</span>' if _handle_domain else '')
                 + f'</a></span>'
