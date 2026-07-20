@@ -287,7 +287,6 @@ class Post(Base):
             return 0
 
     def to_ap_note(self):
-        # 1. 디버깅 로그 추가
         content = self.content
         tags = []
         mentioned_uris = []
@@ -301,16 +300,10 @@ class Post(Base):
                     mentioned_uris.append(actor_uri)
                     tag_name = f"@{u.username}" if u.is_remote else f"@{u.username}@{urlparse(BASE_URL).hostname}"
                     tags.append({"type": "Mention", "href": actor_uri, "name": tag_name})
-                    target_rel = f"href=\"/@{u.username}\""
-                    if '@' in u.username:
-                        username, domain = u.username.split('@', 1)
-                        abs_uri = f"https://{domain}/@{username}"
-                    else:
-                        domain = urlparse(BASE_URL).netloc
-                        abs_uri = f"https://{domain}/@{u.username}"
-                    target_abs = f'href="{abs_uri}"'
-                    # 3. 치환
-                    content = content.replace(target_rel, target_abs)
+                    target_rel = f'href="/@{u.username}"'
+                    domain = u.username.split('@', 1)[1] if '@' in u.username else urlparse(BASE_URL).netloc
+                    username = u.username.split('@', 1)[0]
+                    content = content.replace(target_rel, f'href="https://{domain}/@{username}"')
 
             if self.tag_list:
                 for t in self.tag_list:
@@ -320,69 +313,45 @@ class Post(Base):
         _emoji_pattern = re.compile(r':([a-z0-9_]{2,}):')
         _emoji_keywords = set(_emoji_pattern.findall(content))
         if _emoji_keywords:
-            def _get_emoji_url(file_name, domain="", category=""):
-                sub = "remote" if domain or category == "remote" else "local"
-                from app.config import s3_enabled
-                if s3_enabled:
-                    from app.utils.storage import get_storage
-                    try: return get_storage().url(f"emojis/{sub}/{file_name}")
-                    except Exception: pass
-                return f"{BASE_URL}/emojis/{sub}/{file_name}"
-
             with get_session() as _es:
                 for kw in _emoji_keywords:
                     emoji = _es.query(CustomEmoji).filter_by(keyword=kw).first()
                     if emoji:
-                        url = _get_emoji_url(emoji.file_name, emoji.domain or "", emoji.category or "")
+                        sub = "remote" if (emoji.domain or emoji.category == "remote") else "local"
+                        url = f"{BASE_URL}/emojis/{sub}/{emoji.file_name}"
                         tags.append({
-                            "type": "Emoji",
-                            "id": f"{BASE_URL}/emojis/{kw}",
-                            "name": f":{kw}:",
-                            "icon": {
-                                "type": "Image",
-                                "mediaType": "image/webp",
-                                "url": url,
-                            },
+                            "type": "Emoji", "id": f"{BASE_URL}/emojis/{kw}", "name": f":{kw}:",
+                            "icon": {"type": "Image", "mediaType": "image/webp", "url": url}
                         })
 
-        # 3. 객체 생성 및 권한 설정
+        # 3. 객체 생성
         obj = {
-            "@context": [
-                "https://www.w3.org/ns/activitystreams",
-                "https://w3id.org/security/v1",
-                {
-                    "manuallyapprovesfollowers": "as:manuallyapprovesfollowers",
-                    "toot": "http://joinmastodon.org/ns#",
-                    "misskey": "https://misskey-hub.net/ns#",
-                    "hashtag": "as:hashtag",
-                    "mention": "as:mention",
-                    "sensitive": "as:sensitive",
-                    "emoji": "toot:emoji",
-                    "quoteurl": "as:quoteurl",
-                    "quote": {"@id": "https://w3id.org/fep/044f#quote", "@type": "@id"},
-                    "quoteuri": "http://fedibird.com/ns#quoteuri",
-                },
-            ],
+            "@context": ["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1", {
+                "manuallyapprovesfollowers": "as:manuallyapprovesfollowers", "toot": "http://joinmastodon.org/ns#",
+                "emoji": "toot:emoji", "quote": {"@id": "https://w3id.org/fep/044f#quote", "@type": "@id"}
+            }],
             "id": f"{BASE_URL}/posts/{self.id}",
-            "url": f"{BASE_URL}/posts/{self.id}",
-            "type": "Note",
-            "published": _ap_datetime(self.created_at),
+            "type": "Question" if self.poll_data else "Note",
             "attributedTo": self.author.actor_uri().strip(),
             "content": f"<p>{content}</p>" if not content.strip().startswith("<p>") else content,
             "mediaType": "text/html",
-            "to": [],
-            "cc": [],
             "tag": tags,
+            "to": [], "cc": []
         }
-        # 3. 공개 범위에 따른 권한 설정 로직 (여기서 to, cc를 결정)
-        public_uri = "https://www.w3.org/ns/activitystreams#Public"
-        followers_uri = self.author.followers_uri()
-        author_uri = self.author.actor_uri().strip()
 
-        # 기본 수신자 설정 (멘션)
+        # 4. 수신자 및 답글 관계 설정
         to_list = list(set(mentioned_uris))
         cc_list = []
+        public_uri = "https://www.w3.org/ns/activitystreams#Public"
+        followers_uri = self.author.followers_uri()
 
+        # 답글 처리 (DB 모델의 parent 관계 활용)
+        if self.in_reply_to_ap_id and self.parent:
+            obj["inReplyTo"] = self.parent.ap_id
+            if self.parent.author.actor_uri().strip() not in to_list:
+                to_list.append(self.parent.author.actor_uri().strip())
+
+        # 공개 범위
         if self.visibility == "public":
             to_list.append(public_uri)
             cc_list.append(followers_uri)
@@ -390,84 +359,22 @@ class Post(Base):
             cc_list.extend([public_uri, followers_uri])
         elif self.visibility == "followers":
             to_list.append(followers_uri)
-        elif self.visibility == "mention":
-            pass # 멘션 대상자만 to에 포함됨
 
-        # 본인 추가 (마스토돈 호환성)
-        if author_uri not in to_list and author_uri not in cc_list:
-            cc_list.append(author_uri)
-        # 4. 최종 할당
-        obj["to"] = to_list
-        obj["cc"] = cc_list
-
-        is_sensitive = self.is_sensitive or getattr(self.author, 'is_sensitive', False) or False
-        if self.summary:
-            obj["summary"] = self.summary
-            obj["sensitive"] = True
-        elif is_sensitive:
-            obj["sensitive"] = True
+        # 5. 미디어, 인용, 설문 처리
         if self.media_attachments:
-            from urllib.parse import urlparse
-            attachments = []
-            for m in (self.media_attachments or [])[:4]:
-                if isinstance(m, dict):
-                    url = m.get("url", "")
-                    mtype = m.get("type", "image")
-                    if url:
-                        ext = url.rsplit(".", 1)[-1].lower() if "." in url else "png"
-                        if mtype == "video" or ext in ("mp4", "webm", "mov"):
-                            ap_type = "Video"
-                            ct = "video/webm"
-                        else:
-                            ap_type = "Image"
-                            ct = f"image/{ext}"
-                        attachments.append({
-                            "type": ap_type,
-                            "mediaType": ct,
-                            "url": url,
-                            "name": "",
-                        })
-            if attachments:
-                obj["attachment"] = attachments
-        if self.in_reply_to_ap_id:
-            if self.in_reply_to_id:
-                obj["inReplyTo"] = f"{BASE_URL}/posts/{self.in_reply_to_id}"
-            else:
-                obj["inReplyTo"] = self.in_reply_to_ap_id
+            obj["attachment"] = [{"type": "Video" if m.get("type")=="video" else "Image", 
+                                 "mediaType": "video/webm" if m.get("type")=="video" else f"image/{m.get('url', '').rsplit('.',1)[-1]}", 
+                                 "url": m.get("url")} for m in self.media_attachments[:4]]
         if self.quote_of_ap_id:
-            obj["quoteUrl"] = self.quote_of_ap_id
-            obj["quote"] = self.quote_of_ap_id
-            obj["quoteUri"] = self.quote_of_ap_id
+            obj.update({"quoteUrl": self.quote_of_ap_id, "quote": self.quote_of_ap_id, "quoteUri": self.quote_of_ap_id})
         if self.poll_data:
-            obj["type"] = "Question"
-            poll_id = self.ap_id or f"{BASE_URL}/@{self.author.username}/{self.number}"
-            obj["oneOf"] = [
-                {
-                    "type": "Note",
-                    "id": f"{poll_id}/options/{i}",
-                    "name": o["text"],
-                    "replies": {"type": "Collection", "totalItems": o.get("votes_count", 0)},
-                }
-                for i, o in enumerate(self.poll_data.get("options", []))
-            ]
-            voters = sum(o.get("votes_count", 0) for o in self.poll_data.get("options", []))
-            obj["votersCount"] = voters
-            expires_at = self.poll_data.get("expires_at")
-            if expires_at:
-                obj["endTime"] = expires_at
-                try:
-                    from datetime import datetime
-                    if datetime.fromisoformat(expires_at) < datetime.now(datetime.timezone.utc):
-                        obj["closed"] = expires_at
-                except Exception:
-                    pass
-        # 마지막 정제: 중복 URI 제거 및 교집합 정리
-        to_set = set(obj.get("to", []))
-        cc_set = set(obj.get("cc", []))
-        # cc에 있는 것이 to에도 있다면 cc에서는 제거 (중복 방지)
-        cc_set -= to_set
-        obj["to"] = list(to_set)
-        obj["cc"] = list(cc_set)
+            obj["oneOf"] = [{"type": "Note", "name": o["text"], "replies": {"type": "Collection", "totalItems": o.get("votes_count", 0)}} for o in self.poll_data.get("options", [])]
+            obj["votersCount"] = sum(o.get("votes_count", 0) for o in self.poll_data.get("options", []))
+
+        # 6. 최종 수신자 정리
+        cc_list.append(self.author.actor_uri().strip())
+        obj["to"] = list(set(to_list))
+        obj["cc"] = list(set(cc_list) - set(obj["to"]))
         return obj
 
     def to_ap_create(self):
