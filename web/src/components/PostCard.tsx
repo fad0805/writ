@@ -52,7 +52,7 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
   return text;
 }
 
-export default function PostCard({ post, onUpdate, onDelete, onReply, onRewrite, current, hideContext, selected, readonly }: { post: PostData; onUpdate?: (updated?: PostData) => void; onDelete?: () => void; onReply?: (newPost?: PostData) => void; onRewrite?: (content: string, visibility: string) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean }) {
+export default function PostCard({ post, onUpdate, onDelete, onReply, onRewrite, current, hideContext, selected, readonly }: { post: PostData; onUpdate?: (updated?: PostData) => void; onDelete?: () => void; onReply?: (newPost?: PostData) => void; onRewrite?: (content: string, visibility: string, replyTo?: { id: number; number: string; content: string; author: any; visibility: string } | null) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean }) {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const [showReply, setShowReply] = useState(false);
@@ -831,7 +831,7 @@ const localReactionEmojiMap = useMemo(() => {
                       try { await api.deletePost(post.id); } catch {}
                       if (onDelete) onDelete();
                       else if (onUpdate) onUpdate();
-                      if (onRewrite) onRewrite(stripped, post.visibility);
+                      if (onRewrite) onRewrite(stripped, post.visibility, post.reply_context);
                       else setShowRewrite(true);
                     }} className="post-actions-dropdown-item">
                       <Icon name="trash" /> 지우고 다시 쓰기
@@ -924,7 +924,31 @@ const localReactionEmojiMap = useMemo(() => {
           </div>
         </div>
       )}
-      {!readonly && showRewrite && (
+      {!readonly && showRewrite && post.reply_context && (
+        <ReplyModal post={{
+          id: post.reply_context.id,
+          number: post.reply_context.number,
+          content: post.reply_context.content,
+          author: post.reply_context.author,
+          visibility: post.reply_context.visibility,
+          summary: null,
+          created_at: null,
+          ap_id: "",
+          likes_count: 0,
+          boosts_count: 0,
+          replies_count: 0,
+          liked: false,
+          boosted: false,
+          bookmarked: false,
+          is_mine: false,
+          reply_context: null,
+          media_attachments: [],
+        } as any} onClose={() => setShowRewrite(false)} onDone={(newPost) => {
+          setShowRewrite(false);
+          if (onUpdate) onUpdate();
+        }} />
+      )}
+      {!readonly && showRewrite && !post.reply_context && (
         <div className="reply-modal-backdrop active" onClick={() => setShowRewrite(false)}>
           <div className="reply-modal modal-form" onClick={(e) => e.stopPropagation()}>
             <button className="reply-modal-close" onClick={() => setShowRewrite(false)}>×</button>

@@ -7,7 +7,7 @@ import { sanitizePost } from "@/lib/sanitize";
 
 const VIS_ORDER: Record<string, number> = { public: 0, home: 1, followers: 2, mention: 3 };
 
-export default function ReplyModal({ post, onClose, onDone }: { post: PostData; onClose: () => void; onDone?: (newPost?: PostData) => void }) {
+export default function ReplyModal({ post, onClose, onDone, initialContent }: { post: PostData; onClose: () => void; onDone?: (newPost?: PostData) => void; initialContent?: string }) {
   const { user } = useAuth();
   const replyVis = useMemo(() => {
     const userVis = user?.default_visibility || "public";
@@ -48,7 +48,7 @@ export default function ReplyModal({ post, onClose, onDone }: { post: PostData; 
           <strong>{post.author.display_name} <span className="reply-modal-handle">@{post.author.username}</span></strong>
           <p className="reply-modal-content" dangerouslySetInnerHTML={{ __html: sanitizePost(post.content.replace(/\n/g, '<br>')) }} />
         </div>
-        <PostForm key={post.id} parentId={post.id} initialVisibility={replyVis} placeholder="답글을 입력하세요..." onDone={onDone} initialContent={mentions} parentSummary={post.summary} />
+        <PostForm key={post.id} parentId={post.id} initialVisibility={replyVis} placeholder="답글을 입력하세요..." onDone={onDone} initialContent={initialContent || mentions} parentSummary={post.summary} />
       </div>
     </div>
   );
