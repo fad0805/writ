@@ -303,7 +303,7 @@ class Post(Base):
                     tags.append({"type": "Mention", "href": actor_uri, "name": tag_name})
                     target_rel = f"href=\"/@{u.username}\""
                     target_abs = f"href=\"{u.actor_uri()}\""
-                    content_html = content_html.replace(target_rel, target_abs)
+                    content = content.replace(target_rel, target_abs)
 
             if self.tag_list:
                 for t in self.tag_list:
