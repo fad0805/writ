@@ -412,7 +412,8 @@ def _cache_remote_media(remote_url: str) -> str:
         if not resp:
             return remote_url
         data = resp.content
-        orig_ext = remote_url.rsplit(".", 1)[-1].lower() if "." in remote_url else "bin"
+        clean_url = remote_url.split("?")[0].split("#")[0]
+        orig_ext = clean_url.rsplit(".", 1)[-1].lower() if "." in clean_url else "bin"
         ext = orig_ext
         is_image = orig_ext in ("jpg", "jpeg", "png", "gif", "webp")
 
@@ -1240,28 +1241,39 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     session.flush()
 
     raw_attachments = obj.get("attachment", [])
+    if isinstance(raw_attachments, dict):
+        raw_attachments = [raw_attachments]
+    elif not isinstance(raw_attachments, list):
+        raw_attachments = []
     media_list = []
-    if isinstance(raw_attachments, list):
-        for att in raw_attachments:
-            if not isinstance(att, dict):
-                continue
-            att_type = att.get("mediaType", "")
-            att_as2_type = att.get("type", "")
-            att_url = ""
-            if isinstance(att.get("url"), str):
-                att_url = att["url"]
-            elif isinstance(att.get("url"), dict):
-                att_url = att["url"].get("href", "")
-            if not att_url:
-                continue
-            cached = _cache_remote_media(att_url)
-            if att_type.startswith("image/") or att_as2_type == "Image":
-                media_list.append({"url": cached, "type": "image"})
-            elif att_type.startswith("video/") or att_as2_type == "Video":
-                media_list.append({"url": cached, "type": "video"})
-            elif att_as2_type == "Document" or att_type.startswith("audio/"):
-                media_list.append({"url": cached, "type": "image"})
-                media_list.append({"url": cached, "type": "video"})
+    _att_has_sensitive = False
+    for att in raw_attachments:
+        if not isinstance(att, dict):
+            continue
+        att_type = att.get("mediaType", "")
+        att_as2_type = att.get("type", "")
+        att_url = ""
+        if isinstance(att.get("url"), str):
+            att_url = att["url"]
+        elif isinstance(att.get("url"), dict):
+            att_url = att["url"].get("href", "")
+        if not att_url:
+            continue
+        if att.get("sensitive", False):
+            _att_has_sensitive = True
+        cached = _cache_remote_media(att_url)
+        if att_type.startswith("image/") or att_as2_type == "Image":
+            media_list.append({"url": cached, "type": "image"})
+        elif att_type.startswith("video/") or att_as2_type == "Video":
+            media_list.append({"url": cached, "type": "video"})
+        elif att_as2_type == "Document" or att_type.startswith("audio/"):
+            if att_type.startswith("image/"):
+                mtype = "image"
+            elif att_type.startswith("video/"):
+                mtype = "video"
+            else:
+                mtype = "image"  # fallback for missing mediaType
+            media_list.append({"url": cached, "type": mtype})
 
     # 💡 Post 모델 생성 시 quote_id (또는 모델 설계에 맞춘 인용 필드명) 채워넣기
     post = Post(
@@ -1276,7 +1288,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         quote_of_ap_id=quote_url,
         mentioned_user_ids=mentioned_ids,
         media_attachments=media_list if media_list else None,
-        is_sensitive=obj.get("sensitive", False),
+        is_sensitive=obj.get("sensitive", False) or _att_has_sensitive,
         tag_list=hashtag_list,
     )
     published = obj.get("published", "")
@@ -1434,6 +1446,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 if not reply_to_post:
                     alt_url = in_reply_to.replace("https://", "http://") if "https://" in in_reply_to else in_reply_to.replace("http://", "https://")
                     reply_to_post = session.query(Post).filter_by(ap_id=alt_url).first()
+                if not reply_to_post:
+                    _posts_match = re.match(r'https?://[^/]+/posts/(\d+)', in_reply_to)
+                    if _posts_match:
+                        reply_to_post = session.query(Post).filter_by(id=int(_posts_match.group(1)), is_deleted=False).first()
                 if not reply_to_post:
                     _local_signer = session.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor_id, User.is_remote == False).first()
                     if not _local_signer:
@@ -1629,27 +1645,42 @@ def _handle_create(activity: dict) -> tuple[int, str]:
 
             # Process custom emoji tags and media BEFORE session (network I/O)
             raw_attachments = obj.get("attachment", []) if isinstance(obj, dict) else []
+            if isinstance(raw_attachments, dict):
+                raw_attachments = [raw_attachments]
+            elif not isinstance(raw_attachments, list):
+                raw_attachments = []
             media_list = []
-            if isinstance(raw_attachments, list):
-                for att in raw_attachments:
-                    if not isinstance(att, dict):
-                        continue
-                    att_type = att.get("mediaType", "")
-                    att_as2_type = att.get("type", "")
-                    url = ""
-                    if isinstance(att.get("url"), str):
-                        url = att["url"]
-                    elif isinstance(att.get("url"), dict):
-                        url = att["url"].get("href", "")
-                    if not url:
-                        continue
-                    cached = _cache_remote_media(url)
-                    if att_type.startswith("image/") or att_as2_type == "Image":
-                        media_list.append({"url": cached, "type": "image"})
-                    elif att_type.startswith("video/") or att_as2_type == "Video":
-                        media_list.append({"url": cached, "type": "video"})
-                    elif att_as2_type == "Document" or att_type.startswith("audio/"):
-                        media_list.append({"url": cached, "type": "image"})
+            _att_has_sensitive = False
+            for att in raw_attachments:
+                if not isinstance(att, dict):
+                    continue
+                att_type = att.get("mediaType", "")
+                att_as2_type = att.get("type", "")
+                url = ""
+                if isinstance(att.get("url"), str):
+                    url = att["url"]
+                elif isinstance(att.get("url"), dict):
+                    url = att["url"].get("href", "")
+                if not url:
+                    continue
+                # Per-attachment sensitive flag (Misskey sets this per file)
+                att_sensitive = att.get("sensitive", False)
+                if att_sensitive:
+                    _att_has_sensitive = True
+                cached = _cache_remote_media(url)
+                if att_type.startswith("image/") or att_as2_type == "Image":
+                    media_list.append({"url": cached, "type": "image"})
+                    print(f"[_handle_create MEDIA] image url={cached} sensitive={att_sensitive}", flush=True)
+                elif att_type.startswith("video/") or att_as2_type == "Video":
+                    media_list.append({"url": cached, "type": "video"})
+                    print(f"[_handle_create MEDIA] video url={cached} sensitive={att_sensitive}", flush=True)
+                elif att_as2_type == "Document" or att_type.startswith("audio/"):
+                    if att_type.startswith("image/") or att_type.startswith("video/"):
+                        mtype = "video" if att_type.startswith("video/") else "image"
+                    else:
+                        mtype = "image"
+                    media_list.append({"url": cached, "type": mtype})
+                    print(f"[_handle_create MEDIA] Document({att_type}) url={cached} type={mtype} sensitive={att_sensitive}", flush=True)
 
             # Extract quote reference from Note (FEP-044f / Mastodon / Misskey / Firefish compat)
             quote_of_ap_id = ""
@@ -1704,7 +1735,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 media_attachments=media_list if media_list else None,
                 poll_data=poll_data,
                 is_dm=is_incoming_dm,
-                is_sensitive=obj.get("sensitive", False),
+                is_sensitive=obj.get("sensitive", False) or _att_has_sensitive,
                 quote_of_ap_id=quote_of_ap_id,
                 quote_of_id=quote_of_id,
             )
@@ -1790,6 +1821,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 with get_session() as emoji_s:
                     _process_emoji_tags(obj.get("tag", []), emoji_s)
                     emoji_s.commit()
+                    from app.routes.api import _refresh_emoji_cache_forcibly
+                    _refresh_emoji_cache_forcibly(emoji_s)
             except Exception:
                 pass
             from app.push import send_push_to_user
@@ -2564,6 +2597,8 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     # Update emoji tags
                     _process_emoji_tags(object_data.get("tag", []), session)
                     session.commit()
+                    from app.routes.api import _refresh_emoji_cache_forcibly
+                    _refresh_emoji_cache_forcibly(session)
                     try:
                         from app.timeline_stream import broadcast_post
                         _ua = post.author
@@ -2629,12 +2664,14 @@ def _handle_delete(activity: dict) -> tuple[int, str]:
 
 
 def _send_delete_post(post: Post, sender: User):
+    note_id = f"{BASE_URL}/posts/{post.id}"
     delete = {
         "@context": "https://www.w3.org/ns/activitystreams",
         "id": f"{sender.actor_uri()}#delete/{post.id}",
         "type": "Delete",
         "actor": sender.actor_uri(),
-        "object": post.ap_id  # 객체 대신 삭제 대상 URL(문자열)로 변경
+        "to": [f"https://www.w3.org/ns/activitystreams#Public"],
+        "object": note_id,
     }
     try:
         broadcast_to_followers(sender, delete)
@@ -2646,8 +2683,9 @@ def _send_delete_post(post: Post, sender: User):
             with get_session() as s:
                 parent = s.query(Post).filter_by(ap_id=post.in_reply_to_ap_id).first()
                 if parent and parent.author and parent.author.is_remote:
-                    inbox = parent.author.shared_inbox_url or parent.author.inbox_uri()
-                    _post_to_inbox(inbox, delete, sender)
+                    inbox = parent.author.shared_inbox_url or parent.author.inbox_url
+                    if inbox:
+                        _post_to_inbox(inbox, delete, sender)
         except Exception as e:
             logger.warning("Failed to send Delete to parent author: %s", e)
 
@@ -2959,19 +2997,24 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
 
 def send_to_shared_inbox(user: User, activity: dict):
     with get_session() as session:
-        followers = session.query(Follow).filter(
+        from sqlalchemy.orm import selectinload
+        followers = session.query(Follow).options(
+            selectinload(Follow.following)
+        ).filter(
             Follow.follower_id == user.id,
             Follow.following.has(is_remote=True),
         ).all()
 
-    sent = set()
-    for f in followers:
-        target = f.following
-        inbox = target.shared_inbox_url or target.inbox_uri()
-        if inbox in sent:
-            continue
-        sent.add(inbox)
-        _post_to_inbox(inbox, activity, user)
+        sent = set()
+        for f in followers:
+            target = f.following
+            inbox = target.shared_inbox_url or target.inbox_url
+            if not inbox:
+                continue
+            if inbox in sent:
+                continue
+            sent.add(inbox)
+            _post_to_inbox(inbox, activity, user)
 
 
 def _background_import_emoji(url: str, keyword: str, domain: str):
@@ -3133,19 +3176,24 @@ def _process_emoji_tags(tags: list, session):
 
 def broadcast_to_followers(user: User, activity: dict):
     with get_session() as session:
-        followers = session.query(Follow).filter(
+        from sqlalchemy.orm import selectinload
+        followers = session.query(Follow).options(
+            selectinload(Follow.follower)
+        ).filter(
             Follow.following_id == user.id,
             Follow.follower.has(is_remote=True),
         ).all()
 
-    sent = set()
-    for f in followers:
-        follower = f.follower
-        inbox = follower.shared_inbox_url or follower.inbox_uri()
-        if inbox in sent:
-            continue
-        domain = urlparse(inbox).hostname or ""
-        if not _federation_allowed(domain):
-            continue
-        sent.add(inbox)
-        _post_to_inbox(inbox, activity, user)
+        sent = set()
+        for f in followers:
+            follower = f.follower
+            inbox = follower.shared_inbox_url or follower.inbox_url
+            if not inbox:
+                continue
+            if inbox in sent:
+                continue
+            domain = urlparse(inbox).hostname or ""
+            if not _federation_allowed(domain):
+                continue
+            sent.add(inbox)
+            _post_to_inbox(inbox, activity, user)

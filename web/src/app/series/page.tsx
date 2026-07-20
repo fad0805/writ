@@ -85,6 +85,7 @@ export default function NovelsPage() {
       {user && (
         <div className="series-filter-tabs">
           <Link href="/series/my" className="series-filter-tab">내 시리즈</Link>
+          <Link href="/series/followed" className="series-filter-tab">구독 시리즈</Link>
           <Link href="/series" className="series-filter-tab active">모든 시리즈</Link>
         </div>
       )}

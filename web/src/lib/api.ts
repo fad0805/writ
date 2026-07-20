@@ -264,6 +264,7 @@ export const api = {
   // Novels
   getNovels: (limit = 12, offset = 0) => request<{ novels: NovelData[]; has_more: boolean }>(`/api/series?limit=${limit}&offset=${offset}`),
   getMyNovels: (limit = 12, offset = 0) => request<{ novels: NovelData[]; total: number; page: number; pages: number }>(`/api/series/my?limit=${limit}&offset=${offset}`),
+  getFollowedNovels: (limit = 12, offset = 0) => request<{ novels: NovelData[]; total: number; page: number; pages: number }>(`/api/series/followed?limit=${limit}&offset=${offset}`),
   getNovel: (id: number) => request<{ novel: NovelData; episodes: EpisodeData[]; author: User; is_mine: boolean; is_following: boolean }>(`/api/series/${id}`),
   deleteNovel: (id: number) => request<{ ok: boolean }>(`/api/series/${id}/delete`, { method: "POST" }),
   getEpisode: (id: number, eid: number) => request<{

@@ -910,12 +910,11 @@ def api_get_post(request: Request, post_id: int):
     is_activitypub = "application/activity+json" in accept_header or "application/ld+json" in accept_header
     if is_activitypub:
         with get_session() as s:
-            post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
+            post = s.query(Post).filter_by(id=post_id).first()
             if not post:
                 raise HTTPException(status_code=404, detail="Not Found")
-            # 여기서 ActivityPub 규격에 맞는 JSON을 바로 반환해야 합니다.
-            # _post_json 함수가 일반 웹용이라면, ActivityPub 전용 포맷터(예: _to_activitypub_json)가 필요합니다.
-            return _to_activitypub_json(post) 
+            note = post.to_ap_note()
+            return JSONResponse(content=note, media_type="application/activity+json")
     # --- [추가 끝] ---
     user = get_current_user(request)
     if not user:
@@ -1039,24 +1038,24 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
             logger.warning(f"Broadcast aborted: user_id={user_id} or post_id={post_id} not found")
             return
 
-        create_activity = {
-            "@context": "https://www.w3.org/ns/activitystreams",
-            "id": f"{BASE_URL}/activities/create/{post.id}",
-            "type": "Create",
-            "actor": user.actor_uri(),
-            "object": post.to_ap_note(plain_content),
-        }
+        create_activity = post.to_ap_create()
         if visibility == "mention":
+            _remote_mentioned = False
             if post.mentioned_user_ids:
                 mu_users = ap_s.query(User).filter(
                     User.id.in_(post.mentioned_user_ids), User.is_remote == True
                 ).all()
                 for mu in mu_users:
-                    inbox = mu.inbox_url or mu.inbox_uri()
+                    inbox = mu.inbox_url
+                    if not inbox:
+                        continue
                     domain = mu.actor_uri().split("/")[2] if "//" in mu.actor_uri() else ""
                     if domain and not _federation_allowed(domain):
                         continue
                     _post_to_inbox(inbox, create_activity, user)
+                    _remote_mentioned = True
+            if not _remote_mentioned:
+                broadcast_to_followers(user, create_activity)
             import re as _re
             remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', plain_content or ""))
             _resolved_handles = []
@@ -1100,7 +1099,9 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                 if remote_user:
                     _resolved_handles.append((handle, remote_user))
             for handle, remote_user in _resolved_handles:
-                inbox = remote_user.inbox_url or remote_user.inbox_uri()
+                inbox = remote_user.inbox_url
+                if not inbox:
+                    continue
                 domain = remote_user.actor_uri().split("/")[2] if "//" in remote_user.actor_uri() else ""
                 if domain and not _federation_allowed(domain):
                     continue
@@ -1120,7 +1121,9 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                 ).all()
                 for mu in mu_users:
                     if mu.id not in follower_ids:
-                        inbox = mu.inbox_url or mu.inbox_uri()
+                        inbox = mu.inbox_url
+                        if not inbox:
+                            continue
                         domain = mu.actor_uri().split("/")[2] if "//" in mu.actor_uri() else ""
                         if domain and not _federation_allowed(domain):
                             continue
@@ -1173,7 +1176,9 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                     except Exception:
                         pass
             for handle, remote_user in _known_handles.items():
-                inbox = remote_user.inbox_url or remote_user.inbox_uri()
+                inbox = remote_user.inbox_url
+                if not inbox:
+                    continue
                 domain = remote_user.actor_uri().split("/")[2] if "//" in remote_user.actor_uri() else ""
                 if domain and not _federation_allowed(domain):
                     continue
@@ -1513,8 +1518,11 @@ def api_delete_post(request: Request, post_id: int):
                         p = _s.query(_Po).get(_pid)
                         if p:
                             _send_delete_post(p, _user)
-                except Exception:
-                    pass
+                        else:
+                            print(f"DELETE_FAIL: post {_pid} not found in DB")
+                except Exception as e:
+                    print(f"DELETE_FAIL: {e}")
+                    import traceback; traceback.print_exc()
         threading.Thread(target=_background, daemon=True).start()
     return {"ok": True}
 
@@ -1666,7 +1674,7 @@ def api_like_post(request: Request, post_id: int, reaction: str = "★"):
                 send_push_to_user(post.author_id, "like", user.username, post_id)
                 broadcast_notif_sound(post.author_id)
         if post.author.is_remote and post.author.shared_inbox_url:
-            like_id = f"{base_url}/likes/{uuid.uuid4()}"
+            like_id = f"{BASE_URL}/likes/{uuid.uuid4()}"
             like_rec = existing or s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
             if like_rec:
                 like_rec.ap_id = like_id
@@ -2529,7 +2537,7 @@ def api_follow(request: Request, username: str):
                 }
                 s.add(Follow(follower_id=user.id, following_id=target.id, accepted=False, activity_id=follow_activity["id"]))
                 s.commit()
-                inbox = target.inbox_url or target.inbox_uri()
+                inbox = target.inbox_url
                 if inbox:
                     _post_to_inbox(inbox, follow_activity, user)
         return {"ok": True}
@@ -2655,7 +2663,7 @@ def api_unfollow(request: Request, username: str):
                 Notification.notification_type.in_(["follow", "follow_request"])
             ).delete(synchronize_session=False)
             s.commit()
-            if target.is_remote and target.inbox_uri():
+            if target.is_remote and target.inbox_url:
                 follow_activity_id = f"{user.actor_uri()}#follows/{target.id}"
                 undo = {
                     "@context": "https://www.w3.org/ns/activitystreams",
@@ -2670,7 +2678,7 @@ def api_unfollow(request: Request, username: str):
                     },
                 }
                 try:
-                    _post_to_inbox(target.inbox_uri(), undo, user)
+                    _post_to_inbox(target.inbox_url, undo, user)
                 except Exception as e:
                     logger.warning("Failed to send Undo Follow: %s", e)
     return {"ok": True}
@@ -3070,6 +3078,22 @@ def api_my_novels(request: Request, limit: int = Query(12), offset: int = Query(
         return {"novels": novels, "total": total, "page": offset // limit + 1, "pages": max(1, (total + limit - 1) // limit)}
 
 
+@router.get("/series/followed")
+def api_followed_novels(request: Request, limit: int = Query(12), offset: int = Query(0)):
+    user = require_auth(request)
+    with get_session() as s:
+        follow_ids = [f.novel_id for f in s.query(SeriesFollow).filter_by(user_id=user.id).all()]
+        if not follow_ids:
+            return {"novels": [], "total": 0, "page": 1, "pages": 1}
+        q = _apply_latest_activity_order(
+            s.query(Novel).filter(Novel.id.in_(follow_ids), Novel.is_published == True), s
+        )
+        total = q.count()
+        raw = q.offset(offset).limit(limit).all()
+        novels = [_novel_json(n, s) for n in raw]
+        return {"novels": novels, "total": total, "page": offset // limit + 1, "pages": max(1, (total + limit - 1) // limit)}
+
+
 def _sync_tags(n, s):
     raw = n.tags or ""
     desired = set(t for t in raw.replace(",", " ").split() if t)
@@ -3356,7 +3380,8 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
                     if post.mentioned_user_ids:
                         mu_users = s.query(User).filter(User.id.in_(post.mentioned_user_ids), User.is_remote == True).all()
                         for mu in mu_users:
-                            _post_to_inbox(mu.inbox_uri(), create_activity, user)
+                            if mu.inbox_url:
+                                _post_to_inbox(mu.inbox_url, create_activity, user)
                 else:
                     broadcast_to_followers(user, create_activity)
             except Exception as e:
@@ -6778,9 +6803,9 @@ def api_block_user(request: Request, target_user_id: int):
         target = s.query(User).get(target_user_id)
         if target:
             target_remote_url = target.remote_url
-            target_shared_inbox = target.shared_inbox_url or target.inbox_uri()
+            target_shared_inbox = target.shared_inbox_url or target.inbox_url
             target_id = target.id
-    if target_remote_url:
+    if target_remote_url and target_shared_inbox:
         try:
             block_id = f"{BASE_URL}/users/{user.username}/status/activities/block/{target_id}"
             actor_uri = f"{BASE_URL}/users/{user.username}"
@@ -6808,7 +6833,7 @@ def api_unblock_user(request: Request, target_user_id: int):
         target = s.query(User).get(target_user_id)
         if target:
             target_remote_url = target.remote_url
-            target_shared_inbox = target.shared_inbox_url or target.inbox_uri()
+            target_shared_inbox = target.shared_inbox_url or target.inbox_url
             target_id = target.id
         s.query(UserBlock).filter_by(user_id=user.id, target_user_id=target_user_id).delete()
         s.commit()

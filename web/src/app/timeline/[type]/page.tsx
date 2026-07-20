@@ -37,6 +37,7 @@ export default function TimelinePage() {
   const [showComposer, setShowComposer] = useState(false);
   const [rewriteContent, setRewriteContent] = useState<string | null>(null);
   const [rewriteVisibility, setRewriteVisibility] = useState<string | undefined>(undefined);
+  const [rewriteReplyTo, setRewriteReplyTo] = useState<{ id: number; number: string; content: string; author: any; visibility: string } | null>(null);
   
   // 💡 상태 변경 비동기 문제를 해결하기 위해 offset을 최신 ref로 관리합니다.
   const offsetRef = useRef(0);
@@ -276,18 +277,50 @@ export default function TimelinePage() {
 
   return (
     <>
-      <div className="post-form post-form-desktop">
-        <PostForm key={rewriteContent ? `rewrite-${Date.now()}` : "main"} onDone={(newPost) => {
+      {rewriteReplyTo ? (
+        <ReplyModal post={{
+          id: rewriteReplyTo.id,
+          number: rewriteReplyTo.number,
+          content: rewriteReplyTo.content,
+          author: rewriteReplyTo.author,
+          visibility: rewriteReplyTo.visibility,
+          summary: null,
+          created_at: null,
+          ap_id: "",
+          likes_count: 0,
+          boosts_count: 0,
+          replies_count: 0,
+          liked: false,
+          boosted: false,
+          bookmarked: false,
+          is_mine: false,
+          reply_context: null,
+          media_attachments: [],
+        } as any} onClose={() => { setRewriteContent(null); setRewriteVisibility(undefined); setRewriteReplyTo(null); }} onDone={(newPost) => {
+          setRewriteContent(null);
+          setRewriteVisibility(undefined);
+          setRewriteReplyTo(null);
           if (newPost) {
             setPosts((prev) => {
               if (prev.some((p) => p.id === newPost.id)) return prev;
               return [newPost, ...prev];
             });
           }
-          setRewriteContent(null);
-          setRewriteVisibility(undefined);
-        }} initialContent={rewriteContent ?? undefined} initialVisibility={rewriteVisibility} />
-      </div>
+        }} initialContent={rewriteContent ?? undefined} />
+      ) : (
+        <div className="post-form post-form-desktop">
+          <PostForm key={rewriteContent ? `rewrite-${Date.now()}` : "main"} onDone={(newPost) => {
+            if (newPost) {
+              setPosts((prev) => {
+                if (prev.some((p) => p.id === newPost.id)) return prev;
+                return [newPost, ...prev];
+              });
+            }
+            setRewriteContent(null);
+            setRewriteVisibility(undefined);
+          }} initialContent={rewriteContent ?? undefined} initialVisibility={rewriteVisibility} />
+        </div>
+      )}
       <div className="timeline-tabs">
         {TABS.map((t) => (
           <Link
@@ -336,9 +369,10 @@ export default function TimelinePage() {
                         }); 
                       } 
                     }} 
-                    onRewrite={(content, visibility) => {
+                    onRewrite={(content, visibility, replyTo) => {
                       setRewriteContent(content);
                       setRewriteVisibility(visibility);
+                      setRewriteReplyTo(replyTo ?? null);
                     }}
                     selected={i === selectedIdx} 
                   />

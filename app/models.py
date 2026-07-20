@@ -36,6 +36,14 @@ def now():
     return datetime.datetime.now(datetime.timezone.utc)
 
 
+def _ap_datetime(dt):
+    if dt is None:
+        return ""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -145,7 +153,7 @@ class User(Base):
                 "owner": self.actor_uri(),
                 "publicKeyPem": self.public_key,
             },
-            "published": (self.created_at.isoformat() if self.created_at else ""),
+            "published": _ap_datetime(self.created_at),
             "discoverable": True,
             "manuallyApprovesFollowers": bool(self.is_locked),
         }
@@ -342,6 +350,18 @@ class Post(Base):
                         "url": url,
                     },
                 })
+        # Strip existing mention <a> tags to plain text so the regex below can
+        # re-match and rewrite them with correct actor_href + <span class="h-card">
+        content = re.sub(
+            r'<a\s[^>]*class="[^"]*mention[^"]*"[^>]*>(.*?)</a>',
+            r'\1',
+            content,
+            flags=re.I,
+        )
+        # Also strip any leftover <span class="h-card"> wrappers from stored content
+        content = re.sub(r'<span\s+class="h-card"[^>]*>\s*', '', content, flags=re.I)
+        content = re.sub(r'\s*</span>\s*(?=<)', '', content)
+
         if self.mentioned_user_ids:
             with get_session() as s:
                 users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
@@ -354,13 +374,16 @@ class Post(Base):
                     # tag name must be @user@domain for remote, @user for local
                     if u.is_remote:
                         tag_name = f"@{u.username}"  # username already has @domain
+                        domain_part = u.username.split("@")[1] if "@" in u.username else ""
                     else:
-                        tag_name = f"@{u.username}@{domain}"
+                        domain_part = urlparse(BASE_URL).hostname or ""
+                        tag_name = f"@{u.username}@{domain_part}"
                     mention_html = (
                         f'<span class="h-card" translate="no">'
                         f'<a href="{web_href}" class="u-url mention" rel="mention">'
                         f'@<span>{short_username}</span>'
-                        f'</a></span>'
+                        + (f'@<span>{domain_part}</span>' if domain_part else '')
+                        + f'</a></span>'
                     )
                     short_name = f"@{u.username}"
                     content = re.sub(
@@ -377,16 +400,26 @@ class Post(Base):
                 domain_uri = f"https://{domain}" if domain != urlparse(BASE_URL).hostname else BASE_URL
                 return f"{domain_uri}/users/{name}"
             return f"{BASE_URL}/users/{handle}"
+        def _web_profile_for_handle(handle: str) -> str:
+            if "@" in handle:
+                name, domain = handle.split("@", 1)
+                domain_url = f"https://{domain}" if domain != urlparse(BASE_URL).hostname else BASE_URL
+                return f"{domain_url}/@{name}"
+            return f"{BASE_URL}/@{handle}"
         def _wrap_unknown_mention(m):
             handle = m.group(1)
             actor_uri = _actor_uri_for_handle(handle)
-            web_uri = f"{BASE_URL}/@{handle}"
+            web_url = _web_profile_for_handle(handle)
+            _parts = handle.split("@", 1)
+            _handle_name = _parts[0]
+            _handle_domain = _parts[1] if len(_parts) > 1 else ""
             tags.append({"type": "Mention", "href": actor_uri, "name": f"@{handle}"})
             return (
                 f'<span class="h-card" translate="no">'
-                f'<a href="{web_uri}" class="u-url mention" rel="mention">'
-                f'@<span>{handle.split("@")[0]}</span>'
-                f'</a></span>'
+                f'<a href="{web_url}" class="u-url mention" rel="mention">'
+                f'@<span>{_handle_name}</span>'
+                + (f'@<span>{_handle_domain}</span>' if _handle_domain else '')
+                + f'</a></span>'
             )
         content = re.sub(
             r'(?<!/)(?:^|(?<=\s))@([a-za-z0-9_]+(?:@[a-za-z0-9-]+(?:\.[a-za-z0-9-]+)*)?)(?=\s|$|<|\.|[,:;!?)\'"])',
@@ -421,6 +454,7 @@ class Post(Base):
                 "toot": "http://joinmastodon.org/ns#",
                 "misskey": "https://misskey-hub.net/ns#",
                 "hashtag": "as:hashtag",
+                "mention": "as:mention",
                 "sensitive": "as:sensitive",
                 "emoji": "toot:emoji",
                 "quoteurl": "as:quoteurl",
@@ -428,28 +462,21 @@ class Post(Base):
                 "quoteuri": "http://fedibird.com/ns#quoteuri",
             },
         ]
-        obj_id = f"{BASE_URL}/@{self.author.username}/{self.number}" if self.number else self.ap_id
         obj = {
             "@context": _ap_context,
-            "id": f"{BASE_URL}/posts/{self.id}-{self.created_at.timestamp()}", # 유니크 ID 보장
+            "id": f"{BASE_URL}/posts/{self.id}",
             "url": f"{BASE_URL}/posts/{self.id}",
             "type": "Note",
-            "published": self.created_at.isoformat() if self.created_at else "",
+            "published": _ap_datetime(self.created_at),
             "attributedTo": self.author.actor_uri().strip(),
-            "content": content,
+            "content": f"<p>{content}</p>" if not content.strip().startswith("<p>") else content,
+            "mediaType": "text/html",
             "to": [],
             "cc": [],
             "tag": tags,
         }
-        public_uri = "https://www.w3.org/ns/activitystreams#public"
+        public_uri = "https://www.w3.org/ns/activitystreams#Public"
         followers_uri = self.author.followers_uri()
-
-        # obj 딕셔너리 생성부 마지막에 추가
-        # 1. id 보장
-        obj["id"] = f"{BASE_URL}/posts/{self.id}" # 가장 단순하고 안전한 URL 구조
-        obj["url"] = f"{BASE_URL}/posts/{self.id}"
-        # 3. 작성자 URI 확인 (혹시 모를 공백 제거)
-        obj["attributedTo"] = self.author.actor_uri().strip()
 
         # 멘션 대상자들 URI 미리 구하기
         mentioned_uris = []
@@ -466,13 +493,16 @@ class Post(Base):
             obj["to"].append(public_uri)
             obj["cc"] = [followers_uri]
         elif self.visibility == "home":
-            obj["to"].append(public_uri)      # '공개 범위'에 들어갔음을 명시
-            obj["cc"] = [followers_uri]   # 팔로워들에게 알림
+            # unlisted: public을 cc에만 넣어야 Mastodon이 " bąd만 공개"로 처리
+            # to에 public이 있으면 Mastodon이 "공개"로 해석함
+            # But mentioned users must still be in 'to' for Mastodon mention rendering
+            obj["to"] = list(mentioned_uris) if mentioned_uris else []
+            obj["cc"] = [public_uri, followers_uri]
         elif self.visibility == "followers":
             obj["to"].append(followers_uri)
             obj["cc"] = []
         elif self.visibility == "mention":
-            obj["to"].append(mentioned_uris)
+            obj["to"] = mentioned_uris if mentioned_uris else [followers_uri]
             obj["cc"] = []
         # 추가로 본인도 to나 cc에 있어야 마스토돈이 잘 처리함 (선택사항)
         if self.author.actor_uri() not in obj["to"]:
@@ -507,7 +537,10 @@ class Post(Base):
             if attachments:
                 obj["attachment"] = attachments
         if self.in_reply_to_ap_id:
-            obj["inReplyTo"] = self.in_reply_to_ap_id
+            if self.in_reply_to_id:
+                obj["inReplyTo"] = f"{BASE_URL}/posts/{self.in_reply_to_id}"
+            else:
+                obj["inReplyTo"] = self.in_reply_to_ap_id
         if self.quote_of_ap_id:
             obj["quoteUrl"] = self.quote_of_ap_id
             obj["quote"] = self.quote_of_ap_id
@@ -535,7 +568,6 @@ class Post(Base):
                         obj["closed"] = expires_at
                 except Exception:
                     pass
-        print(obj)
         return obj
 
     def to_ap_create(self):
@@ -545,14 +577,14 @@ class Post(Base):
         cc = note.get("cc", [])
         # 만약 아무것도 없다면(테스트시) 강제로 public 추가
         if not to and not cc:
-            public_uri = "https://www.w3.org/ns/activitystreams#public"
+            public_uri = "https://www.w3.org/ns/activitystreams#Public"
             to = [public_uri]
         return {
             "@context": note.get("@context", "https://www.w3.org/ns/activitystreams"),
             "id": f"{BASE_URL}/activities/create/{self.id}",
             "type": "Create",
             "actor": self.author.actor_uri(),
-            "published": self.created_at.isoformat() if self.created_at else "",
+            "published": _ap_datetime(self.created_at),
             "to": to,
             "cc": cc,
             "object": note,

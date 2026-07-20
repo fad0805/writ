@@ -102,8 +102,7 @@ def _delivery_worker():
                         signature = sign_string(signed_string, get_private_key(sender, SECRET_KEY))
                         signature_header = (
                             f'keyId="{sender.actor_uri()}#main-key",'
-                            f'algorithm="hs2019",'
-                            f'created="{int(time.time())}",'
+                            f'algorithm="rsa-sha256",'
                             f'headers="(request-target) host date digest",'
                             f'signature="{signature}"'
                         )
@@ -171,53 +170,10 @@ async def lifespan(app: FastAPI):
         _cleanup_avatars()
     except Exception:
         pass
-    # Persist VAPID keys so push subscriptions survive restart
+    # Initialize VAPID keys (DB-first, then auto-generate)
     try:
-        from app.config import VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY
-        from app.models import ServerSetting, get_session
-        if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
-            with get_session() as _s:
-                _ss = ServerSetting.get(_s)
-                _db_priv = getattr(_ss, 'vapid_private_key', '') or ''
-                _db_pub = getattr(_ss, 'vapid_public_key', '') or ''
-                from app.config import _is_valid_pem_private_key, _sanitize_pem as _spm
-                _db_priv_san = _spm(_db_priv)
-                if _db_priv and _db_pub and _is_valid_pem_private_key(_db_priv_san):
-                    import os as _os
-                    _os.environ.setdefault("VAPID_PRIVATE_KEY", _db_priv_san)
-                    _os.environ.setdefault("VAPID_PUBLIC_KEY", _db_pub)
-                else:
-                    import base64
-                    from cryptography.hazmat.primitives.asymmetric import ec
-                    from cryptography.hazmat.primitives import serialization as _ser
-                    _vkey = ec.generate_private_key(ec.SECP256R1())
-                    _priv_pem = _vkey.private_bytes(
-                        _ser.Encoding.PEM, _ser.PrivateFormat.PKCS8, _ser.NoEncryption()
-                    ).decode()
-                    _pub_b64 = base64.urlsafe_b64encode(
-                        _vkey.public_key().public_bytes(
-                            _ser.Encoding.X962, _ser.PublicFormat.UncompressedPoint
-                        )
-                    ).rstrip(b"=").decode()
-                    print(f"[VAPID] Lifespan: generated new key (priv len={len(_priv_pem)})", flush=True)
-                    try:
-                        from sqlalchemy import Column, String
-                        if not hasattr(ServerSetting, 'vapid_private_key'):
-                            import sqlalchemy as _sa
-                            with _s.bind.connect() as _c:
-                                _c.execute(_sa.text("ALTER TABLE server_settings ADD COLUMN vapid_private_key TEXT DEFAULT ''"))
-                                _c.execute(_sa.text("ALTER TABLE server_settings ADD COLUMN vapid_public_key TEXT DEFAULT ''"))
-                                _c.commit()
-                    except Exception:
-                        pass
-                    _ss = _s.query(ServerSetting).first()
-                    if _ss:
-                        _ss.vapid_private_key = _priv_pem
-                        _ss.vapid_public_key = _pub_b64
-                        _s.commit()
-                    import os as _os
-                    _os.environ["VAPID_PRIVATE_KEY"] = _priv_pem
-                    _os.environ["VAPID_PUBLIC_KEY"] = _pub_b64
+        from app.config import init_vapid_keys
+        init_vapid_keys()
     except Exception:
         pass
     t = threading.Thread(target=_delivery_worker, daemon=True)
@@ -984,11 +940,14 @@ def get_post_by_handle(request: Request, username: str, number: str):
         user = session.query(User).filter_by(username=username, is_remote=False).first()
         if not user:
             raise HTTPException(status_code=404, detail="Not found")
-        post = session.query(Post).filter_by(author_id=user.id, number=number, is_deleted=False).first()
+        post = session.query(Post).filter_by(author_id=user.id, number=number).first()
         if not post:
             raise HTTPException(status_code=404, detail="Not found")
 
         if "application/activity+json" in accept or "application/ld+json" in accept:
+            if post.is_deleted:
+                return JSONResponse(content=post.to_ap_note(),
+                                    media_type="application/activity+json")
             if not _ap_post_visible(post, request, session):
                 raise HTTPException(status_code=404, detail="Not found")
             return JSONResponse(content=post.to_ap_note(),

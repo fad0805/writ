@@ -266,6 +266,9 @@ export default function Sidebar() {
         <NavItem href="/series/my" active={isActive("/series/my")}>
           <Icon name="book_solid" /> 내 시리즈
         </NavItem>
+        <NavItem href="/series/followed" active={isActive("/series/followed")}>
+          <Icon name="bookmark_solid" /> 구독 시리즈
+        </NavItem>
         <NavItem href="/series" active={isActive("/series")}>
           <Icon name="books_solid" /> 모든 시리즈
         </NavItem>

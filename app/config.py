@@ -92,8 +92,17 @@ def get_vapid_keys():
     pub = _sanitize_pem(os.environ.get("VAPID_PUBLIC_KEY", ""))
     return priv, pub
 
-# Auto-generate VAPID keys if not configured
-if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
+def init_vapid_keys():
+    """Initialize VAPID keys: try DB first, then auto-generate.
+
+    Must be called after models are fully loaded (e.g. from lifespan)
+    to avoid circular imports.
+    """
+    global VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY
+
+    if VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY:
+        return
+
     try:
         from app.models import ServerSetting, get_session
         with get_session() as _s:
@@ -106,7 +115,6 @@ if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
                 VAPID_PUBLIC_KEY = _sanitize_pem(_db_pub)
                 os.environ["VAPID_PRIVATE_KEY"] = VAPID_PRIVATE_KEY
                 os.environ["VAPID_PUBLIC_KEY"] = VAPID_PUBLIC_KEY
-                # Fix bad PEM in DB (literal \n -> real newlines)
                 if VAPID_PRIVATE_KEY != _db_priv or VAPID_PUBLIC_KEY != _db_pub:
                     try:
                         _ss.vapid_private_key = VAPID_PRIVATE_KEY
@@ -114,8 +122,8 @@ if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
                         _s.commit()
                     except Exception:
                         pass
+                return
             elif _db_priv_san and _db_pub:
-                # DB has keys but they're invalid/corrupted — clear them so we regenerate
                 print(f"[VAPID] DB key invalid (len={len(_db_priv_san)}), regenerating...", flush=True)
                 try:
                     _ss.vapid_private_key = ''
@@ -127,7 +135,9 @@ if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
     except Exception as _e:
         print(f"[VAPID] DB read error: {_e}", flush=True)
 
-if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
+    if VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY:
+        return
+
     try:
         import base64
         from cryptography.hazmat.primitives.asymmetric import ec
@@ -161,7 +171,6 @@ if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
                 _ss.vapid_public_key = VAPID_PUBLIC_KEY
                 _s.commit()
                 print(f"[VAPID] Auto-generated and saved new key (priv len={len(VAPID_PRIVATE_KEY)})", flush=True)
-                # VAPID key changed — invalidate all existing push subscriptions
                 try:
                     from app.models import PushSubscription
                     _deleted = _s.query(PushSubscription).delete()

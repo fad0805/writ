@@ -1171,6 +1171,111 @@ with get_session() as s:
         print(f"fixed {fixed} posts with stale mentioned_user_ids")
 PYEOF
 
+elif [ "$1" = "check-create" ]; then
+  docker compose exec api python3 -c "
+from app.models import Post, get_session
+import json
+
+post_id = int('$2')
+
+with get_session() as s:
+    p = s.query(Post).filter(Post.id == post_id).first()
+
+    if not p:
+        print('post not found')
+    else:
+        print(json.dumps(p.to_ap_create(), indent=2, ensure_ascii=False))
+"
+
+elif [ "$1" = "replay-mastodon" ]; then
+  # 받은 Mastodon Create를 거의 그대로 다시 보내기 (_mention만 WRIT 로컬 유저로)
+  # 사용법: ./gogo.sh replay-mastodon <post_id> <target_inbox_url>
+  # 예: ./gogo.sh replay-mastodon 5371 https://qdon.space/inbox
+  docker compose exec api python3 -c "
+import json, datetime, hashlib, base64, httpx
+from urllib.parse import urlparse
+from app.models import Post, User, get_session
+from app.config import SECRET_KEY, BASE_URL
+from app.crypto_utils import sign_string, get_private_key
+
+post_id = int('$2')
+inbox_url = '$3'
+
+with get_session() as s:
+    p = s.query(Post).filter(Post.id == post_id).first()
+    if not p:
+        print('post not found'); exit(1)
+    author = p.author
+
+    # 1. to_ap_note() 로 현재 WRIT 포맷 가져오기
+    note = p.to_ap_note()
+
+    # 2. Mastodon 포맷으로 최소한의 차이만 적용
+    #    - <p> 래핑 제거 (Mastodon은 짧은 글에 <p> 없음)
+    content = note.get('content', '')
+    if content.startswith('<p>') and content.endswith('</p>'):
+        inner = content[3:-4]
+        if '<p>' not in inner:
+            content = inner
+    note['content'] = content
+
+    #    - mediaType 제거 (Mastodon은 보통 없음)
+    note.pop('mediaType', None)
+
+    #    - @context 최소화 (Mastodon 표준)
+    note['@context'] = 'https://www.w3.org/ns/activitystreams'
+
+    # 3. Create 래퍼 생성 (Mastodon 포맷: to/cc를 Note에서 그대로 사용)
+    now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+    activity = {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        'id': f'{BASE_URL}/activities/replay/{p.id}',
+        'type': 'Create',
+        'actor': author.actor_uri(),
+        'published': now.strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'to': note.get('to', []),
+        'cc': note.get('cc', []),
+        'object': note,
+    }
+
+    print('=== REPLAY ACTIVITY ===')
+    print(json.dumps(activity, indent=2, ensure_ascii=False))
+    print()
+
+    # 4. 서명 후 전송
+    body = json.dumps(activity, ensure_ascii=True, sort_keys=True).encode('utf-8')
+    digest = base64.b64encode(hashlib.sha256(body).digest()).decode()
+    digest_header = f'SHA-256={digest}'
+    date = now.strftime('%a, %d %b %Y %H:%M:%S GMT')
+
+    parsed = urlparse(inbox_url)
+    path = parsed.path or '/'
+    signed_string = (
+        f'(request-target): post {path}\n'
+        f'host: {parsed.netloc}\n'
+        f'date: {date}\n'
+        f'digest: {digest_header}'
+    )
+    signature = sign_string(signed_string, get_private_key(author, SECRET_KEY))
+    signature_header = (
+        f'keyId=\"{author.actor_uri()}#main-key\",'
+        f'algorithm=\"rsa-sha256\",'
+        f'headers=\"(request-target) host date digest\",'
+        f'signature=\"{signature}\"'
+    )
+    headers = {
+        'Content-Type': 'application/activity+json',
+        'Signature': signature_header,
+        'Date': date,
+        'Digest': digest_header,
+        'Host': parsed.netloc,
+    }
+
+    resp = httpx.post(inbox_url, content=body, headers=headers, timeout=15)
+    print(f'Status: {resp.status_code}')
+    print(f'Body: {resp.text[:500]}')
+"
+
 else
   echo "사용법: ./gogo.sh [명령어]"
   echo ""
@@ -1188,4 +1293,6 @@ else
   echo "  purge-orphan    - 내용/부스트/답글/ap_id 없는 고아 포스트 삭제"
   echo "  purge-shadows   - 자기 도메인을 가리키는 그림자 원격 유저 삭제"
   echo "  check-custom-fields - 원격 액터의 attachment/custom_fields 확인 (예: ./gogo.sh check-custom-fields https://daydream.ink/users/siarte)"
+  echo "  check-create    - 포스트의 AP Create JSON 출력 (예: ./gogo.sh check-create 5371)"
+  echo "  replay-mastodon - 받은 Create를 Mastodon 포맷으로 재전송 (예: ./gogo.sh replay-mastodon 5371 https://qdon.space/inbox)"
 fi

@@ -27,6 +27,10 @@ const nextConfig: NextConfig = {
         destination: `${API_HOST}/users/:path*`,
       },
       {
+        source: "/posts/:path*",
+        destination: `${API_HOST}/posts/:path*`,
+      },
+      {
         source: "/activities/:path*",
         destination: `${API_HOST}/activities/:path*`,
       },
