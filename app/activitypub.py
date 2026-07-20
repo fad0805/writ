@@ -2646,8 +2646,9 @@ def _send_delete_post(post: Post, sender: User):
             with get_session() as s:
                 parent = s.query(Post).filter_by(ap_id=post.in_reply_to_ap_id).first()
                 if parent and parent.author and parent.author.is_remote:
-                    inbox = parent.author.shared_inbox_url or parent.author.inbox_uri()
-                    _post_to_inbox(inbox, delete, sender)
+                    inbox = parent.author.shared_inbox_url or parent.author.inbox_url
+                    if inbox:
+                        _post_to_inbox(inbox, delete, sender)
         except Exception as e:
             logger.warning("Failed to send Delete to parent author: %s", e)
 
@@ -2967,7 +2968,9 @@ def send_to_shared_inbox(user: User, activity: dict):
     sent = set()
     for f in followers:
         target = f.following
-        inbox = target.shared_inbox_url or target.inbox_uri()
+        inbox = target.shared_inbox_url or target.inbox_url
+        if not inbox:
+            continue
         if inbox in sent:
             continue
         sent.add(inbox)
@@ -3141,7 +3144,9 @@ def broadcast_to_followers(user: User, activity: dict):
     sent = set()
     for f in followers:
         follower = f.follower
-        inbox = follower.shared_inbox_url or follower.inbox_uri()
+        inbox = follower.shared_inbox_url or follower.inbox_url
+        if not inbox:
+            continue
         if inbox in sent:
             continue
         domain = urlparse(inbox).hostname or ""

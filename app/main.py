@@ -102,8 +102,7 @@ def _delivery_worker():
                         signature = sign_string(signed_string, get_private_key(sender, SECRET_KEY))
                         signature_header = (
                             f'keyId="{sender.actor_uri()}#main-key",'
-                            f'algorithm="hs2019",'
-                            f'created="{int(time.time())}",'
+                            f'algorithm="rsa-sha256",'
                             f'headers="(request-target) host date digest",'
                             f'signature="{signature}"'
                         )
