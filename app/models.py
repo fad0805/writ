@@ -330,7 +330,8 @@ class Post(Base):
                 "manuallyapprovesfollowers": "as:manuallyapprovesfollowers", "toot": "http://joinmastodon.org/ns#",
                 "emoji": "toot:emoji", "quote": {"@id": "https://w3id.org/fep/044f#quote", "@type": "@id"}
             }],
-            "id": f"{BASE_URL}/posts/{self.id}",
+            #"id": f"{BASE_URL}/posts/{self.id}",
+            "id": self.ap_id,
             "type": "Question" if self.poll_data else "Note",
             "attributedTo": self.author.actor_uri().strip(),
             "content": f"<p>{content}</p>" if not content.strip().startswith("<p>") else content,
