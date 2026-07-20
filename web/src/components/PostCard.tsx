@@ -282,7 +282,7 @@ const localReactionEmojiMap = useMemo(() => {
   const panStart = useRef({ x: 0, y: 0 });
   const panOrigin = useRef({ x: 0, y: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
-  const [revealedSensitive, setRevealedSensitive] = useState<Set<number>>(new Set());
+  const [revealedSensitive, setRevealedSensitive] = useState(false);
   useEffect(() => {
     if (viewerIndex < 0) return;
     setViewerZoom(1);
@@ -468,28 +468,37 @@ const localReactionEmojiMap = useMemo(() => {
     }
   };
 
-  const _renderMedia = () => (
-    <div className="post-media-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${((n) => { if (n <= 2) return n; if (n <= 4) return 2; let best = 3; for (let c = 2; c <= 4; c++) { const empty = (Math.ceil(n / c) * c - n); if (empty < (Math.ceil(n / best) * best - n) || (empty === (Math.ceil(n / best) * best - n) && c > best)) best = c; } return best; })(((post as any).media_attachments || []).length)}, 1fr)`, gap: 4, marginTop: 8, overflow: "hidden", borderRadius: 8 }}>
-      {(post as any).media_attachments.slice(0, 16).map((m: any, i: number) => {
-        const postSensitive = (post as any).is_sensitive || (post.author as any)?.is_sensitive || !!(post as any).summary;
-        const isSensitive = postSensitive && !revealedSensitive.has(i);
-        const revealed = postSensitive && revealedSensitive.has(i);
-        return m.type === "video" ? (
-          <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", borderRadius: 8 }}>
-            {isSensitive && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 1, cursor: "pointer", color: "#fff", fontSize: 13, fontWeight: 600 }} onClick={(e) => { e.stopPropagation(); e.preventDefault(); setRevealedSensitive((prev) => new Set(prev).add(i)); }}><span style={{ fontSize: 12, fontWeight: 600, textAlign: "center", lineHeight: 1.3 }}>클릭하여 표시</span></div>}
-            {revealed && <button onClick={(e) => { e.stopPropagation(); setRevealedSensitive((prev) => { const n = new Set(prev); n.delete(i); return n; }); }} style={{ position: "absolute", top: 4, right: 4, zIndex: 2, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: 4, color: "#fff", fontSize: 12, padding: "3px 10px", cursor: "pointer" }}>가리기</button>}
-            <video src={m.url} controls style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "contain", background: "#000", filter: isSensitive ? "blur(20px)" : "none" }} />
+  const _renderMedia = () => {
+    const postSensitive = (post as any).is_sensitive || (post.author as any)?.is_sensitive || !!(post as any).summary;
+    const media = (post as any).media_attachments || [];
+    if (!media.length) return null;
+    const gridColumns = ((n) => { if (n <= 2) return n; if (n <= 4) return 2; let best = 3; for (let c = 2; c <= 4; c++) { const empty = (Math.ceil(n / c) * c - n); if (empty < (Math.ceil(n / best) * best - n) || (empty === (Math.ceil(n / best) * best - n) && c > best)) best = c; } return best; })(media.length);
+    return (
+      <div style={{ position: "relative", marginTop: 8 }}>
+        <div className="post-media-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${gridColumns}, 1fr)`, gap: 4, overflow: "hidden", borderRadius: 8 }}>
+          {media.slice(0, 16).map((m: any, i: number) => (
+            m.type === "video" ? (
+              <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", borderRadius: 8 }}>
+                <video src={m.url} controls style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "contain", background: "#000", filter: postSensitive && !revealedSensitive ? "blur(20px)" : "none" }} />
+              </div>
+            ) : (
+              <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", borderRadius: 8 }}>
+                <img src={m.url} alt={m.alt || ""} style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "contain", background: "#000", cursor: "pointer", filter: postSensitive && !revealedSensitive ? "blur(20px)" : "none" }} onClick={(e) => { if (!postSensitive || revealedSensitive) { e.stopPropagation(); setViewerIndex(i); } }} />
+              </div>
+            )
+          ))}
+        </div>
+        {postSensitive && !revealedSensitive && (
+          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1, cursor: "pointer", color: "#fff", fontSize: 13, fontWeight: 600 }} onClick={(e) => { e.stopPropagation(); e.preventDefault(); setRevealedSensitive(true); }}>
+            <span style={{ fontSize: 12, fontWeight: 600, textAlign: "center", lineHeight: 1.3 }}>클릭하여 표시</span>
           </div>
-        ) : (
-          <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", borderRadius: 8 }}>
-            {isSensitive && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 1, cursor: "pointer", color: "#fff", fontSize: 13, fontWeight: 600 }} onClick={(e) => { e.stopPropagation(); e.preventDefault(); setRevealedSensitive((prev) => new Set(prev).add(i)); }}><span style={{ fontSize: 12, fontWeight: 600, textAlign: "center", lineHeight: 1.3 }}>클릭하여 표시</span></div>}
-            {revealed && <button onClick={(e) => { e.stopPropagation(); setRevealedSensitive((prev) => { const n = new Set(prev); n.delete(i); return n; }); }} style={{ position: "absolute", top: 4, right: 4, zIndex: 2, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: 4, color: "#fff", fontSize: 12, padding: "3px 10px", cursor: "pointer" }}>가리기</button>}
-            <img key={i} src={m.url} alt={m.alt || ""} style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "contain", background: "#000", cursor: "pointer", filter: isSensitive ? "blur(20px)" : "none" }} onClick={(e) => { if (!isSensitive) { e.stopPropagation(); setViewerIndex(i); } }} />
-          </div>
-        );
-      })}
-    </div>
-  );
+        )}
+        {postSensitive && revealedSensitive && (
+          <button onClick={(e) => { e.stopPropagation(); setRevealedSensitive(false); }} style={{ position: "absolute", top: 8, right: 8, zIndex: 2, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: 4, color: "#fff", fontSize: 12, padding: "3px 10px", cursor: "pointer" }}>가리기</button>
+        )}
+      </div>
+    );
+  };
 
   if (!post || !post.author) return null;
 
