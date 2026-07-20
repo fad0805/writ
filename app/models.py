@@ -36,6 +36,14 @@ def now():
     return datetime.datetime.now(datetime.timezone.utc)
 
 
+def _ap_datetime(dt):
+    if dt is None:
+        return ""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -145,7 +153,7 @@ class User(Base):
                 "owner": self.actor_uri(),
                 "publicKeyPem": self.public_key,
             },
-            "published": (self.created_at.isoformat() if self.created_at else ""),
+            "published": _ap_datetime(self.created_at),
             "discoverable": True,
             "manuallyApprovesFollowers": bool(self.is_locked),
         }
@@ -428,28 +436,20 @@ class Post(Base):
                 "quoteuri": "http://fedibird.com/ns#quoteuri",
             },
         ]
-        obj_id = f"{BASE_URL}/@{self.author.username}/{self.number}" if self.number else self.ap_id
         obj = {
             "@context": _ap_context,
-            "id": f"{BASE_URL}/posts/{self.id}-{self.created_at.timestamp()}", # 유니크 ID 보장
+            "id": f"{BASE_URL}/posts/{self.id}",
             "url": f"{BASE_URL}/posts/{self.id}",
             "type": "Note",
-            "published": self.created_at.isoformat() if self.created_at else "",
+            "published": _ap_datetime(self.created_at),
             "attributedTo": self.author.actor_uri().strip(),
             "content": content,
             "to": [],
             "cc": [],
             "tag": tags,
         }
-        public_uri = "https://www.w3.org/ns/activitystreams#public"
+        public_uri = "https://www.w3.org/ns/activitystreams#Public"
         followers_uri = self.author.followers_uri()
-
-        # obj 딕셔너리 생성부 마지막에 추가
-        # 1. id 보장
-        obj["id"] = f"{BASE_URL}/posts/{self.id}" # 가장 단순하고 안전한 URL 구조
-        obj["url"] = f"{BASE_URL}/posts/{self.id}"
-        # 3. 작성자 URI 확인 (혹시 모를 공백 제거)
-        obj["attributedTo"] = self.author.actor_uri().strip()
 
         # 멘션 대상자들 URI 미리 구하기
         mentioned_uris = []
@@ -545,14 +545,14 @@ class Post(Base):
         cc = note.get("cc", [])
         # 만약 아무것도 없다면(테스트시) 강제로 public 추가
         if not to and not cc:
-            public_uri = "https://www.w3.org/ns/activitystreams#public"
+            public_uri = "https://www.w3.org/ns/activitystreams#Public"
             to = [public_uri]
         return {
             "@context": note.get("@context", "https://www.w3.org/ns/activitystreams"),
             "id": f"{BASE_URL}/activities/create/{self.id}",
             "type": "Create",
             "actor": self.author.actor_uri(),
-            "published": self.created_at.isoformat() if self.created_at else "",
+            "published": _ap_datetime(self.created_at),
             "to": to,
             "cc": cc,
             "object": note,
