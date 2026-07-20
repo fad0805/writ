@@ -1821,6 +1821,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 with get_session() as emoji_s:
                     _process_emoji_tags(obj.get("tag", []), emoji_s)
                     emoji_s.commit()
+                    from app.routes.api import _refresh_emoji_cache_forcibly
+                    _refresh_emoji_cache_forcibly(emoji_s)
             except Exception:
                 pass
             from app.push import send_push_to_user
@@ -2595,6 +2597,8 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     # Update emoji tags
                     _process_emoji_tags(object_data.get("tag", []), session)
                     session.commit()
+                    from app.routes.api import _refresh_emoji_cache_forcibly
+                    _refresh_emoji_cache_forcibly(session)
                     try:
                         from app.timeline_stream import broadcast_post
                         _ua = post.author
