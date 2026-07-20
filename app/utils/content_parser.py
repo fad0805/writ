@@ -101,7 +101,7 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post | None) -> str
             a_tag.clear()
             a_tag.string = matched_uid
             a_tag["href"] = f"/{matched_uid}"
-            a_tag["class"] = "mention"
+            a_tag["class"] = "u-url mention"
             a_tag.attrs.pop("target", None)
             continue
 
@@ -114,7 +114,7 @@ def _extract_plain_text(sanitized_content: str, post: dict | Post | None) -> str
                 a_tag.clear()
                 a_tag.string = f"@{username}@{domain}"
                 a_tag["href"] = f"/@{username}@{domain}"
-                a_tag["class"] = "mention"
+                a_tag["class"] = "u-url mention"
                 a_tag.attrs.pop("target", None)
                 continue
 
