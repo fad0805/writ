@@ -2672,7 +2672,8 @@ def _send_delete_post(post: Post, sender: User):
         "to": ["https://www.w3.org/ns/activitystreams#Public"],
         "object": {
             "type": "Tombstone",
-            "id": note_id
+            "id": note_id,
+            "attributedTo": sender.actor_uri()
         }
     }
     try:
