@@ -1951,7 +1951,7 @@ def api_unboost_post(request: Request, post_id: int):
         # 2. 원격 작성자 본인에게 Undo 전송 (원격 글일 경우)
         if post.author.is_remote and post.author.shared_inbox_url:
             try:
-                _post_to_inbox(post.author.shared_inbox_url, undo, user)
+                threading.Thread(target=_post_to_inbox, args=(post.author.shared_inbox_url, undo, user), daemon=True).start()
             except Exception as e:
                 logger.warning("Failed to send unboost to author inbox: %s", e)
         # 3. ★ [핵심] 내 팔로워들의 인박스로도 Undo를 뿌려주어 타임라인에서 취소 반영
