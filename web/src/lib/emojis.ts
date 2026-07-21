@@ -26,6 +26,7 @@ export function injectEmojis(list: CustomEmojiRaw[]) {
     }
   }
   if (changed && typeof window !== "undefined") {
+    cache = [...cache];
     (window as any).__emojiCache = cache;
     if ((window as any).__emojiMap) {
       for (const e of list) {

@@ -82,7 +82,10 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, onRewrite,
     return [];
   });
 
-  useEffect(() => subscribeEmojis((list) => { (window as any).__emojiCache = list; setEmojiList(list); }), []);
+  useEffect(() => subscribeEmojis((list) => {
+    (window as any).__emojiCache = list;
+    setEmojiList(...list);
+  }), []);
   const [reactions, setReactions] = useState(post.reactions || {});
   const [myReaction, setMyReaction] = useState(post.my_reaction || null);
   const reactionEmojiMap = useMemo(() => {
