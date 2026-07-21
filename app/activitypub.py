@@ -1505,7 +1505,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                 return (200, "poll ended")
                         except (valueerror, typeerror) as ex:
                             pass
-                    existing_vote = session.query(vote).filter_by(user_id=actor_id, post_id=poll_post.id).first()
+                    existing_vote = session.query(Vote).filter_by(user_id=actor_id, post_id=poll_post.id).first()
                     if existing_vote:
                         if existing_vote.option_index == option_idx:
                             return (200, "already voted")
