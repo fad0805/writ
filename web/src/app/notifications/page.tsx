@@ -53,6 +53,26 @@ export default function NotificationsPage() {
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(20);
   const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
+  const touchStartX = useRef(0);
+
+  useEffect(() => {
+    const h = (e: TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+    document.addEventListener("touchstart", h, { passive: true });
+    return () => document.removeEventListener("touchstart", h);
+  }, []);
+
+  useEffect(() => {
+    const h = (e: TouchEvent) => {
+      const dx = e.changedTouches[0].clientX - touchStartX.current;
+      if (Math.abs(dx) > 100) {
+        const idx = FILTERS.findIndex((f) => f.value === filter);
+        if (dx > 0 && idx > 0) setFilter(FILTERS[idx - 1].value);
+        else if (dx < 0 && idx < FILTERS.length - 1) setFilter(FILTERS[idx + 1].value);
+      }
+    };
+    document.addEventListener("touchend", h, { passive: true });
+    return () => document.removeEventListener("touchend", h);
+  }, [filter]);
 
   useEffect(() => {
     try {
