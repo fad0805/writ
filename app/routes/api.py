@@ -2315,6 +2315,10 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         ).offset(offset).limit(limit + 1).all()
         has_more = len(posts) > limit
         posts = [p for p in posts[:limit] if _can_view(p, user, s)]
+        # Deduplicate: if a post appears both as original and as boost pointer, keep only the boost
+        _boosted_original_ids = {p.boost_of_id for p in posts if p.boost_of_id}
+        if _boosted_original_ids:
+            posts = [p for p in posts if not (p.id in _boosted_original_ids and not p.boost_of_id)]
         total_posts = s.query(Post).filter(
             or_(
                 Post.author_id == profile.id,
