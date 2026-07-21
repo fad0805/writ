@@ -94,11 +94,13 @@ export function invalidateEmojiCache() {
 const _emojiSubscribers: Set<(emojis: CustomEmoji[]) => void> = new Set();
 
 export function subscribeEmojis(cb: (emojis: CustomEmoji[]) => void): () => void {
-  if (cache) { cb(cache); return () => {}; }
+  if (cache) { cb(cache); }
   _emojiSubscribers.add(cb);
-  getCustomEmojis().then(list => {
-    _emojiSubscribers.forEach(fn => fn(list));
-  });
+  if (!cache) {
+    getCustomEmojis().then(list => {
+      _emojiSubscribers.forEach(fn => fn(list));
+    });
+  }
   return () => { _emojiSubscribers.delete(cb); };
 }
 
