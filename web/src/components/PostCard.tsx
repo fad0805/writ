@@ -729,7 +729,7 @@ const localReactionEmojiMap = useMemo(() => {
               return (
                 <span
                   key={emoji}
-                  className={`reaction-badge${myReaction === emoji ? " active" : ""}${emojiIsRemote ? " reaction-disabled" : ""}`}
+                   className={`reaction-badge${myReaction === emoji ? " active" : ""}`}
                   onClick={async () => {
                     // 💡 원격 에모지라면 클릭 시 즉시 리턴하여 백엔드 요청을 방어합니다.
                     if (emojiIsRemote) return;
@@ -770,7 +770,7 @@ const localReactionEmojiMap = useMemo(() => {
                     cursor: emojiIsRemote ? "default" : "pointer", // 원격이면 커서 기본값
                     border: "1px solid var(--border)", 
                     background: myReaction === emoji ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-secondary)", 
-                    opacity: emojiIsRemote ? 0.5 : 1 // 원격이면 흐릿하게 반투명 처리
+                    opacity: 1
                   }}
                 >
                   {emoji === "★" ? (
