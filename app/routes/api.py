@@ -1925,24 +1925,47 @@ def api_unboost_post(request: Request, post_id: int):
             s.commit()
             if post.author_id != user.id:
                 broadcast_refresh_notifs(post.author_id)
-        if post.author and post.author.is_remote and post.author.shared_inbox_url:
-            undo = {
-                "@context": "https://www.w3.org/ns/activitystreams",
-                "id": f"{BASE_URL}/boosts/{uuid.uuid4()}#undo",
-                "type": "Undo",
+
+        # 1. Undo 활동 페이로드 구성 (로컬/원격 글 공통)
+        undo_id = f"{BASE_URL}/boosts/{uuid.uuid4()}#undo"
+        target_announce_id = announce_id or f"{BASE_URL}/boosts/{uuid.uuid4()}"
+        undo = {
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": undo_id,
+            "type": "Undo",
+            "actor": user.actor_uri(),
+            "to": ["https://www.w3.org/ns/activitystreams#Public"],
+            "cc": [
+                post.author.actor_uri(),
+                f'{BASE_URL}/users/{user.username}/followers'
+            ],
+            "object": {
+                "id": target_announce_id,
+                "type": "Announce",
                 "actor": user.actor_uri(),
-                "object": {
-                    "id": announce_id or f"{BASE_URL}/boosts/{uuid.uuid4()}",
-                    "type": "Announce",
-                    "actor": user.actor_uri(),
-                    "object": post.ap_id,
-                },
-            }
-            inbox = post.author.shared_inbox_url
+                "object": post.ap_id,
+            },
+        }
+        # 2. 원격 작성자 본인에게 Undo 전송 (원격 글일 경우)
+        if post.author.is_remote and post.author.shared_inbox_url:
             try:
-                _post_to_inbox(inbox, undo, user)
-            except Exception:
-                pass
+                _post_to_inbox(post.author.shared_inbox_url, undo, user)
+            except Exception as e:
+        # 3. ★ [핵심] 내 팔로워들의 인박스로도 Undo를 뿌려주어 타임라인에서 취소 반영
+        try:
+            followers = s.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == user.id).all()
+            sent_inboxes = set()
+            for follower in followers:
+                if follower.is_remote and (follower.shared_inbox_url or follower.inbox_url):
+                    inbox = follower.shared_inbox_url or follower.inbox_url
+                    if inbox not in sent_inboxes:
+                        sent_inboxes.add(inbox)
+                        try:
+                            _post_to_inbox(inbox, undo, user)
+                        except Exception as e:
+                            logger.warning("Failed to fan-out unboost to inbox %s: %s", inbox, e)
+        except Exception as e:
+            logger.warning("Failed to query followers for unboost fan-out: %s", e)
     return {"ok": True}
 
 
