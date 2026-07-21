@@ -179,24 +179,24 @@ export default function SettingsPage() {
               {" "}<Icon name="bell" /> 브라우저 알림 {pushEnabled ? "활성화" : "비활성화"}
             </label>
             <p className="form-help">브라우저가 꺼져 있어도 새로운 알림을 받을 수 있습니다. 변경 후 설정 저장을 눌러주세요.</p>
-            {pushDevices.length > 0 && (
-              <div style={{ marginTop: 8, fontSize: "0.85em" }}>
-                <div style={{ fontWeight: 600, marginBottom: 4, color: "var(--text-secondary)" }}>등록된 기기</div>
-                {pushDevices.map(dev => (
-                  <div key={dev.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
-                    <span style={{ flex: 1 }}>{dev.device_name || "알 수 없는 기기"}</span>
-                    <span style={{ color: "var(--text-muted)", fontSize: "0.8em" }}>{dev.created_at ? new Date(dev.created_at).toLocaleDateString() : ""}</span>
-                    <button type="button" onClick={async () => {
-                      if (!confirm("이 기기의 알림을 해제하시겠습니까?")) return;
-                      try {
-                        await fetch(`/api/push/subscriptions/${dev.id}/delete`, { method: "POST", credentials: "include" });
-                        setPushDevices(prev => prev.filter(d => d.id !== dev.id));
-                      } catch {}
-                    }} style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", fontSize: "0.85em" }}>해제</button>
-                  </div>
-                ))}
+          </div>
+        )}
+        {pushDevices.length > 0 && (
+          <div className="form-group">
+            <label style={{ fontWeight: 600 }}><Icon name="bell" /> 등록된 기기</label>
+            {pushDevices.map(dev => (
+              <div key={dev.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+                <span style={{ flex: 1 }}>{dev.device_name || "알 수 없는 기기"}</span>
+                <span style={{ color: "var(--text-muted)", fontSize: "0.8em" }}>{dev.created_at ? new Date(dev.created_at).toLocaleDateString() : ""}</span>
+                <button type="button" onClick={async () => {
+                  if (!confirm("이 기기의 알림을 해제하시겠습니까?")) return;
+                  try {
+                    await fetch(`/api/push/subscriptions/${dev.id}/delete`, { method: "POST", credentials: "include" });
+                    setPushDevices(prev => prev.filter(d => d.id !== dev.id));
+                  } catch {}
+                }} style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", fontSize: "0.85em", whiteSpace: "nowrap" }}>해제</button>
               </div>
-            )}
+            ))}
           </div>
         )}
         <div className="form-actions">
