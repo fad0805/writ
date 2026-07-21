@@ -281,6 +281,7 @@ const localReactionEmojiMap = useMemo(() => {
   const isPanning = useRef(false);
   const panStart = useRef({ x: 0, y: 0 });
   const panOrigin = useRef({ x: 0, y: 0 });
+  const swipeStartX = useRef(0);
   const cardRef = useRef<HTMLDivElement>(null);
   const [revealedSensitive, setRevealedSensitive] = useState(false);
   useEffect(() => {
@@ -315,6 +316,8 @@ const localReactionEmojiMap = useMemo(() => {
       isPanning.current = true;
       panStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       panOrigin.current = { ...viewerPan };
+    } else if (e.touches.length === 1) {
+      swipeStartX.current = e.touches[0].clientX;
     }
   }, [viewerZoom, viewerPan]);
   const handleViewerTouchMove = useCallback((e: React.TouchEvent) => {
@@ -335,10 +338,19 @@ const localReactionEmojiMap = useMemo(() => {
       setViewerPan({ x: panOrigin.current.x + dx, y: panOrigin.current.y + dy });
     }
   }, []);
-  const handleViewerTouchEnd = useCallback(() => {
+  const handleViewerTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (swipeStartX.current !== 0 && viewerZoom <= 1) {
+      const dx = e.changedTouches[0].clientX - swipeStartX.current;
+      if (Math.abs(dx) > 60) {
+        const media = (post as any).media_attachments || [];
+        if (dx > 0 && viewerIndex > 0) setViewerIndex(viewerIndex - 1);
+        else if (dx < 0 && viewerIndex < media.length - 1) setViewerIndex(viewerIndex + 1);
+      }
+    }
+    swipeStartX.current = 0;
     lastTouchDist.current = 0;
     isPanning.current = false;
-  }, []);
+  }, [viewerZoom, viewerIndex, post]);
   const handleViewerDblClick = useCallback(() => {
     setViewerZoom((z) => {
       if (z > 1) { setViewerPan({ x: 0, y: 0 }); return 1; }
