@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import TextareaHighlight from "./TextareaHighlight";
 import EmojiPicker from "./EmojiPicker";
 import VisibilitySelector from "./VisibilitySelector";
+import MiniPostCard from "./MiniPostCard";
 import { getCustomEmojis, CustomEmoji } from "@/lib/emojis";
 import { useAuth } from "@/lib/auth";
 
@@ -70,6 +71,29 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [linkPreview, setLinkPreview] = useState<{ url: string; title: string; description: string; image: string } | null>(null);
   const [linkPreviewLoading, setLinkPreviewLoading] = useState(false);
   const linkPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [quoteUrl, setQuoteUrl] = useState(shareUrl || "");
+  const [quotePost, setQuotePost] = useState<any>(null);
+
+  useEffect(() => {
+    if (shareUrl && !quotePost) {
+      const base = typeof window !== "undefined" ? window.location.origin : "";
+      const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const localMatch = base ? shareUrl.match(new RegExp(`^${escapedBase}/@([^/]+)/(\\d+)`)) : null;
+      (async () => {
+        if (localMatch) {
+          try {
+            const r = await fetch(`/api/by-number/${localMatch[1]}/${localMatch[2]}`, { credentials: "include" });
+            if (r.ok) { setQuotePost(await r.json()); return; }
+          } catch {}
+        }
+        const form = new FormData(); form.append("url", shareUrl);
+        try {
+          const r = await fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form });
+          if (r.ok) { setQuotePost(await r.json()); }
+        } catch {}
+      })();
+    }
+  }, [shareUrl]);
 
   useEffect(() => {
     if (!showVisPicker) return;
@@ -98,13 +122,47 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     const match = content.match(urlRegex);
     if (!match) { setLinkPreview(null); return; }
     const url = match[0].replace(/[.,;:!?)]+$/, "");
-    if (linkPreview && linkPreview.url === url) return;
+    if (linkPreview && linkPreview.url === url && !quoteUrl) return;
+
     linkPreviewTimerRef.current = setTimeout(async () => {
       setLinkPreviewLoading(true);
-      try {
-        const data = await api.fetchLinkPreview(url);
-        if (data && data.title) setLinkPreview(data);
-      } catch {}
+
+      const base = typeof window !== "undefined" ? window.location.origin : "";
+      const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const localMatch = base ? url.match(new RegExp(`^${escapedBase}/@([^/]+)/(\\d+)`)) : null;
+
+      let quoteResolved = false;
+
+      if (localMatch) {
+        setQuoteUrl(url);
+        try {
+          const r = await fetch(`/api/by-number/${localMatch[1]}/${localMatch[2]}`, { credentials: "include" });
+          if (r.ok) { setQuotePost(await r.json()); quoteResolved = true; }
+        } catch {}
+      }
+
+      if (!quoteResolved) {
+        const form = new FormData(); form.append("url", url);
+        try {
+          const r = await fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form });
+          if (r.ok) {
+            const d = await r.json();
+            if (d._emojis) { import("@/lib/emojis").then(m => m.injectEmojis(d._emojis)); }
+            setQuoteUrl(url); setQuotePost(d); quoteResolved = true;
+          }
+        } catch {}
+      }
+
+      if (!quoteResolved) {
+        if (quoteUrl && url !== quoteUrl) { setQuoteUrl(""); setQuotePost(null); }
+        try {
+          const data = await api.fetchLinkPreview(url);
+          if (data && data.title) setLinkPreview(data);
+        } catch {}
+      } else {
+        setLinkPreview(null);
+      }
+
       setLinkPreviewLoading(false);
     }, 300);
     return () => { if (linkPreviewTimerRef.current) clearTimeout(linkPreviewTimerRef.current); };
@@ -562,8 +620,8 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         if (res.ok) { const d = await res.json(); uploaded.push({ url: d.url, type: d.type, alt: m.alt || "" }); }
       }
       const opts = showPoll ? pollOptions.filter(o => o.trim()).map(o => o.trim()) : [];
-      const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrl, media_attachments: JSON.stringify(uploaded), is_sensitive: postSensitive, poll_options: opts.length >= 2 ? JSON.stringify(opts) : "", poll_expires_in: pollExpiresIn, link_preview: linkPreview ? JSON.stringify(linkPreview) : "" });
-      setContent(""); setSummary(""); setPostSensitive(false); setMediaItems([]); setShowPoll(false); setPollOptions(["", ""]); setPollExpiresIn(24); setLinkPreview(null);
+      const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: quoteUrl || shareUrl, media_attachments: JSON.stringify(uploaded), is_sensitive: postSensitive, poll_options: opts.length >= 2 ? JSON.stringify(opts) : "", poll_expires_in: pollExpiresIn, link_preview: linkPreview ? JSON.stringify(linkPreview) : "" });
+      setContent(""); setSummary(""); setPostSensitive(false); setMediaItems([]); setShowPoll(false); setPollOptions(["", ""]); setPollExpiresIn(24); setLinkPreview(null); setQuoteUrl(""); setQuotePost(null);
       if (typeof localStorage !== "undefined") localStorage.removeItem(draftKey);
       if (onDone) onDone(result);
       else router.refresh();
@@ -614,7 +672,17 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           )}
         </div>
       )}
-      {(linkPreview || linkPreviewLoading) && (
+      {(quotePost || quoteUrl) && (
+        <div style={{ marginBottom: 8, padding: 10, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-tertiary)", position: "relative" }}>
+          {quotePost ? (
+            <MiniPostCard post={quotePost} />
+          ) : (
+            <div style={{ fontSize: 13, color: "var(--text-muted)" }}>게시글 불러오는 중...</div>
+          )}
+          <button type="button" onClick={() => { setQuoteUrl(""); setQuotePost(null); }} style={{ position: "absolute", top: 4, right: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 14, lineHeight: 1, zIndex: 2 }}>×</button>
+        </div>
+      )}
+      {(linkPreview || linkPreviewLoading) && !quoteUrl && (
         <div style={{ marginBottom: 8, padding: 10, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-tertiary)", display: "flex", gap: 10, alignItems: "flex-start", position: "relative" }}>
           {linkPreviewLoading && !linkPreview ? (
             <div style={{ fontSize: 13, color: "var(--text-muted)" }}>링크 미리보기 불러오는 중...</div>
