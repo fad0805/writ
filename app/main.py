@@ -655,7 +655,11 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
 
 @app.post("/inbox")
 async def shared_inbox(request: Request):
-    body = await request.body()
+    try:
+        body = await request.body()
+    except Exception:
+        # 클라이언트가 중간에 연결을 끊었거나 데이터 수신 실패 시 조용히 무시
+        return {"ok": False}
     if len(body) > 1024 * 1024:
         raise HTTPException(status_code=413, detail="Request body too large")
     try:
