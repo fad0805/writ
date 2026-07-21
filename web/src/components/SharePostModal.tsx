@@ -1,13 +1,15 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import PostForm from "./PostForm";
 
 export default function SharePostModal({ url, title, authorName, description, tags, content, onClose, onDone }: { url: string; title?: string; authorName?: string; description?: string; tags?: string; content?: string; onClose: () => void; onDone?: () => void }) {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onCloseRef.current(); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, []);
 
   const fullUrl = url.startsWith("http") ? url : window.location.origin + url;
   const initialContent = content || (() => {

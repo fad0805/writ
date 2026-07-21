@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { PostData } from "@/lib/api";
 import PostForm from "./PostForm";
 import { useAuth } from "@/lib/auth";
@@ -14,15 +14,17 @@ export default function ReplyModal({ post, onClose, onDone, initialContent }: { 
     const parentVis = post.visibility || "public";
     return VIS_ORDER[userVis] >= VIS_ORDER[parentVis] ? userVis : parentVis;
   }, [user, post.visibility]);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onCloseRef.current(); };
     window.addEventListener("keydown", handler);
     const ta = document.querySelector<HTMLTextAreaElement>(".reply-modal textarea, .reply-modal .textarea-ta");
     setTimeout(() => {
       if (ta) { ta.focus(); ta.selectionStart = ta.selectionEnd = ta.value.length; }
     }, 100);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, []);
 
   const mentions = useMemo(() => {
     const set = new Set<string>();
