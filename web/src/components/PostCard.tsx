@@ -78,10 +78,10 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, onRewrite,
   const [episodeMatch, setEpisodeMatch] = useState<RegExpMatchArray | null>(null);
 
   const [emojiList, setEmojiList] = useState<CustomEmoji[]>(() => {
-    if (typeof window !== "undefined" && (window as any).__emojiCache) return (window as any).__emojiCache as CustomEmoji[];
+    if (typeof window !== "undefined" && (window as any).__emojiCache)
+      return (window as any).__emojiCache as CustomEmoji[];
     return [];
   });
-
   useEffect(() => subscribeEmojis((list) => {
     (window as any).__emojiCache = list;
     setEmojiList([...list]);

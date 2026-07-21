@@ -95,11 +95,17 @@ export function invalidateEmojiCache() {
 const _emojiSubscribers: Set<(emojis: CustomEmoji[]) => void> = new Set();
 
 export function subscribeEmojis(cb: (emojis: CustomEmoji[]) => void): () => void {
-  if (cache) { cb(cache); }
+  // 이미 캐시가 있으면 마운트 직후 바로 전달
+  if (cache) { 
+    cb(cache); 
+  }
   _emojiSubscribers.add(cb);
+  // 캐시가 아직 없다면 비동기로 가져온 뒤, 모든 구독자에게 전파!
   if (!cache) {
     getCustomEmojis().then(list => {
-      _emojiSubscribers.forEach(fn => fn(list));
+      const freshList = [...list];
+      // ★ 이 부분이 핵심입니다. 로딩이 끝났을 때 모든 구독자에게 새 데이터를 쏴줍니다.
+      _emojiSubscribers.forEach(fn => fn(freshList));
     });
   }
   return () => { _emojiSubscribers.delete(cb); };
