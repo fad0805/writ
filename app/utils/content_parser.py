@@ -1,5 +1,5 @@
 import re
-from urllib.parse import quote, unquote
+from urllib.parse import quote, unquote, urlparse
 
 import nh3
 from bs4 import BeautifulSoup, NavigableString
@@ -133,6 +133,15 @@ def process_remote_post(sanitized_content: str, post: dict) -> str:
                 break
 
         if is_mention_matched and matched_uid:
+            # name 필드에 도메인이 없을 경우 href URL에서 추출
+            # (Mastodon 등 같은 인스턴스 사용자 Mention 시 name이 @user 형태로 옴)
+            if '@' not in matched_uid.lstrip('@') and raw_href.startswith('http'):
+                _rm_match = re.match(r'https?://([^/]+)/(?:@|users/)([A-Za-z0-9_.-]+)', raw_href, re.IGNORECASE)
+                if _rm_match:
+                    _domain = _rm_match.group(1).lower()
+                    _uname = _rm_match.group(2)
+                    if _domain != urlparse(BASE_URL).hostname:
+                        matched_uid = f"@{_uname}@{_domain}"
             a_tag.clear()
             a_tag.string = matched_uid
             a_tag["href"] = f"/{matched_uid}"

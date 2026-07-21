@@ -851,7 +851,10 @@ def get_user_by_handle(request: Request, username: str):
     accept = request.headers.get("Accept", "")
 
     with get_session() as session:
-        user = session.query(User).filter_by(username=username, is_remote=False).first()
+        if "@" in username:
+            user = session.query(User).filter_by(username=username, is_remote=True).first()
+        else:
+            user = session.query(User).filter_by(username=username, is_remote=False).first()
         if not user:
             raise HTTPException(status_code=404, detail="Not found")
         if getattr(user, 'is_deactivated', False):
