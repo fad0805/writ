@@ -83,7 +83,7 @@ export default function RightSidebar() {
   }, []);
 
   const renderName = (name: string) => {
-    const html = renderCustomEmojis(name, emojiMap);
+    const html = renderCustomEmojis(name, emojiMap, 14);
     return <span dangerouslySetInnerHTML={{ __html: sanitizeName(html) }} />;
   };
 
