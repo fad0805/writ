@@ -207,6 +207,11 @@ const localReactionEmojiMap = useMemo(() => {
   const buildContentHtml = () => {
     let html = post.content || "";
 
+    // ★ [핵심] 상태(emojiList)가 비어있어도 전역 캐시가 있으면 그걸 강제로 합쳐서 사용합니다!
+    const activeEmojis = emojiList.length > 0 
+      ? emojiList 
+      : ((typeof window !== "undefined" && (window as any).__emojiCache) || []);
+
     // Strip "RE: https://..." from quote posts
     if ((post as any).quote_of_id || (post as any).quote_of_ap_id) {
       html = html.replace(/(?:<span[^>]*>)?[\s\n]*RE:[\s\n]*(?:<a[^>]*>.*?<\/a>|https?:\/\/[^\s<>]+)[\s\n]*(?:<\/span>)?(?:[\s\n]*<br\s*\/?>)*/gi, '');
@@ -233,7 +238,7 @@ const localReactionEmojiMap = useMemo(() => {
     codeBlocks.forEach((block, i) => {
       html = html.replace(`\x00CODEBLOCK_${i}\x00`, block);
     });
-    html = renderCustomEmojis(html, emojiList);
+    html = renderCustomEmojis(html, activeEmojis);
     html = rewriteLinks(html, validMentions);
     return html;
   };
