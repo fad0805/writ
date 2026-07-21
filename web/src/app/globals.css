@@ -1854,10 +1854,14 @@ input[type="checkbox"] {
 .vis-badge.vis-home svg { stroke: #ba68c8; }
 .vis-badge.vis-followers svg { stroke: #81c784; }
 .vis-badge.vis-mention svg { stroke: #ffb74d; }
-.vis-btn-wrap .action-btn[data-vis="public"] .icon-wrap svg { stroke: #4fc3f7; }
-.vis-btn-wrap .action-btn[data-vis="home"] .icon-wrap svg { stroke: #ba68c8; }
-.vis-btn-wrap .action-btn[data-vis="followers"] .icon-wrap svg { stroke: #81c784; }
-.vis-btn-wrap .action-btn[data-vis="mention"] .icon-wrap svg { stroke: #ffb74d; }
+.vis-btn-wrap .action-btn[data-vis="public"] .icon-wrap svg,
+.vis-dropdown .btn[data-vis="public"] .icon-wrap svg { stroke: #4fc3f7; }
+.vis-btn-wrap .action-btn[data-vis="home"] .icon-wrap svg,
+.vis-dropdown .btn[data-vis="home"] .icon-wrap svg { stroke: #ba68c8; }
+.vis-btn-wrap .action-btn[data-vis="followers"] .icon-wrap svg,
+.vis-dropdown .btn[data-vis="followers"] .icon-wrap svg { stroke: #81c784; }
+.vis-btn-wrap .action-btn[data-vis="mention"] .icon-wrap svg,
+.vis-dropdown .btn[data-vis="mention"] .icon-wrap svg { stroke: #ffb74d; }
 
 /* ── Inline style replacements ── */
 .flex-row { display: flex; flex-direction: row; }

@@ -781,7 +781,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           {showVisPicker && (
             <div className="vis-dropdown" style={{ position: "absolute", bottom: "100%", left: 0, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8, padding: 4, zIndex: 100, display: "flex", flexDirection: "column", gap: 2 }}>
               {visOpts.map(v => (
-                <button key={v.value} type="button" className={`btn btn-small ${visibility === v.value ? "btn-primary" : "btn-outline"}`} onClick={() => { setVisibilityOverride(v.value); setShowVisPicker(false); }} style={{ textAlign: "left", justifyContent: "flex-start", gap: 6, whiteSpace: "nowrap" }}>
+                <button key={v.value} type="button" className={`btn btn-small ${visibility === v.value ? "btn-primary" : "btn-outline"}`} data-vis={v.value} onClick={() => { setVisibilityOverride(v.value); setShowVisPicker(false); }} style={{ textAlign: "left", justifyContent: "flex-start", gap: 6, whiteSpace: "nowrap" }}>
                   <Icon name={v.icon} size={14} /> {v.label}
                 </button>
               ))}
