@@ -120,7 +120,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     if (linkPreviewTimerRef.current) clearTimeout(linkPreviewTimerRef.current);
     const urlRegex = /https?:\/\/[^\s<>"')\]]+/i;
     const match = content.match(urlRegex);
-    if (!match) { setLinkPreview(null); return; }
+    if (!match) { setLinkPreview(null); if (!shareUrl || quoteUrl !== shareUrl) { setQuoteUrl(""); setQuotePost(null); } return; }
     const url = match[0].replace(/[.,;:!?)]+$/, "");
     if (linkPreview && linkPreview.url === url && !quoteUrl) return;
 
