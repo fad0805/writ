@@ -105,7 +105,7 @@ export default function MobileNav() {
         </Link>
         <Link href="/notifications" className={`mobile-nav-item${isActive("/notifications") ? " active" : ""}`}>
           <span className="mobile-nav-icon-wrap">
-            <Icon name={isActive("/notifications") ? "bell_solid" : "bell"} size={20} />
+            <img src="/alert.svg" alt="알림" width={20} height={20} style={{ display: "block" }} />
             {unreadNotifs > 0 && <span className="mobile-notif-dot" />}
           </span>
           <span>알림</span>
