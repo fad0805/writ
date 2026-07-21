@@ -7310,10 +7310,13 @@ def subscribe_push(request: Request, endpoint: str = Form(...), p256dh: str = Fo
 
 
 @router.post("/push/unsubscribe")
-def unsubscribe_push(request: Request, endpoint: str = Form(...)):
+def unsubscribe_push(request: Request, endpoint: str = Form("")):
     user = require_active_auth(request)
     with get_session() as s:
-        s.query(PushSubscription).filter_by(user_id=user.id, endpoint=endpoint).delete()
+        if endpoint:
+            s.query(PushSubscription).filter_by(user_id=user.id, endpoint=endpoint).delete()
+        else:
+            s.query(PushSubscription).filter_by(user_id=user.id).delete()
         s.commit()
     return {"ok": True}
 

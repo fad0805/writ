@@ -62,17 +62,13 @@ export async function subscribePush(): Promise<boolean> {
 export async function unsubscribePush(): Promise<boolean> {
   const reg = await navigator.serviceWorker.ready;
   const subscription = await reg.pushManager.getSubscription();
-  if (!subscription) return true;
+  if (subscription) {
+    await subscription.unsubscribe();
+  }
 
-  const endpoint = subscription.endpoint;
-  await subscription.unsubscribe();
-
-  const form = new FormData();
-  form.append("endpoint", endpoint);
   await fetch("/api/push/unsubscribe", {
     method: "POST",
     credentials: "include",
-    body: form,
   });
   return true;
 }
