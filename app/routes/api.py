@@ -747,6 +747,10 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     posts = posts[:limit]
     # Batch-load user interaction data for all remaining posts
     post_ids = [p.id for p in posts]
+    # Also include original post IDs referenced by boost pointers
+    for _p in posts:
+        if _p.boost_of_id and _p.boost_of_id not in post_ids:
+            post_ids.append(_p.boost_of_id)
     if user and post_ids:
         _all_likes = session.query(Like).filter(
             Like.user_id == user.id, Like.post_id.in_(post_ids)
@@ -2358,7 +2362,11 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         followers = s.query(Follow).filter_by(following_id=profile.id, accepted=True).order_by(desc(Follow.created_at)).limit(20).all() if show_follows else []
         following = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).order_by(desc(Follow.created_at)).limit(20).all() if show_follows else []
         # Batch-load _post_json data for all profile posts
-        _all_post_ids = list({p.id for p in posts} | set(profile.pinned_posts or []))
+        _all_post_ids = {p.id for p in posts}
+        for _p in posts:
+            if _p.boost_of_id:
+                _all_post_ids.add(_p.boost_of_id)
+        _all_post_ids = list(_all_post_ids | set(profile.pinned_posts or []))
         if user and _all_post_ids:
             _liked_ids = {l.post_id for l in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(_all_post_ids)).all()}
             _boosted_ids = {b.post_id for b in s.query(Boost).filter(Boost.user_id == user.id, Boost.post_id.in_(_all_post_ids)).all()}
