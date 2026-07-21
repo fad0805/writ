@@ -1833,7 +1833,7 @@ def api_boost_post(request: Request, post_id: int):
         # 2. 원격 작성자 본인에게 Announce 전송 (원격 글일 경우)
         if post.author.is_remote and post.author.shared_inbox_url:
             try:
-                _post_to_inbox(post.author.shared_inbox_url, announce, user)
+                threading.Thread(target=_post_to_inbox, args=(inbox, announce, user), daemon=True).start()
             except Exception as e:
                 logger.warning("Failed to send boost to author inbox: %s", e)
 
@@ -1848,7 +1848,7 @@ def api_boost_post(request: Request, post_id: int):
                     if inbox not in sent_inboxes:
                         sent_inboxes.add(inbox)
                         try:
-                            _post_to_inbox(inbox, announce, user)
+                            threading.Thread(target=_post_to_inbox, args=(inbox, announce, user), daemon=True).start()
                         except Exception as e:
                             logger.warning("Failed to fan-out boost to inbox %s: %s", inbox, e)
         except Exception as e:
