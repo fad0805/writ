@@ -1951,6 +1951,7 @@ def api_unboost_post(request: Request, post_id: int):
             try:
                 _post_to_inbox(post.author.shared_inbox_url, undo, user)
             except Exception as e:
+                logger.warning("Failed to send unboost to author inbox: %s", e)
         # 3. ★ [핵심] 내 팔로워들의 인박스로도 Undo를 뿌려주어 타임라인에서 취소 반영
         try:
             followers = s.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == user.id).all()
