@@ -13,6 +13,7 @@ from typing import Optional
 from urllib.parse import urlparse, quote, unquote
 
 import httpx
+from sqlalchemy.orm import object_session
 
 from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, UserBlock, Tag, get_session
 from app.config import BASE_URL, SECRET_KEY
@@ -695,7 +696,6 @@ def _get_instance_actor(session) -> User:
 
 
 def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optional[User] = None) -> Optional[User]:
-    import sys
     _actor_domain = urlparse(actor_url).hostname or ""
     _own_domain = urlparse(BASE_URL).hostname or ""
     if _actor_domain and _actor_domain == _own_domain:
@@ -742,8 +742,8 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             resp = _safe_fetch(actor_url, timeout=10, headers={"Accept": "application/activity+json"})
             if resp:
                 data = resp.json()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("Failed to fetch actor %s: %s", actor_url, e)
 
     if not data:
         return None
@@ -2060,33 +2060,39 @@ def _handle_like(activity: dict) -> tuple[int, str]:
 
 
 def _handle_vote(activity: dict) -> tuple[int, str]:
-    import sys
     raw_actor = activity.get("actor")
     if not raw_actor:
         return (400, "Missing actor")
     actor_url = raw_actor if isinstance(raw_actor, str) else raw_actor[0]
-    object_url = activity.get("object", "")
-    if isinstance(object_url, dict):
-        object_url = object_url.get("id", "")
-    if not object_url:
+    obj = activity.get("object", "")
+    if not obj:
+        return (200, "OK")
+    if not isinstance(obj, dict):
+        return (400, "Wrong object")
+    if obj.get('type') != "Question":
+        return (400, "Not vote")
+
+    _sign_as = None
+    post = None
+    with get_session() as session:
+        post = session.query(Post).filter_by(ap_id=obj.get("id")).first()
+        _sign_as = session.query(User).get(post.author_id) if post else None
+    if not post or not post.poll_data:
         return (200, "OK")
 
-    with get_session() as session:
-        post = session.query(Post).filter_by(ap_id=object_url).first()
-        _sign_as = session.query(User).get(post.author_id) if post else None
-    actor = _resolve_actor(actor_url, sign_as=_sign_as)
-    if not actor:
+    actor_id = ''
+    try:
+        actor = _resolve_actor(actor_url, sign_as=_sign_as)
+        if not actor:
+            return (404, "Actor not found")
+        actor_id = actor.id
+    except Exception as e:
+        logger.error("Failed to resolve actor %s: %s", actor_url, e)
         return (404, "Actor not found")
 
-    actor_id = actor.id
-
     with get_session() as session:
-        post = session.query(Post).filter_by(ap_id=object_url).first()
-        if not post or not post.poll_data:
-            return (200, "OK")
-
         # Determine which option was voted for
-        option_name = activity.get("name", "")
+        option_name = obj.get("name", "") or obj.get("content", "")
         options = post.poll_data.get("options", [])
         option_idx = -1
         if option_name:
@@ -2548,7 +2554,6 @@ def _handle_update(activity: dict) -> tuple[int, str]:
     object_data = activity.get("object", {})
     if isinstance(object_data, str):
         try:
-            import httpx
             resp = _validated_get(object_data, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, timeout=10)
             if resp is not None and resp.status_code < 300:
                 object_data = resp.json()
