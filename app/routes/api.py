@@ -2116,7 +2116,14 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
                 return {"ok": True}
             existing.option_index = option
         else:
-            s.add(Vote(user_id=user.id, post_id=post_id, option_index=option))
+            s.add(
+                Vote(
+                    user_id=user.id,
+                    post_id=post_id,
+                    option_index=option,
+                    expires_at=post.poll_data.get("expires_at")
+                )
+            )
         s.flush()
         votes = s.query(Vote.option_index, func.count(Vote.id).label("cnt")).filter(Vote.post_id == post_id).group_by(Vote.option_index).all()
         counts = {v.option_index: v.cnt for v in votes}

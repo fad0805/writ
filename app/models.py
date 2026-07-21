@@ -34,6 +34,8 @@ def generate_uuid():
 
 def now():
     return datetime.datetime.now(datetime.timezone.utc)
+def get_24hours_later():
+    return datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
 
 
 def _ap_datetime(dt):
@@ -378,8 +380,17 @@ class Post(Base):
         if self.quote_of_ap_id:
             obj.update({"quoteUrl": self.quote_of_ap_id, "quote": self.quote_of_ap_id, "quoteUri": self.quote_of_ap_id})
         if self.poll_data:
-            obj["oneOf"] = [{"type": "Note", "name": o["text"], "replies": {"type": "Collection", "totalItems": o.get("votes_count", 0)}} for o in self.poll_data.get("options", [])]
+            obj["oneOf"] = [
+                {
+                    "type": "Note",
+                    "name": o["text"],
+                    "replies": {
+                        "type": "Collection",
+                        "totalItems": o.get("votes_count", 0)
+                    }} for o in self.poll_data.get("options", [])
+            ]
             obj["votersCount"] = sum(o.get("votes_count", 0) for o in self.poll_data.get("options", []))
+            obj["endTime"] = self.poll_data.get('expires_at')
 
         # 6. 최종 수신자 정리
         cc_list.append(self.author.actor_uri().strip())
@@ -410,6 +421,7 @@ class Vote(Base):
     option_index = Column(Integer, nullable=False)
     ap_id = Column(String(1024), unique=True, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now)
+    expires_at = Column(DateTime(timezone=True), default=get_24hours_later)
 
     user = relationship("User", lazy="selectin")
     post = relationship("Post", back_populates="votes", lazy="selectin")
