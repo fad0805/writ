@@ -860,6 +860,8 @@ input:focus {
   color: var(--danger);
 }
 
+.action-btn:disabled { cursor: default; opacity: 0.5; }
+.action-btn:disabled:hover { background: none; color: var(--text-muted); }
 .action-btn {
   background: none;
   border: none;
