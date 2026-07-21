@@ -1205,8 +1205,6 @@ def api_create_post(
                                 quote_of_id = result.id
                 except:
                     pass
-        content = content.replace(share_url, "").strip()
-        content = (content + "\n\nRE: " if content else "RE: ") + share_url
     # 🌟 [추가] DB 저장 전에 로컬 쌩 텍스트 규칙으로 멘션/태그/URL을 HTML <a> 태그로 파싱!
     content_html = process_post_content(content, None)
     mentions = extract_mentions(content, None)
