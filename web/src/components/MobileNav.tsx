@@ -129,6 +129,9 @@ export default function MobileNav() {
             <Link href={`/@${user.username}`} className="mobile-more-item">
               <Icon name="user" /> <span>내 프로필</span>
             </Link>
+            <Link href="/my" className="mobile-more-item">
+              <Icon name="archive" /> <span>내 보관함</span>
+            </Link>
             <Link href="/users/settings" className="mobile-more-item">
               <Icon name="settings" /> <span>설정 관리</span>
             </Link>
