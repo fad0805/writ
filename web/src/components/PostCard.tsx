@@ -150,10 +150,22 @@ const localReactionEmojiMap = useMemo(() => {
   };
 
   const toggleBoost = async () => {
+    const prevCount = boostsCount;
     try {
-      if (boosted) { await api.unboost(post.id); setBoosted(false); setBoostsCount(Math.max(0, boostsCount - 1)); }
-      else { await api.boost(post.id); setBoosted(true); setBoostsCount(boostsCount + 1); }
-    } catch {}
+      if (boosted) {
+        setBoosted(false);
+        setBoostsCount(Math.max(0, boostsCount - 1));
+        await api.unboost(post.id);
+      }
+      else {
+        setBoosted(true);
+        setBoostsCount(boostsCount + 1);
+        await api.boost(post.id);
+      }
+    } catch {
+      setBoosted(false);
+      setBoostsCount(prevCount);
+    }
   };
 
   const handleDelete = async () => {
