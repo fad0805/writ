@@ -170,6 +170,17 @@ async def lifespan(app: FastAPI):
         _cleanup_avatars()
     except Exception:
         pass
+    try:
+        from app.models import get_session, PushSubscription
+        import sqlalchemy as _sa
+        with get_session() as s:
+            inspector = _sa.inspect(s.bind)
+            cols = [c["name"] for c in inspector.get_columns("push_subscriptions")]
+            if "device_name" not in cols:
+                s.execute(_sa.text("ALTER TABLE push_subscriptions ADD COLUMN device_name VARCHAR(256) DEFAULT ''"))
+                s.commit()
+    except Exception:
+        pass
     # Initialize VAPID keys (DB-first, then auto-generate)
     try:
         from app.config import init_vapid_keys

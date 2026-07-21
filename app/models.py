@@ -598,6 +598,7 @@ class PushSubscription(Base):
     endpoint = Column(Text, nullable=False)
     p256dh = Column(Text, nullable=False)
     auth = Column(Text, nullable=False)
+    device_name = Column(String(256), default="")
     created_at = Column(DateTime(timezone=True), default=now)
 
 

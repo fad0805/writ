@@ -49,6 +49,19 @@ export async function subscribePush(): Promise<boolean> {
   form.append("p256dh", sub.keys?.p256dh || "");
   form.append("auth", sub.keys?.auth || "");
 
+  const ua = navigator.userAgent;
+  let deviceName = "알 수 없는 기기";
+  if (ua.includes("Android")) deviceName = "Android";
+  else if (ua.includes("iPhone") || ua.includes("iPad")) deviceName = "iOS";
+  else if (ua.includes("Mac OS")) deviceName = "macOS";
+  else if (ua.includes("Windows")) deviceName = "Windows";
+  else if (ua.includes("Linux")) deviceName = "Linux";
+  if (ua.includes("Chrome") && !ua.includes("Edg")) deviceName += " Chrome";
+  else if (ua.includes("Firefox")) deviceName += " Firefox";
+  else if (ua.includes("Safari") && !ua.includes("Chrome")) deviceName += " Safari";
+  else if (ua.includes("Edg")) deviceName += " Edge";
+  form.append("device_name", deviceName);
+
   const res = await fetch("/api/push/subscribe", {
     method: "POST",
     credentials: "include",
@@ -62,13 +75,17 @@ export async function subscribePush(): Promise<boolean> {
 export async function unsubscribePush(): Promise<boolean> {
   const reg = await navigator.serviceWorker.ready;
   const subscription = await reg.pushManager.getSubscription();
-  if (subscription) {
-    await subscription.unsubscribe();
-  }
+  if (!subscription) return true;
 
+  const endpoint = subscription.endpoint;
+  await subscription.unsubscribe();
+
+  const form = new FormData();
+  form.append("endpoint", endpoint);
   await fetch("/api/push/unsubscribe", {
     method: "POST",
     credentials: "include",
+    body: form,
   });
   return true;
 }
