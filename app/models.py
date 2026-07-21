@@ -318,7 +318,7 @@ class Post(Base):
                     emoji = _es.query(CustomEmoji).filter_by(keyword=kw).first()
                     if emoji:
                         sub = "remote" if (emoji.domain or emoji.category == "remote") else "local"
-                        url = f"{BASE_URL}/emojis/{sub}/{emoji.file_name}"
+                        url = emoji.source_url
                         tags.append({
                             "type": "Emoji", "id": f"{BASE_URL}/emojis/{kw}", "name": f":{kw}:",
                             "icon": {"type": "Image", "mediaType": "image/webp", "url": url}
