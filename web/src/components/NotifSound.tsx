@@ -42,7 +42,7 @@ export default function NotifSound() {
             if (typeof window !== "undefined") (window as any).__unreadNotifs = parsed.unread;
             window.dispatchEvent(new Event("notifchange"));
           }
-          if ((parsed.sound || (parsed.unread !== undefined && parsed.unread > 0)) && audioRef.current && isNotifSoundEnabled()) {
+          if (parsed.sound && audioRef.current && isNotifSoundEnabled()) {
             audioRef.current.currentTime = 0;
             audioRef.current.play().catch(() => {});
           }
