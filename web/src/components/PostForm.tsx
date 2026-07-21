@@ -775,7 +775,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       )}
       <div className="reply-form-footer">
         <div className="vis-btn-wrap" style={{ position: "relative" }}>
-          <button type="button" className="action-btn" onClick={() => setShowVisPicker(!showVisPicker)} title="공개 설정">
+          <button type="button" className="action-btn" data-vis={visibility} onClick={() => setShowVisPicker(!showVisPicker)} title="공개 설정">
             <Icon name={visOpts.find(v => v.value === visibility)?.icon || "globe"} />
           </button>
           {showVisPicker && (
