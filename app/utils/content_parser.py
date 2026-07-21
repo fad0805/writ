@@ -142,6 +142,11 @@ def process_remote_post(sanitized_content: str, post: dict) -> str:
                     _uname = _rm_match.group(2)
                     if _domain != urlparse(BASE_URL).hostname:
                         matched_uid = f"@{_uname}@{_domain}"
+            # BASE_URL 도메인이 포함된 matched_uid는 로컬 형식으로 변환
+            _hostname = urlparse(BASE_URL).hostname
+            _mparts = matched_uid.lstrip('@').split('@', 1)
+            if len(_mparts) == 2 and _mparts[1] == _hostname:
+                matched_uid = f"@{_mparts[0]}"
             a_tag.clear()
             a_tag.string = matched_uid
             a_tag["href"] = f"/{matched_uid}"
@@ -155,9 +160,12 @@ def process_remote_post(sanitized_content: str, post: dict) -> str:
             if remote_url_match:
                 domain = remote_url_match.group(1).lower()
                 username = remote_url_match.group(2)
-                a_tag.clear()
-                a_tag.string = f"@{username}@{domain}"
-                a_tag["href"] = f"/@{username}@{domain}"
+                if domain == urlparse(BASE_URL).hostname:
+                    a_tag.string = f"@{username}"
+                    a_tag["href"] = f"/@{username}"
+                else:
+                    a_tag.string = f"@{username}@{domain}"
+                    a_tag["href"] = f"/@{username}@{domain}"
                 a_tag["class"] = "u-url mention"
                 a_tag.attrs.pop("target", None)
                 continue
