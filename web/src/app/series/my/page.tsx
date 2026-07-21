@@ -20,7 +20,7 @@ export default function MyNovelsPage() {
   useEffect(() => {
     const h = (e: TouchEvent) => {
       const dx = e.changedTouches[0].clientX - touchStartX.current;
-      if (Math.abs(dx) > 120 && dx < 0) router.push("/series");
+      if (Math.abs(dx) > 120 && dx < 0) router.push("/series/followed");
     };
     document.addEventListener("touchend", h, { passive: true });
     return () => document.removeEventListener("touchend", h);
