@@ -5,8 +5,8 @@ self.addEventListener("push", function (event) {
     const title = data.title || "WRIT";
     const options = {
       body: data.body || "",
-      icon: data.icon || "/alert.svg",
-      badge: data.icon || "/alert.svg",
+      icon: data.icon || "/icons/icon-192.png",
+      badge: data.icon || "/icons/icon-192.png",
       data: { url: data.url || "/notifications" },
       tag: "writ-notif",
       renotify: true,
