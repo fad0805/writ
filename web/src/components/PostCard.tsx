@@ -82,10 +82,12 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, onRewrite,
       return (window as any).__emojiCache as CustomEmoji[];
     return [];
   });
-  useEffect(() => subscribeEmojis((list) => {
-    (window as any).__emojiCache = list;
-    setEmojiList([...list]);
-  }), []);
+  useEffect(() => {
+    const unsubscribe = subscribeEmojis((list) => {
+      setEmojiList([...list]);
+    });
+    return () => unsubscribe();
+  }, []);
   const [reactions, setReactions] = useState(post.reactions || {});
   const [myReaction, setMyReaction] = useState(post.my_reaction || null);
   const reactionEmojiMap = useMemo(() => {
@@ -243,6 +245,7 @@ const localReactionEmojiMap = useMemo(() => {
     return html;
   };
 
+
   // useState 초기화 시점에는 빈 문자열 세팅 (어차피 useEffect가 즉시 실행되어 채워줌)
   const [contentHtml, setContentHtml] = useState("");
 
@@ -266,7 +269,7 @@ const localReactionEmojiMap = useMemo(() => {
     // 💡 (만약 기존 프로젝트에서 이 useEffect 내부에 기존 fetch 함수나 
     // ID를 추출해 갱신하는 코드가 들어있었다면 바로 여기에 위치하면 됩니다!)
 
-  }, [post.id, post.content, post.summary, emojiList]);
+  }, [post.id, post.content, post.summary]);
 
   // 4. 코드 복사 버튼 플러그인 Effect (기존 코드 그대로 유지)
   useEffect(() => {
