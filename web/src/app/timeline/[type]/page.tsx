@@ -147,6 +147,7 @@ export default function TimelinePage() {
     const tabs = ["home", "social", "local", "federated"];
     const currentIdx = tabs.indexOf(tlType);
     const handler = (e: TouchEvent) => {
+      if ((e.target as HTMLElement).closest(".reply-modal-backdrop")) return;
       const dx = e.changedTouches[0].clientX - touchStartX.current;
       if (Math.abs(dx) < 120) return;
       if (dx > 0 && currentIdx > 0) router.push(`/timeline/${tabs[currentIdx - 1]}`);
