@@ -1946,6 +1946,7 @@ def api_unboost_post(request: Request, post_id: int):
     return {"ok": True}
 
 
+
 @router.post("/posts/{post_id}/react")
 def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
     user = require_active_auth(request)
