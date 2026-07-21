@@ -1820,13 +1820,34 @@ def api_boost_post(request: Request, post_id: int):
                 "actor": user.actor_uri(),
                 "object": post.ap_id,
                 "to": ["https://www.w3.org/ns/activitystreams#Public"],
-                "cc": [post.author.actor_uri()],
+                "cc": [
+                    post.author.actor_uri(),
+                    f'{BASE_URL}/users/{user.username}/followers'
+                ],
             }
             inbox = post.author.shared_inbox_url
             try:
                 _post_to_inbox(inbox, announce, user)
             except Exception:
                 pass
+
+        # 2. ★ [핵심] 내 팔로워들의 인박스로도 Announce를 뿌려주어야 페더레이션 팔로워들에게 퍼집니다!
+        try:
+            # 내 계정을 팔로우하고 있는 인스턴스 밖(원격) 팔로워들의 공유 인박스(shared_inbox) 혹은 개별 인박스 목록 수집
+            # (프로젝트 내에 팔로워 목록을 조회하는 기존 함수가 있다면 그것을 활용하세요)
+            followers = s.query(User).join(Follow, Follow.user_id == User.id).filter(Follow.target_id == user.id).all()
+            
+            # 중복 전송을 막기 위해 shared_inbox 주소 단위로 묶거나 개별 인박스로 전송
+            sent_inboxes = set()
+            for follower in followers:
+                if follower.is_remote and (follower.shared_inbox_url or follower.inbox_url):
+                    inbox = follower.shared_inbox_url or follower.inbox_url
+                    if inbox not in sent_inboxes:
+                        sent_inboxes.add(inbox)
+                        # 백그라운드 태스크나 안전한 try-except로 전송
+                        _post_to_inbox(inbox, announce, user)
+        except Exception as e:
+            logger.warning("Failed to fan-out boost to followers: %s", e)
     return {"ok": True}
 
 
