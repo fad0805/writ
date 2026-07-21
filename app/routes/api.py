@@ -1806,51 +1806,53 @@ def api_boost_post(request: Request, post_id: int):
                 broadcast_refresh_notifs(post.author_id)
                 send_push_to_user(post.author_id, "boost", user.username, post_id)
                 broadcast_notif_sound(post.author_id)
+
+        # 1. Announce 활동(Activity) 페이로드 생성 (로컬/원격 글 공통)
+        announce_id = f"{BASE_URL}/boosts/{uuid.uuid4()}"
+
         if post.author.is_remote and post.author.shared_inbox_url:
-            # 1. Announce 활동(Activity) 페이로드 생성 (로컬/원격 글 공통)
-            announce_id = f"{BASE_URL}/boosts/{uuid.uuid4()}"
             # 기존 Boost 레코드나 새로 생긴 Boost 레코드에 ap_id 기록
             boost_rec = existing or s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
             if boost_rec:
                 boost_rec.ap_id = announce_id
                 s.commit()
 
-            announce = {
-                "@context": "https://www.w3.org/ns/activitystreams",
-                "id": announce_id,
-                "type": "Announce",
-                "actor": user.actor_uri(),
-                "object": post.ap_id,
-                "to": ["https://www.w3.org/ns/activitystreams#Public"],
-                "cc": [
-                    post.author.actor_uri(),
-                    f'{BASE_URL}/users/{user.username}/followers'
-                ],
-            }
+        announce = {
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": announce_id,
+            "type": "Announce",
+            "actor": user.actor_uri(),
+            "object": post.ap_id,
+            "to": ["https://www.w3.org/ns/activitystreams#Public"],
+            "cc": [
+                post.author.actor_uri(),
+                f'{BASE_URL}/users/{user.username}/followers'
+            ],
+        }
 
-            # 2. 원격 작성자 본인에게 Announce 전송 (원격 글일 경우)
-            if post.author.is_remote and post.author.shared_inbox_url:
-                try:
-                    _post_to_inbox(post.author.shared_inbox_url, announce, user)
-                except Exception as e:
-                    logger.warning("Failed to send boost to author inbox: %s", e)
-
-            # 3. 내 원격 팔로워들의 인박스로 Fan-out 전송
+        # 2. 원격 작성자 본인에게 Announce 전송 (원격 글일 경우)
+        if post.author.is_remote and post.author.shared_inbox_url:
             try:
-                # 프로젝트 내 기존 팔로워 조회 방식에 맞춰 정렬 (예: Follow.following_id == user.id 등)
-                followers = s.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == user.id).all()
-                sent_inboxes = set()
-                for follower in followers:
-                    if follower.is_remote and (follower.shared_inbox_url or follower.inbox_url):
-                        inbox = follower.shared_inbox_url or follower.inbox_url
-                        if inbox not in sent_inboxes:
-                            sent_inboxes.add(inbox)
-                            try:
-                                _post_to_inbox(inbox, announce, user)
-                            except Exception as e:
-                                logger.warning("Failed to fan-out boost to inbox %s: %s", inbox, e)
+                _post_to_inbox(post.author.shared_inbox_url, announce, user)
             except Exception as e:
-                logger.warning("Failed to query followers for boost fan-out: %s", e)
+                logger.warning("Failed to send boost to author inbox: %s", e)
+
+        # 3. 내 원격 팔로워들의 인박스로 Fan-out 전송
+        try:
+            # 프로젝트 내 기존 팔로워 조회 방식에 맞춰 정렬 (예: Follow.following_id == user.id 등)
+            followers = s.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == user.id).all()
+            sent_inboxes = set()
+            for follower in followers:
+                if follower.is_remote and (follower.shared_inbox_url or follower.inbox_url):
+                    inbox = follower.shared_inbox_url or follower.inbox_url
+                    if inbox not in sent_inboxes:
+                        sent_inboxes.add(inbox)
+                        try:
+                            _post_to_inbox(inbox, announce, user)
+                        except Exception as e:
+                            logger.warning("Failed to fan-out boost to inbox %s: %s", inbox, e)
+        except Exception as e:
+            logger.warning("Failed to query followers for boost fan-out: %s", e)
 
         return {"ok": True}
 
