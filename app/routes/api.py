@@ -1183,11 +1183,30 @@ def api_create_post(
     link_preview: str = Form(""),
 ):
     user = require_active_auth(request)
+    quote_of_ap_id = ""
+    quote_of_id = None
     if share_url:
-        if "/episodes/" in share_url:
-            content = content + "\n\nepisode: " + share_url
-        else:
-            content = content + "\n\nseries: " + share_url
+        with get_session() as _qs:
+            local = _qs.query(Post).filter(Post.ap_id == share_url).first()
+            if local:
+                quote_of_ap_id = local.ap_id
+                quote_of_id = local.id
+            else:
+                try:
+                    from app.activitypub import _ap_fetch as _ap_fetch_quote
+                    data = _ap_fetch_quote(share_url, user)
+                    if data:
+                        obj = data.get("object", data)
+                        if obj.get("type") in ("Note", "Article"):
+                            from app.activitypub import _fetch_and_save_ap_object as _fsao
+                            result = _fsao(obj, user)
+                            if result:
+                                quote_of_ap_id = result.ap_id
+                                quote_of_id = result.id
+                except:
+                    pass
+        if not quote_of_ap_id:
+            content = content + "\n\n" + share_url
     # 🌟 [추가] DB 저장 전에 로컬 쌩 텍스트 규칙으로 멘션/태그/URL을 HTML <a> 태그로 파싱!
     content_html = process_post_content(content, None)
     mentions = extract_mentions(content, None)
@@ -1235,6 +1254,8 @@ def api_create_post(
             ap_id="",
             is_dm=bool(dm_target_id),
             is_sensitive=is_sensitive or author_is_sensitive,
+            quote_of_ap_id=quote_of_ap_id,
+            quote_of_id=quote_of_id,
         )
         import json as _json
         if link_preview:
