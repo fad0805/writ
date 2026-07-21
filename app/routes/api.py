@@ -2339,9 +2339,18 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         has_more = len(posts) > limit
         posts = [p for p in posts[:limit] if _can_view(p, user, s)]
         # Deduplicate: if a post appears both as original and as boost pointer, keep only the boost
-        _boosted_original_ids = {p.boost_of_id for p in posts if p.boost_of_id}
-        if _boosted_original_ids:
-            posts = [p for p in posts if not (p.id in _boosted_original_ids and not p.boost_of_id)]
+        seen_ids = set()
+        deduped = []
+        for p in posts:
+            if p.boost_of_id:
+                if p.boost_of_id in seen_ids:
+                    continue
+                seen_ids.add(p.boost_of_id)
+            elif p.id in seen_ids and (not user or p.author_id != user.id):
+                continue
+            seen_ids.add(p.id)
+            deduped.append(p)
+        posts = deduped
         total_posts = s.query(Post).filter(
             or_(
                 Post.author_id == profile.id,
@@ -2403,10 +2412,12 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                     _reactions_map[pid] = {}
                 _reactions_map[pid][react] = cnt
             # Batch-load booster info to avoid N+1 queries in _post_json
+            # On profile page, only show boosts by the profile user
             _booster_map = {}
             _three_hours_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=10800)
             _boost_rows = s.query(Boost).filter(
                 Boost.post_id.in_(_all_post_ids),
+                Boost.user_id == profile.id,
                 Boost.created_at > _three_hours_ago,
             ).order_by(desc(Boost.created_at)).all()
             _booster_user_ids = {b.user_id for b in _boost_rows}
