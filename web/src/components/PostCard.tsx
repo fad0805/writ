@@ -217,14 +217,19 @@ const localReactionEmojiMap = useMemo(() => {
   })() : "";
 
   const validMentions = useMemo(() => new Set(post.mentioned_handles || []), [post.mentioned_handles]);
+
   // 2. 순수한 HTML 변환 함수 (Setter 함수들 완전 제거)
   const buildContentHtml = () => {
     let html = post.content || "";
 
-    // ★ [핵심] 상태(emojiList)가 비어있어도 전역 캐시가 있으면 그걸 강제로 합쳐서 사용합니다!
-    const activeEmojis = emojiList.length > 0 
-      ? emojiList 
-      : ((typeof window !== "undefined" && (window as any).__emojiCache) || []);
+    // 🌟 [핵심 개선] 컴포넌트 state뿐만 아니라 window 전역 캐시 및 로컬 맵을 무조건 총동원합니다.
+    const globalCache = (typeof window !== "undefined" && (window as any).__emojiCache) || [];
+    const activeEmojis = [...emojiList, ...globalCache];
+
+    // 중복 제거 (keyword 기준)
+    const uniqueEmojis = Array.from(
+      new Map(activeEmojis.map(e => [e.keyword, e])).values()
+    );
 
     // Strip "RE: https://..." from quote posts
     if ((post as any).quote_of_id || (post as any).quote_of_ap_id) {
@@ -252,7 +257,7 @@ const localReactionEmojiMap = useMemo(() => {
     codeBlocks.forEach((block, i) => {
       html = html.replace(`\x00CODEBLOCK_${i}\x00`, block);
     });
-    html = renderCustomEmojis(html, activeEmojis);
+    html = renderCustomEmojis(html, uniqueEmojis);
     html = rewriteLinks(html, validMentions);
     return html;
   };
