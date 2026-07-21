@@ -1838,7 +1838,7 @@ def api_boost_post(request: Request, post_id: int):
             # 3. 내 원격 팔로워들의 인박스로 Fan-out 전송
             try:
                 # 프로젝트 내 기존 팔로워 조회 방식에 맞춰 정렬 (예: Follow.following_id == user.id 등)
-                followers = s.query(User).join(Follow, Follow.user_id == User.id).filter(Follow.target_id == user.id).all()
+                followers = s.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == user.id).all()
                 sent_inboxes = set()
                 for follower in followers:
                     if follower.is_remote and (follower.shared_inbox_url or follower.inbox_url):
