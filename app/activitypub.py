@@ -1512,7 +1512,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         options[existing_vote.option_index]["votes_count"] = max(0, options[existing_vote.option_index].get("votes_count", 0) - 1)
                         existing_vote.option_index = option_idx
                     else:
-                        session.add(vote(user_id=actor_id, post_id=poll_post.id, option_index=option_idx))
+                        session.add(Vote(user_id=actor_id, post_id=poll_post.id, option_index=option_idx))
                     import copy
                     new_options = copy.deepcopy(options)
                     new_options[option_idx]["votes_count"] = new_options[option_idx].get("votes_count", 0) + 1
