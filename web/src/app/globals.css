@@ -1283,6 +1283,7 @@ input[type="checkbox"] {
 .notif-mini-list {
   max-height: 420px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 .novel-mini-list {
   margin-bottom: 10px;
