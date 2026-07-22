@@ -54,13 +54,21 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
     html = renderCustomEmojis(html, emojiMap);
     return sanitizePost(rewriteLinks(html, validMentions));
   })();
-  const makeUrl = ((post: any) => {
-    if (post.type === 'series') return `/series/@${post.author.username}/${post.novel.number}`;
-    if (post.type === 'episode') return `/series/${post.novel.id}/episodes/${post.episode.id}`;
-   if (post.number) {
-      return post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`
+  const makeUrl = ((post: any): string => {
+    if (post.type === 'series' && post.author?.username && post.novel?.number) {
+      return `/series/@${post.author.username}/${post.novel.number}`;
     }
-  })
+    if (post.type === 'episode' && post.novel?.id && post.episode?.id) {
+      return `/series/${post.novel.id}/episodes/${post.episode.id}`;
+    }
+    if (post.number && post.author?.username) {
+      return `/@${post.author.username}/${post.number}`;
+    }
+    if (post.id) {
+      return `/post/${post.id}`;
+    }
+    return '#'; // 모든 조건에 해당 안 될 때의 기본 안전 경로
+  });
 
   if (!post || !post.author) return null;
   return (
