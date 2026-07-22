@@ -2,7 +2,7 @@ import { SIZES } from "@/const/const";
 import { EDITOR_EXTENSIONS } from "@/const/extensions";
 import { Editor } from "@tiptap/core";
 import { useEditor } from "@tiptap/react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 export function useEditorInit({value, onChange}: {value: string; onChange: (html: string) => void}) {
   const editor = useEditor({
@@ -10,18 +10,29 @@ export function useEditorInit({value, onChange}: {value: string; onChange: (html
     content: value || "",
   })
 
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
   useEffect(() => {
     if (!editor) return;
 
     const handler = ({editor}: {editor: Editor}) => {
-      onChange(editor.getHTML())
+      onChangeRef.current(editor.getHTML())
     }
     editor.on("update", handler);
 
     return () => {
       editor.off("update", handler);
     }
-  }, [editor, onChange])
+  }, [editor])
+
+  useEffect(() => {
+    if (!editor || value === undefined) return;
+    const incoming = value || "";
+    if (editor.getHTML() !== incoming) {
+      editor.commands.setContent(incoming, { emitUpdate: false });
+    }
+  }, [editor, value])
 
   return editor;
 }
