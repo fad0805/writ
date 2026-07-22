@@ -84,7 +84,11 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, onRewrite,
   });
   useEffect(() => {
     const unsubscribe = subscribeEmojis((list) => {
-      setEmojiList([...list]);
+      setEmojiList((prev) => {
+        if (prev === list) return prev;
+        if (prev.length === list.length && prev.every((e, i) => e.keyword === list[i]?.keyword && e.url === list[i]?.url)) return prev;
+        return [...list];
+      });
     });
     return () => unsubscribe();
   }, []);
