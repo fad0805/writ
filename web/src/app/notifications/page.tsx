@@ -37,6 +37,7 @@ const NOTIF_ICONS: Record<string, string> = {
   post: "bell_solid",
   moderation: "shield_filled",
   new_episode: "book",
+  poll_ended: "chart",
 };
 
 export default function NotificationsPage() {
@@ -263,7 +264,7 @@ export default function NotificationsPage() {
             }}
             style={{ cursor: ((n.type === "moderation" && (n.metadata?.type === "report" || n.metadata?.type === "new_user")) || (n.type === "mention" && n.post?.is_dm) || (n.type === "new_episode")) ? "pointer" : undefined }}>
             <div className="notif-icon notif-icon-dynamic" style={{ color: n.type === "like" ? "#f1c40f" : n.type === "boost" ? "var(--accent)" : n.type === "follow" ? "#4fc3f7" : n.type === "new_episode" ? "#9b59b6" : (n.type === "moderation" && n.metadata?.type === "new_user") ? "#4fc3f7" : n.type === "moderation" ? "var(--danger)" : "var(--text-muted)", borderRadius: 8, overflow: "hidden", flexShrink: 0 }}>
-              {n.from_user && (n.type === "like" || n.type === "boost" || n.type === "follow" || n.type === "follow_request" || n.type === "mention" || n.type === "new_episode" || (n.type === "moderation" && n.metadata?.type === "new_user") || (n.type === "moderation" && n.metadata?.type === "migrate_request")) ? (
+              {n.from_user && (n.type === "like" || n.type === "boost" || n.type === "follow" || n.type === "follow_request" || n.type === "mention" || n.type === "new_episode" || n.type === "poll_ended" || (n.type === "moderation" && n.metadata?.type === "new_user") || (n.type === "moderation" && n.metadata?.type === "migrate_request")) ? (
                 <Avatar user={n.from_user} style={{ width: 40, height: 40, borderRadius: 8 }} />
               ) : (
                 <Icon name={(n.type === "moderation" && n.metadata?.type === "new_user") ? "user_solid" : NOTIF_ICONS[n.type] || "bell"} size={20} />
@@ -304,6 +305,8 @@ export default function NotificationsPage() {
                 </div></>
               ) : n.type === "moderation" ? (
                 <><span className="font-bold" style={{ color: "var(--danger)" }}>{actionNames[n.metadata?.action] || n.metadata?.action || "중재"}</span> 조치가 적용되었습니다.</>
+              ) : n.type === "poll_ended" ? (
+                <>회원님이 참여한 투표가 끝났습니다</>
               ) : (
                 <>{n.from_user && (
                   <Link href={`/@${n.from_user.username}`} className="notif-from-link">

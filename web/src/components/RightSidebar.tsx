@@ -150,7 +150,15 @@ export default function RightSidebar() {
               const msg = n.metadata?.is_author ? "내 투표가 종료되었습니다" : "참여한 투표가 종료되었습니다";
               return (
                 pollPost ? <MiniPostCard key={n.id} post={pollPost} notifType={n.type} notifLabel={
-                  <>{msg}{pollText && <> — {pollText}</>}</>
+                  <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {n.from_user && (
+                      <Link href={`/@${n.from_user.username}`} style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text-primary)", fontWeight: 600 }} onClick={(e) => e.stopPropagation()}>
+                        <Avatar user={n.from_user} style={{ width: 18, height: 18, borderRadius: 4 }} />
+                        <span>{renderName(n.from_user.display_name || n.from_user.username)}</span>
+                      </Link>
+                    )}
+                    <span>{msg}</span>
+                  </span>
                 } /> : <div key={n.id} />
               );
             }
