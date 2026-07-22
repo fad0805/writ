@@ -10,11 +10,11 @@ export default function FavoritesPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [offset, setOffset] = useState(20);
+  const [offset, setOffset] = useState(10);
 
   const load = useCallback(() => {
     setLoading(true);
-    api.getFavorites(20, 0)
+    api.getFavorites(10, 0)
       .then((d) => { setPosts(d.posts); setHasMore(d.has_more); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
