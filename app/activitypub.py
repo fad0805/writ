@@ -1753,6 +1753,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             reply_to_post = None
             if reply_to_post_id:
                 reply_to_post = session.query(Post).get(reply_to_post_id)
+                if not reply_to_post:
+                    reply_to_post_id = None
 
             post = Post(
                 author_id=actor_id,
