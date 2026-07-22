@@ -1055,6 +1055,25 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
     return (200, "Accepted follow")
 
 
+def _retry_fetch_reply(post_id: int, in_reply_to_ap_id: str):
+    """Background: fetch remote parent and link to local post."""
+    import threading
+    def _worker():
+        try:
+            with get_session() as s:
+                post = s.query(Post).get(post_id)
+                if not post or post.in_reply_to_id:
+                    return
+                signer = s.query(User).filter_by(id=post.author_id).first() or _get_instance_actor(s)
+                parent = _fetch_remote_post(in_reply_to_ap_id, signer, s)
+                if parent:
+                    post.in_reply_to_id = parent.id
+                    s.commit()
+        except Exception as e:
+            print(f"[RETRY-REPLY] failed post_id={post_id} err={e}", flush=True)
+    threading.Thread(target=_worker, daemon=True).start()
+
+
 def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     """Fetch a remote AP object and save it as a Post. Returns the Post or None."""
     if _depth > 3 or not url:
@@ -1755,11 +1774,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             reply_to_post = None
             if reply_to_post_id:
                 reply_to_post = session.query(Post).get(reply_to_post_id)
-            if not reply_to_post and in_reply_to:
-                _signer = session.query(User).filter_by(id=actor_id).first() or _get_instance_actor(session)
-                reply_to_post = _fetch_remote_post(in_reply_to, _signer, session)
-                if reply_to_post:
-                    reply_to_post_id = reply_to_post.id
 
             post = Post(
                 author_id=actor_id,
@@ -1790,6 +1804,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 post.link_preview = link_preview
             session.add(post)
             session.flush()
+
+            # Background retry if remote parent not found
+            if in_reply_to and not reply_to_post_id:
+                _retry_fetch_reply(post.id, in_reply_to)
 
             # Resolve and set hashtag tags
             tag_list = []
