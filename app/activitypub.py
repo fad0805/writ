@@ -1753,8 +1753,11 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             reply_to_post = None
             if reply_to_post_id:
                 reply_to_post = session.query(Post).get(reply_to_post_id)
-                if not reply_to_post:
-                    reply_to_post_id = None
+            if not reply_to_post and in_reply_to:
+                _signer = session.query(User).filter_by(id=actor_id).first() or _get_instance_actor(session)
+                reply_to_post = _fetch_remote_post(in_reply_to, _signer, session)
+                if reply_to_post:
+                    reply_to_post_id = reply_to_post.id
 
             post = Post(
                 author_id=actor_id,
