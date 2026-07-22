@@ -6,6 +6,7 @@ import { api, NotificationData, User } from "@/lib/api";
 import Link from "next/link";
 import PostCard from "@/components/PostCard";
 import Icon from "@/components/Icon";
+import Avatar from "@/components/Avatar";
 import DirectUserCard from "@/components/DirectUserCard";
 import InfiniteScroll from "@/components/InfiniteScroll";
 import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
@@ -261,13 +262,20 @@ export default function NotificationsPage() {
               else if (n.type === "new_episode" && n.metadata?.novel_id && n.metadata?.episode_id) router.push(`/series/${n.metadata.novel_id}/episodes/${n.metadata.episode_id}`);
             }}
             style={{ cursor: ((n.type === "moderation" && (n.metadata?.type === "report" || n.metadata?.type === "new_user")) || (n.type === "mention" && n.post?.is_dm) || (n.type === "new_episode")) ? "pointer" : undefined }}>
-            <div className="notif-icon notif-icon-dynamic" style={{ color: n.type === "like" ? "#f1c40f" : n.type === "boost" ? "var(--accent)" : n.type === "follow" ? "#4fc3f7" : n.type === "new_episode" ? "#9b59b6" : (n.type === "moderation" && n.metadata?.type === "new_user") ? "#4fc3f7" : n.type === "moderation" ? "var(--danger)" : "var(--text-muted)" }}>
-              <Icon name={(n.type === "moderation" && n.metadata?.type === "new_user") ? "user_solid" : NOTIF_ICONS[n.type] || "bell"} size={20} />
+            <div className="notif-icon notif-icon-dynamic" style={{ color: n.type === "like" ? "#f1c40f" : n.type === "boost" ? "var(--accent)" : n.type === "follow" ? "#4fc3f7" : n.type === "new_episode" ? "#9b59b6" : (n.type === "moderation" && n.metadata?.type === "new_user") ? "#4fc3f7" : n.type === "moderation" ? "var(--danger)" : "var(--text-muted)", borderRadius: 8, overflow: "hidden", flexShrink: 0 }}>
+              {n.from_user && (n.type === "like" || n.type === "boost" || n.type === "follow" || n.type === "follow_request" || n.type === "new_episode" || (n.type === "moderation" && n.metadata?.type === "new_user") || (n.type === "moderation" && n.metadata?.type === "migrate_request")) ? (
+                <Avatar user={n.from_user} style={{ width: 40, height: 40, borderRadius: 8 }} />
+              ) : (
+                <Icon name={(n.type === "moderation" && n.metadata?.type === "new_user") ? "user_solid" : NOTIF_ICONS[n.type] || "bell"} size={20} />
+              )}
             </div>
             <div className="notif-body">
               {n.type === "moderation" && n.metadata?.type === "report" ? (
                 <>
-                  <Link href={`/@${n.from_user?.username}`} className="notif-from-link"><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user?.display_name || "", emojiMap)) }} /></Link>{" "}
+                  <Link href={`/@${n.from_user?.username}`} className="notif-from-link" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    {n.from_user && <Avatar user={n.from_user} style={{ width: 18, height: 18, borderRadius: 4, verticalAlign: "middle" }} />}
+                    <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user?.display_name || "", emojiMap)) }} />
+                  </Link>{" "}
                   님이 <strong>{targetTypeNames[n.metadata.target_type] || n.metadata.target_type}</strong>을(를) 신고했습니다
                   <div className="notif-mod-message">
                     <div style={{ fontSize: 13, marginBottom: 2 }}>
@@ -279,9 +287,15 @@ export default function NotificationsPage() {
                   </div>
                 </>
               ) : n.type === "moderation" && n.metadata?.type === "new_user" ? (
-                <><Link href={`/@${n.from_user?.username}`} className="notif-from-link"><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user?.display_name || "", emojiMap)) }} /></Link> 님이 가입했습니다</>
+                <><Link href={`/@${n.from_user?.username}`} className="notif-from-link" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  {n.from_user && <Avatar user={n.from_user} style={{ width: 18, height: 18, borderRadius: 4, verticalAlign: "middle" }} />}
+                  <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user?.display_name || "", emojiMap)) }} />
+                </Link> 님이 가입했습니다</>
               ) : n.type === "moderation" && n.metadata?.type === "migrate_request" ? (
-                <><Link href={`/@${n.from_user?.username}`} className="notif-from-link"><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user?.display_name || n.from_user?.username || "", emojiMap)) }} /></Link> 님이 계정 이전을 요청했습니다
+                <><Link href={`/@${n.from_user?.username}`} className="notif-from-link" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  {n.from_user && <Avatar user={n.from_user} style={{ width: 18, height: 18, borderRadius: 4, verticalAlign: "middle" }} />}
+                  <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user?.display_name || n.from_user?.username || "", emojiMap)) }} />
+                </Link> 님이 계정 이전을 요청했습니다
                 <div style={{ marginTop: 6, display: "flex", gap: 6 }}>
                   <button onClick={async () => {
                     const form = new FormData();
@@ -301,7 +315,8 @@ export default function NotificationsPage() {
                 <><span className="font-bold" style={{ color: "var(--danger)" }}>{actionNames[n.metadata?.action] || n.metadata?.action || "중재"}</span> 조치가 적용되었습니다.</>
               ) : (
                 <>{n.from_user && (
-                  <Link href={`/@${n.from_user.username}`} className="notif-from-link">
+                  <Link href={`/@${n.from_user.username}`} className="notif-from-link" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <Avatar user={n.from_user} style={{ width: 18, height: 18, borderRadius: 4, verticalAlign: "middle" }} />
                     <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user.display_name, emojiMap)) }} />
                   </Link>
                 )}{" "}
