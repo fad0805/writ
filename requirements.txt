@@ -42,3 +42,4 @@ alembic==1.14.1
 pywebpush==2.0.0
 nh3==0.3.6
 bs4==0.0.2
+psutil==5.9.8

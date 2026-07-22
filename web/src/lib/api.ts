@@ -83,6 +83,7 @@ export interface User {
   pinned_posts?: number[];
   pinned_series?: number[];
   enable_reactions?: boolean;
+  post_lifetime?: number;
   remote_url?: string;
 }
 

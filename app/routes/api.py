@@ -252,6 +252,7 @@ def _user_json(u):
         ] if hasattr(u, 'custom_fields') else [],
         "profile_hashtags": (u.profile_hashtags or []) if hasattr(u, 'profile_hashtags') else [],
         "enable_reactions": getattr(u, 'enable_reactions', True),
+        "post_lifetime": getattr(u, 'post_lifetime', 0) or 0,
         "aliases": (u.aliases or []) if hasattr(u, 'aliases') else [],
         "moved_to": getattr(u, 'moved_to', '') or '',
         "remote_followers_count": getattr(u, 'remote_followers_count', 0) or 0,
@@ -3937,7 +3938,8 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
                         show_badge: bool = Form(False),
                         is_bot: bool = Form(False),
                         follow_list_visibility: str = Form("public"),
-                        enable_reactions: bool = Form(True)):
+                        enable_reactions: bool = Form(True),
+                        post_lifetime: int = Form(0)):
     user = require_auth(request)
     valid_post = ("public", "home", "followers", "mention")
     if default_visibility not in valid_post:
@@ -3946,6 +3948,9 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
         episode_default_visibility = "public"
     if follow_list_visibility not in ("public", "private"):
         follow_list_visibility = "public"
+    valid_lifetimes = [0, 7, 14, 30, 60, 90, 180, 365, 730]
+    if post_lifetime not in valid_lifetimes:
+        post_lifetime = 0
     with get_session() as s:
         db = s.query(User).filter_by(id=user.id).first()
         db.default_visibility = default_visibility
@@ -3954,6 +3959,7 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
         db.is_bot = is_bot
         db.follow_list_visibility = follow_list_visibility
         db.enable_reactions = enable_reactions
+        db.post_lifetime = post_lifetime
         if user.role in ("admin", "moderator", "owner"):
             db.show_badge = show_badge
         s.commit()

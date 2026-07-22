@@ -149,6 +149,115 @@ def _refresh_remote_profiles():
             pass
 
 
+def _auto_delete_expired_posts():
+    """Hard-delete expired posts daily at 3 AM server time.
+    Checks CPU and DB load before and during execution; aborts if too busy.
+    Uses user.post_lifetime (days) + post.created_at to determine expiry."""
+    import time as _time
+    import datetime as _dt
+
+    def _next_3am():
+        now = _dt.datetime.now()
+        target = now.replace(hour=3, minute=0, second=0, microsecond=0)
+        if target <= now:
+            target += _dt.timedelta(days=1)
+        return (target - now).total_seconds()
+
+    def _server_busy():
+        try:
+            import psutil
+            if psutil.cpu_percent(interval=1) > 70:
+                return True
+        except Exception:
+            pass
+        try:
+            from app.models import engine
+            pool = engine.pool
+            checkedout = pool.checkedout()
+            size = pool.size()
+            if size > 0 and checkedout / size > 0.8:
+                return True
+        except Exception:
+            pass
+        return False
+
+    _time.sleep(min(_next_3am(), 300))
+    while True:
+        try:
+            if _server_busy():
+                logger.info("Auto-delete: server busy, skipping")
+                _time.sleep(1800)
+                continue
+
+            from app.models import get_session, Post, User, Like, Boost, Bookmark, Vote, Notification
+            with get_session() as s:
+                now = _dt.datetime.now(_dt.timezone.utc)
+                users_with_lifetime = s.query(User).filter(
+                    User.post_lifetime > 0,
+                    User.is_remote == False,
+                ).all()
+                deleted = 0
+                for u in users_with_lifetime:
+                    cutoff = now - _dt.timedelta(days=u.post_lifetime)
+                    expired = s.query(Post).filter(
+                        Post.author_id == u.id,
+                        Post.is_deleted == False,
+                        Post.created_at <= cutoff,
+                    ).all()
+                    for post in expired:
+                        if _server_busy():
+                            logger.info("Auto-delete: server busy mid-run, stopping at %d", deleted)
+                            break
+                        try:
+                            s.query(Notification).filter(Notification.post_id == post.id).delete()
+                            s.query(Like).filter(Like.post_id == post.id).delete()
+                            s.query(Boost).filter(Boost.post_id == post.id).delete()
+                            s.query(Bookmark).filter(Bookmark.post_id == post.id).delete()
+                            s.query(Vote).filter(Vote.post_id == post.id).delete()
+
+                            media = list(post.media_attachments or [])
+                            if media:
+                                try:
+                                    from app.utils.storage import get_storage
+                                    storage = get_storage()
+                                    for m in media:
+                                        if isinstance(m, dict) and m.get("url"):
+                                            try:
+                                                storage.delete(m["url"])
+                                            except Exception:
+                                                pass
+                                except Exception:
+                                    pass
+
+                            ap_id = post.ap_id or ""
+                            if ap_id and ap_id.startswith("http"):
+                                try:
+                                    from app.activitypub import _send_delete_post
+                                    _send_delete_post(post, u)
+                                except Exception:
+                                    pass
+
+                            s.delete(post)
+                            s.flush()
+
+                            try:
+                                from app.timeline_stream import broadcast_delete
+                                broadcast_delete(post.id)
+                            except Exception:
+                                pass
+                            deleted += 1
+                        except Exception:
+                            pass
+                    if _server_busy():
+                        break
+                if deleted:
+                    s.commit()
+                    logger.info("Auto-deleted %d expired posts", deleted)
+        except Exception as e:
+            logger.error("Auto-delete worker error: %s", e)
+        _time.sleep(_next_3am() + 60)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from app.routes.api import _cleanup_avatars
@@ -195,6 +304,8 @@ async def lifespan(app: FastAPI):
     t.start()
     t2 = threading.Thread(target=_refresh_remote_profiles, daemon=True)
     t2.start()
+    t3 = threading.Thread(target=_auto_delete_expired_posts, daemon=True)
+    t3.start()
     _cleanup_expired_media()
     _cleanup_remote_data()
     yield
