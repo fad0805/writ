@@ -163,13 +163,29 @@ def _auto_delete_expired_posts():
             target += _dt.timedelta(days=1)
         return (target - now).total_seconds()
 
-    def _server_busy():
+    def _get_cpu_percent():
         try:
-            import psutil
-            if psutil.cpu_percent(interval=1) > 70:
-                return True
+            with open("/proc/stat") as f:
+                parts = f.readline().split()
+            idle1 = int(parts[4])
+            total1 = sum(int(x) for x in parts[1:])
+            import time as _time
+            _time.sleep(1)
+            with open("/proc/stat") as f:
+                parts = f.readline().split()
+            idle2 = int(parts[4])
+            total2 = sum(int(x) for x in parts[1:])
+            idle_d = idle2 - idle1
+            total_d = total2 - total1
+            if total_d == 0:
+                return 0
+            return (1 - idle_d / total_d) * 100
         except Exception:
-            pass
+            return 0
+
+    def _server_busy():
+        if _get_cpu_percent() > 70:
+            return True
         try:
             from app.models import engine
             pool = engine.pool
