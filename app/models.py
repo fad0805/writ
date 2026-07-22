@@ -20,7 +20,7 @@ else:
         pool_use_lifo=True,
         pool_recycle=300,
         pool_timeout=15,
-        pool_pre_ping=False,
+        pool_pre_ping=True,
     )
 
 

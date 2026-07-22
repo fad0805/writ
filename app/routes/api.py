@@ -7469,9 +7469,14 @@ def _parse_device_name(ua: str) -> str:
 def list_sessions(request: Request):
     user = require_active_auth(request)
     from app.routes.auth import get_session_key_from_cookie
+    from datetime import timedelta, timezone
+    from app.config import SESSION_EXPIRE_DAYS
     current_key = get_session_key_from_cookie(request)
     with get_session() as s:
-        sessions = s.query(LoginSession).filter_by(user_id=user.id).order_by(LoginSession.last_active.desc()).all()
+        cutoff = datetime.datetime.now(timezone.utc) - timedelta(days=SESSION_EXPIRE_DAYS)
+        s.query(LoginSession).filter(LoginSession.user_id == user.id, LoginSession.created_at < cutoff).delete(synchronize_session=False)
+        s.commit()
+        sessions = s.query(LoginSession).filter_by(user_id=user.id).order_by(LoginSession.last_active.desc()).limit(50).all()
         result = []
         for ls in sessions:
             result.append({

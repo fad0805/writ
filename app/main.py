@@ -236,15 +236,14 @@ def validate_csrf_token(token: str, session_token: str) -> bool:
                              hashlib.sha256).hexdigest()[:16]
         if not _hmac.compare_digest(sig, expected) or expires <= time.time():
             return False
+        # Verify session cookie is also valid HMAC-signed (same browser)
         session_decoded = base64.urlsafe_b64decode(session_token.encode()).decode()
         session_parts = session_decoded.split(":")
-        session_key = session_parts[0]
-        from app.models import LoginSession, get_session as _gs
-        with _gs() as _s:
-            ls = _s.query(LoginSession).filter_by(session_key=session_key).first()
-            if ls:
-                return user_id == ls.user_id
-        return False
+        session_payload = f"{session_parts[0]}:{session_parts[1]}"
+        session_sig = session_parts[2]
+        session_expected = _hmac.new(SECRET_KEY.encode(), session_payload.encode(),
+                                     hashlib.sha256).hexdigest()[:16]
+        return _hmac.compare_digest(session_sig, session_expected)
     except Exception:
         return False
 
