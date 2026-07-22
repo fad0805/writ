@@ -1423,12 +1423,17 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     "expires_at": expires_at,
                 }
 
+        # ===== PHASE 1: DB READS (short-lived session) =====
+        reply_to_post_id = None
+        tag_names = []
+        mentioned_ids = []
+        muted_visibility = False
+
         with get_session() as session:
             import sys; sys.stdout.flush()
             existing = session.query(Post).filter_by(ap_id=post_id).first()
             import sys; sys.stdout.flush()
             if existing:
-                # If the existing post is a poll and incoming has updated votes, update it
                 if existing.poll_data and poll_data:
                     for new_opt in poll_data.get("options", []):
                         for old_opt in existing.poll_data.get("options", []):
@@ -1440,55 +1445,23 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     return (200, "Poll votes updated")
                 return (200, "Already exists")
 
-            reply_to_post = None
+            reply_to_post_local = None
             if in_reply_to:
-                reply_to_post = session.query(Post).filter_by(ap_id=in_reply_to).first()
-                if not reply_to_post:
+                reply_to_post_local = session.query(Post).filter_by(ap_id=in_reply_to).first()
+                if not reply_to_post_local:
                     alt_url = in_reply_to.replace("https://", "http://") if "https://" in in_reply_to else in_reply_to.replace("http://", "https://")
-                    reply_to_post = session.query(Post).filter_by(ap_id=alt_url).first()
-                if not reply_to_post:
+                    reply_to_post_local = session.query(Post).filter_by(ap_id=alt_url).first()
+                if not reply_to_post_local:
                     _posts_match = re.match(r'https?://[^/]+/posts/(\d+)', in_reply_to)
                     if _posts_match:
-                        reply_to_post = session.query(Post).filter_by(id=int(_posts_match.group(1)), is_deleted=False).first()
-                if not reply_to_post:
-                    _local_signer = session.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor_id, User.is_remote == False).first()
-                    if not _local_signer:
-                        _local_signer = _get_instance_actor(session)
-                    reply_to_post = _fetch_remote_post(in_reply_to, _local_signer, session)
-                    if reply_to_post:
-                        try:
-                            from app.timeline_stream import broadcast_post
-                            _ra = reply_to_post.author
-                            broadcast_post({
-                                "id": reply_to_post.id,
-                                "number": reply_to_post.number or "",
-                                "content": reply_to_post.content,
-                                "summary": reply_to_post.summary or "",
-                                "visibility": reply_to_post.visibility or "public",
-                                "created_at": reply_to_post.created_at.isoformat() if reply_to_post.created_at else "",
-                                "author": {
-                                    "id": _ra.id, "username": _ra.username,
-                                    "display_name": _ra.display_name or _ra.username,
-                                    "avatar": _ra.profile_image or "", "header": _ra.header_image or "",
-                                    "summary": _ra.summary or "", "is_admin": _ra.is_admin,
-                                    "is_locked": getattr(_ra, "is_locked", false),
-                                    "is_limited": getattr(_ra, "is_limited", false),
-                                    "is_remote": _ra.is_remote, "ap_id": _ra.remote_url or "",
-                                },
-                                "likes_count": 0, "boosts_count": 0, "replies_count": 0,
-                                "liked": false, "boosted": false, "bookmarked": false, "is_mine": false,
-                                "is_dm": false, "is_sensitive": getattr(reply_to_post, "is_sensitive", false) or false,
-                                "ap_id": reply_to_post.ap_id or "", "media_attachments": reply_to_post.media_attachments or [],
-                                "poll_data": reply_to_post.poll_data, "my_vote": none, "reactions": {}, "my_reaction": none,
-                                "quote_of_id": reply_to_post.quote_of_id or None, "quote_of_ap_id": reply_to_post.quote_of_ap_id or "",
-                                "_emojis": _broadcast_emoji_list(session),
-                            }, reply_to_post.author_id, reply_to_post.visibility or "public", false)
-                        except Exception:
-                            pass
+                        reply_to_post_local = session.query(Post).filter_by(id=int(_posts_match.group(1)), is_deleted=False).first()
+                if reply_to_post_local:
+                    reply_to_post_id = reply_to_post_local.id
+
             # mastodon poll votes: create(note) with name + inreplyto + no content
             vote_name = obj.get("name", "") if not raw_content.strip() else ""
-            if vote_name and reply_to_post and reply_to_post.poll_data:
-                poll_post = reply_to_post
+            if vote_name and reply_to_post_local and reply_to_post_local.poll_data:
+                poll_post = reply_to_post_local
                 options = poll_post.poll_data.get("options", [])
                 option_idx = -1
                 for i, opt in enumerate(options):
@@ -1519,7 +1492,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     poll_post.poll_data = {**poll_post.poll_data, "options": new_options}
                     session.commit()
                     from app.timeline_stream import broadcast_post, broadcast_refresh_notifs
-                    # notify poll author + all voters
                     _voter_ids = {v.user_id for v in session.query(vote).filter_by(post_id=poll_post.id).all()}
                     _voter_ids.add(poll_post.author_id)
                     for _vid in _voter_ids:
@@ -1540,11 +1512,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             # Parse mentions ONLY from AP tag array (No regex body parsing)
             mentioned_hrefs = set()
             mentioned_names = set()
-            # Get actor domain for same-server mention resolution
             _actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
 
-            # Extract from AP tag array
-            tag_list = []
             for tag in (obj.get("tag", []) or []):
                 if isinstance(tag, dict) and tag.get("type") == "Mention":
                     href = tag.get("href", "")
@@ -1554,15 +1523,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     if name and name.startswith("@"):
                         mentioned_names.add(name.lstrip("@"))
                 if isinstance(tag, dict) and tag.get("type") == "Hashtag":
-                    tag_name = tag.get("name", "").lower()
-                    _existing = session.query(Tag).filter_by(name=tag_name).first()
-                    if not _existing:
-                        _existing = Tag(name=tag_name)
-                        session.add(_existing)
-                        session.flush()
-                    tag_list.append(_existing)
+                    tag_names.append(tag.get("name", "").lower())
 
-            # Also check `to` / `cc` for local user actor URIs (DMs from Mastodon)
             for _aud in all_audiences:
                 _a = _aud.rstrip("/")
                 if _a and _a.startswith("http"):
@@ -1570,13 +1532,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             print(f"[_handle_create MENTION DEBUG] actor={actor_url} to={to} cc={cc}", flush=True)
             print(f"[_handle_create MENTION DEBUG] mentioned_hrefs={mentioned_hrefs} mentioned_names={mentioned_names}", flush=True)
 
-            mentioned_ids = []
             _seen_ids = set()
-            # Process href-based mentions FIRST (most reliable: from AP Mention tag href or to/cc)
             if mentioned_hrefs:
                 for _href in mentioned_hrefs:
                     _matched = False
-                    # 1. 로컬 유저 매칭 우선 (same-domain shadow user 문제 방지)
                     if BASE_URL in _href:
                         for _u in session.query(User).filter_by(is_remote=False).all():
                             local_uris = {
@@ -1589,7 +1548,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                 print(f"[_handle_create MENTION] LOCAL MATCH: href={_href} -> uid={_u.id} username={_u.username}", flush=True)
                                 _matched = True
                                 break
-                    # 2. 원격 유저 매칭 (로컬에서 매칭 안 됐을 때만)
                     if not _matched:
                         u = session.query(User).filter(User.remote_url == _href).first()
                         if u and u.id not in _seen_ids:
@@ -1609,9 +1567,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             _p = urlparse(u.remote_url)
                             if _p.hostname and _p.hostname.lower() == _dom.lower():
                                 mentioned_ids.append(u.id)
-                                _seen_ids.add(u.id)
+                                _seen_ids.add(_u.id)
                                 continue
-                        # username may contain @domain, try like + domain check
                         candidates = session.query(User).filter(
                             User.username.like(f"{_lp}@%"),
                             User.is_remote == True,
@@ -1626,7 +1583,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                     _seen_ids.add(_c.id)
                                     break
                     else:
-                        # same-domain remote user only (local user handled via href already)
                         if _actor_domain:
                             u = session.query(User).filter(
                                 User.username == _name, User.is_remote == True,
@@ -1641,87 +1597,162 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             if actor_domain:
                 mute_entry = session.query(MutedServer).filter_by(domain=actor_domain).first()
                 if mute_entry and mute_entry.muted and visibility == "public":
-                    visibility = "home"
+                    muted_visibility = True
 
-            # Process custom emoji tags and media BEFORE session (network I/O)
-            raw_attachments = obj.get("attachment", []) if isinstance(obj, dict) else []
-            if isinstance(raw_attachments, dict):
-                raw_attachments = [raw_attachments]
-            elif not isinstance(raw_attachments, list):
-                raw_attachments = []
-            media_list = []
-            _att_has_sensitive = False
-            for att in raw_attachments:
-                if not isinstance(att, dict):
-                    continue
-                att_type = att.get("mediaType", "")
-                att_as2_type = att.get("type", "")
-                url = ""
-                if isinstance(att.get("url"), str):
-                    url = att["url"]
-                elif isinstance(att.get("url"), dict):
-                    url = att["url"].get("href", "")
-                if not url:
-                    continue
-                # Per-attachment sensitive flag (Misskey sets this per file)
-                att_sensitive = att.get("sensitive", False)
-                if att_sensitive:
-                    _att_has_sensitive = True
-                cached = _cache_remote_media(url)
-                if att_type.startswith("image/") or att_as2_type == "Image":
-                    media_list.append({"url": cached, "type": "image"})
-                    print(f"[_handle_create MEDIA] image url={cached} sensitive={att_sensitive}", flush=True)
-                elif att_type.startswith("video/") or att_as2_type == "Video":
-                    media_list.append({"url": cached, "type": "video"})
-                    print(f"[_handle_create MEDIA] video url={cached} sensitive={att_sensitive}", flush=True)
-                elif att_as2_type == "Document" or att_type.startswith("audio/"):
-                    if att_type.startswith("image/") or att_type.startswith("video/"):
-                        mtype = "video" if att_type.startswith("video/") else "image"
-                    else:
-                        mtype = "image"
-                    media_list.append({"url": cached, "type": mtype})
-                    print(f"[_handle_create MEDIA] Document({att_type}) url={cached} type={mtype} sensitive={att_sensitive}", flush=True)
+        if muted_visibility:
+            visibility = "home"
 
-            # Extract quote reference from Note (FEP-044f / Mastodon / Misskey / Firefish compat)
-            quote_of_ap_id = ""
-            quote_of_id = None
-            if isinstance(obj, dict):
-                # FEP-044f primary field, plus legacy compat fields
-                quote_url = (
-                    obj.get("quote")           # FEP-044f (Mastodon 4.4+)
-                    or obj.get("quoteUrl")     # as:quoteUrl
-                    or obj.get("quoteUri")     # fedibird compat
-                    or obj.get("_misskey_quote")  # Misskey/Firefish
-                    or ""
-                )
-                # Some platforms put the quote URL in the tag array
-                if not quote_url and isinstance(obj.get("tag"), list):
-                    for _tag in obj["tag"]:
-                        if not isinstance(_tag, dict):
-                            continue
-                        if _tag.get("type") == "Quote":
-                            quote_url = _tag.get("href") or _tag.get("id") or ""
-                        elif _tag.get("type") == "Link" and _tag.get("rel") == "https://misskey-hub.net/ns#_misskey_quote":
-                            quote_url = _tag.get("href") or ""
-                        if quote_url:
-                            break
-                try:
-                    _q_fields = {k: obj.get(k) for k in ("quote", "quoteUrl", "quoteUri", "_misskey_quote") if obj.get(k)}
-                    if quote_url:
-                        print(f"[_handle_create QUOTE] post_id={post_id} url={quote_url} fields={_q_fields}", flush=True)
-                except Exception:
-                    pass
-                if quote_url and isinstance(quote_url, str):
-                    quote_of_ap_id = quote_url
+        # ===== PHASE 2: NETWORK I/O (no DB session held) =====
+
+        # Fetch remote reply if not found locally
+        if in_reply_to and not reply_to_post_id:
+            with get_session() as fetch_s:
+                _local_signer = fetch_s.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor_id, User.is_remote == False).first()
+                if not _local_signer:
+                    _local_signer = _get_instance_actor(fetch_s)
+                fetched_reply = _fetch_remote_post(in_reply_to, _local_signer, fetch_s)
+                if fetched_reply:
+                    reply_to_post_id = fetched_reply.id
                     try:
-                        quote_post = _fetch_remote_post(quote_url, actor, session)
+                        from app.timeline_stream import broadcast_post
+                        _ra = fetched_reply.author
+                        broadcast_post({
+                            "id": fetched_reply.id,
+                            "number": fetched_reply.number or "",
+                            "content": fetched_reply.content,
+                            "summary": fetched_reply.summary or "",
+                            "visibility": fetched_reply.visibility or "public",
+                            "created_at": fetched_reply.created_at.isoformat() if fetched_reply.created_at else "",
+                            "author": {
+                                "id": _ra.id, "username": _ra.username,
+                                "display_name": _ra.display_name or _ra.username,
+                                "avatar": _ra.profile_image or "", "header": _ra.header_image or "",
+                                "summary": _ra.summary or "", "is_admin": _ra.is_admin,
+                                "is_locked": getattr(_ra, "is_locked", false),
+                                "is_limited": getattr(_ra, "is_limited", false),
+                                "is_remote": _ra.is_remote, "ap_id": _ra.remote_url or "",
+                            },
+                            "likes_count": 0, "boosts_count": 0, "replies_count": 0,
+                            "liked": false, "boosted": false, "bookmarked": false, "is_mine": false,
+                            "is_dm": false, "is_sensitive": getattr(fetched_reply, "is_sensitive", false) or false,
+                            "ap_id": fetched_reply.ap_id or "", "media_attachments": fetched_reply.media_attachments or [],
+                            "poll_data": fetched_reply.poll_data, "my_vote": none, "reactions": {}, "my_reaction": none,
+                            "quote_of_id": fetched_reply.quote_of_id or None, "quote_of_ap_id": fetched_reply.quote_of_ap_id or "",
+                            "_emojis": _broadcast_emoji_list(fetch_s),
+                        }, fetched_reply.author_id, fetched_reply.visibility or "public", false)
+                    except Exception:
+                        pass
+
+        # Cache media attachments
+        raw_attachments = obj.get("attachment", []) if isinstance(obj, dict) else []
+        if isinstance(raw_attachments, dict):
+            raw_attachments = [raw_attachments]
+        elif not isinstance(raw_attachments, list):
+            raw_attachments = []
+        media_list = []
+        _att_has_sensitive = False
+        for att in raw_attachments:
+            if not isinstance(att, dict):
+                continue
+            att_type = att.get("mediaType", "")
+            att_as2_type = att.get("type", "")
+            url = ""
+            if isinstance(att.get("url"), str):
+                url = att["url"]
+            elif isinstance(att.get("url"), dict):
+                url = att["url"].get("href", "")
+            if not url:
+                continue
+            att_sensitive = att.get("sensitive", False)
+            if att_sensitive:
+                _att_has_sensitive = True
+            cached = _cache_remote_media(url)
+            if att_type.startswith("image/") or att_as2_type == "Image":
+                media_list.append({"url": cached, "type": "image"})
+                print(f"[_handle_create MEDIA] image url={cached} sensitive={att_sensitive}", flush=True)
+            elif att_type.startswith("video/") or att_as2_type == "Video":
+                media_list.append({"url": cached, "type": "video"})
+                print(f"[_handle_create MEDIA] video url={cached} sensitive={att_sensitive}", flush=True)
+            elif att_as2_type == "Document" or att_type.startswith("audio/"):
+                if att_type.startswith("image/") or att_type.startswith("video/"):
+                    mtype = "video" if att_type.startswith("video/") else "image"
+                else:
+                    mtype = "image"
+                media_list.append({"url": cached, "type": mtype})
+                print(f"[_handle_create MEDIA] Document({att_type}) url={cached} type={mtype} sensitive={att_sensitive}", flush=True)
+
+        # Extract quote reference from Note (FEP-044f / Mastodon / Misskey / Firefish compat)
+        quote_of_ap_id = ""
+        quote_of_id = None
+        if isinstance(obj, dict):
+            quote_url = (
+                obj.get("quote")
+                or obj.get("quoteUrl")
+                or obj.get("quoteUri")
+                or obj.get("_misskey_quote")
+                or ""
+            )
+            if not quote_url and isinstance(obj.get("tag"), list):
+                for _tag in obj["tag"]:
+                    if not isinstance(_tag, dict):
+                        continue
+                    if _tag.get("type") == "Quote":
+                        quote_url = _tag.get("href") or _tag.get("id") or ""
+                    elif _tag.get("type") == "Link" and _tag.get("rel") == "https://misskey-hub.net/ns#_misskey_quote":
+                        quote_url = _tag.get("href") or ""
+                    if quote_url:
+                        break
+            try:
+                _q_fields = {k: obj.get(k) for k in ("quote", "quoteUrl", "quoteUri", "_misskey_quote") if obj.get(k)}
+                if quote_url:
+                    print(f"[_handle_create QUOTE] post_id={post_id} url={quote_url} fields={_q_fields}", flush=True)
+            except Exception:
+                pass
+            if quote_url and isinstance(quote_url, str):
+                quote_of_ap_id = quote_url
+                try:
+                    with get_session() as quote_s:
+                        quote_post = _fetch_remote_post(quote_url, actor, quote_s)
                         if quote_post:
                             quote_of_id = quote_post.id
                             print(f"[_handle_create QUOTE OK] post_id={quote_post.id}", flush=True)
                         else:
                             print(f"[_handle_create QUOTE FETCH FAIL] url={quote_url}", flush=True)
-                    except Exception as e:
-                        print(f"[_handle_create QUOTE ERR] url={quote_url} {e}", flush=True)
+                except Exception as e:
+                    print(f"[_handle_create QUOTE ERR] url={quote_url} {e}", flush=True)
+
+        # Fetch link preview for URLs in remote post content (skip if quote post)
+        link_preview = None
+        if not quote_of_ap_id:
+            _url_match_lp = re.search(r'https?://(?!.*/tags/)[^\s<>"\')\]#]+', content or "")
+            if _url_match_lp:
+                _url_lp = _url_match_lp.group(0)
+                try:
+                    import httpx as _httpx_lp
+                    _resp_lp = _httpx_lp.get(_url_lp, headers={"User-Agent": "WRIT/1.0"}, timeout=5, follow_redirects=True)
+                    if _resp_lp.status_code == 200:
+                        _html_lp = _resp_lp.text
+                        def _og_lp(n):
+                            _m = re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', _html_lp, re.I)
+                            if not _m:
+                                _m = re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', _html_lp, re.I)
+                            return _m.group(1) if _m else ""
+                        _og_title_lp = _og_lp("title") or (re.search(r'<title>([^<]*)</title>', _html_lp, re.I).group(1) if re.search(r'<title>([^<]*)</title>', _html_lp, re.I) else "")
+                        _og_desc_lp = _og_lp("description")
+                        _og_img_lp = _og_lp("image")
+                        if _og_img_lp and _og_img_lp.startswith("/"):
+                            _p_lp = urlparse(_url_lp)
+                            _og_img_lp = f"{_p_lp.scheme}://{_p_lp.netloc}{_og_img_lp}"
+                        if _og_title_lp:
+                            link_preview = {"url": _url_lp, "title": _og_title_lp[:200], "description": _og_desc_lp[:400] if _og_desc_lp else "", "image": _og_img_lp or ""}
+                except Exception:
+                    pass
+
+        # ===== PHASE 3: DB WRITES (new session) =====
+        with get_session() as session:
+            reply_to_post = None
+            if reply_to_post_id:
+                reply_to_post = session.query(Post).get(reply_to_post_id)
 
             post = Post(
                 author_id=actor_id,
@@ -1731,7 +1762,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 mentioned_user_ids=mentioned_ids,
                 ap_id=post_id,
                 in_reply_to_ap_id=in_reply_to,
-                in_reply_to_id=reply_to_post.id if reply_to_post else None,
+                in_reply_to_id=reply_to_post_id,
                 media_attachments=media_list if media_list else None,
                 poll_data=poll_data,
                 is_dm=is_incoming_dm,
@@ -1739,7 +1770,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 quote_of_ap_id=quote_of_ap_id,
                 quote_of_id=quote_of_id,
             )
-            # Strip "RE: https://..." from quote post content
             if quote_of_ap_id and post.content:
                 post.content = re.sub(
                     r'^[\s\n]*RE:\s*<a[^>]*>[^<]*</a>\s*[\n\s]*',
@@ -1749,37 +1779,20 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     r'^[\s\n]*RE:\s*https?://\S+\s*[\n\s]*',
                     '', post.content, count=1, flags=re.I
                 )
+            if link_preview:
+                post.link_preview = link_preview
             session.add(post)
             session.flush()
 
-            # Fetch link preview for URLs in remote post content (skip if quote post)
-            if not quote_of_ap_id:
-                # 💡 [해결] URL 전체를 미리 훑어봐서(?!.*/tags/) 중간에 /tags/가 들어가 있다면 아예 시작조차 안 하고 쳐냅니다.
-                _url_match_lp = re.search(r'https?://(?!.*/tags/)[^\s<>"\')\]#]+', content or "")
-                if _url_match_lp:
-                    _url_lp = _url_match_lp.group(0)
-                    try:
-                        import httpx as _httpx_lp
-                        _resp_lp = _httpx_lp.get(_url_lp, headers={"User-Agent": "WRIT/1.0"}, timeout=5, follow_redirects=True)
-                        if _resp_lp.status_code == 200:
-                            _html_lp = _resp_lp.text
-                            def _og_lp(n):
-                                _m = re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', _html_lp, re.I)
-                                if not _m:
-                                    _m = re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', _html_lp, re.I)
-                                return _m.group(1) if _m else ""
-                            _og_title_lp = _og_lp("title") or (re.search(r'<title>([^<]*)</title>', _html_lp, re.I).group(1) if re.search(r'<title>([^<]*)</title>', _html_lp, re.I) else "")
-                            _og_desc_lp = _og_lp("description")
-                            _og_img_lp = _og_lp("image")
-                            if _og_img_lp and _og_img_lp.startswith("/"):
-                                _p_lp = urlparse(_url_lp)
-                                _og_img_lp = f"{_p_lp.scheme}://{_p_lp.netloc}{_og_img_lp}"
-                            if _og_title_lp:
-                                post.link_preview = {"url": _url_lp, "title": _og_title_lp[:200], "description": _og_desc_lp[:400] if _og_desc_lp else "", "image": _og_img_lp or ""}
-                    except Exception:
-                        pass
-
-            # Parse #hashtags from content and sync with Tag model (so hashtag search includes remote posts)
+            # Resolve and set hashtag tags
+            tag_list = []
+            for tag_name in tag_names:
+                _existing = session.query(Tag).filter_by(name=tag_name).first()
+                if not _existing:
+                    _existing = Tag(name=tag_name)
+                    session.add(_existing)
+                    session.flush()
+                tag_list.append(_existing)
             post.tag_list = tag_list
 
             # Notify local users mentioned or replied to
@@ -1800,7 +1813,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         notification_type="mention", post_id=post.id,
                     ))
 
-            # Notify local followers who enabled post notifications (skip self + already notified)
             followers = session.query(Follow).filter(
                 Follow.following_id == actor_id,
                 Follow.notify_on_post == True,
