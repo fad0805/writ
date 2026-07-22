@@ -4242,9 +4242,10 @@ input[type="checkbox"] {
 .icon-shield-green { color: #27ae60; }
 
 /* ── Hide vertical scrollbars globally ── */
-html {
-  scrollbar-width: none;          /* Firefox */
+*, *::-webkit-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
-html::-webkit-scrollbar {
-  display: none;                  /* Chrome / Safari / Edge */
+*::-webkit-scrollbar {
+  display: none;
 }
