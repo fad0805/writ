@@ -283,6 +283,7 @@ def _reply_context(p, session=None, user=None, tl_type=None):
         "number": parent.number or "",
         "content": parent.content[:200] if parent.content else "",
         "summary": parent.summary or "",
+        "is_sensitive": bool(getattr(parent, 'is_sensitive', False)),
         "author": _user_json(parent.author),
         "visibility": parent.visibility or "public",
     }

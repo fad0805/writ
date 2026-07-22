@@ -576,10 +576,12 @@ const localReactionEmojiMap = useMemo(() => {
             <strong dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.reply_context.author.display_name || post.reply_context.author.username, emojiList, 14)) }} />
             <span>@{post.reply_context.author.username}</span>
             <p dangerouslySetInnerHTML={{ __html: (() => {
-              const hasCw = !!(post.reply_context as any).summary;
-              const rawText = hasCw
-                ? (post.reply_context as any).summary
-                : (post.reply_context.content || "");
+              const hasCw = !!(post.reply_context as any).summary || !!(post.reply_context as any).is_sensitive;
+              if (hasCw) {
+                const cwLabel = (post.reply_context as any).summary || "내용 숨김";
+                return `<span style="opacity:0.5;font-size:0.9em">🔒 ${cwLabel}</span>`;
+              }
+              const rawText = (post.reply_context.content || "");
               const text = rawText.slice(0, 90);
               let html = text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
               html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
