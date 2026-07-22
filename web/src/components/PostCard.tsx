@@ -140,18 +140,22 @@ const localReactionEmojiMap = useMemo(() => {
     return () => clearInterval(id);
   }, [post.poll_data]);
 
-  const toggleLike = async () => {
-    try {
-      if (liked) { await api.unlike(post.id); setLiked(false); setLikesCount(Math.max(0, likesCount - 1)); }
-      else { await api.like(post.id); setLiked(true); setLikesCount(likesCount + 1); }
-    } catch {}
+  const toggleLike = () => {
+    const next = !liked;
+    setLiked(next);
+    setLikesCount(Math.max(0, likesCount + (next ? 1 : -1)));
+    (next ? api.like(post.id) : api.unlike(post.id)).catch(() => {
+      setLiked(!next);
+      setLikesCount(Math.max(0, likesCount + (next ? -1 : 1)));
+    });
   };
 
-  const toggleBookmark = async () => {
-    try {
-      if (bookmarked) { await api.unbookmark(post.id); setBookmarked(false); }
-      else { await api.bookmark(post.id); setBookmarked(true); }
-    } catch {}
+  const toggleBookmark = () => {
+    const next = !bookmarked;
+    setBookmarked(next);
+    (next ? api.bookmark(post.id) : api.unbookmark(post.id)).catch(() => {
+      setBookmarked(!next);
+    });
   };
 
   const toggleBoost = async () => {
