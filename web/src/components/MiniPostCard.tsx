@@ -86,7 +86,7 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
             CW: {post.summary}
           </div>
         )}
-        <div className="mini-post-body" dangerouslySetInnerHTML={{ __html: contentHtml }} />
+        {!post.summary && <div className="mini-post-body" dangerouslySetInnerHTML={{ __html: contentHtml }} />}
       </div>
     </Link>
   );
