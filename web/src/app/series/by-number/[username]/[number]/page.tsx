@@ -164,7 +164,7 @@ export default function NovelByNumberPage() {
           <span><Icon name="book" /> 총 {novel.episode_count}화</span>
           {isMine && typeof novel.total_views === 'number' && <span><Icon name="eye" /> 총 {novel.total_views}회 조회</span>}
           {isMine && typeof (novel as any).followers_count === 'number' && <span><Icon name="user" /> {(novel as any).followers_count}명 팔로우</span>}
-          <span><Icon name="lock" /> {novel.visibility === "public" ? "전체공개" : novel.visibility === "unlisted" ? "공개" : "비공개"}</span>
+          <span><Icon name={novel.visibility === "public" ? "globe" : novel.visibility === "unlisted" ? "eye" : "lock"} /> {novel.visibility === "public" ? "전체공개" : novel.visibility === "unlisted" ? "공개" : "비공개"}</span>
         </div>
         {novel.description && <p className="novel-description">{novel.description}</p>}
         {novel.tags && <p className="novel-tags"><Icon name="tag" /> {novel.tags.split(/[ ,]+/).filter(Boolean).map((t, i) => <span key={i} className="tag-spacing">{t}</span>)}</p>}

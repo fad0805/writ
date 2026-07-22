@@ -657,6 +657,35 @@ with get_session() as s:
         print("no duplicates found")
 PYEOF
 
+elif [ "$1" = "purge-orphan" ]; then
+  docker compose exec -T api python3 << 'PYEOF'
+from app.models import Post, Notification, Like, Boost, Bookmark, Vote, get_session
+
+with get_session() as s:
+    orphans = s.query(Post).filter(
+        Post.content.is_(None) | (Post.content == ""),
+        Post.boost_of_id.is_(None),
+        Post.in_reply_to_id.is_(None),
+        (Post.in_reply_to_ap_id == "") | Post.in_reply_to_ap_id.is_(None),
+        Post.ap_id.is_(None),
+        Post.is_deleted == False,
+    ).all()
+    if not orphans:
+        print("no orphan posts found")
+    else:
+        deleted = 0
+        for p in orphans:
+            s.query(Notification).filter(Notification.post_id == p.id).delete()
+            s.query(Like).filter(Like.post_id == p.id).delete()
+            s.query(Boost).filter(Boost.post_id == p.id).delete()
+            s.query(Bookmark).filter(Bookmark.post_id == p.id).delete()
+            s.query(Vote).filter(Vote.post_id == p.id).delete()
+            s.delete(p)
+            deleted += 1
+        s.commit()
+        print(f"deleted {deleted} orphan posts")
+PYEOF
+
 elif [ "$1" = "check-post" ]; then
   post_id="${2}"
   if [ -z "$post_id" ]; then
@@ -678,10 +707,15 @@ with get_session() as s:
     print(f"id={p.id} number={p.number} author_id={p.author_id} is_deleted={p.is_deleted}")
     print(f"content={p.content[:100] if p.content else ''}")
     print(f"visibility={p.visibility} is_dm={p.is_dm}")
+    print(f"boost_of_id={p.boost_of_id}")
     print(f"ap_id={p.ap_id}")
     print(f"in_reply_to_id={p.in_reply_to_id}")
     print(f"in_reply_to_ap_id={p.in_reply_to_ap_id}")
     print(f"mentioned_user_ids={p.mentioned_user_ids}")
+    print(f"created_at={p.created_at}")
+    print(f"bumped_at={p.bumped_at}")
+    author = s.query(User).get(p.author_id)
+    print(f"author_username={author.username if author else '?'} (is_remote={author.is_remote if author else '?'})")
     if p.in_reply_to_id:
         parent = s.query(Post).get(p.in_reply_to_id)
         if parent:
@@ -1068,6 +1102,180 @@ with get_session() as s:
 print(f'done: {moved} moved, {skipped} skipped, {errors} errors (total {len(emojis)} emojis)')
 "
 
+elif [ "$1" = "purge-shadows" ]; then
+  docker compose exec -T api python3 << 'PYEOF'
+from urllib.parse import urlparse
+from app.config import BASE_URL
+from app.models import User, Follow, Post, Like, Boost, Bookmark, Vote, Notification, UserBlock, UserMute, get_session
+
+own_domain = urlparse(BASE_URL).hostname or ""
+print(f"own domain: {own_domain}")
+
+with get_session() as s:
+    shadows = s.query(User).filter(
+        User.is_remote == True,
+        User.remote_url.like(f"%{own_domain}%"),
+    ).all()
+    if not shadows:
+        print("no shadow users found")
+    else:
+        deleted = 0
+        for u in shadows:
+            parsed = urlparse(u.remote_url or "")
+            if parsed.hostname and parsed.hostname.lower() == own_domain.lower():
+                print(f"  shadow: id={u.id} username={u.username} remote_url={u.remote_url}")
+                uid = u.id
+                # Delete dependent rows first, one table at a time with rollback on error
+                for table, fk in [(Follow, "follower_id"), (Follow, "following_id"),
+                                  (Notification, "user_id"), (Notification, "from_user_id"),
+                                  (Like, "user_id"), (Boost, "user_id"),
+                                  (Bookmark, "user_id"), (Vote, "user_id"),
+                                  (UserBlock, "user_id"), (UserBlock, "target_user_id"),
+                                  (UserMute, "user_id"), (UserMute, "target_user_id")]:
+                    try:
+                        n = s.query(table).filter_by(**{fk: uid}).delete()
+                        s.commit()
+                        if n: print(f"    deleted {n} {table.__name__} rows")
+                    except Exception as e:
+                        s.rollback()
+                        print(f"    skip {table.__name__}: {e}")
+                # Nullify FK on Post (author_id) — set to first local user
+                try:
+                    local_user = s.query(User).filter_by(is_remote=False).first()
+                    s.query(Post).filter_by(author_id=uid).update({"author_id": local_user.id if local_user else uid})
+                    s.commit()
+                except Exception as e:
+                    s.rollback()
+                    print(f"    skip Post.author_id: {e}")
+                # Now delete the user
+                try:
+                    s.delete(u)
+                    s.commit()
+                    deleted += 1
+                    print(f"    deleted user id={uid}")
+                except Exception as e:
+                    s.rollback()
+                    print(f"    failed to delete user: {e}")
+        print(f"deleted {deleted} shadow users")
+
+        # Fix posts with mentioned_user_ids pointing to deleted shadows
+        remaining_remote = {u.id for u in s.query(User).filter(User.is_remote == True).all()}
+        fixed = 0
+        for p in s.query(Post).filter(Post.mentioned_user_ids.isnot(None)).all():
+            if p.mentioned_user_ids:
+                final_ids = [mid for mid in p.mentioned_user_ids if mid in remaining_remote]
+                if final_ids != p.mentioned_user_ids:
+                    p.mentioned_user_ids = final_ids
+                    fixed += 1
+        s.commit()
+        print(f"fixed {fixed} posts with stale mentioned_user_ids")
+PYEOF
+
+elif [ "$1" = "check-create" ]; then
+  docker compose exec api python3 -c "
+from app.models import Post, get_session
+import json
+
+post_id = int('$2')
+
+with get_session() as s:
+    p = s.query(Post).filter(Post.id == post_id).first()
+
+    if not p:
+        print('post not found')
+    else:
+        print(json.dumps(p.to_ap_create(), indent=2, ensure_ascii=False))
+"
+
+elif [ "$1" = "replay-mastodon" ]; then
+  # 받은 Mastodon Create를 거의 그대로 다시 보내기 (_mention만 WRIT 로컬 유저로)
+  # 사용법: ./gogo.sh replay-mastodon <post_id> <target_inbox_url>
+  # 예: ./gogo.sh replay-mastodon 5371 https://qdon.space/inbox
+  docker compose exec api python3 -c "
+import json, datetime, hashlib, base64, httpx
+from urllib.parse import urlparse
+from app.models import Post, User, get_session
+from app.config import SECRET_KEY, BASE_URL
+from app.crypto_utils import sign_string, get_private_key
+
+post_id = int('$2')
+inbox_url = '$3'
+
+with get_session() as s:
+    p = s.query(Post).filter(Post.id == post_id).first()
+    if not p:
+        print('post not found'); exit(1)
+    author = p.author
+
+    # 1. to_ap_note() 로 현재 WRIT 포맷 가져오기
+    note = p.to_ap_note()
+
+    # 2. Mastodon 포맷으로 최소한의 차이만 적용
+    #    - <p> 래핑 제거 (Mastodon은 짧은 글에 <p> 없음)
+    content = note.get('content', '')
+    if content.startswith('<p>') and content.endswith('</p>'):
+        inner = content[3:-4]
+        if '<p>' not in inner:
+            content = inner
+    note['content'] = content
+
+    #    - mediaType 제거 (Mastodon은 보통 없음)
+    note.pop('mediaType', None)
+
+    #    - @context 최소화 (Mastodon 표준)
+    note['@context'] = 'https://www.w3.org/ns/activitystreams'
+
+    # 3. Create 래퍼 생성 (Mastodon 포맷: to/cc를 Note에서 그대로 사용)
+    now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+    activity = {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        'id': f'{BASE_URL}/activities/replay/{p.id}',
+        'type': 'Create',
+        'actor': author.actor_uri(),
+        'published': now.strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'to': note.get('to', []),
+        'cc': note.get('cc', []),
+        'object': note,
+    }
+
+    print('=== REPLAY ACTIVITY ===')
+    print(json.dumps(activity, indent=2, ensure_ascii=False))
+    print()
+
+    # 4. 서명 후 전송
+    body = json.dumps(activity, ensure_ascii=True, sort_keys=True).encode('utf-8')
+    digest = base64.b64encode(hashlib.sha256(body).digest()).decode()
+    digest_header = f'SHA-256={digest}'
+    date = now.strftime('%a, %d %b %Y %H:%M:%S GMT')
+
+    parsed = urlparse(inbox_url)
+    path = parsed.path or '/'
+    signed_string = (
+        f'(request-target): post {path}\n'
+        f'host: {parsed.netloc}\n'
+        f'date: {date}\n'
+        f'digest: {digest_header}'
+    )
+    signature = sign_string(signed_string, get_private_key(author, SECRET_KEY))
+    signature_header = (
+        f'keyId=\"{author.actor_uri()}#main-key\",'
+        f'algorithm=\"rsa-sha256\",'
+        f'headers=\"(request-target) host date digest\",'
+        f'signature=\"{signature}\"'
+    )
+    headers = {
+        'Content-Type': 'application/activity+json',
+        'Signature': signature_header,
+        'Date': date,
+        'Digest': digest_header,
+        'Host': parsed.netloc,
+    }
+
+    resp = httpx.post(inbox_url, content=body, headers=headers, timeout=15)
+    print(f'Status: {resp.status_code}')
+    print(f'Body: {resp.text[:500]}')
+"
+
 else
   echo "사용법: ./gogo.sh [명령어]"
   echo ""
@@ -1082,5 +1290,9 @@ else
   echo "  fix-follow      - 꼬인 팔로우 강제 수락 및 Accept 전송 (예: ./gogo.sh fix-follow siarte alex@daydream.ink)"
   echo "  dedup-users     - 중복 리모트 유저 통합"
   echo "  purge-deleted   - 스레드에 없는 삭제된 게시글 완전 제거 (댓글 있는 건 껍데기 유지)"
+  echo "  purge-orphan    - 내용/부스트/답글/ap_id 없는 고아 포스트 삭제"
+  echo "  purge-shadows   - 자기 도메인을 가리키는 그림자 원격 유저 삭제"
   echo "  check-custom-fields - 원격 액터의 attachment/custom_fields 확인 (예: ./gogo.sh check-custom-fields https://daydream.ink/users/siarte)"
+  echo "  check-create    - 포스트의 AP Create JSON 출력 (예: ./gogo.sh check-create 5371)"
+  echo "  replay-mastodon - 받은 Create를 Mastodon 포맷으로 재전송 (예: ./gogo.sh replay-mastodon 5371 https://qdon.space/inbox)"
 fi

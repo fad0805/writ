@@ -88,7 +88,7 @@ export default function AdminContentPage() {
   return (
     <>
       <div className="page-header">
-        <h2><Icon name="book" /> 콘텐츠 관리</h2>
+        <h2><Icon name="book" /> 서버 관리</h2>
       </div>
       <AdminNav current="content" />
 

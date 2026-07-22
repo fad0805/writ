@@ -12,6 +12,7 @@ import MentionModal from "@/components/MentionModal";
 import ClickableCover from "@/components/ClickableCover";
 import ConfirmModal from "@/components/ConfirmModal";
 import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
+import { sanitizeName, sanitizePost, sanitizeSummary } from "@/lib/sanitize";
 
 export default function ProfilePage() {
   const params = useParams();
@@ -243,34 +244,22 @@ export default function ProfilePage() {
                   </div>
                 )}
               </div>
-            <h2><span dangerouslySetInnerHTML={{ __html: renderCustomEmojis(profile.display_name, emojiMap) }} /> {profile.is_locked && <Icon name="lock_filled" style={{ fontSize: "0.7em", verticalAlign: "middle", color: "var(--text-muted)" }} />} {(profile.role === "admin" || profile.role === "moderator" || profile.role === "owner") && (isMine || (profile as any).show_badge) && <Icon name={profile.role === "owner" ? "books_solid" : "shield_filled"} style={{ color: profile.role === "owner" ? "var(--accent)" : profile.role === "admin" ? "#27ae60" : "#cc8800", fontSize: "0.75em", verticalAlign: "middle", marginLeft: 3 }} title={profile.role === "owner" ? "오너" : profile.role === "admin" ? "관리자" : "조율자"} />}{(profile as any).is_deceased && <span className="deceased-badge"><svg viewBox="0 0 24 24" width="11" height="11" fill="#e8a0bf" stroke="#e8a0bf" stroke-width="0.5" style={{ verticalAlign: "middle", marginRight: 1 }}><circle cx="9" cy="8" r="2.8"/><circle cx="15" cy="8" r="2.8"/><circle cx="12" cy="5.5" r="2.8"/><path d="M6 12c2 3 4 5 6 8 2-3 4-5 6-8"/></svg> 당신을 만나고 싶습니다</span>}</h2>
+            <h2><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(profile.display_name, emojiMap, 14)) }} /> {profile.is_locked && <Icon name="lock_filled" style={{ fontSize: "0.7em", verticalAlign: "middle", color: "var(--text-muted)" }} />} {(profile.role === "admin" || profile.role === "moderator" || profile.role === "owner") && (isMine || (profile as any).show_badge) && <Icon name={profile.role === "owner" ? "books_solid" : "shield_filled"} style={{ color: profile.role === "owner" ? "var(--accent)" : profile.role === "admin" ? "#27ae60" : "#cc8800", fontSize: "0.75em", verticalAlign: "middle", marginLeft: 3 }} title={profile.role === "owner" ? "오너" : profile.role === "admin" ? "관리자" : "조율자"} />}{(profile as any).is_deceased && <span className="deceased-badge"><svg viewBox="0 0 24 24" width="11" height="11" fill="#e8a0bf" stroke="#e8a0bf" stroke-width="0.5" style={{ verticalAlign: "middle", marginRight: 1 }}><circle cx="9" cy="8" r="2.8"/><circle cx="15" cy="8" r="2.8"/><circle cx="12" cy="5.5" r="2.8"/><path d="M6 12c2 3 4 5 6 8 2-3 4-5 6-8"/></svg> 당신을 만나고 싶습니다</span>}</h2>
             <p className="profile-username">@{profile.display_handle || profile.username}</p>
             {profile.summary && (
               <p key={emojiMap.length} className="profile-summary" dangerouslySetInnerHTML={{
-                __html: rewriteLinks(renderCustomEmojis(
-                  profile.summary
-                    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-                    .replace(/<[^>]+\s+on\w+\s*=\s*[^>]*>/gi, '')
-                    .replace(/<img[^>]*alt="([^"]*)"[^>]*>/gi, '$1')
-                    .replace(/<img[^>]*>/gi, '')
-                    .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '')
-                    .replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '')
-                    .replace(/<embed[^>]*>/gi, '')
-                    .replace(/\n/g, '<br>'),
+                __html: sanitizeSummary(rewriteLinks(renderCustomEmojis(
+                  profile.summary.replace(/\n/g, '<br>'),
                   emojiMap
-                ))
-                  .replace(/<a\s+href="https?:\/\/([^/]+)\/@(\w+)"[^>]*>([^<]*)<\/a>/gi,
-                    (_m: string, domain: string, user: string) =>
-                      `<a href="/@${user}@${domain}" class="mention-link">@${user}@${domain}</a>`
-                  )
+                )))
               }} />
             )}
             {(profile as any).custom_fields?.length > 0 && (
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
                 {(profile as any).custom_fields.map((f: { name?: string; label?: string; value: string }, i: number) => (
                     <div key={i} style={{ fontSize: "0.85em", color: "var(--text-secondary)" }}>
-                    <span style={{ fontWeight: 600, marginRight: 4 }} dangerouslySetInnerHTML={{ __html: renderCustomEmojis(f.name || f.label || "", emojiMap) }} />
-                    {f.value.startsWith("http") ? <a href={f.value} target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>{f.value}</a> : <span dangerouslySetInnerHTML={{ __html: rewriteLinks(renderCustomEmojis(f.value, emojiMap)) }} />}
+                    <span style={{ fontWeight: 600, marginRight: 4 }} dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(f.name || f.label || "", emojiMap)) }} />
+                    {f.value.startsWith("http") ? <a href={f.value} target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>{f.value}</a> : <span dangerouslySetInnerHTML={{ __html: sanitizePost(rewriteLinks(renderCustomEmojis(f.value, emojiMap))) }} />}
                   </div>
                 ))}
               </div>
@@ -491,7 +480,7 @@ export default function ProfilePage() {
             <div className="profile-user-row">
               <Avatar user={f.user} className="sidebar-avatar" />
               <div>
-                <strong className="follower-name">{f.user.display_name}</strong>
+                <strong className="follower-name" dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(f.user.display_name, emojiMap, 14)) }} />
                 <br /><span className="text-muted">@{f.user.username}</span>
               </div>
             </div>
@@ -505,7 +494,7 @@ export default function ProfilePage() {
             <div className="profile-user-row">
               <Avatar user={f.user} className="sidebar-avatar" />
               <div>
-                <strong className="follower-name">{f.user.display_name}</strong>
+                <strong className="follower-name" dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(f.user.display_name, emojiMap, 14)) }} />
                 <br /><span className="text-muted">@{f.user.username}</span>
               </div>
             </div>

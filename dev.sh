@@ -19,7 +19,7 @@ if [ ! -d "$VENV_DIR" ]; then
 fi
 
 echo -e "${YELLOW}[setup]${NC} Python 의존성 확인 중..."
-"$PYTHON" -m pip install -r "$ROOT_DIR/app/requirements.txt" --quiet
+"$PYTHON" -m pip install -r "$ROOT_DIR/requirements.txt" --quiet
 # watchfiles가 있으면 RustNotify가 db_data/ 권한 오류로 크래시 → 제거
 "$PYTHON" -m pip uninstall -y watchfiles 2>/dev/null || true
 
@@ -128,8 +128,10 @@ _prefix_web() {
   done
 }
 
+echo -e "${YELLOW}[api]${NC} 마이그레이션 실행 중..."
+cd "$ROOT_DIR" && "$PYTHON" -m alembic upgrade head 2>&1 | _prefix_output "[migrate]" "$YELLOW" || echo -e "${YELLOW}[migrate]${NC} 마이그레이션 스킵 또는 완료"
+
 echo -e "${YELLOW}[api]${NC} 서버 시작 중 (포트 $BACKEND_PORT)..."
-cd "$ROOT_DIR" && APP_ENV=development PYTHONUNBUFFERED=1 "$PYTHON" -m alembic upgrade head
 cd "$ROOT_DIR" && APP_ENV=development PYTHONUNBUFFERED=1 "$PYTHON" -m uvicorn app.main:app --reload --reload-dir "$ROOT_DIR/app" --host 0.0.0.0 --port "$BACKEND_PORT" \
   > >(tee -a "$COMBINED_LOG" | _prefix_output "[api]" "$GREEN") 2>&1 &
 BACKEND_PID=$!

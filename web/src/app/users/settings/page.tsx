@@ -99,7 +99,7 @@ export default function SettingsPage() {
           }
           setPushInitial(pushEnabled);
         } catch (e: any) {
-          alert(`브라우저 알림 설정 중 오류: ${e.message || e}`);
+          alert("알림 설정 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.");
           setPushEnabled(pushInitial);
         }
       }
@@ -178,6 +178,7 @@ export default function SettingsPage() {
             <p className="form-help">브라우저가 꺼져 있어도 새로운 알림을 받을 수 있습니다. 변경 후 설정 저장을 눌러주세요.</p>
           </div>
         )}
+
         <div className="form-actions">
           <button type="submit" disabled={submitting} className="btn btn-primary">설정 저장</button>
         </div>

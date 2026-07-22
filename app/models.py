@@ -3,7 +3,7 @@ import re
 import uuid
 from sqlalchemy import (
     create_engine, Column, Integer, String, Text, DateTime, Boolean,
-    ForeignKey, JSON, Index, event, text, Table
+    ForeignKey, JSON, text, Table
 )
 from sqlalchemy.orm import DeclarativeBase, relationship, Session
 
@@ -20,7 +20,7 @@ else:
         pool_use_lifo=True,
         pool_recycle=300,
         pool_timeout=15,
-        pool_pre_ping=False,
+        pool_pre_ping=True,
     )
 
 
@@ -34,6 +34,16 @@ def generate_uuid():
 
 def now():
     return datetime.datetime.now(datetime.timezone.utc)
+def get_24hours_later():
+    return datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+
+
+def _ap_datetime(dt):
+    if dt is None:
+        return ""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class User(Base):
@@ -96,8 +106,8 @@ class User(Base):
     session_token = Column(String(64), default="")
 
     posts = relationship("Post", back_populates="author", foreign_keys="Post.author_id",
-                         cascade="all, delete-orphan", lazy="selectin")
-    novels = relationship("Novel", back_populates="author", cascade="all, delete-orphan", lazy="selectin")
+                         cascade="all, delete-orphan", lazy="noload")
+    novels = relationship("Novel", back_populates="author", cascade="all, delete-orphan", lazy="noload")
 
     def actor_uri(self):
         if self.is_remote and self.remote_url:
@@ -115,6 +125,9 @@ class User(Base):
 
     def outbox_uri(self):
         return f"{BASE_URL}/users/{self.username}/outbox"
+
+    def featured_uri(self):
+        return f"{BASE_URL}/users/{self.username}/featured"
 
     def to_ap_actor(self):
         tags = []
@@ -134,6 +147,7 @@ class User(Base):
             "url": f"{BASE_URL}/@{self.username}",
             "inbox": self.inbox_uri(),
             "outbox": self.outbox_uri(),
+            "featured": self.featured_uri(),
             "followers": self.followers_uri(),
             "following": self.following_uri(),
             "publicKey": {
@@ -141,7 +155,7 @@ class User(Base):
                 "owner": self.actor_uri(),
                 "publicKeyPem": self.public_key,
             },
-            "published": (self.created_at.isoformat() if self.created_at else ""),
+            "published": _ap_datetime(self.created_at),
             "discoverable": True,
             "manuallyApprovesFollowers": bool(self.is_locked),
         }
@@ -220,11 +234,15 @@ class Post(Base):
     in_reply_to_ap_id = Column(String(1024), default="")
 
     # Boost pointer: if set, this post is a boost of another post
-    boost_of_id = Column(Integer, ForeignKey("posts.id"), nullable=True, index=True)
+    boost_of_id = Column(Integer, ForeignKey("posts.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # Quote pointer: if set, this post quotes another post
+    quote_of_id = Column(Integer, ForeignKey("posts.id", ondelete="SET NULL"), nullable=True, index=True)
+    quote_of_ap_id = Column(String(1024), default="")
 
     # Novel post (if this post is a novel episode announcement)
-    novel_id = Column(Integer, ForeignKey("novels.id"), nullable=True)
-    episode_id = Column(Integer, ForeignKey("episodes.id"), nullable=True)
+    novel_id = Column(Integer, ForeignKey("novels.id", ondelete="SET NULL"), nullable=True)
+    episode_id = Column(Integer, ForeignKey("episodes.id", ondelete="SET NULL"), nullable=True)
 
     is_deleted = Column(Boolean, default=False)
     is_pinned = Column(Boolean, default=False)
@@ -241,10 +259,11 @@ class Post(Base):
     author = relationship("User", back_populates="posts", foreign_keys=[author_id], lazy="selectin")
     parent = relationship("Post", back_populates="replies", remote_side=[id], foreign_keys=[in_reply_to_id], lazy="selectin")
     replies = relationship("Post", back_populates="parent", foreign_keys=[in_reply_to_id], lazy="selectin")
-    boost_of = relationship("Post", foreign_keys=[boost_of_id], remote_side=[id], lazy="selectin")
+    boost_of = relationship("Post", foreign_keys=[boost_of_id], remote_side=[id], lazy="noload")
+    quote_of = relationship("Post", foreign_keys=[quote_of_id], remote_side=[id], lazy="noload")
     likes = relationship("Like", back_populates="post", cascade="all, delete-orphan", lazy="selectin")
     boosts = relationship("Boost", back_populates="post", cascade="all, delete-orphan", lazy="selectin")
-    votes = relationship("Vote", back_populates="post", cascade="all, delete-orphan", lazy="selectin")
+    votes = relationship("Vote", back_populates="post", cascade="all, delete-orphan", lazy="noload")
     novel = relationship("Novel", foreign_keys=[novel_id], lazy="selectin")
     episode = relationship("Episode", foreign_keys=[episode_id], lazy="selectin")
 
@@ -270,234 +289,123 @@ class Post(Base):
             return 0
 
     def to_ap_note(self):
-        from urllib.parse import urlparse
         content = self.content
+        tags = []
+        mentioned_uris = []
 
-        content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', content)
-        content = re.sub(r'\*(.+?)\*', r'<em>\1</em>', content)
-        content = content.replace('\n', '<br>')
+        # 1. 멘션 및 해시태그 구축
+        with get_session() as s:
+            if self.mentioned_user_ids:
+                users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
+                for u in users:
+                    actor_uri = u.actor_uri()
+                    mentioned_uris.append(actor_uri)
+                    tag_name = f"@{u.username}" if u.is_remote else f"@{u.username}@{urlparse(BASE_URL).hostname}"
+                    tags.append({"type": "Mention", "href": actor_uri, "name": tag_name})
+                    target_rel = f'href="/@{u.username}"'
+                    domain = u.username.split('@', 1)[1] if '@' in u.username else urlparse(BASE_URL).netloc
+                    username = u.username.split('@', 1)[0]
+                    content = content.replace(target_rel, f'href="https://{domain}/@{username}"')
 
-        # Collect :emoji: shortcodes for tag array (content stays as :shortcode:)
+            if self.tag_list:
+                for t in self.tag_list:
+                    tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={_urlencode(t.name)}", "name": f"#{t.name}"})
+
+        # 2. 이모지 구축
         _emoji_pattern = re.compile(r':([a-z0-9_]{2,}):')
         _emoji_keywords = set(_emoji_pattern.findall(content))
-        _emoji_map = {}
         if _emoji_keywords:
-            def _get_emoji_url(file_name: str, domain: str = "", category: str = "") -> str:
-                sub = "remote" if domain or category == "remote" else "local"
-                from app.config import S3_ENABLED
-                if S3_ENABLED:
-                    from app.utils.storage import get_storage
-                    try:
-                        storage = get_storage()
-                        return storage.url(f"emojis/{sub}/{file_name}")
-                    except Exception:
-                        pass
-                return f"{BASE_URL}/emojis/{sub}/{file_name}"
-
             with get_session() as _es:
                 for kw in _emoji_keywords:
                     emoji = _es.query(CustomEmoji).filter_by(keyword=kw).first()
                     if emoji:
-                        _emoji_map[kw] = (_get_emoji_url(emoji.file_name, emoji.domain or "", emoji.category or ""), emoji.keyword)
-
-        tags = []
-        if _emoji_map:
-            for keyword, (url, _) in _emoji_map.items():
-                tags.append({
-                    "type": "Emoji",
-                    "id": f"{BASE_URL}/emojis/{keyword}",
-                    "name": f":{keyword}:",
-                    "icon": {
-                        "type": "Image",
-                        "mediaType": "image/webp",
-                        "url": url,
-                    },
-                })
-        if self.mentioned_user_ids:
-            from app.config import DOMAIN
-            from urllib.parse import urlparse as _urlparse
-            with get_session() as s:
-                users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
-                for u in users:
-                    web_href = getattr(u, 'profile_url', '') or f"{BASE_URL}/@{u.username}"
-                    # Actor URI (for Mention tag)
-                    actor_href = u.actor_uri()
-                    # Display name: just username (Mastodon expects @<span>username</span>)
-                    short_username = u.username.split("@")[0] if u.is_remote else u.username
-                    # tag name must be @user@domain for remote, @user for local
-                    if u.is_remote:
-                        tag_name = f"@{u.username}"  # username already has @domain
-                    else:
-                        tag_name = f"@{u.username}@{DOMAIN}"
-                    mention_html = (
-                        f'<span class="h-card" translate="no">'
-                        f'<a href="{web_href}" class="u-url mention" rel="mention">'
-                        f'@<span>{short_username}</span>'
-                        f'</a></span>'
-                    )
-                    short_name = f"@{u.username}"
-                    content = re.sub(
-                        r'(?<!/)' + re.escape(short_name) + r'(?:@[a-zA-Z0-9.-]+)?(?![^\s<]*(?:</a>|">))',
-                        mention_html,
-                        content,
-                    )
-                    tags.append({"type": "Mention", "href": actor_href, "name": tag_name})
-
-        # Wrap remaining @user@domain patterns as mentions + tag array entries
-        def _actor_uri_for_handle(handle: str) -> str:
-            if "@" in handle:
-                name, domain = handle.split("@", 1)
-                domain_uri = f"https://{domain}" if domain != urlparse(BASE_URL).hostname else BASE_URL
-                return f"{domain_uri}/users/{name}"
-            return f"{BASE_URL}/users/{handle}"
-        def _wrap_unknown_mention(m):
-            handle = m.group(1)
-            actor_uri = _actor_uri_for_handle(handle)
-            web_uri = f"{BASE_URL}/@{handle}"
-            tags.append({"type": "Mention", "href": actor_uri, "name": f"@{handle}"})
-            return (
-                f'<span class="h-card" translate="no">'
-                f'<a href="{web_uri}" class="u-url mention" rel="mention">'
-                f'@<span>{handle.split("@")[0]}</span>'
-                f'</a></span>'
-            )
-        content = re.sub(
-            r'(?<!/)(?:^|(?<=\s))@([a-zA-Z0-9_]+(?:@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*)?)(?=\s|$|<|\.|[,:;!?)\'"])',
-            _wrap_unknown_mention,
-            content,
-        )
-
-        content = re.sub(
-            r'(^|>|　|\s)(https?://[^\s<>"\')\]]+)(?![^<]*</a>)',
-            lambda m: f'{m.group(1)}<a href="{m.group(2)}">{m.group(2)}</a>',
-            content,
-        )
-
-        from urllib.parse import quote as _urlencode
-        content = re.sub(
-            r'(^|(?<=\s)|(?<=>))#([^\s<]+)',
-            lambda m: f'{m.group(1)}<a href="{BASE_URL}/explore?tag={_urlencode(m.group(2))}" class="mention hashtag" rel="tag">#{m.group(2)}</a>',
-            content,
-        )
-
-        if self.tag_list:
-            for t in self.tag_list:
-                tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={_urlencode(t.name)}", "name": f"#{t.name}"})
-
-        content = re.sub(r'href="/', f'href="{BASE_URL}/', content)
-
-        _ap_context = [
-            "https://www.w3.org/ns/activitystreams",
-            "https://w3id.org/security/v1",
-            {
-                "manuallyApprovesFollowers": "as:manuallyApprovesFollowers",
-                "toot": "http://joinmastodon.org/ns#",
-                "misskey": "https://misskey-hub.net/ns#",
-                "Hashtag": "as:Hashtag",
-                "sensitive": "as:sensitive",
-                "Emoji": "toot:Emoji",
-                "emoji": "toot:emoji",
-                "quoteUrl": "as:quoteUrl",
-            },
-        ]
-        obj_id = f"{BASE_URL}/@{self.author.username}/{self.number}" if self.number else self.ap_id
-        obj = {
-            "@context": _ap_context,
-            "id": obj_id,
-            "url": obj_id,
-            "type": "Note",
-            "published": self.created_at.isoformat() if self.created_at else "",
-            "attributedTo": self.author.actor_uri(),
-            "content": content,
-            "to": [],
-            "cc": [],
-            "tag": tags,
-        }
-        followers_uri = self.author.followers_uri()
-        public_uri = "https://www.w3.org/ns/activitystreams#Public"
-        if self.visibility == "public":
-            obj["to"] = [followers_uri, public_uri]
-        elif self.visibility == "home":
-            obj["to"] = [followers_uri]
-            obj["cc"] = [public_uri]
-        elif self.visibility == "followers":
-            obj["to"] = [followers_uri]
-        elif self.visibility == "mention":
-            obj["to"] = []
-        if self.mentioned_user_ids:
-            with get_session() as _ms:
-                _musers = _ms.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
-                for _mu in _musers:
-                    _mu_uri = _mu.actor_uri()
-                    if _mu_uri not in obj["to"] and _mu_uri not in obj["cc"]:
-                        if self.is_dm:
-                            obj["to"].append(_mu_uri)
-                        else:
-                            obj["cc"].append(_mu_uri)
-        is_sensitive = self.is_sensitive or getattr(self.author, 'is_sensitive', False) or False
-        if self.summary:
-            obj["summary"] = self.summary
-            obj["sensitive"] = True
-        elif is_sensitive:
-            obj["sensitive"] = True
-        if self.media_attachments:
-            from urllib.parse import urlparse
-            attachments = []
-            for m in (self.media_attachments or [])[:4]:
-                if isinstance(m, dict):
-                    url = m.get("url", "")
-                    mtype = m.get("type", "image")
-                    if url:
-                        ext = url.rsplit(".", 1)[-1].lower() if "." in url else "png"
-                        if mtype == "video" or ext in ("mp4", "webm", "mov"):
-                            ap_type = "Video"
-                            ct = "video/webm"
-                        else:
-                            ap_type = "Image"
-                            ct = f"image/{ext}"
-                        attachments.append({
-                            "type": ap_type,
-                            "mediaType": ct,
-                            "url": url,
-                            "name": "",
+                        sub = "remote" if (emoji.domain or emoji.category == "remote") else "local"
+                        url = emoji.source_url
+                        tags.append({
+                            "type": "Emoji", "id": f"{BASE_URL}/emojis/{kw}", "name": f":{kw}:",
+                            "icon": {"type": "Image", "mediaType": "image/webp", "url": url}
                         })
-            if attachments:
-                obj["attachment"] = attachments
-        if self.in_reply_to_ap_id:
-            obj["inReplyTo"] = self.in_reply_to_ap_id
+
+        # 3. 객체 생성
+        obj = {
+            "@context": ["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1", {
+                "manuallyapprovesfollowers": "as:manuallyapprovesfollowers", "toot": "http://joinmastodon.org/ns#",
+                "emoji": "toot:emoji", "quote": {"@id": "https://w3id.org/fep/044f#quote", "@type": "@id"}
+            }],
+            #"id": f"{BASE_URL}/posts/{self.id}",
+            "id": self.ap_id,
+            "type": "Question" if self.poll_data else "Note",
+            "attributedTo": self.author.actor_uri().strip(),
+            "content": f"<p>{content}</p>" if not content.strip().startswith("<p>") else content,
+            "mediaType": "text/html",
+            "tag": tags,
+            "to": [], "cc": []
+        }
+
+        # 4. 수신자 및 답글 관계 설정
+        to_list = list(set(mentioned_uris))
+        cc_list = []
+        public_uri = "https://www.w3.org/ns/activitystreams#Public"
+        followers_uri = self.author.followers_uri()
+
+        # 답글 처리 (DB 모델의 parent 관계 활용)
+        if self.in_reply_to_ap_id and self.parent:
+            obj["inReplyTo"] = self.parent.ap_id
+            if self.parent.author.actor_uri().strip() not in to_list:
+                to_list.append(self.parent.author.actor_uri().strip())
+
+        # 공개 범위
+        if self.visibility == "public":
+            to_list.append(public_uri)
+            cc_list.append(followers_uri)
+        elif self.visibility == "home":
+            # 홈공개는 '팔로워에게 전달(to)'하고 '공개(cc)'로 처리해야 미스키에서 보임
+            if followers_uri not in to_list:
+                to_list.append(followers_uri)
+            if public_uri not in cc_list:
+                cc_list.append(public_uri)
+        elif self.visibility == "followers":
+            to_list.append(followers_uri)
+
+        # [수정] 본인에게 보내는 답글일 경우, to_list에 본인을 포함
+        if self.in_reply_to_ap_id and self.parent and self.parent.author_id == self.author_id:
+            if self.author.actor_uri().strip() not in to_list:
+                to_list.append(self.author.actor_uri().strip())
+
+        # 5. 미디어, 인용, 설문 처리
+        if self.media_attachments:
+            obj["attachment"] = [{"type": "Video" if m.get("type")=="video" else "Image", 
+                                 "mediaType": "video/webm" if m.get("type")=="video" else f"image/{m.get('url', '').rsplit('.',1)[-1]}", 
+                                 "url": m.get("url")} for m in self.media_attachments[:4]]
+        if self.quote_of_ap_id:
+            obj.update({"quoteUrl": self.quote_of_ap_id, "quote": self.quote_of_ap_id, "quoteUri": self.quote_of_ap_id})
         if self.poll_data:
-            obj["type"] = "Question"
-            poll_id = self.ap_id or f"{BASE_URL}/@{self.author.username}/{self.number}"
             obj["oneOf"] = [
                 {
                     "type": "Note",
-                    "id": f"{poll_id}/options/{i}",
                     "name": o["text"],
-                    "replies": {"type": "Collection", "totalItems": o.get("votes_count", 0)},
-                }
-                for i, o in enumerate(self.poll_data.get("options", []))
+                    "replies": {
+                        "type": "Collection",
+                        "totalItems": o.get("votes_count", 0)
+                    }} for o in self.poll_data.get("options", [])
             ]
-            voters = sum(o.get("votes_count", 0) for o in self.poll_data.get("options", []))
-            obj["votersCount"] = voters
-            expires_at = self.poll_data.get("expires_at")
-            if expires_at:
-                obj["endTime"] = expires_at
-                try:
-                    from datetime import datetime
-                    if datetime.fromisoformat(expires_at) < datetime.now(datetime.timezone.utc):
-                        obj["closed"] = expires_at
-                except Exception:
-                    pass
+            obj["votersCount"] = sum(o.get("votes_count", 0) for o in self.poll_data.get("options", []))
+            obj["endTime"] = self.poll_data.get('expires_at')
+
+        # 6. 최종 수신자 정리
+        cc_list.append(self.author.actor_uri().strip())
+        obj["to"] = list(set(to_list))
+        obj["cc"] = list(set(cc_list) - set(obj["to"]))
         return obj
 
     def to_ap_create(self):
         note = self.to_ap_note()
         return {
-            "@context": note.get("@context", "https://www.w3.org/ns/activitystreams"),
+            "@context": note.get("@context"),
             "id": f"{BASE_URL}/activities/create/{self.id}",
             "type": "Create",
             "actor": self.author.actor_uri(),
-            "published": self.created_at.isoformat() if self.created_at else "",
+            "published": note.get("published"),
             "to": note.get("to", []),
             "cc": note.get("cc", []),
             "object": note,
@@ -513,6 +421,7 @@ class Vote(Base):
     option_index = Column(Integer, nullable=False)
     ap_id = Column(String(1024), unique=True, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now)
+    expires_at = Column(DateTime(timezone=True), default=get_24hours_later)
 
     user = relationship("User", lazy="selectin")
     post = relationship("Post", back_populates="votes", lazy="selectin")
@@ -683,7 +592,7 @@ class Notification(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     from_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     notification_type = Column(String(32), nullable=False)  # follow, like, boost, reply, mention, moderation
-    post_id = Column(Integer, ForeignKey("posts.id"), nullable=True)
+    post_id = Column(Integer, ForeignKey("posts.id", ondelete="SET NULL"), nullable=True)
     metadata_json = Column(Text, default="")
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now)
@@ -701,6 +610,19 @@ class PushSubscription(Base):
     endpoint = Column(Text, nullable=False)
     p256dh = Column(Text, nullable=False)
     auth = Column(Text, nullable=False)
+    device_name = Column(String(256), default="")
+    created_at = Column(DateTime(timezone=True), default=now)
+
+
+class LoginSession(Base):
+    __tablename__ = "login_sessions"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    session_key = Column(String(64), unique=True, nullable=False, index=True)
+    ip_address = Column(String(45), default="")
+    user_agent = Column(Text, default="")
+    last_active = Column(DateTime(timezone=True), default=now)
     created_at = Column(DateTime(timezone=True), default=now)
 
 
@@ -874,6 +796,8 @@ class ServerSetting(Base):
     admin_email = Column(String(255), default="")
     federation_mode = Column(String(16), default="blacklist")
     enable_reactions = Column(Boolean, default=True)
+    vapid_private_key = Column(Text, default="")
+    vapid_public_key = Column(Text, default="")
 
     @classmethod
     def get(cls, session):
@@ -996,7 +920,17 @@ def _add_missing_columns():
     ])
 
 
+_SAFE_TABLE_NAMES = {"users", "posts", "novels", "episodes", "follows", "likes", "boosts",
+                      "bookmarks", "notifications", "server_settings", "processed_activities",
+                      "custom_emojis", "votes", "reactions", "user_blocks", "user_mutes",
+                      "keyword_mutes", "series_mutes", "reports", "report_rules",
+                      "federation_blocks", "federation_modes", "allowed_servers", "custom_fields",
+                      "episode_comments", "series_notices", "remote_followers"}
+
+
 def _add_cols(table: str, inspector, cols: list[tuple[str, str]]):
+    if table not in _SAFE_TABLE_NAMES:
+        raise ValueError(f"Invalid table name: {table}")
     try:
         existing = {c["name"] for c in inspector.get_columns(table)}
     except Exception:

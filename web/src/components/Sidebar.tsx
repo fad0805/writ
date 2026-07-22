@@ -8,7 +8,10 @@ import Avatar from "./Avatar";
 
 function NavItem({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
   const handleClick = (e: React.MouseEvent) => {
-    if (active) e.preventDefault();
+    if (active) {
+      e.preventDefault();
+      document.querySelector(".main-content")?.scrollTo({ top: 0, behavior: "smooth" });
+    }
   };
   return (
     <li>
@@ -30,6 +33,7 @@ export default function Sidebar() {
   const [sidebarServerName, setSidebarServerName] = useState("WRIT");
   const [sidebarLogo, setSidebarLogo] = useState("");
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
+  const [timelineTab, setTimelineTab] = useState("home");
 
   useEffect(() => {
     fetch("/api/server-info")
@@ -46,24 +50,24 @@ export default function Sidebar() {
     }
   }, []);
   useEffect(() => {
+    if (typeof localStorage !== "undefined") setTimelineTab(localStorage.getItem("lastTimelineTab") || "home");
+  }, [pathname]);
+  useEffect(() => {
     if (!user) return;
-    const check = () => {
-      fetch("/api/notifications/unread-count", { credentials: "include" })
-        .then((r) => r.json())
-        .then((d) => setUnreadNotifs(d.count || 0))
-        .catch(() => {});
+    const update = () => {
+      if (typeof window !== "undefined" && (window as any).__unreadNotifs !== undefined) {
+        setUnreadNotifs((window as any).__unreadNotifs);
+      }
     };
-    check();
+    update();
     const handler = () => { setUnreadNotifs(0); };
     const profileHandler = () => refresh();
-    const notifChangeHandler = () => check();
     window.addEventListener("notificationsread", handler);
     window.addEventListener("profilechange", profileHandler);
-    window.addEventListener("notifchange", notifChangeHandler);
+    window.addEventListener("notifchange", update);
     const serverHandler = () => setSidebarRefreshKey((k) => k + 1);
     window.addEventListener("serverchange", serverHandler);
-    const interval = setInterval(check, 30000);
-    return () => { clearInterval(interval); window.removeEventListener("notificationsread", handler); window.removeEventListener("profilechange", profileHandler); window.removeEventListener("notifchange", notifChangeHandler); window.removeEventListener("serverchange", serverHandler); };
+    return () => { window.removeEventListener("notificationsread", handler); window.removeEventListener("profilechange", profileHandler); window.removeEventListener("notifchange", update); window.removeEventListener("serverchange", serverHandler); };
   }, [user, refresh]);
   useEffect(() => {
     const link = document.querySelector<HTMLLinkElement>("link[rel~=icon]");
@@ -108,7 +112,7 @@ export default function Sidebar() {
 
   const isActive = (href: string) => {
     if (!pathname) return false;
-    if (pathname.startsWith("/timeline")) return href.startsWith("/timeline");
+    if (href === "/timeline/home") return pathname.startsWith("/timeline");
     if (href === "/series/my") return pathname === "/series/my";
     if (href === "/series") return pathname === "/series";
     if (user && href === `/@${user.username}`) return pathname === `/@${user.username}`;
@@ -219,7 +223,7 @@ export default function Sidebar() {
             try {
               const form = new FormData(); form.append("url", q);
               const res = await fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form });
-              if (res.ok) { const d = await res.json(); setSidebarQ(""); router.push(d.number ? `/@${d.author.username}/${d.number}` : `/post/${d.id}`); return; }
+              if (res.ok) { const d = await res.json(); setSidebarQ(""); if (d.type === "user" && d.redirect) { router.push(d.redirect); } else { router.push(d.number ? `/@${d.author.username}/${d.number}` : `/post/${d.id}`); } return; }
             } catch {}
             toExplore();
           }
@@ -247,7 +251,7 @@ export default function Sidebar() {
         </div>
       </Link>
       <ul className="nav-links">
-        <NavItem href={`/timeline/${typeof localStorage !== "undefined" ? (localStorage.getItem("lastTimelineTab") || "home") : "home"}`} active={pathname.startsWith("/timeline")}>
+        <NavItem href={`/timeline/${timelineTab}`} active={pathname.startsWith("/timeline")}>
           <Icon name="home_solid" /> 타임라인
         </NavItem>
         <NavItem href="/notifications" active={isActive("/notifications")}>
@@ -261,6 +265,9 @@ export default function Sidebar() {
         <li className="nav-divider" />
         <NavItem href="/series/my" active={isActive("/series/my")}>
           <Icon name="book_solid" /> 내 시리즈
+        </NavItem>
+        <NavItem href="/series/followed" active={isActive("/series/followed")}>
+          <Icon name="bookmark_solid" /> 구독 시리즈
         </NavItem>
         <NavItem href="/series" active={isActive("/series")}>
           <Icon name="books_solid" /> 모든 시리즈

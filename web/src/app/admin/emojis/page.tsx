@@ -10,6 +10,10 @@ export default function AdminEmojiPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const [emojis, setEmojis] = useState<CustomEmoji[]>([]);
+  const [total, setTotal] = useState(0);
+  const [emojiPage, setEmojiPage] = useState(0);
+  const [emojiLoading, setEmojiLoading] = useState(false);
+  const PAGE_SIZE = 20;
   const [emojiKeyword, setEmojiKeyword] = useState("");
   const [emojiCategory, setEmojiCategory] = useState("");
   const [emojiAliases, setEmojiAliases] = useState("");
@@ -23,6 +27,20 @@ export default function AdminEmojiPage() {
   const [editCategory, setEditCategory] = useState("");
   const [editAliases, setEditAliases] = useState("");
 
+  const fetchEmojis = (page: number, search?: string, filter?: string) => {
+    setEmojiLoading(true);
+    const q = search !== undefined ? search : emojiSearch;
+    const f = filter !== undefined ? filter : emojiFilter;
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE), category: f === "all" ? "" : f });
+    if (q) params.set("q", q);
+    fetch(`/api/emojis?${params}`, { credentials: "include" })
+      .then(r => r.json()).then(d => {
+        setEmojis(d.emojis || d || []);
+        setTotal(d.total || 0);
+        setEmojiLoading(false);
+      }).catch(() => setEmojiLoading(false));
+  };
+
   useEffect(() => {
     if (!authLoading && user?.role !== "admin" && user?.role !== "moderator" && user?.role !== "owner") {
       router.push("/timeline/home");
@@ -30,8 +48,7 @@ export default function AdminEmojiPage() {
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    fetch("/api/emojis?limit=999", { credentials: "include" })
-      .then(r => r.json()).then(d => { console.log("[EMOJI ADMIN] response:", d); setEmojis(d.emojis || d || []); }).catch(() => {});
+    fetchEmojis(0);
   }, []);
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
@@ -62,9 +79,9 @@ export default function AdminEmojiPage() {
             const res = await fetch("/api/emojis", { method: "POST", credentials: "include", body: form });
             if (res.ok) {
               const newEmoji = await res.json();
-              setEmojis([...emojis, newEmoji]);
               setEmojiKeyword(""); setEmojiCategory(""); setEmojiAliases(""); setEmojiFile(null);
               invalidateEmojiCache();
+              fetchEmojis(0);
             } else {
               const d = await res.json();
               alert(d.detail || "업로드 실패");
@@ -94,17 +111,19 @@ export default function AdminEmojiPage() {
         </form>}
 
         <div className="hm-top-24">
-          <input type="text" value={emojiSearch} onChange={(e) => setEmojiSearch(e.target.value)} placeholder="이모지 검색..." className="cw-input w-full hm-bottom-8" />
+          <input type="text" value={emojiSearch} onChange={(e) => { const v = e.target.value; setEmojiSearch(v); setEmojiPage(0); fetchEmojis(0, v); }} placeholder="이모지 검색..." className="cw-input w-full hm-bottom-8" />
           <div className="flex-row gap-8 mb-12">
             {["all", "local", "remote"].map((f) => (
-              <button key={f} onClick={() => setEmojiFilter(f)} className={`btn btn-small ${emojiFilter === f ? "btn-primary" : "btn-outline"}`}>{f === "all" ? "전체" : f === "local" ? "로컬" : "리모트"}</button>
+              <button key={f} onClick={() => { setEmojiFilter(f); setEmojiPage(0); fetchEmojis(0, undefined, f); }} className={`btn btn-small ${emojiFilter === f ? "btn-primary" : "btn-outline"}`}>{f === "all" ? "전체" : f === "local" ? "로컬" : "리모트"}</button>
             ))}
           </div>
-          {emojis.length === 0 ? (
+          {emojiLoading ? (
+            <p className="empty-state">로딩 중...</p>
+          ) : emojis.length === 0 ? (
             <p className="empty-state">등록된 커스텀 이모지가 없습니다.</p>
           ) : (
             <div className="flex-col gap-8">
-              {emojis.filter(e => (emojiFilter === "all" || (emojiFilter === "local" ? e.category !== "remote" : e.category === "remote")) && (!emojiSearch || e.keyword.includes(emojiSearch.toLowerCase()))).map((emo) => (
+              {emojis.filter(e => !emojiSearch || e.keyword.includes(emojiSearch.toLowerCase())).map((emo) => (
                 <div key={emo.id} className="emoji-list-item" onClick={() => { if (emo.category !== "remote") { setEditEmoji(emo); setEditKeyword(emo.keyword); setEditCategory(emo.category || ""); setEditAliases((emo.aliases || []).join(", ")); } }} style={{ cursor: emo.category !== "remote" ? "pointer" : "default" }}>
                   <img src={emo.url} alt={emo.keyword} width={33} height={33} className="emoji-img-admin" />
                   <div className="emoji-info">
@@ -116,11 +135,18 @@ export default function AdminEmojiPage() {
                     </div>
                   </div>
                   {emo.category === "remote" && (
-                    <button type="button" onClick={async (e) => { e.stopPropagation(); const res = await fetch(`/api/emojis/${emo.id}/copy`, { method: "POST", credentials: "include" }); if (res.ok) { const d = await res.json(); setEmojis([...emojis, d.emoji || d]); invalidateEmojiCache(); } }} className="btn btn-emoji-copy">복사</button>
+                    <button type="button" onClick={async (e) => { e.stopPropagation(); const res = await fetch(`/api/emojis/${emo.id}/copy`, { method: "POST", credentials: "include" }); if (res.ok) { invalidateEmojiCache(); fetchEmojis(emojiPage); } }} className="btn btn-emoji-copy">복사</button>
                   )}
-                  <button type="button" onClick={async (e) => { e.stopPropagation(); if (!confirm(`:${emo.keyword}:를 삭제하시겠습니까?`)) return; try { const res = await fetch(`/api/emojis/${emo.id}`, { method: "DELETE", credentials: "include" }); if (res.ok) { setEmojis(emojis.filter(e => e.id !== emo.id)); invalidateEmojiCache(); } } catch {} }} className="btn emoji-delete-btn">삭제</button>
+                  <button type="button" onClick={async (e) => { e.stopPropagation(); if (!confirm(`:${emo.keyword}:를 삭제하시겠습니까?`)) return; try { const res = await fetch(`/api/emojis/${emo.id}`, { method: "DELETE", credentials: "include" }); if (res.ok) { invalidateEmojiCache(); fetchEmojis(emojiPage); } } catch {} }} className="btn emoji-delete-btn">삭제</button>
                 </div>
               ))}
+            </div>
+          )}
+          {total > PAGE_SIZE && (
+            <div className="flex-row gap-8 mt-16" style={{ justifyContent: "center" }}>
+              <button className="btn btn-outline btn-small" disabled={emojiPage === 0} onClick={() => { const p = emojiPage - 1; setEmojiPage(p); fetchEmojis(p); }}>이전</button>
+              <span className="text-dim" style={{ lineHeight: "32px" }}>{emojiPage + 1} / {Math.ceil(total / PAGE_SIZE)}</span>
+              <button className="btn btn-outline btn-small" disabled={(emojiPage + 1) * PAGE_SIZE >= total} onClick={() => { const p = emojiPage + 1; setEmojiPage(p); fetchEmojis(p); }}>다음</button>
             </div>
           )}
         </div>
@@ -152,7 +178,7 @@ export default function AdminEmojiPage() {
               <button type="button" className="btn btn-primary" onClick={async () => {
                 const form = new FormData(); form.append("keyword", editKeyword); form.append("category", editCategory); form.append("aliases", editAliases);
                 const res = await fetch(`/api/emojis/${editEmoji.id}`, { method: "PATCH", credentials: "include", body: form });
-                if (res.ok) { const d = await res.json(); setEmojis(emojis.map(e => e.id === editEmoji.id ? d.emoji : e)); invalidateEmojiCache(); setEditEmoji(null); }
+                if (res.ok) { const d = await res.json(); invalidateEmojiCache(); fetchEmojis(emojiPage); setEditEmoji(null); }
                 else { const d = await res.json(); alert(d.detail || "저장 실패"); }
               }}>저장</button>
               <button type="button" className="btn btn-outline" onClick={() => setEditEmoji(null)}>취소</button>

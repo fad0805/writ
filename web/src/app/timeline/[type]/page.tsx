@@ -1,6 +1,6 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { api, PostData } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import PostCard from "@/components/PostCard";
@@ -30,33 +30,52 @@ export default function TimelinePage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [rawOffset, setRawOffset] = useState(0);
   const [error, setError] = useState("");
 
   const [selectedIdx, setSelectedIdx] = useState(-1);
   const [replyPost, setReplyPost] = useState<PostData | null>(null);
   const [showComposer, setShowComposer] = useState(false);
+  const [rewriteContent, setRewriteContent] = useState<string | null>(null);
+  const [rewriteVisibility, setRewriteVisibility] = useState<string | undefined>(undefined);
+  const [rewriteReplyTo, setRewriteReplyTo] = useState<{ id: number; number: string; content: string; author: any; visibility: string } | null>(null);
+  
+  // 💡 상태 변경 비동기 문제를 해결하기 위해 offset을 최신 ref로 관리합니다.
+  const offsetRef = useRef(0);
   const deletedIds = useRef<Set<number>>(new Set());
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
   const postsRef = useRef(posts);
   postsRef.current = posts;
   const selectedIdxRef = useRef(selectedIdx);
   selectedIdxRef.current = selectedIdx;
-  const tabCache = useRef<Record<string, { posts: PostData[]; hasMore: boolean; rawOffset: number }>>({});
+  
+  const tabCache = useRef<Record<string, { posts: PostData[]; hasMore: boolean; offset: number }>>({});
   const prevTlRef = useRef(tlType);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("writ:tl-cache");
+      if (raw) tabCache.current = JSON.parse(raw);
+    } catch {}
+  }, []);
+
+  const saveTabCache = () => {
+    try { localStorage.setItem("writ:tl-cache", JSON.stringify(tabCache.current)); } catch {}
+  };
 
   useEffect(() => {
     if (typeof localStorage !== "undefined") localStorage.setItem("lastTimelineTab", tlType);
     if (prevTlRef.current !== tlType) {
-      tabCache.current[prevTlRef.current] = { posts, hasMore, rawOffset };
+      tabCache.current[prevTlRef.current] = { posts, hasMore, offset: offsetRef.current };
+      saveTabCache();
       prevTlRef.current = tlType;
     }
     const saved = tabCache.current[tlType];
     if (saved) {
       setPosts(saved.posts);
       setHasMore(saved.hasMore);
-      setRawOffset(saved.rawOffset);
+      offsetRef.current = saved.offset;
       setLoading(false);
+      load();
       return;
     }
     load();
@@ -67,10 +86,12 @@ export default function TimelinePage() {
     setError("");
     try {
       const data = await api.timeline(tlType, LIMIT, 0);
+      if (data._emojis) injectEmojis(data._emojis);
       setPosts(data.posts);
       setHasMore(data.has_more);
-      setRawOffset(LIMIT);
-      tabCache.current[tlType] = { posts: data.posts, hasMore: data.has_more, rawOffset: LIMIT };
+      offsetRef.current = LIMIT;
+      tabCache.current[tlType] = { posts: data.posts, hasMore: data.has_more, offset: LIMIT };
+      saveTabCache();
     } catch (e: any) {
       setError(e.message || "불러오기 실패");
     }
@@ -83,11 +104,15 @@ export default function TimelinePage() {
     return () => window.removeEventListener("followchange", handler);
   }, [tlType]);
 
+  // 💡 의존성 배열을 단순화하여 렉이 걸려도 항상 최신 정보로 백엔드에 페이징을 요청하도록 보장합니다.
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     try {
-      const data = await api.timeline(tlType, LOAD_MORE, rawOffset);
+      const currentOffset = offsetRef.current;
+      const data = await api.timeline(tlType, LOAD_MORE, currentOffset);
+      if (data._emojis) injectEmojis(data._emojis);
+      
       setPosts((prev) => {
         const ids = new Set(prev.map((p) => p.id));
         const newPosts = data.posts.filter((p: any) => !ids.has(p.id));
@@ -95,11 +120,20 @@ export default function TimelinePage() {
         if (total >= 500) setHasMore(false);
         return [...prev, ...newPosts];
       });
+      
       setHasMore(data.has_more);
-      setRawOffset((prev) => prev + LOAD_MORE);
+      offsetRef.current = currentOffset + LOAD_MORE;
+      
+      // 캐시 업데이트
+      const cached = tabCache.current[tlType];
+      if (cached) {
+        tabCache.current[tlType].offset = currentOffset + LOAD_MORE;
+        tabCache.current[tlType].hasMore = data.has_more;
+        saveTabCache();
+      }
     } catch {}
     setLoadingMore(false);
-  }, [tlType, rawOffset, hasMore, loadingMore]);
+  }, [tlType, hasMore, loadingMore]);
 
   const touchStartX = useRef(0);
 
@@ -113,8 +147,9 @@ export default function TimelinePage() {
     const tabs = ["home", "social", "local", "federated"];
     const currentIdx = tabs.indexOf(tlType);
     const handler = (e: TouchEvent) => {
+      if ((e.target as HTMLElement).closest(".reply-modal-backdrop")) return;
       const dx = e.changedTouches[0].clientX - touchStartX.current;
-      if (Math.abs(dx) < 60) return;
+      if (Math.abs(dx) < 120) return;
       if (dx > 0 && currentIdx > 0) router.push(`/timeline/${tabs[currentIdx - 1]}`);
       else if (dx < 0 && currentIdx < tabs.length - 1) router.push(`/timeline/${tabs[currentIdx + 1]}`);
     };
@@ -205,6 +240,7 @@ export default function TimelinePage() {
           const cached = tabCache.current[tlType];
           if (cached) {
             tabCache.current[tlType] = { ...cached, posts: cached.posts.filter((p: any) => p.id !== newPost.id) };
+            saveTabCache();
           }
           return;
         }
@@ -213,6 +249,7 @@ export default function TimelinePage() {
           const cached = tabCache.current[tlType];
           if (cached) {
             tabCache.current[tlType] = { ...cached, posts: cached.posts.map((p: any) => p.id === newPost.id ? { ...p, ...newPost } : p) };
+            saveTabCache();
           }
           return;
         }
@@ -223,6 +260,7 @@ export default function TimelinePage() {
         const cached = tabCache.current[tlType];
         if (cached && !cached.posts.some((p: any) => p.id === newPost.id)) {
           tabCache.current[tlType] = { ...cached, posts: [newPost, ...cached.posts] };
+          saveTabCache();
         }
       } catch {}
     };
@@ -230,24 +268,60 @@ export default function TimelinePage() {
     return () => { es?.close(); };
   }, [tlType]);
 
-
-
-
+  // 성능 최적화용 필터링 분리
+  const filteredPosts = useMemo(() => {
+    return posts.filter((p) => !deletedIds.current.has(p.id));
+  }, [posts]);
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
-  if (!user) return <div className="empty-state">{authLoading ? "로딩 중..." : "로그인이 필요합니다"}</div>;
+  if (!user) return <div className="empty-state">로그인이 필요합니다</div>;
+
   return (
     <>
-      <div className="post-form post-form-desktop">
-        <PostForm onDone={(newPost) => {
+      {rewriteReplyTo ? (
+        <ReplyModal post={{
+          id: rewriteReplyTo.id,
+          number: rewriteReplyTo.number,
+          content: rewriteReplyTo.content,
+          author: rewriteReplyTo.author,
+          visibility: rewriteReplyTo.visibility,
+          summary: null,
+          created_at: null,
+          ap_id: "",
+          likes_count: 0,
+          boosts_count: 0,
+          replies_count: 0,
+          liked: false,
+          boosted: false,
+          bookmarked: false,
+          is_mine: false,
+          reply_context: null,
+          media_attachments: [],
+        } as any} onClose={() => { setRewriteContent(null); setRewriteVisibility(undefined); setRewriteReplyTo(null); }} onDone={(newPost) => {
+          setRewriteContent(null);
+          setRewriteVisibility(undefined);
+          setRewriteReplyTo(null);
           if (newPost) {
             setPosts((prev) => {
               if (prev.some((p) => p.id === newPost.id)) return prev;
               return [newPost, ...prev];
             });
           }
-        }} />
-      </div>
+        }} initialContent={rewriteContent ?? undefined} />
+      ) : (
+        <div className="post-form post-form-desktop">
+          <PostForm key={rewriteContent ? `rewrite-${Date.now()}` : "main"} onDone={(newPost) => {
+            if (newPost) {
+              setPosts((prev) => {
+                if (prev.some((p) => p.id === newPost.id)) return prev;
+                return [newPost, ...prev];
+              });
+            }
+            setRewriteContent(null);
+            setRewriteVisibility(undefined);
+          }} initialContent={rewriteContent ?? undefined} initialVisibility={rewriteVisibility} />
+        </div>
+      )}
       <div className="timeline-tabs">
         {TABS.map((t) => (
           <Link
@@ -260,15 +334,52 @@ export default function TimelinePage() {
         ))}
       </div>
       <div className="feed">
-        {loading ? (
-          <p className="empty-state">로딩 중...</p>
-        ) : error ? (
+        {error ? (
           <p className="empty-state">오류: {error}</p>
-        ) : posts.length === 0 ? (
-          <p className="empty-state">표시할 글이 없습니다.</p>
         ) : (
-          <InfiniteScroll hasMore={hasMore} loadingMore={loadingMore} loadMore={loadMore}>
-            {posts.filter((p) => !deletedIds.current.has(p.id)).map((p, i) => <div key={p.id} ref={(el) => { cardRefs.current[i] = el; }}><PostCard post={p} onDelete={() => { deletedIds.current.add(p.id); setPosts((prev) => prev.filter((x) => x.id !== p.id)); }} onUpdate={(updated) => { if (updated) { setPosts((prev) => prev.map((x) => x.id === p.id ? updated : x)); } else { api.getPost(p.id).then((u) => setPosts((prev) => prev.map((x) => x.id === p.id ? u : x))).catch(() => {}); } }} onReply={(newPost) => { if (newPost) { setPosts((prev) => { if (prev.some((x) => x.id === newPost.id)) return prev; return [newPost, ...prev]; }); } }} selected={i === selectedIdx} /></div>)}
+          /* 💡 loading 상태와 관계없이 InfiniteScroll은 항상 렌더링 상태를 유지합니다. */
+          <InfiniteScroll 
+            hasMore={hasMore} 
+            loadingMore={loadingMore || loading} 
+            loadMore={loadMore}
+          >
+            {/* 실제 데이터가 로드되었고 포스트가 있을 때만 카드들을 그립니다. */}
+            {!loading && filteredPosts.length === 0 ? (
+              <p className="empty-state">표시할 글이 없습니다.</p>
+            ) : (
+              filteredPosts.map((p, i) => (
+                <div key={p.id} ref={(el) => { if (el) cardRefs.current[i] = el; }}>
+                  <PostCard 
+                    post={p} 
+                    onDelete={() => { 
+                      deletedIds.current.add(p.id); 
+                      setPosts((prev) => prev.filter((x) => x.id !== p.id)); 
+                    }} 
+                    onUpdate={(updated) => { 
+                      if (updated) { 
+                        setPosts((prev) => prev.map((x) => x.id === p.id ? updated : x)); 
+                      } else { 
+                        api.getPost(p.id).then((u) => setPosts((prev) => prev.map((x) => x.id === p.id ? u : x))).catch(() => {}); 
+                      } 
+                    }} 
+                    onReply={(newPost) => { 
+                      if (newPost) { 
+                        setPosts((prev) => { 
+                          if (prev.some((x) => x.id === newPost.id)) return prev; 
+                          return [newPost, ...prev]; 
+                        }); 
+                      } 
+                    }} 
+                    onRewrite={(content, visibility, replyTo) => {
+                      setRewriteContent(content);
+                      setRewriteVisibility(visibility);
+                      setRewriteReplyTo(replyTo ?? null);
+                    }}
+                    selected={i === selectedIdx} 
+                  />
+                </div>
+              ))
+            )}
           </InfiniteScroll>
         )}
       </div>

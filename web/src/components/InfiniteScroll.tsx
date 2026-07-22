@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useEffect, ReactNode } from "react";
+import { useRef, useEffect, useCallback, ReactNode } from "react";
 import Loading from "./Loading";
 
 export default function InfiniteScroll({
@@ -7,27 +7,38 @@ export default function InfiniteScroll({
 }: {
   hasMore: boolean; loadingMore: boolean; loadMore: () => void; children: ReactNode;
 }) {
-  const sentinelRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef(loadMore);
   loadMoreRef.current = loadMore;
+  const hasMoreRef = useRef(hasMore);
+  hasMoreRef.current = hasMore;
   const loadingRef = useRef(loadingMore);
   loadingRef.current = loadingMore;
 
-  useEffect(() => {
-    if (!hasMore) return;
-    const el = sentinelRef.current;
+  const checkNearBottom = useCallback(() => {
+    if (loadingRef.current || !hasMoreRef.current) return;
+    const el = document.querySelector(".main-content");
     if (!el) return;
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && !loadingRef.current && hasMore) loadMoreRef.current();
-    }, { rootMargin: "200px" });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [hasMore]);
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    if (scrollHeight - scrollTop - clientHeight < 400) {
+      loadingRef.current = true;
+      loadMoreRef.current();
+    }
+  }, []);
+
+  useEffect(() => {
+    const el = document.querySelector(".main-content");
+    if (!el) return;
+    el.addEventListener("scroll", checkNearBottom, { passive: true });
+    return () => el.removeEventListener("scroll", checkNearBottom);
+  }, [checkNearBottom]);
+
+  useEffect(() => {
+    if (!loadingMore && hasMore) checkNearBottom();
+  }, [loadingMore, hasMore, checkNearBottom]);
 
   return (
     <>
       {children}
-      <div ref={sentinelRef} className="sentinel" />
       {loadingMore && <Loading text="불러오는 중..." />}
     </>
   );

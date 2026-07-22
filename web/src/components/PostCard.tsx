@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import EditModal from "./EditModal";
 import ReplyModal from "./ReplyModal";
 import ClickableCover from "./ClickableCover";
+import PostForm from "./PostForm";
 import Icon from "./Icon";
 import Avatar from "./Avatar";
 import MiniPostCard from "./MiniPostCard";
@@ -13,8 +14,9 @@ import EmojiPicker from "./EmojiPicker";
 import { useAuth } from "@/lib/auth";
 import ShareButton from "@/components/ShareButton";
 import { hashColor } from "@/lib/avatar";
-import { getCustomEmojis, renderCustomEmojis, injectEmojis, CustomEmoji } from "@/lib/emojis";
+import { renderCustomEmojis, injectEmojis, CustomEmoji, subscribeEmojis } from "@/lib/emojis";
 import { sanitizePost, sanitizeName } from "@/lib/sanitize";
+import { installCodeCopyButtons } from "@/lib/codeCopy";
 
 const VIS_ICONS: Record<string, string> = {
   public: "globe", home: "home", followers: "lock", mention: "mail",
@@ -30,47 +32,35 @@ function formatRelative(iso: string, now: number = Date.now()): string {
 }
 
 export function rewriteLinks(text: string, validMentions?: Set<string>): string {
-  // Convert remote hashtag links to local explore
   text = text.replace(
-    /<a\s+href="https?:\/\/[^"]*\/tags\/([^"/]+)"[^>]*>#(\w+)<\/a>/gi,
-    (_m: string, _tagPath: string, tag: string) =>
-      `<a href="/explore?q=%23${encodeURIComponent(tag)}" class="hashtag-link">#${tag}</a>`
-  );
-
-  text = text.replace(
-    /<a\s+href="https?:\/\/([^"/]+)\/@([a-zA-Z_][a-zA-Z0-9_]*)"[^>]*>@?\w*<\/a>/gi,
-    (_m: string, domain: string, user: string) =>
-      `<a href="/@${user}@${domain}" class="mention-link">@${user}@${domain}</a>`
-  );
-
-  text = text.replace(/(^|>|\s)@([a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?)/g, (_m, before, handle) => {
-    // If no domain in handle, check validMentions for a remote match
-    if (!handle.includes("@") && validMentions) {
-      const found = Array.from(validMentions).find((v: string) => v.startsWith(handle + "@"));
-      if (found) handle = found;
+    /(?<!<[^>]*)(^|>|\s)#([\p{L}\p{N}_]+)/gu, 
+    (_m, before, tag) => {
+      return `${before}<a href="/explore?q=%23${encodeURIComponent(tag)}" class="hashtag-link">#${tag}</a>`;
     }
-    return `${before}<a href="/@${handle}" class="mention-link">@${handle}</a>`;
-  });
+  );
 
-  text = text.replace(/(^|>|\s)#([\w_가-힣]+)/g, (_m, before, tag) => {
-    return `${before}<a href="/explore?q=%23${encodeURIComponent(tag)}" class="hashtag-link">#${tag}</a>`;
-  });
-
-  text = text.replace(/(^|>|　|\s)(https?:\/\/[^\s<>"')\]]+)(?![\s\S]*?<\/a>)/g, (_m: string, before: string, url: string) => {
-    const isLocal = typeof window !== "undefined" && url.startsWith(window.location.origin);
-    return `${before}<a href="${isLocal ? url.replace(window.location.origin, "") : url}"${isLocal ? "" : ' target="_blank" rel="noopener noreferrer"'}>${url}</a>`;
-  });
-
+  text = text.replace(
+    /(?<!<[^>]*)(?<!href=")(?<!src=")(^|>| |\s)(https?:\/\/[^\s<>"')\]]+)/g,
+    (_m: string, before: string, url: string) => {
+      const isLocal = typeof window !== "undefined" && url.startsWith(window.location.origin);
+      const targetUrl = isLocal ? url.replace(window.location.origin, "") : url;
+      let display = url.replace(/^https?:\/\//, "");
+      if (display.length > 40) display = display.slice(0, 37) + "...";
+      return `${before}<a href="${targetUrl}"${isLocal ? "" : ' target="_blank" rel="noopener noreferrer"'}>${display}</a>`;
+    }
+  );
   return text;
 }
 
-export default function PostCard({ post, onUpdate, onDelete, onReply, current, hideContext, selected, readonly }: { post: PostData; onUpdate?: (updated?: PostData) => void; onDelete?: () => void; onReply?: (newPost?: PostData) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean }) {
+export default function PostCard({ post, onUpdate, onDelete, onReply, onRewrite, current, hideContext, selected, readonly }: { post: PostData; onUpdate?: (updated?: PostData) => void; onDelete?: () => void; onReply?: (newPost?: PostData) => void; onRewrite?: (content: string, visibility: string, replyTo?: { id: number; number: string; content: string; author: any; visibility: string } | null) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean }) {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const [showReply, setShowReply] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const [showRewrite, setShowRewrite] = useState(false);
   const [showPollResults, setShowPollResults] = useState(false);
+  const [pollRefreshing, setPollRefreshing] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [reportReason, setReportReason] = useState("");
   const [reportError, setReportError] = useState("");
@@ -85,21 +75,50 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likes_count);
   const [boostsCount, setBoostsCount] = useState(post.boosts_count);
+  const [seriesMatch, setSeriesMatch] = useState<RegExpMatchArray | null>(null);
+  const [episodeMatch, setEpisodeMatch] = useState<RegExpMatchArray | null>(null);
 
-  const [emojiList, setEmojiList] = useState<CustomEmoji[]>([]);
-  useEffect(() => { getCustomEmojis().then(setEmojiList); }, []);
+  const [emojiList, setEmojiList] = useState<CustomEmoji[]>(() => {
+    if (typeof window !== "undefined" && (window as any).__emojiCache)
+      return (window as any).__emojiCache as CustomEmoji[];
+    return [];
+  });
+  useEffect(() => {
+    const unsubscribe = subscribeEmojis((list) => {
+      setEmojiList((prev) => {
+        if (prev === list) return prev;
+        if (prev.length === list.length && prev.every((e, i) => e.keyword === list[i]?.keyword && e.url === list[i]?.url)) return prev;
+        return [...list];
+      });
+    });
+    return () => unsubscribe();
+  }, []);
   const [reactions, setReactions] = useState(post.reactions || {});
   const [myReaction, setMyReaction] = useState(post.my_reaction || null);
-  const [reactionEmojiMap, setReactionEmojiMap] = useState<Record<string, string>>(() => {
-    if ((window as any).__emojiMap) return (window as any).__emojiMap;
-    getCustomEmojis().then(list => {
-      const m: Record<string, string> = {};
-      for (const e of list) if (e.keyword && e.url) m[e.keyword] = e.url;
-      (window as any).__emojiMap = m;
-      setReactionEmojiMap(m);
-    }).catch(() => {});
-    return {};
-  });
+  const reactionEmojiMap = useMemo(() => {
+    const m = (window as any).__emojiMap as Record<string, string> | undefined;
+    if (m && Object.keys(m).length > 0) return m;
+    const map: Record<string, string> = {};
+    for (const e of emojiList) if (e.keyword && e.url) map[e.keyword] = e.url;
+    if (Object.keys(map).length > 0) {
+      (window as any).__emojiMap = map;
+    }
+    return map;
+  }, [emojiList]);
+const localReactionEmojiMap = useMemo(() => {
+  const m = (window as any).__localEmojiMap as Record<string, string> | undefined;
+  if (m && Object.keys(m).length > 0) return m;
+  const map: Record<string, string> = {};
+  for (const e of emojiList) {
+    if (e.keyword && e.url && e.url.includes('/emojis/local/')) {
+      map[e.keyword] = e.url;
+    }
+  }
+  if (Object.keys(map).length > 0) {
+    (window as any).__localEmojiMap = map;
+  }
+  return map;
+}, [emojiList]);
 
   useEffect(() => {
     if (currentUser?.pinned_posts) setPinned(currentUser.pinned_posts.includes(post.id));
@@ -136,10 +155,22 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   };
 
   const toggleBoost = async () => {
+    const prevCount = boostsCount;
     try {
-      if (boosted) { await api.unboost(post.id); setBoosted(false); setBoostsCount(Math.max(0, boostsCount - 1)); }
-      else { await api.boost(post.id); setBoosted(true); setBoostsCount(boostsCount + 1); }
-    } catch {}
+      if (boosted) {
+        setBoosted(false);
+        setBoostsCount(Math.max(0, boostsCount - 1));
+        await api.unboost(post.id);
+      }
+      else {
+        setBoosted(true);
+        setBoostsCount(boostsCount + 1);
+        await api.boost(post.id);
+      }
+    } catch {
+      setBoosted(false);
+      setBoostsCount(prevCount);
+    }
   };
 
   const handleDelete = async () => {
@@ -170,17 +201,9 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     }
   };
 
-  const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
   useEffect(() => {
-    getCustomEmojis().then((all) => {
-      if (post._emojis) {
-        injectEmojis(post._emojis);
-        getCustomEmojis().then(setEmojiMap);
-      } else {
-        setEmojiMap(all);
-      }
-    });
-  }, [post._emojis, post.id]);
+    if (post._emojis) injectEmojis(post._emojis);
+  }, [post._emojis]);
 
   const [nowTime, setNowTime] = useState(Date.now());
   useEffect(() => { const id = setInterval(() => setNowTime(Date.now()), 10000); return () => clearInterval(id); }, []);
@@ -198,96 +221,69 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     }).replace(/\. /g, "-").replace(/\.$/, "");
   })() : "";
 
-  const [quoteUrl, setQuoteUrl] = useState("");
   const validMentions = useMemo(() => new Set(post.mentioned_handles || []), [post.mentioned_handles]);
-  const [resolvedMentions, setResolvedMentions] = useState<Map<string, string>>(new Map());
-  const buildContentHtml = (qUrl?: string, resolved?: Map<string, string>) => {
-    let html = post.content;
-    if (/<\/?[a-zA-Z]+[\s>]/.test(html) || /&[a-z]+;/.test(html)) {
+
+  // 2. 순수한 HTML 변환 함수 (Setter 함수들 완전 제거)
+  const buildContentHtml = () => {
+    let html = post.content || "";
+
+    // 🌟 [핵심 개선] 컴포넌트 state뿐만 아니라 window 전역 캐시 및 로컬 맵을 무조건 총동원합니다.
+    const globalCache = (typeof window !== "undefined" && (window as any).__emojiCache) || [];
+    const activeEmojis = [...emojiList, ...globalCache];
+
+    // 중복 제거 (keyword 기준)
+    const uniqueEmojis = Array.from(
+      new Map(activeEmojis.map(e => [e.keyword, e])).values()
+    );
+
+    // Strip "RE: https://..." from quote posts
+    if ((post as any).quote_of_id || (post as any).quote_of_ap_id) {
+      html = html.replace(/(?:<span[^>]*>)?[\s\n]*RE:[\s\n]*(?:<a[^>]*>.*?<\/a>|https?:\/\/[^\s<>]+)[\s\n]*(?:<\/span>)?(?:[\s\n]*<br\s*\/?>)*/gi, '');
+    }
+
+    // 본문에서 series, episode 라인을 앞뒤 공백/줄바꿈 포함하여 완전히 삭제
+    html = html.replace(/(?:<br\s*\/?>|\n|^)\s*(?:series|episode):\s*(?:<a[^>]*>.*?<\/a>|https?:\/\/[^\s<>]+)\s*(?:<br\s*\/?>|\n|$)/gi, '\n');
+
+    if (/<\/?[a-zA-Z]+[\s\/>]/.test(html) || /&[a-z]+;/.test(html)) {
       html = html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
     } else {
       html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
+    const codeBlocks: string[] = [];
+    html = html.replace(/```(\w*)\r?\n([\s\S]*?)```/g, (_m, _lang, code) => {
+      const idx = codeBlocks.length;
+      codeBlocks.push(`<pre><code>${code.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+$/, '')}</code></pre>`);
+      return `\x00CODEBLOCK_${idx}\x00`;
+    });
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    html = html.replace(/`(.+?)`/g, '<code>$1</code>');
     html = html.replace(/\n/g, '<br>');
-    html = renderCustomEmojis(html, emojiMap);
+    codeBlocks.forEach((block, i) => {
+      html = html.replace(`\x00CODEBLOCK_${i}\x00`, block);
+    });
+    html = renderCustomEmojis(html, uniqueEmojis);
     html = rewriteLinks(html, validMentions);
-    if (resolved && resolved.size) {
-      resolved.forEach((localUser, handle) => {
-        const escaped = handle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        html = html.replace(
-          new RegExp(`<a\\s+href="/@${escaped}"[^>]*>[^<]*<\\/a>`, "g"),
-          `<a href="/@${localUser}" class="mention-link">@${localUser}</a>`
-        );
-      });
-    }
-    if (qUrl) {
-      const escUrl = qUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const hasPrefix = new RegExp(`(RE:|series:|episode:)\\s*(<a[^>]*>\\s*)?${escUrl}`, 'i').test(html);
-      if (hasPrefix) {
-        // Remove the whole prefix + anchor block or bare URL
-        html = html.replace(new RegExp(`(RE:|series:|episode:|episode\\s*):?\\s*<a[^>]*>[\\s\\S]*?<\\/a>`, 'gi'), '');
-        html = html.replace(new RegExp(`(RE:|series:|episode:|episode\\s*):?\\s*${escUrl}`, 'gi'), '');
-        html = html.replace(new RegExp(escUrl, 'gi'), '');
-      } else {
-        const host = typeof window !== 'undefined' ? window.location.host : '';
-        const isLocal = host === (qUrl.match(/https?:\/\/([^/]+)/)?.[1]);
-        const linkHref = isLocal ? qUrl.replace(/https?:\/\/[^/]+/, '') : qUrl;
-        const linkTarget = isLocal ? '' : ' target="_blank" rel="noopener noreferrer"';
-        const inAnchorRe = new RegExp(`<a\\s+href="[^"]*${escUrl}[^"]*"[^>]*>[\\s\\S]*?<\\/a>`, 'gi');
-        if (inAnchorRe.test(html)) {
-          html = html.replace(new RegExp(`<a(\\s+)href="[^"]*${escUrl}[^"]*"`), `<a$1href="${linkHref}"${linkTarget}`);
-        } else {
-          html = html.replace(new RegExp(`(^|>|　|\\s)${escUrl}`, 'gi'), `$1<a href="${linkHref}"${linkTarget}>${qUrl}</a>`);
-        }
-      }
-      html = html.replace(/<span class="quote-inline">\s*RE:\s*<\/span>/gi, '');
-    }
     return html;
   };
-  const [contentHtml, setContentHtml] = useState(() => sanitizePost(buildContentHtml()));
 
+
+  // series/episode 매칭 추출용 Effect
   useEffect(() => {
-    setContentHtml(sanitizePost(buildContentHtml()));
+    const rawContent = post.content || "";
+    const seriesMatches = rawContent.match(/(?:<br\s*\/?>|\n|^)\s*(series):\s*(?:<a[^>]*href="([^"]+)"[^>]*>.*?<\/a>|(https?:\/\/[^\s<>]+))/i);
+    const episodeMatches = rawContent.match(/(?:<br\s*\/?>|\n|^)\s*(episode):\s*(?:<a[^>]*href="([^"]+)"[^>]*>.*?<\/a>|(https?:\/\/[^\s<>]+))/i);
+    setSeriesMatch(seriesMatches && (seriesMatches[2] || seriesMatches[3]) ? seriesMatches : null);
+    setEpisodeMatch(episodeMatches && (episodeMatches[2] || episodeMatches[3]) ? episodeMatches : null);
   }, [post.id, post.content, post.summary]);
 
+  // contentHtml: emojiList 변경 시 즉시 재계산하여 이모지 렌더링 깜빡임 방지
+  const contentHtml = useMemo(() => sanitizePost(buildContentHtml()), [post.id, post.content, post.summary, emojiList]);
+
+  // 4. 코드 복사 버튼 플러그인 Effect (기존 코드 그대로 유지)
   useEffect(() => {
-    const mentionRe = /<a\s+href="\/@([a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}))"[^>]*>[^<]*<\/a>/g;
-    const remoteMentions: string[] = [];
-    let m: RegExpExecArray | null;
-    while ((m = mentionRe.exec(contentHtml)) !== null) {
-      const handle = m[1];
-      if (handle.includes("@") && !validMentions.has(handle) && !resolvedMentions.has(handle)) {
-        remoteMentions.push(handle);
-      }
-    }
-    if (!remoteMentions.length) return;
-    const seen = new Set<string>();
-    remoteMentions.forEach((handle) => {
-      if (seen.has(handle)) return;
-      seen.add(handle);
-      const [username, domain] = handle.split("@");
-      const profileUrl = `https://${domain}/@${username}`;
-      const form = new FormData();
-      form.append("url", profileUrl);
-      fetch("/api/fetch-actor", { method: "POST", credentials: "include", body: form })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          if (data?.username) {
-            setResolvedMentions((prev) => {
-              const next = new Map(prev);
-              next.set(handle, data.username);
-              return next;
-            });
-          }
-        })
-        .catch(() => {});
-    });
-  }, []);
-  useEffect(() => {
-    setContentHtml(buildContentHtml(quoteUrl || undefined, resolvedMentions));
-  }, [quoteUrl, resolvedMentions, emojiMap]);
+    if (cardRef.current) installCodeCopyButtons(cardRef.current);
+  }, [contentHtml, post.content]);
 
   // Extract quoted post URL from content
   type QuotedSeries = { type: "series"; novel: NovelData; author: User };
@@ -305,7 +301,9 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
   const isPanning = useRef(false);
   const panStart = useRef({ x: 0, y: 0 });
   const panOrigin = useRef({ x: 0, y: 0 });
-  const [revealedSensitive, setRevealedSensitive] = useState<Set<number>>(new Set());
+  const swipeStartX = useRef(0);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [revealedSensitive, setRevealedSensitive] = useState(false);
   useEffect(() => {
     if (viewerIndex < 0) return;
     setViewerZoom(1);
@@ -338,6 +336,8 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
       isPanning.current = true;
       panStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       panOrigin.current = { ...viewerPan };
+    } else if (e.touches.length === 1) {
+      swipeStartX.current = e.touches[0].clientX;
     }
   }, [viewerZoom, viewerPan]);
   const handleViewerTouchMove = useCallback((e: React.TouchEvent) => {
@@ -358,10 +358,19 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
       setViewerPan({ x: panOrigin.current.x + dx, y: panOrigin.current.y + dy });
     }
   }, []);
-  const handleViewerTouchEnd = useCallback(() => {
+  const handleViewerTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (swipeStartX.current !== 0 && viewerZoom <= 1) {
+      const dx = e.changedTouches[0].clientX - swipeStartX.current;
+      if (Math.abs(dx) > 60) {
+        const media = (post as any).media_attachments || [];
+        if (dx > 0 && viewerIndex > 0) setViewerIndex(viewerIndex - 1);
+        else if (dx < 0 && viewerIndex < media.length - 1) setViewerIndex(viewerIndex + 1);
+      }
+    }
+    swipeStartX.current = 0;
     lastTouchDist.current = 0;
     isPanning.current = false;
-  }, []);
+  }, [viewerZoom, viewerIndex, post]);
   const handleViewerDblClick = useCallback(() => {
     setViewerZoom((z) => {
       if (z > 1) { setViewerPan({ x: 0, y: 0 }); return 1; }
@@ -383,74 +392,102 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
       setViewerPan({ x: panOrigin.current.x + dx, y: panOrigin.current.y + dy });
     }
   }, []);
+
   const handleViewerMouseUp = useCallback(() => { isPanning.current = false; }, []);
+
   useEffect(() => {
     if (!showMoreActions) return;
     const handler = () => setShowMoreActions(false);
     window.addEventListener("click", handler);
     return () => window.removeEventListener("click", handler);
   }, [showMoreActions]);
+
+  // Handle stored quote reference from ActivityPub (quote_of_id / quote_of_ap_id)
   useEffect(() => {
-    const hasRePrefix = /<span class="quote-inline">\s*RE:\s*<\/span>/i.test(post.content) || /\b(RE|series):\s*https?:\/\//i.test(post.content.replace(/<[^>]+>/g, ''));
-    if (!hasRePrefix) return;
-    const anyUrl = (post.content.match(/https?:\/\/[^\s<>"']+/g) || []).find((u: string) => !u.match(/\/tags\//));
-    if (!anyUrl) return;
-    const newFormat = anyUrl.match(/https?:\/\/([^/]+)\/@(\w+(?:@[\w.-]+)?)\/([a-f0-9]+)/);
-    const oldFormat = anyUrl.match(/https?:\/\/[^/]+\/post\/(\d+)/);
-    const seriesFormat = anyUrl.match(/https?:\/\/[^/]+\/series\/(\d+)/);
-    const seriesByNumber = anyUrl.match(/https?:\/\/[^/]+\/series\/by-number\/(\w+)\/([a-f0-9]+)/);
-    const episodeFormat = anyUrl.match(/https?:\/\/[^/]+\/series\/(\d+)\/episodes\/(\d+)/);
-    const url = anyUrl;
-    if (!url) return;
-    setQuoteUrl(url);
-    setLoadingQuote(true);
-    const isLocal = (url.match(/https?:\/\/([^/]+)/)?.[1]) === window.location.host;
-    if (isLocal && episodeFormat) {
-      fetch("/api/fetch-episode", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ url }) })
+    if (quotedPost || quotedSeries || quotedEpisode || loadingQuote) return;
+    const qid = (post as any).quote_of_id;
+    const qApId = (post as any).quote_of_ap_id;
+    if (qid) {
+      setLoadingQuote(true);
+      fetch(`/api/posts/${qid}?reply_limit=0&reply_offset=0`, { credentials: "include" })
         .then(r => { if (r.ok) return r.json(); throw new Error(); })
-        .then(d => { setQuotedEpisode(d); setLoadingQuote(false); })
+        .then(d => { setQuotedPost(d); setLoadingQuote(false); })
         .catch(() => setLoadingQuote(false));
-    } else if (isLocal && (seriesFormat || seriesByNumber)) {
-      fetch("/api/fetch-series", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ url }) })
-        .then(r => { if (r.ok) return r.json(); throw new Error(); })
-        .then(d => { setQuotedSeries(d); setLoadingQuote(false); })
-        .catch(() => setLoadingQuote(false));
-    } else if (newFormat) {
-      const domain = newFormat[1];
-      const username = newFormat[2];
-      const number = newFormat[3];
-      if (isLocal) {
-        fetch(`/api/by-number/${username}/${number}`, { credentials: "include" })
-          .then(r => r.json()).then(d => { setQuotedPost(d); setLoadingQuote(false); })
-          .catch(() => setLoadingQuote(false));
-      } else {
-        const fullUrl = `https://${domain}/@${username}/${number}`;
-        const form = new FormData(); form.append("url", fullUrl);
-        fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form })
-          .then(r => r.json()).then(d => { if (d._emojis) { injectEmojis(d._emojis); getCustomEmojis().then(setEmojiMap); } setQuotedPost(d); setLoadingQuote(false); })
-          .catch(() => setLoadingQuote(false));
-      }
-    } else if (oldFormat) {
-      const postId = oldFormat[1];
-      fetch(`/api/posts/${postId}?reply_limit=0&reply_offset=0`, { credentials: "include" })
-        .then(r => r.json()).then(d => { setQuotedPost(d); setLoadingQuote(false); })
-        .catch(() => setLoadingQuote(false));
-    } else {
-      const form = new FormData(); form.append("url", url);
+    } else if (qApId) {
+      setLoadingQuote(true);
+      const form = new FormData(); form.append("url", qApId);
       fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form })
         .then(r => { if (r.ok) return r.json(); throw new Error(); })
+        .then(d => { if (d._emojis) { injectEmojis(d._emojis); } setQuotedPost(d); setLoadingQuote(false); })
+        .catch(() => setLoadingQuote(false));
+    }
+  }, [post.id, (post as any).quote_of_id, (post as any).quote_of_ap_id]);
+
+// Detect series/episode share URLs in content (e.g. "series: https://.../series/123")
+  useEffect(() => {
+    // 🌟 [추가] 중요: 포스트가 새로 바뀌었을 때(또는 주소가 없을 때) 이전 포스트의 카드 데이터를 초기화합니다.
+    const match = seriesMatch || episodeMatch;
+    if (!match) {
+      setQuotedSeries(null);
+      setQuotedEpisode(null);
+      return;
+    }
+
+    if (loadingQuote) return;
+
+    const url = typeof match === 'string' ? match : (match[2] || match[3] || match[0]); 
+    if (!url) return;
+    // 🌟 [정규식 수정] 실제 주소 스펙에 맞춤
+    // 1. 에피소드 주소 (ex: /series/1/episodes/5)
+    const epMatch = url.match(/\/series\/(\d+)\/episodes\/(\d+)/);
+    // 2. 시리즈 단독 주소 (ex: /series/1)
+    const seriesOnlyMatch = url.match(/\/series\/(?:by-number\/[^/]+\/)?([a-zA-Z0-9]+)(?:\?.*)?$/);
+    if (epMatch) {
+      const novelId = parseInt(epMatch[1]);
+      const episodeId = parseInt(epMatch[2]);
+      setLoadingQuote(true);
+      fetch(`/api/series/${novelId}/episodes/${episodeId}`, { credentials: 'include' })
+        .then(r => { if (r.ok) return r.json(); throw new Error(); })
         .then(d => {
-          if (d._emojis) {
-            injectEmojis(d._emojis);
-            // Immediately update emoji map so render picks it up
-            getCustomEmojis().then(setEmojiMap);
+          if (d.episode && d.novel) {
+            setQuotedEpisode({ type: 'episode', episode: d.episode, novel: d.novel, author: d.novel?.author || null });
           }
-          setQuotedPost(d);
           setLoadingQuote(false);
         })
         .catch(() => setLoadingQuote(false));
+    } else if (seriesOnlyMatch) {
+      setLoadingQuote(true); // 🌟 누락되었던 로딩 시작 세팅 추가
+      const form = new FormData();
+      form.append("url", url);
+
+      fetch("/api/fetch-series", {
+        method: "POST",
+        credentials: "include",
+        body: form
+      })
+      .then((r) => {
+        if (!r.ok) throw new Error("Series not found");
+        return r.json();
+      })
+      .then((d) => {
+        if (!d) return;
+        if (d.type === "series" && d.novel) {
+          setQuotedSeries({
+            type: 'series',
+            novel: d.novel,
+            author: d.author || null
+          });
+        }
+      })
+      .then(() => setLoadingQuote(false))
+      .catch((err) => {
+        console.error("시리즈 연동 실패:", err);
+        setLoadingQuote(false);
+      });
     }
-  }, [post.content]);
+  // 🌟 의존성 배열에 seriesMatch와 episodeMatch를 추가해 주어야 
+  // 주소가 먼저 파싱되어 나왔을 때 이 이펙트가 기민하게 감지하고 fetch를 쏩니다.
+  }, [post.id, seriesMatch, episodeMatch]);
 
   const handleContentClick = (e: React.MouseEvent) => {
     const anchor = (e.target as HTMLElement).closest('a');
@@ -463,35 +500,50 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
     }
   };
 
-  const _renderMedia = () => (
-    <div className="post-media-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(((post as any).media_attachments || []).length, 2)}, 1fr)`, gap: 4, marginTop: 8, overflow: "hidden", borderRadius: 8 }}>
-      {(post as any).media_attachments.slice(0, 16).map((m: any, i: number) => {
-        const postSensitive = (post as any).is_sensitive || (post.author as any)?.is_sensitive || !!(post as any).summary;
-        const isSensitive = postSensitive && !revealedSensitive.has(i);
-        const revealed = postSensitive && revealedSensitive.has(i);
-        return m.type === "video" ? (
-          <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", borderRadius: 8 }}>
-            {isSensitive && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 1, cursor: "pointer", color: "#fff", fontSize: 13, fontWeight: 600 }} onClick={(e) => { e.stopPropagation(); e.preventDefault(); setRevealedSensitive((prev) => new Set(prev).add(i)); }}><span style={{ fontSize: 12, fontWeight: 600, textAlign: "center", lineHeight: 1.3 }}>클릭하여 표시</span></div>}
-            {revealed && <button onClick={(e) => { e.stopPropagation(); setRevealedSensitive((prev) => { const n = new Set(prev); n.delete(i); return n; }); }} style={{ position: "absolute", top: 4, right: 4, zIndex: 2, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: 4, color: "#fff", fontSize: 12, padding: "3px 10px", cursor: "pointer" }}>가리기</button>}
-            <video src={m.url} controls style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "contain", background: "#000", filter: isSensitive ? "blur(20px)" : "none" }} />
+  const _renderMedia = () => {
+    const postSensitive = (post as any).is_sensitive || (post.author as any)?.is_sensitive || !!(post as any).summary;
+    const media = (post as any).media_attachments || [];
+    if (!media.length) return null;
+    const n = media.length;
+    const gridColumns = n <= 2 ? n : n <= 4 ? 2 : 3;
+    return (
+      <div style={{ position: "relative", marginTop: 8, overflow: "hidden", borderRadius: 8 }}>
+        <div className="post-media-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${gridColumns}, 1fr)`, gap: 4 }}>
+          {media.slice(0, 16).map((m: any, i: number) => {
+            const blurred = postSensitive && !revealedSensitive;
+            return m.type === "video" ? (
+              <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden" }}>
+                {blurred && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 8, zIndex: 1 }} />}
+                <video src={m.url} controls style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "contain", background: "#000", filter: blurred ? "blur(20px)" : "none" }} />
+              </div>
+            ) : (
+              <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden" }}>
+                {blurred && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 8, zIndex: 1 }} />}
+                <img src={m.url} alt={m.alt || ""} style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "contain", background: "#000", cursor: blurred ? "default" : "pointer", filter: blurred ? "blur(20px)" : "none" }} onClick={(e) => { if (!blurred) { e.stopPropagation(); setViewerIndex(i); } }} />
+              </div>
+            );
+          })}
+        </div>
+        {postSensitive && !revealedSensitive && (
+          <div onClick={(e) => { e.stopPropagation(); e.preventDefault(); setRevealedSensitive(true); }} style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2, cursor: "pointer", color: "#fff", fontSize: 13, fontWeight: 600 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, textAlign: "center", lineHeight: 1.3 }}>클릭하여 표시</span>
           </div>
-        ) : (
-          <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", borderRadius: 8 }}>
-            {isSensitive && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 1, cursor: "pointer", color: "#fff", fontSize: 13, fontWeight: 600 }} onClick={(e) => { e.stopPropagation(); e.preventDefault(); setRevealedSensitive((prev) => new Set(prev).add(i)); }}><span style={{ fontSize: 12, fontWeight: 600, textAlign: "center", lineHeight: 1.3 }}>클릭하여 표시</span></div>}
-            {revealed && <button onClick={(e) => { e.stopPropagation(); setRevealedSensitive((prev) => { const n = new Set(prev); n.delete(i); return n; }); }} style={{ position: "absolute", top: 4, right: 4, zIndex: 2, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: 4, color: "#fff", fontSize: 12, padding: "3px 10px", cursor: "pointer" }}>가리기</button>}
-            <img key={i} src={m.url} alt={m.alt || ""} style={{ width: "100%", maxHeight: 300, borderRadius: 8, objectFit: "contain", background: "#000", cursor: "pointer", filter: isSensitive ? "blur(20px)" : "none" }} onClick={(e) => { if (!isSensitive) { e.stopPropagation(); setViewerIndex(i); } }} />
-          </div>
-        );
-      })}
-    </div>
-  );
+        )}
+        {postSensitive && revealedSensitive && (
+          <button onClick={(e) => { e.stopPropagation(); setRevealedSensitive(false); }} style={{ position: "absolute", top: 8, right: 8, zIndex: 2, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: 4, color: "#fff", fontSize: 12, padding: "3px 10px", cursor: "pointer" }}>가리기</button>
+        )}
+      </div>
+    );
+  };
+
+  if (!post || !post.author) return null;
 
   return (
     <>
-      <div className={`post-card${current ? " current" : ""}${selected ? " selected" : ""}${post.visibility === "mention" ? " mention-card" : ""}`} onClick={(e) => { if (current || (e.target as HTMLElement).closest('a')) return; router.push(post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`); }}>
+      <div ref={cardRef} className={`post-card${current ? " current" : ""}${selected ? " selected" : ""}${post.visibility === "mention" ? " mention-card" : ""}`} onClick={(e) => { if (current || (e.target as HTMLElement).closest('a')) return; router.push(post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`); }}>
         {post.boosted_by && (
-          <div className="boost-badge">
-            <Icon name="refresh" size={12} /> <span dangerouslySetInnerHTML={{ __html: renderCustomEmojis(post.boosted_by.display_name || post.boosted_by.username, emojiList, 14) }} />님이 부스트
+          <div className={`boost-badge${currentUser?.id === post.boosted_by.id ? " boost-self" : ""}`}>
+            <Icon name="refresh" size={12} /> <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.boosted_by.display_name || post.boosted_by.username, emojiList, 14)) }} />님이 부스트
           </div>
         )}
         <div className="post-header">
@@ -500,7 +552,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
           </Link>
           <div className="post-name-wrap">
             <Link href={`/@${post.author.username}`} className="post-author" onClick={(e) => e.stopPropagation()}>
-              <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.author.display_name, emojiList)) }} /> {(post.author.role === "admin" || post.author.role === "moderator" || post.author.role === "owner") && (post.author as any).show_badge && <Icon name={post.author.role === "owner" ? "books_solid" : "shield_filled"} style={{ color: post.author.role === "owner" ? "var(--accent)" : post.author.role === "admin" ? "#27ae60" : "#cc8800", fontSize: "0.65em", verticalAlign: "middle", marginLeft: 2 }} title={post.author.role === "owner" ? "오너" : post.author.role === "admin" ? "관리자" : "조율자"} />}
+              <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.author.display_name, emojiList, 14)) }} /> {(post.author.role === "admin" || post.author.role === "moderator" || post.author.role === "owner") && (post.author as any).show_badge && <Icon name={post.author.role === "owner" ? "books_solid" : "shield_filled"} style={{ color: post.author.role === "owner" ? "var(--accent)" : post.author.role === "admin" ? "#27ae60" : "#cc8800", fontSize: "0.65em", verticalAlign: "middle", marginLeft: 2 }} title={post.author.role === "owner" ? "오너" : post.author.role === "admin" ? "관리자" : "조율자"} />}
             </Link>
             <Link href={`/@${post.author.username}`} className="post-username" onClick={(e) => e.stopPropagation()}>
               @{post.author.display_handle || post.author.username}
@@ -521,17 +573,21 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
         {!hideContext && post.reply_context && (
           <Link href={post.reply_context.number ? `/@${post.reply_context.author.username}/${post.reply_context.number}` : `/post/${post.reply_context.id}`} className={`reply-context${post.reply_context.visibility === "mention" ? " mention-context" : ""}`} onClick={(e) => e.stopPropagation()}>
             <span className="reply-context-label">답글 대상</span>
-            <strong dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.reply_context.author.display_name || post.reply_context.author.username, emojiList)) }} />
+            <strong dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.reply_context.author.display_name || post.reply_context.author.username, emojiList, 14)) }} />
             <span>@{post.reply_context.author.username}</span>
             <p dangerouslySetInnerHTML={{ __html: (() => {
-              const text = (post.reply_context.content || "").slice(0, 90);
+              const hasCw = !!(post.reply_context as any).summary;
+              const rawText = hasCw
+                ? (post.reply_context as any).summary
+                : (post.reply_context.content || "");
+              const text = rawText.slice(0, 90);
               let html = text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
               html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
               html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
               html = html.replace(/\n/g, '<br>');
-              html = renderCustomEmojis(html, emojiMap);
+              html = renderCustomEmojis(html, emojiList);
               html = rewriteLinks(html, validMentions);
-              if ((post.reply_context.content || "").length > 90) html += "...";
+              if (rawText.length > 90) html += "...";
               return sanitizePost(html);
             })() }} />
           </Link>
@@ -541,6 +597,21 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
             <summary onClick={(e) => e.stopPropagation()}>⚠️ {post.summary}</summary>
             <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
             {(post as any).media_attachments?.length > 0 && _renderMedia()}
+            {post.link_preview && !(post as any).quote_of_id && !(post as any).quote_of_ap_id && (() => {
+                const lp = post.link_preview!;
+                const isLocalLink = (() => { try { return new URL(lp.url).hostname === window.location.hostname; } catch { return false; } })();
+                const lpImage = isLocalLink ? ((window as any).__serverLogo || lp.image) : lp.image;
+                return (
+              <a href={lp.url} target="_blank" rel="noopener noreferrer" className="link-preview-card" onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: 12, marginTop: 8, padding: 10, borderRadius: 8, border: "1px solid var(--border)", textDecoration: "none", color: "inherit" }}>
+                {lpImage && <img src={lpImage} alt="" style={{ width: 80, height: 80, borderRadius: isLocalLink ? 16 : 6, objectFit: "contain", flexShrink: 0, background: isLocalLink ? "var(--bg-tertiary)" : undefined }} onError={(e) => (e.target as HTMLElement).style.display = "none"} />}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lp.title}</div>
+                  {lp.description && <div style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{lp.description}</div>}
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{(() => { try { return new URL(lp.url).hostname; } catch { return ""; } })()}</div>
+                </div>
+              </a>
+                );
+              })()}
           </details>
         ) : (
           <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
@@ -589,7 +660,31 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
                 );
               })}
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-                <span>총 {total}표</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  총 {total}표
+                  {!post.is_mine && post.ap_id && (
+                    <button
+                      type="button"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (pollRefreshing) return;
+                        setPollRefreshing(true);
+                        try {
+                          const result = await api.refreshPoll(post.id);
+                          if (result.post) Object.assign(post, result.post);
+                          if (onUpdate) onUpdate();
+                          else window.dispatchEvent(new Event("postchange"));
+                        } catch (err: any) { alert(err.message); }
+                        finally { setPollRefreshing(false); }
+                      }}
+                      className="action-btn"
+                      style={{ fontSize: 10, padding: "1px 4px", lineHeight: 1 }}
+                      title="원격 서버에서 최신 투표 결과 가져오기"
+                    >
+                      <span style={pollRefreshing ? { animation: "spin 1s linear infinite" } : undefined}><Icon name="refresh" /></span>
+                    </button>
+                  )}
+                </span>
                 <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   {!showResults && post.my_vote == null && !isExpired && !readonly && !post.is_mine && (
                     <button type="button" onClick={(e) => { e.stopPropagation(); setShowPollResults(true); }} className="action-btn" style={{ fontSize: 11, padding: "2px 6px" }}>결과 보기</button>
@@ -651,57 +746,89 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
             </div>
           </div>
         )}
-        {post.link_preview && (
-          <a href={post.link_preview.url} target="_blank" rel="noopener noreferrer" className="link-preview-card" onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: 12, marginTop: 8, padding: 10, borderRadius: 8, border: "1px solid var(--border)", textDecoration: "none", color: "inherit" }}>
-            {post.link_preview.image && <img src={post.link_preview.image} alt="" style={{ width: 80, height: 80, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} onError={(e) => (e.target as HTMLElement).style.display = "none"} />}
+        {!post.summary && post.link_preview && !(post as any).quote_of_id && !(post as any).quote_of_ap_id && (() => {
+            const lp = post.link_preview!;
+            const isLocalLink = (() => { try { return new URL(lp.url).hostname === window.location.hostname; } catch { return false; } })();
+            const lpImage = isLocalLink ? ((window as any).__serverLogo || lp.image) : lp.image;
+            return (
+          <a href={lp.url} target="_blank" rel="noopener noreferrer" className="link-preview-card" onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: 12, marginTop: 8, padding: 10, borderRadius: 8, border: "1px solid var(--border)", textDecoration: "none", color: "inherit" }}>
+            {lpImage && <img src={lpImage} alt="" style={{ width: 80, height: 80, borderRadius: isLocalLink ? 16 : 6, objectFit: "contain", flexShrink: 0, background: isLocalLink ? "var(--bg-tertiary)" : undefined }} onError={(e) => (e.target as HTMLElement).style.display = "none"} />}
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{post.link_preview.title}</div>
-              {post.link_preview.description && <div style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{post.link_preview.description}</div>}
-              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{(() => { try { return new URL(post.link_preview!.url).hostname; } catch { return ""; } })()}</div>
+              <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lp.title}</div>
+              {lp.description && <div style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{lp.description}</div>}
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{(() => { try { return new URL(lp.url).hostname; } catch { return ""; } })()}</div>
             </div>
           </a>
-        )}
-          {reactions && Object.keys(reactions).length > 0 && currentUser?.enable_reactions !== false && (
-          <div className="reactions-row" style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8, marginBottom: 4, padding: "0 8px" }} onClick={(e) => e.stopPropagation()}>
-              {Object.entries(reactions).sort(([a], [b]) => a === "★" ? -1 : b === "★" ? 1 : 0).map(([emoji, count]) => {
-              const emojiKey = emoji.startsWith(":") && emoji.endsWith(":") ? emoji.slice(1, -1) : emoji;
-              const emojiIsRemote = emoji.startsWith(":") && emoji.endsWith(":") && !reactionEmojiMap[emojiKey] && Object.keys(reactionEmojiMap).length > 0;
-              return (
-              <span
-                key={emoji}
-                className={`reaction-badge${myReaction === emoji ? " active" : ""}${emojiIsRemote ? " reaction-disabled" : ""}`}
-                onClick={async () => {
-                  if (myReaction === emoji) {
-                    await api.unreact(post.id);
-                    const next = { ...reactions };
-                    if (next[emoji] <= 1) delete next[emoji];
-                    else next[emoji] -= 1;
-                    setReactions(next);
-                    setMyReaction(null);
-                    setLiked(false);
-                    setLikesCount(Math.max(0, likesCount - 1));
-                  } else {
-                    await api.react(post.id, emoji);
-                    setReactions({ ...reactions, [emoji]: (reactions[emoji] || 0) + 1 });
-                    setMyReaction(emoji);
-                    setLiked(true);
-                    setLikesCount(likesCount + 1);
-                  }
-                }}
-                style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 12, fontSize: 13, cursor: emojiIsRemote ? "default" : "pointer", border: "1px solid var(--border)", background: myReaction === emoji ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-secondary)", opacity: emojiIsRemote ? 0.5 : 1 }}
-              >
-{emoji === "★" ? (
-                  <Icon name="star_filled" size={18} style={{ color: "#f1c40f" }} />
-                ) : emoji.startsWith(":") && emoji.endsWith(":") ? (
-                  reactionEmojiMap[emojiKey]
-                    ? <img src={reactionEmojiMap[emojiKey]} alt={emoji} style={{ height: 22, verticalAlign: "middle" }} />
-                    : <span>{emoji}</span>
-                ) : (
-                  <span>{emoji}</span>
-                )}
-                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{count}</span>
-              </span>
             );
+          })()}
+        {reactions && Object.keys(reactions).length > 0 && currentUser?.enable_reactions !== false && (
+          <div className="reactions-row" style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8, marginBottom: 4, padding: "0 8px" }} onClick={(e) => e.stopPropagation()}>
+            {Object.entries(reactions).sort(([a], [b]) => a === "★" ? -1 : b === "★" ? 1 : 0).map(([emoji, count]) => {
+
+              const emojiKey = emoji.startsWith(":") && emoji.endsWith(":") ? emoji.slice(1, -1) : emoji;
+              const isCustomEmoji = emoji.startsWith(":") && emoji.endsWith(":");
+
+              const isMapLoaded = Object.keys(reactionEmojiMap).length > 0;
+              const emojiIsRemote = isCustomEmoji && isMapLoaded && !localReactionEmojiMap[emojiKey];
+              return (
+                <span
+                  key={emoji}
+                   className={`reaction-badge${myReaction === emoji ? " active" : ""}`}
+                  onClick={async () => {
+                    // 💡 원격 에모지라면 클릭 시 즉시 리턴하여 백엔드 요청을 방어합니다.
+                    if (emojiIsRemote) return;
+                    if (myReaction === emoji) {
+                      const next = { ...reactions };
+                      if (next[emoji] <= 1) delete next[emoji];
+                      else next[emoji] -= 1;
+                      setReactions(next);
+                      setMyReaction(null);
+                      setLiked(false);
+                      setLikesCount(Math.max(0, likesCount - 1));
+                      try {
+                        await api.unreact(post.id);
+                      } catch {}
+                    } else {
+                      const next = { ...reactions };
+                      if (myReaction && myReaction !== emoji) {
+                        if ((next[myReaction] || 0) <= 1) delete next[myReaction];
+                        else next[myReaction] -= 1;
+                      }
+                      next[emoji] = (next[emoji] || 0) + 1;
+                      setReactions(next);
+                      setMyReaction(emoji);
+                      setLiked(true);
+                      setLikesCount(myReaction ? likesCount : likesCount + 1);
+                      try {
+                        await api.react(post.id, emoji);
+                      } catch {}
+                    }
+                  }}
+                  style={{ 
+                    display: "inline-flex", 
+                    alignItems: "center", 
+                    gap: 3, 
+                    padding: "2px 8px", 
+                    borderRadius: 12, 
+                    fontSize: 13, 
+                    cursor: emojiIsRemote ? "default" : "pointer", // 원격이면 커서 기본값
+                    border: "1px solid var(--border)", 
+                    background: myReaction === emoji ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-secondary)", 
+                    opacity: 1
+                  }}
+                >
+                  {emoji === "★" ? (
+                    <Icon name="star_filled" size={18} style={{ color: "#f1c40f" }} />
+                  ) : isCustomEmoji ? (
+                    reactionEmojiMap[emojiKey]
+                      ? <img src={reactionEmojiMap[emojiKey]} alt={emoji} style={{ height: 22, verticalAlign: "middle" }} />
+                      : <span>{emoji}</span>
+                  ) : (
+                    <span>{emoji}</span>
+                  )}
+                  <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{count}</span>
+                </span>
+              );
             })}
           </div>
         )}
@@ -710,19 +837,25 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
             <Icon name="reply" /> {post.replies_count}
           </button>
           <form className="inline-form" onSubmit={(e) => e.preventDefault()}>
-            <button type="button" onClick={toggleBoost} className={`action-btn ${boosted ? "boosted" : ""}`}>
+            <button type="button" onClick={toggleBoost} disabled={!post.is_mine && (post.visibility === "followers" || post.visibility === "mention")} className={`action-btn ${boosted ? "boosted" : ""}`}>
               <Icon name="refresh" /> {boostsCount}
             </button>
           </form>
           {currentUser?.enable_reactions !== false ? (
             <span onClick={(e) => e.stopPropagation()} className="relative-wrap" style={{ marginBottom: -2 }}>
               <EmojiPicker onEmoji={async (emoji) => {
+                const next = { ...reactions };
+                if (myReaction && myReaction !== emoji) {
+                  if ((next[myReaction] || 0) <= 1) delete next[myReaction];
+                  else next[myReaction] -= 1;
+                }
+                next[emoji] = (next[emoji] || 0) + 1;
+                setReactions(next);
+                setMyReaction(emoji);
+                setLiked(true);
+                setLikesCount(myReaction ? likesCount : likesCount + 1);
                 try {
                   await api.react(post.id, emoji);
-                  setReactions({ ...reactions, [emoji]: (reactions[emoji] || 0) + 1 });
-                  setMyReaction(emoji);
-                  setLiked(true);
-                  setLikesCount(likesCount + 1);
                 } catch {}
               }} />
             </span>
@@ -758,6 +891,19 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
                   {post.is_mine && (
                     <button onClick={() => { setShowMoreActions(false); setShowEdit(true); }} className="post-actions-dropdown-item">
                       <Icon name="edit" /> 수정
+                    </button>
+                  )}
+                  {post.is_mine && (
+                    <button onClick={async () => {
+                      setShowMoreActions(false);
+                      const stripped = (post.content || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+                      try { await api.deletePost(post.id); } catch {}
+                      if (onDelete) onDelete();
+                      else if (onUpdate) onUpdate();
+                      if (onRewrite) onRewrite(stripped, post.visibility, post.reply_context);
+                      else setShowRewrite(true);
+                    }} className="post-actions-dropdown-item">
+                      <Icon name="trash" /> 지우고 다시 쓰기
                     </button>
                   )}
                   {(post.is_mine || currentUser?.is_admin) && (
@@ -844,6 +990,41 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, current, h
                 <img ref={viewerImgRef} src={m.url} alt={m.alt || ""} draggable={false} onDoubleClick={handleViewerDblClick} style={{ maxWidth: viewerZoom > 1 ? "none" : "100%", maxHeight: viewerZoom > 1 ? "none" : "85vh", borderRadius: viewerZoom > 1 ? 0 : 8, objectFit: "contain", transform: `scale(${viewerZoom}) translate(${viewerPan.x / viewerZoom}px, ${viewerPan.y / viewerZoom}px)`, transition: isPanning.current ? "none" : "transform 0.15s ease", userSelect: "none" }} />
               );
             })()}
+          </div>
+        </div>
+      )}
+      {!readonly && showRewrite && post.reply_context && (
+        <ReplyModal post={{
+          id: post.reply_context.id,
+          number: post.reply_context.number,
+          content: post.reply_context.content,
+          author: post.reply_context.author,
+          visibility: post.reply_context.visibility,
+          summary: null,
+          created_at: null,
+          ap_id: "",
+          likes_count: 0,
+          boosts_count: 0,
+          replies_count: 0,
+          liked: false,
+          boosted: false,
+          bookmarked: false,
+          is_mine: false,
+          reply_context: null,
+          media_attachments: [],
+        } as any} onClose={() => setShowRewrite(false)} onDone={(newPost) => {
+          setShowRewrite(false);
+          if (onUpdate) onUpdate();
+        }} />
+      )}
+      {!readonly && showRewrite && !post.reply_context && (
+        <div className="reply-modal-backdrop active" onClick={() => setShowRewrite(false)}>
+          <div className="reply-modal modal-form" onClick={(e) => e.stopPropagation()}>
+            <button className="reply-modal-close" onClick={() => setShowRewrite(false)}>×</button>
+            <h3>지우고 다시 쓰기</h3>
+            <PostForm onDone={(newPost) => {
+              setShowRewrite(false);
+            }} initialContent={(post.content || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")} initialVisibility={post.visibility} />
           </div>
         </div>
       )}

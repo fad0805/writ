@@ -68,19 +68,84 @@ S3_BUCKET = os.environ.get("S3_BUCKET", "")
 S3_PUBLIC_URL = os.environ.get("S3_PUBLIC_URL", "")
 
 # Web Push / VAPID
-VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "").replace("\\n", "\n")
-VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "").replace("\\n", "\n")
+def _sanitize_pem(val: str) -> str:
+    if not val:
+        return val
+    val = val.strip()
+    val = val.replace("\\n", "\n").replace("\\r", "")
+    return val
+
+
+def _is_valid_pem_private_key(pem: str) -> bool:
+    """Check that a PEM string is a real private key by actually parsing it."""
+    if not pem:
+        return False
+    if not pem.startswith("-----BEGIN ") or not pem.rstrip().endswith("-----"):
+        return False
+    try:
+        from cryptography.hazmat.primitives.serialization import load_pem_private_key
+        load_pem_private_key(pem.encode("utf-8"), password=None)
+        return True
+    except Exception:
+        return False
+
+VAPID_PRIVATE_KEY = _sanitize_pem(os.environ.get("VAPID_PRIVATE_KEY", ""))
+VAPID_PUBLIC_KEY = _sanitize_pem(os.environ.get("VAPID_PUBLIC_KEY", ""))
 VAPID_CLAIM_EMAIL = os.environ.get("VAPID_CLAIM_EMAIL", f"admin@{DOMAIN}")
 
 
 def get_vapid_keys():
     """VAPID 키를 즉시 조회 (lifespan에서 env 업데이트 후 재조회 가능)."""
-    priv = os.environ.get("VAPID_PRIVATE_KEY", "").replace("\\n", "\n")
-    pub = os.environ.get("VAPID_PUBLIC_KEY", "").replace("\\n", "\n")
+    priv = _sanitize_pem(os.environ.get("VAPID_PRIVATE_KEY", ""))
+    pub = _sanitize_pem(os.environ.get("VAPID_PUBLIC_KEY", ""))
     return priv, pub
 
-# Auto-generate VAPID keys if not configured
-if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
+def init_vapid_keys():
+    """Initialize VAPID keys: try DB first, then auto-generate.
+
+    Must be called after models are fully loaded (e.g. from lifespan)
+    to avoid circular imports.
+    """
+    global VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY
+
+    if VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY:
+        return
+
+    try:
+        from app.models import ServerSetting, get_session
+        with get_session() as _s:
+            _ss = ServerSetting.get(_s)
+            _db_priv = getattr(_ss, 'vapid_private_key', '') or ''
+            _db_pub = getattr(_ss, 'vapid_public_key', '') or ''
+            _db_priv_san = _sanitize_pem(_db_priv)
+            if _db_priv_san and _db_pub and _is_valid_pem_private_key(_db_priv_san):
+                VAPID_PRIVATE_KEY = _db_priv_san
+                VAPID_PUBLIC_KEY = _sanitize_pem(_db_pub)
+                os.environ["VAPID_PRIVATE_KEY"] = VAPID_PRIVATE_KEY
+                os.environ["VAPID_PUBLIC_KEY"] = VAPID_PUBLIC_KEY
+                if VAPID_PRIVATE_KEY != _db_priv or VAPID_PUBLIC_KEY != _db_pub:
+                    try:
+                        _ss.vapid_private_key = VAPID_PRIVATE_KEY
+                        _ss.vapid_public_key = VAPID_PUBLIC_KEY
+                        _s.commit()
+                    except Exception:
+                        pass
+                return
+            elif _db_priv_san and _db_pub:
+                print(f"[VAPID] DB key invalid (len={len(_db_priv_san)}), regenerating...", flush=True)
+                try:
+                    _ss.vapid_private_key = ''
+                    _ss.vapid_public_key = ''
+                    _s.commit()
+                    print("[VAPID] Cleared invalid key from DB", flush=True)
+                except Exception as _e:
+                    print(f"[VAPID] Failed to clear DB key: {_e}", flush=True)
+    except Exception as _e:
+        print(f"[VAPID] DB read error: {_e}", flush=True)
+
+    if VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY:
+        return
+
     try:
         import base64
         from cryptography.hazmat.primitives.asymmetric import ec
@@ -102,5 +167,27 @@ if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
                 serialization.PublicFormat.UncompressedPoint,
             )
             VAPID_PUBLIC_KEY = base64.urlsafe_b64encode(_raw_pub).rstrip(b"=").decode()
-    except Exception:
-        pass
+
+        os.environ["VAPID_PRIVATE_KEY"] = VAPID_PRIVATE_KEY
+        os.environ["VAPID_PUBLIC_KEY"] = VAPID_PUBLIC_KEY
+
+        try:
+            from app.models import ServerSetting, get_session
+            with get_session() as _s:
+                _ss = ServerSetting.get(_s)
+                _ss.vapid_private_key = VAPID_PRIVATE_KEY
+                _ss.vapid_public_key = VAPID_PUBLIC_KEY
+                _s.commit()
+                print(f"[VAPID] Auto-generated and saved new key (priv len={len(VAPID_PRIVATE_KEY)})", flush=True)
+                try:
+                    from app.models import PushSubscription
+                    _deleted = _s.query(PushSubscription).delete()
+                    _s.commit()
+                    if _deleted:
+                        print(f"[VAPID] Cleared {_deleted} stale push subscriptions (users must re-subscribe)", flush=True)
+                except Exception as _e:
+                    print(f"[VAPID] Failed to clear push subscriptions: {_e}", flush=True)
+        except Exception as _e:
+            print(f"[VAPID] Failed to save auto-generated key to DB: {_e}", flush=True)
+    except Exception as _e:
+        print(f"[VAPID] Auto-generate error: {_e}", flush=True)

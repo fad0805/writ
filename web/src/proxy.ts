@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const API_HOST = process.env.API_HOST || "http://localhost:8000";
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const accept = request.headers.get("accept") || "";
   const { pathname } = request.nextUrl;
 

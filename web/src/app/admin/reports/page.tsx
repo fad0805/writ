@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
 import AdminNav from "@/components/AdminNav";
+import { sanitizePost } from "@/lib/sanitize";
 
 interface Report {
   id: number;
@@ -104,7 +105,7 @@ export default function AdminReportsPage() {
                 <span style={{ marginLeft: 6 }}>
                   {r.target
                     ? (r.target.content
-                      ? <span dangerouslySetInnerHTML={{ __html: r.target.content.length > 60 ? r.target.content.slice(0, 60) + "..." : r.target.content }} />
+                      ? <span dangerouslySetInnerHTML={{ __html: sanitizePost(r.target.content.length > 60 ? r.target.content.slice(0, 60) + "..." : r.target.content) }} />
                       : r.target.title || `#${r.target_id}`)
                     : `#${r.target_id}`}
                 </span>

@@ -1,12 +1,15 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api, NovelData, EpisodeData } from "@/lib/api";
 import Icon from "@/components/Icon";
 import ShareButton from "@/components/ShareButton";
 import SharePostModal from "@/components/SharePostModal";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
+import { installCodeCopyButtons } from "@/lib/codeCopy";
+import { sanitizeEpisode, sanitizeBasic } from "@/lib/sanitize";
+
 
 export default function EpisodeDetailPage() {
   const params = useParams();
@@ -26,6 +29,30 @@ export default function EpisodeDetailPage() {
   const [reportDone, setReportDone] = useState(false);
   const [reportRules, setReportRules] = useState<any[]>([]);
   const [selectedRuleIds, setSelectedRuleIds] = useState<number[]>([]);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  function renderEpisodeContent(html: string): string {
+    let content = html;
+    if (/<\/?[a-zA-Z]+[\s\/>]/.test(content)) {
+      content = content.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+    } else {
+      content = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    const codeBlocks: string[] = [];
+    content = content.replace(/```(\w*)\r?\n([\s\S]*?)```/g, (_m, _lang, code) => {
+      const idx = codeBlocks.length;
+      codeBlocks.push(`<pre><code>${code.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')}</code></pre>`);
+      return `\x00CODEBLOCK_${idx}\x00`;
+    });
+    content = content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    content = content.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    content = content.replace(/`(.+?)`/g, '<code>$1</code>');
+    content = content.replace(/\n/g, '<br>');
+    codeBlocks.forEach((block, i) => {
+      content = content.replace(`\x00CODEBLOCK_${i}\x00`, block);
+    });
+    return content;
+  }
 
   useEffect(() => {
     api.getEpisode(Number(params.id), Number(params.eid))
@@ -39,6 +66,10 @@ export default function EpisodeDetailPage() {
       })
       .catch((err) => { setError(err.message || "불러오기 실패"); setLoading(false); });
   }, [params.id, params.eid, router]);
+
+  useEffect(() => {
+    if (bodyRef.current) installCodeCopyButtons(bodyRef.current);
+  }, [episode]);
 
   const handleDelete = async () => {
     if (!confirm("정말 삭제하시겠습니까?")) return;
@@ -55,9 +86,7 @@ export default function EpisodeDetailPage() {
   return (
     <>
       <article className="episode-content">
-        <div className="episode-header-row">
-          <h2>제 {episode.episode_number}화: {episode.title}</h2>
-          <div className="episode-header-btns">
+        <div className="episode-header-btns" style={{ marginBottom: 12 }}>
             {novel?.visibility !== "private" && <ShareButton url={`/series/${novel.id}/episodes/${episode.id}`} />}
             {user && <button className="action-btn" onClick={() => setShowSharePost(true)} title="포스트로 공유"><Icon name="edit" /></button>}
             {user && !isMine && (
@@ -72,8 +101,8 @@ export default function EpisodeDetailPage() {
                 <button className="btn btn-small btn-danger" onClick={handleDelete}>삭제</button>
               </>
             )}
-          </div>
         </div>
+        <h2>제 {episode.episode_number}화: {episode.title}</h2>
         <div className="episode-meta episode-meta-bottom">
           {isMine && episode.views !== undefined && <span><Icon name="eye" /> {episode.views}</span>}
           <span>{episode.created_at ? new Date(episode.created_at).toLocaleString("ko-KR") : ""}</span>
@@ -84,8 +113,8 @@ export default function EpisodeDetailPage() {
         ) : (
           <>
             {episode.summary && <blockquote className="episode-summary">{episode.summary}</blockquote>}
-            <div className="episode-body" dangerouslySetInnerHTML={{ __html: episode.content }} />
-            {episode.comment && <div className="episode-comment" dangerouslySetInnerHTML={{ __html: episode.comment }} />}
+            <div ref={bodyRef} className="episode-body" dangerouslySetInnerHTML={{ __html: sanitizeEpisode(renderEpisodeContent(episode.content)) }} />
+            {episode.comment && <div className="episode-comment" dangerouslySetInnerHTML={{ __html: sanitizeBasic(episode.comment) }} />}
           </>
         )}
         <div className="episode-footer">
@@ -93,7 +122,7 @@ export default function EpisodeDetailPage() {
           <div className="episode-nav-side">
             {prevEp ? (
               <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${prevEp.id}`)}>
-                ← 제 {prevEp.episode_number} 화 ({prevEp.title})
+                <span className="episode-nav-arrow">←</span> <span className="episode-nav-text">제 {prevEp.episode_number} 화 ({prevEp.title})</span>
               </button>
             ) : (
               <span className="episode-nav-none">이전 화가 없습니다</span>
@@ -103,7 +132,7 @@ export default function EpisodeDetailPage() {
           <div className="episode-nav-side">
             {nextEp ? (
               <button className="btn btn-outline" onClick={() => router.push(`/series/${novel.id}/episodes/${nextEp.id}`)}>
-                제 {nextEp.episode_number} 화 ({nextEp.title}) →
+                <span className="episode-nav-text">제 {nextEp.episode_number} 화 ({nextEp.title})</span> <span className="episode-nav-arrow">→</span>
               </button>
             ) : (
               <span className="episode-nav-none">다음 화가 없습니다</span>

@@ -20,7 +20,7 @@ export default function MyNovelsPage() {
   useEffect(() => {
     const h = (e: TouchEvent) => {
       const dx = e.changedTouches[0].clientX - touchStartX.current;
-      if (Math.abs(dx) > 60 && dx < 0) router.push("/series");
+      if (Math.abs(dx) > 120 && dx < 0) router.push("/series/followed");
     };
     document.addEventListener("touchend", h, { passive: true });
     return () => document.removeEventListener("touchend", h);
@@ -87,6 +87,7 @@ export default function MyNovelsPage() {
       </div>
       <div className="series-filter-tabs">
         <Link href="/series/my" className="series-filter-tab active">내 시리즈</Link>
+        <Link href="/series/followed" className="series-filter-tab">구독 시리즈</Link>
         <Link href="/series" className="series-filter-tab">모든 시리즈</Link>
       </div>
       <div className="novel-grid">

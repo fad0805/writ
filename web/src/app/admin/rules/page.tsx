@@ -98,8 +98,10 @@ export default function AdminRulesPage() {
 
   return (
     <>
-      <AdminNav current="dashboard" />
-      <h3>서버 규칙</h3>
+      <div className="page-header">
+        <h2><Icon name="settings" /> 서버 관리</h2>
+      </div>
+      <AdminNav current="rules" />
       {!showNew && (
         <button className="btn btn-primary btn-small" style={{ marginBottom: 12 }} onClick={() => setShowNew(true)}>새 규칙</button>
       )}

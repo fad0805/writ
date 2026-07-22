@@ -16,22 +16,18 @@ export default function MobileNav() {
 
   useEffect(() => {
     if (!user) return;
-    const check = () => {
-      fetch("/api/notifications/unread-count", { credentials: "include" })
-        .then((r) => r.json())
-        .then((d) => setUnreadNotifs(d.count || 0))
-        .catch(() => {});
+    const update = () => {
+      if (typeof window !== "undefined" && (window as any).__unreadNotifs !== undefined) {
+        setUnreadNotifs((window as any).__unreadNotifs);
+      }
     };
-    check();
+    update();
     const handler = () => setUnreadNotifs(0);
-    const changeHandler = () => check();
     window.addEventListener("notificationsread", handler);
-    window.addEventListener("notifchange", changeHandler);
-    const interval = setInterval(check, 30000);
+    window.addEventListener("notifchange", update);
     return () => {
-      clearInterval(interval);
       window.removeEventListener("notificationsread", handler);
-      window.removeEventListener("notifchange", changeHandler);
+      window.removeEventListener("notifchange", update);
     };
   }, [user]);
 
@@ -132,6 +128,9 @@ export default function MobileNav() {
             <div className="mobile-more-divider" />
             <Link href={`/@${user.username}`} className="mobile-more-item">
               <Icon name="user" /> <span>내 프로필</span>
+            </Link>
+            <Link href="/my" className="mobile-more-item">
+              <Icon name="archive" /> <span>내 보관함</span>
             </Link>
             <Link href="/users/settings" className="mobile-more-item">
               <Icon name="settings" /> <span>설정 관리</span>

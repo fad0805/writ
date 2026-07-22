@@ -10,13 +10,15 @@ import socket
 import time
 import uuid
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote, unquote
 
 import httpx
+from sqlalchemy.orm import object_session
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, RemoteMedia, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, UserBlock, Tag, get_session
+from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, UserBlock, Tag, get_session
 from app.config import BASE_URL, SECRET_KEY
 from app.crypto_utils import generate_keypair, sign_string, encrypt_key, get_private_key
+from app.utils.content_parser import _sanitize_html, process_post_content
 
 WRIT_USER_AGENT = "WRIT/1.0 (+https://daydream.ink)"
 
@@ -47,102 +49,12 @@ def _federation_allowed(domain: str) -> bool:
             return False
 
 
-_SAFE_TAGS = {"p", "br", "a", "strong", "em", "b", "i", "u", "s", "ul", "ol", "li", "blockquote", "code", "pre", "span", "img"}
-_SAFE_SCHEMES = {"http", "https", "mailto"}
-_SAFE_ATTRS = {"a": {"href", "rel", "class"}, "span": {"class"}, "code": {"class"}, "pre": {"class"}, "img": {"src", "alt", "class", "title"}}
+def _html_to_newlines(html: str) -> str:
+    """Convert HTML line breaks/paragraphs to \\n for consistent storage."""
+    html = re.sub(r'<br\s*/?>', '\n', html, flags=re.I)
+    html = re.sub(r'</?p>', '\n', html, flags=re.I)
+    return html.strip('\n')
 
-
-def _sanitize_html(html: str) -> str:
-    """Strip dangerous HTML tags/attributes, keep only safe ones."""
-    # Remove script/style blocks and their content
-    html = re.sub(r'<(script|style)[^>]*>.*?</\1>', '', html, flags=re.DOTALL | re.IGNORECASE)
-    # Remove remaining script/style self-closing tags
-    html = re.sub(r'<(script|style)[^>]*/?>', '', html, flags=re.IGNORECASE)
-
-    def _tag_filter(m):
-        tag = m.group(0)
-        # Parse tag name
-        name_match = re.match(r'</?(\w+)', tag)
-        if not name_match:
-            return ''
-        name = name_match.group(1).lower()
-        if name not in _SAFE_TAGS:
-            return ''
-        # For closing tags, return as-is
-        if tag.startswith('</'):
-            return tag
-        # For opening tags, filter attributes
-        allowed = _SAFE_ATTRS.get(name, set())
-        attrs = re.findall(r'''([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')''', tag)
-        safe_attrs = []
-        for attr_name, v1, v2 in attrs:
-            val = v1 or v2 or ''
-            attr_lower = attr_name.lower()
-            if attr_lower.startswith('on'):
-                continue
-            if attr_lower == 'href' and name == 'a':
-                scheme = val.split(':', 1)[0].lower() if ':' in val else ''
-                if scheme not in _SAFE_SCHEMES:
-                    continue
-            if attr_lower in allowed:
-                safe_attrs.append(f'{attr_name}="{val}"')
-        if not safe_attrs:
-            return f'<{name}>'
-        return f'<{name} {" ".join(safe_attrs)}>'
-
-    html = re.sub(r'<[^>]+>', _tag_filter, html)
-    return html
-
-
-import re
-from urllib.parse import urlparse
-
-def _normalize_mentions(html: str) -> str:
-    """
-    Convert Mastodon-style mention HTML to plain text.
-    If the text lacks a domain (e.g. just '@user'), parses the href attribute 
-    to append the correct '@domain' and prevent local user collision.
-    """
-    def _strip_mention(m):
-        full_tag_text = m.group(0)
-        # 1. <a> 태그의 href 주소 추출
-        href_match = re.search(r'href=["\']([^"\']+)["\']', full_tag_text, re.IGNORECASE)
-        domain = None
-        if href_match:
-            try:
-                # URL에서 도메인(예: remote.com)만 쏙 빼오기
-                parsed_url = urlparse(href_match.group(1))
-                domain = parsed_url.netloc.lower()
-            except Exception:
-                pass
-        # 2. 모든 HTML 태그를 지우고 알맹이 텍스트만 추출
-        text = re.sub(r'<[^>]+>', '', full_tag_text).strip()
-        # 3. 텍스트 내부에서 @아이디 파싱
-        match = re.search(r'@([\w.-]+)(?:@([\w.-]+))?', text)
-        if not match:
-            return text
-        username = match.group(1)
-        text_domain = match.group(2)
-        # 4. 텍스트에 이미 도메인이 있다면 그걸 그대로 사용
-        if text_domain:
-            return f"@{username}@{text_domain}"
-        # 5. 텍스트엔 도메인이 없는데 <a> 링크 도메인이 존재한다면?
-        # (단, 우리 서비스 내부 링크일 수도 있으니 로컬 도메인은 붙이지 않도록 방어 코드 추가 가능)
-        if domain:
-            # 예: @jack -> @jack@remote.com 으로 복원
-            return f"@{username}@{domain}"
-        return f"@{username}"
-    # 1. <span> wrapper가 있는 형태 처리 (클래스 순서 무관)
-    html = re.sub(
-        r'<span[^>]*class="[^"]*\bh-card\b[^"]*"[^>]*>\s*<a[^>]*class="(?=[^"]*\bu-url\b)(?=[^"]*\bmention\b)[^"]*"[^>]*>.*?</a>\s*</span>',
-        _strip_mention, html, flags=re.IGNORECASE | re.DOTALL
-    )
-    # 2. <a> 태그 단독 형태 처리 (클래스 순서 무관)
-    html = re.sub(
-        r'<a[^>]*class="(?=[^"]*\bu-url\b)(?=[^"]*\bmention\b)[^"]*"[^>]*>.*?</a>',
-        _strip_mention, html, flags=re.IGNORECASE | re.DOTALL
-    )
-    return html
 
 _PRIVATE_SUBNETS = [
     ipaddress.ip_network("127.0.0.0/8"),
@@ -333,6 +245,55 @@ def get_following(username: str, page: Optional[int] = None):
             }
 
 
+def get_featured(username: str, page: Optional[int] = None):
+    with get_session() as session:
+        user = session.query(User).filter_by(username=username).first()
+        if not user:
+            return None
+        pinned_ids = user.pinned_posts or []
+        if not pinned_ids:
+            featured_url = user.featured_uri()
+            return {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": featured_url,
+                "type": "OrderedCollection",
+                "totalItems": 0,
+                "first": f"{featured_url}?page=1",
+            }
+
+        posts = session.query(Post).filter(
+            Post.id.in_(pinned_ids),
+            Post.is_deleted == False,
+        ).all()
+        posts_dict = {p.id: p for p in posts}
+        ordered = [posts_dict[pid] for pid in pinned_ids if pid in posts_dict]
+
+        featured_url = user.featured_uri()
+        total = len(ordered)
+        if page is not None:
+            offset = (page - 1) * 20
+            page_posts = ordered[offset:offset + 20]
+            items = [p.to_ap_note() for p in page_posts]
+            return {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": f"{featured_url}?page={page}",
+                "type": "OrderedCollectionPage",
+                "totalItems": total,
+                "partOf": featured_url,
+                "orderedItems": items,
+                "next": f"{featured_url}?page={page + 1}" if offset + 20 < total else None,
+                "prev": f"{featured_url}?page={page - 1}" if page > 1 else None,
+            }
+        else:
+            return {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": featured_url,
+                "type": "OrderedCollection",
+                "totalItems": total,
+                "first": f"{featured_url}?page=1",
+            }
+
+
 def handle_inbox(activity: dict) -> tuple[int, str]:
     atype = activity.get("type")
     actor = activity.get("actor")
@@ -441,27 +402,69 @@ _REMOTE_MEDIA_EXPIRY_DAYS = 30
 def _cache_remote_media(remote_url: str) -> str:
     from app.models import RemoteMedia
     from app.utils.storage import get_storage
+    from PIL import Image, ImageSequence
+
     if not _validate_url(remote_url):
         return remote_url
+
     with get_session() as s:
         existing = s.query(RemoteMedia).filter_by(remote_url=remote_url).first()
         if existing and existing.expires_at and existing.expires_at > datetime.datetime.now(datetime.timezone.utc):
             return existing.local_url
+
     try:
         resp = _safe_fetch(remote_url, max_size=_REMOTE_MEDIA_MAX_SIZE)
         if not resp:
             return remote_url
         data = resp.content
-        ext = remote_url.rsplit(".", 1)[-1].lower() if "." in remote_url else ""
-        is_image = ext in ("jpg", "jpeg", "png", "gif", "webp")
+        clean_url = remote_url.split("?")[0].split("#")[0]
+        orig_ext = clean_url.rsplit(".", 1)[-1].lower() if "." in clean_url else "bin"
+        ext = orig_ext
+        is_image = orig_ext in ("jpg", "jpeg", "png", "gif", "webp")
+
         if is_image and len(data) < _REMOTE_MEDIA_MAX_SIZE:
-            from PIL import Image
-            img = Image.open(io.BytesIO(data))
-            img = img.convert("RGB")
-            out = io.BytesIO()
-            img.save(out, format="WEBP", quality=85)
-            data = out.getvalue()
-            ext = "webp"
+            is_apng = (orig_ext == "png" and b"acTL" in data)
+            is_custom_emoji = "custom_emojis" in remote_url
+
+            # 💡 [해결] APNG나 커스텀 이모지는 아래 try-except 압축 블록을 "완전히 우회"합니다.
+            if is_apng or is_custom_emoji:
+                logger.info("Preserving original animated/emoji media without processing: %s", remote_url)
+                # 가공을 하지 않으므로 data와 ext는 원본 상태(png 등)를 그대로 유지합니다.
+            else:
+                try:
+                    img = Image.open(io.BytesIO(data))
+                    is_animated = getattr(img, "is_animated", False) or (img.format == "GIF")
+                    max_dim = 2048
+                    out = io.BytesIO()
+
+                    if is_animated:
+                        frames = []
+                        durations = []
+                        for frame in ImageSequence.Iterator(img):
+                            frames.append(frame.convert("RGBA"))
+                            durations.append(frame.info.get("duration", 100))
+
+                        if any(f.width > max_dim or f.height > max_dim for f in frames):
+                            ratio = min(max_dim / max(f.width for f in frames), max_dim / max(f.height for f in frames))
+                            frames = [f.resize((int(f.width * ratio), int(f.height * ratio)), Image.LANCZOS) for f in frames]
+                        frames[0].save(out, format="WEBP", save_all=True, append_images=frames[1:], duration=durations, loop=0, quality=85)
+                        data = out.getvalue()
+                        ext = "webp"
+                    else:
+                        if img.width > max_dim or img.height > max_dim:
+                            ratio = min(max_dim / img.width, max_dim / img.height)
+                            img = img.resize((int(img.width * ratio), int(img.height * ratio)), Image.LANCZOS)
+                        save_format = "PNG" if orig_ext == "png" else "WEBP"
+                        img.save(out, format=save_format, quality=85)
+                        data = out.getvalue()
+                        ext = save_format.lower()
+
+                except Exception as img_err:
+                    logger.warning("Image processing failed, fallback to original bytes: %s", img_err)
+                    data = resp.content
+                    ext = orig_ext
+
+        # 🚀 이제 보호된 원본 데이터(바이너리)가 안전하게 스토리지로 넘어옵니다.
         name = f"remote_{uuid.uuid4().hex[:12]}.{ext}"
         key = f"media/remote/{name}"
         storage = get_storage()
@@ -553,43 +556,74 @@ def _cleanup_remote_data():
 
 
 def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url: str = "") -> str:
-    """Download remote image and save as WebP, return URL. If old_url given, delete it after."""
+    """Download remote image. Keep GIF/PNG as-is, convert others (like JPG) to WebP."""
+    from PIL import Image as PILImage
     from app.utils.storage import get_storage
+
     if not _validate_url(image_url):
         return ""
-    ext = image_url.rsplit(".", 1)[-1].lower() if "." in image_url else "jpg"
-    is_gif = ext == "gif"
+
+    # 💡 [개선] 쿼리 스트링(?...)과 해시(#...)를 확실하게 날리고 순수 파일명에서 확장자 추출
+    pure_path = urlparse(image_url).path.split('?')[0].split('#')[0]
+    ext = pure_path.rsplit(".", 1)[-1].lower() if "." in pure_path else "webp"
+
     try:
-        import httpx
-        import io
-        from PIL import Image as PILImage
         r = _validated_get(image_url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=15)
-        if r.status_code == 200 and len(r.content) <= 10 * 1024 * 1024:
-            if is_gif:
-                filename = f"{uuid.uuid4().hex}.gif"
+        if r.status_code != 200 or len(r.content) > 10 * 1024 * 1024:
+            return image_url
+
+        data = r.content
+        storage = get_storage()
+        content_type_header = r.headers.get("Content-Type", "").lower()
+        new_url = None
+
+        # 1차 필터: 대놓고 확장자나 헤더가 GIF/PNG인 경우 안전하게 원본 보존
+        if ext in ("gif", "png") or "gif" in content_type_header or "png" in content_type_header:
+            final_ext = "gif" if ("gif" in ext or "gif" in content_type_header) else "png"
+            filename = f"{uuid.uuid4().hex}.{final_ext}"
+            key = f"{prefix}/remote/{filename}"
+            new_url = storage.save(key, data, f"image/{final_ext}")
+        else:
+            # 2차 필터: 외관은 JPG 같지만 실제 파일 내부를 검사
+            try:
+                img = PILImage.open(io.BytesIO(data))
+                is_animated = getattr(img, "is_animated", False)
+                real_format = (img.format or "").lower()
+                if is_animated or real_format in ("gif", "png"):
+                    final_ext = real_format if real_format in ("gif", "png", "webp") else "webp"
+                    filename = f"{uuid.uuid4().hex}.{final_ext}"
+                    key = f"{prefix}/remote/{filename}"
+                    new_url = storage.save(key, data, f"image/{final_ext}")
+                else:
+                    # 3차 필터: 진짜 순수 정지 이미지(JPEG 등)인 경우에만 WebP 압축 최적화 진행
+                    if img.mode in ("RGBA", "P"):
+                        bg = PILImage.new("RGB", img.size, (255, 255, 255))
+                        bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
+                        img = bg
+                    out = io.BytesIO()
+                    img.save(out, format="WEBP", quality=85)
+                    filename = f"{uuid.uuid4().hex}.webp"
+                    key = f"{prefix}/remote/{filename}"
+                    new_url = storage.save(key, out.getvalue(), "image/webp")
+
+            except Exception as img_err:
+                # 이미지 파싱 자체가 안 되거나 Pillow가 지원하지 않는 특이 포맷은 안전하게 원본 바이너리 저장
+                logger.warning("Pillow could not process image %s, saving raw data. Error: %s", image_url, img_err)
+                filename = f"{uuid.uuid4().hex}.{ext}"
                 key = f"{prefix}/remote/{filename}"
-                storage = get_storage()
-                new_url = storage.save(key, r.content, "image/gif")
-            else:
-                img = PILImage.open(io.BytesIO(r.content))
-                if img.mode in ("RGBA", "P"):
-                    bg = PILImage.new("RGB", img.size, (255, 255, 255))
-                    bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
-                    img = bg
-                out = io.BytesIO()
-                img.save(out, format="WEBP", quality=85)
-                filename = f"{uuid.uuid4().hex}.webp"
-                key = f"{prefix}/remote/{filename}"
-                storage = get_storage()
-                new_url = storage.save(key, out.getvalue(), "image/webp")
-            if old_url:
-                try:
-                    storage.delete(old_url)
-                except Exception:
-                    pass
-            return new_url
+                new_url = storage.save(key, data, content_type_header or f"image/{ext}")
+
+        # 모든 필터를 거쳐 새로운 저장이 안전하게 끝났다면 구 버전 미디어 삭제
+        if new_url and old_url:
+            try:
+                storage.delete(old_url)
+            except Exception:
+                pass
+
+        return new_url if new_url else image_url
+
     except Exception as e:
-        logger.warning("Failed to save remote %s %s: %s", prefix, image_url, e)
+        logger.error("Failed to save remote %s %s. Error: %s", prefix, image_url, e, exc_info=True)
     return image_url
 
 
@@ -621,13 +655,10 @@ def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> 
     if not collection_url:
         return 0
     try:
-        import httpx
         headers = {"Accept": "application/activity+json, application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"", "User-Agent": WRIT_USER_AGENT}
         if sign_as:
-            import datetime, time, hashlib, base64
             from app.crypto_utils import sign_string, get_private_key
             from app.config import SECRET_KEY
-            from urllib.parse import urlparse
             parsed = urlparse(collection_url)
             date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
             created = int(time.time())
@@ -669,15 +700,22 @@ def _get_instance_actor(session) -> User:
 
 
 def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optional[User] = None) -> Optional[User]:
-    import sys
+    _actor_domain = urlparse(actor_url).hostname or ""
+    _own_domain = urlparse(BASE_URL).hostname or ""
+    if _actor_domain and _actor_domain == _own_domain:
+        _u = _parse_username_from_url(actor_url)
+        if _u:
+            with get_session() as _s:
+                local = _s.query(User).filter(User.username == _u, User.is_remote == False).first()
+                if local:
+                    return local
     with get_session() as session:
         user = session.query(User).filter_by(remote_url=actor_url).first()
         if user and not force_refresh:
             return user
         # Fallback: normalize /@username -> /users/username
         if not user:
-            from urllib.parse import urlparse as _up
-            p = _up(actor_url)
+            p = urlparse(actor_url)
             if "/@" in p.path:
                 alt_url = f"{p.scheme}://{p.netloc}/users/{p.path.split('/@')[-1]}"
                 user = session.query(User).filter_by(remote_url=alt_url).first()
@@ -689,7 +727,6 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
         try:
             import datetime, time
             from app.crypto_utils import sign_string, get_private_key
-            from urllib.parse import urlparse
             date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
             parsed = urlparse(actor_url)
             created = int(time.time())
@@ -709,8 +746,8 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             resp = _safe_fetch(actor_url, timeout=10, headers={"Accept": "application/activity+json"})
             if resp:
                 data = resp.json()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("Failed to fetch actor %s: %s", actor_url, e)
 
     if not data:
         return None
@@ -720,7 +757,6 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
     resp_id = data.get("id", "")
     canonical_url = resp_id or actor_url
     if resp_id:
-        from urllib.parse import urlparse
         req_domain = urlparse(actor_url).hostname or ""
         resp_domain = urlparse(resp_id).hostname or ""
         if req_domain and resp_domain and req_domain != resp_domain:
@@ -816,6 +852,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             username=local_username,
             display_name=data.get("name", preferred_username),
             summary=data.get("summary", ""),
+            email=f"remote-{uuid.uuid4().hex}@remote.placeholder.invalid",
             password_hash="remote_user",
             private_key=encrypt_key(priv, SECRET_KEY),
             public_key=public_key_pem or pub,
@@ -1022,19 +1059,46 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
     return (200, "Accepted follow")
 
 
+def _retry_fetch_reply(post_id: int, in_reply_to_ap_id: str, attempt: int = 0):
+    """Background: fetch remote parent and link to local post. Max 3 attempts."""
+    import threading
+    MAX_ATTEMPTS = 3
+    def _worker():
+        try:
+            with get_session() as s:
+                post = s.query(Post).get(post_id)
+                if not post or post.in_reply_to_id:
+                    return
+                signer = s.query(User).filter_by(id=post.author_id).first() or _get_instance_actor(s)
+                parent = _fetch_remote_post(in_reply_to_ap_id, signer, s)
+                if parent:
+                    post.in_reply_to_id = parent.id
+                    s.commit()
+                elif attempt + 1 < MAX_ATTEMPTS:
+                    time.sleep(10 * (attempt + 1))
+                    _retry_fetch_reply(post_id, in_reply_to_ap_id, attempt + 1)
+                else:
+                    print(f"[RETRY-REPLY] gave up post_id={post_id} after {MAX_ATTEMPTS} attempts", flush=True)
+        except Exception as e:
+            print(f"[RETRY-REPLY] failed post_id={post_id} err={e}", flush=True)
+    threading.Thread(target=_worker, daemon=True).start()
+
+
 def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     """Fetch a remote AP object and save it as a Post. Returns the Post or None."""
     if _depth > 3 or not url:
         return None
 
-    # Convert web URL /@username/id to AP URL /users/username/statuses/id
+    print(f"[FETCH-POST] url={url} signer={signer.actor_uri() if signer else 'None'} depth={_depth}", flush=True)
+
+    # Convert web URL /@username/id to AP URL /users/username/statuses/id (Mastodon)
     m = re.match(r'^(https?://[^/]+)/@(\w+(?:@\S+)?)/([a-f0-9]+)(\?.*)?$', url)
     if m:
         base, username, status_id, query = m.group(1), m.group(2), m.group(3), m.group(4) or ""
         url = f"{base}/users/{username}/statuses/{status_id}{query}"
+        print(f"[FETCH-POST] Mastodon URL converted to: {url}", flush=True)
 
-    from urllib.parse import urlparse as _urlparse
-    parsed = _urlparse(url)
+    parsed = urlparse(url)
     headers = {"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}
 
     if not signer:
@@ -1068,33 +1132,39 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     headers["Accept"] = "application/activity+json"
     data = None
     try:
-        resp = _validated_get(url, headers=headers, timeout=15)
+        resp = _validated_get(url, headers=headers, timeout=10)
+        print(f"[FETCH-POST] first attempt url={url} status={resp.status_code if resp else 'None'}", flush=True)
         if resp is not None and resp.status_code == 200:
             data = resp.json()
     except Exception as e:
         print(f"[FETCH-POST] url={url} error={e}", flush=True)
 
-    if data is None and signer:
+    if data is None:
         try:
-            resp = _validated_get(url, headers={"Accept": "application/activity+json"}, timeout=15)
+            resp = _validated_get(url, headers=headers, timeout=10)
+            print(f"[FETCH-POST] retry url={url} status={resp.status_code if resp else 'None'}", flush=True)
             if resp is not None and resp.status_code == 200:
                 data = resp.json()
         except Exception as e:
             print(f"[FETCH-POST] retry url={url} error={e}", flush=True)
 
     if data is None:
+        print(f"[FETCH-POST] FAILED url={url}", flush=True)
         return None
 
     obj = data.get("object", data) if isinstance(data, dict) else {}
     if not isinstance(obj, dict):
+        print(f"[FETCH-POST] obj not dict url={url}", flush=True)
         return None
     obj_type = obj.get("type", "")
     if obj_type not in ("Note", "Question"):
+        print(f"[FETCH-POST] not Note/Question type={obj_type} url={url}", flush=True)
         return None
 
     ap_id = obj.get("id", url)
     existing = session.query(Post).filter_by(ap_id=ap_id).first()
     if existing and not existing.is_deleted:
+        print(f"[FETCH-POST] existing post id={existing.id} ap_id={ap_id}", flush=True)
         return existing
 
     attributed_to = obj.get("attributedTo", "")
@@ -1103,17 +1173,19 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     if isinstance(attributed_to, dict):
         attributed_to = attributed_to.get("id", "")
     if not attributed_to:
+        print(f"[FETCH-POST] no attributedTo url={url}", flush=True)
         return None
 
-    _resolve_actor(attributed_to)
+    _resolve_actor(attributed_to, sign_as=signer)
     author = session.query(User).filter_by(remote_url=attributed_to).first()
     if not author:
+        print(f"[FETCH-POST] author not found attributed_to={attributed_to}", flush=True)
         return None
 
     raw_content = obj.get("content", "") or ""
     if len(raw_content) > 65536:
         raw_content = raw_content[:65536]
-    content = _normalize_mentions(_sanitize_html(raw_content))
+    content = _html_to_newlines(process_post_content(_sanitize_html(raw_content), obj))
     summary = obj.get("summary", "")
 
     to = obj.get("to", [])
@@ -1122,7 +1194,42 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     if isinstance(cc, str): cc = [cc]
     all_auds = to + cc
     pub = "https://www.w3.org/ns/activitystreams#Public"
-    if pub in to:
+
+    tags = obj.get("tag", [])
+    if isinstance(tags, dict): 
+        tags = [tags]
+    elif not isinstance(tags, list): 
+        tags = []
+
+    has_mention_tag = False
+    mentioned_ids = []
+    hashtag_list = []
+    for t in tags:
+        if not isinstance(t, dict):
+            continue
+        is_mention_type = t.get("type") == "Mention"
+        name_val = t.get("name", "") or ""
+        is_double_at = name_val.startswith("@") and name_val.count("@") >= 2
+        if is_mention_type or is_double_at:
+            has_mention_tag = True
+            actor_href = t.get("href", "")
+            if not actor_href:
+                continue
+            try:
+                _resolve_actor(actor_href)
+                mentioned_user = session.query(User).filter_by(remote_url=actor_href).first()
+                if mentioned_user:
+                    mentioned_ids.append(mentioned_user.id)
+            except Exception as e:
+                print(f"[FETCH-POST] Failed to resolve mentioned actor={actor_href}: {e}", flush=True)
+        elif t.get('type') == "Hashtag":
+            tag_name = t.get("name", "") or ""
+            hashtag_list.append(Tag(name=tag_name))
+    mentioned_ids = list(set(mentioned_ids))
+
+    if pub not in all_auds and has_mention_tag:
+        vis = "mention"
+    elif pub in to:
         vis = "public"
     elif pub in cc:
         vis = "home"
@@ -1133,84 +1240,71 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     else:
         vis = "home"
 
+    instance_actor = session.query(User).filter_by(username='actor').first()
     in_reply_to_ap = obj.get("inReplyTo", "")
     if isinstance(in_reply_to_ap, dict):
         in_reply_to_ap = in_reply_to_ap.get("id", "")
 
-    # NOTE: parent fetch uses session (may do network I/O via recursive _fetch_remote_post)
     in_reply_to_id = None
     if in_reply_to_ap:
         parent = session.query(Post).filter_by(ap_id=in_reply_to_ap).first()
         if parent:
             in_reply_to_id = parent.id
         else:
-            parent = _fetch_remote_post(in_reply_to_ap, signer, session, _depth + 1)
+            parent = _fetch_remote_post(in_reply_to_ap, instance_actor, session, _depth + 1)
             if parent:
                 in_reply_to_id = parent.id
 
-    # 1. 정규식 보완 (아이디와 도메인에 대시나 점이 들어간 경우까지 안전하게 추출)
-    mentioned_names = set(re.findall(r'@([\w.-]+(?:@[\w.-]+)?)', content or ""))
-    mentioned_ids = []
-    if mentioned_names:
-        local_lookups = set()
-        remote_lookups = []  # (username, domain) 쌍으로 분리 보관
-        for name in mentioned_names:
-            if '@' in name:
-                parts = name.split('@', 1)
-                remote_lookups.append((parts[0], parts[1]))
-            else:
-                local_lookups.add(name)
-        # 2. 로컬 유저 조회 (username이 단일 아이디인 경우)
-        users = []
-        if local_lookups:
-            local_users = session.query(User).filter(User.username.in_(local_lookups)).all()
-            users.extend(local_users)
-        # 3. 원격 유저 조회 (username과 domain이 DB 상에서 분리되어 있거나, 혹은 remote_url 매칭이 필요한 경우)
-        # ※ 프로젝트의 User 모델 설계에 따라 아래 중 맞는 방식을 선택해야 합니다.
-        if remote_lookups:
-            # 방식 A: User 모델에 domain(또는 host) 필드가 따로 있는 경우 (권장)
-            for r_user, r_domain in remote_lookups:
-                ru = session.query(User).filter(
-                    User.username == r_user,
-                    User.domain == r_domain # (만약 User 모델에 domain 필드가 없다면 아래 방식 B 사용)
-                ).first()
-                if ru:
-                    users.append(ru)
-            # 방식 B: domain 필드가 따로 없고, 멘션된 원격 유저도 로컬 유저 리스트에서 '순수 username'으로만 찾아야 하는 경우
-            # (이 경우 'alice@remote.com'의 앞부분 'alice'만 따서 DB를 조회합니다.)
-            extra_local_names = {u[0] for u in remote_lookups} - local_lookups
-            if extra_local_names:
-                extra_users = session.query(User).filter(User.username.in_(extra_local_names)).all()
-                existing_ids = {u.id for u in users}
-                for eu in extra_users:
-                    if eu.id not in existing_ids:
-                        users.append(eu)
-
-        mentioned_ids = [u.id for u in users]
+    # 💡 [해결] 원격 오브젝트에서 인용 URL(quoteUrl) 추출 및 연동 처리
+    quote_url = obj.get("quoteUrl", "")
+    quote_id = None
+    if quote_url:
+        quoted_post = session.query(Post).filter_by(ap_id=quote_url).first()
+        if not quoted_post:
+            # 내 DB에 없다면 인용된 원본 게시물도 연합망에서 깊이(depth)를 더해 긁어옵니다.
+            quoted_post = _fetch_remote_post(quote_url, signer, session, _depth + 1)
+        if quoted_post:
+            quote_id = quoted_post.id
 
     _process_emoji_tags(obj.get("tag", []), session)
     session.flush()
 
     raw_attachments = obj.get("attachment", [])
+    if isinstance(raw_attachments, dict):
+        raw_attachments = [raw_attachments]
+    elif not isinstance(raw_attachments, list):
+        raw_attachments = []
     media_list = []
-    if isinstance(raw_attachments, list):
-        for att in raw_attachments:
-            if not isinstance(att, dict):
-                continue
-            att_type = att.get("mediaType", "")
-            att_url = ""
-            if isinstance(att.get("url"), str):
-                att_url = att["url"]
-            elif isinstance(att.get("url"), dict):
-                att_url = att["url"].get("href", "")
-            if not att_url:
-                continue
-            cached = _cache_remote_media(att_url)
+    _att_has_sensitive = False
+    for att in raw_attachments:
+        if not isinstance(att, dict):
+            continue
+        att_type = att.get("mediaType", "")
+        att_as2_type = att.get("type", "")
+        att_url = ""
+        if isinstance(att.get("url"), str):
+            att_url = att["url"]
+        elif isinstance(att.get("url"), dict):
+            att_url = att["url"].get("href", "")
+        if not att_url:
+            continue
+        if att.get("sensitive", False):
+            _att_has_sensitive = True
+        cached = _cache_remote_media(att_url)
+        if att_type.startswith("image/") or att_as2_type == "Image":
+            media_list.append({"url": cached, "type": "image"})
+        elif att_type.startswith("video/") or att_as2_type == "Video":
+            media_list.append({"url": cached, "type": "video"})
+        elif att_as2_type == "Document" or att_type.startswith("audio/"):
             if att_type.startswith("image/"):
-                media_list.append({"url": cached, "type": "image"})
+                mtype = "image"
             elif att_type.startswith("video/"):
-                media_list.append({"url": cached, "type": "video"})
+                mtype = "video"
+            else:
+                mtype = "image"  # fallback for missing mediaType
+            media_list.append({"url": cached, "type": mtype})
 
+    # 💡 Post 모델 생성 시 quote_id (또는 모델 설계에 맞춘 인용 필드명) 채워넣기
     post = Post(
         author_id=author.id,
         content=content,
@@ -1219,9 +1313,12 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         ap_id=ap_id,
         in_reply_to_ap_id=in_reply_to_ap,
         in_reply_to_id=in_reply_to_id,
+        quote_of_id=quote_id,
+        quote_of_ap_id=quote_url,
         mentioned_user_ids=mentioned_ids,
         media_attachments=media_list if media_list else None,
-        is_sensitive=obj.get("sensitive", False),
+        is_sensitive=obj.get("sensitive", False) or _att_has_sensitive,
+        tag_list=hashtag_list,
     )
     published = obj.get("published", "")
     if published:
@@ -1235,11 +1332,42 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     except Exception:
         session.rollback()
         return session.query(Post).filter_by(ap_id=ap_id).first()
+
+    # 💡 만약 인용 글이 제대로 매칭되었다면 하단의 링크 미리보기(외부링크 상자) 연산을 건너뜁니다.
+    if post.quote_of_id:
+        return post
+
+    # 원격 포스트에 포함된 URL의 링크 미리보기 fetch
+    import re as _re
+    _url_match = _re.search(r'https?://(?:(?!/tags/)[^\s<>"\')\]#])+', content or "")
+    if _url_match:
+        _url = _url_match.group(0)
+        try:
+            import httpx as _httpx
+            _resp = _httpx.get(_url, headers={"User-Agent": "WRIT/1.0"}, timeout=5, follow_redirects=True)
+            if _resp.status_code == 200:
+                _html = _resp.text
+                def _og(n):
+                    _m = _re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', _html, _re.I)
+                    if not _m:
+                        _m = _re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', _html, _re.I)
+                    return _m.group(1) if _m else ""
+                _og_title = _og("title") or (_re.search(r'<title>([^<]*)</title>', _html, _re.I).group(1) if _re.search(r'<title>([^<]*)</title>', _html, _re.I) else "")
+                _og_desc = _og("description")
+                _og_img = _og("image")
+                if _og_img and _og_img.startswith("/"):
+                    _p = urlparse(_url)
+                    _og_img = f"{_p.scheme}://{_p.netloc}{_og_img}"
+                if _og_title:
+                    post.link_preview = {"url": _url, "title": _og_title[:200], "description": _og_desc[:400] if _og_desc else "", "image": _og_img or ""}
+        except Exception:
+            pass
+
     return post
 
 
 def _handle_create(activity: dict) -> tuple[int, str]:
-    import sys, json
+    import sys
     obj = activity.get("object", {})
     obj_type = obj.get("type") if isinstance(obj, dict) else ""
     if obj_type in ("Note", "Question"):
@@ -1263,7 +1391,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         actor_uri = actor.actor_uri()
         actor_remote_url = actor.remote_url or ""
 
-
         # Verify attributedTo matches activity actor
         obj_attributed = obj.get("attributedTo", "")
         if isinstance(obj_attributed, list):
@@ -1278,7 +1405,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if len(raw_content) > 65536:
             raw_content = raw_content[:65536]
         post_id = obj.get("id", "")
-        content = _normalize_mentions(_sanitize_html(raw_content))
+        content = _html_to_newlines(process_post_content(_sanitize_html(raw_content), obj))
         summary = obj.get("summary", "")
         in_reply_to = obj.get("inReplyTo", "")
 
@@ -1325,12 +1452,17 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     "expires_at": expires_at,
                 }
 
+        # ===== PHASE 1: DB READS (short-lived session) =====
+        reply_to_post_id = None
+        tag_names = []
+        mentioned_ids = []
+        muted_visibility = False
+
         with get_session() as session:
             import sys; sys.stdout.flush()
             existing = session.query(Post).filter_by(ap_id=post_id).first()
             import sys; sys.stdout.flush()
             if existing:
-                # If the existing post is a poll and incoming has updated votes, update it
                 if existing.poll_data and poll_data:
                     for new_opt in poll_data.get("options", []):
                         for old_opt in existing.poll_data.get("options", []):
@@ -1342,50 +1474,23 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     return (200, "Poll votes updated")
                 return (200, "Already exists")
 
-            reply_to_post = None
+            reply_to_post_local = None
             if in_reply_to:
-                reply_to_post = session.query(Post).filter_by(ap_id=in_reply_to).first()
-                if not reply_to_post:
+                reply_to_post_local = session.query(Post).filter_by(ap_id=in_reply_to).first()
+                if not reply_to_post_local:
                     alt_url = in_reply_to.replace("https://", "http://") if "https://" in in_reply_to else in_reply_to.replace("http://", "https://")
-                    reply_to_post = session.query(Post).filter_by(ap_id=alt_url).first()
-                if not reply_to_post:
-                    _local_signer = session.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor_id, User.is_remote == False).first()
-                    if not _local_signer:
-                        _local_signer = _get_instance_actor(session)
-                    reply_to_post = _fetch_remote_post(in_reply_to, _local_signer, session)
-                    if reply_to_post:
-                        try:
-                            from app.timeline_stream import broadcast_post
-                            _ra = reply_to_post.author
-                            broadcast_post({
-                                "id": reply_to_post.id,
-                                "number": reply_to_post.number or "",
-                                "content": reply_to_post.content,
-                                "summary": reply_to_post.summary or "",
-                                "visibility": reply_to_post.visibility or "public",
-                                "created_at": reply_to_post.created_at.isoformat() if reply_to_post.created_at else "",
-                                "author": {
-                                    "id": _ra.id, "username": _ra.username,
-                                    "display_name": _ra.display_name or _ra.username,
-                                    "avatar": _ra.profile_image or "", "header": _ra.header_image or "",
-                                    "summary": _ra.summary or "", "is_admin": _ra.is_admin,
-                                    "is_locked": getattr(_ra, "is_locked", False),
-                                    "is_limited": getattr(_ra, "is_limited", False),
-                                    "is_remote": _ra.is_remote, "ap_id": _ra.remote_url or "",
-                                },
-                                "likes_count": 0, "boosts_count": 0, "replies_count": 0,
-                                "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
-                                "is_dm": False, "is_sensitive": getattr(reply_to_post, "is_sensitive", False) or False,
-                                "ap_id": reply_to_post.ap_id or "", "media_attachments": reply_to_post.media_attachments or [],
-                                "poll_data": reply_to_post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
-                            }, reply_to_post.author_id, reply_to_post.visibility or "public", False)
-                        except Exception:
-                            pass
+                    reply_to_post_local = session.query(Post).filter_by(ap_id=alt_url).first()
+                if not reply_to_post_local:
+                    _posts_match = re.match(r'https?://[^/]+/posts/(\d+)', in_reply_to)
+                    if _posts_match:
+                        reply_to_post_local = session.query(Post).filter_by(id=int(_posts_match.group(1)), is_deleted=False).first()
+                if reply_to_post_local:
+                    reply_to_post_id = reply_to_post_local.id
 
-            # Mastodon poll votes: Create(Note) with name + inReplyTo + no content
+            # mastodon poll votes: create(note) with name + inreplyto + no content
             vote_name = obj.get("name", "") if not raw_content.strip() else ""
-            if vote_name and reply_to_post and reply_to_post.poll_data:
-                poll_post = reply_to_post
+            if vote_name and reply_to_post_local and reply_to_post_local.poll_data:
+                poll_post = reply_to_post_local
                 options = poll_post.poll_data.get("options", [])
                 option_idx = -1
                 for i, opt in enumerate(options):
@@ -1399,13 +1504,13 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             exp = datetime.datetime.fromisoformat(expires_at)
                             now = datetime.datetime.now(datetime.timezone.utc)
                             if exp < now:
-                                return (200, "Poll ended")
-                        except (ValueError, TypeError) as ex:
+                                return (200, "poll ended")
+                        except (valueerror, typeerror) as ex:
                             pass
                     existing_vote = session.query(Vote).filter_by(user_id=actor_id, post_id=poll_post.id).first()
                     if existing_vote:
                         if existing_vote.option_index == option_idx:
-                            return (200, "Already voted")
+                            return (200, "already voted")
                         options[existing_vote.option_index]["votes_count"] = max(0, options[existing_vote.option_index].get("votes_count", 0) - 1)
                         existing_vote.option_index = option_idx
                     else:
@@ -1416,8 +1521,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     poll_post.poll_data = {**poll_post.poll_data, "options": new_options}
                     session.commit()
                     from app.timeline_stream import broadcast_post, broadcast_refresh_notifs
-                    # Notify poll author + all voters
-                    _voter_ids = {v.user_id for v in session.query(Vote).filter_by(post_id=poll_post.id).all()}
+                    _voter_ids = {v.user_id for v in session.query(vote).filter_by(post_id=poll_post.id).all()}
                     _voter_ids.add(poll_post.author_id)
                     for _vid in _voter_ids:
                         broadcast_refresh_notifs(_vid)
@@ -1430,15 +1534,15 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         "id": poll_post.id,
                         "type": "update",
                         "poll_data": poll_post.poll_data,
-                    }, poll_post.author_id, poll_post.visibility or "public", False)
-                    return (200, "Voted")
+                        "_emojis": _broadcast_emoji_list(session),
+                    }, poll_post.author_id, poll_post.visibility or "public", false)
+                    return (200, "voted")
 
-            # Parse mentioned users from content
-            mentioned_names = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content or ""))
+            # Parse mentions ONLY from AP tag array (No regex body parsing)
             mentioned_hrefs = set()
-            # Get actor domain for same-server mention resolution
+            mentioned_names = set()
             _actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
-            # Also parse mentions from AP tag array
+
             for tag in (obj.get("tag", []) or []):
                 if isinstance(tag, dict) and tag.get("type") == "Mention":
                     href = tag.get("href", "")
@@ -1447,42 +1551,53 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         mentioned_hrefs.add(href.rstrip("/"))
                     if name and name.startswith("@"):
                         mentioned_names.add(name.lstrip("@"))
-            # Also check `to` / `cc` for local user actor URIs (DMs from Mastodon)
+                if isinstance(tag, dict) and tag.get("type") == "Hashtag":
+                    tag_names.append(tag.get("name", "").lower())
+
             for _aud in all_audiences:
                 _a = _aud.rstrip("/")
                 if _a and _a.startswith("http"):
                     mentioned_hrefs.add(_a)
-            mentioned_ids = []
+            print(f"[_handle_create MENTION DEBUG] actor={actor_url} to={to} cc={cc}", flush=True)
+            print(f"[_handle_create MENTION DEBUG] mentioned_hrefs={mentioned_hrefs} mentioned_names={mentioned_names}", flush=True)
+
             _seen_ids = set()
-            # Process href-based mentions FIRST (most reliable: from AP Mention tag href or to/cc)
             if mentioned_hrefs:
                 for _href in mentioned_hrefs:
-                    u = session.query(User).filter(User.remote_url == _href).first()
-                    if u and u.id not in _seen_ids:
-                        mentioned_ids.append(u.id)
-                        _seen_ids.add(u.id)
-                    if u is None and BASE_URL in _href:
+                    _matched = False
+                    if BASE_URL in _href:
                         for _u in session.query(User).filter_by(is_remote=False).all():
-                            if (_u.actor_uri() == _href or _u.actor_uri().replace("/users/", "/@") == _href) and _u.id not in _seen_ids:
+                            local_uris = {
+                                _u.actor_uri().rstrip("/"),
+                                _u.actor_uri().replace("/users/", "/@").rstrip("/")
+                            }
+                            if _href in local_uris and _u.id not in _seen_ids:
                                 mentioned_ids.append(_u.id)
                                 _seen_ids.add(_u.id)
+                                print(f"[_handle_create MENTION] LOCAL MATCH: href={_href} -> uid={_u.id} username={_u.username}", flush=True)
+                                _matched = True
                                 break
-            # Content-based name matching as supplement (only for users not already found)
+                    if not _matched:
+                        u = session.query(User).filter(User.remote_url == _href).first()
+                        if u and u.id not in _seen_ids:
+                            mentioned_ids.append(u.id)
+                            _seen_ids.add(u.id)
+                            print(f"[_handle_create MENTION] REMOTE MATCH: href={_href} -> uid={u.id} username={u.username}", flush=True)
+                        elif not u:
+                            print(f"[_handle_create MENTION] NO MATCH: href={_href}", flush=True)
             if mentioned_names:
                 for _name in mentioned_names:
                     if '@' in _name:
                         _lp, _dom = _name.split('@', 1)
-                        from urllib.parse import urlparse as _urlparse
                         u = session.query(User).filter(
                             User.username == _lp, User.is_remote == True,
                         ).first()
                         if u and u.id not in _seen_ids and u.remote_url:
-                            _p = _urlparse(u.remote_url)
+                            _p = urlparse(u.remote_url)
                             if _p.hostname and _p.hostname.lower() == _dom.lower():
                                 mentioned_ids.append(u.id)
-                                _seen_ids.add(u.id)
+                                _seen_ids.add(_u.id)
                                 continue
-                        # username may contain @domain, try like + domain check
                         candidates = session.query(User).filter(
                             User.username.like(f"{_lp}@%"),
                             User.is_remote == True,
@@ -1491,13 +1606,12 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             if _c.id in _seen_ids:
                                 continue
                             if _c.remote_url:
-                                _p = _urlparse(_c.remote_url)
+                                _p = urlparse(_c.remote_url)
                                 if _p.hostname and _p.hostname.lower() == _dom.lower():
                                     mentioned_ids.append(_c.id)
                                     _seen_ids.add(_c.id)
                                     break
                     else:
-                        # same-domain remote user only (local user handled via href already)
                         if _actor_domain:
                             u = session.query(User).filter(
                                 User.username == _name, User.is_remote == True,
@@ -1507,34 +1621,169 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                 mentioned_ids.append(u.id)
                                 _seen_ids.add(u.id)
 
-            # Check if actor's domain is server-muted
+            print(f"[_handle_create MENTION RESULT] mentioned_ids={mentioned_ids} (from hrefs={mentioned_hrefs}, names={mentioned_names})", flush=True)
             actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
             if actor_domain:
                 mute_entry = session.query(MutedServer).filter_by(domain=actor_domain).first()
                 if mute_entry and mute_entry.muted and visibility == "public":
-                    visibility = "home"
+                    muted_visibility = True
 
-            # Process custom emoji tags and media BEFORE session (network I/O)
-            import json as _json
-            raw_attachments = obj.get("attachment", []) if isinstance(obj, dict) else []
-            media_list = []
-            if isinstance(raw_attachments, list):
-                for att in raw_attachments:
-                    if not isinstance(att, dict):
+        if muted_visibility:
+            visibility = "home"
+
+        # ===== PHASE 2: NETWORK I/O (no DB session held) =====
+
+        # Fetch remote reply if not found locally
+        if in_reply_to and not reply_to_post_id:
+            with get_session() as fetch_s:
+                _local_signer = fetch_s.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor_id, User.is_remote == False).first()
+                if not _local_signer:
+                    _local_signer = _get_instance_actor(fetch_s)
+                fetched_reply = _fetch_remote_post(in_reply_to, _local_signer, fetch_s)
+                if fetched_reply:
+                    fetch_s.commit()
+                    reply_to_post_id = fetched_reply.id
+                    try:
+                        from app.timeline_stream import broadcast_post
+                        _ra = fetched_reply.author
+                        broadcast_post({
+                            "id": fetched_reply.id,
+                            "number": fetched_reply.number or "",
+                            "content": fetched_reply.content,
+                            "summary": fetched_reply.summary or "",
+                            "visibility": fetched_reply.visibility or "public",
+                            "created_at": fetched_reply.created_at.isoformat() if fetched_reply.created_at else "",
+                            "author": {
+                                "id": _ra.id, "username": _ra.username,
+                                "display_name": _ra.display_name or _ra.username,
+                                "avatar": _ra.profile_image or "", "header": _ra.header_image or "",
+                                "summary": _ra.summary or "", "is_admin": _ra.is_admin,
+                                "is_locked": getattr(_ra, "is_locked", false),
+                                "is_limited": getattr(_ra, "is_limited", false),
+                                "is_remote": _ra.is_remote, "ap_id": _ra.remote_url or "",
+                            },
+                            "likes_count": 0, "boosts_count": 0, "replies_count": 0,
+                            "liked": false, "boosted": false, "bookmarked": false, "is_mine": false,
+                            "is_dm": false, "is_sensitive": getattr(fetched_reply, "is_sensitive", false) or false,
+                            "ap_id": fetched_reply.ap_id or "", "media_attachments": fetched_reply.media_attachments or [],
+                            "poll_data": fetched_reply.poll_data, "my_vote": none, "reactions": {}, "my_reaction": none,
+                            "quote_of_id": fetched_reply.quote_of_id or None, "quote_of_ap_id": fetched_reply.quote_of_ap_id or "",
+                            "_emojis": _broadcast_emoji_list(fetch_s),
+                        }, fetched_reply.author_id, fetched_reply.visibility or "public", false)
+                    except Exception:
+                        pass
+
+        # Cache media attachments
+        raw_attachments = obj.get("attachment", []) if isinstance(obj, dict) else []
+        if isinstance(raw_attachments, dict):
+            raw_attachments = [raw_attachments]
+        elif not isinstance(raw_attachments, list):
+            raw_attachments = []
+        media_list = []
+        _att_has_sensitive = False
+        for att in raw_attachments:
+            if not isinstance(att, dict):
+                continue
+            att_type = att.get("mediaType", "")
+            att_as2_type = att.get("type", "")
+            url = ""
+            if isinstance(att.get("url"), str):
+                url = att["url"]
+            elif isinstance(att.get("url"), dict):
+                url = att["url"].get("href", "")
+            if not url:
+                continue
+            att_sensitive = att.get("sensitive", False)
+            if att_sensitive:
+                _att_has_sensitive = True
+            cached = _cache_remote_media(url)
+            if att_type.startswith("image/") or att_as2_type == "Image":
+                media_list.append({"url": cached, "type": "image"})
+                print(f"[_handle_create MEDIA] image url={cached} sensitive={att_sensitive}", flush=True)
+            elif att_type.startswith("video/") or att_as2_type == "Video":
+                media_list.append({"url": cached, "type": "video"})
+                print(f"[_handle_create MEDIA] video url={cached} sensitive={att_sensitive}", flush=True)
+            elif att_as2_type == "Document" or att_type.startswith("audio/"):
+                if att_type.startswith("image/") or att_type.startswith("video/"):
+                    mtype = "video" if att_type.startswith("video/") else "image"
+                else:
+                    mtype = "image"
+                media_list.append({"url": cached, "type": mtype})
+                print(f"[_handle_create MEDIA] Document({att_type}) url={cached} type={mtype} sensitive={att_sensitive}", flush=True)
+
+        # Extract quote reference from Note (FEP-044f / Mastodon / Misskey / Firefish compat)
+        quote_of_ap_id = ""
+        quote_of_id = None
+        if isinstance(obj, dict):
+            quote_url = (
+                obj.get("quote")
+                or obj.get("quoteUrl")
+                or obj.get("quoteUri")
+                or obj.get("_misskey_quote")
+                or ""
+            )
+            if not quote_url and isinstance(obj.get("tag"), list):
+                for _tag in obj["tag"]:
+                    if not isinstance(_tag, dict):
                         continue
-                    att_type = att.get("mediaType", "")
-                    url = ""
-                    if isinstance(att.get("url"), str):
-                        url = att["url"]
-                    elif isinstance(att.get("url"), dict):
-                        url = att["url"].get("href", "")
-                    if not url:
-                        continue
-                    cached = _cache_remote_media(url)
-                    if att_type.startswith("image/"):
-                        media_list.append({"url": cached, "type": "image"})
-                    elif att_type.startswith("video/"):
-                        media_list.append({"url": cached, "type": "video"})
+                    if _tag.get("type") == "Quote":
+                        quote_url = _tag.get("href") or _tag.get("id") or ""
+                    elif _tag.get("type") == "Link" and _tag.get("rel") == "https://misskey-hub.net/ns#_misskey_quote":
+                        quote_url = _tag.get("href") or ""
+                    if quote_url:
+                        break
+            try:
+                _q_fields = {k: obj.get(k) for k in ("quote", "quoteUrl", "quoteUri", "_misskey_quote") if obj.get(k)}
+                if quote_url:
+                    print(f"[_handle_create QUOTE] post_id={post_id} url={quote_url} fields={_q_fields}", flush=True)
+            except Exception:
+                pass
+            if quote_url and isinstance(quote_url, str):
+                quote_of_ap_id = quote_url
+                try:
+                    with get_session() as quote_s:
+                        quote_post = _fetch_remote_post(quote_url, actor, quote_s)
+                        if quote_post:
+                            quote_s.commit()
+                            quote_of_id = quote_post.id
+                            print(f"[_handle_create QUOTE OK] post_id={quote_post.id}", flush=True)
+                        else:
+                            print(f"[_handle_create QUOTE FETCH FAIL] url={quote_url}", flush=True)
+                except Exception as e:
+                    print(f"[_handle_create QUOTE ERR] url={quote_url} {e}", flush=True)
+
+        # Fetch link preview for URLs in remote post content (skip if quote post)
+        link_preview = None
+        if not quote_of_ap_id:
+            _url_match_lp = re.search(r'https?://(?!.*/tags/)[^\s<>"\')\]#]+', content or "")
+            if _url_match_lp:
+                _url_lp = _url_match_lp.group(0)
+                try:
+                    import httpx as _httpx_lp
+                    _resp_lp = _httpx_lp.get(_url_lp, headers={"User-Agent": "WRIT/1.0"}, timeout=5, follow_redirects=True)
+                    if _resp_lp.status_code == 200:
+                        _html_lp = _resp_lp.text
+                        def _og_lp(n):
+                            _m = re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', _html_lp, re.I)
+                            if not _m:
+                                _m = re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', _html_lp, re.I)
+                            return _m.group(1) if _m else ""
+                        _og_title_lp = _og_lp("title") or (re.search(r'<title>([^<]*)</title>', _html_lp, re.I).group(1) if re.search(r'<title>([^<]*)</title>', _html_lp, re.I) else "")
+                        _og_desc_lp = _og_lp("description")
+                        _og_img_lp = _og_lp("image")
+                        if _og_img_lp and _og_img_lp.startswith("/"):
+                            _p_lp = urlparse(_url_lp)
+                            _og_img_lp = f"{_p_lp.scheme}://{_p_lp.netloc}{_og_img_lp}"
+                        if _og_title_lp:
+                            link_preview = {"url": _url_lp, "title": _og_title_lp[:200], "description": _og_desc_lp[:400] if _og_desc_lp else "", "image": _og_img_lp or ""}
+                except Exception:
+                    pass
+
+        # ===== PHASE 3: DB WRITES (new session) =====
+        with get_session() as session:
+            reply_to_post = None
+            if reply_to_post_id:
+                reply_to_post = session.query(Post).get(reply_to_post_id)
 
             post = Post(
                 author_id=actor_id,
@@ -1544,23 +1793,42 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 mentioned_user_ids=mentioned_ids,
                 ap_id=post_id,
                 in_reply_to_ap_id=in_reply_to,
-                in_reply_to_id=reply_to_post.id if reply_to_post else None,
+                in_reply_to_id=reply_to_post_id,
                 media_attachments=media_list if media_list else None,
                 poll_data=poll_data,
                 is_dm=is_incoming_dm,
-                is_sensitive=obj.get("sensitive", False),
+                is_sensitive=obj.get("sensitive", False) or _att_has_sensitive,
+                quote_of_ap_id=quote_of_ap_id,
+                quote_of_id=quote_of_id,
             )
+            if quote_of_ap_id and post.content:
+                post.content = re.sub(
+                    r'^[\s\n]*RE:\s*<a[^>]*>[^<]*</a>\s*[\n\s]*',
+                    '', post.content, count=1, flags=re.I
+                )
+                post.content = re.sub(
+                    r'^[\s\n]*RE:\s*https?://\S+\s*[\n\s]*',
+                    '', post.content, count=1, flags=re.I
+                )
+            if link_preview:
+                post.link_preview = link_preview
             session.add(post)
             session.flush()
 
-            # Parse #hashtags from content and sync with Tag model (so hashtag search includes remote posts)
-            for _t in re.findall(r'(?<!\w)#([\w_가-힣]+)', content or ""):
-                _existing = session.query(Tag).filter_by(name=_t.lower()).first()
+            # Background retry if remote parent not found
+            if in_reply_to and not reply_to_post_id:
+                _retry_fetch_reply(post.id, in_reply_to)
+
+            # Resolve and set hashtag tags
+            tag_list = []
+            for tag_name in tag_names:
+                _existing = session.query(Tag).filter_by(name=tag_name).first()
                 if not _existing:
-                    _existing = Tag(name=_t.lower())
+                    _existing = Tag(name=tag_name)
                     session.add(_existing)
                     session.flush()
-                post.tag_list.append(_existing)
+                tag_list.append(_existing)
+            post.tag_list = tag_list
 
             # Notify local users mentioned or replied to
             _notified = set()
@@ -1580,7 +1848,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         notification_type="mention", post_id=post.id,
                     ))
 
-            # Notify local followers who enabled post notifications (skip self + already notified)
             followers = session.query(Follow).filter(
                 Follow.following_id == actor_id,
                 Follow.notify_on_post == True,
@@ -1601,6 +1868,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 with get_session() as emoji_s:
                     _process_emoji_tags(obj.get("tag", []), emoji_s)
                     emoji_s.commit()
+                    from app.routes.api import _refresh_emoji_cache_forcibly
+                    _refresh_emoji_cache_forcibly(emoji_s)
             except Exception:
                 pass
             from app.push import send_push_to_user
@@ -1629,7 +1898,27 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 logger.warning("broadcast failed: %s", e)
             try:
                 from app.timeline_stream import broadcast_post
+                _broadcast_emojis = _broadcast_emoji_list(session)
                 author = post.author
+                _reply_ctx = None
+                if reply_to_post and not getattr(reply_to_post, 'is_deleted', False):
+                    _rp_author = reply_to_post.author
+                    _reply_ctx = {
+                        "id": reply_to_post.id,
+                        "number": reply_to_post.number or "",
+                        "content": (reply_to_post.content or "")[:200],
+                        "author": {
+                            "id": _rp_author.id, "username": _rp_author.username,
+                            "display_name": _rp_author.display_name or _rp_author.username,
+                            "avatar": _rp_author.profile_image or "",
+                            "header": _rp_author.header_image or "",
+                            "summary": _rp_author.summary or "", "is_admin": _rp_author.is_admin,
+                            "is_locked": getattr(_rp_author, "is_locked", False),
+                            "is_limited": getattr(_rp_author, "is_limited", False),
+                            "is_remote": _rp_author.is_remote, "ap_id": _rp_author.remote_url or "",
+                        },
+                        "visibility": reply_to_post.visibility or "public",
+                    }
                 post_json = {
                     "id": post.id,
                     "number": post.number or "",
@@ -1665,6 +1954,12 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     "my_vote": None,
                     "reactions": {},
                     "my_reaction": None,
+                    "mentioned_user_ids": mentioned_ids,
+                    "reply_context": _reply_ctx,
+                    "link_preview": post.link_preview,
+                    "quote_of_id": post.quote_of_id or None,
+                    "quote_of_ap_id": post.quote_of_ap_id or "",
+                    "_emojis": _broadcast_emojis,
                 }
                 broadcast_post(post_json, actor_id, visibility, is_incoming_dm)
             except Exception as e:
@@ -1672,6 +1967,12 @@ def _handle_create(activity: dict) -> tuple[int, str]:
 
         return (200, "Created")
     return (200, "OK")
+
+
+def _broadcast_emoji_list(session):
+    """Return ALL emojis from DB formatted for SSE broadcast payload."""
+    from app.routes.api import _load_emojis
+    return [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)]
 
 
 def _build_reactions(session, post_id: int) -> dict:
@@ -1696,7 +1997,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
     actor_url = raw_actor if isinstance(raw_actor, str) else raw_actor[0]
     object_url = activity["object"] if isinstance(activity.get("object"), str) else ""
     activity_id = activity.get("id", "")
-    reaction = activity.get("_misskey_reaction", activity.get("reaction", ""))
+    reaction = activity.get("_misskey_reaction", activity.get("content", activity.get("reaction", "")))
 
     if not object_url:
         return (200, "OK")
@@ -1721,38 +2022,17 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             _kw = reaction[1:-1]
             _existing_emoji = session.query(CustomEmoji).filter_by(keyword=_kw).first()
             if not _existing_emoji:
-                # Do emoji HTTP download outside this session to avoid holding connection
-                _emoji_data = None
+                _import_data = {"kw": _kw}
                 tags = activity.get("tag", []) or []
                 for _tag in tags:
                     if isinstance(_tag, dict) and _tag.get("type") == "Emoji":
                         _icon = _tag.get("icon", {})
-                        _url = _icon.get("url", "") if isinstance(_icon, dict) else ""
-                        _tag_id = _tag.get("id", "")
-                        _domain = urlparse(_tag_id).netloc if _tag_id else ""
-                        if _url:
-                            try:
-                                import httpx as _httpx
-                                _resp = _httpx.get(_url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=10)
-                                if _resp.status_code == 200:
-                                    _ext = _url.rsplit(".", 1)[-1].split("?")[0] if "." in _url else "png"
-                                    _fname = f"{_kw}.{_ext}"
-                                    _emoji_data = (_fname, _resp.content, f"image/{_ext}", _domain)
-                            except Exception as e:
-                                logger.warning("Failed to download remote emoji %s: %s", _kw, e)
+                        _import_data["url"] = _icon.get("url", "") if isinstance(_icon, dict) else ""
+                        _import_data["domain"] = urlparse(_tag.get("id", "")).netloc if _tag.get("id", "") else ""
                         break
-                if _emoji_data:
-                    _fname, _content, _mime, _domain = _emoji_data
-                    from app.utils.storage import get_storage
-                    _storage = get_storage()
-                    try:
-                        _storage.save(f"emojis/remote/{_fname}", _content, _mime)
-                        with get_session() as emoji_s:
-                            emoji_s.add(CustomEmoji(keyword=_kw, file_name=_fname, category="remote", domain=_domain))
-                            emoji_s.commit()
-                        logger.info("Imported remote emoji: %s from %s", _kw, _domain)
-                    except Exception as e:
-                        logger.warning("Failed to save remote emoji %s: %s", _kw, e)
+                if _import_data.get("url"):
+                    import threading as _thr
+                    _thr.Thread(target=_background_import_emoji, args=(_import_data["url"], _import_data["kw"], _import_data["domain"]), daemon=True).start()
 
         existing = session.query(Like).filter_by(user_id=actor_id, post_id=post.id).first()
         if existing:
@@ -1816,6 +2096,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                     "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
                     "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
                     "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
+                    "_emojis": _broadcast_emoji_list(session),
                 }, post.author_id, post.visibility or "public", False)
             except Exception:
                 pass
@@ -1826,33 +2107,39 @@ def _handle_like(activity: dict) -> tuple[int, str]:
 
 
 def _handle_vote(activity: dict) -> tuple[int, str]:
-    import sys
     raw_actor = activity.get("actor")
     if not raw_actor:
         return (400, "Missing actor")
     actor_url = raw_actor if isinstance(raw_actor, str) else raw_actor[0]
-    object_url = activity.get("object", "")
-    if isinstance(object_url, dict):
-        object_url = object_url.get("id", "")
-    if not object_url:
+    obj = activity.get("object", "")
+    if not obj:
+        return (200, "OK")
+    if not isinstance(obj, dict):
+        return (400, "Wrong object")
+    if obj.get('type') != "Question":
+        return (400, "Not vote")
+
+    _sign_as = None
+    post = None
+    with get_session() as session:
+        post = session.query(Post).filter_by(ap_id=obj.get("id")).first()
+        _sign_as = session.query(User).get(post.author_id) if post else None
+    if not post or not post.poll_data:
         return (200, "OK")
 
-    with get_session() as session:
-        post = session.query(Post).filter_by(ap_id=object_url).first()
-        _sign_as = session.query(User).get(post.author_id) if post else None
-    actor = _resolve_actor(actor_url, sign_as=_sign_as)
-    if not actor:
+    actor_id = ''
+    try:
+        actor = _resolve_actor(actor_url, sign_as=_sign_as)
+        if not actor:
+            return (404, "Actor not found")
+        actor_id = actor.id
+    except Exception as e:
+        logger.error("Failed to resolve actor %s: %s", actor_url, e)
         return (404, "Actor not found")
 
-    actor_id = actor.id
-
     with get_session() as session:
-        post = session.query(Post).filter_by(ap_id=object_url).first()
-        if not post or not post.poll_data:
-            return (200, "OK")
-
         # Determine which option was voted for
-        option_name = activity.get("name", "")
+        option_name = obj.get("name", "") or obj.get("content", "")
         options = post.poll_data.get("options", [])
         option_idx = -1
         if option_name:
@@ -1910,7 +2197,9 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
         _sign_as = session.query(User).get(post.author_id) if post else None
-    print(f"[ANNOUNCE] db_post={'found id='+str(post.id) if post else 'none'}", flush=True)
+        if not _sign_as:
+            _sign_as = _get_instance_actor(session)
+    print(f"[ANNOUNCE] db_post={'found id='+str(post.id) if post else 'none'} signer={'id='+str(_sign_as.id) if _sign_as else 'none'}", flush=True)
     actor = _resolve_actor(actor_url, sign_as=_sign_as)
     if not actor:
         print("[ANNOUNCE] actor not found, returning 404", flush=True)
@@ -1923,9 +2212,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
         post = session.query(Post).filter_by(ap_id=object_url).first()
         print(f"[ANNOUNCE] session2 post={'found id='+str(post.id) if post else 'none'}", flush=True)
         if not post:
-            _local_signer = session.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == actor_id, User.is_remote == False).first()
-            if not _local_signer:
-                _local_signer = session.query(User).filter_by(is_remote=False).first()
+            _local_signer = _get_instance_actor(session)
             try:
                 post = _fetch_remote_post(object_url, _local_signer, session)
                 print(f"[ANNOUNCE] fetch_remote_post result={'id='+str(post.id) if post else 'None'}", flush=True)
@@ -1961,9 +2248,20 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
         )
         session.add(boost_post)
 
+        # 1. 안전하게 DB 세션이 활성화되어 있을 때 미리 _actor와 post.author(_a)를 가져옵니다.
+        _actor = session.query(User).get(actor_id)
+        _a = post.author
+
+        # 2. 통계 개수 조회도 커밋 전에 안전하게 미리 해둡니다.
+        likes_cnt = session.query(Like).filter_by(post_id=post.id).count()
+        boosts_cnt = session.query(Boost).filter_by(post_id=post.id).count()
+        replies_cnt = session.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count()
+        reactions_data = _build_reactions(session, post.id)
+
         existing_n = session.query(Notification).filter_by(
             user_id=post.author_id, from_user_id=actor_id, notification_type="boost", post_id=post.id
         ).first()
+
         if not existing_n:
             n = Notification(
                 user_id=post.author_id,
@@ -1972,45 +2270,78 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                 post_id=post.id,
             )
             session.add(n)
-            session.commit()
+
+        session.commit()
+
+        # 5. 커밋 이후 외부 연동 (푸시 및 스트리밍) 처리
+        if not existing_n:
             from app.push import send_push_to_user
             from app.timeline_stream import broadcast_notif_sound
             send_push_to_user(post.author_id, "boost", actor_username, post.id)
             broadcast_notif_sound(post.author_id)
-        else:
-            session.commit()
 
         try:
             from app.timeline_stream import broadcast_post
-            _a = post.author
+            def _safe_user_json(u):
+                if not u:
+                    return None
+                role = getattr(u, 'role', 'user') or 'user'
+                return {
+                    "id": u.id, "username": u.username,
+                    "display_name": u.display_name or u.username,
+                    "avatar": u.profile_image or "", "header": u.header_image or "",
+                    "summary": u.summary or "", "is_admin": u.is_admin,
+                    "is_locked": getattr(u, "is_locked", False) or False,
+                    "is_limited": getattr(u, "is_limited", False) or False,
+                    "is_frozen": getattr(u, "is_frozen", False) or False,
+                    "is_deceased": getattr(u, "is_deceased", False) or False,
+                    "is_deactivated": getattr(u, "is_deactivated", False) or False,
+                    "is_sensitive": getattr(u, "is_sensitive", False) or False,
+                    "is_remote": u.is_remote, "role": role,
+                    "show_badge": getattr(u, "show_badge", False) or False,
+                    "email_verified": getattr(u, "email_verified", False) or False,
+                    "default_visibility": getattr(u, "default_visibility", "public") or "public",
+                    "display_handle": getattr(u, "display_handle", "") or "",
+                    "is_bot": getattr(u, "is_bot", False) or False,
+                    "pinned_posts": (u.pinned_posts or []) if hasattr(u, 'pinned_posts') else [],
+                    "pinned_series": (u.pinned_series or []) if hasattr(u, 'pinned_series') else [],
+                    "episode_default_visibility": getattr(u, "episode_default_visibility", "public") or "public",
+                    "follow_list_visibility": getattr(u, "follow_list_visibility", "public") or "public",
+                    "custom_fields": (u.custom_fields or []) if hasattr(u, 'custom_fields') else [],
+                    "profile_hashtags": (u.profile_hashtags or []) if hasattr(u, 'profile_hashtags') else [],
+                    "enable_reactions": getattr(u, "enable_reactions", True),
+                    "aliases": (u.aliases or []) if hasattr(u, 'aliases') else [],
+                    "moved_to": getattr(u, "moved_to", "") or "",
+                }
+            _author_data = _safe_user_json(_a)
+            if not _author_data:
+                _a = session.query(User).get(post.author_id)
+                _author_data = _safe_user_json(_a)
             broadcast_post({
-                "id": post.id,
+                "id": boost_post.id,
                 "number": post.number or "",
                 "content": post.content,
                 "summary": post.summary or "",
                 "visibility": post.visibility or "public",
                 "created_at": post.created_at.isoformat() if post.created_at else "",
-                "author": {
-                    "id": _a.id, "username": _a.username,
-                    "display_name": _a.display_name or _a.username,
-                    "avatar": _a.profile_image or "", "header": _a.header_image or "",
-                    "summary": _a.summary or "", "is_admin": _a.is_admin,
-                    "is_locked": getattr(_a, "is_locked", False),
-                    "is_limited": getattr(_a, "is_limited", False),
-                    "is_remote": _a.is_remote, "ap_id": _a.remote_url or "",
-                },
-                "likes_count": session.query(Like).filter_by(post_id=post.id).count(),
-                "boosts_count": session.query(Boost).filter_by(post_id=post.id).count(),
-                "replies_count": session.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count(),
+                "author": _author_data,
+                "likes_count": likes_cnt,
+                "boosts_count": boosts_cnt,
+                "replies_count": replies_cnt,
                 "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
                 "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
                 "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
                 "poll_data": post.poll_data, "my_vote": None,
-                "reactions": _build_reactions(session, post.id),
+                "reactions": reactions_data,
                 "my_reaction": None,
-            }, post.author_id, post.visibility or "public", False)
-        except Exception:
-            pass
+                "boosted_by": _safe_user_json(_actor),
+                "mentioned_user_ids": [],
+                "quote_of_id": post.quote_of_id or None, "quote_of_ap_id": post.quote_of_ap_id or "",
+                "_emojis": _broadcast_emoji_list(session),
+            }, actor_id, post.visibility or "public", False)
+        except Exception as e:
+            logger.warning("Failed to broadcast boost from AP: %s", e)
+            print(f"Failed to broadcast boost from AP: {e}", flush=True)
 
     print(f"[ANNOUNCE] success post_id={post.id} by actor_id={actor_id}", flush=True)
     return (200, "Announced")
@@ -2039,8 +2370,7 @@ def _handle_block(activity: dict) -> tuple[int, str]:
             # Re-query both users in the SAME session to avoid detached instance issues
             remote = session.query(User).filter_by(remote_url=actor_url).first()
             if not remote:
-                from urllib.parse import urlparse as _up
-                p = _up(actor_url)
+                p = urlparse(actor_url)
                 if "/@" in p.path:
                     alt_url = f"{p.scheme}://{p.netloc}/users/{p.path.split('/@')[-1]}"
                     remote = session.query(User).filter_by(remote_url=alt_url).first()
@@ -2159,6 +2489,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
                     "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
                     "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
                     "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
+                    "_emojis": _broadcast_emoji_list(session),
                 }, post.author_id, post.visibility or "public", False)
             except Exception:
                 pass
@@ -2220,6 +2551,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
                     "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
                     "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
                     "poll_data": post.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
+                    "_emojis": _broadcast_emoji_list(session),
                 }, post.author_id, post.visibility or "public", False)
             except Exception:
                 pass
@@ -2263,10 +2595,12 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
 
 
 def _handle_update(activity: dict) -> tuple[int, str]:
+    actor_url = activity.get("actor", "")
+    if isinstance(actor_url, list):
+        actor_url = actor_url[0]
     object_data = activity.get("object", {})
     if isinstance(object_data, str):
         try:
-            import httpx
             resp = _validated_get(object_data, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, timeout=10)
             if resp is not None and resp.status_code < 300:
                 object_data = resp.json()
@@ -2283,10 +2617,13 @@ def _handle_update(activity: dict) -> tuple[int, str]:
             with get_session() as session:
                 post = session.query(Post).filter_by(ap_id=obj_id).first()
                 if post and not post.is_deleted:
+                    if post.author and post.author.remote_url != actor_url:
+                        print(f"[AP] _handle_update REJECTED: actor {actor_url} does not own post {obj_id}", flush=True)
+                        return (403, "Actor does not own this post")
                     # Update content/summary
                     new_content = object_data.get("content", "")
                     if new_content:
-                        post.content = _normalize_mentions(_sanitize_html(new_content))
+                        post.content = _html_to_newlines(process_post_content(_sanitize_html(new_content), post))
                     if "summary" in object_data:
                         post.summary = object_data.get("summary", "")
                     # Update poll data
@@ -2312,6 +2649,8 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     # Update emoji tags
                     _process_emoji_tags(object_data.get("tag", []), session)
                     session.commit()
+                    from app.routes.api import _refresh_emoji_cache_forcibly
+                    _refresh_emoji_cache_forcibly(session)
                     try:
                         from app.timeline_stream import broadcast_post
                         _ua = post.author
@@ -2341,12 +2680,16 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     "reactions": _build_reactions(session, post.id),
                     "my_reaction": None,
                             "type": "update",
-                        }, post.author_id, post.visibility or "public", False)
+                            "_emojis": _broadcast_emoji_list(session),
+            }, actor_id, post.visibility or "public", False)
                     except Exception:
                         pass
     return (200, "Updated")
 
 def _handle_delete(activity: dict) -> tuple[int, str]:
+    actor_url = activity.get("actor", "")
+    if isinstance(actor_url, list):
+        actor_url = actor_url[0]
     object_url = activity.get("object", "")
     if isinstance(object_url, dict):
         object_url = object_url.get("id", "")
@@ -2357,6 +2700,9 @@ def _handle_delete(activity: dict) -> tuple[int, str]:
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
         if post:
+            if post.author and post.author.remote_url != actor_url:
+                print(f"[AP] _handle_delete REJECTED: actor {actor_url} does not own post {object_url} (author={post.author.remote_url})", flush=True)
+                return (403, "Actor does not own this post")
             post.is_deleted = True
             session.query(Notification).filter_by(post_id=post.id).delete()
             session.commit()
@@ -2370,17 +2716,19 @@ def _handle_delete(activity: dict) -> tuple[int, str]:
 
 
 def _send_delete_post(post: Post, sender: User):
+    note_id = post.ap_id
     delete = {
         "@context": "https://www.w3.org/ns/activitystreams",
-        "id": f"{sender.actor_uri()}#delete/{post.id}",
+        "id": f"{sender.actor_uri()}/deletes/{post.id}",
         "type": "Delete",
         "actor": sender.actor_uri(),
+        "to": ["https://www.w3.org/ns/activitystreams#Public"],
         "object": {
-            "id": post.ap_id,
             "type": "Note",
-        },
+            "id": note_id,
+            "attributedTo": sender.actor_uri()
+        }
     }
-    from app.activitypub import broadcast_to_followers
     try:
         broadcast_to_followers(sender, delete)
     except Exception as e:
@@ -2391,14 +2739,14 @@ def _send_delete_post(post: Post, sender: User):
             with get_session() as s:
                 parent = s.query(Post).filter_by(ap_id=post.in_reply_to_ap_id).first()
                 if parent and parent.author and parent.author.is_remote:
-                    inbox = parent.author.shared_inbox_url or parent.author.inbox_uri()
-                    _post_to_inbox(inbox, delete, sender)
+                    inbox = parent.author.shared_inbox_url or parent.author.inbox_url
+                    if inbox:
+                        _post_to_inbox(inbox, delete, sender)
         except Exception as e:
             logger.warning("Failed to send Delete to parent author: %s", e)
 
 
 def _notify_admins(session, reporter, target_type, target_id, reason):
-    import json as _json
     _admins = session.query(User).filter(User.role.in_(["admin", "moderator", "owner"])).all()
     for _a in _admins:
         if _a.id == reporter.id:
@@ -2406,7 +2754,7 @@ def _notify_admins(session, reporter, target_type, target_id, reason):
         session.add(Notification(
             user_id=_a.id, from_user_id=reporter.id,
             notification_type="moderation",
-            metadata_json=_json.dumps({"type": "report", "target_type": target_type, "target_id": target_id, "target_label": "", "reason": (reason or "")[:200]}),
+            metadata_json=json.dumps({"type": "report", "target_type": target_type, "target_id": target_id, "target_label": "", "reason": (reason or "")[:200]}),
         ))
     session.flush()
     from app.push import send_push_to_user
@@ -2449,7 +2797,6 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
 
     if not reporter:
         try:
-            import httpx as _httpx, json as _json
             _r = _validated_get(actor_url, headers={"Accept": "application/activity+json"}, timeout=10)
             if _r.status_code == 200:
                 _d = _r.json()
@@ -2652,24 +2999,31 @@ def _deliver_sync(inbox_url: str, body: bytes, headers: dict) -> bool:
 def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     if not _validate_url(inbox_url):
         return
-    body = json.dumps(activity, ensure_ascii=False).encode("utf-8")
-    import base64 as _b64
-    digest = _b64.b64encode(hashlib.sha256(body).digest()).decode()
-    date = datetime.datetime.now(datetime.timezone.utc).strftime(
-        "%a, %d %b %Y %H:%M:%S GMT"
-    )
+    body = json.dumps(activity, ensure_ascii=True, sort_keys=True).encode("utf-8")
+    print(f"DEBUG_BODY_LENGTH: {len(body)}")
+    print(f"DEBUG_BODY: {body.decode('utf-8')}") # 실제 전송되는 JSON
+    import base64
+    digest = base64.b64encode(hashlib.sha256(body).digest()).decode()
+    digest_header = f"SHA-256={digest}" # 공백 없음 확인
+    now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+    date = now.strftime("%a, %d %b %Y %H:%M:%S GMT")
 
     parsed = urlparse(inbox_url)
     path = parsed.path or "/"
-    created = int(time.time())
-    signed_string = f"(request-target): post {path}\nhost: {parsed.netloc}\ndate: {date}\ndigest: SHA-256={digest}\n(created): {created}"
+    print(f"DEBUG_VERIFY: incoming_inbox={inbox_url}, parsed_host={parsed.netloc}")
+    signed_string = (
+        f"(request-target): post {path}\n"
+        f"host: {parsed.netloc}\n"
+        f"date: {date}\n"
+        f"digest: {digest_header}"
+    )
+    print(f"DEBUG_SIGNED_STRING: {repr(signed_string)}") # \n 같은 제어문자까지 다 보게 repr() 사용
 
     signature = sign_string(signed_string, get_private_key(sender, SECRET_KEY))
     signature_header = (
         f'keyId="{sender.actor_uri()}#main-key",'
-        f'algorithm="hs2019",'
-        f'created="{created}",'
-        f'headers="(request-target) host date digest (created)",'
+        f'algorithm="rsa-sha256",'
+        f'headers="(request-target) host date digest",'
         f'signature="{signature}"'
     )
 
@@ -2677,7 +3031,7 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
         "Content-Type": "application/activity+json",
         "Signature": signature_header,
         "Date": date,
-        "Digest": f"SHA-256={digest}",
+        "Digest": digest_header,
         "Host": parsed.netloc,
     }
 
@@ -2690,7 +3044,7 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     with get_session() as session:
         session.add(PendingDelivery(
             inbox_url=inbox_url,
-            activity_json=json.dumps(activity, ensure_ascii=False),
+            activity_json=json.dumps(activity, ensure_ascii=True, sort_keys=True),
             sender_id=sender.id,
             status="pending",
         ))
@@ -2699,25 +3053,71 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
 
 def send_to_shared_inbox(user: User, activity: dict):
     with get_session() as session:
-        followers = session.query(Follow).filter(
+        from sqlalchemy.orm import selectinload
+        followers = session.query(Follow).options(
+            selectinload(Follow.following)
+        ).filter(
             Follow.follower_id == user.id,
             Follow.following.has(is_remote=True),
         ).all()
 
-    sent = set()
-    for f in followers:
-        target = f.following
-        inbox = target.shared_inbox_url or target.inbox_uri()
-        if inbox in sent:
-            continue
-        sent.add(inbox)
-        _post_to_inbox(inbox, activity, user)
+        sent = set()
+        for f in followers:
+            target = f.following
+            inbox = target.shared_inbox_url or target.inbox_url
+            if not inbox:
+                continue
+            if inbox in sent:
+                continue
+            sent.add(inbox)
+            _post_to_inbox(inbox, activity, user)
+
+
+def _background_import_emoji(url: str, keyword: str, domain: str):
+    """백그라운드에서 리모트 에모지 다운로드 + WebP 변환 + 저장. Like 처리 지연 방지."""
+    try:
+        import httpx as _hx
+        _resp = _hx.get(url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=15)
+        if _resp.status_code != 200:
+            return
+        from PIL import Image
+        _img = Image.open(io.BytesIO(_resp.content))
+        _out = io.BytesIO()
+        try:
+            _img.seek(1)
+            _frames = []
+            _durations = []
+            while True:
+                _frames.append(_img.convert("RGBA"))
+                _durations.append(_img.info.get("duration", 100))
+                _img.seek(_img.tell() + 1)
+            _frames[0].save(_out, format="WEBP", save_all=True, append_images=_frames[1:], duration=_durations, loop=0, quality=85)
+        except Exception:
+            _out = io.BytesIO()
+            _img = _img.convert("RGBA") if _img.mode in ("RGBA", "P") else _img.convert("RGB")
+            _img.save(_out, format="WEBP", quality=85)
+        finally:
+            _img.seek(0)
+        _content = _out.getvalue()
+        _fname = f"{keyword}.webp"
+        from app.utils.storage import get_storage
+        get_storage().save(f"emojis/remote/{_fname}", _content, "image/webp")
+        with get_session() as _es:
+            _existing = _es.query(CustomEmoji).filter_by(keyword=keyword).first()
+            if not _existing:
+                _es.add(CustomEmoji(keyword=keyword, file_name=_fname, category="remote", domain=domain))
+                _es.commit()
+                from app.routes.api import _refresh_emoji_cache_forcibly
+                _refresh_emoji_cache_forcibly(_es)
+    except Exception as e:
+        logger.warning("Background emoji import failed %s: %s", keyword, e)
 
 
 def _process_emoji_tags(tags: list, session):
-    """Parse Emoji tags from an ActivityPub object, download and save custom emojis."""
+    """Parse Emoji tags from an ActivityPub object, download and save custom emojis safely."""
     if not tags or not isinstance(tags, list):
         return
+    from PIL import Image
     from app.utils.storage import get_storage
     _storage = get_storage()
     EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "web", "public", "emojis")
@@ -2732,7 +3132,6 @@ def _process_emoji_tags(tags: list, session):
         if not keyword or not re.match(r'^[a-z0-9_]+$', keyword):
             continue
         icon = tag.get("icon", {})
-        # icon can be a single object or a list per ActivityStreams spec
         if isinstance(icon, list):
             icon = icon[0] if icon else {}
         img_url = ""
@@ -2740,14 +3139,10 @@ def _process_emoji_tags(tags: list, session):
             img_url = icon.get("url", "") or icon.get("href", "")
         elif isinstance(icon, str):
             img_url = icon
-        if not img_url:
-            continue
-        if not img_url.startswith("http"):
+        if not img_url or not img_url.startswith("http"):
             continue
 
-        # Extract domain from the emoji ActivityPub ID
         emoji_id = tag.get("id", "")
-        from urllib.parse import urlparse
         domain = urlparse(emoji_id).netloc if emoji_id else ""
 
         existing = session.query(CustomEmoji).filter_by(keyword=keyword, domain=domain).first()
@@ -2756,12 +3151,11 @@ def _process_emoji_tags(tags: list, session):
 
         if not _validate_url(img_url):
             continue
-        from PIL import Image
-        import httpx
         try:
             resp = _validated_get(img_url, timeout=15)
             if resp.status_code != 200:
                 continue
+            # Content-Type 기반 안전하게 확장자 추론
             ext = "png"
             ct = resp.headers.get("content-type", "")
             if "jpeg" in ct or "jpg" in ct:
@@ -2778,43 +3172,49 @@ def _process_emoji_tags(tags: list, session):
                     ext = "png"
             if ext == "jpeg":
                 ext = "jpg"
-            file_name = f"{uuid.uuid4().hex}.{ext}"
-            remote_dir = os.path.join(EMOJI_DIR, "remote")
-            os.makedirs(remote_dir, exist_ok=True)
-            file_path = os.path.join(remote_dir, file_name)
 
-            # Check aspect ratio — skip if too wide (>2x height)
+            # 종횡비 체크 (Pillow로 열어서 확인 후 바로 닫기)
             tmp = Image.open(io.BytesIO(resp.content))
             w, h = tmp.size
             tmp.close()
             if h > 0 and w / h > 2.0:
                 continue
 
-            if ext == "gif":
+            remote_dir = os.path.join(EMOJI_DIR, "remote")
+            os.makedirs(remote_dir, exist_ok=True)
+
+            # 💡 [핵심 교정] GIF와 PNG는 원본 데이터(바이너리)를 100% 보존합니다. (APNG 완전 보장)
+            if ext in ("gif", "png"):
+                file_name = f"{uuid.uuid4().hex}.{ext}"
+                file_path = os.path.join(remote_dir, file_name)
                 data = resp.content
+                content_type = "image/gif" if ext == "gif" else "image/png"
             else:
+                # 일반 정지 이미지(JPG 등)만 WebP로 가공
                 file_name = f"{uuid.uuid4().hex}.webp"
                 file_path = os.path.join(remote_dir, file_name)
                 img = Image.open(io.BytesIO(resp.content))
-                if img.mode == "RGBA" or img.mode == "P":
+                if img.mode in ("RGBA", "P"):
                     img = img.convert("RGBA")
                 else:
                     img = img.convert("RGB")
+                # 정지 이미지일 때만 안전하게 리사이징
                 if img.width > 66 or img.height > 66:
                     img = img.resize((img.width // 2, img.height // 2), Image.LANCZOS)
                 buf = io.BytesIO()
                 img.save(buf, format="WEBP", quality=100)
                 data = buf.getvalue()
-            # Save to emoji dir (served by /emojis static mount)
+                content_type = "image/webp"
+
+            # 1. 로컬 static 디렉토리에 저장
             try:
-                os.makedirs(remote_dir, exist_ok=True)
                 with open(file_path, "wb") as f:
                     f.write(data)
             except Exception:
                 pass
-            # Also save via storage backend for S3
+            # 2. S3 등 외부 스토리지 백엔드에 저장 (정확한 content_type 반영)
             try:
-                _storage.save(f"emojis/remote/{file_name}", data, f"image/{ext}")
+                _storage.save(f"emojis/remote/{file_name}", data, content_type)
             except Exception:
                 pass
             emoji = CustomEmoji(
@@ -2832,19 +3232,24 @@ def _process_emoji_tags(tags: list, session):
 
 def broadcast_to_followers(user: User, activity: dict):
     with get_session() as session:
-        followers = session.query(Follow).filter(
+        from sqlalchemy.orm import selectinload
+        followers = session.query(Follow).options(
+            selectinload(Follow.follower)
+        ).filter(
             Follow.following_id == user.id,
             Follow.follower.has(is_remote=True),
         ).all()
 
-    sent = set()
-    for f in followers:
-        follower = f.follower
-        inbox = follower.shared_inbox_url or follower.inbox_uri()
-        if inbox in sent:
-            continue
-        domain = urlparse(inbox).hostname or ""
-        if not _federation_allowed(domain):
-            continue
-        sent.add(inbox)
-        _post_to_inbox(inbox, activity, user)
+        sent = set()
+        for f in followers:
+            follower = f.follower
+            inbox = follower.shared_inbox_url or follower.inbox_url
+            if not inbox:
+                continue
+            if inbox in sent:
+                continue
+            domain = urlparse(inbox).hostname or ""
+            if not _federation_allowed(domain):
+                continue
+            sent.add(inbox)
+            _post_to_inbox(inbox, activity, user)

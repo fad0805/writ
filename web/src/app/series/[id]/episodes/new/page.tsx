@@ -53,6 +53,7 @@ export default function NewEpisodePage() {
   const novelId = Number(Array.isArray(params.id) ? params.id[0] : params.id);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedRef = useRef(false);
+  const lastSavedContentRef = useRef("");
 
   useEffect(() => {
     if (isNaN(novelId)) return;
@@ -75,6 +76,8 @@ export default function NewEpisodePage() {
 
   const doSave = useCallback(async () => {
     if (isNaN(novelId)) return;
+    const currentContent = JSON.stringify({ title, summary, content, comment, isPublished, announce, announceComment });
+    if (currentContent === lastSavedContentRef.current) return;
     setSaving(true);
     try {
       const form = new FormData();
@@ -92,6 +95,7 @@ export default function NewEpisodePage() {
       if (data.ok) {
         setDraftId(data.draft_id);
         setLastSaved(new Date().toISOString());
+        lastSavedContentRef.current = currentContent;
         loadDrafts();
       }
     } catch {}
@@ -117,6 +121,7 @@ export default function NewEpisodePage() {
     setAnnounceComment(d.announce_comment);
     setDraftId(d.id);
     setLastSaved(d.updated_at);
+    lastSavedContentRef.current = JSON.stringify({ title: d.title, summary: d.summary, content: d.content, comment: d.comment, isPublished: d.is_published, announce: d.announce, announceComment: d.announce_comment });
     setShowDraftList(false);
   };
 
@@ -127,7 +132,7 @@ export default function NewEpisodePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanContent = content.replace(/<[^>]*>/g, "").trim();
+    const cleanContent = (content || "").replace(/<[^>]*>/g, "").trim();
     if (!title.trim() || !cleanContent || submitting) return;
     setSubmitting(true);
     try {
@@ -204,7 +209,7 @@ export default function NewEpisodePage() {
               </button>
             )}
           </div>
-          <button type="submit" disabled={submitting || !title.trim() || !content.trim()} className="btn btn-primary">게시</button>
+          <button type="submit" disabled={submitting || !title.trim() || !(content || "").trim()} className="btn btn-primary">게시</button>
           <button type="button" onClick={() => router.back()} className="btn btn-outline">취소</button>
         </div>
         {showDraftList && (

@@ -5,8 +5,9 @@ import { api, NovelData, NotificationData, PostData, PollOption } from "@/lib/ap
 import Icon from "./Icon";
 import Link from "next/link";
 import MiniPostCard from "./MiniPostCard";
+import Avatar from "./Avatar";
 import { useRouter } from "next/navigation";
-import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
+import { getCustomEmojis, renderCustomEmojis, CustomEmoji, invalidateEmojiCache } from "@/lib/emojis";
 import { sanitizeName } from "@/lib/sanitize";
 
 const MODAL_ACTION_NAMES: Record<string, string> = {
@@ -26,19 +27,26 @@ export default function RightSidebar() {
 
   useEffect(() => {
     if (!user) return;
-    api.getMyNovels().then((d) => setNovels(d.novels)).catch(() => {});
-    api.getNotifications(undefined, 10, 0).then((d) => setNotifs(d.notifications)).catch(() => {});
+    let cancelled = false;
+    api.getMyNovels().then((d) => { if (!cancelled) setNovels(d.novels); }).catch(() => {});
+    api.getNotifications(undefined, 10, 0).then((d) => { if (!cancelled) setNotifs(d.notifications); }).catch(() => {});
     const es = new EventSource("/api/notifications/stream");
     es.onmessage = (event) => {
       if (event.data === "refresh") {
-        api.getNotifications(undefined, 10, 0, false).then((d) => {
-          setNotifs(d.notifications);
-          window.dispatchEvent(new Event("notifchange"));
+        invalidateEmojiCache();
+        api.getNotifications(undefined, 5, 0, false).then((d) => {
+          setNotifs((prev) => {
+            const existing = new Set(prev.map((n) => n.id));
+            const newItems = d.notifications.filter((n) => !existing.has(n.id));
+            if (newItems.length === 0) return prev;
+            window.dispatchEvent(new Event("notifchange"));
+            return [...newItems, ...prev];
+          });
         }).catch(() => {});
       }
     };
     es.onerror = () => {};
-    return () => { es.close(); };
+    return () => { cancelled = true; es.close(); };
   }, [user, refreshKey]);
 
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
@@ -76,7 +84,7 @@ export default function RightSidebar() {
   }, []);
 
   const renderName = (name: string) => {
-    const html = renderCustomEmojis(name, emojiMap);
+    const html = renderCustomEmojis(name, emojiMap, 14);
     return <span dangerouslySetInnerHTML={{ __html: sanitizeName(html) }} />;
   };
 
@@ -112,38 +120,53 @@ export default function RightSidebar() {
         <h4><Icon name="bell" /> 알림</h4>
         <div className="notif-mini-list">
           {notifs.length > 0 ? notifs.map((n) => {
-            if (n.post) return (
-              <MiniPostCard key={n.id} post={n.post} notifType={n.type} notifLabel={
-                (n.type === "like" || n.type === "boost") && n.from_user ? (
-                  <><strong>{renderName(n.from_user.display_name || n.from_user.username)}</strong> {n.type === "like" ? "님이 즐겨찾기했습니다" : "님이 부스트했습니다"}</>
-                ) : undefined
-              } />
-            );
-
             if (n.type === "vote") {
               return (
                 n.post ? <MiniPostCard key={n.id} post={n.post} notifType={n.type} notifLabel={
-                  <><strong>{renderName(n.from_user?.display_name || "알 수 없음")}</strong> 님이 투표에 참여했습니다</>
+                  n.from_user ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <Avatar user={n.from_user} style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: "middle" }} />
+                      <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{renderName(n.from_user.display_name || n.from_user.username)}</strong> 님이 투표에 참여했습니다
+                    </span>
+                  ) : <><strong>{renderName("알 수 없음")}</strong> 님이 투표에 참여했습니다</>
                 } /> : <div key={n.id} />
               );
             }
 
             if (n.type === "poll_ended") {
               const pollPost = n.post as unknown as PostData | undefined;
-              const pollText = pollPost?.poll_data?.options?.map((o: PollOption) => o.text || "").join(" / ") || "";
-              const msg = n.metadata?.is_author ? "내 투표가 종료되었습니다" : "참여한 투표가 종료되었습니다";
+              const msg = n.metadata?.is_author ? "내 투표가 종료되었습니다" : "회원님이 참여한 투표가 종료되었습니다";
               return (
                 pollPost ? <MiniPostCard key={n.id} post={pollPost} notifType={n.type} notifLabel={
-                  <>{msg}{pollText && <> — {pollText}</>}</>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 4 }}>
+                    <span>{msg}</span>
+                    {n.from_user && (
+                      <Link href={`/@${n.from_user.username}`} style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text-primary)", fontWeight: 600, overflow: "hidden", minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+                        <Avatar user={n.from_user} style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0 }} />
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.9em" }}>{renderName(n.from_user.display_name || n.from_user.username)}</span>
+                      </Link>
+                    )}
+                  </div>
                 } /> : <div key={n.id} />
               );
             }
 
+            if (n.post) return (
+              <MiniPostCard key={n.id} post={n.post} notifType={n.type} notifLabel={
+                (n.type === "like" || n.type === "boost" || n.type === "mention") && n.from_user ? (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <Avatar user={n.from_user} style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: "middle" }} />
+                    <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{renderName(n.from_user.display_name || n.from_user.username)}</strong> {n.type === "like" ? "님이 즐겨찾기했습니다" : n.type === "boost" ? "님이 부스트했습니다" : "님이 회원님을 언급했습니다"}
+                  </span>
+                ) : undefined
+              } />
+            );
+
             if (n.type === "follow" || n.type === "follow_request") {
               return (
                 <Link key={n.id} href={`/@${n.from_user?.username || ""}`} className="mini-post-link" style={{ background: "var(--bg-tertiary)", cursor: "pointer" }}>
-                  <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#4fc3f7" }}>
-                    <Icon name="user_solid" size={14} />
+                  <div className="mini-post-avatar-box" style={{ width: 28, height: 28, borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
+                    {n.from_user ? <Avatar user={n.from_user} style={{ width: 28, height: 28, borderRadius: 6 }} /> : <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#4fc3f7", width: 28, height: 28 }}><Icon name="user_solid" size={14} /></div>}
                   </div>
                   <div className="mini-post-content">
                     <div className="mini-post-author">
@@ -168,8 +191,8 @@ export default function RightSidebar() {
               if (n.metadata?.type === "new_user") {
                 return (
                   <Link key={n.id} href={`/@${n.from_user?.username || ""}`} className="mini-post-link" style={{ background: "var(--bg-tertiary)", cursor: "pointer" }}>
-                    <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#4fc3f7" }}>
-                      <Icon name="user_solid" size={14} />
+                    <div className="mini-post-avatar-box" style={{ width: 28, height: 28, borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
+                      {n.from_user ? <Avatar user={n.from_user} style={{ width: 28, height: 28, borderRadius: 6 }} /> : <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#4fc3f7", width: 28, height: 28 }}><Icon name="user_solid" size={14} /></div>}
                     </div>
                     <div className="mini-post-content">
                       <div className="mini-post-author">
@@ -204,12 +227,12 @@ export default function RightSidebar() {
                 const fromName = n.from_user?.display_name || n.from_user?.username || "알 수 없음";
                 return (
                   <div key={n.id} className="mini-post-link" style={{ background: "var(--bg-tertiary)" }}>
-                    <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#e74c3c" }}>
-                      <Icon name="user_solid" size={14} />
+                    <div className="mini-post-avatar-box" style={{ width: 28, height: 28, borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
+                      {n.from_user ? <Avatar user={n.from_user} style={{ width: 28, height: 28, borderRadius: 6 }} /> : <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#e74c3c", width: 28, height: 28 }}><Icon name="user_solid" size={14} /></div>}
                     </div>
                     <div className="mini-post-content">
                       <div className="text-sm" style={{ color: "var(--text)" }}>
-                        <strong>{renderName(fromName)}</strong>
+                        <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120, display: "inline-block", verticalAlign: "middle" }}>{renderName(fromName)}</strong>
                         <span style={{ color: "var(--text-muted)", marginLeft: 4 }}>님이 계정 이전을 요청했습니다</span>
                       </div>
                       <div className="mini-notif-btns" style={{ display: "flex", gap: 4, marginTop: 4 }}>
@@ -250,8 +273,8 @@ export default function RightSidebar() {
             if (n.type === "new_episode") {
               return (
                 <Link key={n.id} href={n.metadata?.novel_id && n.metadata?.episode_id ? `/series/${n.metadata.novel_id}/episodes/${n.metadata.episode_id}` : "#"} className="mini-post-link" style={{ background: "var(--bg-tertiary)" }}>
-                  <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#9b59b6" }}>
-                    <Icon name="book" size={14} />
+                  <div className="mini-post-avatar-box" style={{ width: 28, height: 28, borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
+                    {n.from_user ? <Avatar user={n.from_user} style={{ width: 28, height: 28, borderRadius: 6 }} /> : <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#9b59b6", width: 28, height: 28 }}><Icon name="book" size={14} /></div>}
                   </div>
                   <div className="mini-post-content">
                     <div className="mini-post-author">
@@ -277,7 +300,7 @@ export default function RightSidebar() {
           <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>{serverInfo.name}</div>
             {serverInfo.description && <div style={{ fontSize: 12, marginBottom: 6, color: "var(--text-dim)" }}>{serverInfo.description}</div>}
-            {serverInfo.admins.length > 0 && (
+            {serverInfo.admins?.length > 0 && (
               <div style={{ marginBottom: 8 }}>
                 {serverInfo.admins.map((a) => (
                   <div key={a.username} style={{ marginBottom: 2 }}>

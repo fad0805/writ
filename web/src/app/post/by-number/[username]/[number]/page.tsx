@@ -101,14 +101,6 @@ export default function PostByNumberPage() {
     <>
       <Head>
         <link rel="alternate" type="application/activity+json" href={`/@${username}/${number}`} />
-        <meta property="og:title" content={`${post.author.display_name || post.author.username} — WRIT`} />
-        <meta property="og:description" content={post.content.replace(/<[^>]*>/g, "").slice(0, 200)} />
-        <meta property="og:type" content="article" />
-        <meta property="og:image" content="/icons/icon-512.png" />
-        <meta name="twitter:card" content="summary" />
-        <meta name="twitter:title" content={`${post.author.display_name || post.author.username} — WRIT`} />
-        <meta name="twitter:description" content={post.content.replace(/<[^>]*>/g, "").slice(0, 200)} />
-        <meta name="twitter:image" content="/icons/icon-512.png" />
       </Head>
       {ancestors.filter((a) => !a.is_deleted).map((a) => (
         <div key={a.id} className="thread-child"><PostCard post={a} hideContext onDelete={() => setPost((prev) => prev ? { ...prev, ancestors: (prev.ancestors || []).filter((x) => x.id !== a.id) } : prev)} /></div>

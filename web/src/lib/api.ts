@@ -1,10 +1,22 @@
+function getCsrfToken(): string {
+  if (typeof document === "undefined") return "";
+  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10000);
+  const timer = setTimeout(() => controller.abort(), 30000);
   try {
+    const method = (options?.method || "GET").toUpperCase();
+    const headers: Record<string, string> = { "Content-Type": "application/json", ...options?.headers as Record<string, string> };
+    if (method !== "GET" && method !== "HEAD") {
+      const csrf = getCsrfToken();
+      if (csrf) headers["X-CSRF-Token"] = csrf;
+    }
     const res = await fetch(path, {
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...options?.headers },
+      headers,
       ...options,
       signal: controller.signal,
     });
@@ -26,10 +38,14 @@ async function formRequest<T>(path: string, data: Record<string, any>): Promise<
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
+    const csrf = getCsrfToken();
+    const headers: Record<string, string> = {};
+    if (csrf) headers["X-CSRF-Token"] = csrf;
     const res = await fetch(path, {
       method: "POST",
       credentials: "include",
       body: form,
+      headers,
       signal: controller.signal,
     });
     if (!res.ok) {
@@ -109,6 +125,8 @@ export interface PostData {
   mentioned_handles?: string[];
   link_preview?: { url: string; title: string; description: string; image: string } | null;
   is_deleted?: boolean;
+  quote_of_id?: number | null;
+  quote_of_ap_id?: string;
   _emojis?: { keyword: string; file_name: string; url: string; aliases: string[] }[];
 }
 
@@ -187,7 +205,7 @@ export const api = {
 
   // Timeline
   timeline: (type: string = "home", limit: number = 10, offset: number = 0) =>
-    request<{ posts: PostData[]; timeline_type: string; has_more: boolean }>(
+    request<{ posts: PostData[]; timeline_type: string; has_more: boolean; _emojis?: any[] }>(
       `/api/timeline/${type}?limit=${limit}&offset=${offset}`
     ),
 
@@ -211,6 +229,7 @@ export const api = {
   getFavorites: (limit = 10, offset = 0) => request<{ posts: PostData[]; has_more: boolean }>(`/api/favorites?limit=${limit}&offset=${offset}`),
   vote: (id: number, option: number) => formRequest<{ ok: boolean; post?: PostData }>(`/api/posts/${id}/vote`, { option }),
   unvote: (id: number) => formRequest<{ ok: boolean }>(`/api/posts/${id}/unvote`, {}),
+  refreshPoll: (id: number) => request<{ ok: boolean; post?: PostData }>(`/api/posts/${id}/refresh-poll`, { method: "POST" }),
   react: (id: number, emoji: string) => formRequest<{ ok: boolean }>(`/api/posts/${id}/react`, { emoji }),
   unreact: (id: number) => formRequest<{ ok: boolean }>(`/api/posts/${id}/unreact`, {}),
 
@@ -246,6 +265,7 @@ export const api = {
   // Novels
   getNovels: (limit = 12, offset = 0) => request<{ novels: NovelData[]; has_more: boolean }>(`/api/series?limit=${limit}&offset=${offset}`),
   getMyNovels: (limit = 12, offset = 0) => request<{ novels: NovelData[]; total: number; page: number; pages: number }>(`/api/series/my?limit=${limit}&offset=${offset}`),
+  getFollowedNovels: (limit = 12, offset = 0) => request<{ novels: NovelData[]; total: number; page: number; pages: number }>(`/api/series/followed?limit=${limit}&offset=${offset}`),
   getNovel: (id: number) => request<{ novel: NovelData; episodes: EpisodeData[]; author: User; is_mine: boolean; is_following: boolean }>(`/api/series/${id}`),
   deleteNovel: (id: number) => request<{ ok: boolean }>(`/api/series/${id}/delete`, { method: "POST" }),
   getEpisode: (id: number, eid: number) => request<{

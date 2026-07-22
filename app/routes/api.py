@@ -7,15 +7,18 @@ import datetime
 import uuid
 import logging
 import threading
-from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File, Depends
+from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import desc, or_, and_, func
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import desc, or_, and_, func, String
 from sqlalchemy.orm import selectinload, Session
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PendingDelivery, PushSubscription, get_session
+from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PushSubscription, LoginSession, get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.log_utils import log_admin_action
+from app.activitypub import _fetch_remote_post
+from app.db.mention_resolver import resolve_handles_to_ids
+from app.utils.filter import _timeline_filter
+from app.utils.content_parser import process_post_content, extract_mentions
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
 
@@ -55,7 +58,7 @@ def _fmt_dt(dt: datetime.datetime | None) -> str | None:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=datetime.timezone.utc)
     return dt.astimezone(KST).isoformat()
-from app.activitypub import broadcast_to_followers, _post_to_inbox, _process_emoji_tags, _federation_allowed, _build_reactions
+from app.activitypub import broadcast_to_followers, _post_to_inbox, _federation_allowed, _build_reactions
 from app.database import get_db
 from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED, SCHEME
 from app.crypto_utils import encrypt_key, get_private_key
@@ -79,7 +82,7 @@ router = APIRouter(prefix="/api")
 def _post_json(p, session, user, tl_type=None,
                _liked_ids=None, _boosted_ids=None, _bookmarked_ids=None,
                _vote_map=None, _my_reaction_map=None, _reactions_map=None,
-               _booster_map=None, _mentioned_users_map=None):
+               _booster_map=None, _mentioned_users_map=None, _boost_originals=None, _skip_emojis=False):
     if p.is_deleted:
         return {
             "id": p.id,
@@ -98,16 +101,17 @@ def _post_json(p, session, user, tl_type=None,
             "reactions": {}, "my_reaction": None,
             "mentioned_user_ids": [], "mentioned_handles": [],
             "link_preview": None, "is_deleted": True,
+            "quote_of_id": None, "quote_of_ap_id": "",
         }
 
     # If this is a boost pointer post, resolve to the original
     if p.boost_of_id:
-        original = session.query(Post).filter_by(id=p.boost_of_id).first()
+        original = (_boost_originals or {}).get(p.boost_of_id) or session.query(Post).filter_by(id=p.boost_of_id).first()
         if original and not original.is_deleted:
             result = _post_json(original, session, user, tl_type,
                                 _liked_ids, _boosted_ids, _bookmarked_ids,
                                 _vote_map, _my_reaction_map, _reactions_map,
-                                _booster_map, _mentioned_users_map)
+                                _booster_map, _mentioned_users_map, _boost_originals)
             result["boosted_by"] = _user_json(p.author)
             return result
         else:
@@ -135,8 +139,7 @@ def _post_json(p, session, user, tl_type=None,
             latest_boost = session.query(Boost).filter_by(post_id=p.id).order_by(desc(Boost.created_at)).first()
             b = None
             if latest_boost:
-                import datetime as _dt
-                if (_dt.datetime.now(_dt.timezone.utc) - latest_boost.created_at).total_seconds() > 10800:
+                if (datetime.datetime.now(datetime.timezone.utc) - latest_boost.created_at).total_seconds() > 10800:
                     b = session.query(User).get(latest_boost.user_id)
         if b and b.id != p.author_id:
             booster = b
@@ -165,8 +168,8 @@ def _post_json(p, session, user, tl_type=None,
                     reactions[like.reaction] = reactions.get(like.reaction, 0) + 1
                 else:
                     reactions[_default_react] = reactions.get(_default_react, 0) + 1
-    if _mentioned_users_map is not None:
-        mentioned_handles = _mentioned_users_map.get(p.id, [])
+    if _mentioned_users_map is not None and p.id in _mentioned_users_map:
+        mentioned_handles = _mentioned_users_map[p.id]
     elif p.mentioned_user_ids:
         from urllib.parse import urlparse as _urlparse2
         mentioned_handles = []
@@ -178,7 +181,10 @@ def _post_json(p, session, user, tl_type=None,
             else:
                 mentioned_handles.append(u.username)
     else:
-        mentioned_handles = []
+        # content에서 @handle@domain 패턴 파싱
+        mentioned_handles = list(set(
+            f"{m.group(1)}@{m.group(2)}" for m in re.finditer(r'@([a-zA-Z0-9_]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', p.content or "")
+        ))
     return {
         "id": p.id,
         "number": p.number or "",
@@ -207,7 +213,9 @@ def _post_json(p, session, user, tl_type=None,
         "mentioned_user_ids": p.mentioned_user_ids or [],
         "mentioned_handles": mentioned_handles,
         "link_preview": p.link_preview or None,
-        "_emojis": [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)],
+        "quote_of_id": p.quote_of_id or None,
+        "quote_of_ap_id": p.quote_of_ap_id or "",
+        **(({}) if _skip_emojis else {"_emojis": [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)]}),
     }
 
 
@@ -272,9 +280,56 @@ def _reply_context(p, session=None, user=None, tl_type=None):
         "id": parent.id,
         "number": parent.number or "",
         "content": parent.content[:200] if parent.content else "",
+        "summary": parent.summary or "",
         "author": _user_json(parent.author),
         "visibility": parent.visibility or "public",
     }
+
+
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".ico"}
+ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".webm", ".ogg", ".mov"}
+ALLOWED_UPLOAD_EXTENSIONS = ALLOWED_IMAGE_EXTENSIONS | ALLOWED_VIDEO_EXTENSIONS
+MAX_IMAGE_SIZE = 10 * 1024 * 1024
+MAX_AVATAR_SIZE = 5 * 1024 * 1024
+IMAGE_MIME_PREFIXES = ("image/jpeg", "image/png", "image/gif", "image/webp", "image/ico")
+VIDEO_MIME_TYPES = {"video/mp4", "video/webm", "video/ogg", "video/quicktime"}
+
+
+def _validate_upload(file: UploadFile, *, allow_video: bool = True, max_size: int = MAX_IMAGE_SIZE, label: str = "file"):
+    import os
+    ext = os.path.splitext(file.filename or "file")[1].lower() if file.filename else ""
+    is_video = ext in ALLOWED_VIDEO_EXTENSIONS
+    is_image = ext in ALLOWED_IMAGE_EXTENSIONS
+    if not is_image and not (is_video and allow_video):
+        raise HTTPException(status_code=400, detail=f"{label}: 지원하지 않는 파일 형식입니다")
+    ct = (file.content_type or "").lower()
+    if is_image and not any(ct.startswith(p) for p in IMAGE_MIME_PREFIXES):
+        raise HTTPException(status_code=400, detail=f"{label}: 이미지 MIME 타입이 올바르지 않습니다")
+    if is_video and ct not in VIDEO_MIME_TYPES:
+        raise HTTPException(status_code=400, detail=f"{label}: 비디오 MIME 타입이 올바르지 않습니다")
+    file.file.seek(0, 2)
+    size = file.file.tell()
+    file.file.seek(0)
+    if is_video and size > MAX_VIDEO_SIZE:
+        raise HTTPException(status_code=400, detail=f"{label}: 비디오 파일이 너무 큽니다 (최대 25MB)")
+    if is_image and size > max_size:
+        raise HTTPException(status_code=400, detail=f"{label}: 이미지 파일이 너무 큽니다 (최대 {max_size // (1024*1024)}MB)")
+    return ext, is_image, is_video
+
+
+def _validate_media_url(url: str) -> bool:
+    from urllib.parse import urlparse
+    if not url or not isinstance(url, str):
+        return False
+    parsed = urlparse(url)
+    if parsed.scheme not in ("https", ""):
+        return False
+    if parsed.scheme == "javascript" or parsed.scheme == "data":
+        return False
+    path = parsed.path.lower()
+    allowed_ext = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".webm"}
+    ext = os.path.splitext(path)[1]
+    return ext in allowed_ext
 
 
 def _can_view(post, viewer, session):
@@ -304,41 +359,15 @@ def _can_view(post, viewer, session):
     return True
 
 
-def _parse_mentions(content):
-    mentioned = set(re.findall(r'@([a-zA-Z0-9_]+(?:@[a-zA-Z0-9.-]+)?)', content))
-    if not mentioned:
-        return []
-    with get_session() as s:
-        user_ids = []
-        for handle in mentioned:
-            if '@' in handle:
-                local_part, domain = handle.split('@', 1)
-                from urllib.parse import urlparse as _urlparse
-                u = s.query(User).filter(
-                    User.username == local_part,
-                    User.is_remote == True,
-                ).first()
-                if u and u.remote_url:
-                    parsed = _urlparse(u.remote_url)
-                    if parsed.hostname and parsed.hostname.lower() == domain.lower():
-                        user_ids.append(u.id)
-                        continue
-                # username may contain @domain, try like + domain check
-                candidates = s.query(User).filter(
-                    User.username.like(f"{local_part}@%"),
-                    User.is_remote == True,
-                ).all()
-                for _c in candidates:
-                    if _c.remote_url:
-                        _p = _urlparse(_c.remote_url)
-                        if _p.hostname and _p.hostname.lower() == domain.lower():
-                            user_ids.append(_c.id)
-                            break
-            else:
-                u = s.query(User).filter(User.username == handle, User.is_remote == False).first()
-                if u:
-                    user_ids.append(u.id)
-        return user_ids
+def _json_array_has_user(column, user_id):
+    """JSON 배열 컬럼에 user_id가 정확히 포함되어 있는지 확인"""
+    from sqlalchemy.dialects import postgresql
+    if isinstance(column.type, postgresql.JSONB):
+        from sqlalchemy.dialects.postgresql import JSONB
+        return column.cast(JSONB).op('@>')(func.json_build_array(user_id).cast(JSONB))
+    else:
+        # SQLite fallback: cast to text and check containment via LIKE
+        return column.cast(String).like(f'%{user_id}%')
 
 
 def _sync_post_tags(post, s):
@@ -376,7 +405,12 @@ def api_me(request: Request, s: Session = Depends(get_db)):
     _settings = _SS.get(s)
     if not _settings.enable_reactions:
         result["enable_reactions"] = False
-    return result
+    resp = JSONResponse(result)
+    from app.main import generate_csrf_token
+    from app.config import APP_ENV
+    secure = APP_ENV != "development"
+    resp.set_cookie(key="csrf_token", value=generate_csrf_token(user.id), max_age=30*86400, httponly=False, samesite="lax", path="/", secure=secure)
+    return resp
 
 
 @router.post("/auth/login")
@@ -416,7 +450,8 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
             if not db_user.email_verified:
                 log_admin_action(db_user.id, db_user.username, "login_blocked", details="email_not_verified", ip_address=client_ip)
                 raise HTTPException(status_code=403, detail="이메일 인증이 필요합니다. 가입 시 등록한 이메일에서 인증을 완료해 주세요.")
-            token = create_session(db_user.id)
+            user_agent = request.headers.get("user-agent", "")
+            token = create_session(db_user.id, ip_address=client_ip, user_agent=user_agent)
             if client_ip:
                 ips = db_user.recent_ips or []
                 ips = [ip for ip in ips if ip != client_ip]
@@ -425,7 +460,11 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
                 s.commit()
             log_admin_action(db_user.id, db_user.username, "login", ip_address=client_ip)
             resp = JSONResponse(_user_json(db_user))
-            resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/", secure=(SCHEME == "https"))
+            from app.main import generate_csrf_token
+            from app.config import APP_ENV
+            secure = APP_ENV != "development"
+            resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/", secure=secure)
+            resp.set_cookie(key="csrf_token", value=generate_csrf_token(db_user.id), max_age=3600, httponly=False, samesite="lax", path="/", secure=secure)
             return resp
     except HTTPException:
         raise
@@ -485,7 +524,6 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
     if not _check_auth_rate_limit(client_ip):
         raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
     from app.crypto_utils import generate_keypair
-    import secrets
     display_handle = username
     username = username.lower()
     if username in RESERVED_HANDLES:
@@ -512,12 +550,12 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
                 raise HTTPException(status_code=400, detail="해당 이메일 도메인은 가입이 차단되었습니다.")
         user_count = s.query(User).count()
         is_first = user_count == 0
-        from app.config import INITIAL_OWNER_PASSWORD
+        from app.config import INITIAL_OWNER_PASSWORD, APP_ENV
         if is_first and INITIAL_OWNER_PASSWORD and password != INITIAL_OWNER_PASSWORD:
             raise HTTPException(status_code=400, detail="초기 관리자 암호가 일치하지 않습니다.")
         salt, pwd_hash = hash_password(password)
         priv_key, pub_key = generate_keypair()
-        email_verified = is_first
+        email_verified = APP_ENV == "development"
         user = User(
             username=username,
             display_name=display_name or display_handle,
@@ -537,19 +575,19 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
         s.flush()
         user_id = user.id
 
-        if not is_first:
-            try:
-                _send_verification_email(user)
-            except Exception:
-                pass
+        try:
+            _send_verification_email(user)
+        except Exception:
+            pass
         s.commit()
 
         log_admin_action(user_id, user.username, "register", ip_address=client_ip, details="first_user" if is_first else "email_required")
 
+        return {"email_sent": True}
+
 
 @router.post("/auth/verify-email")
 def api_verify_email(request: Request, token: str = Form(...)):
-    from app.routes.auth import create_session
     with get_session() as s:
         u = s.query(User).filter_by(verification_token=token).first()
 
@@ -650,19 +688,25 @@ def api_reset_password(request: Request, token: str = Form(...), password: str =
 
 @router.post("/auth/logout")
 def api_logout(request: Request):
+    from app.routes.auth import get_session_key_from_cookie, delete_session_by_key
+    session_key = get_session_key_from_cookie(request)
+    if session_key:
+        delete_session_by_key(session_key)
     resp = JSONResponse({"ok": True})
     resp.delete_cookie("session")
+    resp.delete_cookie("csrf_token")
     return resp
 
 
 # ── Timeline API ──
 
 def _get_feed(user, tl_type, session, limit=10, offset=0):
+    print(f"[feed] _get_feed uid={user.id if user else None} tl={tl_type} limit={limit} offset={offset}", flush=True)
     _base_opts = [selectinload(Post.author), selectinload(Post.parent)]
     # Cache following IDs for home/social (reused across main query + reply filter)
     _following_ids = None
     if user and tl_type in ("home", "social"):
-        _following_ids = {f.following_id for f in session.query(Follow).filter_by(
+        _following_ids = {row[0] for row in session.query(Follow.following_id).filter_by(
             follower_id=user.id, accepted=True
         ).all()}
         _following_ids.add(user.id)
@@ -672,22 +716,24 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     if tl_type == "home":
         following_ids = list(_following_ids) if _following_ids else [user.id]
         all_boost_user_ids = list(set(following_ids) | {user.id})
-        boosted_ids = list({b.post_id for b in session.query(Boost.post_id).filter(
+        boosted_ids = list({row[0] for row in session.query(Boost.post_id).filter(
             Boost.user_id.in_(all_boost_user_ids),
         ).all()})
         final = following_ids[:]
+        _mentioned_self = _json_array_has_user(Post.mentioned_user_ids, user.id)
         posts = session.query(Post).options(*_base_opts).filter(
             or_(
                 Post.author_id.in_(final),
                 Post.id.in_(boosted_ids),
+                and_(_mentioned_self, Post.visibility.in_(("followers", "mention", "home"))),
             ),
             Post.is_deleted == False,
-            or_(Post.visibility != "home", Post.author_id.in_(final)),
+            or_(Post.visibility != "home", Post.author_id.in_(final), _mentioned_self),
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     elif tl_type == "social":
         following_ids = list(_following_ids) if _following_ids else [user.id]
         all_boost_user_ids = list(set(following_ids) | {user.id})
-        boosted_ids = list({b.post_id for b in session.query(Boost.post_id).filter(
+        boosted_ids = list({row[0] for row in session.query(Boost.post_id).filter(
             Boost.user_id.in_(all_boost_user_ids),
         ).all()})
         posts = session.query(Post).options(*_base_opts).filter(
@@ -712,7 +758,9 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             Post.is_deleted == False,
         ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
     raw_total = len(posts)
+    print(f"[feed] raw query: {raw_total} posts for tl={tl_type}", flush=True)
     posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm and p.author_id != user.id and user.id not in (p.mentioned_user_ids or []))]
+    print(f"[feed] after DM filter: {len(posts)} posts", flush=True)
     # Deduplicate: track seen post IDs and boost_of targets
     seen_ids = set()
     deduped = []
@@ -720,7 +768,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     boost_pointer_ids = {p.boost_of_id for p in posts if p.boost_of_id}
     boost_originals = {}
     if boost_pointer_ids:
-        for orig in session.query(Post).filter(Post.id.in_(boost_pointer_ids), Post.is_deleted == False).all():
+        for orig in session.query(Post).options(selectinload(Post.author)).filter(Post.id.in_(boost_pointer_ids), Post.is_deleted == False).all():
             boost_originals[orig.id] = orig
     for p in posts:
         if p.boost_of_id:
@@ -734,136 +782,22 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         seen_ids.add(p.id)
         deduped.append(p)
     posts = deduped
-    # Filter replies: hide if direct parent author is not followed
-    # Only for home/social timeline, not local/federated
-    if user and tl_type in ("home", "social") and _following_ids:
-        parent_ids = {p.in_reply_to_id for p in posts if p.author_id != user.id and p.in_reply_to_id}
-        parent_authors = {}
-        if parent_ids:
-            for pp in session.query(Post).filter(Post.id.in_(parent_ids)).all():
-                parent_authors[pp.id] = pp.author_id
-        reply_filtered = []
-        for p in posts:
-            if p.author_id != user.id and (p.in_reply_to_id or p.in_reply_to_ap_id):
-                if p.in_reply_to_id:
-                    parent_author_id = parent_authors.get(p.in_reply_to_id)
-                    if parent_author_id is None or parent_author_id not in _following_ids:
-                        continue
-                else:
-                    # remote parent not in DB → hide (can't verify parent author)
-                    continue
-            reply_filtered.append(p)
-        posts = reply_filtered
-    # Apply user mutes, blocks, and keyword mutes
-    if user:
-        muted_user_ids = {m.target_user_id for m in session.query(UserMute.target_user_id).filter_by(user_id=user.id).all()}
-        blocked_ids = {b.target_user_id for b in session.query(UserBlock.target_user_id).filter_by(user_id=user.id).all()}
-        blocked_by_ids = {b.user_id for b in session.query(UserBlock.user_id).filter_by(target_user_id=user.id).all()}
-        muted_series_ids = {m.novel_id for m in session.query(SeriesMute.novel_id).filter_by(user_id=user.id).all()}
-        hidden_ids = muted_user_ids | blocked_ids | blocked_by_ids
-        kw_mutes = session.query(KeywordMute).filter_by(user_id=user.id).all()
-        # Pre-parse keyword mutes
-        parsed_kw = []
-        for kw in kw_mutes:
-            if kw.is_regex:
-                parsed_kw.append(("regex", kw.keyword, kw.mode, None))
-            else:
-                try:
-                    keywords = json.loads(kw.keyword)
-                    if isinstance(keywords, str):
-                        keywords = [keywords]
-                except (json.JSONDecodeError, TypeError):
-                    keywords = [kw.keyword]
-                keywords = [k.strip().lower() for k in keywords if k.strip()]
-                parsed_kw.append(("text", None, kw.mode, keywords))
-        import re
-        filtered = []
-        for p in posts:
-            if p.author_id in hidden_ids:
-                continue
-            if p.novel_id and p.novel_id in muted_series_ids:
-                continue
-            if parsed_kw:
-                content_lower = (p.content or "").lower()
-                matched = False
-                for kw_type, pattern, mode, keywords in parsed_kw:
-                    if kw_type == "regex":
-                        try:
-                            if re.search(pattern, content_lower):
-                                matched = True
-                                break
-                        except re.error:
-                            pass
-                    else:
-                        if mode == "and":
-                            if all(k in content_lower for k in keywords):
-                                matched = True
-                                break
-                        else:
-                            if any(k in content_lower for k in keywords):
-                                matched = True
-                                break
-                if matched:
-                    continue
-            filtered.append(p)
-        posts = filtered
-    # Hide posts that mention someone the user doesn't follow (home/social only)
-    if user and tl_type in ("home", "social"):
-        _following_ids_set = set(_following_ids) if _following_ids else set()
-
-        mention_filtered = []
-        for p in posts:
-            skip = False
-
-            if p.mentioned_user_ids:
-                for muid in p.mentioned_user_ids:
-                    if muid != p.author_id and muid != user.id and muid not in _following_ids_set:
-                        skip = True
-                        break
-
-            # 2. [핵심] 리모트 글 본문 HTML 멘션 태그 추적 (HTML 정규식 방어선)
-            if not skip and p.content and p.author and p.author.is_remote:
-                import re as _re
-                # HTML 멘션 태그 추출 (예: <a href="https://mastodon.social/@target" ...>@target</a>)
-                # href 안의 주소나 class="mention"이 들어간 링크들을 긁어옵니다.
-                mentions = _re.findall(r'<a\s+[^>]*href="([^"]+)"[^>]*class="[^"]*mention[^"]*"[^>]*>', p.content)
-                for mention_url in mentions:
-                    # 언급된 사람의 프로필 URL(mention_url)이 내 프로필 URL이 아니고,
-                    # 내가 팔로우하는 사람의 프로필 URL 목록에도 없다면 스킵 처리합니다.
-
-                    # 팁: URL을 기반으로 대조하는 것이 가장 정확합니다.
-                    # 만약 DB에 팔로잉들의 프로필 URL(actor_id 또는 ap_id) 정보가 저장되어 있다면 
-                    # 아래와 같이 주소 비교를 통해 안전하게 걸러낼 수 있습니다.
-
-                    # 예시 구현 (_following_actor_urls가 있다면):
-                    # if mention_url != user.actor_id and mention_url not in _following_actor_urls:
-                    #     skip = True
-                    #     break
-
-                    # 만약 URL 목록을 당장 가져오기 힘들다면, 
-                    # 최소한 내 서버 주소가 아닌 외부 주소로 향하는 멘션 링크가 발견되었을 때 
-                    # 내 팔로잉이 아닌 제3자에 대한 멘션으로 보고 안전하게 스킵시킬 수 있습니다.
-                    pass
-
-            if not skip and p.in_reply_to_ap_id and not p.in_reply_to_id:
-                # remote parent not in DB - can't verify parent author, hide
-                if p.author_id == user.id or p.author_id in _following_ids_set:
-                    pass
-                else:
-                    skip = True
-            if not skip and not p.mentioned_user_ids and p.author and p.author.is_remote:
-                # No mentioned_user_ids but author is remote - check content for @domain mentions
-                import re as _re
-                _remote_mentions = _re.findall(r'@[\w.-]+@[a-zA-Z0-9.-]+\.(?:[a-zA-Z]{2,})(?!\w)', p.content or "")
-                if _remote_mentions:
-                    skip = True
-            if skip:
-                continue
-            mention_filtered.append(p)
-        posts = mention_filtered
+    print(f"[feed] after dedup: {len(posts)} posts", flush=True)
+    if _following_ids:
+        try:
+            posts = _timeline_filter(posts, session, user, tl_type, _following_ids)
+            print(f"[feed] after mention filter: {len(posts)} posts", flush=True)
+        except Exception as e:
+            print(f'[feed] mention filter error: {e}', flush=True)
     has_more = raw_total > limit
+    print(f"[feed] has_more={has_more} (raw_total={raw_total}, after_filter={len(posts)}, limit={limit})", flush=True)
+    posts = posts[:limit]
     # Batch-load user interaction data for all remaining posts
-    post_ids = [p.id for p in posts[:limit]]
+    post_ids = [p.id for p in posts]
+    # Also include original post IDs referenced by boost pointers
+    for _p in posts:
+        if _p.boost_of_id and _p.boost_of_id not in post_ids:
+            post_ids.append(_p.boost_of_id)
     if user and post_ids:
         _all_likes = session.query(Like).filter(
             Like.user_id == user.id, Like.post_id.in_(post_ids)
@@ -881,8 +815,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         ).all()}
         # Batch load latest boost per post
         _booster_map = {}
-        import datetime as _dt
-        _cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(hours=3)
+        _cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3)
         for b in session.query(Boost).filter(
             Boost.post_id.in_(post_ids), Boost.created_at > _cutoff
         ).order_by(Boost.created_at.desc()).all():
@@ -906,7 +839,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             _reactions_map[pid][react] = cnt
         # Batch load mentioned users
         all_mentioned_ids = set()
-        for p in posts[:limit]:
+        for p in posts:
             if p.mentioned_user_ids:
                 all_mentioned_ids.update(p.mentioned_user_ids)
         _mentioned_users_map = {}
@@ -920,7 +853,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                     _mentioned_users[_mu.id] = f"{_name}@{_domain}"
                 else:
                     _mentioned_users[_mu.id] = _mu.username
-            for p in posts[:limit]:
+            for p in posts:
                 if p.mentioned_user_ids:
                     _mentioned_users_map[p.id] = [_mentioned_users.get(mid, "?") for mid in p.mentioned_user_ids if mid in _mentioned_users]
                 else:
@@ -928,12 +861,15 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     else:
         _liked_ids = _boosted_ids = _bookmarked_ids = set()
         _vote_map = _my_reaction_map = _reactions_map = _booster_map = _mentioned_users_map = {}
+    print(f"[feed] final: {len(posts)} posts returned, has_more={has_more}", flush=True)
+    _timeline_emojis = [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)]
     return [_post_json(p, session, user, tl_type,
                        _liked_ids=_liked_ids, _boosted_ids=_boosted_ids,
                        _bookmarked_ids=_bookmarked_ids, _vote_map=_vote_map,
                        _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map,
-                       _booster_map=_booster_map, _mentioned_users_map=_mentioned_users_map)
-            for p in posts[:limit]], has_more
+                       _booster_map=_booster_map, _mentioned_users_map=_mentioned_users_map,
+                       _boost_originals=boost_originals, _skip_emojis=True)
+            for p in posts], has_more, _timeline_emojis
 
 
 @router.get("/timeline/stream")
@@ -966,14 +902,25 @@ def api_timeline(request: Request, tl_type: str, limit: int = Query(10), offset:
         return JSONResponse({"error": "Account deactivated"}, status_code=403)
     if tl_type not in TIMELINE_LABELS:
         tl_type = "home"
-    feed, has_more = _get_feed(user, tl_type, s, limit=limit, offset=offset)
-    return {"posts": feed, "timeline_type": tl_type, "has_more": has_more}
+    feed, has_more, emojis = _get_feed(user, tl_type, s, limit=limit, offset=offset)
+    return {"posts": feed, "timeline_type": tl_type, "has_more": has_more, "_emojis": emojis}
 
 
 # ── Post CRUD ──
 
 @router.get("/posts/{post_id}")
 def api_get_post(request: Request, post_id: int):
+    # --- [추가 시작] ActivityPub 전용 처리 ---
+    accept_header = request.headers.get("Accept", "")
+    is_activitypub = "application/activity+json" in accept_header or "application/ld+json" in accept_header
+    if is_activitypub:
+        with get_session() as s:
+            post = s.query(Post).filter_by(id=post_id).first()
+            if not post:
+                raise HTTPException(status_code=404, detail="Not Found")
+            note = post.to_ap_note()
+            return JSONResponse(content=note, media_type="application/activity+json")
+    # --- [추가 끝] ---
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
@@ -987,16 +934,28 @@ def api_get_post(request: Request, post_id: int):
             raise HTTPException(status_code=404, detail="Post not found")
         if not _can_view(post, user, s):
             raise HTTPException(status_code=403, detail="Cannot view this post")
-        result = _post_json(post, s, user)
+        _main_booster_map = {}
+        if user:
+            _buid = s.query(Boost.user_id).filter_by(post_id=post.id).order_by(desc(Boost.created_at)).first()
+            if _buid:
+                _u = s.query(User).get(_buid[0])
+                if _u:
+                    _main_booster_map[post.id] = _u
+        result = _post_json(post, s, user, _booster_map=_main_booster_map)
         if user and post.author_id != user.id:
             result["is_following_author"] = s.query(Follow).filter_by(
                 follower_id=user.id, following_id=post.author_id, accepted=True
             ).first() is not None
         else:
             result["is_following_author"] = False
+        limit = min(int(request.query_params.get("reply_limit", 5)), 50)
+        offset = int(request.query_params.get("reply_offset", 0))
+        direct_count = s.query(Post).filter_by(in_reply_to_id=post_id, is_deleted=False).count()
+        result["total_replies"] = direct_count
         descendant_ids = set()
         queue = [post_id]
-        while queue:
+        need = offset + limit + 1
+        while queue and len(descendant_ids) < need:
             pid = queue.pop(0)
             child_ids = [r[0] for r in s.query(Post.id).filter(
                 Post.in_reply_to_id == pid, Post.is_deleted == False
@@ -1004,13 +963,10 @@ def api_get_post(request: Request, post_id: int):
             for cid in child_ids:
                 if cid not in descendant_ids:
                     descendant_ids.add(cid)
+                    if len(descendant_ids) >= need:
+                        break
                     queue.append(cid)
-        direct_count = s.query(Post).filter_by(in_reply_to_id=post_id, is_deleted=False).count()
-        total_descendants = len(descendant_ids)
-        result["total_replies"] = direct_count
-        result["total_descendants"] = total_descendants
-        limit = min(int(request.query_params.get("reply_limit", 5)), 50)
-        offset = int(request.query_params.get("reply_offset", 0))
+        result["total_descendants"] = len(descendant_ids)
         reply_ids = sorted(descendant_ids)[offset:offset + limit]
         if reply_ids:
             descendants = s.query(Post).options(
@@ -1020,153 +976,176 @@ def api_get_post(request: Request, post_id: int):
         else:
             descendants = []
         reply_id_set = set(reply_ids)
+        _reply_liked_ids = _reply_boosted_ids = _reply_bookmarked_ids = set()
+        _reply_booster_map = {}
         if user and reply_id_set:
-            liked_ids = set(r[0] for r in s.query(Like.post_id).filter(
-                Like.user_id == user.id, Like.post_id.in_(reply_id_set)).all())
-            boosted_ids = set(r[0] for r in s.query(Boost.post_id).filter(
-                Boost.user_id == user.id, Boost.post_id.in_(reply_id_set)).all())
-            bookmarked_ids = set(r[0] for r in s.query(Bookmark.post_id).filter(
-                Bookmark.user_id == user.id, Bookmark.post_id.in_(reply_id_set)).all())
-        else:
-            liked_ids = boosted_ids = bookmarked_ids = set()
-        result["replies"] = [_post_json(r, s, user, _liked_ids=liked_ids, _boosted_ids=boosted_ids, _bookmarked_ids=bookmarked_ids) for r in descendants if _can_view(r, user, s)]
-        result["has_more_replies"] = offset + limit < total_descendants
+            _reply_liked_ids = set(r[0] for r in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(reply_id_set)).all())
+            _reply_boosted_ids = set(r[0] for r in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(reply_id_set)).all())
+            _reply_bookmarked_ids = set(r[0] for r in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(reply_id_set)).all())
+            for bid, buid in s.query(Boost.post_id, Boost.user_id).filter(Boost.post_id.in_(reply_id_set)).order_by(desc(Boost.created_at)).all():
+                if bid not in _reply_booster_map:
+                    _reply_booster_map[bid] = buid
+            if _reply_booster_map:
+                _bu = {u.id: u for u in s.query(User).filter(User.id.in_(set(_reply_booster_map.values()))).all()}
+                _reply_booster_map = {pid: _bu.get(uid) for pid, uid in _reply_booster_map.items()}
+        result["replies"] = [_post_json(r, s, user, _liked_ids=_reply_liked_ids, _boosted_ids=_reply_boosted_ids, _bookmarked_ids=_reply_bookmarked_ids, _booster_map=_reply_booster_map) for r in descendants if _can_view(r, user, s)]
+        result["has_more_replies"] = offset + limit < len(descendant_ids)
         ancestors = []
         cur = post.parent
+        ancestor_ids = []
         while cur:
             if not cur.is_deleted:
-                ancestors.insert(0, _post_json(cur, s, user))
+                ancestor_ids.append(cur.id)
             cur = cur.parent
+        if ancestor_ids:
+            if user:
+                _anc_liked = {a[0] for a in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(ancestor_ids)).all()}
+                _anc_boosted = {a[0] for a in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(ancestor_ids)).all()}
+                _anc_bookmarked = {a[0] for a in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(ancestor_ids)).all()}
+            else:
+                _anc_liked = _anc_boosted = _anc_bookmarked = set()
+            cur = post.parent
+            while cur:
+                if not cur.is_deleted and _can_view(cur, user, s):
+                    ancestors.insert(0, _post_json(cur, s, user, _liked_ids=_anc_liked, _boosted_ids=_anc_boosted, _bookmarked_ids=_anc_bookmarked))
+                cur = cur.parent
         if not ancestors and post.in_reply_to_ap_id:
             parent = s.query(Post).filter_by(ap_id=post.in_reply_to_ap_id).first()
-            if parent:
+            if parent and _can_view(parent, user, s):
                 ancestors = [_post_json(parent, s, user)]
             else:
                 fetch_remote_url = post.in_reply_to_ap_id
         result["ancestors"] = ancestors
     if fetch_remote_url:
         try:
-            from app.activitypub import _fetch_remote_post
             with get_session() as remote_s:
                 remote_parent = _fetch_remote_post(fetch_remote_url, user, remote_s)
-                if remote_parent:
+                # 💡 remote_parent가 정확히 존재하고(None이 아니고) 부모 게시글 객체일 때만 파싱하도록 방어막을 칩니다.
+                if remote_parent is not None:
                     result["ancestors"] = [_post_json(remote_parent, remote_s, user)]
-        except Exception:
-            pass
+                else:
+                    print(f"[WARN] Remote parent fetch returned None for URL: {fetch_remote_url}", flush=True)
+        except Exception as e:
+            # 💡 pass로 에러를 완전히 지우지 말고, 개발 중에는 최소한 어떤 에러인지 로그를 남겨줍니다.
+            print(f"[ERROR] Failed to fetch or process remote parent: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
     return result
 
 
-def _broadcast_federation(user, post, visibility):
+def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
     """Deliver Create activity to remote followers (background thread)."""
-    try:
-        create_activity = {
-            "@context": "https://www.w3.org/ns/activitystreams",
-            "id": f"{BASE_URL}/activities/create/{post.id}",
-            "type": "Create",
-            "actor": user.actor_uri(),
-            "object": post.to_ap_note(),
-        }
+    # 🌟 함수 전체를 감싸서 외부 변수 간섭을 완전히 차단합니다.
+    with get_session() as ap_s:
+        user = ap_s.query(User).filter_by(id=user_id).first()
+        post = ap_s.query(Post).filter_by(id=post_id).first()
+        if not user or not post:
+            logger.warning(f"Broadcast aborted: user_id={user_id} or post_id={post_id} not found")
+            return
+
+        create_activity = post.to_ap_create()
         if visibility == "mention":
-            with get_session() as ap_s:
-                if post.mentioned_user_ids:
-                    mu_users = ap_s.query(User).filter(
-                        User.id.in_(post.mentioned_user_ids), User.is_remote == True
-                    ).all()
-                    for mu in mu_users:
-                        inbox = mu.inbox_url or mu.inbox_uri()
+            _remote_mentioned = False
+            if post.mentioned_user_ids:
+                mu_users = ap_s.query(User).filter(
+                    User.id.in_(post.mentioned_user_ids), User.is_remote == True
+                ).all()
+                for mu in mu_users:
+                    inbox = mu.inbox_url
+                    if not inbox:
+                        continue
+                    domain = mu.actor_uri().split("/")[2] if "//" in mu.actor_uri() else ""
+                    if domain and not _federation_allowed(domain):
+                        continue
+                    _post_to_inbox(inbox, create_activity, user)
+                    _remote_mentioned = True
+            if not _remote_mentioned:
+                broadcast_to_followers(user, create_activity)
+            import re as _re
+            remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', plain_content or ""))
+            _resolved_handles = []
+            for handle in remote_handles:
+                remote_user = ap_s.query(User).filter(
+                    User.username == handle, User.is_remote == True
+                ).first()
+                if remote_user:
+                    _resolved_handles.append((handle, remote_user))
+                    continue
+                try:
+                    from app.activitypub import _resolve_actor
+                    r_name, r_domain = handle.split("@", 1)
+                    if not _federation_allowed(r_domain):
+                        continue
+                    resolved = None
+                    for url in [f"https://{r_domain}/@{r_name}", f"https://{r_domain}/users/{r_name}"]:
+                        try:
+                            resolved = _resolve_actor(url, sign_as=user)
+                            if resolved:
+                                break
+                        except Exception:
+                            continue
+                    if not resolved:
+                        import httpx as _httpx
+                        wf = _httpx.get(
+                            f"https://{r_domain}/.well-known/webfinger?resource=acct:{handle}",
+                            timeout=5,
+                        )
+                        if wf.status_code == 200:
+                            for link in wf.json().get("links", []):
+                                if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
+                                    href = link.get("href", "")
+                                    if href:
+                                        resolved = _resolve_actor(href, sign_as=user)
+                                        break
+                    if resolved:
+                        remote_user = ap_s.query(User).get(resolved.id)
+                except Exception:
+                    pass
+                if remote_user:
+                    _resolved_handles.append((handle, remote_user))
+            for handle, remote_user in _resolved_handles:
+                inbox = remote_user.inbox_url
+                if not inbox:
+                    continue
+                domain = remote_user.actor_uri().split("/")[2] if "//" in remote_user.actor_uri() else ""
+                if domain and not _federation_allowed(domain):
+                    continue
+                _post_to_inbox(inbox, create_activity, user)
+        else:
+            broadcast_to_followers(user, create_activity)
+            delivered_domains = set()
+            _known_handles = {}
+            _unknown_handles = set()
+            if post.mentioned_user_ids:
+                follower_ids = {f.following_id for f in ap_s.query(Follow).filter(
+                    Follow.following_id == user.id,
+                    Follow.follower.has(is_remote=True),
+                ).all()}
+                mu_users = ap_s.query(User).filter(
+                    User.id.in_(post.mentioned_user_ids), User.is_remote == True
+                ).all()
+                for mu in mu_users:
+                    if mu.id not in follower_ids:
+                        inbox = mu.inbox_url
+                        if not inbox:
+                            continue
                         domain = mu.actor_uri().split("/")[2] if "//" in mu.actor_uri() else ""
                         if domain and not _federation_allowed(domain):
                             continue
                         _post_to_inbox(inbox, create_activity, user)
-                # Also deliver to @user@domain mentions parsed from content
-                import re as _re
-                remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', post.content or ""))
-                # Resolve remote handles OUTSIDE session (network I/O)
-                _resolved_handles = []
-                for handle in remote_handles:
-                    remote_user = ap_s.query(User).filter(
-                        User.username == handle, User.is_remote == True
-                    ).first()
-                    if remote_user:
-                        _resolved_handles.append((handle, remote_user))
-                        continue
-                    try:
-                        from app.activitypub import _resolve_actor
-                        r_name, r_domain = handle.split("@", 1)
-                        if not _federation_allowed(r_domain):
-                            continue
-                        resolved = None
-                        for url in [f"https://{r_domain}/@{r_name}", f"https://{r_domain}/users/{r_name}"]:
-                            try:
-                                resolved = _resolve_actor(url, sign_as=user)
-                                if resolved:
-                                    break
-                            except Exception:
-                                continue
-                        if not resolved:
-                            import httpx as _httpx
-                            wf = _httpx.get(
-                                f"https://{r_domain}/.well-known/webfinger?resource=acct:{handle}",
-                                timeout=5,
-                            )
-                            if wf.status_code == 200:
-                                for link in wf.json().get("links", []):
-                                    if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
-                                        href = link.get("href", "")
-                                        if href:
-                                            resolved = _resolve_actor(href, sign_as=user)
-                                            break
-                        if resolved:
-                            # Re-query in case resolved is detached
-                            remote_user = ap_s.query(User).get(resolved.id)
-                    except Exception:
-                        pass
-                    if remote_user:
-                        _resolved_handles.append((handle, remote_user))
-                for handle, remote_user in _resolved_handles:
-                    inbox = remote_user.inbox_url or remote_user.inbox_uri()
-                    domain = remote_user.actor_uri().split("/")[2] if "//" in remote_user.actor_uri() else ""
-                    if domain and not _federation_allowed(domain):
-                        continue
-                    _post_to_inbox(inbox, create_activity, user)
-        else:
-            broadcast_to_followers(user, create_activity)
-            delivered_domains = set()
-            # Collect known users and handles from DB first
-            _known_handles = {}
-            _unknown_handles = set()
-            with get_session() as ap_s:
-                # Deliver to mentioned remote users from mentioned_user_ids
-                if post.mentioned_user_ids:
-                    follower_ids = {f.following_id for f in ap_s.query(Follow).filter(
-                        Follow.following_id == user.id,
-                        Follow.follower.has(is_remote=True),
-                    ).all()}
-                    mu_users = ap_s.query(User).filter(
-                        User.id.in_(post.mentioned_user_ids), User.is_remote == True
-                    ).all()
-                    for mu in mu_users:
-                        if mu.id not in follower_ids:
-                            inbox = mu.inbox_url or mu.inbox_uri()
-                            domain = mu.actor_uri().split("/")[2] if "//" in mu.actor_uri() else ""
-                            if domain and not _federation_allowed(domain):
-                                continue
-                            _post_to_inbox(inbox, create_activity, user)
-                            delivered_domains.add(domain)
+                        delivered_domains.add(domain)
 
-                # Collect @user@domain mentions
-                import re as _re
-                remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', post.content or ""))
-                for handle in remote_handles:
-                    remote_user = ap_s.query(User).filter(
-                        User.username == handle, User.is_remote == True
-                    ).first()
-                    if remote_user:
-                        _known_handles[handle] = remote_user
-                    else:
-                        _unknown_handles.add(handle)
+            import re as _re
+            remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', plain_content or ""))
+            for handle in remote_handles:
+                remote_user = ap_s.query(User).filter(
+                    User.username == handle, User.is_remote == True
+                ).first()
+                if remote_user:
+                    _known_handles[handle] = remote_user
+                else:
+                    _unknown_handles.add(handle)
 
-            # Resolve unknown handles OUTSIDE session (network I/O)
             if _unknown_handles:
                 from app.activitypub import _resolve_actor
                 for handle in _unknown_handles:
@@ -1196,21 +1175,20 @@ def _broadcast_federation(user, post, visibility):
                                             resolved = _resolve_actor(href, sign_as=user)
                                             break
                         if resolved:
-                            with get_session() as ap_s2:
-                                remote_user = ap_s2.query(User).get(resolved.id)
-                                if remote_user:
-                                    _known_handles[handle] = remote_user
+                            remote_user = ap_s.query(User).get(resolved.id)
+                            if remote_user:
+                                _known_handles[handle] = remote_user
                     except Exception:
                         pass
             for handle, remote_user in _known_handles.items():
-                inbox = remote_user.inbox_url or remote_user.inbox_uri()
+                inbox = remote_user.inbox_url
+                if not inbox:
+                    continue
                 domain = remote_user.actor_uri().split("/")[2] if "//" in remote_user.actor_uri() else ""
                 if domain and not _federation_allowed(domain):
                     continue
                 _post_to_inbox(inbox, create_activity, user)
                 delivered_domains.add(domain)
-    except Exception as e:
-        logger.warning("Failed to broadcast federation activity: %s", e)
 
 
 def _broadcast_update_actor(user):
@@ -1252,13 +1230,41 @@ def api_create_post(
     link_preview: str = Form(""),
 ):
     user = require_active_auth(request)
+    quote_of_ap_id = ""
+    quote_of_id = None
     if share_url:
-        if "/episodes/" in share_url:
-            content = content + "\n\nepisode: " + share_url
-        else:
-            content = content + "\n\nseries: " + share_url
-    content = content.strip('\n\r ')
-    if not content.strip() and not poll_options:
+        with get_session() as _qs:
+            local = _qs.query(Post).filter(Post.ap_id == share_url).first()
+            if local:
+                quote_of_ap_id = local.ap_id
+                quote_of_id = local.id
+            else:
+                try:
+                    from app.activitypub import _ap_fetch as _ap_fetch_quote
+                    data = _ap_fetch_quote(share_url, user)
+                    if data:
+                        obj = data.get("object", data)
+                        if obj.get("type") in ("Note", "Article"):
+                            from app.activitypub import _fetch_and_save_ap_object as _fsao
+                            result = _fsao(obj, user)
+                            if result:
+                                quote_of_ap_id = result.ap_id
+                                quote_of_id = result.id
+                except:
+                    pass
+    # 🌟 [추가] DB 저장 전에 로컬 쌩 텍스트 규칙으로 멘션/태그/URL을 HTML <a> 태그로 파싱!
+    content_html = process_post_content(content, None)
+    mentions = extract_mentions(content, None)
+    mentioned_handles = [m["handle"] for m in mentions]
+
+    # 2. 핸들을 ID로 변환
+    mentioned_ids = resolve_handles_to_ids(mentioned_handles)
+    if dm_target_id:
+        mentioned_ids.append(dm_target_id)
+    # 중복 제거 후 리스트로 변환 (알림 발송 루프를 위해 리스트 상태 유지)
+    mentioned_ids = list(set(mentioned_ids))
+
+    if not content_html.strip() and not poll_options:
         raise HTTPException(status_code=400, detail="Content cannot be empty")
     total_len = len(content) + len(summary)
     if total_len > MAX_POST_LENGTH:
@@ -1278,16 +1284,13 @@ def api_create_post(
                 if vis_order.get(parent_vis, 0) > vis_order.get(visibility, 0):
                     visibility = parent_vis
 
-    mentioned_ids = _parse_mentions(content)
-    if dm_target_id and dm_target_id not in mentioned_ids:
-        mentioned_ids.append(dm_target_id)
     with get_session() as s:
         import secrets
         post_number = secrets.token_hex(4)
         author_is_sensitive = getattr(user, 'is_sensitive', False) or False
         post = Post(
             author_id=user.id,
-            content=content,
+            content=content_html,
             summary=summary,
             visibility=visibility,
             in_reply_to_id=parent_id,
@@ -1296,6 +1299,8 @@ def api_create_post(
             ap_id="",
             is_dm=bool(dm_target_id),
             is_sensitive=is_sensitive or author_is_sensitive,
+            quote_of_ap_id=quote_of_ap_id,
+            quote_of_id=quote_of_id,
         )
         import json as _json
         if link_preview:
@@ -1306,7 +1311,7 @@ def api_create_post(
         try:
             media = _json.loads(media_attachments)
             if isinstance(media, list):
-                post.media_attachments = media[:16]
+                post.media_attachments = [m for m in media[:16] if isinstance(m, str) and _validate_media_url(m)]
         except (_json.JSONDecodeError, TypeError):
             pass
         if poll_options:
@@ -1360,7 +1365,7 @@ def api_create_post(
                 _brn(parent.author_id)
 
         # Async federation broadcast (background thread so it doesn't block response)
-        threading.Thread(target=_broadcast_federation, args=(user, post, visibility), daemon=True).start()
+        threading.Thread(target=_broadcast_federation, args=(user.id, post.id, visibility, content), daemon=True).start()
 
         try:
             broadcast("new_post", {"post_id": post.id, "author_id": user.id})
@@ -1385,7 +1390,9 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
             raise HTTPException(status_code=403, detail="Cannot edit this post")
         if post.summary and post.summary.startswith("[관리자 강제] ") and not summary.startswith("[관리자 강제] "):
             raise HTTPException(status_code=403, detail="관리자가 강제한 CW는 수정할 수 없습니다")
-        post.content = content
+        new_content = content.replace('\r\n', '\n').replace('\r', '\n')
+        # 본문 파싱 및 시리즈/에피소드 외래키 자동 추출 연동
+        post.content = process_post_content(new_content, post=post)
         post.summary = summary
         s.commit()
 
@@ -1419,6 +1426,7 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
                 "reactions": _build_reactions(s, post.id),
                 "my_reaction": None,
                 "type": "update",
+                "_emojis": [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(s)],
             }, post.author_id, post.visibility or "public", False)
         except Exception:
             pass
@@ -1427,10 +1435,8 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
         if post.ap_id:
             try:
                 note_data = post.to_ap_note()
-                # Strip @context from Note (it goes on the Activity only)
                 note_data.pop("@context", None)
                 note_data.pop("url", None)
-                # Add required fields matching Mastodon format
                 note_data["atomUri"] = post.ap_id
                 note_data["updated"] = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
                 note_data.setdefault("summary", None)
@@ -1451,15 +1457,16 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
                     "cc": note_data.get("cc", []),
                     "object": note_data,
                 }
-                import json as _json
                 def _send_update():
                     try:
                         broadcast_to_followers(user, update_activity)
                     except Exception as e:
-                        logger.warning("Update federation failed: %s", e)
+                        # 🌟 logger.warning 대신 즉시 출력되도록 print flush 적용
+                        print(f"[Warning] Update federation failed: {e}", file=sys.stderr, flush=True)
                 threading.Thread(target=_send_update, daemon=True).start()
             except Exception as e:
-                logger.warning("Update activity build failed: %s", e)
+                # 🌟 에러 로그 즉시 출력
+                print(f"[Warning] Update activity build failed: {e}", file=sys.stderr, flush=True)
 
         return _post_json(post, s, user)
 
@@ -1538,8 +1545,11 @@ def api_delete_post(request: Request, post_id: int):
                         p = _s.query(_Po).get(_pid)
                         if p:
                             _send_delete_post(p, _user)
-                except Exception:
-                    pass
+                        else:
+                            print(f"DELETE_FAIL: post {_pid} not found in DB")
+                except Exception as e:
+                    print(f"DELETE_FAIL: {e}")
+                    import traceback; traceback.print_exc()
         threading.Thread(target=_background, daemon=True).start()
     return {"ok": True}
 
@@ -1551,8 +1561,7 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
     if target_type not in ("post", "novel", "episode"):
         raise HTTPException(status_code=400, detail="Invalid target_type")
     if forward_to_remote:
-        import datetime as _dt
-        _cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(minutes=1)
+        _cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=1)
         with get_session() as _s:
             _recent = _s.query(Report).filter(
                 Report.reporter_id == user.id,
@@ -1646,20 +1655,44 @@ def api_list_rules():
 
 
 @router.post("/posts/{post_id}/like")
-def api_like_post(request: Request, post_id: int):
+def api_like_post(request: Request, post_id: int, reaction: str = "★"):
+    """Like a post with a specific emoji/reaction. Rejects if the emoji is not registered locally."""
     user = require_active_auth(request)
+    # -----------------------------------------------------------------
+    # 🛡️ [핵심 방어선] 로컬에 등록되지 않은 커스텀 이모지 리액션 차단
+    # -----------------------------------------------------------------
+    # 리액션이 일반 텍스트/기본 심볼(★)이 아니라 콜론으로 감싸진 커스텀 이모지 형태일 때만 검사
+    if reaction.startswith(":") and reaction.endswith(":"):
+        keyword = reaction[1:-1].strip().lower().replace(" ", "_")
+        with get_session() as s:
+            # domain이 비어있는('category="local"' 등) 진짜 우리 서버 순정 이모지가 존재하는지 확인
+            is_local_defined = s.query(CustomEmoji).filter_by(keyword=keyword, domain="").first()
+            if not is_local_defined:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"The emoji '{reaction}' is not registered on this server."
+                )
+    # -----------------------------------------------------------------
+
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
-            raise HTTPException(status_code=404, detail="Post not found")
+            raise HTTPException(status_code=404, detail="post not found")
+        if not _can_view(post, user, s):
+            raise HTTPException(status_code=404, detail="post not found")
         existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
         existing_notif = s.query(Notification).filter_by(
             user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id
         ).first() if post.author_id != user.id else None
         if not existing:
-            s.add(Like(user_id=user.id, post_id=post_id))
+            # 새 Like 객체 생성 시 요청받은 reaction 값을 저장 (DB 스키마 필드명에 맞춰 적용)
+            s.add(Like(user_id=user.id, post_id=post_id, reaction=reaction))
             if post.author_id != user.id and not existing_notif:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
+            s.flush()
+            keep_id = s.query(Like.id).filter_by(user_id=user.id, post_id=post_id).order_by(Like.id.desc()).first()
+            if keep_id:
+                s.query(Like).filter(Like.user_id == user.id, Like.post_id == post_id, Like.id != keep_id[0]).delete(synchronize_session=False)
             s.commit()
             if post.author_id != user.id:
                 broadcast_refresh_notifs(post.author_id)
@@ -1672,16 +1705,25 @@ def api_like_post(request: Request, post_id: int):
             like_rec = existing or s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
             if like_rec:
                 like_rec.ap_id = like_id
+                # 이미 존재하던 레코드라면 reaction 업데이트 (원할 경우 추가)
+                if reaction != "★":
+                    like_rec.reaction = reaction
                 s.commit()
+            _react = reaction or "★"
+            is_custom = _react != "★"
+            activity_type = "EmojiReact" if is_custom else "Like"
             like_activity = {
                 "@context": "https://www.w3.org/ns/activitystreams",
                 "id": like_id,
-                "type": "Like",
+                "type": activity_type,
                 "actor": user.actor_uri(),
                 "object": post.ap_id,
                 "to": [post.author.actor_uri()],
-                "cc": [],
+                "cc": ["https://www.w3.org/ns/activitystreams#Public"],
             }
+            if is_custom or _react:
+                like_activity["content"] = _react
+                like_activity["_misskey_reaction"] = _react
             inbox = post.author.shared_inbox_url
             try:
                 _post_to_inbox(inbox, like_activity, user)
@@ -1699,6 +1741,7 @@ def api_unlike_post(request: Request, post_id: int):
             raise HTTPException(status_code=404, detail="Post not found")
         existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
         like_id = existing.ap_id if existing and existing.ap_id else ""
+        existing_reaction = existing.reaction if existing else None
         if existing:
             s.delete(existing)
             s.query(Notification).filter_by(
@@ -1717,6 +1760,8 @@ def api_unlike_post(request: Request, post_id: int):
                     "type": "Like",
                     "actor": user.actor_uri(),
                     "object": post.ap_id,
+                    "content": existing_reaction or "★",
+                    "_misskey_reaction": existing_reaction or "★",
                 },
             }
             inbox = post.author.shared_inbox_url
@@ -1734,6 +1779,10 @@ def api_boost_post(request: Request, post_id: int):
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
+        if not _can_view(post, user, s):
+            raise HTTPException(status_code=404, detail="Post not found")
+        if post.author_id != user.id and post.visibility in ("followers", "mention"):
+            raise HTTPException(status_code=403, detail="Cannot boost followers-only or mention-only posts from other users")
         existing = s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
         existing_notif = s.query(Notification).filter_by(
             user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id
@@ -1757,53 +1806,108 @@ def api_boost_post(request: Request, post_id: int):
             if post.author_id != user.id and not existing_notif:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id))
             s.commit()
-            broadcast_refresh_notifs(post.author_id)
             # Stream the boost pointer post as a new timeline entry
             try:
-                from app.timeline_stream import broadcast_post
-                og = _post_json(post, s, user)
-                og["id"] = boost_post.id
-                og["boosted_by"] = _user_json(boost_post.author)
-                og["mentioned_user_ids"] = []
-                threading.Thread(target=_broadcast_timeline, args=(og, user.id, post.visibility or "public", False), daemon=True).start()
-            except Exception:
-                pass
+                _a = post.author
+                _author_json = _user_json(_a)
+                _boosted_json = _user_json(user)
+                _og = {
+                    "id": post.id,
+                    "number": post.number or "",
+                    "content": post.content,
+                    "summary": post.summary or "",
+                    "visibility": post.visibility or "public",
+                    "created_at": _fmt_dt(post.created_at),
+                    "author": _author_json,
+                    "likes_count": 0,
+                    "boosts_count": s.query(Boost).filter_by(post_id=post_id).count(),
+                    "replies_count": post.replies_count or 0,
+                    "liked": False, "boosted": True, "bookmarked": False,
+                    "is_mine": True, "is_dm": False,
+                    "is_sensitive": getattr(post, "is_sensitive", False) or False,
+                    "ap_id": post.ap_id or "",
+                    "reply_context": None,
+                    "boosted_by": _boosted_json,
+                    "media_attachments": (post.media_attachments or []) if hasattr(post, 'media_attachments') else [],
+                    "poll_data": None, "my_vote": None,
+                    "reactions": {}, "my_reaction": None,
+                    "mentioned_user_ids": [], "mentioned_handles": [],
+                    "link_preview": None,
+                    "_emojis": [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(s)],
+                }
+                _boost_user_id = user.id
+                _boost_post_id = post_id
+                def _safe_broadcast_boost_pointer():
+                    with get_session() as _s:
+                        if _s.query(Boost).filter_by(user_id=_boost_user_id, post_id=_boost_post_id).first():
+                            _broadcast_timeline(_og, _boost_user_id, post.visibility or "public", False)
+                threading.Thread(target=_safe_broadcast_boost_pointer, daemon=True).start()
+            except Exception as e:
+                logger.warning("Failed to broadcast boost stream: %s", e)
             # Also send an update event for the original post (count sync)
             try:
-                _ba = post.author
                 broadcast_post({
                     "id": post.id, "type": "update",
                     "boosts_count": s.query(Boost).filter_by(post_id=post_id).count(),
+                    "boosted_by": _user_json(user),
                 }, post.author_id, post.visibility or "public", False)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to broadcast boost update: %s", e)
             if post.author_id != user.id:
                 from app.push import send_push_to_user
-                from app.timeline_stream import broadcast_notif_sound
+                from app.timeline_stream import broadcast_notif_sound, broadcast_refresh_notifs
+                broadcast_refresh_notifs(post.author_id)
                 send_push_to_user(post.author_id, "boost", user.username, post_id)
                 broadcast_notif_sound(post.author_id)
+
+        # 1. Announce 활동(Activity) 페이로드 생성 (로컬/원격 글 공통)
+        announce_id = f"{BASE_URL}/boosts/{uuid.uuid4()}"
+
         if post.author.is_remote and post.author.shared_inbox_url:
-            announce_id = f"{BASE_URL}/boosts/{uuid.uuid4()}"
-            # Store the activity ID so Unboosts can reference it
+            # 기존 Boost 레코드나 새로 생긴 Boost 레코드에 ap_id 기록
             boost_rec = existing or s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
             if boost_rec:
                 boost_rec.ap_id = announce_id
                 s.commit()
-            announce = {
-                "@context": "https://www.w3.org/ns/activitystreams",
-                "id": announce_id,
-                "type": "Announce",
-                "actor": user.actor_uri(),
-                "object": post.ap_id,
-                "to": ["https://www.w3.org/ns/activitystreams#Public"],
-                "cc": [post.author.actor_uri()],
-            }
-            inbox = post.author.shared_inbox_url
+
+        announce = {
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": announce_id,
+            "type": "Announce",
+            "actor": user.actor_uri(),
+            "object": post.ap_id,
+            "to": ["https://www.w3.org/ns/activitystreams#Public"],
+            "cc": [
+                post.author.actor_uri(),
+                f'{BASE_URL}/users/{user.username}/followers'
+            ],
+        }
+
+        # 2. 원격 작성자 본인에게 Announce 전송 (원격 글일 경우)
+        if post.author.is_remote and post.author.shared_inbox_url:
             try:
-                _post_to_inbox(inbox, announce, user)
-            except Exception:
-                pass
-    return {"ok": True}
+                threading.Thread(target=_post_to_inbox, args=(inbox, announce, user), daemon=True).start()
+            except Exception as e:
+                logger.warning("Failed to send boost to author inbox: %s", e)
+
+        # 3. 내 원격 팔로워들의 인박스로 Fan-out 전송
+        try:
+            # 프로젝트 내 기존 팔로워 조회 방식에 맞춰 정렬 (예: Follow.following_id == user.id 등)
+            followers = s.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == user.id).all()
+            sent_inboxes = set()
+            for follower in followers:
+                if follower.is_remote and (follower.shared_inbox_url or follower.inbox_url):
+                    inbox = follower.shared_inbox_url or follower.inbox_url
+                    if inbox not in sent_inboxes:
+                        sent_inboxes.add(inbox)
+                        try:
+                            threading.Thread(target=_post_to_inbox, args=(inbox, announce, user), daemon=True).start()
+                        except Exception as e:
+                            logger.warning("Failed to fan-out boost to inbox %s: %s", inbox, e)
+        except Exception as e:
+            logger.warning("Failed to query followers for boost fan-out: %s", e)
+
+        return {"ok": True}
 
 
 @router.post("/posts/{post_id}/bookmark")
@@ -1812,6 +1916,8 @@ def api_bookmark_post(request: Request, post_id: int):
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        if not _can_view(post, user, s):
             raise HTTPException(status_code=404, detail="Post not found")
         existing = s.query(Bookmark).filter_by(user_id=user.id, post_id=post_id).first()
         if not existing:
@@ -1837,17 +1943,18 @@ def api_bookmarks(request: Request, limit: int = Query(20), offset: int = Query(
     with get_session() as s:
         raw = s.query(Bookmark).filter_by(user_id=user.id).order_by(desc(Bookmark.created_at)).offset(offset).limit(limit + 1).all()
         has_more = len(raw) > limit
-        posts = [_post_json(b.post, s, user) for b in raw[:limit] if b.post and not b.post.is_deleted]
+        posts = [_post_json(b.post, s, user) for b in raw[:limit] if b.post and not b.post.is_deleted and _can_view(b.post, user, s)]
         return {"posts": posts, "has_more": has_more}
 
 
 @router.get("/favorites")
 def api_favorites(request: Request, limit: int = Query(10), offset: int = Query(0)):
+    limit = min(limit, 20)
     user = require_active_auth(request)
     with get_session() as s:
         raw = s.query(Like).filter_by(user_id=user.id).order_by(desc(Like.created_at)).offset(offset).limit(limit + 1).all()
         has_more = len(raw) > limit
-        posts = [_post_json(l.post, s, user) for l in raw[:limit] if l.post and not l.post.is_deleted]
+        posts = [_post_json(l.post, s, user) for l in raw[:limit] if l.post and not l.post.is_deleted and _can_view(l.post, user, s)]
         return {"posts": posts, "has_more": has_more}
 
 
@@ -1871,26 +1978,64 @@ def api_unboost_post(request: Request, post_id: int):
             if remaining == 0:
                 post.bumped_at = None
             s.commit()
-            broadcast_refresh_notifs(post.author_id)
-        if post.author and post.author.is_remote and post.author.shared_inbox_url:
-            undo = {
-                "@context": "https://www.w3.org/ns/activitystreams",
-                "id": f"{BASE_URL}/boosts/{uuid.uuid4()}#undo",
-                "type": "Undo",
-                "actor": user.actor_uri(),
-                "object": {
-                    "id": announce_id or f"{BASE_URL}/boosts/{uuid.uuid4()}",
-                    "type": "Announce",
-                    "actor": user.actor_uri(),
-                    "object": post.ap_id,
-                },
-            }
-            inbox = post.author.shared_inbox_url
+            if post.author_id != user.id:
+                broadcast_refresh_notifs(post.author_id)
+            # SSE: broadcast updated boosts_count (boosted_by cleared) for the original post.
+            # The boost pointer post is serialized with the original post's id (see _post_json),
+            # so clients see it as the original post with boosted_by set. Sending an update
+            # event clears boosted_by and syncs the count across all connected timelines.
             try:
-                _post_to_inbox(inbox, undo, user)
-            except Exception:
-                pass
+                broadcast_post({
+                    "id": post_id, "type": "update",
+                    "boosts_count": remaining,
+                    "boosted_by": None,
+                }, post.author_id, post.visibility or "public", False)
+            except Exception as e:
+                logger.warning("Failed to broadcast unboost update: %s", e)
+
+        # 1. Undo 활동 페이로드 구성 (로컬/원격 글 공통)
+        undo_id = f"{BASE_URL}/boosts/{uuid.uuid4()}#undo"
+        target_announce_id = announce_id or f"{BASE_URL}/boosts/{uuid.uuid4()}"
+        undo = {
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": undo_id,
+            "type": "Undo",
+            "actor": user.actor_uri(),
+            "to": ["https://www.w3.org/ns/activitystreams#Public"],
+            "cc": [
+                post.author.actor_uri(),
+                f'{BASE_URL}/users/{user.username}/followers'
+            ],
+            "object": {
+                "id": target_announce_id,
+                "type": "Announce",
+                "actor": user.actor_uri(),
+                "object": post.ap_id,
+            },
+        }
+        # 2. 원격 작성자 본인에게 Undo 전송 (원격 글일 경우)
+        if post.author.is_remote and post.author.shared_inbox_url:
+            try:
+                threading.Thread(target=_post_to_inbox, args=(post.author.shared_inbox_url, undo, user), daemon=True).start()
+            except Exception as e:
+                logger.warning("Failed to send unboost to author inbox: %s", e)
+        # 3. ★ [핵심] 내 팔로워들의 인박스로도 Undo를 뿌려주어 타임라인에서 취소 반영
+        try:
+            followers = s.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == user.id).all()
+            sent_inboxes = set()
+            for follower in followers:
+                if follower.is_remote and (follower.shared_inbox_url or follower.inbox_url):
+                    inbox = follower.shared_inbox_url or follower.inbox_url
+                    if inbox not in sent_inboxes:
+                        sent_inboxes.add(inbox)
+                        try:
+                            _post_to_inbox(inbox, undo, user)
+                        except Exception as e:
+                            logger.warning("Failed to fan-out unboost to inbox %s: %s", inbox, e)
+        except Exception as e:
+            logger.warning("Failed to query followers for unboost fan-out: %s", e)
     return {"ok": True}
+
 
 
 @router.post("/posts/{post_id}/react")
@@ -1900,38 +2045,68 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
         settings = ServerSetting.get(s)
         if not emoji or len(emoji) > 50:
             raise HTTPException(status_code=400, detail="Invalid emoji")
+        if emoji.startswith(":") and emoji.endswith(":"):
+            _kw = emoji[1:-1]
+            _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw, domain="").first()
+            if not _emoji_row:
+                _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw).first()
+            if not _emoji_row or (_emoji_row.domain and _emoji_row.domain.strip()):
+                raise HTTPException(status_code=400, detail="Remote emojis cannot be used as reactions")
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        if not _can_view(post, user, s):
             raise HTTPException(status_code=404, detail="Post not found")
         reactions_disabled = not settings.enable_reactions or not getattr(post.author, 'enable_reactions', True)
         final_emoji = emoji if not reactions_disabled else None
         existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
+        old_reaction = existing.reaction if existing else None
+        is_new = existing is None
         existing_notif = s.query(Notification).filter_by(
             user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id
         ).first() if post.author_id != user.id else None
-        is_new = False
         if existing:
             existing.reaction = final_emoji
         else:
             s.add(Like(user_id=user.id, post_id=post_id, reaction=final_emoji))
             if post.author_id != user.id and not existing_notif:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id))
-            is_new = True
+        s.flush()
+        keep_id = s.query(Like.id).filter_by(user_id=user.id, post_id=post_id).order_by(Like.id.desc()).first()
+        if keep_id:
+            s.query(Like).filter(Like.user_id == user.id, Like.post_id == post_id, Like.id != keep_id[0]).delete(synchronize_session=False)
         s.commit()
         if post.author_id != user.id:
             from app.timeline_stream import broadcast_refresh_notifs
             broadcast_refresh_notifs(post.author_id)
         if post.author.is_remote and post.author.shared_inbox_url:
             from app.activitypub import _post_to_inbox
+            _tag = []
+            if emoji.startswith(":") and emoji.endswith(":"):
+                _kw = emoji[1:-1]
+                _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw, domain="").first()
+                if not _emoji_row:
+                    _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw).first()
+                if _emoji_row and _emoji_row.file_name:
+                    _emoji_img = _emoji_url(_emoji_row.file_name, _emoji_row.domain or "", _emoji_row.category or "")
+                    if not _emoji_img.startswith("http"):
+                        _emoji_img = f"{BASE_URL}{_emoji_img}"
+                else:
+                    _emoji_img = ""
+                if _emoji_img:
+                    _tag = [{"type": "Emoji", "id": f"{BASE_URL}/emojis/{_kw}", "name": emoji, "icon": {"type": "Image", "mediaType": "image/png", "url": _emoji_img}}]
             like_activity = {
                 "@context": "https://www.w3.org/ns/activitystreams",
                 "id": f"{BASE_URL}/likes/{uuid.uuid4()}",
                 "type": "Like",
                 "actor": user.actor_uri(),
                 "object": post.ap_id,
+                "content": emoji,
                 "_misskey_reaction": emoji,
             }
-            if is_new or (existing and existing.reaction != emoji):
+            if _tag:
+                like_activity["tag"] = _tag
+            if is_new or old_reaction != emoji:
                 inbox = post.author.shared_inbox_url
                 try:
                     _post_to_inbox(inbox, like_activity, user)
@@ -1948,6 +2123,7 @@ def api_unreact_post(request: Request, post_id: int):
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
         existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
+        existing_reaction = existing.reaction if existing else None
         if existing:
             s.delete(existing)
             s.query(Notification).filter_by(
@@ -1967,6 +2143,8 @@ def api_unreact_post(request: Request, post_id: int):
                         "type": "Like",
                         "actor": user.actor_uri(),
                         "object": post.ap_id,
+                        "content": existing_reaction or "★",
+                        "_misskey_reaction": existing_reaction or "★",
                     },
                 }
                 try:
@@ -1984,6 +2162,8 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post or not post.poll_data:
             raise HTTPException(status_code=404, detail="Post or poll not found")
+        if not _can_view(post, user, s):
+            raise HTTPException(status_code=404, detail="Post not found")
         options = post.poll_data.get("options", [])
         if option < 0 or option >= len(options):
             raise HTTPException(status_code=400, detail="Invalid option")
@@ -2001,7 +2181,14 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
                 return {"ok": True}
             existing.option_index = option
         else:
-            s.add(Vote(user_id=user.id, post_id=post_id, option_index=option))
+            s.add(
+                Vote(
+                    user_id=user.id,
+                    post_id=post_id,
+                    option_index=option,
+                    expires_at=post.poll_data.get("expires_at")
+                )
+            )
         s.flush()
         votes = s.query(Vote.option_index, func.count(Vote.id).label("cnt")).filter(Vote.post_id == post_id).group_by(Vote.option_index).all()
         counts = {v.option_index: v.cnt for v in votes}
@@ -2048,6 +2235,8 @@ def api_unvote_post(request: Request, post_id: int):
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post or not post.poll_data:
             raise HTTPException(status_code=404, detail="Post or poll not found")
+        if not _can_view(post, user, s):
+            raise HTTPException(status_code=404, detail="Post not found")
         existing = s.query(Vote).filter_by(user_id=user.id, post_id=post_id).first()
         if existing:
             options = post.poll_data.get("options", [])
@@ -2061,6 +2250,69 @@ def api_unvote_post(request: Request, post_id: int):
             s.commit()
             s.expire_all()
     return {"ok": True}
+
+
+@router.post("/posts/{post_id}/refresh-poll")
+def api_refresh_poll(request: Request, post_id: int):
+    user = require_active_auth(request)
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
+        if not post or not post.poll_data:
+            raise HTTPException(status_code=404, detail="Post or poll not found")
+        if not _can_view(post, user, s):
+            raise HTTPException(status_code=404, detail="Post not found")
+        if not post.ap_id:
+            raise HTTPException(status_code=400, detail="Local poll has nothing to refresh")
+
+    # Fetch remote object with HTTP Signature
+    remote_data = _ap_fetch(post.ap_id, user)
+    if not remote_data:
+        raise HTTPException(status_code=502, detail="Failed to fetch remote poll")
+    obj = remote_data.get("object", remote_data) if isinstance(remote_data, dict) else {}
+    if not isinstance(obj, dict):
+        raise HTTPException(status_code=502, detail="Invalid remote response")
+
+    # Extract poll data
+    one_of = obj.get("oneOf") or obj.get("anyOf") or []
+    if not isinstance(one_of, list) or not one_of:
+        raise HTTPException(status_code=502, detail="Remote object has no poll data")
+
+    new_options = []
+    for opt in one_of:
+        if isinstance(opt, dict) and opt.get("name"):
+            replies = opt.get("replies", {})
+            votes_count = 0
+            if isinstance(replies, dict):
+                votes_count = replies.get("totalItems", 0)
+            new_options.append({"text": opt["name"], "votes_count": votes_count})
+
+    if not new_options:
+        raise HTTPException(status_code=502, detail="No valid poll options found")
+
+    # Merge: match by text, take MAX of local and remote counts (never decrease)
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id).first()
+        if not post or not post.poll_data:
+            raise HTTPException(status_code=404, detail="Post not found")
+        old_options = post.poll_data.get("options", [])
+        text_to_old = {o.get("text", ""): o for o in old_options}
+        for new_opt in new_options:
+            old = text_to_old.get(new_opt["text"])
+            if old:
+                new_opt["votes_count"] = max(new_opt.get("votes_count", 0), old.get("votes_count", 0))
+
+        new_expires = obj.get("endTime") or post.poll_data.get("expires_at", "")
+        post.poll_data = {
+            "options": new_options,
+            "expires_at": new_expires,
+        }
+        s.commit()
+        s.expire_all()
+
+        post = s.query(Post).filter_by(id=post_id).first()
+        updated = _post_json(post, s, user)
+
+    return {"ok": True, "post": updated}
 
 
 @router.post("/pin/post/{post_id}")
@@ -2273,6 +2525,19 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         ).offset(offset).limit(limit + 1).all()
         has_more = len(posts) > limit
         posts = [p for p in posts[:limit] if _can_view(p, user, s)]
+        # Deduplicate: if a post appears both as original and as boost pointer, keep only the boost
+        seen_ids = set()
+        deduped = []
+        for p in posts:
+            if p.boost_of_id:
+                if p.boost_of_id in seen_ids:
+                    continue
+                seen_ids.add(p.boost_of_id)
+            elif p.id in seen_ids and (not user or p.author_id != user.id):
+                continue
+            seen_ids.add(p.id)
+            deduped.append(p)
+        posts = deduped
         total_posts = s.query(Post).filter(
             or_(
                 Post.author_id == profile.id,
@@ -2312,7 +2577,11 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         followers = s.query(Follow).filter_by(following_id=profile.id, accepted=True).order_by(desc(Follow.created_at)).limit(20).all() if show_follows else []
         following = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).order_by(desc(Follow.created_at)).limit(20).all() if show_follows else []
         # Batch-load _post_json data for all profile posts
-        _all_post_ids = list({p.id for p in posts} | set(profile.pinned_posts or []))
+        _all_post_ids = {p.id for p in posts}
+        for _p in posts:
+            if _p.boost_of_id:
+                _all_post_ids.add(_p.boost_of_id)
+        _all_post_ids = list(_all_post_ids | set(profile.pinned_posts or []))
         if user and _all_post_ids:
             _liked_ids = {l.post_id for l in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(_all_post_ids)).all()}
             _boosted_ids = {b.post_id for b in s.query(Boost).filter(Boost.user_id == user.id, Boost.post_id.in_(_all_post_ids)).all()}
@@ -2330,11 +2599,12 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                     _reactions_map[pid] = {}
                 _reactions_map[pid][react] = cnt
             # Batch-load booster info to avoid N+1 queries in _post_json
-            import datetime as _dt
+            # On profile page, only show boosts by the profile user
             _booster_map = {}
-            _three_hours_ago = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(seconds=10800)
+            _three_hours_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=10800)
             _boost_rows = s.query(Boost).filter(
                 Boost.post_id.in_(_all_post_ids),
+                Boost.user_id == profile.id,
                 Boost.created_at > _three_hours_ago,
             ).order_by(desc(Boost.created_at)).all()
             _booster_user_ids = {b.user_id for b in _boost_rows}
@@ -2390,7 +2660,7 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             "am_i_blocked": am_i_blocked,
             "has_more": has_more,
             "offset": offset,
-            "pinned_posts_data": [_post_json(p, s, user, **_pj_kwargs) for p in (s.query(Post).filter(Post.id.in_(profile.pinned_posts or []), Post.is_deleted == False).all() if profile.pinned_posts else [])],
+            "pinned_posts_data": [_post_json(p, s, user, **_pj_kwargs) for p in (s.query(Post).filter(Post.id.in_(profile.pinned_posts or []), Post.is_deleted == False).all() if profile.pinned_posts else []) if _can_view(p, user, s)],
             "pinned_series_data": [_novel_json(n, s) for n in (s.query(Novel).filter(Novel.id.in_(profile.pinned_series or [])).all() if profile.pinned_series else [])],
         }
 
@@ -2403,9 +2673,9 @@ def api_user_media(request: Request, username: str, limit: int = Query(12), offs
         if not profile:
             raise HTTPException(status_code=404, detail="User not found")
         from sqlalchemy import text
-        # Use raw SQL to filter non-empty media_attachments at DB level
+        # Use raw SQL to filter non-empty media_attachments at DB level (cast to text for cross-DB compatibility)
         rows = s.execute(
-            text("SELECT id FROM posts WHERE author_id = :aid AND is_deleted = 0 AND media_attachments IS NOT NULL AND media_attachments != 'null' AND media_attachments != '[]' ORDER BY created_at DESC LIMIT :lim OFFSET :off"),
+            text("SELECT id FROM posts WHERE author_id = :aid AND is_deleted = FALSE AND CAST(media_attachments AS TEXT) NOT IN ('null', '[]') ORDER BY created_at DESC LIMIT :lim OFFSET :off"),
             {"aid": profile.id, "lim": limit + 1, "off": offset}
         ).fetchall()
         post_ids = [r[0] for r in rows]
@@ -2418,7 +2688,7 @@ def api_user_media(request: Request, username: str, limit: int = Query(12), offs
         # Count total for has_more if needed
         if not has_more:
             total = s.execute(
-                text("SELECT COUNT(*) FROM posts WHERE author_id = :aid AND is_deleted = 0 AND media_attachments IS NOT NULL AND media_attachments != 'null' AND media_attachments != '[]'"),
+                text("SELECT COUNT(*) FROM posts WHERE author_id = :aid AND is_deleted = FALSE AND CAST(media_attachments AS TEXT) NOT IN ('null', '[]')"),
                 {"aid": profile.id}
             ).scalar()
             has_more = total > offset + limit
@@ -2453,7 +2723,7 @@ def api_follow(request: Request, username: str):
                 }
                 s.add(Follow(follower_id=user.id, following_id=target.id, accepted=False, activity_id=follow_activity["id"]))
                 s.commit()
-                inbox = target.inbox_url or target.inbox_uri()
+                inbox = target.inbox_url
                 if inbox:
                     _post_to_inbox(inbox, follow_activity, user)
         return {"ok": True}
@@ -2579,7 +2849,7 @@ def api_unfollow(request: Request, username: str):
                 Notification.notification_type.in_(["follow", "follow_request"])
             ).delete(synchronize_session=False)
             s.commit()
-            if target.is_remote and target.inbox_uri():
+            if target.is_remote and target.inbox_url:
                 follow_activity_id = f"{user.actor_uri()}#follows/{target.id}"
                 undo = {
                     "@context": "https://www.w3.org/ns/activitystreams",
@@ -2594,7 +2864,7 @@ def api_unfollow(request: Request, username: str):
                     },
                 }
                 try:
-                    _post_to_inbox(target.inbox_uri(), undo, user)
+                    _post_to_inbox(target.inbox_url, undo, user)
                 except Exception as e:
                     logger.warning("Failed to send Undo Follow: %s", e)
     return {"ok": True}
@@ -2649,7 +2919,6 @@ def api_following(request: Request, username: str):
 def api_direct_conversation(request: Request, other_id: int):
     user = require_auth(request)
     is_self = (other_id == user.id)
-    from sqlalchemy import cast, String as SAString
     with get_session() as s:
         if is_self:
             other = user
@@ -2657,8 +2926,8 @@ def api_direct_conversation(request: Request, other_id: int):
             other = s.query(User).get(other_id)
             if not other:
                 raise HTTPException(status_code=404, detail="User not found")
-        _contains_self = cast(Post.mentioned_user_ids, SAString).contains(str(user.id))
-        _contains_other = cast(Post.mentioned_user_ids, SAString).contains(str(other_id))
+        _contains_self = _json_array_has_user(Post.mentioned_user_ids, user.id)
+        _contains_other = _json_array_has_user(Post.mentioned_user_ids, other_id)
         if is_self:
             conv_posts = s.query(Post).options(selectinload(Post.author)).filter(
                 Post.visibility == "mention",
@@ -2687,14 +2956,13 @@ def api_direct_threads(request: Request):
     user = require_auth(request)
     three_months_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=90)
     with get_session() as s:
-        from sqlalchemy import cast, String as SAString
         posts = s.query(Post).filter(
             Post.visibility == "mention",
             Post.is_deleted == False,
             Post.created_at >= three_months_ago,
             or_(
                 Post.author_id == user.id,
-                cast(Post.mentioned_user_ids, SAString).contains(str(user.id)),
+                _json_array_has_user(Post.mentioned_user_ids, user.id),
             ),
         ).order_by(desc(Post.created_at)).limit(200).all()
         author_map = {}
@@ -2738,32 +3006,45 @@ def api_direct_threads(request: Request):
 
 
 def _generate_poll_end_notifications(user_id: int, session):
-    import datetime as _dt
-    now = _dt.datetime.now(_dt.timezone.utc)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    # 빠른 확인: 사용자의 poll이 없으면 skip
+    has_any_poll = session.query(Post.id).filter(
+        Post.poll_data.isnot(None), Post.is_deleted == False,
+        Post.author_id == user_id,
+    ).first() is not None
+    has_voted_poll = session.query(Post.id).join(Vote, Vote.post_id == Post.id).filter(
+        Vote.user_id == user_id, Post.poll_data.isnot(None), Post.is_deleted == False
+    ).first() is not None
+    if not has_any_poll and not has_voted_poll:
+        return
     candidates = []
-    voted_posts = (
-        session.query(Post)
-        .join(Vote, Vote.post_id == Post.id)
-        .filter(Vote.user_id == user_id, Post.poll_data.isnot(None), Post.is_deleted == False)
-        .all()
-    )
-    candidates.extend(voted_posts)
-    authored_posts = (
-        session.query(Post)
-        .filter(Post.author_id == user_id, Post.poll_data.isnot(None), Post.is_deleted == False)
-        .all()
-    )
-    for p in authored_posts:
-        if p not in candidates:
-            candidates.append(p)
+    if has_voted_poll:
+        voted_posts = (
+            session.query(Post)
+            .join(Vote, Vote.post_id == Post.id)
+            .filter(Vote.user_id == user_id, Post.poll_data.isnot(None), Post.is_deleted == False)
+            .limit(50)
+            .all()
+        )
+        candidates.extend(voted_posts)
+    if has_any_poll:
+        authored_posts = (
+            session.query(Post)
+            .filter(Post.author_id == user_id, Post.poll_data.isnot(None), Post.is_deleted == False)
+            .limit(50)
+            .all()
+        )
+        for p in authored_posts:
+            if p not in candidates and len(candidates) < 100:
+                candidates.append(p)
     for post in candidates:
         expires_at = post.poll_data.get("expires_at") if post.poll_data else None
         if not expires_at:
             continue
         try:
-            exp = _dt.datetime.fromisoformat(expires_at)
+            exp = datetime.datetime.fromisoformat(expires_at)
             if exp.tzinfo is None:
-                exp = exp.replace(tzinfo=_dt.timezone.utc)
+                exp = exp.replace(tzinfo=datetime.timezone.utc)
             if exp > now:
                 continue
         except (ValueError, TypeError):
@@ -2787,9 +3068,13 @@ def _generate_poll_end_notifications(user_id: int, session):
 
 @router.get("/notifications")
 def api_notifications(request: Request, filter_type: str = Query(""), limit: int = Query(20), offset: int = Query(0), mark_read: bool = Query(True)):
+    limit = min(limit, 20)
     user = require_auth(request)
     with get_session() as s:
-        _generate_poll_end_notifications(user.id, s)
+        # 첫 페이지에서만 투표 마감 알림 생성
+        if offset == 0:
+            _generate_poll_end_notifications(user.id, s)
+
         q = s.query(Notification).options(
             selectinload(Notification.from_user),
             selectinload(Notification.post).selectinload(Post.author),
@@ -2801,34 +3086,51 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
         elif filter_type:
             q = q.filter_by(notification_type=filter_type)
         q = q.order_by(desc(Notification.created_at))
-        total = q.count()
         raw = q.offset(offset).limit(limit + 1).all()
         has_more = len(raw) > limit
         notifs = raw[:limit]
 
-        # Batch load user interaction data for notification posts
-        notif_post_ids = [n.post_id for n in notifs if n.post_id]
+        # 이미 로드된 Notification.post 객체를 재사용 (재조회 제거)
+        posts_cache = [n.post for n in notifs if n.post and not n.post.is_deleted]
+        notif_post_ids = [p.id for p in posts_cache]
+
+        _liked_ids = _boosted_ids = _bookmarked_ids = set()
+        _vote_map = {}
+        _my_reaction_map = {}
+        _reactions_map = {}
+        _mentioned_users_map = {}
+        _booster_map = {}
+
         if user and notif_post_ids:
-            _liked_ids = {l.post_id for l in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids)).all()}
-            _boosted_ids = {b.post_id for b in s.query(Boost).filter(Boost.user_id == user.id, Boost.post_id.in_(notif_post_ids)).all()}
-            _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(notif_post_ids)).all()}
-            _vote_map = {}
-            for v in s.query(Vote).filter(Vote.user_id == user.id, Vote.post_id.in_(notif_post_ids)).all():
+            _liked_ids = {l.post_id for l in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids)).all()}
+            _boosted_ids = {b.post_id for b in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(notif_post_ids)).all()}
+            _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(notif_post_ids)).all()}
+
+            for v in s.query(Vote.post_id, Vote.option_index).filter(Vote.user_id == user.id, Vote.post_id.in_(notif_post_ids)).all():
                 _vote_map[v.post_id] = v.option_index
-            _my_reaction_map = {}
-            for l in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids), Like.reaction.isnot(None)).all():
+
+            for l in s.query(Like.post_id, Like.reaction).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids), Like.reaction.isnot(None)).all():
                 _my_reaction_map[l.post_id] = l.reaction
+
+            for bid, buid in s.query(Boost.post_id, Boost.user_id).filter(Boost.post_id.in_(notif_post_ids)).order_by(desc(Boost.created_at)).all():
+                if bid not in _booster_map:
+                    _booster_map[bid] = buid
+            if _booster_map:
+                _booster_users = {u.id: u for u in s.query(User).filter(User.id.in_(set(_booster_map.values()))).all()}
+                _booster_map = {pid: _booster_users.get(uid) for pid, uid in _booster_map.items()}
+
             from sqlalchemy import func as _func
-            _reactions_map = {}
             for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(notif_post_ids)).group_by(Like.post_id, Like.reaction).all():
                 if pid not in _reactions_map:
                     _reactions_map[pid] = {}
                 _reactions_map[pid][react] = cnt
+
+            # posts_cache를 활용해 DB 재조회 제거
             all_mentioned_ids = set()
-            for p in s.query(Post).filter(Post.id.in_(notif_post_ids)).all():
+            for p in posts_cache:
                 if p.mentioned_user_ids:
                     all_mentioned_ids.update(p.mentioned_user_ids)
-            _mentioned_users_map = {}
+
             if all_mentioned_ids:
                 from urllib.parse import urlparse as _urlparse
                 _mentioned_users = {}
@@ -2839,14 +3141,11 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
                         _mentioned_users[_um.id] = f"{_name}@{_domain}"
                     else:
                         _mentioned_users[_um.id] = _um.username
-                for p in s.query(Post).filter(Post.id.in_(notif_post_ids)).all():
+                for p in posts_cache:
                     if p.mentioned_user_ids:
                         _mentioned_users_map[p.id] = [_mentioned_users.get(mid, "?") for mid in p.mentioned_user_ids if mid in _mentioned_users]
                     else:
                         _mentioned_users_map[p.id] = []
-        else:
-            _liked_ids = _boosted_ids = _bookmarked_ids = set()
-            _vote_map = _my_reaction_map = _reactions_map = _mentioned_users_map = {}
 
         result = []
         for n in notifs:
@@ -2866,18 +3165,22 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
                     _liked_ids=_liked_ids, _boosted_ids=_boosted_ids,
                     _bookmarked_ids=_bookmarked_ids, _vote_map=_vote_map,
                     _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map,
-                    _mentioned_users_map=_mentioned_users_map,
+                    _booster_map=_booster_map, _mentioned_users_map=_mentioned_users_map,
+                    _skip_emojis=True,
                 ) if post and not post.is_deleted and _can_view(post, user, s) else None,
                 "metadata": meta,
             }
             result.append(item)
 
-        # mark as read (only first page, when mark_read=true)
-        if offset == 0 and mark_read:
-            s.query(Notification).filter_by(user_id=user.id, is_read=False).update({"is_read": True})
-            s.commit()
+        # 읽음 처리: 현재 페이지에 노출된 알림만 업데이트
+        if offset == 0 and mark_read and notifs:
+            unread_ids = [n.id for n in notifs if not n.is_read]
+            if unread_ids:
+                s.query(Notification).filter(Notification.id.in_(unread_ids)).update({"is_read": True}, synchronize_session=False)
+                s.commit()
+                _unread_cache.pop(user.id, None)
 
-    return {"notifications": result, "has_more": has_more, "total": total}
+    return {"notifications": result, "has_more": has_more, "total": 0}
 
 
 @router.get("/notifications/stream")
@@ -2961,6 +3264,22 @@ def api_my_novels(request: Request, limit: int = Query(12), offset: int = Query(
         return {"novels": novels, "total": total, "page": offset // limit + 1, "pages": max(1, (total + limit - 1) // limit)}
 
 
+@router.get("/series/followed")
+def api_followed_novels(request: Request, limit: int = Query(12), offset: int = Query(0)):
+    user = require_auth(request)
+    with get_session() as s:
+        follow_ids = [f.novel_id for f in s.query(SeriesFollow).filter_by(user_id=user.id).all()]
+        if not follow_ids:
+            return {"novels": [], "total": 0, "page": 1, "pages": 1}
+        q = _apply_latest_activity_order(
+            s.query(Novel).filter(Novel.id.in_(follow_ids), Novel.is_published == True), s
+        )
+        total = q.count()
+        raw = q.offset(offset).limit(limit).all()
+        novels = [_novel_json(n, s) for n in raw]
+        return {"novels": novels, "total": total, "page": offset // limit + 1, "pages": max(1, (total + limit - 1) // limit)}
+
+
 def _sync_tags(n, s):
     raw = n.tags or ""
     desired = set(t for t in raw.replace(",", " ").split() if t)
@@ -3010,7 +3329,13 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
                      tags: str = Form(""), visibility: str = Form("public"), status: str = Form("ongoing"),
                      cover_image: UploadFile = File(None), is_sensitive: bool = Form(False)):
     user = require_active_auth(request)
-    if getattr(user, 'is_deceased', False):
+    is_user_deceased = False
+    if isinstance(user, dict):
+        is_user_deceased = user.get('is_deceased', False)
+    else:
+        is_user_deceased = getattr(user, 'is_deceased', False)
+
+    if is_user_deceased:
         raise HTTPException(status_code=403, detail="고인 계정은 시리즈를 생성할 수 없습니다.")
     if not title.strip():
         raise HTTPException(status_code=400, detail="Title cannot be empty")
@@ -3023,7 +3348,7 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
         from uuid import uuid4
         from PIL import Image as PILImage
         import io
-        ext = "webp"
+        ext, is_image, is_video = _validate_upload(cover_image, allow_video=False, max_size=MAX_AVATAR_SIZE, label="커버 이미지")
         ct = cover_image.content_type or ""
         if "gif" in ct:
             ext = "gif"
@@ -3097,6 +3422,8 @@ def api_follow_novel(request: Request, novel_id: int):
         novel = s.query(Novel).filter_by(id=novel_id).first()
         if not novel:
             raise HTTPException(status_code=404, detail="Novel not found")
+        if novel.visibility == "private" and novel.author_id != user.id:
+            raise HTTPException(status_code=404, detail="Novel not found")
         existing = s.query(SeriesFollow).filter_by(user_id=user.id, novel_id=novel.id).first()
         if not existing:
             sf = SeriesFollow(user_id=user.id, novel_id=novel.id)
@@ -3131,7 +3458,7 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
         from uuid import uuid4
         from PIL import Image as PILImage
         import io
-        ext = "webp"
+        ext, is_image, is_video = _validate_upload(cover_image, allow_video=False, max_size=MAX_AVATAR_SIZE, label="커버 이미지")
         ct = cover_image.content_type or ""
         if "gif" in ct:
             ext = "gif"
@@ -3239,7 +3566,8 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
                     if post.mentioned_user_ids:
                         mu_users = s.query(User).filter(User.id.in_(post.mentioned_user_ids), User.is_remote == True).all()
                         for mu in mu_users:
-                            _post_to_inbox(mu.inbox_uri(), create_activity, user)
+                            if mu.inbox_url:
+                                _post_to_inbox(mu.inbox_url, create_activity, user)
                 else:
                     broadcast_to_followers(user, create_activity)
             except Exception as e:
@@ -3307,7 +3635,7 @@ def api_get_episode(request: Request, novel_id: int, episode_id: int):
             next_ep = next_ep.filter(Episode.is_published == True)
         next_ep = next_ep.order_by(Episode.episode_number).first()
         if user and not is_mine:
-            from datetime import datetime, timedelta
+            from datetime import datetime
             today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
             existing_view = s.query(EpisodeView).filter(
                 EpisodeView.user_id == user.id,
@@ -3403,6 +3731,9 @@ def api_delete_episode(request: Request, novel_id: int, episode_id: int):
         # Log admin action
         if episode.novel.author_id != user.id:
             log_admin_action(user.id, user.username, "delete_episode", target_type="episode", target_id=episode_id, target_username=episode.novel.author.username if episode.novel else "", details=episode.title, ip_address=request.client.host if request.client else "")
+        for p in s.query(Post).filter(Post.episode_id == episode_id).all():
+            p.episode_id = None
+        s.flush()
         s.delete(episode)
         s.commit()
     return {"ok": True}
@@ -3415,6 +3746,8 @@ def api_delete_novel(request: Request, novel_id: int):
         novel = s.query(Novel).filter_by(id=novel_id, author_id=user.id).first()
         if not novel:
             raise HTTPException(status_code=404, detail="Novel not found")
+        s.query(Post).filter(Post.novel_id == novel.id).update({Post.novel_id: None})
+        s.query(Episode).filter(Episode.novel_id == novel.id).update({Episode.novel_id: None})
         s.delete(novel)
         s.commit()
     return {"ok": True}
@@ -3674,17 +4007,7 @@ def api_upload_media(request: Request, file: UploadFile = File(...)):
     storage = get_storage()
     from PIL import Image as PILImage
     import io, os
-    ext = os.path.splitext(file.filename or "file")[1].lower() if file.filename else ""
-    is_video = ext in (".mp4", ".webm", ".ogg", ".mov")
-    is_image = ext in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".ico")
-    if not is_image and not is_video:
-        raise HTTPException(status_code=400, detail="Unsupported file type")
-    if is_video:
-        file.file.seek(0, 2)
-        size = file.file.tell()
-        file.file.seek(0)
-        if size > MAX_VIDEO_SIZE:
-            raise HTTPException(status_code=400, detail="Video exceeds maximum size (25MB)")
+    ext, is_image, is_video = _validate_upload(file, allow_video=True, max_size=MAX_IMAGE_SIZE, label="미디어")
     from uuid import uuid4
     name = f"{uuid4().hex}.webp" if is_image else f"{uuid4().hex}{ext}"
     key = f"media/{name}"
@@ -4002,6 +4325,7 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
 
     resp = JSONResponse({"ok": True})
     resp.delete_cookie("session")
+    resp.delete_cookie("csrf_token")
     return resp
 
 
@@ -4011,8 +4335,9 @@ def _domain_from_actor(u) -> str:
     if u.is_remote and u.remote_url:
         from urllib.parse import urlparse
         return urlparse(u.remote_url).hostname or ""
-    from app.config import DOMAIN
-    return DOMAIN
+    # 🌟 app.config 임포트를 제거하고, 이미 전역에 정의된 BASE_URL을 안전하게 파싱!
+    from urllib.parse import urlparse
+    return urlparse(BASE_URL).hostname or ""
 
 
 @router.get("/settings/export/{export_type}")
@@ -4243,6 +4568,7 @@ def _save_profile_image(user_id: int, file: UploadFile, prefix: str, max_size: t
     from PIL import Image as PILImage
     import io
     from uuid import uuid4
+    _validate_upload(file, allow_video=False, max_size=MAX_AVATAR_SIZE, label="프로필 이미지")
     key = f"{prefix}/local/u{user_id}_{uuid4().hex[:8]}.webp"
     img = PILImage.open(file.file)
     img.thumbnail(max_size, PILImage.Resampling.LANCZOS)
@@ -4332,7 +4658,6 @@ def api_by_series_number(request: Request, username: str, number: str):
 
 @router.post("/fetch-series")
 def api_fetch_series(request: Request, url: str = Form(...)):
-    user = get_current_user(request)
     with get_session() as s:
         import re
         m = re.match(r"https?://[^/]+/series/(\d+)", url)
@@ -4402,13 +4727,8 @@ def api_by_number(request: Request, username: str, number: str):
 def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)):
     user = get_current_user(request)
     with get_session() as s:
+        # 1. 포스트 메인 쿼리
         local_ids = s.query(User.id).filter_by(is_remote=False).subquery()
-        total = s.query(Post).filter(
-            Post.author_id.in_(local_ids),
-            Post.visibility == "public",
-            Post.is_deleted == False,
-            Post.in_reply_to_id == None,
-        ).count()
         posts = s.query(Post).options(
             selectinload(Post.author)
         ).filter(
@@ -4416,19 +4736,70 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
             Post.visibility == "public",
             Post.is_deleted == False,
             Post.in_reply_to_id == None,
-        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit).all()
+        ).order_by(
+            desc(Post.created_at)
+        ).offset(offset).limit(limit + 1).all()
+        has_more = len(posts) > limit
+        posts = posts[:limit]
 
-        novels = _apply_latest_activity_order(s.query(Novel).options(
-            selectinload(Novel.author),
-            selectinload(Novel.tag_list),
-        ).filter(
-            Novel.visibility == "public",
-            Novel.is_published == True,
-        ), s).limit(20).all()
+        # 2. 사용자 활동(좋아요, 부스트, 북마크, 리액션, 부스터) 배치 로딩
+        post_ids = [p.id for p in posts]
+        _liked_ids = _boosted_ids = _bookmarked_ids = set()
+        _my_reaction_map = {}
+        _reactions_map = {}
+        _booster_map = {}
+        _mentioned_users_map = {}
+        if user and post_ids:
+            _liked_ids = {l.post_id for l in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(post_ids)).all()}
+            _boosted_ids = {b.post_id for b in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(post_ids)).all()}
+            _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(post_ids)).all()}
+            for l in s.query(Like.post_id, Like.reaction).filter(Like.user_id == user.id, Like.post_id.in_(post_ids), Like.reaction.isnot(None)).all():
+                _my_reaction_map[l.post_id] = l.reaction
+            for bid, buid in s.query(Boost.post_id, Boost.user_id).filter(Boost.post_id.in_(post_ids)).order_by(desc(Boost.created_at)).all():
+                if bid not in _booster_map:
+                    _booster_map[bid] = buid
+            if _booster_map:
+                _booster_users = {u.id: u for u in s.query(User).filter(User.id.in_(set(_booster_map.values()))).all()}
+                _booster_map = {pid: _booster_users.get(uid) for pid, uid in _booster_map.items()}
+            from sqlalchemy import func as _func
+            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).all():
+                if pid not in _reactions_map:
+                    _reactions_map[pid] = {}
+                _reactions_map[pid][react] = cnt
+            all_mentioned_ids = set()
+            for p in posts:
+                if p.mentioned_user_ids:
+                    all_mentioned_ids.update(p.mentioned_user_ids)
+            if all_mentioned_ids:
+                from urllib.parse import urlparse as _urlparse
+                _mentioned_users = {}
+                for _um in s.query(User).filter(User.id.in_(all_mentioned_ids)).all():
+                    if _um.is_remote and _um.remote_url:
+                        _name = _um.username.split("@")[0]
+                        _domain = _urlparse(_um.remote_url).hostname or ""
+                        _mentioned_users[_um.id] = f"{_name}@{_domain}"
+                    else:
+                        _mentioned_users[_um.id] = _um.username
+                for p in posts:
+                    if p.mentioned_user_ids:
+                        _mentioned_users_map[p.id] = [_mentioned_users.get(mid, "?") for mid in p.mentioned_user_ids if mid in _mentioned_users]
+                    else:
+                        _mentioned_users_map[p.id] = []
+
+        # 3. 첫 페이지에서만 소설 목록 조회
+        novels = []
+        if offset == 0:
+            novels = _apply_latest_activity_order(s.query(Novel).options(
+                selectinload(Novel.author),
+                selectinload(Novel.tag_list),
+            ).filter(
+                Novel.visibility == "public",
+                Novel.is_published == True,
+            ), s).limit(20).all()
 
         return {
-            "posts": [_post_json(p, s, user) for p in posts],
-            "has_more": offset + limit < total,
+            "posts": [_post_json(p, s, user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids, _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map, _booster_map=_booster_map, _mentioned_users_map=_mentioned_users_map, _skip_emojis=True) for p in posts],
+            "has_more": has_more,
             "novels": [_novel_json(n, s) for n in novels],
         }
 
@@ -4463,8 +4834,9 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
         if is_hashtag_search:
             tag = s.query(Tag).filter_by(name=query.lower()).first()
             if tag:
+                # 1. 포스트 쿼리
                 q_posts = s.query(Post).options(selectinload(Post.author)).filter(
-                    Post.tag_list.any(id=tag.id),
+                    Post.tag_list.any(name=tag.name),
                     Post.is_deleted == False,
                 )
                 if user:
@@ -4479,8 +4851,18 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                         q_posts = q_posts.filter(Post.author_id == author_user.id)
                 posts = q_posts.order_by(desc(Post.created_at)).limit(20).all()
             else:
+                # 태그가 디비에 없으면 둘 다 깔끔하게 빈 리스트 처리
                 posts = []
-            novels = []
+            if tag:
+                # 2. 소설(Novel) 쿼리 💡 (오류 방지를 위해 tag가 확실히 있을 때만 돌도록 안으로 이동)
+                novels = s.query(Novel).options(selectinload(Novel.author)).filter(
+                    Novel.tag_list.any(name=tag.name),
+                    Novel.is_published == True,
+                    Novel.visibility == "public",
+                ).order_by(desc(Novel.updated_at)).limit(20).all()
+            else:
+                # 태그가 디비에 없으면 둘 다 깔끔하게 빈 리스트 처리
+                novels = []
         else:
             posts = s.query(Post).options(selectinload(Post.author)).filter(
                 Post.content.ilike(pattern),
@@ -4558,6 +4940,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
         return result
 
 
+import traceback
 
 def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
     """Fetch a remote AP object, resolve its author, save to DB, return post.
@@ -4567,7 +4950,7 @@ def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
     if _visited is None:
         _visited = set()
 
-    # First, recursively fetch parent posts if this is a reply
+    # 1. 스레드 상위 글 역추적 로직 안전하게 실행
     in_reply_to = obj.get("inReplyTo", "")
     if isinstance(in_reply_to, dict):
         in_reply_to = in_reply_to.get("id", "")
@@ -4576,125 +4959,28 @@ def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
         parent_data = _ap_fetch(in_reply_to, user)
         if parent_data:
             parent_obj = parent_data.get("object", parent_data)
-            _fetch_and_save_ap_object(parent_obj, user, _visited, _depth + 1)
-
-    from app.activitypub import _sanitize_html, _normalize_mentions
-    content = _normalize_mentions(_sanitize_html(obj.get("content", "")))
-    if not content:
-        return None
-
-    attributed_to = obj.get("attributedTo", "")
-    if isinstance(attributed_to, list):
-        attributed_to = attributed_to[0] if attributed_to else ""
-    if not attributed_to:
-        return None
-
-    from app.activitypub import _resolve_actor
-    _resolve_actor(attributed_to)
-    author_id = None
-    with get_session() as qs:
-        u = qs.query(User).filter_by(remote_url=attributed_to).first()
-        if u:
-            author_id = u.id
-    if not author_id:
-        # fallback: try parsing username from attributed_to URL
-        try:
-            from urllib.parse import urlparse
-            parsed = urlparse(attributed_to)
-            domain = parsed.netloc
-            preferred = parsed.path.rstrip("/").split("/")[-1]
-            local_username = f"{preferred}@{domain}"
-            with get_session() as qs:
-                u = qs.query(User).filter_by(username=local_username).first()
-                if u:
-                    u.remote_url = attributed_to
-                    qs.commit()
-                    author_id = u.id
-        except Exception:
-            pass
-    if not author_id:
-        return None
-
-    ap_id = obj.get("id", "")
-    summary = obj.get("summary", "")
-
-    # Process custom emoji tags before saving
-    with get_session() as emoji_session:
-        _process_emoji_tags(obj.get("tag", []), emoji_session)
-        emoji_session.commit()
-
-    with get_session() as s:
-        existing = s.query(Post).filter_by(ap_id=ap_id).first()
-        if existing and not existing.is_deleted:
-            return _post_json(existing, s, user)
-        if existing and existing.is_deleted:
-            existing.is_deleted = False
-            existing.content = content
-            existing.summary = summary
-            s.commit()
-            return _post_json(existing, s, user)
-
-        import re
-        mentioned_names = set(re.findall(r'@(\w+(?:@[\w.-]+)?)', content or ""))
-        mentioned_ids = []
-        if mentioned_names:
-            mentioned = s.query(User).filter(User.username.in_(mentioned_names)).all()
-            mentioned_ids = [u.id for u in mentioned]
-
-        in_reply_to_ap_id = obj.get("inReplyTo", "")
-
-        in_reply_to_id = None
-        if in_reply_to_ap_id:
-            parent = s.query(Post).filter_by(ap_id=in_reply_to_ap_id).first()
-            if parent:
-                in_reply_to_id = parent.id
-
-        # Determine visibility from to/cc like _handle_create
-        to = obj.get("to", [])
-        if isinstance(to, str): to = [to]
-        cc = obj.get("cc", [])
-        if isinstance(cc, str): cc = [cc]
-        all_auds = to + cc
-        pub = "https://www.w3.org/ns/activitystreams#Public"
-        if pub in to:
-            vis = "public"
-        elif pub in cc:
-            vis = "home"
-        elif any(a.endswith("/followers") for a in all_auds):
-            vis = "followers"
-        elif all(a.startswith("http") for a in all_auds if a):
-            vis = "mention"
-        else:
-            vis = "home"
-
-        post = Post(
-            author_id=author_id,
-            content=content,
-            summary=summary,
-            visibility=vis,
-            ap_id=ap_id,
-            in_reply_to_ap_id=in_reply_to_ap_id,
-            in_reply_to_id=in_reply_to_id,
-            mentioned_user_ids=mentioned_ids,
-        )
-        published = obj.get("published", "")
-        if published:
+            # 💡 재귀 함수가 안전하게 마칠 수 있도록 단독 실행 확보
             try:
-                post.created_at = datetime.datetime.fromisoformat(published.replace("Z", "+00:00"))
+                _fetch_and_save_ap_object(parent_obj, user, _visited, _depth + 1)
             except Exception as e:
-                logger.warning("Failed to parse published date: %s", e)
-        s.add(post)
+                print(f"[WARN] Failed to process parent post {in_reply_to}: {e}", flush=True)
+
+    actor_url = obj.get("id")
+    post = None
+    # 2. 본문 페치 및 DB 저장 로직 수행
+    with get_session() as session:
         try:
-            s.commit()
-        except IntegrityError:
-            s.rollback()
-            s.close()
-            with get_session() as s2:
-                existing = s2.query(Post).filter_by(ap_id=ap_id).first()
-                if existing:
-                    return _post_json(existing, s2, user)
-            return None
-        return _post_json(post, s, user)
+            post = _fetch_remote_post(actor_url, user, session, _depth)
+            # 💡 페치가 성공했을 때만 확실하게 DB 세션 커밋을 보장
+            if post:
+                session.commit()
+        except Exception as e:
+            # 💡 단순 print 대신 에러가 발생한 정확한 라인과 원인을 추적하기 위해 traceback 추가
+            print(f"[ERROR] Failed to fetch remote post from {actor_url}: {e}", flush=True)
+            traceback.print_exc() 
+            return None # 껍데기를 만들지 않도록 에러 시 None 리턴 구조로 방어
+
+        return _post_json(post, session, user)
 
 
 def _safe_httpx_get(url, headers=None, timeout=15, max_size=5*1024*1024):
@@ -4778,13 +5064,22 @@ def _ap_fetch(url, user):
     except Exception:
         return None
 
+_unread_cache: dict[int, tuple[int, float]] = {}
+_UNREAD_CACHE_TTL = 5.0
+
 @router.get("/notifications/unread-count")
 def api_unread_count(request: Request):
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    import time as _time
+    now = _time.time()
+    cached = _unread_cache.get(user.id)
+    if cached and now - cached[1] < _UNREAD_CACHE_TTL:
+        return {"count": cached[0]}
     with get_session() as s:
-        count = s.query(Notification).filter_by(user_id=user.id, is_read=False).count()
+        count = s.query(Notification.id).filter_by(user_id=user.id, is_read=False).count()
+    _unread_cache[user.id] = (count, now)
     return {"count": count}
 
 
@@ -4807,66 +5102,80 @@ def _check_fetch_domain_allowed(url: str) -> str | None:
     return None
 
 
+def _background_fetch_outbox(url: str, user_id: int, actor_id: int):
+    with get_session() as s:
+        user = s.query(User).get(user_id)
+        actor = s.query(User).get(actor_id)
+        if not user or not actor:
+            return
+        try:
+            outbox_url = getattr(actor, "outbox_url", None) or getattr(actor, "endpoints", {}).get("sharedInbox", "")
+            if not outbox_url:
+                import time
+                from app.crypto_utils import sign_string, get_private_key
+                from urllib.parse import urlparse as _up
+                date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+                parsed = _up(url)
+                created = int(time.time())
+                ss = f"(request-target): get {parsed.path}\nhost: {parsed.netloc}\ndate: {date}\n(created): {created}"
+                priv = get_private_key(user, SECRET_KEY)
+                sig = sign_string(ss, priv)
+                sig_header = f'keyId="{user.actor_uri()}#main-key",algorithm="hs2019",created="{created}",headers="(request-target) host date (created)",signature="{sig}"'
+                headers = {"Accept": "application/activity+json", "Signature": sig_header, "Date": date, "Host": parsed.netloc}
+                r = _safe_httpx_get(url, headers=headers)
+                if r:
+                    outbox_url = r.json().get("outbox", "")
+            if outbox_url:
+                import time
+                from app.crypto_utils import sign_string, get_private_key
+                from urllib.parse import urlparse as _up
+                parsed2 = _up(outbox_url)
+                date2 = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+                created2 = int(time.time())
+                path2 = parsed2.path or "/"
+                if parsed2.query:
+                    path2 += f"?{parsed2.query}"
+                priv = get_private_key(user, SECRET_KEY)
+                ss2 = f"(request-target): get {path2}\nhost: {parsed2.netloc}\ndate: {date2}\n(created): {created2}"
+                sig2 = sign_string(ss2, priv)
+                sig_header2 = f'keyId="{user.actor_uri()}#main-key",algorithm="hs2019",created="{created2}",headers="(request-target) host date (created)",signature="{sig2}"'
+                headers2 = {"Accept": "application/activity+json", "Signature": sig_header2, "Date": date2, "Host": parsed2.netloc}
+                resp = _safe_httpx_get(f"{outbox_url}?page=1", headers=headers2)
+                if resp:
+                    outbox_data = resp.json()
+                    for item in outbox_data.get("orderedItems", []):
+                        try:
+                            obj = item.get("object", item)
+                            _fetch_and_save_ap_object(obj, actor)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+
 @router.post("/fetch-actor")
-def api_fetch_actor(request: Request, url: str = Form(...)):
-    import sys
+def api_fetch_actor(request: Request, background_tasks: BackgroundTasks, url: str = Form(...)):
     user = require_auth(request)
     if not url.startswith("http"):
         raise HTTPException(status_code=400, detail="Invalid URL")
     err = _check_fetch_domain_allowed(url)
     if err:
         raise HTTPException(status_code=403, detail=err)
-    from app.activitypub import _resolve_actor, _safe_fetch
-    from app.activitypub import _safe_fetch
+
+    # 로컬 DB에 이미 존재하는 유저인지 먼저 확인 (외부 네트워크 요청 회피)
+    with get_session() as _s:
+        local_user = _s.query(User).filter_by(remote_url=url).first()
+        if local_user:
+            background_tasks.add_task(_background_fetch_outbox, url, user.id, local_user.id)
+            return _user_json(local_user)
+
+    from app.activitypub import _resolve_actor
     actor = _resolve_actor(url, force_refresh=False, sign_as=user)
     if not actor:
         raise HTTPException(status_code=400, detail="Cannot resolve actor")
 
-    # Fetch recent posts from outbox (re-fetch actor to get outbox URL)
-    outbox_url = None
-    try:
-        import datetime, time
-        from app.crypto_utils import sign_string, get_private_key
-        from urllib.parse import urlparse
-        date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
-        parsed = urlparse(url)
-        created = int(time.time())
-        ss = f"(request-target): get {parsed.path}\nhost: {parsed.netloc}\ndate: {date}\n(created): {created}"
-        priv = get_private_key(user, SECRET_KEY)
-        sig = sign_string(ss, priv)
-        sig_header = f'keyId="{user.actor_uri()}#main-key",algorithm="hs2019",created="{created}",headers="(request-target) host date (created)",signature="{sig}"'
-        headers = {"Accept": "application/activity+json", "Signature": sig_header, "Date": date, "Host": parsed.netloc}
-        r = _safe_httpx_get(url, headers=headers)
-        if r:
-            ap_data = r.json()
-            outbox_url = ap_data.get("outbox", "")
-    except Exception:
-        pass
+    background_tasks.add_task(_background_fetch_outbox, url, user.id, actor.id)
 
-    if outbox_url:
-        try:
-            import datetime, time
-            parsed2 = urlparse(outbox_url)
-            date2 = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
-            created2 = int(time.time())
-            path2 = parsed2.path or "/"
-            if parsed2.query:
-                path2 += f"?{parsed2.query}"
-            ss2 = f"(request-target): get {path2}\nhost: {parsed2.netloc}\ndate: {date2}\n(created): {created2}"
-            sig2 = sign_string(ss2, priv)
-            sig_header2 = f'keyId="{user.actor_uri()}#main-key",algorithm="hs2019",created="{created2}",headers="(request-target) host date (created)",signature="{sig2}"'
-            headers2 = {"Accept": "application/activity+json", "Signature": sig_header2, "Date": date2, "Host": parsed2.netloc}
-            resp = _safe_httpx_get(f"{outbox_url}?page=1", headers=headers2)
-            if resp:
-                outbox_data = resp.json()
-                for item in outbox_data.get("orderedItems", []):
-                    try:
-                        obj = item.get("object", item)
-                        _fetch_and_save_ap_object(obj, actor)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
     with get_session() as _s:
         _attached = _s.query(User).filter_by(remote_url=url).first()
         if not _attached:
@@ -4889,6 +5198,13 @@ def api_fetch_post(request: Request, url: str = Form(...)):
 
     obj = data.get("object", data)
     obj_type = data.get("type", obj.get("type", ""))
+    if obj_type in ("Person", "Application", "Service"):
+        with get_session() as _us:
+            from app.activitypub import _resolve_actor
+            actor = _resolve_actor(url, sign_as=user)
+            if actor:
+                return {"type": "user", "redirect": f"/@{actor.username}"}
+        raise HTTPException(status_code=400, detail="Cannot resolve actor")
     if obj_type not in ("Note", "Article"):
         raise HTTPException(status_code=400, detail=f"Not a Note/Article (type={obj_type})")
 
@@ -4910,10 +5226,22 @@ EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public",
 _emoji_cache = {"data": None, "ts": 0}
 _EMOJI_CACHE_TTL = 60  # seconds
 
-
-def _invalidate_emoji_cache():
-    _emoji_cache["data"] = None
-    _emoji_cache["ts"] = 0
+def _refresh_emoji_cache_forcibly(session):
+    import time
+    emojis = session.query(CustomEmoji).all()
+    # 딕셔너리 형태로 안전하게 직렬화
+    serialized = [{
+        "id": e.id,
+        "keyword": e.keyword,
+        "file_name": e.file_name,
+        "category": e.category,
+        "aliases": list(e.aliases) if e.aliases else [],
+        "url": _emoji_url(e.file_name, e.domain or "", e.category or ""),
+        "source_url": e.source_url or "",
+        "domain": e.domain or ""
+    } for e in emojis]
+    _emoji_cache["data"] = serialized
+    _emoji_cache["ts"] = time.time()
 
 _emoji_storage = None
 
@@ -4941,6 +5269,14 @@ def _load_emojis(session):
     if _emoji_cache["data"] is not None and now - _emoji_cache["ts"] < _EMOJI_CACHE_TTL:
         return _emoji_cache["data"]
     emojis = session.query(CustomEmoji).order_by(desc(CustomEmoji.created_at)).all()
+    from sqlalchemy import case
+    emojis = session.query(CustomEmoji).order_by(
+        case(
+            (CustomEmoji.category == "remote", 1),
+            else_=0
+        ),
+        CustomEmoji.created_at.desc() # 동일 조건 내에서는 최신순 정렬
+    ).all()
     result = [
         {
             "id": e.id,
@@ -4960,10 +5296,22 @@ def _load_emojis(session):
 
 
 @router.get("/emojis")
-def api_list_emojis(limit: int = Query(30), offset: int = Query(0)):
+def api_list_emojis(limit: int = Query(30), offset: int = Query(0), q: str = Query(""), category: str = Query("")):
     with get_session() as s:
-        total = s.query(CustomEmoji).count()
-        emojis = s.query(CustomEmoji).order_by(desc(CustomEmoji.created_at)).offset(offset).limit(limit).all()
+        query = s.query(CustomEmoji)
+        if q:
+            query = query.filter(
+                or_(
+                    CustomEmoji.keyword.ilike(f"%{q}%"),
+                    CustomEmoji.category.ilike(f"%{q}%"),
+                )
+            )
+        if category != "remote":
+            query = query.filter(CustomEmoji.category != "remote")
+        elif category == "remote":
+            query = query.filter(CustomEmoji.category == "remote")
+        total = query.count()
+        emojis = query.order_by(desc(CustomEmoji.created_at)).offset(offset).limit(limit).all()
         result = [
             {
                 "id": e.id,
@@ -4977,7 +5325,7 @@ def api_list_emojis(limit: int = Query(30), offset: int = Query(0)):
             }
             for e in emojis
         ]
-    return JSONResponse({"emojis": result, "total": total, "has_more": offset + limit < total}, headers={"Cache-Control": "public, max-age=300"})
+    return JSONResponse({"emojis": result, "total": total, "has_more": offset + limit < total}, headers={"Cache-Control": "public, max-age=3600"})
 
 
 @router.post("/emojis")
@@ -4989,6 +5337,8 @@ def api_create_emoji(
     image: UploadFile = File(...),
 ):
     user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
     if not keyword.strip():
         raise HTTPException(status_code=400, detail="Keyword is required")
     keyword = keyword.strip().lower().replace(" ", "_")
@@ -5000,7 +5350,8 @@ def api_create_emoji(
         raise HTTPException(status_code=400, detail=f"Unsupported image type: {image.content_type}")
 
     import uuid
-    ext = image.filename.rsplit(".", 1)[-1].lower() if image.filename else "png"
+    ct_to_ext = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}
+    ext = ct_to_ext.get(image.content_type, "png")
     file_name = f"{uuid.uuid4().hex}.{ext}"
     local_dir = os.path.join(EMOJI_DIR, "local")
     os.makedirs(local_dir, exist_ok=True)
@@ -5041,7 +5392,8 @@ def api_create_emoji(
             except Exception:
                 pass
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to process image: {e}")
+        logger.exception("Failed to process emoji image")
+        raise HTTPException(status_code=400, detail="Failed to process image")
 
     alias_list = [a.strip().lower().replace(" ", "_") for a in aliases.split(",") if a.strip()]
 
@@ -5058,7 +5410,7 @@ def api_create_emoji(
         )
         s.add(emoji)
         s.commit()
-        _invalidate_emoji_cache()
+        _refresh_emoji_cache_forcibly(s)
         return {
             "id": emoji.id,
             "keyword": emoji.keyword,
@@ -5072,6 +5424,8 @@ def api_create_emoji(
 @router.patch("/emojis/{emoji_id}")
 def api_update_emoji(request: Request, emoji_id: int, category: str = Form(""), keyword: str = Form(""), aliases: str = Form("")):
     user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         emoji = s.query(CustomEmoji).get(emoji_id)
         if not emoji:
@@ -5087,12 +5441,15 @@ def api_update_emoji(request: Request, emoji_id: int, category: str = Form(""), 
             emoji.category = category
         emoji.aliases = [a.strip().lower().replace(" ", "_") for a in aliases.split(",") if a.strip()]
         s.commit()
-        _invalidate_emoji_cache()
+        _refresh_emoji_cache_forcibly(s)
         return {"ok": True, "emoji": {"id": emoji.id, "keyword": emoji.keyword, "file_name": emoji.file_name, "category": emoji.category, "aliases": emoji.aliases or [], "url": _emoji_url(emoji.file_name, emoji.domain or "", emoji.category or ""), "source_url": emoji.source_url or "", "domain": emoji.domain or ""}}
+
 
 @router.post("/emojis/{emoji_id}/copy")
 def api_copy_emoji(request: Request, emoji_id: int):
     user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         src = s.query(CustomEmoji).get(emoji_id)
         if not src:
@@ -5131,12 +5488,15 @@ def api_copy_emoji(request: Request, emoji_id: int):
         copy = CustomEmoji(keyword=new_kw, file_name=_new_fname, category="기본", aliases=src.aliases or [])
         s.add(copy)
         s.commit()
-        _invalidate_emoji_cache()
+        _refresh_emoji_cache_forcibly(s)
         return {"ok": True, "emoji": {"id": copy.id, "keyword": copy.keyword, "file_name": copy.file_name, "category": copy.category, "aliases": copy.aliases or [], "url": _emoji_url(copy.file_name, "", copy.category or ""), "source_url": copy.source_url or "", "domain": copy.domain or ""}}
+
 
 @router.delete("/emojis/{emoji_id}")
 def api_delete_emoji(request: Request, emoji_id: int):
     user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         emoji = s.query(CustomEmoji).get(emoji_id)
         if not emoji:
@@ -5152,7 +5512,7 @@ def api_delete_emoji(request: Request, emoji_id: int):
             os.remove(file_path)
         s.delete(emoji)
         s.commit()
-        _invalidate_emoji_cache()
+        _refresh_emoji_cache_forcibly(s)
     return {"ok": True}
 
 
@@ -5413,7 +5773,7 @@ def api_admin_refresh_profile(request: Request, user_id: int):
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("refresh_profile error for user %s", user_id)
+        logger.exception("Failed to refresh profile for user %s", user_id)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -5502,6 +5862,7 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
             u.is_suspended = True
             for p in s.query(Post).filter(Post.author_id == u.id).all():
                 s.query(Post).filter(Post.in_reply_to_id == p.id).update({"in_reply_to_id": None})
+                s.query(Notification).filter(Notification.post_id == p.id).delete()
                 s.delete(p)
         elif action == "unlimit":
             u.is_limited = False
@@ -5862,7 +6223,7 @@ def api_admin_forward_report(request: Request, report_id: int):
             _send_flag(reporter, report.target_type, target_obj, report.reason[:200], report.rule_ids or [])
         except Exception as e:
             logger.error("Failed to forward report %s: %s", report_id, e)
-            raise HTTPException(status_code=500, detail=f"Failed to forward: {e}")
+            raise HTTPException(status_code=500, detail="Failed to forward report")
     return {"ok": True}
 
 @router.get("/admin/rules")
@@ -6507,14 +6868,13 @@ def api_admin_remote_server_purge(domain: str, request: Request):
             s.query(Bookmark).filter(Bookmark.user_id.in_(user_ids)).delete(synchronize_session=False)
             s.query(Vote).filter(Vote.user_id.in_(user_ids)).delete(synchronize_session=False)
             # Convert mentions to the purged domain to plain text in local posts
-            import re as _re
-            _esc = _re.escape(domain)
-            _mention_re = _re.compile(
+            _esc = re.escape(domain)
+            _mention_re = re.compile(
                 r'<span class="h-card"[^>]*>'
                 r'<a href="[^"]*' + _esc + r'[^"]*" class="u-url mention">'
                 r'@<span>([^<]+)</span></a></span>'
             )
-            _mention_re2 = _re.compile(
+            _mention_re2 = re.compile(
                 r'<a href="[^"]*' + _esc + r'[^"]*" class="mention">@([^<]+)</a>'
             )
             for _p in s.query(Post).filter(Post.author_id.notin_(user_ids), Post.content.contains(domain)).all():
@@ -6629,9 +6989,9 @@ def api_block_user(request: Request, target_user_id: int):
         target = s.query(User).get(target_user_id)
         if target:
             target_remote_url = target.remote_url
-            target_shared_inbox = target.shared_inbox_url or target.inbox_uri()
+            target_shared_inbox = target.shared_inbox_url or target.inbox_url
             target_id = target.id
-    if target_remote_url:
+    if target_remote_url and target_shared_inbox:
         try:
             block_id = f"{BASE_URL}/users/{user.username}/status/activities/block/{target_id}"
             actor_uri = f"{BASE_URL}/users/{user.username}"
@@ -6659,7 +7019,7 @@ def api_unblock_user(request: Request, target_user_id: int):
         target = s.query(User).get(target_user_id)
         if target:
             target_remote_url = target.remote_url
-            target_shared_inbox = target.shared_inbox_url or target.inbox_uri()
+            target_shared_inbox = target.shared_inbox_url or target.inbox_url
             target_id = target.id
         s.query(UserBlock).filter_by(user_id=user.id, target_user_id=target_user_id).delete()
         s.commit()
@@ -7097,41 +7457,54 @@ def api_client_log(request: Request):
         )
         return {"ok": True}
     except Exception as e:
-        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+        logger.exception("Client log error")
+        return JSONResponse({"ok": False, "error": "Failed to save log"}, status_code=400)
 
 
 # ── Web Push ──
 
 @router.get("/push/vapid-public-key")
 def get_vapid_public_key():
-    from app.config import get_vapid_keys
-    _, key = get_vapid_keys()
+    import base64
+    from app.config import VAPID_PUBLIC_KEY
+    key = VAPID_PUBLIC_KEY
     if not key:
-        raise HTTPException(404, "Web Push not configured")
-    # If PEM format, extract raw base64 key
-    if key.startswith("-----"):
-        import base64, re
-        b64 = "".join(re.findall(r"base64,[\s]*([A-Za-z0-9+/=]+)", key)) or "".join(re.findall(r"([A-Za-z0-9+/=]{40,})", key.replace("\n","")))
-        if b64:
-            from cryptography.hazmat.primitives.serialization import load_pem_public_key, Encoding, PublicFormat
+        try:
             from cryptography.hazmat.primitives.asymmetric import ec
-            pub = load_pem_public_key(key.encode())
-            if isinstance(pub, ec.EllipticCurvePublicKey):
-                raw = pub.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
-                key = base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+            from cryptography.hazmat.primitives import serialization
+            _k = ec.generate_private_key(ec.SECP256R1())
+            _priv_pem = _k.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode()
+            _raw_pub = _k.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+            key = base64.urlsafe_b64encode(_raw_pub).rstrip(b"=").decode()
+            import os
+            os.environ["VAPID_PRIVATE_KEY"] = _priv_pem
+            os.environ["VAPID_PUBLIC_KEY"] = key
+            print("[PUSH] Auto-generated VAPID keys", flush=True)
+        except Exception as e:
+            print(f"[PUSH] Failed to generate VAPID key: {e}", flush=True)
+            raise HTTPException(500, "Web Push configuration error")
+    if key.startswith("-----"):
+        from cryptography.hazmat.primitives.serialization import load_pem_public_key, Encoding, PublicFormat
+        from cryptography.hazmat.primitives.asymmetric import ec
+        pub = load_pem_public_key(key.encode())
+        if isinstance(pub, ec.EllipticCurvePublicKey):
+            raw = pub.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+            key = base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
     return {"publicKey": key}
 
 
 @router.post("/push/subscribe")
-def subscribe_push(request: Request, endpoint: str = Form(...), p256dh: str = Form(...), auth: str = Form(...)):
+def subscribe_push(request: Request, endpoint: str = Form(...), p256dh: str = Form(...), auth: str = Form(...), device_name: str = Form("")):
     user = require_active_auth(request)
     with get_session() as s:
         existing = s.query(PushSubscription).filter_by(user_id=user.id, endpoint=endpoint).first()
         if existing:
             existing.p256dh = p256dh
             existing.auth = auth
+            if device_name:
+                existing.device_name = device_name
         else:
-            s.add(PushSubscription(user_id=user.id, endpoint=endpoint, p256dh=p256dh, auth=auth))
+            s.add(PushSubscription(user_id=user.id, endpoint=endpoint, p256dh=p256dh, auth=auth, device_name=device_name))
         s.commit()
     return {"ok": True}
 
@@ -7145,10 +7518,96 @@ def unsubscribe_push(request: Request, endpoint: str = Form(...)):
     return {"ok": True}
 
 
+@router.get("/push/subscriptions")
+def push_subscriptions(request: Request):
+    user = require_active_auth(request)
+    with get_session() as s:
+        subs = s.query(PushSubscription).filter_by(user_id=user.id).all()
+    return {"subscriptions": [{"id": sub.id, "device_name": sub.device_name, "created_at": sub.created_at.isoformat() if sub.created_at else ""} for sub in subs]}
+
+
+@router.post("/push/subscriptions/{sub_id}/delete")
+def delete_push_subscription(request: Request, sub_id: int):
+    user = require_active_auth(request)
+    with get_session() as s:
+        sub = s.query(PushSubscription).filter_by(id=sub_id, user_id=user.id).first()
+        if not sub:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        s.delete(sub)
+        s.commit()
+    return {"ok": True}
+
+
 @router.get("/push/status")
 def push_status(request: Request):
     user = require_active_auth(request)
     with get_session() as s:
         count = s.query(PushSubscription).filter_by(user_id=user.id).count()
     return {"subscribed": count > 0}
+
+
+# ── Login session management ──
+
+import re as _re
+
+_UA_BROWSER = {
+    "chrome": ("Chrome", _re.compile(r"Chrome/(\d+)")),
+    "edge": ("Edge", _re.compile(r"Edg/(\d+)")),
+    "firefox": ("Firefox", _re.compile(r"Firefox/(\d+)")),
+    "safari": ("Safari", _re.compile(r"Version/(\d+).*Safari")),
+    "opera": ("Opera", _re.compile(r"(?:OPR|Opera)/(\d+)")),
+}
+
+
+def _parse_device_name(ua: str) -> str:
+    if not ua:
+        return "알 수 없는 기기"
+    for key, (name, pattern) in _UA_BROWSER.items():
+        m = pattern.search(ua)
+        if m:
+            return f"{name} {m.group(1)}"
+    if "Mobile" in ua or "Android" in ua:
+        return "모바일 브라우저"
+    return "알 수 없는 브라우저"
+
+
+@router.get("/sessions")
+def list_sessions(request: Request):
+    user = require_active_auth(request)
+    from app.routes.auth import get_session_key_from_cookie
+    from datetime import timedelta, timezone
+    from app.config import SESSION_EXPIRE_DAYS
+    current_key = get_session_key_from_cookie(request)
+    with get_session() as s:
+        cutoff = datetime.datetime.now(timezone.utc) - timedelta(days=SESSION_EXPIRE_DAYS)
+        s.query(LoginSession).filter(LoginSession.user_id == user.id, LoginSession.created_at < cutoff).delete(synchronize_session=False)
+        s.commit()
+        sessions = s.query(LoginSession).filter_by(user_id=user.id).order_by(LoginSession.last_active.desc()).limit(50).all()
+        result = []
+        for ls in sessions:
+            result.append({
+                "id": ls.id,
+                "device_name": _parse_device_name(ls.user_agent),
+                "ip_address": ls.ip_address,
+                "is_current": ls.session_key == current_key,
+                "last_active": ls.last_active.isoformat() if ls.last_active else "",
+                "created_at": ls.created_at.isoformat() if ls.created_at else "",
+            })
+    return {"sessions": result}
+
+
+@router.post("/sessions/{session_id}/delete")
+def delete_session(request: Request, session_id: int):
+    user = require_active_auth(request)
+    from app.routes.auth import get_session_key_from_cookie
+    current_key = get_session_key_from_cookie(request)
+    with get_session() as s:
+        ls = s.query(LoginSession).filter_by(id=session_id, user_id=user.id).first()
+        if not ls:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if ls.session_key == current_key:
+            raise HTTPException(status_code=400, detail="현재 사용 중인 기기는 해제할 수 없습니다.")
+        s.delete(ls)
+        s.commit()
+    return {"ok": True}
 

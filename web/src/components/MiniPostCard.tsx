@@ -5,24 +5,7 @@ import Link from "next/link";
 import Icon from "./Icon";
 import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
 import { sanitizePost, sanitizeName } from "@/lib/sanitize";
-
-function rewriteLinks(text: string, validMentions?: Set<string>): string {
-  text = text.replace(
-    /<a\s+href="https?:\/\/([^"/]+)\/@(\w+)"[^>]*>@?\w*<\/a>/gi,
-    (_m: string, domain: string, user: string) =>
-      `<a href="/@${user}@${domain}" class="mention-link">@${user}@${domain}</a>`
-  );
-  text = text.replace(/(^|>|\s)@(\w+(?:@[\w.-]+)?)/g, (_m, before, handle) => {
-    const hasDomain = handle.includes("@");
-    if (hasDomain && !validMentions?.has(handle)) {
-      return `${before}@${handle}`;
-    }
-    return `${before}<a href="/@${handle}" class="mention-link">@${handle}</a>`;
-  });
-  return text.replace(/(^|>|\s)#([\w_가-힣]+)/g, (_m, before, tag) => {
-    return `${before}<a href="/explore?q=%23${encodeURIComponent(tag)}" class="hashtag-link">#${tag}</a>`;
-  });
-}
+import { rewriteLinks } from "./PostCard";
 
 const LIGHT_BG: Record<string, string> = {
   boost: "rgba(104, 159, 56, 0.1)",
@@ -58,8 +41,8 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
     : "var(--bg-tertiary)";
   const iconColor = notifType ? TYPE_COLORS[notifType] || "var(--text-muted)" : "var(--text-muted)";
   const contentHtml = (() => {
-    let html = post.content;
-    if (/<\/?[a-zA-Z]+[\s>]/.test(html) || /&[a-z]+;/.test(html)) {
+    let html = post.content || "";
+    if (/<\/?[a-zA-Z]+[\s\/>]/.test(html) || /&[a-z]+;/.test(html)) {
       html = html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
     } else {
       html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -70,41 +53,40 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
     html = renderCustomEmojis(html, emojiMap);
     return sanitizePost(rewriteLinks(html, validMentions));
   })();
+  if (!post || !post.author) return null;
   return (
     <Link
       href={post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`}
       className="mini-post-link"
       style={{ background: bg }}
     >
-      {notifType ? (
-        <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: iconColor }}>
-          <Icon name={TYPE_ICONS[notifType] || "bell"} size={14} />
-        </div>
-      ) : (
+      {!notifType && (
         <div className="mini-post-avatar-box">
           {post.author.avatar ? (
-            <img src={post.author.avatar} alt="" className="mini-post-avatar-img" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover" }} />
+            <img src={post.author.avatar} alt="" className="mini-post-avatar-img" style={{ width: 28, height: 28, borderRadius: 6, objectFit: "cover" }} />
           ) : (
-            <div className="mini-post-avatar-box-initials" style={{ background: `hsl(${post.author.username?.length * 37 % 360}, 35%, 40%)`, width: 36, height: 36, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>
+            <div className="mini-post-avatar-box-initials" style={{ background: `hsl(${post.author.username?.length * 37 % 360}, 35%, 40%)`, width: 28, height: 28, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>
               {(post.author.display_name || post.author.username)[0]}
             </div>
           )}
         </div>
       )}
       <div className="mini-post-content">
-        {notifLabel && <div style={{ fontSize: "0.82em", color: "var(--text-muted)", marginBottom: 3, lineHeight: 1.4 }}>{notifLabel}</div>}
-        <div className="mini-post-author">
-          <span dangerouslySetInnerHTML={{ __html: renderCustomEmojis(post.author.display_name || post.author.username, emojiMap) }} />
-          <span className="mini-post-handle">
-            @{post.author.display_handle || post.author.username}
-          </span>
-        </div>
+        {notifLabel && <div style={{ fontSize: "0.82em", color: "var(--text-muted)", marginBottom: 6, lineHeight: 1.4 }}>{notifLabel}</div>}
+        {!notifType && (
+          <div className="mini-post-author">
+            <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.author.display_name || post.author.username, emojiMap, 14)) }} />
+            <span className="mini-post-handle">
+              @{post.author.display_handle || post.author.username}
+            </span>
+          </div>
+        )}
         {post.summary && (
           <div className="mini-post-cw">
             CW: {post.summary}
           </div>
         )}
-        <div className="mini-post-body" dangerouslySetInnerHTML={{ __html: contentHtml }} />
+        {!post.summary && <div className="mini-post-body" dangerouslySetInnerHTML={{ __html: contentHtml }} />}
       </div>
     </Link>
   );

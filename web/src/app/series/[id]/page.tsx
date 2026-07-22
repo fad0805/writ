@@ -101,60 +101,58 @@ export default function NovelDetailPage() {
             )}
           </div>
           <div className="series-header-info">
-            <div className="series-header-top">
-              <div>
-                <h2>{novel.title}</h2>
-                <p className="novel-author">
-                  by <Link href={`/@${author?.username}`}>{author?.display_name || author?.username}</Link>
-                </p>
+            <div className="series-header-btns" style={{ marginBottom: 12, display: "flex", justifyContent: "flex-end", gap: 6, flexWrap: "wrap" }}>
+              {isMine && <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>}
+              <div className="series-more-wrap">
+                <button className="action-btn" title="공유" onClick={(e) => { e.stopPropagation(); setShowShareMenu(!showShareMenu); }}><Icon name="share" /></button>
+                {showShareMenu && (
+                  <div className="series-more-menu" onClick={(e) => e.stopPropagation()}>
+                    <button onClick={() => { setShowShareMenu(false); setShowSharePost(true); }}><Icon name="edit" /> 포스트 공유</button>
+                    <button onClick={() => { navigator.clipboard.writeText(window.location.origin + `/series/${novel.id}`); setShowShareMenu(false); }}><Icon name="link" /> 링크 복사</button>
+                  </div>
+                )}
               </div>
-              <div className="series-header-btns">
+              <div className="series-more-wrap" onClick={() => setShowMoreMenu(!showMoreMenu)}>
+                <button className="action-btn" title="더보기"><Icon name="menu" /></button>
+                {showMoreMenu && (
+                  <div className="series-more-menu" onClick={(e) => e.stopPropagation()}>
+                    {novel.visibility !== "private" && <button onClick={() => { navigator.clipboard.writeText(window.location.origin + `/series/${novel.id}`); setShowMoreMenu(false); }}><Icon name="link" /> 링크 복사</button>}
+                    {user && !isMine && (
+                      <button onClick={async () => {
+                        if (isSeriesMuted) { await fetch(`/api/mutes/series/${novel.id}`, { method: "DELETE", credentials: "include" }); setIsSeriesMuted(false); }
+                        else { await fetch(`/api/mutes/series/${novel.id}`, { method: "POST", credentials: "include" }); setIsSeriesMuted(true); }
+                        setShowMoreMenu(false);
+                      }}><Icon name={isSeriesMuted ? "mute" : "bell"} /> {isSeriesMuted ? "뮤트 해제" : "시리즈 뮤트"}</button>
+                    )}
+                    {user && !isMine && (
+                      <button onClick={() => { setShowReport(true); setReportReason(""); setReportError(""); setReportDone(false); setSelectedRuleIds([]); fetch("/api/rules").then((r) => r.json()).then((d) => setReportRules(d)).catch(() => {}); setShowMoreMenu(false); }}><Icon name="flag" /> 신고</button>
+                    )}
+                    {isMine && (
+                      <>
+                        <button onClick={async () => {
+                          const wasPinned = isSeriesPinned;
+                          setIsSeriesPinned(!wasPinned);
+                          const res = await fetch(`/api/${wasPinned ? "unpin" : "pin"}/series/${novel.id}`, { method: "POST", credentials: "include" });
+                          if (!res.ok) { setIsSeriesPinned(wasPinned); const d = await res.json().catch(() => ({})); if (d.detail) alert(d.detail); }
+                          setShowMoreMenu(false);
+                        }}><Icon name={isSeriesPinned ? "pin_filled" : "pin"} /> 고정</button>
+                        <button onClick={() => { router.push(`/series/${novel.id}/edit`); setShowMoreMenu(false); }}><Icon name="edit" /> 시리즈 편집</button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="series-header-top">
+              <h2>{novel.title}</h2>
+              <p className="novel-author" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                by <Link href={`/@${author?.username}`}>{author?.display_name || author?.username}</Link>
                 {user && !isMine && (
-                  <button onClick={toggleFollow} className={`btn btn-small ${isFollowing ? "btn-outline" : "btn-primary"}`}>
+                  <button onClick={toggleFollow} className={`btn btn-small ${isFollowing ? "btn-outline" : "btn-primary"}`} style={{ marginLeft: 4 }}>
                     {isFollowing ? "팔로잉" : "팔로우"}
                   </button>
                 )}
-                {isMine && <button className="btn btn-primary btn-small" onClick={() => router.push(`/series/${novel.id}/episodes/new`)}>새 에피소드</button>}
-                <div className="series-more-wrap">
-                  <button className="action-btn" title="공유" onClick={(e) => { e.stopPropagation(); setShowShareMenu(!showShareMenu); }}><Icon name="share" /></button>
-                  {showShareMenu && (
-                    <div className="series-more-menu" onClick={(e) => e.stopPropagation()}>
-                      <button onClick={() => { setShowShareMenu(false); setShowSharePost(true); }}><Icon name="edit" /> 포스트 공유</button>
-                      <button onClick={() => { navigator.clipboard.writeText(window.location.origin + `/series/${novel.id}`); setShowShareMenu(false); }}><Icon name="link" /> 링크 복사</button>
-                    </div>
-                  )}
-                </div>
-                <div className="series-more-wrap" onClick={() => setShowMoreMenu(!showMoreMenu)}>
-                  <button className="action-btn" title="더보기"><Icon name="menu" /></button>
-                  {showMoreMenu && (
-                    <div className="series-more-menu" onClick={(e) => e.stopPropagation()}>
-                      {novel.visibility !== "private" && <button onClick={() => { navigator.clipboard.writeText(window.location.origin + `/series/${novel.id}`); setShowMoreMenu(false); }}><Icon name="link" /> 링크 복사</button>}
-                      {user && !isMine && (
-                        <button onClick={async () => {
-                          if (isSeriesMuted) { await fetch(`/api/mutes/series/${novel.id}`, { method: "DELETE", credentials: "include" }); setIsSeriesMuted(false); }
-                          else { await fetch(`/api/mutes/series/${novel.id}`, { method: "POST", credentials: "include" }); setIsSeriesMuted(true); }
-                          setShowMoreMenu(false);
-                        }}><Icon name={isSeriesMuted ? "mute" : "bell"} /> {isSeriesMuted ? "뮤트 해제" : "시리즈 뮤트"}</button>
-                      )}
-                      {user && !isMine && (
-                        <button onClick={() => { setShowReport(true); setReportReason(""); setReportError(""); setReportDone(false); setSelectedRuleIds([]); fetch("/api/rules").then((r) => r.json()).then((d) => setReportRules(d)).catch(() => {}); setShowMoreMenu(false); }}><Icon name="flag" /> 신고</button>
-                      )}
-                      {isMine && (
-                        <>
-                          <button onClick={async () => {
-                            const wasPinned = isSeriesPinned;
-                            setIsSeriesPinned(!wasPinned);
-                            const res = await fetch(`/api/${wasPinned ? "unpin" : "pin"}/series/${novel.id}`, { method: "POST", credentials: "include" });
-                            if (!res.ok) { setIsSeriesPinned(wasPinned); const d = await res.json().catch(() => ({})); if (d.detail) alert(d.detail); }
-                            setShowMoreMenu(false);
-                          }}><Icon name={isSeriesPinned ? "pin_filled" : "pin"} /> 고정</button>
-                          <button onClick={() => { router.push(`/series/${novel.id}/edit`); setShowMoreMenu(false); }}><Icon name="edit" /> 시리즈 편집</button>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
+              </p>
             </div>
           </div>
         </div>
@@ -163,7 +161,7 @@ export default function NovelDetailPage() {
           <span><Icon name="book" /> 총 {novel.episode_count}화</span>
           {isMine && typeof novel.total_views === 'number' && <span><Icon name="eye" /> 총 {novel.total_views}회 조회</span>}
           {isMine && typeof (novel as any).followers_count === 'number' && <span><Icon name="user" /> {(novel as any).followers_count}명 팔로우</span>}
-          <span><Icon name="lock" /> {novel.visibility === "public" ? "전체공개" : novel.visibility === "unlisted" ? "공개" : "비공개"}</span>
+          <span><Icon name={novel.visibility === "public" ? "globe" : novel.visibility === "unlisted" ? "eye" : "lock"} /> {novel.visibility === "public" ? "전체공개" : novel.visibility === "unlisted" ? "공개" : "비공개"}</span>
         </div>
         {novel.description && <p className="novel-description">{novel.description}</p>}
         {novel.tags && <p className="novel-tags"><Icon name="tag" /> {novel.tags.split(/[ ,]+/).filter(Boolean).map((t, i) => <span key={i} className="tag-spacing">{t}</span>)}</p>}

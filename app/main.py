@@ -2,9 +2,11 @@ import base64
 import datetime
 import email.utils
 import hashlib
+import hmac as _hmac
 import json
 import os
 import logging
+import secrets
 import threading
 import time
 from collections import defaultdict
@@ -95,7 +97,7 @@ def _delivery_worker():
                             item.last_error = "Sender not found"
                             continue
                         activity = json.loads(item.activity_json)
-                        body = json.dumps(activity, ensure_ascii=False).encode("utf-8")
+                        body = json.dumps(activity, ensure_ascii=True, sort_keys=True).encode("utf-8")
                         digest = base64.b64encode(hashlib.sha256(body).digest()).decode()
                         date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
                         parsed = urlparse(item.inbox_url)
@@ -104,8 +106,7 @@ def _delivery_worker():
                         signature = sign_string(signed_string, get_private_key(sender, SECRET_KEY))
                         signature_header = (
                             f'keyId="{sender.actor_uri()}#main-key",'
-                            f'algorithm="hs2019",'
-                            f'created="{int(time.time())}",'
+                            f'algorithm="rsa-sha256",'
                             f'headers="(request-target) host date digest",'
                             f'signature="{signature}"'
                         )
@@ -161,49 +162,33 @@ async def lifespan(app: FastAPI):
             if "link_preview" not in cols:
                 s.execute(_sa.text("ALTER TABLE posts ADD COLUMN link_preview JSON"))
                 s.commit()
+            if "quote_of_id" not in cols:
+                s.execute(_sa.text("ALTER TABLE posts ADD COLUMN quote_of_id INTEGER"))
+                s.commit()
+            if "quote_of_ap_id" not in cols:
+                s.execute(_sa.text("ALTER TABLE posts ADD COLUMN quote_of_ap_id VARCHAR(1024) DEFAULT ''"))
+                s.commit()
     except Exception:
         pass
     try:
         _cleanup_avatars()
     except Exception:
         pass
-    # Persist VAPID keys so push subscriptions survive restart
     try:
-        from app.config import VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY
-        from app.models import ServerSetting, get_session
-        if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
-            with get_session() as _s:
-                _ss = ServerSetting.get(_s)
-                _db_priv = getattr(_ss, 'vapid_private_key', '') or ''
-                _db_pub = getattr(_ss, 'vapid_public_key', '') or ''
-                if _db_priv and _db_pub:
-                    import os as _os
-                    _os.environ.setdefault("VAPID_PRIVATE_KEY", _db_priv)
-                    _os.environ.setdefault("VAPID_PUBLIC_KEY", _db_pub)
-                else:
-                    import py_vapid, base64
-                    _v = py_vapid.Vapid()
-                    _v.generate_keys()
-                    _priv_pem = _v.private_pem().decode().strip()
-                    _pub_b64 = base64.urlsafe_b64encode(_v.public_key).rstrip(b"=").decode()
-                    try:
-                        from sqlalchemy import Column, String
-                        if not hasattr(ServerSetting, 'vapid_private_key'):
-                            import sqlalchemy as _sa
-                            with _s.bind.connect() as _c:
-                                _c.execute(_sa.text("ALTER TABLE server_settings ADD COLUMN vapid_private_key TEXT DEFAULT ''"))
-                                _c.execute(_sa.text("ALTER TABLE server_settings ADD COLUMN vapid_public_key TEXT DEFAULT ''"))
-                                _c.commit()
-                    except Exception:
-                        pass
-                    _ss = _s.query(ServerSetting).first()
-                    if _ss:
-                        _ss.vapid_private_key = _priv_pem
-                        _ss.vapid_public_key = _pub_b64
-                        _s.commit()
-                    import os as _os
-                    _os.environ.setdefault("VAPID_PRIVATE_KEY", _priv_pem)
-                    _os.environ.setdefault("VAPID_PUBLIC_KEY", _pub_b64)
+        from app.models import get_session, PushSubscription
+        import sqlalchemy as _sa
+        with get_session() as s:
+            inspector = _sa.inspect(s.bind)
+            cols = [c["name"] for c in inspector.get_columns("push_subscriptions")]
+            if "device_name" not in cols:
+                s.execute(_sa.text("ALTER TABLE push_subscriptions ADD COLUMN device_name VARCHAR(256) DEFAULT ''"))
+                s.commit()
+    except Exception:
+        pass
+    # Initialize VAPID keys (DB-first, then auto-generate)
+    try:
+        from app.config import init_vapid_keys
+        init_vapid_keys()
     except Exception:
         pass
     t = threading.Thread(target=_delivery_worker, daemon=True)
@@ -230,6 +215,88 @@ async def debug_exception_handler(request: Request, exc: Exception):
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
     return JSONResponse({"detail": "Internal server error"}, status_code=500)
 
+CSRF_EXEMPT_PREFIXES = ("/.well-known/", "/nodeinfo", "/webfinger", "/static/", "/uploads/", "/api/auth/", "/api/push/", "/inbox", "/outbox")
+CSRF_EXEMPT_EXACT = ("/users/", "/posts/", "/activities/", "/@/")
+CSRF_EXEMPT_METHODS = ("GET", "HEAD", "OPTIONS")
+
+
+def generate_csrf_token(user_id: int) -> str:
+    expires = int(time.time()) + 3600
+    payload = f"{user_id}:{expires}"
+    sig = _hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+    return base64.urlsafe_b64encode(f"{payload}:{sig}".encode()).decode()
+
+
+def validate_csrf_token(token: str, session_token: str) -> bool:
+    if not token or not session_token:
+        return False
+    try:
+        decoded = base64.urlsafe_b64decode(token.encode()).decode()
+        parts = decoded.split(":")
+        user_id = int(parts[0])
+        expires = int(parts[1])
+        sig = parts[2]
+        expected = _hmac.new(SECRET_KEY.encode(), f"{user_id}:{expires}".encode(),
+                             hashlib.sha256).hexdigest()[:16]
+        if not _hmac.compare_digest(sig, expected) or expires <= time.time():
+            return False
+        # Verify session cookie is also valid HMAC-signed (same browser)
+        session_decoded = base64.urlsafe_b64decode(session_token.encode()).decode()
+        session_parts = session_decoded.split(":")
+        session_payload = f"{session_parts[0]}:{session_parts[1]}"
+        session_sig = session_parts[2]
+        session_expected = _hmac.new(SECRET_KEY.encode(), session_payload.encode(),
+                                     hashlib.sha256).hexdigest()[:16]
+        return _hmac.compare_digest(session_sig, session_expected)
+    except Exception:
+        return False
+
+
+@app.middleware("http")
+async def csrf_protection(request: Request, call_next):
+    if request.method in CSRF_EXEMPT_METHODS:
+        return await call_next(request)
+    path = request.url.path
+    for prefix in CSRF_EXEMPT_PREFIXES:
+        if path.startswith(prefix):
+            return await call_next(request)
+    if path in CSRF_EXEMPT_EXACT or any(path.startswith(p) for p in CSRF_EXEMPT_EXACT):
+        return await call_next(request)
+    session_token = request.cookies.get("session", "")
+    csrf_token = request.headers.get("X-CSRF-Token", "")
+    import os
+    is_dev = os.getenv("APP_ENV", "production") == "development"
+    if is_dev:
+        pass
+    else:
+        host_header = request.headers.get("Host", "")
+        if host_header in ("api:8000", "localhost:8000") or host_header.startswith("172."):
+            host_header = DOMAIN
+        origin = request.headers.get("Origin", "")
+        referer = request.headers.get("Referer", "")
+        if origin:
+            from urllib.parse import urlparse as _urlparse
+            try:
+                origin_host = _urlparse(origin).netloc
+            except Exception:
+                origin_host = ""
+            if origin_host and origin_host != host_header:
+                print(f"[CSRF] origin mismatch: origin={origin_host} host={host_header}", flush=True)
+                return JSONResponse({"detail": "CSRF origin mismatch"}, status_code=403)
+        elif referer:
+            from urllib.parse import urlparse as _urlparse
+            try:
+                referer_host = _urlparse(referer).netloc
+            except Exception:
+                referer_host = ""
+            if referer_host and referer_host != host_header:
+                print(f"[CSRF] referer mismatch: referer={referer_host} host={host_header}", flush=True)
+                return JSONResponse({"detail": "CSRF referer mismatch"}, status_code=403)
+    if not validate_csrf_token(csrf_token, session_token):
+        return JSONResponse({"detail": "CSRF token missing or invalid"}, status_code=403)
+    return await call_next(request)
+
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     import time
@@ -254,10 +321,8 @@ if not S3_ENABLED:
     os.makedirs("uploads", exist_ok=True)
     app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-# Mount emoji directory
+# Mount emoji directory (must be after the /emojis/{keyword} route)
 _emoji_static_dir = os.path.join(os.path.dirname(__file__), "..", "web", "public", "emojis")
-if os.path.isdir(_emoji_static_dir):
-    app.mount("/emojis", StaticFiles(directory=_emoji_static_dir), name="emojis")
 
 # AP/WebFinger routes must be registered before routers to take priority
 @app.get("/.well-known/webfinger")
@@ -370,6 +435,43 @@ def user_following(request: Request, username: str, page: int = None):
     return JSONResponse(content=result, media_type="application/activity+json")
 
 
+@app.get("/users/{username}/featured")
+def user_featured(request: Request, username: str, page: int = None):
+    from app.activitypub import get_featured
+    if not _check_collection_access(username, request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    result = get_featured(username, page)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return JSONResponse(content=result, media_type="application/activity+json")
+
+
+def _ap_post_visible(post, request, session):
+    """Check if an AP post is visible to the requester.
+    For non-AP requests, redirect to frontend handles visibility.
+    For AP requests, public/unlisted/home are always visible.
+    Followers-only/mention posts require a valid HTTP signature from a follower/mentioned user.
+    """
+    v = post.visibility or "public"
+    if v in ("public", "unlisted", "home"):
+        return True
+    accept = request.headers.get("Accept", "")
+    if "application/activity+json" not in accept and "application/ld+json" not in accept:
+        return True
+    ok, remote_actor = _verify_http_signature(request, b"", {})
+    if not ok or not remote_actor:
+        return False
+    if v == "followers":
+        if post.mentioned_user_ids and remote_actor.id in post.mentioned_user_ids:
+            return True
+        return session.query(Follow).filter_by(
+            follower_id=remote_actor.id, following_id=post.author_id, accepted=True
+        ).first() is not None
+    if v == "mention":
+        return post.mentioned_user_ids and remote_actor.id in post.mentioned_user_ids
+    return False
+
+
 def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tuple[bool, object]:
     """Verify HTTP signature.
     Returns (ok, remote_actor_or_None).
@@ -474,20 +576,32 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
     if not remote_actor or not remote_actor.public_key:
         return (False, None)
 
-    # Actor binding check (Fix 1) — verify the signer matches activity.actor
+    # Actor binding check — verify the signer matches activity.actor
     activity_actor = activity.get("actor")
     if isinstance(activity_actor, list):
         activity_actor = activity_actor[0]
     signer_uri = remote_actor.actor_uri() if not remote_actor.is_remote else remote_actor.remote_url
     print(f"[SIG] bind_check signer_uri={signer_uri} activity_actor={activity_actor}", flush=True)
-    if not activity_actor or signer_uri != activity_actor:
-        atype = activity.get("type", "")
-        if remote_actor.is_remote and atype not in ("Announce", "Create", "Update", "Undo", "Like", "Follow", "Accept", "Reject", "Block", "Flag", "Move", "Vote", "EmojiReact"):
-            print(f"[SIG] bind_check FAIL (remote, type={atype})", flush=True)
-            return (False, None)
-        elif remote_actor.is_remote:
-            print(f"[SIG] bind_check OK (relayed {atype}, signer={signer_uri})", flush=True)
+    if not activity_actor:
+        print(f"[SIG] bind_check FAIL (no activity_actor)", flush=True)
+        return (False, None)
+    if signer_uri != activity_actor:
+        print(f"[SIG] bind_check FAIL (signer != actor)", flush=True)
+        return (False, None)
     print(f"[SIG] bind_check OK", flush=True)
+
+    # Domain check — activity id must be from actor's domain
+    activity_id = activity.get("id", "")
+    if activity_id:
+        from urllib.parse import urlparse as _urlparse
+        try:
+            actor_domain = _urlparse(activity_actor).netloc
+            id_domain = _urlparse(activity_id).netloc
+            if actor_domain and id_domain and actor_domain != id_domain:
+                print(f"[SIG] domain_check FAIL (actor_domain={actor_domain} != id_domain={id_domain})", flush=True)
+                return (False, None)
+        except Exception:
+            pass
 
     # Date freshness check — 5분 window to prevent replay
     date_header = request.headers.get("Date", "")
@@ -550,7 +664,11 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
 
 @app.post("/inbox")
 async def shared_inbox(request: Request):
-    body = await request.body()
+    try:
+        body = await request.body()
+    except Exception:
+        # 클라이언트가 중간에 연결을 끊었거나 데이터 수신 실패 시 조용히 무시
+        return {"ok": False}
     if len(body) > 1024 * 1024:
         raise HTTPException(status_code=413, detail="Request body too large")
     try:
@@ -575,7 +693,9 @@ async def shared_inbox(request: Request):
                 return JSONResponse({"status": 200, "message": "Already processed"})
             s.add(ProcessedActivity(id=activity_id))
             s.commit()
-    status_code, message = handle_inbox(activity)
+    import asyncio
+    loop = asyncio.get_event_loop()
+    status_code, message = await loop.run_in_executor(None, handle_inbox, activity)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)
 
 
@@ -677,7 +797,9 @@ async def user_inbox(request: Request, username: str):
             s.add(ProcessedActivity(id=activity_id))
             s.commit()
 
-    status_code, message = handle_inbox(activity)
+    import asyncio
+    loop = asyncio.get_event_loop()
+    status_code, message = await loop.run_in_executor(None, handle_inbox, activity)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)
 
 
@@ -717,6 +839,8 @@ def get_create_activity(request: Request, post_id: int):
         post = session.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
             raise HTTPException(status_code=404, detail="Not found")
+        if not _ap_post_visible(post, request, session):
+            raise HTTPException(status_code=404, detail="Not found")
         return JSONResponse(content=post.to_ap_create(),
                             media_type="application/activity+json")
 
@@ -731,6 +855,8 @@ def get_post(request: Request, post_id: int):
             raise HTTPException(status_code=404, detail="Not found")
 
         if "application/activity+json" in accept or "application/ld+json" in accept:
+            if not _ap_post_visible(post, request, session):
+                raise HTTPException(status_code=404, detail="Not found")
             return JSONResponse(content=post.to_ap_note(),
                                 media_type="application/activity+json")
 
@@ -742,7 +868,10 @@ def get_user_by_handle(request: Request, username: str):
     accept = request.headers.get("Accept", "")
 
     with get_session() as session:
-        user = session.query(User).filter_by(username=username, is_remote=False).first()
+        if "@" in username:
+            user = session.query(User).filter_by(username=username, is_remote=True).first()
+        else:
+            user = session.query(User).filter_by(username=username, is_remote=False).first()
         if not user:
             raise HTTPException(status_code=404, detail="Not found")
         if getattr(user, 'is_deactivated', False):
@@ -776,6 +905,41 @@ def get_like(like_uuid: str):
             "type": "Like",
             "actor": actor.actor_uri(),
             "object": post.ap_id,
+            "_misskey_reaction": like.reaction or "★",
+        }, media_type="application/activity+json")
+
+@app.get("/emojis/{keyword}")
+def get_emoji(keyword: str):
+    """Return an Emoji activity (dereferenceable URI)."""
+    from app.models import CustomEmoji, get_session
+    from app.config import S3_ENABLED
+    ap_id = f"{BASE_URL}/emojis/{keyword}"
+    with get_session() as s:
+        emoji = s.query(CustomEmoji).filter_by(keyword=keyword).first()
+        if not emoji:
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        sub = "remote" if emoji.domain or emoji.category == "remote" else "local"
+        if S3_ENABLED:
+            from app.utils.storage import get_storage
+            try:
+                storage = get_storage()
+                url = storage.url(f"emojis/{sub}/{emoji.file_name}")
+            except Exception:
+                url = f"{BASE_URL}/emojis/{sub}/{emoji.file_name}"
+        else:
+            url = f"{BASE_URL}/emojis/{sub}/{emoji.file_name}"
+        ext = emoji.file_name.rsplit(".", 1)[-1].lower() if "." in emoji.file_name else "png"
+        mt = f"image/{ext}" if ext in ("png", "jpg", "jpeg", "gif", "webp", "svg") else "image/png"
+        return JSONResponse({
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": ap_id,
+            "type": "Emoji",
+            "name": f":{keyword}:",
+            "icon": {
+                "type": "Image",
+                "mediaType": mt,
+                "url": url,
+            },
         }, media_type="application/activity+json")
 
 @app.get("/boosts/{boost_uuid}")
@@ -807,11 +971,16 @@ def get_post_by_handle(request: Request, username: str, number: str):
         user = session.query(User).filter_by(username=username, is_remote=False).first()
         if not user:
             raise HTTPException(status_code=404, detail="Not found")
-        post = session.query(Post).filter_by(author_id=user.id, number=number, is_deleted=False).first()
+        post = session.query(Post).filter_by(author_id=user.id, number=number).first()
         if not post:
             raise HTTPException(status_code=404, detail="Not found")
 
         if "application/activity+json" in accept or "application/ld+json" in accept:
+            if post.is_deleted:
+                return JSONResponse(content=post.to_ap_note(),
+                                    media_type="application/activity+json")
+            if not _ap_post_visible(post, request, session):
+                raise HTTPException(status_code=404, detail="Not found")
             return JSONResponse(content=post.to_ap_note(),
                                 media_type="application/activity+json")
 
@@ -958,6 +1127,9 @@ def well_known_nodeinfo():
         ]
     })
 
+
+if os.path.isdir(_emoji_static_dir):
+    app.mount("/emojis", StaticFiles(directory=_emoji_static_dir), name="emojis")
 
 app.include_router(auth_router)
 app.include_router(admin_router)

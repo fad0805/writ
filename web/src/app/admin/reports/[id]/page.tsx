@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
 import AdminNav from "@/components/AdminNav";
+import { sanitizePost } from "@/lib/sanitize";
 import Link from "next/link";
 
 interface TargetInfo {
@@ -174,7 +175,7 @@ export default function ReportDetailPage() {
               {target.content && (
                 <div style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 4, maxHeight: 120, overflow: "auto", lineHeight: 1.5 }}
                   dangerouslySetInnerHTML={{
-                    __html: target.content.length > 300 ? target.content.slice(0, 300) + "..." : target.content
+                    __html: sanitizePost(target.content.length > 300 ? target.content.slice(0, 300) + "..." : target.content)
                   }}
                 />
               )}

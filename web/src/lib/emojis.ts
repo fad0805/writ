@@ -18,10 +18,25 @@ export interface CustomEmoji {
 
 export function injectEmojis(list: CustomEmojiRaw[]) {
   if (!cache) cache = [];
+  let changed = false;
   for (const e of list) {
     if (!cache.some((c) => c.keyword === e.keyword)) {
       cache.push({ ...e, category: "remote" });
+      changed = true;
     }
+  }
+  if (changed && typeof window !== "undefined") {
+    cache = [...cache];
+    (window as any).__emojiCache = cache;
+    if ((window as any).__emojiMap) {
+      for (const e of list) {
+        if (e.keyword && e.url && !(window as any).__emojiMap[e.keyword]) {
+          (window as any).__emojiMap[e.keyword] = e.url;
+        }
+      }
+    }
+    window.dispatchEvent(new CustomEvent("emojichange", { detail: list }));
+    _emojiSubscribers.forEach(fn => fn(cache as CustomEmoji[]));
   }
 }
 
@@ -30,40 +45,34 @@ let fetchPromise: Promise<CustomEmoji[]> | null = null;
 let cacheTs = 0;
 
 export async function getCustomEmojis(): Promise<CustomEmoji[]> {
-  let storedTs = 0;
   if (typeof localStorage !== "undefined") {
-    storedTs = parseInt(localStorage.getItem("emoji_cache_ts") || "0", 10);
-    if (storedTs > cacheTs) {
-      cache = null;
-      fetchPromise = null;
-      cacheTs = storedTs;
+    const storedTs = parseInt(localStorage.getItem("emoji_cache_ts") || "0", 10);
+    const stored = localStorage.getItem("emoji_cache");
+    if (storedTs > cacheTs && stored) {
+      try {
+        const parsed: CustomEmoji[] = JSON.parse(stored);
+        cache = parsed;
+        cacheTs = storedTs;
+        return parsed;
+      } catch {}
     }
   }
   if (cache !== null) return cache;
   if (fetchPromise) return fetchPromise;
   fetchPromise = (async () => {
-    const all: CustomEmoji[] = [];
-    let offset = 0;
-    const limit = 30;
     try {
-      while (true) {
-        const res = await fetch(`/api/emojis?limit=${limit}&offset=${offset}`, { credentials: "include" });
-        if (!res.ok) break;
-        const data = await res.json();
-        const batch: CustomEmoji[] = data.emojis || data || [];
-        for (const e of batch) {
-          if (!all.some((c) => c.keyword === e.keyword)) {
-            all.push(e);
-          }
-        }
-        if (!data.has_more) break;
-        offset += limit;
-      }
-    } catch {}
-    cache = all;
+      const res = await fetch(`/api/emojis?limit=9999&offset=0`, { credentials: "include" });
+      if (!res.ok) { cache = []; fetchPromise = null; return cache as CustomEmoji[]; }
+      const data = await res.json();
+      cache = data.emojis || [];
+    } catch { cache = []; }
+    if (typeof window !== "undefined") (window as any).__emojiCache = cache;
     fetchPromise = null;
-    cacheTs = storedTs || Date.now();
-    return cache;
+    cacheTs = Date.now();
+    if (typeof localStorage !== "undefined") {
+      try { localStorage.setItem("emoji_cache", JSON.stringify(cache)); localStorage.setItem("emoji_cache_ts", String(cacheTs)); } catch {}
+    }
+    return cache as CustomEmoji[];
   })();
   return fetchPromise;
 }
@@ -72,8 +81,34 @@ export function invalidateEmojiCache() {
   cache = null;
   fetchPromise = null;
   if (typeof localStorage !== "undefined") {
+    localStorage.removeItem("emoji_cache");
     localStorage.setItem("emoji_cache_ts", Date.now().toString());
   }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("emojichange"));
+  }
+  getCustomEmojis().then(list => {
+    _emojiSubscribers.forEach(fn => fn(list));
+  });
+}
+
+const _emojiSubscribers: Set<(emojis: CustomEmoji[]) => void> = new Set();
+
+export function subscribeEmojis(cb: (emojis: CustomEmoji[]) => void): () => void {
+  // 이미 캐시가 있으면 마운트 직후 바로 전달
+  if (cache) { 
+    cb(cache); 
+  }
+  _emojiSubscribers.add(cb);
+  // 캐시가 아직 없다면 비동기로 가져온 뒤, 모든 구독자에게 전파!
+  if (!cache) {
+    getCustomEmojis().then(list => {
+      const freshList = [...list];
+      // ★ 이 부분이 핵심입니다. 로딩이 끝났을 때 모든 구독자에게 새 데이터를 쏴줍니다.
+      _emojiSubscribers.forEach(fn => fn(freshList));
+    });
+  }
+  return () => { _emojiSubscribers.delete(cb); };
 }
 
 export function renderCustomEmojis(html: string, emojis: CustomEmoji[], size?: number): string {

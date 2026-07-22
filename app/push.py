@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import threading
 
 from app.config import VAPID_CLAIM_EMAIL, get_vapid_keys
@@ -22,13 +23,69 @@ NOTIF_LABELS = {
 
 
 def _get_vapid_key():
+    from app.config import _sanitize_pem, _is_valid_pem_private_key
+    # 1. Try DB first (authoritative source)
+    try:
+        from app.models import ServerSetting, get_session
+        with get_session() as s:
+            ss = ServerSetting.get(s)
+            db_priv = _sanitize_pem(getattr(ss, 'vapid_private_key', '') or '')
+            db_pub = _sanitize_pem(getattr(ss, 'vapid_public_key', '') or '')
+            if db_priv and db_pub and _is_valid_pem_private_key(db_priv):
+                return {"privateKey": db_priv, "publicKey": db_pub}
+            if (db_priv or db_pub) and not _is_valid_pem_private_key(db_priv):
+                print(f"[PUSH] DB VAPID key invalid (len={len(db_priv)}), clearing and regenerating", flush=True)
+                try:
+                    ss.vapid_private_key = ''
+                    ss.vapid_public_key = ''
+                    s.commit()
+                    print("[PUSH] Cleared invalid VAPID key from DB", flush=True)
+                except Exception as ce:
+                    print(f"[PUSH] Failed to clear DB key: {ce}", flush=True)
+    except Exception:
+        pass
+
+    # 2. Try env vars
     priv, pub = get_vapid_keys()
-    if not priv or not pub:
-        return None
-    return {
-        "privateKey": priv,
-        "publicKey": pub,
-    }
+    if priv and pub:
+        return {"privateKey": priv, "publicKey": pub}
+
+    # 3. Auto-generate and persist to DB
+    try:
+        import base64
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.hazmat.primitives import serialization
+        from app.models import ServerSetting, get_session
+
+        _key = ec.generate_private_key(ec.SECP256R1())
+        _priv_pem = _key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        ).decode()
+        _raw_pub = _key.public_key().public_bytes(
+            serialization.Encoding.X962,
+            serialization.PublicFormat.UncompressedPoint,
+        )
+        _pub_b64 = base64.urlsafe_b64encode(_raw_pub).rstrip(b"=").decode()
+
+        with get_session() as s:
+            ss = ServerSetting.get(s)
+            ss.vapid_private_key = _priv_pem
+            ss.vapid_public_key = _pub_b64
+            s.commit()
+
+        # Update env for the rest of this process
+        import os
+        os.environ["VAPID_PRIVATE_KEY"] = _priv_pem
+        os.environ["VAPID_PUBLIC_KEY"] = _pub_b64
+
+        print("[PUSH] Auto-generated new VAPID keys and saved to DB", flush=True)
+        return {"privateKey": _priv_pem, "publicKey": _pub_b64}
+    except Exception as e:
+        print(f"[PUSH] Failed to auto-generate VAPID keys: {e}", flush=True)
+
+    return None
 
 
 def send_push_to_user(user_id: int, notification_type: str, from_username: str = "", post_id: int = None, metadata: dict = None):
@@ -58,7 +115,8 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
                     from app.models import Post as _Po
                     _p = s.query(_Po).get(post_id)
                     if _p and _p.content:
-                        _preview = _p.content.replace("<br>", " ").replace("\n", " ").strip()[:80]
+                        _preview = re.sub(r'<[^>]+>', ' ', _p.content).replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+                        _preview = re.sub(r'\s+', ' ', _preview).strip()[:80]
                         if _preview:
                             body += f"\n{_preview}"
                 except Exception:
@@ -82,32 +140,51 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
             })
 
             from pywebpush import webpush, WebPushException
+            from py_vapid import Vapid as _Vapid
+            from cryptography.hazmat.primitives.serialization import load_pem_private_key
+
+            raw_pem = vapid_key["privateKey"]
+            if isinstance(raw_pem, str):
+                raw_pem = raw_pem.strip().replace("\\n", "\n").replace("\\r", "")
+
+            try:
+                _priv_key_obj = load_pem_private_key(raw_pem.encode("utf-8"), password=None)
+                _vapid_obj = _Vapid()
+                _vapid_obj.private_key = _priv_key_obj
+            except Exception as _kerr:
+                print(f"[PUSH] Failed to load VAPID key object: {_kerr}", flush=True)
+                return
+
+            print(f"[PUSH] VAPID key loaded OK type={type(_vapid_obj.private_key).__name__}", flush=True)
+
             for sub in subs:
                 try:
+                    print(f"[PUSH] sending to sub {sub.id}", flush=True)
                     webpush(
                         subscription_info={
                             "endpoint": sub.endpoint,
                             "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
                         },
                         data=payload,
-                        vapid_private_key=vapid_key["privateKey"],
+                        vapid_private_key=_vapid_obj,
                         vapid_claims={"sub": f"mailto:{VAPID_CLAIM_EMAIL}"},
                     )
+                    print(f"[PUSH] OK sub {sub.id}", flush=True)
                 except (ValueError, TypeError) as _ke:
-                    logger.warning("Push key error for sub %s: %s (key may have changed after restart)", sub.id, _ke)
-                    s.delete(sub)
+                    print(f"[PUSH] key error sub {sub.id}: {_ke}", flush=True)
                 except WebPushException as ex:
                     status_code = getattr(ex, "response", None)
                     if status_code is not None and hasattr(status_code, "status_code"):
                         status_code = status_code.status_code
-                    if status_code in (404, 410):
-                        logger.info("Removing expired push subscription %s for user %s", sub.id, user_id)
+                    print(f"[PUSH] WebPushException sub {sub.id} status={status_code}: {ex}", flush=True)
+                    if status_code in (404, 410, 401, 403):
+                        print(f"[PUSH] Removing stale subscription {sub.id} (status={status_code}, VAPID key changed)", flush=True)
                         s.delete(sub)
                     else:
-                        logger.warning("Push send failed for sub %s: %s", sub.id, ex)
+                        print(f"[PUSH] WebPushException sub {sub.id} (not 404/410/401/403): {ex}", flush=True)
                 except Exception as ex:
-                    logger.warning("Push send error for sub %s: %s", sub.id, ex)
+                    print(f"[PUSH] error sub {sub.id}: {ex}", flush=True)
 
             s.commit()
     except Exception as ex:
-        logger.warning("send_push_to_user error: %s", ex)
+        print(f"[PUSH] send_push_to_user error: {ex}", flush=True)

@@ -6,8 +6,11 @@ import { api, NotificationData, User } from "@/lib/api";
 import Link from "next/link";
 import PostCard from "@/components/PostCard";
 import Icon from "@/components/Icon";
+import Avatar from "@/components/Avatar";
 import DirectUserCard from "@/components/DirectUserCard";
 import InfiniteScroll from "@/components/InfiniteScroll";
+import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
+import { sanitizeName } from "@/lib/sanitize";
 
 type DirectUserData = User & {
   latest_previews?: { text: string; is_me: boolean }[];
@@ -34,6 +37,7 @@ const NOTIF_ICONS: Record<string, string> = {
   post: "bell_solid",
   moderation: "shield_filled",
   new_episode: "book",
+  poll_ended: "chart",
 };
 
 export default function NotificationsPage() {
@@ -45,20 +49,42 @@ export default function NotificationsPage() {
 
   const [notifs, setNotifs] = useState<NotificationData[]>([]);
   const [directGroups, setDirectGroups] = useState<DirectUserData[]>([]);
-  const [filter, setFilter] = useState(() => {
-    try {
-      const saved = sessionStorage.getItem("notif_filter");
-      if (saved) {
-        sessionStorage.removeItem("notif_filter");
-        return saved;
-      }
-    } catch {}
-    return "";
-  });
+  const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(20);
+  const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
+  const touchStartX = useRef(0);
+
+  useEffect(() => {
+    const h = (e: TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+    document.addEventListener("touchstart", h, { passive: true });
+    return () => document.removeEventListener("touchstart", h);
+  }, []);
+
+  useEffect(() => {
+    const h = (e: TouchEvent) => {
+      const dx = e.changedTouches[0].clientX - touchStartX.current;
+      if (Math.abs(dx) > 100) {
+        const idx = FILTERS.findIndex((f) => f.value === filter);
+        if (dx > 0 && idx > 0) setFilter(FILTERS[idx - 1].value);
+        else if (dx < 0 && idx < FILTERS.length - 1) setFilter(FILTERS[idx + 1].value);
+      }
+    };
+    document.addEventListener("touchend", h, { passive: true });
+    return () => document.removeEventListener("touchend", h);
+  }, [filter]);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("notif_filter");
+      if (saved) {
+        sessionStorage.removeItem("notif_filter");
+        setFilter(saved);
+      }
+    } catch {}
+  }, []);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -84,16 +110,33 @@ export default function NotificationsPage() {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     try {
-      const data = await api.getNotifications(filter || undefined, 10, offset);
+      const data = await api.getNotifications(filter || undefined, 5, offset);
       setNotifs((prev) => { const merged = [...prev, ...data.notifications]; if (merged.length >= 200) setHasMore(false); return merged; });
       setHasMore(data.has_more);
-      setOffset((prev) => prev + 10);
+      setOffset((prev) => prev + 5);
     } catch {}
     setLoadingMore(false);
   }, [filter, offset, hasMore, loadingMore]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { window.dispatchEvent(new Event("notificationsread")); }, []);
+  useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
+  useEffect(() => {
+    if (!user || filter === "direct") return;
+    const handler = () => {
+      api.getNotifications(undefined, 5, 0, false).then((data) => {
+        setNotifs((prev) => {
+          const existing = new Set(prev.map((n) => n.id));
+          const newItems = data.notifications.filter((n) => !existing.has(n.id));
+          if (newItems.length === 0) return prev;
+          return [...newItems, ...prev];
+        });
+        setHasMore(data.has_more);
+      }).catch(() => {});
+    };
+    window.addEventListener("notifchange", handler);
+    return () => window.removeEventListener("notifchange", handler);
+  }, [filter, user]);
 
   const handleApprove = useCallback(async (username: string) => {
     try {
@@ -108,6 +151,24 @@ export default function NotificationsPage() {
       setNotifs((prev) => prev.filter((n) => !(n.type === "follow_request" && n.from_user?.username === username)));
     } catch {}
   }, []);
+
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const updateTabMask = useCallback(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    const atStart = el.scrollLeft <= 2;
+    const atEnd = el.scrollLeft >= el.scrollWidth - el.clientWidth - 2;
+    const fadeSize = 20;
+    const leftFade = atStart ? 0 : fadeSize;
+    const rightFade = atEnd ? 0 : fadeSize;
+    el.style.maskImage = `linear-gradient(to right, transparent ${leftFade}px, black ${leftFade}px, black calc(100% - ${rightFade}px), transparent calc(100% - ${rightFade}px))`;
+    el.style.webkitMaskImage = el.style.maskImage;
+  }, []);
+  useEffect(() => {
+    updateTabMask();
+    window.addEventListener("resize", updateTabMask);
+    return () => window.removeEventListener("resize", updateTabMask);
+  }, [updateTabMask]);
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
   if (!user) return null;
@@ -147,39 +208,18 @@ export default function NotificationsPage() {
 
   const handleMarkAllRead = async () => {
     try {
-      await api.getNotifications(filter || undefined);
       if (filter === "direct") {
         const res = await fetch("/api/notifications/direct-threads", { credentials: "include" });
         const data = await res.json();
         setDirectGroups(data.users || []);
-        setNotifs([]);
       } else {
-        const data = await api.getNotifications(filter || undefined);
-        setNotifs(data.notifications);
-        setDirectGroups([]);
+        await api.getNotifications(filter || undefined, 9999, 0, true);
       }
+      setNotifs((prev) => prev.map((n) => ({ ...n, is_read: true })));
       window.dispatchEvent(new Event("notificationsread"));
       window.dispatchEvent(new Event("notifchange"));
     } catch {}
   };
-
-  const tabsRef = useRef<HTMLDivElement>(null);
-  const updateTabMask = useCallback(() => {
-    const el = tabsRef.current;
-    if (!el) return;
-    const atStart = el.scrollLeft <= 2;
-    const atEnd = el.scrollLeft >= el.scrollWidth - el.clientWidth - 2;
-    const fadeSize = 20;
-    const leftFade = atStart ? 0 : fadeSize;
-    const rightFade = atEnd ? 0 : fadeSize;
-    el.style.maskImage = `linear-gradient(to right, transparent ${leftFade}px, black ${leftFade}px, black calc(100% - ${rightFade}px), transparent calc(100% - ${rightFade}px))`;
-    el.style.webkitMaskImage = el.style.maskImage;
-  }, []);
-  useEffect(() => {
-    updateTabMask();
-    window.addEventListener("resize", updateTabMask);
-    return () => window.removeEventListener("resize", updateTabMask);
-  }, [updateTabMask]);
 
   return (
     <>
@@ -223,13 +263,17 @@ export default function NotificationsPage() {
               else if (n.type === "new_episode" && n.metadata?.novel_id && n.metadata?.episode_id) router.push(`/series/${n.metadata.novel_id}/episodes/${n.metadata.episode_id}`);
             }}
             style={{ cursor: ((n.type === "moderation" && (n.metadata?.type === "report" || n.metadata?.type === "new_user")) || (n.type === "mention" && n.post?.is_dm) || (n.type === "new_episode")) ? "pointer" : undefined }}>
-            <div className="notif-icon notif-icon-dynamic" style={{ color: n.type === "like" ? "#f1c40f" : n.type === "boost" ? "var(--accent)" : n.type === "follow" ? "#4fc3f7" : n.type === "new_episode" ? "#9b59b6" : (n.type === "moderation" && n.metadata?.type === "new_user") ? "#4fc3f7" : n.type === "moderation" ? "var(--danger)" : "var(--text-muted)" }}>
-              <Icon name={(n.type === "moderation" && n.metadata?.type === "new_user") ? "user_solid" : NOTIF_ICONS[n.type] || "bell"} size={20} />
+            <div className="notif-icon notif-icon-dynamic" style={{ color: n.type === "like" ? "#f1c40f" : n.type === "boost" ? "var(--accent)" : n.type === "follow" ? "#4fc3f7" : n.type === "new_episode" ? "#9b59b6" : (n.type === "moderation" && n.metadata?.type === "new_user") ? "#4fc3f7" : n.type === "moderation" ? "var(--danger)" : "var(--text-muted)", borderRadius: 8, overflow: "hidden", flexShrink: 0 }}>
+              {n.from_user && (n.type === "like" || n.type === "boost" || n.type === "follow" || n.type === "follow_request" || n.type === "mention" || n.type === "new_episode" || n.type === "poll_ended" || (n.type === "moderation" && n.metadata?.type === "new_user") || (n.type === "moderation" && n.metadata?.type === "migrate_request")) ? (
+                <Avatar user={n.from_user} style={{ width: 40, height: 40, borderRadius: 8 }} />
+              ) : (
+                <Icon name={(n.type === "moderation" && n.metadata?.type === "new_user") ? "user_solid" : NOTIF_ICONS[n.type] || "bell"} size={20} />
+              )}
             </div>
             <div className="notif-body">
               {n.type === "moderation" && n.metadata?.type === "report" ? (
                 <>
-                  <Link href={`/@${n.from_user?.username}`} className="notif-from-link">{n.from_user?.display_name}</Link>{" "}
+                  <Link href={`/@${n.from_user?.username}`} className="notif-from-link"><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user?.display_name || "", emojiMap)) }} /></Link>{" "}
                   님이 <strong>{targetTypeNames[n.metadata.target_type] || n.metadata.target_type}</strong>을(를) 신고했습니다
                   <div className="notif-mod-message">
                     <div style={{ fontSize: 13, marginBottom: 2 }}>
@@ -241,9 +285,9 @@ export default function NotificationsPage() {
                   </div>
                 </>
               ) : n.type === "moderation" && n.metadata?.type === "new_user" ? (
-                <><Link href={`/@${n.from_user?.username}`} className="notif-from-link">{n.from_user?.display_name}</Link> 님이 가입했습니다</>
+                <><Link href={`/@${n.from_user?.username}`} className="notif-from-link"><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user?.display_name || "", emojiMap)) }} /></Link> 님이 가입했습니다</>
               ) : n.type === "moderation" && n.metadata?.type === "migrate_request" ? (
-                <><Link href={`/@${n.from_user?.username}`} className="notif-from-link">{n.from_user?.display_name || n.from_user?.username}</Link> 님이 계정 이전을 요청했습니다
+                <><Link href={`/@${n.from_user?.username}`} className="notif-from-link"><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user?.display_name || n.from_user?.username || "", emojiMap)) }} /></Link> 님이 계정 이전을 요청했습니다
                 <div style={{ marginTop: 6, display: "flex", gap: 6 }}>
                   <button onClick={async () => {
                     const form = new FormData();
@@ -261,10 +305,12 @@ export default function NotificationsPage() {
                 </div></>
               ) : n.type === "moderation" ? (
                 <><span className="font-bold" style={{ color: "var(--danger)" }}>{actionNames[n.metadata?.action] || n.metadata?.action || "중재"}</span> 조치가 적용되었습니다.</>
+              ) : n.type === "poll_ended" ? (
+                <>회원님이 참여한 투표가 끝났습니다</>
               ) : (
                 <>{n.from_user && (
                   <Link href={`/@${n.from_user.username}`} className="notif-from-link">
-                    {n.from_user.display_name}
+                    <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user.display_name, emojiMap)) }} />
                   </Link>
                 )}{" "}
                 {typeText(n.type, n.metadata)}</>
