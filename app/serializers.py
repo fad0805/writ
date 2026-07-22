@@ -1,6 +1,8 @@
 import re
 import datetime
 
+from sqlalchemy import desc
+
 from app.models import Like, Boost, Bookmark, User, Vote, Post, Follow
 from app.utils.datetime import _fmt_dt
 from app.utils.emoji import _load_emojis
