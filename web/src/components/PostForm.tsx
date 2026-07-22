@@ -110,7 +110,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         }
 
         try {
-          const options = { credentials: "include" };
+          const options: RequestInit = { credentials: "include" };
           if (isPostRequest) {
             options.method = "POST";
             options.body = form;
