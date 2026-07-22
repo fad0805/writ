@@ -60,6 +60,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, onRewrite,
   const [showReport, setShowReport] = useState(false);
   const [showRewrite, setShowRewrite] = useState(false);
   const [showPollResults, setShowPollResults] = useState(false);
+  const [pollRefreshing, setPollRefreshing] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [reportReason, setReportReason] = useState("");
   const [reportError, setReportError] = useState("");
@@ -659,7 +660,31 @@ const localReactionEmojiMap = useMemo(() => {
                 );
               })}
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-                <span>총 {total}표</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  총 {total}표
+                  {!post.is_mine && post.ap_id && (
+                    <button
+                      type="button"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (pollRefreshing) return;
+                        setPollRefreshing(true);
+                        try {
+                          const result = await api.refreshPoll(post.id);
+                          if (result.post) Object.assign(post, result.post);
+                          if (onUpdate) onUpdate();
+                          else window.dispatchEvent(new Event("postchange"));
+                        } catch (err: any) { alert(err.message); }
+                        finally { setPollRefreshing(false); }
+                      }}
+                      className="action-btn"
+                      style={{ fontSize: 10, padding: "1px 4px", lineHeight: 1 }}
+                      title="원격 서버에서 최신 투표 결과 가져오기"
+                    >
+                      <span style={pollRefreshing ? { animation: "spin 1s linear infinite" } : undefined}><Icon name="refresh" /></span>
+                    </button>
+                  )}
+                </span>
                 <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   {!showResults && post.my_vote == null && !isExpired && !readonly && !post.is_mine && (
                     <button type="button" onClick={(e) => { e.stopPropagation(); setShowPollResults(true); }} className="action-btn" style={{ fontSize: 11, padding: "2px 6px" }}>결과 보기</button>

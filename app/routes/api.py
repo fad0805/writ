@@ -2209,6 +2209,69 @@ def api_unvote_post(request: Request, post_id: int):
     return {"ok": True}
 
 
+@router.post("/posts/{post_id}/refresh-poll")
+def api_refresh_poll(request: Request, post_id: int):
+    user = require_active_auth(request)
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
+        if not post or not post.poll_data:
+            raise HTTPException(status_code=404, detail="Post or poll not found")
+        if not _can_view(post, user, s):
+            raise HTTPException(status_code=404, detail="Post not found")
+        if not post.ap_id:
+            raise HTTPException(status_code=400, detail="Local poll has nothing to refresh")
+
+    # Fetch remote object with HTTP Signature
+    remote_data = _ap_fetch(post.ap_id, user)
+    if not remote_data:
+        raise HTTPException(status_code=502, detail="Failed to fetch remote poll")
+    obj = remote_data.get("object", remote_data) if isinstance(remote_data, dict) else {}
+    if not isinstance(obj, dict):
+        raise HTTPException(status_code=502, detail="Invalid remote response")
+
+    # Extract poll data
+    one_of = obj.get("oneOf") or obj.get("anyOf") or []
+    if not isinstance(one_of, list) or not one_of:
+        raise HTTPException(status_code=502, detail="Remote object has no poll data")
+
+    new_options = []
+    for opt in one_of:
+        if isinstance(opt, dict) and opt.get("name"):
+            replies = opt.get("replies", {})
+            votes_count = 0
+            if isinstance(replies, dict):
+                votes_count = replies.get("totalItems", 0)
+            new_options.append({"text": opt["name"], "votes_count": votes_count})
+
+    if not new_options:
+        raise HTTPException(status_code=502, detail="No valid poll options found")
+
+    # Merge: match by text, take MAX of local and remote counts (never decrease)
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id).first()
+        if not post or not post.poll_data:
+            raise HTTPException(status_code=404, detail="Post not found")
+        old_options = post.poll_data.get("options", [])
+        text_to_old = {o.get("text", ""): o for o in old_options}
+        for new_opt in new_options:
+            old = text_to_old.get(new_opt["text"])
+            if old:
+                new_opt["votes_count"] = max(new_opt.get("votes_count", 0), old.get("votes_count", 0))
+
+        new_expires = obj.get("endTime") or post.poll_data.get("expires_at", "")
+        post.poll_data = {
+            "options": new_options,
+            "expires_at": new_expires,
+        }
+        s.commit()
+        s.expire_all()
+
+        post = s.query(Post).filter_by(id=post_id).first()
+        updated = _post_json(post, user, s)
+
+    return {"ok": True, "post": updated}
+
+
 @router.post("/pin/post/{post_id}")
 def api_pin_post(request: Request, post_id: int):
     user = require_active_auth(request)
