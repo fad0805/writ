@@ -78,19 +78,53 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     if (shareUrl && !quotePost) {
       const base = typeof window !== "undefined" ? window.location.origin : "";
       const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      // 1. 기존 유저 포스트 패턴: /@유저아이디/숫자
       const localMatch = base ? shareUrl.match(new RegExp(`^${escapedBase}/@([^/]+)/(\\d+)`)) : null;
+      // 2. 새 시리즈/에피소드 패턴: /series/숫자/episodes/숫자
+      const seriesEpisodeMatch = base ? shareUrl.match(new RegExp(`^${escapedBase}/series/(\\d+)/episodes/(\\d+)`)) : null;
+      // 3. 새 시리즈 by-number 패턴: /series/by-number/문자열/문자열
+      const seriesByNumberMatch = base ? shareUrl.match(new RegExp(`^${escapedBase}/series/by-number/([^/]+)/([^/]+)`)) : null;
+
+
       (async () => {
+        let fetchUrl = "";
+        let isPostRequest = false;
+        const form = new FormData();
+        form.append("url", shareUrl);
+
         if (localMatch) {
-          try {
-            const r = await fetch(`/api/by-number/${localMatch[1]}/${localMatch[2]}`, { credentials: "include" });
-            if (r.ok) { setQuotePost(await r.json()); return; }
-          } catch {}
+          // 1. 기존 유저 포스트 GET 요청
+          fetchUrl = `/api/${localMatch[1]}/${localMatch[2]}`;
+        } else if (seriesEpisodeMatch) {
+          // 2. 시리즈 에피소드용 (만약 POST로 url을 넘기는 구조라면)
+          fetchUrl = "/api/fetch-episode";
+          isPostRequest = true;
+        } else if (seriesByNumberMatch || seriesEpisodeMatch) { // 혹은 기존 시리즈 관련 통합 처리
+          // 3. 시리즈 관련 POST 요청
+          fetchUrl = "/api/fetch-series";
+          isPostRequest = true;
+        } else {
+          // 4. 그 외 외부 페치 fallback
+          fetchUrl = "/api/fetch-post";
+          isPostRequest = true;
         }
-        const form = new FormData(); form.append("url", shareUrl);
+
         try {
-          const r = await fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form });
-          if (r.ok) { setQuotePost(await r.json()); }
-        } catch {}
+          const options = { credentials: "include" };
+          if (isPostRequest) {
+            options.method = "POST";
+            options.body = form;
+          }
+
+          const r = await fetch(fetchUrl, options);
+          if (r.ok) {
+            const data = await r.json();
+            setQuotePost(data);
+            return;
+          }
+        } catch (e) {
+          console.error("데이터 페치 실패:", e);
+        }
       })();
     }
   }, [shareUrl]);
@@ -450,10 +484,10 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     });
   }, [content, hashtagStart]);
 
-  const insertSeries = useCallback((novel: { id: number; title: string }) => {
+  const insertSeries = useCallback((series: { id: number; title: string }) => {
     const slashIdx = content.lastIndexOf("/");
     const before = slashIdx > 0 ? content.slice(0, slashIdx - 1) : "";
-    const fullUrl = `${window.location.origin}/series/${novel.id}`;
+    const fullUrl = `${window.location.origin}/series/${series.id}`;
     const inserted = `${before} ${fullUrl} `;
     setContent(inserted);
     setShowSeriesSearch(false); setSeriesResults([]); setSeriesSearchQ("");

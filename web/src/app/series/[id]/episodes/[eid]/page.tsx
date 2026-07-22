@@ -141,7 +141,15 @@ export default function EpisodeDetailPage() {
         </div>
         </div>
       </article>
-      {showSharePost && <SharePostModal url={`/series/${novel.id}/episodes/${episode.id}`} content={`「${episode.episode_number}화: ${episode.title}」\n${novel.title} by ${novel.author?.display_name || novel.author?.username}`} onClose={() => setShowSharePost(false)} />}
+      {showSharePost && <SharePostModal
+        url={`/series/${novel.id}/episodes/${episode.id}`}
+        title={novel.title}
+        authorName={novel.author?.display_name || novel.author?.username}
+        description={episode.description}
+        tags={novel.tags}
+        content={`「${episode.episode_number}화: ${episode.title}」`}
+        onClose={() => setShowSharePost(false)}
+      />}
       {showReport && (
         <div className="reply-modal-backdrop active" onClick={() => setShowReport(false)}>
           <div className="reply-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>

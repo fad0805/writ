@@ -220,7 +220,14 @@ export default function NovelDetailPage() {
           </div>
         ))}
       </div>
-      {showSharePost && <SharePostModal url={`/series/${novel.id}`} title={novel.title} authorName={author?.display_name || author?.username} description={novel.description} tags={novel.tags} onClose={() => setShowSharePost(false)} />}
+      {showSharePost && <SharePostModal
+        url={`/series/${novel.id}`}
+        title={novel.title}
+        authorName={author?.display_name || author?.username}
+        description={novel.description}
+        tags={novel.tags}
+        onClose={() => setShowSharePost(false)}
+      />}
       {showReport && (
         <div className="reply-modal-backdrop active" onClick={() => setShowReport(false)}>
           <div className="reply-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>

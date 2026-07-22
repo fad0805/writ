@@ -203,13 +203,22 @@ def process_local_post(text: str) -> str:
 
     # 2. 코드 블록 보호 (플레이스홀더 사용)
     code_blocks = []
-    def _save_code_block(m):
-        code_blocks.append(f'<pre><code>{m.group(2).rstrip()}</code></pre>')
-        return f'\x00codeblock_{len(code_blocks) - 1}\x00'
-
     # 2.1 마크다운 코드 블록 처리
     text = re.sub(r'```(\w*)\r?\n([\s\S]*?)```', _save_code_block, text)
     text = re.sub(r'```([^`\n]+?)```', lambda m: f'<pre><code>{m.group(1)}</code></pre>', text)
+
+    # series: 처리
+    text = re.sub(
+        r'(?i)\bseries\s*:\s*(https?://[^\s<>"\')\]#]+)',
+        lambda m: _make_internal_link(m, 'series'),
+        text
+    )
+    # episode: 처리
+    text = re.sub(
+        r'(?i)\bepisode\s*:\s*(https?://[^\s<>"\')\]#]+)',
+        lambda m: _make_internal_link(m, 'episode'),
+        text
+    )
 
     # 3. 생짜 URL 링크화 (코드 블록은 이미 보호됨)
     url_pattern = r'(?<!href=")(?<!src=")(?<!">)(https?://(?!.*/tags/)[^\s<>"\')\]#]+)'
@@ -308,3 +317,16 @@ def extract_mentions_from_local(text: str) -> list[dict]:
             seen_handles.add(handle)
     return mentions
 
+
+def _save_code_block(m):
+    code_blocks.append(f'<pre><code>{m.group(2).rstrip()}</code></pre>')
+    return f'\x00codeblock_{len(code_blocks) - 1}\x00'
+
+
+def _make_internal_link(match, label):
+    url = match.group(1)
+    parsed = urlparse(url)
+    # 만약 우리 도메인 내부 URL이라면 경로(path)만 추출 (예: /series/1/episodes/1)
+    # 외부 도메인이라면 원본 URL 그대로 유지
+    path = parsed.path if parsed.path else url
+    return f'{label}: <a href="{path}" class="u-url {label}-link">{url}</a>'

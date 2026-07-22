@@ -450,14 +450,14 @@ const localReactionEmojiMap = useMemo(() => {
       const novelId = parseInt(epMatch[1]);
       const episodeId = parseInt(epMatch[2]);
       setLoadingQuote(true);
-      fetch(`/api/series/${novelId}/episodes/${episodeId}`, { credentials: 'include' })
-        .then(r => { if (r.ok) return r.json(); throw new Error(); })
-        .then(d => {
-          if (d.episode && d.novel) {
-            setQuotedEpisode({ type: 'episode', episode: d.episode, novel: d.novel, author: d.novel?.author || null });
-          }
-          setLoadingQuote(false);
-        })
+      const form = new FormData();
+      form.append("url", url);
+
+      fetch("/api/fetch-episode", {
+        method: "POST",
+        credentials: "include",
+        body: form
+      })
         .catch(() => setLoadingQuote(false));
     } else if (seriesOnlyMatch) {
       setLoadingQuote(true); // 🌟 누락되었던 로딩 시작 세팅 추가
@@ -476,11 +476,7 @@ const localReactionEmojiMap = useMemo(() => {
       .then((d) => {
         if (!d) return;
         if (d.type === "series" && d.novel) {
-          setQuotedSeries({
-            type: 'series',
-            novel: d.novel,
-            author: d.author || null
-          });
+          setQuotedSeries(d);
         }
       })
       .then(() => setLoadingQuote(false))

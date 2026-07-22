@@ -33,6 +33,7 @@ const TYPE_COLORS: Record<string, string> = {
 export default function MiniPostCard({ post, notifType, notifLabel }: { post: PostData; notifType?: string; notifLabel?: React.ReactNode }) {
   const [isDark, setIsDark] = useState(false);
   const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
+
   useEffect(() => { setIsDark(document.body.classList.contains("dark-theme")); }, []);
   useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
   const validMentions = useMemo(() => new Set(post.mentioned_handles || []), [post.mentioned_handles]);
@@ -53,10 +54,19 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
     html = renderCustomEmojis(html, emojiMap);
     return sanitizePost(rewriteLinks(html, validMentions));
   })();
+  const makeUrl = ((post) => {
+    console.log(post);
+    if (post.type === 'series') return `/series/@${post.author.username}/${post.novel.number}`;
+    if (post.type === 'episode') return `/series/${post.novel.id}/episodes/${post.episode.id}`;
+   if (post.number) {
+      return post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`
+    }
+  })
+
   if (!post || !post.author) return null;
   return (
     <Link
-      href={post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`}
+      href={makeUrl(post)}
       className="mini-post-link"
       style={{ background: bg }}
     >

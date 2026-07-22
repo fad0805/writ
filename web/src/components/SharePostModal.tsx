@@ -12,11 +12,16 @@ export default function SharePostModal({ url, title, authorName, description, ta
   }, []);
 
   const fullUrl = url.startsWith("http") ? url : window.location.origin + url;
-  const initialContent = content || (() => {
+  const initialContent = (() => {
+    const seriesRegex = /^\/series\//;
+    const episodeRegex = /\/episodes\//;
     const parts = [`「${title || url}」`];
     if (authorName) parts.push(`by ${authorName}`);
     if (description) parts.push(`\n${description}`);
     if (tags) parts.push(`\n#${tags.split(/[ ,]+/).filter(Boolean).join(" #")}`);
+    if (content) parts.push(`\n${content}`)
+    if (episodeRegex.test(url)) parts.push(`episode : ${fullUrl}`)
+    else if (seriesRegex.test(url)) parts.push(`series : ${fullUrl}`)
     return parts.join("\n");
   })();
 
