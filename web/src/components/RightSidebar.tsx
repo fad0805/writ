@@ -122,10 +122,10 @@ export default function RightSidebar() {
           {notifs.length > 0 ? notifs.map((n) => {
             if (n.post) return (
               <MiniPostCard key={n.id} post={n.post} notifType={n.type} notifLabel={
-                (n.type === "like" || n.type === "boost") && n.from_user ? (
+                (n.type === "like" || n.type === "boost" || n.type === "mention") && n.from_user ? (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                     <Avatar user={n.from_user} style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: "middle" }} />
-                    <strong>{renderName(n.from_user.display_name || n.from_user.username)}</strong> {n.type === "like" ? "님이 즐겨찾기했습니다" : "님이 부스트했습니다"}
+                    <strong>{renderName(n.from_user.display_name || n.from_user.username)}</strong> {n.type === "like" ? "님이 즐겨찾기했습니다" : n.type === "boost" ? "님이 부스트했습니다" : "님이 회원님을 언급했습니다"}
                   </span>
                 ) : undefined
               } />
