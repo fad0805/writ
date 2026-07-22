@@ -88,7 +88,7 @@ export default function EditModal({ post, onClose, onDone }: { post: PostData; o
             style={forceCw ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
           />
           <div className="edit-modal-footer edit-modal-footer-flex">
-            <EmojiPicker onEmoji={(e) => setContent(content + e)} />
+            <EmojiPicker onEmoji={(e) => setContent(content + e + " ")} />
             <div className="flex-spacer" />
             <button type="submit" disabled={submitting || !content.trim()} className="btn btn-primary">
               {submitting ? "..." : "수정"}

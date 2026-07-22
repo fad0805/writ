@@ -87,7 +87,7 @@ export default function DirectConversationPage() {
           autoFocus
         />
         <div className="dm-emoji-wrap">
-          <EmojiPicker onEmoji={(e) => setInput(input + e)} dropUp />
+          <EmojiPicker onEmoji={(e) => setInput(input + e + " ")} dropUp />
         </div>
         <button type="submit" disabled={sending || !input.trim()} className="btn btn-primary">전송</button>
       </form>
