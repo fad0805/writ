@@ -120,17 +120,6 @@ export default function RightSidebar() {
         <h4><Icon name="bell" /> 알림</h4>
         <div className="notif-mini-list">
           {notifs.length > 0 ? notifs.map((n) => {
-            if (n.post) return (
-              <MiniPostCard key={n.id} post={n.post} notifType={n.type} notifLabel={
-                (n.type === "like" || n.type === "boost" || n.type === "mention") && n.from_user ? (
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                    <Avatar user={n.from_user} style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: "middle" }} />
-                    <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{renderName(n.from_user.display_name || n.from_user.username)}</strong> {n.type === "like" ? "님이 즐겨찾기했습니다" : n.type === "boost" ? "님이 부스트했습니다" : "님이 회원님을 언급했습니다"}
-                  </span>
-                ) : undefined
-              } />
-            );
-
             if (n.type === "vote") {
               return (
                 n.post ? <MiniPostCard key={n.id} post={n.post} notifType={n.type} notifLabel={
@@ -146,7 +135,6 @@ export default function RightSidebar() {
 
             if (n.type === "poll_ended") {
               const pollPost = n.post as unknown as PostData | undefined;
-              const pollText = pollPost?.poll_data?.options?.map((o: PollOption) => o.text || "").join(" / ") || "";
               const msg = n.metadata?.is_author ? "내 투표가 종료되었습니다" : "참여한 투표가 종료되었습니다";
               return (
                 pollPost ? <MiniPostCard key={n.id} post={pollPost} notifType={n.type} notifLabel={
@@ -162,6 +150,17 @@ export default function RightSidebar() {
                 } /> : <div key={n.id} />
               );
             }
+
+            if (n.post) return (
+              <MiniPostCard key={n.id} post={n.post} notifType={n.type} notifLabel={
+                (n.type === "like" || n.type === "boost" || n.type === "mention") && n.from_user ? (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <Avatar user={n.from_user} style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: "middle" }} />
+                    <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{renderName(n.from_user.display_name || n.from_user.username)}</strong> {n.type === "like" ? "님이 즐겨찾기했습니다" : n.type === "boost" ? "님이 부스트했습니다" : "님이 회원님을 언급했습니다"}
+                  </span>
+                ) : undefined
+              } />
+            );
 
             if (n.type === "follow" || n.type === "follow_request") {
               return (
