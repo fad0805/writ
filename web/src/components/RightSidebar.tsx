@@ -5,6 +5,7 @@ import { api, NovelData, NotificationData, PostData, PollOption } from "@/lib/ap
 import Icon from "./Icon";
 import Link from "next/link";
 import MiniPostCard from "./MiniPostCard";
+import Avatar from "./Avatar";
 import { useRouter } from "next/navigation";
 import { getCustomEmojis, renderCustomEmojis, CustomEmoji, invalidateEmojiCache } from "@/lib/emojis";
 import { sanitizeName } from "@/lib/sanitize";
@@ -149,8 +150,8 @@ export default function RightSidebar() {
             if (n.type === "follow" || n.type === "follow_request") {
               return (
                 <Link key={n.id} href={`/@${n.from_user?.username || ""}`} className="mini-post-link" style={{ background: "var(--bg-tertiary)", cursor: "pointer" }}>
-                  <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#4fc3f7" }}>
-                    <Icon name="user_solid" size={14} />
+                  <div className="mini-post-avatar-box" style={{ width: 28, height: 28, borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
+                    {n.from_user ? <Avatar user={n.from_user} style={{ width: 28, height: 28, borderRadius: 6 }} /> : <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#4fc3f7", width: 28, height: 28 }}><Icon name="user_solid" size={14} /></div>}
                   </div>
                   <div className="mini-post-content">
                     <div className="mini-post-author">
@@ -175,8 +176,8 @@ export default function RightSidebar() {
               if (n.metadata?.type === "new_user") {
                 return (
                   <Link key={n.id} href={`/@${n.from_user?.username || ""}`} className="mini-post-link" style={{ background: "var(--bg-tertiary)", cursor: "pointer" }}>
-                    <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#4fc3f7" }}>
-                      <Icon name="user_solid" size={14} />
+                    <div className="mini-post-avatar-box" style={{ width: 28, height: 28, borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
+                      {n.from_user ? <Avatar user={n.from_user} style={{ width: 28, height: 28, borderRadius: 6 }} /> : <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#4fc3f7", width: 28, height: 28 }}><Icon name="user_solid" size={14} /></div>}
                     </div>
                     <div className="mini-post-content">
                       <div className="mini-post-author">
@@ -211,8 +212,8 @@ export default function RightSidebar() {
                 const fromName = n.from_user?.display_name || n.from_user?.username || "알 수 없음";
                 return (
                   <div key={n.id} className="mini-post-link" style={{ background: "var(--bg-tertiary)" }}>
-                    <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#e74c3c" }}>
-                      <Icon name="user_solid" size={14} />
+                    <div className="mini-post-avatar-box" style={{ width: 28, height: 28, borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
+                      {n.from_user ? <Avatar user={n.from_user} style={{ width: 28, height: 28, borderRadius: 6 }} /> : <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#e74c3c", width: 28, height: 28 }}><Icon name="user_solid" size={14} /></div>}
                     </div>
                     <div className="mini-post-content">
                       <div className="text-sm" style={{ color: "var(--text)" }}>
@@ -257,8 +258,8 @@ export default function RightSidebar() {
             if (n.type === "new_episode") {
               return (
                 <Link key={n.id} href={n.metadata?.novel_id && n.metadata?.episode_id ? `/series/${n.metadata.novel_id}/episodes/${n.metadata.episode_id}` : "#"} className="mini-post-link" style={{ background: "var(--bg-tertiary)" }}>
-                  <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#9b59b6" }}>
-                    <Icon name="book" size={14} />
+                  <div className="mini-post-avatar-box" style={{ width: 28, height: 28, borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
+                    {n.from_user ? <Avatar user={n.from_user} style={{ width: 28, height: 28, borderRadius: 6 }} /> : <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: "#9b59b6", width: 28, height: 28 }}><Icon name="book" size={14} /></div>}
                   </div>
                   <div className="mini-post-content">
                     <div className="mini-post-author">
