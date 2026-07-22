@@ -123,7 +123,10 @@ export default function RightSidebar() {
             if (n.post) return (
               <MiniPostCard key={n.id} post={n.post} notifType={n.type} notifLabel={
                 (n.type === "like" || n.type === "boost") && n.from_user ? (
-                  <><strong>{renderName(n.from_user.display_name || n.from_user.username)}</strong> {n.type === "like" ? "님이 즐겨찾기했습니다" : "님이 부스트했습니다"}</>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <Avatar user={n.from_user} style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: "middle" }} />
+                    <strong>{renderName(n.from_user.display_name || n.from_user.username)}</strong> {n.type === "like" ? "님이 즐겨찾기했습니다" : "님이 부스트했습니다"}
+                  </span>
                 ) : undefined
               } />
             );
@@ -131,7 +134,12 @@ export default function RightSidebar() {
             if (n.type === "vote") {
               return (
                 n.post ? <MiniPostCard key={n.id} post={n.post} notifType={n.type} notifLabel={
-                  <><strong>{renderName(n.from_user?.display_name || "알 수 없음")}</strong> 님이 투표에 참여했습니다</>
+                  n.from_user ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <Avatar user={n.from_user} style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: "middle" }} />
+                      <strong>{renderName(n.from_user.display_name || n.from_user.username)}</strong> 님이 투표에 참여했습니다
+                    </span>
+                  ) : <><strong>{renderName("알 수 없음")}</strong> 님이 투표에 참여했습니다</>
                 } /> : <div key={n.id} />
               );
             }
