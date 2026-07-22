@@ -1788,7 +1788,13 @@ def api_boost_post(request: Request, post_id: int):
                     "link_preview": None,
                     "_emojis": [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(s)],
                 }
-                threading.Thread(target=_broadcast_timeline, args=(_og, user.id, post.visibility or "public", False), daemon=True).start()
+                _boost_user_id = user.id
+                _boost_post_id = post_id
+                def _safe_broadcast_boost_pointer():
+                    with get_session() as _s:
+                        if _s.query(Boost).filter_by(user_id=_boost_user_id, post_id=_boost_post_id).first():
+                            _broadcast_timeline(_og, _boost_user_id, post.visibility or "public", False)
+                threading.Thread(target=_safe_broadcast_boost_pointer, daemon=True).start()
             except Exception as e:
                 logger.warning("Failed to broadcast boost stream: %s", e)
             # Also send an update event for the original post (count sync)
@@ -1927,6 +1933,18 @@ def api_unboost_post(request: Request, post_id: int):
             s.commit()
             if post.author_id != user.id:
                 broadcast_refresh_notifs(post.author_id)
+            # SSE: broadcast updated boosts_count (boosted_by cleared) for the original post.
+            # The boost pointer post is serialized with the original post's id (see _post_json),
+            # so clients see it as the original post with boosted_by set. Sending an update
+            # event clears boosted_by and syncs the count across all connected timelines.
+            try:
+                broadcast_post({
+                    "id": post_id, "type": "update",
+                    "boosts_count": remaining,
+                    "boosted_by": None,
+                }, post.author_id, post.visibility or "public", False)
+            except Exception as e:
+                logger.warning("Failed to broadcast unboost update: %s", e)
 
         # 1. Undo 활동 페이로드 구성 (로컬/원격 글 공통)
         undo_id = f"{BASE_URL}/boosts/{uuid.uuid4()}#undo"
