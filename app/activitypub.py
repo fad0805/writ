@@ -1055,9 +1055,10 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
     return (200, "Accepted follow")
 
 
-def _retry_fetch_reply(post_id: int, in_reply_to_ap_id: str):
-    """Background: fetch remote parent and link to local post."""
+def _retry_fetch_reply(post_id: int, in_reply_to_ap_id: str, attempt: int = 0):
+    """Background: fetch remote parent and link to local post. Max 3 attempts."""
     import threading
+    MAX_ATTEMPTS = 3
     def _worker():
         try:
             with get_session() as s:
@@ -1069,6 +1070,11 @@ def _retry_fetch_reply(post_id: int, in_reply_to_ap_id: str):
                 if parent:
                     post.in_reply_to_id = parent.id
                     s.commit()
+                elif attempt + 1 < MAX_ATTEMPTS:
+                    time.sleep(10 * (attempt + 1))
+                    _retry_fetch_reply(post_id, in_reply_to_ap_id, attempt + 1)
+                else:
+                    print(f"[RETRY-REPLY] gave up post_id={post_id} after {MAX_ATTEMPTS} attempts", flush=True)
         except Exception as e:
             print(f"[RETRY-REPLY] failed post_id={post_id} err={e}", flush=True)
     threading.Thread(target=_worker, daemon=True).start()
@@ -1122,7 +1128,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     headers["Accept"] = "application/activity+json"
     data = None
     try:
-        resp = _validated_get(url, headers=headers, timeout=15)
+        resp = _validated_get(url, headers=headers, timeout=10)
         print(f"[FETCH-POST] first attempt url={url} status={resp.status_code if resp else 'None'}", flush=True)
         if resp is not None and resp.status_code == 200:
             data = resp.json()
@@ -1131,7 +1137,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
 
     if data is None:
         try:
-            resp = _validated_get(url, headers=headers, timeout=15)
+            resp = _validated_get(url, headers=headers, timeout=10)
             print(f"[FETCH-POST] retry url={url} status={resp.status_code if resp else 'None'}", flush=True)
             if resp is not None and resp.status_code == 200:
                 data = resp.json()
