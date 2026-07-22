@@ -689,7 +689,9 @@ async def shared_inbox(request: Request):
                 return JSONResponse({"status": 200, "message": "Already processed"})
             s.add(ProcessedActivity(id=activity_id))
             s.commit()
-    status_code, message = handle_inbox(activity)
+    import asyncio
+    loop = asyncio.get_event_loop()
+    status_code, message = await loop.run_in_executor(None, handle_inbox, activity)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)
 
 
@@ -791,7 +793,9 @@ async def user_inbox(request: Request, username: str):
             s.add(ProcessedActivity(id=activity_id))
             s.commit()
 
-    status_code, message = handle_inbox(activity)
+    import asyncio
+    loop = asyncio.get_event_loop()
+    status_code, message = await loop.run_in_executor(None, handle_inbox, activity)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)
 
 
