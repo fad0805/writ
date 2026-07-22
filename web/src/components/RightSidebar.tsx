@@ -135,18 +135,18 @@ export default function RightSidebar() {
 
             if (n.type === "poll_ended") {
               const pollPost = n.post as unknown as PostData | undefined;
-              const msg = n.metadata?.is_author ? "내 투표가 종료되었습니다" : "참여한 투표가 종료되었습니다";
+              const msg = n.metadata?.is_author ? "내 투표가 종료되었습니다" : "회원님이 참여한 투표가 종료되었습니다";
               return (
                 pollPost ? <MiniPostCard key={n.id} post={pollPost} notifType={n.type} notifLabel={
-                  <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <span>{msg}</span>
                     {n.from_user && (
                       <Link href={`/@${n.from_user.username}`} style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text-primary)", fontWeight: 600, overflow: "hidden", minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
-                        <Avatar user={n.from_user} style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0 }} />
-                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{renderName(n.from_user.display_name || n.from_user.username)}</span>
+                        <Avatar user={n.from_user} style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0 }} />
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.9em" }}>{renderName(n.from_user.display_name || n.from_user.username)}</span>
                       </Link>
                     )}
-                    <span>{msg}</span>
-                  </span>
+                  </div>
                 } /> : <div key={n.id} />
               );
             }
