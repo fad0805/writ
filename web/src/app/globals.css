@@ -115,17 +115,25 @@ a:hover { color: var(--accent-light); text-decoration: none; }
   justify-content: center;
   min-height: 40px;
   gap: 1px;
+  overflow: hidden;
+  min-width: 0;
 }
 .user-info strong {
   display: block;
   font-size: 1em;
   color: var(--text-white);
   line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .user-info span {
   font-size: 0.8em;
   color: var(--text-muted);
   line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .user-info-link {
