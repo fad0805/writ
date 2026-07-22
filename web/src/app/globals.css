@@ -4240,3 +4240,11 @@ input[type="checkbox"] {
 
 /* ── Setting page icon color (shield) ── */
 .icon-shield-green { color: #27ae60; }
+
+/* ── Hide vertical scrollbars globally ── */
+html {
+  scrollbar-width: none;          /* Firefox */
+}
+html::-webkit-scrollbar {
+  display: none;                  /* Chrome / Safari / Edge */
+}
