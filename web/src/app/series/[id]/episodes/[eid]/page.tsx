@@ -145,7 +145,7 @@ export default function EpisodeDetailPage() {
         url={`/series/${novel.id}/episodes/${episode.id}`}
         title={novel.title}
         authorName={novel.author?.display_name || novel.author?.username}
-        description={episode?.description}
+        description={episode?.summary}
         tags={novel.tags}
         content={`「${episode.episode_number}화: ${episode.title}」`}
         onClose={() => setShowSharePost(false)}
