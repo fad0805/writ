@@ -237,8 +237,14 @@ def validate_csrf_token(token: str, session_token: str) -> bool:
         if not _hmac.compare_digest(sig, expected) or expires <= time.time():
             return False
         session_decoded = base64.urlsafe_b64decode(session_token.encode()).decode()
-        session_user_id = int(session_decoded.split(":")[0])
-        return user_id == session_user_id
+        session_parts = session_decoded.split(":")
+        session_key = session_parts[0]
+        from app.models import LoginSession, get_session as _gs
+        with _gs() as _s:
+            ls = _s.query(LoginSession).filter_by(session_key=session_key).first()
+            if ls:
+                return user_id == ls.user_id
+        return False
     except Exception:
         return False
 

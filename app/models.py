@@ -614,6 +614,18 @@ class PushSubscription(Base):
     created_at = Column(DateTime(timezone=True), default=now)
 
 
+class LoginSession(Base):
+    __tablename__ = "login_sessions"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    session_key = Column(String(64), unique=True, nullable=False, index=True)
+    ip_address = Column(String(45), default="")
+    user_agent = Column(Text, default="")
+    last_active = Column(DateTime(timezone=True), default=now)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+
 class ProfileNote(Base):
     __tablename__ = "profile_notes"
 

@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import desc, or_, and_, func, String
 from sqlalchemy.orm import selectinload, Session
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PushSubscription, get_session
+from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PushSubscription, LoginSession, get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.log_utils import log_admin_action
 from app.activitypub import _fetch_remote_post
@@ -413,7 +413,8 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
             if not db_user.email_verified:
                 log_admin_action(db_user.id, db_user.username, "login_blocked", details="email_not_verified", ip_address=client_ip)
                 raise HTTPException(status_code=403, detail="이메일 인증이 필요합니다. 가입 시 등록한 이메일에서 인증을 완료해 주세요.")
-            token = create_session(db_user.id)
+            user_agent = request.headers.get("user-agent", "")
+            token = create_session(db_user.id, ip_address=client_ip, user_agent=user_agent)
             if client_ip:
                 ips = db_user.recent_ips or []
                 ips = [ip for ip in ips if ip != client_ip]
@@ -547,7 +548,6 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
 
 @router.post("/auth/verify-email")
 def api_verify_email(request: Request, token: str = Form(...)):
-    from app.routes.auth import create_session
     with get_session() as s:
         u = s.query(User).filter_by(verification_token=token).first()
 
@@ -645,6 +645,10 @@ def api_reset_password(request: Request, token: str = Form(...), password: str =
 
 @router.post("/auth/logout")
 def api_logout(request: Request):
+    from app.routes.auth import get_session_key_from_cookie, delete_session_by_key
+    session_key = get_session_key_from_cookie(request)
+    if session_key:
+        delete_session_by_key(session_key)
     resp = JSONResponse({"ok": True})
     resp.delete_cookie("session")
     resp.delete_cookie("csrf_token")
@@ -7434,4 +7438,65 @@ def push_status(request: Request):
     with get_session() as s:
         count = s.query(PushSubscription).filter_by(user_id=user.id).count()
     return {"subscribed": count > 0}
+
+
+# ── Login session management ──
+
+import re as _re
+
+_UA_BROWSER = {
+    "chrome": ("Chrome", _re.compile(r"Chrome/(\d+)")),
+    "edge": ("Edge", _re.compile(r"Edg/(\d+)")),
+    "firefox": ("Firefox", _re.compile(r"Firefox/(\d+)")),
+    "safari": ("Safari", _re.compile(r"Version/(\d+).*Safari")),
+    "opera": ("Opera", _re.compile(r"(?:OPR|Opera)/(\d+)")),
+}
+
+
+def _parse_device_name(ua: str) -> str:
+    if not ua:
+        return "알 수 없는 기기"
+    for key, (name, pattern) in _UA_BROWSER.items():
+        m = pattern.search(ua)
+        if m:
+            return f"{name} {m.group(1)}"
+    if "Mobile" in ua or "Android" in ua:
+        return "모바일 브라우저"
+    return "알 수 없는 브라우저"
+
+
+@router.get("/sessions")
+def list_sessions(request: Request):
+    user = require_active_auth(request)
+    from app.routes.auth import get_session_key_from_cookie
+    current_key = get_session_key_from_cookie(request)
+    with get_session() as s:
+        sessions = s.query(LoginSession).filter_by(user_id=user.id).order_by(LoginSession.last_active.desc()).all()
+        result = []
+        for ls in sessions:
+            result.append({
+                "id": ls.id,
+                "device_name": _parse_device_name(ls.user_agent),
+                "ip_address": ls.ip_address,
+                "is_current": ls.session_key == current_key,
+                "last_active": ls.last_active.isoformat() if ls.last_active else "",
+                "created_at": ls.created_at.isoformat() if ls.created_at else "",
+            })
+    return {"sessions": result}
+
+
+@router.post("/sessions/{session_id}/delete")
+def delete_session(request: Request, session_id: int):
+    user = require_active_auth(request)
+    from app.routes.auth import get_session_key_from_cookie
+    current_key = get_session_key_from_cookie(request)
+    with get_session() as s:
+        ls = s.query(LoginSession).filter_by(id=session_id, user_id=user.id).first()
+        if not ls:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if ls.session_key == current_key:
+            raise HTTPException(status_code=400, detail="현재 사용 중인 기기는 해제할 수 없습니다.")
+        s.delete(ls)
+        s.commit()
+    return {"ok": True}
 
