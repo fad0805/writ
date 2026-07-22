@@ -54,8 +54,7 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
     html = renderCustomEmojis(html, emojiMap);
     return sanitizePost(rewriteLinks(html, validMentions));
   })();
-  const makeUrl = ((post) => {
-    console.log(post);
+  const makeUrl = ((post as any) => {
     if (post.type === 'series') return `/series/@${post.author.username}/${post.novel.number}`;
     if (post.type === 'episode') return `/series/${post.novel.id}/episodes/${post.episode.id}`;
    if (post.number) {
