@@ -97,6 +97,7 @@ class User(Base):
     profile_hashtags = Column(JSON, default=list)
     enable_reactions = Column(Boolean, default=True)
     post_lifetime = Column(Integer, default=0)
+    post_lifetime_exceptions = Column(JSON, default=list)
     pinned_posts = Column(JSON, default=list)
     pinned_series = Column(JSON, default=list)
     aliases = Column(JSON, default=list)

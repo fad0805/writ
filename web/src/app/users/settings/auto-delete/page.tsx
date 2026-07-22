@@ -4,18 +4,36 @@ import { useRouter } from "next/navigation";
 import Icon from "@/components/Icon";
 import SettingsNav from "@/components/SettingsNav";
 
+const EXCEPTIONS = [
+  { key: "pinned", label: "고정된 게시물", icon: "pin" },
+  { key: "dm", label: "다이렉트 메시지", icon: "direct" },
+  { key: "liked", label: "내가 좋아요한 게시물", icon: "star_filled" },
+  { key: "bookmarked", label: "내가 북마크한 게시물", icon: "bookmark" },
+  { key: "poll", label: "설문이 있는 게시물", icon: "chart" },
+  { key: "media", label: "미디어가 있는 게시물", icon: "image" },
+];
+
 export default function AutoDeleteSettingsPage() {
   const router = useRouter();
   const [postLifetime, setPostLifetime] = useState(0);
+  const [exceptions, setExceptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     fetch("/api/me", { credentials: "include" })
       .then((r) => r.json())
-      .then((u) => { setPostLifetime(u.post_lifetime || 0); setLoading(false); })
+      .then((u) => {
+        setPostLifetime(u.post_lifetime || 0);
+        setExceptions(u.post_lifetime_exceptions || []);
+        setLoading(false);
+      })
       .catch(() => router.push("/login"));
   }, [router]);
+
+  const toggleException = (key: string) => {
+    setExceptions((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,6 +42,7 @@ export default function AutoDeleteSettingsPage() {
     try {
       const form = new FormData();
       form.append("post_lifetime", String(postLifetime));
+      form.append("post_lifetime_exceptions", JSON.stringify(exceptions));
       const res = await fetch("/api/settings/update", {
         method: "POST",
         credentials: "include",
@@ -64,6 +83,25 @@ export default function AutoDeleteSettingsPage() {
             자동 삭제 작업은 서버가 한가한 새벽 시간에 백그라운드에서 돌아가기 때문에, 설정 후 바로 삭제되지 않을 수 있습니다.
           </p>
         </div>
+
+        {postLifetime > 0 && (
+          <div className="form-group">
+            <label>삭제 예외</label>
+            <p className="form-help" style={{ marginBottom: 8, color: "var(--text-secondary)" }}>
+              선택한 항목에 해당하는 게시물은 자동 삭제에서 제외됩니다.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {EXCEPTIONS.map((ex) => (
+                <label key={ex.key} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "6px 10px", borderRadius: 6, background: exceptions.includes(ex.key) ? "color-mix(in srgb, var(--accent) 10%, transparent)" : "var(--bg-tertiary)", border: `1px solid ${exceptions.includes(ex.key) ? "var(--accent)" : "var(--border)"}`, transition: "all 0.15s" }}>
+                  <input type="checkbox" checked={exceptions.includes(ex.key)} onChange={() => toggleException(ex.key)} style={{ accentColor: "var(--accent)" }} />
+                  <Icon name={ex.icon} size={14} />
+                  <span style={{ fontSize: 14 }}>{ex.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="form-actions">
           <button type="submit" disabled={submitting} className="btn btn-primary">설정 저장</button>
         </div>

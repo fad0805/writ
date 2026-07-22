@@ -253,6 +253,7 @@ def _user_json(u):
         "profile_hashtags": (u.profile_hashtags or []) if hasattr(u, 'profile_hashtags') else [],
         "enable_reactions": getattr(u, 'enable_reactions', True),
         "post_lifetime": getattr(u, 'post_lifetime', 0) or 0,
+        "post_lifetime_exceptions": getattr(u, 'post_lifetime_exceptions', []) or [],
         "aliases": (u.aliases or []) if hasattr(u, 'aliases') else [],
         "moved_to": getattr(u, 'moved_to', '') or '',
         "remote_followers_count": getattr(u, 'remote_followers_count', 0) or 0,
@@ -3939,7 +3940,8 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
                         is_bot: bool = Form(False),
                         follow_list_visibility: str = Form("public"),
                         enable_reactions: bool = Form(True),
-                        post_lifetime: int = Form(0)):
+                        post_lifetime: int = Form(0),
+                        post_lifetime_exceptions: str = Form("[]")):
     user = require_auth(request)
     valid_post = ("public", "home", "followers", "mention")
     if default_visibility not in valid_post:
@@ -3960,6 +3962,13 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
         db.follow_list_visibility = follow_list_visibility
         db.enable_reactions = enable_reactions
         db.post_lifetime = post_lifetime
+        try:
+            import json as _json
+            exc = _json.loads(post_lifetime_exceptions)
+            if isinstance(exc, list):
+                db.post_lifetime_exceptions = exc
+        except Exception:
+            pass
         if user.role in ("admin", "moderator", "owner"):
             db.show_badge = show_badge
         s.commit()

@@ -198,6 +198,7 @@ def _auto_delete_expired_posts():
                 ).all()
                 deleted = 0
                 for u in users_with_lifetime:
+                    exc = u.post_lifetime_exceptions or []
                     cutoff = now - _dt.timedelta(days=u.post_lifetime)
                     expired = s.query(Post).filter(
                         Post.author_id == u.id,
@@ -209,6 +210,20 @@ def _auto_delete_expired_posts():
                             logger.info("Auto-delete: server busy mid-run, stopping at %d", deleted)
                             break
                         try:
+                            if "pinned" in exc and post.is_pinned:
+                                continue
+                            if "dm" in exc and post.is_dm:
+                                continue
+                            if "liked" in exc:
+                                if s.query(Like).filter_by(user_id=u.id, post_id=post.id).first():
+                                    continue
+                            if "bookmarked" in exc:
+                                if s.query(Bookmark).filter_by(user_id=u.id, post_id=post.id).first():
+                                    continue
+                            if "poll" in exc and post.poll_data:
+                                continue
+                            if "media" in exc and post.media_attachments:
+                                continue
                             s.query(Notification).filter(Notification.post_id == post.id).delete()
                             s.query(Like).filter(Like.post_id == post.id).delete()
                             s.query(Boost).filter(Boost.post_id == post.id).delete()

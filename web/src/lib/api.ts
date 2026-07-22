@@ -84,6 +84,7 @@ export interface User {
   pinned_series?: number[];
   enable_reactions?: boolean;
   post_lifetime?: number;
+  post_lifetime_exceptions?: string[];
   remote_url?: string;
 }
 
