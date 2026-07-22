@@ -6,6 +6,7 @@ import asyncio
 import datetime
 import uuid
 import logging
+import time
 import threading
 from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -16,11 +17,13 @@ from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notifica
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.log_utils import log_admin_action
 from app.activitypub import _fetch_remote_post
+from app.serializers import _post_json, _user_json
 from app.db.mention_resolver import resolve_handles_to_ids
+from app.utils.datetime import _fmt_dt
+from app.utils.emoji import EMOJI_DIR, _refresh_emoji_cache_forcibly, _emoji_url, _load_emojis
 from app.utils.filter import _timeline_filter
 from app.utils.content_parser import process_post_content, extract_mentions
-
-KST = datetime.timezone(datetime.timedelta(hours=9))
+from app.utils.post import _get_descendant_ids
 
 # Auth rate limiting (IP-based, in-memory)
 import threading
@@ -52,12 +55,7 @@ def _get_auth_backoff_seconds(ip: str) -> int:
         return 0
     return _AUTH_FAIL_BACKOFF_BASE * (2 ** min(count - _AUTH_FAIL_MAX, 6))
 
-def _fmt_dt(dt: datetime.datetime | None) -> str | None:
-    if dt is None:
-        return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=datetime.timezone.utc)
-    return dt.astimezone(KST).isoformat()
+
 from app.activitypub import broadcast_to_followers, _post_to_inbox, _federation_allowed, _build_reactions
 from app.database import get_db
 from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED, SCHEME
@@ -75,218 +73,6 @@ RESERVED_HANDLES = frozenset({
 })
 
 router = APIRouter(prefix="/api")
-
-
-# ── helpers ──
-
-def _post_json(p, session, user, tl_type=None,
-               _liked_ids=None, _boosted_ids=None, _bookmarked_ids=None,
-               _vote_map=None, _my_reaction_map=None, _reactions_map=None,
-               _booster_map=None, _mentioned_users_map=None, _boost_originals=None, _skip_emojis=False):
-    if p.is_deleted:
-        return {
-            "id": p.id,
-            "number": p.number or "",
-            "content": "",
-            "summary": "",
-            "visibility": "public",
-            "created_at": _fmt_dt(p.created_at),
-            "author": {"id": 0, "username": "deleted", "display_name": "삭제된 사용자", "avatar": "", "header": "", "is_admin": False, "is_remote": False, "summary": "", "is_locked": False, "is_limited": False, "is_frozen": False, "is_deceased": False, "is_deactivated": False, "is_sensitive": False, "role": "user", "show_badge": False, "email_verified": False, "default_visibility": "public", "display_handle": "deleted", "is_bot": False, "pinned_posts": [], "pinned_series": [], "episode_default_visibility": "public", "follow_list_visibility": "public", "custom_fields": [], "profile_hashtags": [], "enable_reactions": True, "aliases": [], "moved_to": ""},
-            "likes_count": 0, "boosts_count": 0, "replies_count": 0,
-            "liked": False, "boosted": False, "bookmarked": False,
-            "is_mine": False, "is_dm": False, "is_sensitive": False,
-            "ap_id": p.ap_id or "",
-            "reply_context": None, "boosted_by": None,
-            "media_attachments": [], "poll_data": None, "my_vote": None,
-            "reactions": {}, "my_reaction": None,
-            "mentioned_user_ids": [], "mentioned_handles": [],
-            "link_preview": None, "is_deleted": True,
-            "quote_of_id": None, "quote_of_ap_id": "",
-        }
-
-    # If this is a boost pointer post, resolve to the original
-    if p.boost_of_id:
-        original = (_boost_originals or {}).get(p.boost_of_id) or session.query(Post).filter_by(id=p.boost_of_id).first()
-        if original and not original.is_deleted:
-            result = _post_json(original, session, user, tl_type,
-                                _liked_ids, _boosted_ids, _bookmarked_ids,
-                                _vote_map, _my_reaction_map, _reactions_map,
-                                _booster_map, _mentioned_users_map, _boost_originals)
-            result["boosted_by"] = _user_json(p.author)
-            return result
-        else:
-            return {"id": p.id, "is_deleted": True, "boosted_by": _user_json(p.author)}
-    if user:
-        if _liked_ids is not None:
-            liked = p.id in _liked_ids
-        else:
-            liked = session.query(Like).filter_by(user_id=user.id, post_id=p.id).first() is not None
-        if _boosted_ids is not None:
-            boosted = p.id in _boosted_ids
-        else:
-            boosted = session.query(Boost).filter_by(user_id=user.id, post_id=p.id).first() is not None
-        if _bookmarked_ids is not None:
-            bookmarked = p.id in _bookmarked_ids
-        else:
-            bookmarked = session.query(Bookmark).filter_by(user_id=user.id, post_id=p.id).first() is not None
-    else:
-        liked = boosted = bookmarked = False
-    booster = None
-    if user and p.author_id != user.id:
-        if _booster_map is not None:
-            b = _booster_map.get(p.id)
-        else:
-            latest_boost = session.query(Boost).filter_by(post_id=p.id).order_by(desc(Boost.created_at)).first()
-            b = None
-            if latest_boost:
-                if (datetime.datetime.now(datetime.timezone.utc) - latest_boost.created_at).total_seconds() > 10800:
-                    b = session.query(User).get(latest_boost.user_id)
-        if b and b.id != p.author_id:
-            booster = b
-    my_vote = None
-    if user and p.poll_data:
-        if _vote_map is not None:
-            my_vote = _vote_map.get(p.id)
-        else:
-            vote = session.query(Vote).filter_by(user_id=user.id, post_id=p.id).first()
-            if vote:
-                my_vote = vote.option_index
-    my_reaction = None
-    if user and liked:
-        if _my_reaction_map is not None:
-            my_reaction = _my_reaction_map.get(p.id)
-        else:
-            my_reaction = session.query(Like.reaction).filter_by(user_id=user.id, post_id=p.id).scalar()
-    if _reactions_map is not None:
-        reactions = _reactions_map.get(p.id, {})
-    else:
-        reactions = {}
-        _default_react = "★"
-        if p.likes:
-            for like in p.likes:
-                if like.reaction:
-                    reactions[like.reaction] = reactions.get(like.reaction, 0) + 1
-                else:
-                    reactions[_default_react] = reactions.get(_default_react, 0) + 1
-    if _mentioned_users_map is not None and p.id in _mentioned_users_map:
-        mentioned_handles = _mentioned_users_map[p.id]
-    elif p.mentioned_user_ids:
-        from urllib.parse import urlparse as _urlparse2
-        mentioned_handles = []
-        for u in session.query(User).filter(User.id.in_(p.mentioned_user_ids or [])).all():
-            if u.is_remote and u.remote_url:
-                _name = u.username.split("@")[0]
-                _domain = _urlparse2(u.remote_url).hostname or ""
-                mentioned_handles.append(f"{_name}@{_domain}")
-            else:
-                mentioned_handles.append(u.username)
-    else:
-        # content에서 @handle@domain 패턴 파싱
-        mentioned_handles = list(set(
-            f"{m.group(1)}@{m.group(2)}" for m in re.finditer(r'@([a-zA-Z0-9_]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', p.content or "")
-        ))
-    return {
-        "id": p.id,
-        "number": p.number or "",
-        "content": p.content,
-        "summary": p.summary or "",
-        "visibility": p.visibility or "public",
-        "created_at": _fmt_dt(p.created_at),
-        "author": _user_json(p.author),
-        "likes_count": p.likes_count,
-        "boosts_count": p.boosts_count,
-        "replies_count": p.replies_count,
-        "liked": liked,
-        "boosted": boosted,
-        "bookmarked": bookmarked,
-        "is_mine": p.author_id == user.id if user else False,
-        "is_dm": p.is_dm or False,
-        "is_sensitive": getattr(p, 'is_sensitive', False) or False,
-        "ap_id": p.ap_id or "",
-        "reply_context": _reply_context(p, session, user, tl_type),
-        "boosted_by": _user_json(booster) if booster else None,
-        "media_attachments": (p.media_attachments or []) if hasattr(p, 'media_attachments') else [],
-        "poll_data": p.poll_data,
-        "my_vote": my_vote,
-        "reactions": reactions,
-        "my_reaction": my_reaction,
-        "mentioned_user_ids": p.mentioned_user_ids or [],
-        "mentioned_handles": mentioned_handles,
-        "link_preview": p.link_preview or None,
-        "quote_of_id": p.quote_of_id or None,
-        "quote_of_ap_id": p.quote_of_ap_id or "",
-        **(({}) if _skip_emojis else {"_emojis": [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)]}),
-    }
-
-
-def _user_json(u):
-    role = getattr(u, 'role', 'user') or 'user'
-    return {
-        "id": u.id,
-        "username": u.username,
-        "display_name": u.display_name or u.username,
-        "avatar": u.profile_image or "",
-        "header": u.header_image or "",
-        "summary": u.summary or "",
-        "is_admin": u.is_admin,
-        "is_locked": u.is_locked or False,
-        "is_limited": u.is_limited or False,
-        "is_frozen": getattr(u, 'is_frozen', False) or False,
-        "is_deceased": getattr(u, 'is_deceased', False) or False,
-        "is_deactivated": getattr(u, 'is_deactivated', False) or False,
-        "is_sensitive": getattr(u, 'is_sensitive', False) or False,
-        "is_remote": u.is_remote,
-        "role": role,
-        "show_badge": getattr(u, 'show_badge', False) or False,
-        "email_verified": u.email_verified or False,
-        "default_visibility": u.default_visibility or "public",
-        "display_handle": getattr(u, 'display_handle', '') or "",
-        "is_bot": getattr(u, 'is_bot', False) or False,
-        "pinned_posts": (u.pinned_posts or []) if hasattr(u, 'pinned_posts') else [],
-        "pinned_series": (u.pinned_series or []) if hasattr(u, 'pinned_series') else [],
-        "episode_default_visibility": u.episode_default_visibility or "public",
-        "follow_list_visibility": getattr(u, 'follow_list_visibility', 'public') or 'public',
-        "custom_fields": [
-            {"name": f.get("name") or f.get("label", ""), "label": f.get("name") or f.get("label", ""), "value": f.get("value", "")}
-            for f in (u.custom_fields or [])
-        ] if hasattr(u, 'custom_fields') else [],
-        "profile_hashtags": (u.profile_hashtags or []) if hasattr(u, 'profile_hashtags') else [],
-        "enable_reactions": getattr(u, 'enable_reactions', True),
-        "post_lifetime": getattr(u, 'post_lifetime', 0) or 0,
-        "post_lifetime_exceptions": getattr(u, 'post_lifetime_exceptions', []) or [],
-        "aliases": (u.aliases or []) if hasattr(u, 'aliases') else [],
-        "moved_to": getattr(u, 'moved_to', '') or '',
-        "remote_followers_count": getattr(u, 'remote_followers_count', 0) or 0,
-        "remote_following_count": getattr(u, 'remote_following_count', 0) or 0,
-    }
-
-
-def _reply_context(p, session=None, user=None, tl_type=None):
-    parent = p.parent if hasattr(p, 'parent') else None
-    if not parent and p.in_reply_to_ap_id and session:
-        try:
-            parent = session.query(Post).filter_by(ap_id=p.in_reply_to_ap_id).first()
-        except Exception:
-            pass
-    if not parent or parent.is_deleted:
-        return None
-    if tl_type == "home" and user and parent.author_id != user.id:
-        followed = session.query(Follow).filter_by(
-            follower_id=user.id, following_id=parent.author_id, accepted=True
-        ).first()
-        if not followed:
-            return None
-    if tl_type == "local" and parent.author.is_remote:
-        return None
-    return {
-        "id": parent.id,
-        "number": parent.number or "",
-        "content": parent.content[:200] if parent.content else "",
-        "summary": parent.summary or "",
-        "is_sensitive": bool(getattr(parent, 'is_sensitive', False)),
-        "author": _user_json(parent.author),
-        "visibility": parent.visibility or "public",
-    }
 
 
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".ico"}
@@ -913,7 +699,7 @@ def api_timeline(request: Request, tl_type: str, limit: int = Query(10), offset:
 
 @router.get("/posts/{post_id}")
 def api_get_post(request: Request, post_id: int):
-    # --- [추가 시작] ActivityPub 전용 처리 ---
+    # --- [추가 시작] ActivityPub 전용 inbox 처리 ---
     accept_header = request.headers.get("Accept", "")
     is_activitypub = "application/activity+json" in accept_header or "application/ld+json" in accept_header
     if is_activitypub:
@@ -924,6 +710,7 @@ def api_get_post(request: Request, post_id: int):
             note = post.to_ap_note()
             return JSONResponse(content=note, media_type="application/activity+json")
     # --- [추가 끝] ---
+
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
@@ -937,39 +724,17 @@ def api_get_post(request: Request, post_id: int):
             raise HTTPException(status_code=404, detail="Post not found")
         if not _can_view(post, user, s):
             raise HTTPException(status_code=403, detail="Cannot view this post")
-        _main_booster_map = {}
-        if user:
-            _buid = s.query(Boost.user_id).filter_by(post_id=post.id).order_by(desc(Boost.created_at)).first()
-            if _buid:
-                _u = s.query(User).get(_buid[0])
-                if _u:
-                    _main_booster_map[post.id] = _u
-        result = _post_json(post, s, user, _booster_map=_main_booster_map)
-        if user and post.author_id != user.id:
-            result["is_following_author"] = s.query(Follow).filter_by(
-                follower_id=user.id, following_id=post.author_id, accepted=True
-            ).first() is not None
-        else:
-            result["is_following_author"] = False
+        result = _post_json(post, s, user)
+
         limit = min(int(request.query_params.get("reply_limit", 5)), 50)
         offset = int(request.query_params.get("reply_offset", 0))
+
         direct_count = s.query(Post).filter_by(in_reply_to_id=post_id, is_deleted=False).count()
         result["total_replies"] = direct_count
-        descendant_ids = set()
-        queue = [post_id]
-        need = offset + limit + 1
-        while queue and len(descendant_ids) < need:
-            pid = queue.pop(0)
-            child_ids = [r[0] for r in s.query(Post.id).filter(
-                Post.in_reply_to_id == pid, Post.is_deleted == False
-            ).all()]
-            for cid in child_ids:
-                if cid not in descendant_ids:
-                    descendant_ids.add(cid)
-                    if len(descendant_ids) >= need:
-                        break
-                    queue.append(cid)
+
+        descendant_ids = _get_descendant_ids(s, post_id, max_depth=5)
         result["total_descendants"] = len(descendant_ids)
+
         reply_ids = sorted(descendant_ids)[offset:offset + limit]
         if reply_ids:
             descendants = s.query(Post).options(
@@ -980,25 +745,24 @@ def api_get_post(request: Request, post_id: int):
             descendants = []
         reply_id_set = set(reply_ids)
         _reply_liked_ids = _reply_boosted_ids = _reply_bookmarked_ids = set()
-        _reply_booster_map = {}
         if user and reply_id_set:
             _reply_liked_ids = set(r[0] for r in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(reply_id_set)).all())
             _reply_boosted_ids = set(r[0] for r in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(reply_id_set)).all())
             _reply_bookmarked_ids = set(r[0] for r in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(reply_id_set)).all())
-            for bid, buid in s.query(Boost.post_id, Boost.user_id).filter(Boost.post_id.in_(reply_id_set)).order_by(desc(Boost.created_at)).all():
-                if bid not in _reply_booster_map:
-                    _reply_booster_map[bid] = buid
-            if _reply_booster_map:
-                _bu = {u.id: u for u in s.query(User).filter(User.id.in_(set(_reply_booster_map.values()))).all()}
-                _reply_booster_map = {pid: _bu.get(uid) for pid, uid in _reply_booster_map.items()}
-        result["replies"] = [_post_json(r, s, user, _liked_ids=_reply_liked_ids, _boosted_ids=_reply_boosted_ids, _bookmarked_ids=_reply_bookmarked_ids, _booster_map=_reply_booster_map) for r in descendants if _can_view(r, user, s)]
+        result["replies"] = [_post_json(r, s, user, _liked_ids=_reply_liked_ids, _boosted_ids=_reply_boosted_ids, _bookmarked_ids=_reply_bookmarked_ids) for r in descendants if _can_view(r, user, s)]
         result["has_more_replies"] = offset + limit < len(descendant_ids)
+
         ancestors = []
         cur = post.parent
         ancestor_ids = []
-        while cur:
+
+        # 1단계: 조상 ID를 모을 때 최대 5개까지만 수집
+        max_depth = 10
+        depth = 0
+        while cur and depth < max_depth:
             if not cur.is_deleted:
                 ancestor_ids.append(cur.id)
+                depth += 1
             cur = cur.parent
         if ancestor_ids:
             if user:
@@ -1007,11 +771,15 @@ def api_get_post(request: Request, post_id: int):
                 _anc_bookmarked = {a[0] for a in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(ancestor_ids)).all()}
             else:
                 _anc_liked = _anc_boosted = _anc_bookmarked = set()
+
             cur = post.parent
-            while cur:
+            depth = 0
+            while cur and depth < max_depth:
                 if not cur.is_deleted and _can_view(cur, user, s):
                     ancestors.insert(0, _post_json(cur, s, user, _liked_ids=_anc_liked, _boosted_ids=_anc_boosted, _bookmarked_ids=_anc_bookmarked))
+                    depth += 1
                 cur = cur.parent
+
         if not ancestors and post.in_reply_to_ap_id:
             parent = s.query(Post).filter_by(ap_id=post.in_reply_to_ap_id).first()
             if parent and _can_view(parent, user, s):
@@ -1019,6 +787,7 @@ def api_get_post(request: Request, post_id: int):
             else:
                 fetch_remote_url = post.in_reply_to_ap_id
         result["ancestors"] = ancestors
+
     if fetch_remote_url:
         try:
             with get_session() as remote_s:
@@ -5233,81 +5002,6 @@ def api_fetch_post(request: Request, url: str = Form(...)):
             {"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]}
             for e in _load_emojis(es)
         ]
-    return result
-
-
-EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "emojis")
-
-# Simple in-memory TTL cache for emoji list
-_emoji_cache = {"data": None, "ts": 0}
-_EMOJI_CACHE_TTL = 60  # seconds
-
-def _refresh_emoji_cache_forcibly(session):
-    import time
-    emojis = session.query(CustomEmoji).all()
-    # 딕셔너리 형태로 안전하게 직렬화
-    serialized = [{
-        "id": e.id,
-        "keyword": e.keyword,
-        "file_name": e.file_name,
-        "category": e.category,
-        "aliases": list(e.aliases) if e.aliases else [],
-        "url": _emoji_url(e.file_name, e.domain or "", e.category or ""),
-        "source_url": e.source_url or "",
-        "domain": e.domain or ""
-    } for e in emojis]
-    _emoji_cache["data"] = serialized
-    _emoji_cache["ts"] = time.time()
-
-_emoji_storage = None
-
-
-def _emoji_url(file_name: str, domain: str = "", category: str = "") -> str:
-    """Return the correct emoji URL (local or S3)."""
-    global _emoji_storage
-    sub = "remote" if domain or category == "remote" else "local"
-    from app.config import S3_ENABLED
-    if S3_ENABLED:
-        if _emoji_storage is None:
-            from app.utils.storage import get_storage
-            _emoji_storage = get_storage()
-        try:
-            return _emoji_storage.url(f"emojis/{sub}/{file_name}")
-        except Exception:
-            pass
-    return f"/emojis/{sub}/{file_name}"
-
-
-def _load_emojis(session):
-    """Load all emojis from DB, with simple in-memory TTL caching."""
-    import time as _time
-    now = _time.time()
-    if _emoji_cache["data"] is not None and now - _emoji_cache["ts"] < _EMOJI_CACHE_TTL:
-        return _emoji_cache["data"]
-    emojis = session.query(CustomEmoji).order_by(desc(CustomEmoji.created_at)).all()
-    from sqlalchemy import case
-    emojis = session.query(CustomEmoji).order_by(
-        case(
-            (CustomEmoji.category == "remote", 1),
-            else_=0
-        ),
-        CustomEmoji.created_at.desc() # 동일 조건 내에서는 최신순 정렬
-    ).all()
-    result = [
-        {
-            "id": e.id,
-            "keyword": e.keyword,
-            "file_name": e.file_name,
-            "category": e.category or "",
-            "aliases": e.aliases or [],
-            "url": _emoji_url(e.file_name, e.domain or "", e.category or ""),
-            "source_url": e.source_url or "",
-            "domain": e.domain or "",
-        }
-        for e in emojis
-    ]
-    _emoji_cache["data"] = result
-    _emoji_cache["ts"] = now
     return result
 
 
