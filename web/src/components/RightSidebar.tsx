@@ -138,7 +138,7 @@ export default function RightSidebar() {
               const msg = n.metadata?.is_author ? "내 투표가 종료되었습니다" : "회원님이 참여한 투표가 종료되었습니다";
               return (
                 pollPost ? <MiniPostCard key={n.id} post={pollPost} notifType={n.type} notifLabel={
-                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 4 }}>
                     <span>{msg}</span>
                     {n.from_user && (
                       <Link href={`/@${n.from_user.username}`} style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text-primary)", fontWeight: 600, overflow: "hidden", minWidth: 0 }} onClick={(e) => e.stopPropagation()}>

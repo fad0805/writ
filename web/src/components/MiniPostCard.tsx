@@ -72,7 +72,7 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
         </div>
       )}
       <div className="mini-post-content">
-        {notifLabel && <div style={{ fontSize: "0.82em", color: "var(--text-muted)", marginBottom: 3, lineHeight: 1.4 }}>{notifLabel}</div>}
+        {notifLabel && <div style={{ fontSize: "0.82em", color: "var(--text-muted)", marginBottom: 6, lineHeight: 1.4 }}>{notifLabel}</div>}
         {!notifType && (
           <div className="mini-post-author">
             <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.author.display_name || post.author.username, emojiMap, 14)) }} />
