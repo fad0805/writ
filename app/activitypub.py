@@ -1612,6 +1612,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     _local_signer = _get_instance_actor(fetch_s)
                 fetched_reply = _fetch_remote_post(in_reply_to, _local_signer, fetch_s)
                 if fetched_reply:
+                    fetch_s.commit()
                     reply_to_post_id = fetched_reply.id
                     try:
                         from app.timeline_stream import broadcast_post
@@ -1714,6 +1715,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     with get_session() as quote_s:
                         quote_post = _fetch_remote_post(quote_url, actor, quote_s)
                         if quote_post:
+                            quote_s.commit()
                             quote_of_id = quote_post.id
                             print(f"[_handle_create QUOTE OK] post_id={quote_post.id}", flush=True)
                         else:
