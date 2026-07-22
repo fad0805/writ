@@ -1729,7 +1729,7 @@ def api_like_post(request: Request, post_id: int, reaction: str = "★"):
                 like_activity["_misskey_reaction"] = _react
             inbox = post.author.shared_inbox_url
             try:
-                _post_to_inbox(inbox, like_activity, user)
+                threading.Thread(target=_post_to_inbox, args=(inbox, like_activity, user), daemon=True).start()
             except Exception:
                 pass
     return {"ok": True}
@@ -1769,7 +1769,7 @@ def api_unlike_post(request: Request, post_id: int):
             }
             inbox = post.author.shared_inbox_url
             try:
-                _post_to_inbox(inbox, undo, user)
+                threading.Thread(target=_post_to_inbox, args=(inbox, undo, user), daemon=True).start()
             except Exception:
                 pass
     return {"ok": True}
