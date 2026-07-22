@@ -60,11 +60,7 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
       className="mini-post-link"
       style={{ background: bg }}
     >
-      {notifType ? (
-        <div className="mini-post-avatar-box mini-post-avatar-box-icon" style={{ color: iconColor }}>
-          <Icon name={TYPE_ICONS[notifType] || "bell"} size={14} />
-        </div>
-      ) : (
+      {!notifType && (
         <div className="mini-post-avatar-box">
           {post.author.avatar ? (
             <img src={post.author.avatar} alt="" className="mini-post-avatar-img" style={{ width: 28, height: 28, borderRadius: 6, objectFit: "cover" }} />
