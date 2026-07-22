@@ -56,6 +56,7 @@ export default function EditEpisodePage() {
   const [saving, setSaving] = useState(false);
   const loadedRef = useRef(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedContentRef = useRef("");
   const novelId = Number(Array.isArray(params.id) ? params.id[0] : params.id);
   const episodeId = Number(Array.isArray(params.eid) ? params.eid[0] : params.eid);
 
@@ -74,6 +75,7 @@ export default function EditEpisodePage() {
       setContent(ep.content || "");
       setIsPublished(ep.is_published);
       setNovelTitle(d.novel.title);
+      lastSavedContentRef.current = JSON.stringify({ title: ep.title, summary: ep.summary || "", content: ep.content || "", comment: ep.comment || "", isPublished: ep.is_published, announce: false, announceComment: "", visibility: "public" });
       setLoading(false);
     }).catch(() => router.push("/series"));
   }, [novelId, episodeId, router]);
@@ -91,6 +93,8 @@ export default function EditEpisodePage() {
 
   const doSave = useCallback(async () => {
     if (isNaN(novelId)) return;
+    const currentContent = JSON.stringify({ title, summary, content, comment, isPublished, announce, announceComment, visibility });
+    if (currentContent === lastSavedContentRef.current) return;
     setSaving(true);
     try {
       const form = new FormData();
@@ -109,6 +113,7 @@ export default function EditEpisodePage() {
       if (data.ok) {
         setDraftId(data.draft_id);
         setLastSaved(new Date().toISOString());
+        lastSavedContentRef.current = currentContent;
         loadDrafts();
       }
     } catch {}
@@ -133,6 +138,7 @@ export default function EditEpisodePage() {
     if (d.visibility) setVisibility(d.visibility);
     setDraftId(d.id);
     setLastSaved(d.updated_at);
+    lastSavedContentRef.current = JSON.stringify({ title: d.title, summary: d.summary, content: d.content, comment: d.comment, isPublished: d.is_published, announce: d.announce, announceComment: d.announce_comment, visibility: d.visibility || "public" });
     setShowDraftList(false);
   };
 
