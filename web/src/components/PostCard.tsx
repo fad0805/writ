@@ -263,30 +263,17 @@ const localReactionEmojiMap = useMemo(() => {
   };
 
 
-  // useState 초기화 시점에는 빈 문자열 세팅 (어차피 useEffect가 즉시 실행되어 채워줌)
-  const [contentHtml, setContentHtml] = useState("");
-
-  // 3. 포스트 렌더링 및 데이터 추출용 Effect
+  // series/episode 매칭 추출용 Effect
   useEffect(() => {
-    // 1️⃣ [가장 먼저 수행] 아직 아무것도 지워지지 않은 원본 컨텐츠를 확보합니다.
     const rawContent = post.content || "";
-
-    // 2️⃣ 원본 텍스트 상태에서 정규식 매칭을 시도합니다.
     const seriesMatches = rawContent.match(/(?:<br\s*\/?>|\n|^)\s*(series):\s*(?:<a[^>]*href="([^"]+)"[^>]*>.*?<\/a>|(https?:\/\/[^\s<>]+))/i);
     const episodeMatches = rawContent.match(/(?:<br\s*\/?>|\n|^)\s*(episode):\s*(?:<a[^>]*href="([^"]+)"[^>]*>.*?<\/a>|(https?:\/\/[^\s<>]+))/i);
-
-    // 3️⃣ 정확한 그룹 인덱스([2]번 혹은 [3]번)로 순수 URL 주소를 상태에 넣어줍니다.
-    // 원래 코드 대신, 조건에 맞으면 정규식 결과 배열(seriesMatches)을 통째로 넘겨줍니다.
     setSeriesMatch(seriesMatches && (seriesMatches[2] || seriesMatches[3]) ? seriesMatches : null);
     setEpisodeMatch(episodeMatches && (episodeMatches[2] || episodeMatches[3]) ? episodeMatches : null);
-
-    // 4️⃣ [그 다음 수행] 주소 추출이 끝났으므로 안심하고 본문을 파싱하고 도려냅니다.
-    setContentHtml(sanitizePost(buildContentHtml()));
-    
-    // 💡 (만약 기존 프로젝트에서 이 useEffect 내부에 기존 fetch 함수나 
-    // ID를 추출해 갱신하는 코드가 들어있었다면 바로 여기에 위치하면 됩니다!)
-
   }, [post.id, post.content, post.summary]);
+
+  // contentHtml: emojiList 변경 시 즉시 재계산하여 이모지 렌더링 깜빡임 방지
+  const contentHtml = useMemo(() => sanitizePost(buildContentHtml()), [post.id, post.content, post.summary, emojiList]);
 
   // 4. 코드 복사 버튼 플러그인 Effect (기존 코드 그대로 유지)
   useEffect(() => {
