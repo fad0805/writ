@@ -125,7 +125,7 @@ export default function RightSidebar() {
                 (n.type === "like" || n.type === "boost" || n.type === "mention") && n.from_user ? (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                     <Avatar user={n.from_user} style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: "middle" }} />
-                    <strong>{renderName(n.from_user.display_name || n.from_user.username)}</strong> {n.type === "like" ? "님이 즐겨찾기했습니다" : n.type === "boost" ? "님이 부스트했습니다" : "님이 회원님을 언급했습니다"}
+                    <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{renderName(n.from_user.display_name || n.from_user.username)}</strong> {n.type === "like" ? "님이 즐겨찾기했습니다" : n.type === "boost" ? "님이 부스트했습니다" : "님이 회원님을 언급했습니다"}
                   </span>
                 ) : undefined
               } />
@@ -137,7 +137,7 @@ export default function RightSidebar() {
                   n.from_user ? (
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                       <Avatar user={n.from_user} style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: "middle" }} />
-                      <strong>{renderName(n.from_user.display_name || n.from_user.username)}</strong> 님이 투표에 참여했습니다
+                      <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{renderName(n.from_user.display_name || n.from_user.username)}</strong> 님이 투표에 참여했습니다
                     </span>
                   ) : <><strong>{renderName("알 수 없음")}</strong> 님이 투표에 참여했습니다</>
                 } /> : <div key={n.id} />
@@ -152,9 +152,9 @@ export default function RightSidebar() {
                 pollPost ? <MiniPostCard key={n.id} post={pollPost} notifType={n.type} notifLabel={
                   <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     {n.from_user && (
-                      <Link href={`/@${n.from_user.username}`} style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text-primary)", fontWeight: 600 }} onClick={(e) => e.stopPropagation()}>
-                        <Avatar user={n.from_user} style={{ width: 18, height: 18, borderRadius: 4 }} />
-                        <span>{renderName(n.from_user.display_name || n.from_user.username)}</span>
+                      <Link href={`/@${n.from_user.username}`} style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text-primary)", fontWeight: 600, overflow: "hidden", minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+                        <Avatar user={n.from_user} style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0 }} />
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{renderName(n.from_user.display_name || n.from_user.username)}</span>
                       </Link>
                     )}
                     <span>{msg}</span>
@@ -233,7 +233,7 @@ export default function RightSidebar() {
                     </div>
                     <div className="mini-post-content">
                       <div className="text-sm" style={{ color: "var(--text)" }}>
-                        <strong>{renderName(fromName)}</strong>
+                        <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120, display: "inline-block", verticalAlign: "middle" }}>{renderName(fromName)}</strong>
                         <span style={{ color: "var(--text-muted)", marginLeft: 4 }}>님이 계정 이전을 요청했습니다</span>
                       </div>
                       <div className="mini-notif-btns" style={{ display: "flex", gap: 4, marginTop: 4 }}>

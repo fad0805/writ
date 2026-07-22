@@ -2831,6 +2831,9 @@ input[type="checkbox"] {
   font-weight: 600;
   color: var(--accent);
   margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .mini-post-handle {
   font-weight: 400;
