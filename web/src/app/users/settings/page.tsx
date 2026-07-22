@@ -19,7 +19,6 @@ export default function SettingsPage() {
   const [isBot, setIsBot] = useState(false);
   const [followListVis, setFollowListVis] = useState("public");
   const [enableReactions, setEnableReactions] = useState(true);
-  const [postLifetime, setPostLifetime] = useState(0);
   const [followRequests, setFollowRequests] = useState<{ id: number; user: User }[]>([]);
   const [frLoading, setFrLoading] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -41,7 +40,6 @@ export default function SettingsPage() {
       setIsBot(user.is_bot || false);
       setFollowListVis(user.follow_list_visibility || "public");
       setEnableReactions(user.enable_reactions !== false);
-      setPostLifetime(user.post_lifetime || 0);
       setNotifSound(isNotifSoundEnabled());
       fetch("/api/server-info").then(r=>r.json()).then((info: any) => setServerEnableReactions(info.enable_reactions !== false)).catch(() => {});
       setLoading(false);
@@ -84,7 +82,6 @@ export default function SettingsPage() {
       form.append("is_bot", isBot ? "true" : "");
       form.append("follow_list_visibility", followListVis);
       form.append("enable_reactions", enableReactions ? "true" : "false");
-      form.append("post_lifetime", String(postLifetime));
       const res = await fetch("/api/settings/update", {
         method: "POST",
         credentials: "include",
@@ -148,21 +145,6 @@ export default function SettingsPage() {
           <p className="form-help">끄면 모든 리액션이 별(★)로 통합되어 표시됩니다.</p>
         </div>
         )}
-        <div className="form-group">
-          <label><Icon name="trash" /> 포스트 자동 삭제</label>
-          <select value={postLifetime} onChange={(e) => setPostLifetime(Number(e.target.value))} style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: 14 }}>
-            <option value={0}>사용 안 함</option>
-            <option value={7}>1주</option>
-            <option value={14}>2주</option>
-            <option value={30}>1개월</option>
-            <option value={60}>2개월</option>
-            <option value={90}>3개월</option>
-            <option value={180}>6개월</option>
-            <option value={365}>1년</option>
-            <option value={730}>2년</option>
-          </select>
-          <p className="form-help">설정한 기간이 지난 게시물이 새벽에 자동으로 삭제됩니다.</p>
-        </div>
         <div className="form-group">
           <label>팔로워/팔로잉 목록 공개</label>
           <div className="visibility-selector">
