@@ -29,8 +29,6 @@ export default function SettingsPage() {
   const [pushInitial, setPushInitial] = useState(false);
   const [serverEnableReactions, setServerEnableReactions] = useState(true);
   const [notifSound, setNotifSound] = useState(true);
-  const [sessions, setSessions] = useState<{ id: number; device_name: string; ip_address: string; is_current: boolean; last_active: string; created_at: string }[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(true);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -59,12 +57,6 @@ export default function SettingsPage() {
       setPushSupported(supported);
       if (supported) isSubscribed().then((v) => { setPushEnabled(v); setPushInitial(v); });
     });
-  }, []);
-
-  useEffect(() => {
-    fetch("/api/sessions", { credentials: "include" })
-      .then(r => r.json()).then(d => { setSessions(d.sessions || []); setSessionsLoading(false); })
-      .catch(() => setSessionsLoading(false));
   }, []);
 
   useEffect(() => {
@@ -191,37 +183,6 @@ export default function SettingsPage() {
           <button type="submit" disabled={submitting} className="btn btn-primary">설정 저장</button>
         </div>
       </form>
-
-      <div className="novel-form" style={{ marginTop: 20 }}>
-        <h3 style={{ fontSize: "1.1em", marginBottom: 16 }}><Icon name="bell" /> 로그인 기기</h3>
-        {sessionsLoading ? (
-          <p className="empty-small">로딩 중...</p>
-        ) : sessions.length === 0 ? (
-          <p className="empty-small">등록된 기기가 없습니다.</p>
-        ) : sessions.sort((a, b) => (a.is_current ? 0 : 1) - (b.is_current ? 0 : 1)).map(dev => (
-          <div key={dev.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: dev.is_current ? "var(--card-hover)" : "var(--bg-tertiary)", borderRadius: 8, marginBottom: 6, border: dev.is_current ? "1px solid var(--accent)" : "1px solid var(--border)" }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, fontSize: "0.9em" }}>{dev.device_name}</div>
-              <div style={{ fontSize: "0.8em", color: "var(--text-muted)" }}>
-                {dev.ip_address && <span>{dev.ip_address}</span>}
-                {dev.last_active && <span> · 최근 접속 {new Date(dev.last_active).toLocaleString()}</span>}
-              </div>
-            </div>
-            {dev.is_current ? (
-              <span style={{ color: "var(--accent)", fontSize: "0.85em", fontWeight: 600, whiteSpace: "nowrap" }}>현재 사용 중</span>
-            ) : (
-              <button type="button" onClick={async () => {
-                if (!confirm("이 기기의 로그인을 해제하시겠습니까?")) return;
-                try {
-                  const res = await fetch(`/api/sessions/${dev.id}/delete`, { method: "POST", credentials: "include" });
-                  if (res.ok) setSessions(prev => prev.filter(d => d.id !== dev.id));
-                  else { const data = await res.json(); alert(data.detail || "해제 실패"); }
-                } catch {}
-              }} style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", fontSize: "0.85em", whiteSpace: "nowrap" }}>해제</button>
-            )}
-          </div>
-        ))}
-      </div>
 
       <div className="novel-form" style={{ marginTop: 20 }}>
         <h3 style={{ fontSize: "1.1em", marginBottom: 16 }}><Icon name="user_solid" /> 팔로우 요청</h3>
