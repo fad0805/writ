@@ -65,6 +65,25 @@ export default function PostByNumberPage() {
 
   useEffect(() => { loadPost(); }, [params.username, params.number]);
 
+  useEffect(() => {
+    if (!post?.id) return;
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource(`/api/posts/${post.id}/stream`);
+    } catch { return; }
+    es.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "update" && msg.id && msg.reactions) {
+          setPost((prev) => prev && prev.id === msg.id ? { ...prev, reactions: msg.reactions } : prev);
+          setReplies((prev) => prev.map((r) => r.id === msg.id ? { ...r, reactions: msg.reactions } : r));
+        }
+      } catch {}
+    };
+    es.onerror = () => {};
+    return () => { es?.close(); };
+  }, [post?.id]);
+
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || !post) return;
     setLoadingMore(true);

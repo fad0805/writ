@@ -177,22 +177,40 @@ def broadcast_notif_sound(target_user_id: int):
         broadcast_notif(json.dumps({"event": "notif", "sound": True}), target_user_id)
 
 
+_post_streams: dict[int, dict] = {}
+_post_counter = 0
+
+
 def broadcast_delete(post_id: int):
-    """Broadcast a delete event to all connected timeline streams."""
-    if not _streams:
-        return
+    """Broadcast a delete event to all connected timeline streams and post streams."""
     payload = json.dumps({"type": "delete", "id": post_id})
     for info in list(_streams.values()):
         _enqueue(info["queue"], payload)
+    for info in list(_post_streams.values()):
+        if info["post_id"] == post_id:
+            _enqueue(info["queue"], payload)
+
+
+def add_post_stream(post_id: int) -> tuple[int, asyncio.Queue]:
+    global _post_counter
+    _set_loop()
+    _post_counter += 1
+    q: asyncio.Queue = asyncio.Queue(maxsize=50)
+    _post_streams[_post_counter] = {"queue": q, "post_id": post_id}
+    return _post_counter, q
+
+def remove_post_stream(sid: int):
+    _post_streams.pop(sid, None)
 
 
 def broadcast_reaction_update(post_id: int, reactions: dict):
-    """Broadcast updated reactions dict for a post to all connected timeline streams."""
-    if not _streams:
-        return
+    """Broadcast updated reactions dict for a post to all connected timeline streams and post streams."""
     payload = json.dumps({"type": "update", "id": post_id, "reactions": reactions}, default=str)
     for info in list(_streams.values()):
         _enqueue(info["queue"], payload)
+    for info in list(_post_streams.values()):
+        if info["post_id"] == post_id:
+            _enqueue(info["queue"], payload)
 
 
 def _should_deliver_fast(user_id: int, tl_type: str, author_id: int, visibility: str,

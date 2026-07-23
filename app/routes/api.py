@@ -61,7 +61,7 @@ from app.database import get_db
 from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED, SCHEME
 from app.crypto_utils import encrypt_key, get_private_key
 from app.eventbus import broadcast
-from app.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream, broadcast_reaction_update
+from app.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream, broadcast_reaction_update, add_post_stream, remove_post_stream
 from app.utils.storage import LocalStorage
 
 logger = logging.getLogger("writ.api")
@@ -679,6 +679,27 @@ async def api_timeline_stream(request: Request, tl_type: str = "home"):
                     yield ":keepalive\n\n"
         finally:
             remove_stream(sid)
+    return StreamingResponse(event_gen(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
+
+
+@router.get("/posts/{post_id}/stream")
+async def api_post_stream(request: Request, post_id: int):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    sid, q = add_post_stream(post_id)
+    async def event_gen():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    payload = await asyncio.wait_for(q.get(), timeout=30)
+                    yield f"data: {payload}\n\n"
+                except asyncio.TimeoutError:
+                    yield ":keepalive\n\n"
+        finally:
+            remove_post_stream(sid)
     return StreamingResponse(event_gen(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
 
 
