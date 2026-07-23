@@ -4924,6 +4924,7 @@ def _safe_httpx_get(url, headers=None, timeout=15, max_size=5*1024*1024):
     import httpx
     from app.activitypub import _validate_url
     if not _validate_url(url):
+        print(f"[SAFE_GET] blocked by _validate_url url={url}", flush=True)
         return None
     client = httpx.Client(follow_redirects=True, timeout=timeout)
     # Intercept redirects to validate each target
@@ -4936,6 +4937,7 @@ def _safe_httpx_get(url, headers=None, timeout=15, max_size=5*1024*1024):
     try:
         resp = client.get(url, headers=headers)
         client.close()
+        print(f"[SAFE_GET] url={url} status={resp.status_code} len={len(resp.content)}", flush=True)
         if resp.status_code != 200:
             return None
         if len(resp.content) > max_size:
@@ -4991,19 +4993,20 @@ def _ap_fetch(url, user):
         }
         resp = _safe_httpx_get(target_url, headers=headers)
         if not resp or resp.status_code != 200:
-            logger.info("ap_fetch _sign_and_fetch url=%s status=%s", target_url, resp.status_code if resp else None)
+            print(f"[AP_FETCH] url={target_url} status={resp.status_code if resp else 'None resp'}", flush=True)
             return None
         try:
             return resp.json()
         except Exception as e:
-            logger.info("ap_fetch json parse error url=%s: %s", target_url, e)
+            print(f"[AP_FETCH] json error url={target_url}: {e}", flush=True)
             return None
 
     result = _sign_and_fetch(url)
     # Fallback: try original /@username/id URL if /users/.../statuses/... returned 404
     if not result and original_url != url:
+        print(f"[AP_FETCH] fallback to original_url={original_url}", flush=True)
         result = _sign_and_fetch(original_url)
-    logger.info("ap_fetch result_is_none=%s original=%s converted=%s", result is None, original_url, url)
+    print(f"[AP_FETCH] result_is_none={result is None} original={original_url} converted={url}", flush=True)
     return result
 
 _unread_cache: dict[int, tuple[int, float]] = {}
