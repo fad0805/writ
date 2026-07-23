@@ -19,23 +19,36 @@ export interface CustomEmoji {
 export function injectEmojis(list: CustomEmojiRaw[]) {
   if (!cache) cache = [];
   let changed = false;
+  if (!(window as any).__emojiMap) {
+    (window as any).__emojiMap = {};
+  }
+  const emojiMap = (window as any).__emojiMap;
+
   for (const e of list) {
-    if (!cache.some((c) => c.keyword === e.keyword)) {
+    if (!e.keyword) continue;
+    // 기존 캐시에 있는지 확인
+    const existing = cache.find((c) => c.keyword === e.keyword);
+    if (!existing) {
       cache.push({ ...e, category: "remote" });
+      changed = true;
+    } else if (e.url && existing.url !== e.url) {
+      // URL이 변경되었거나 업데이트된 경우 갱신
+      existing.url = e.url;
+      changed = true;
+    }
+
+    // map도 항상 최신으로 갱신
+    if (e.url && emojiMap[e.keyword] !== e.url) {
+      emojiMap[e.keyword] = e.url;
       changed = true;
     }
   }
+
   if (changed && typeof window !== "undefined") {
     cache = [...cache];
     (window as any).__emojiCache = cache;
-    if ((window as any).__emojiMap) {
-      for (const e of list) {
-        if (e.keyword && e.url && !(window as any).__emojiMap[e.keyword]) {
-          (window as any).__emojiMap[e.keyword] = e.url;
-        }
-      }
-    }
-    window.dispatchEvent(new CustomEvent("emojichange", { detail: list }));
+    // 💡 핵심: 조각난 list가 아니라 전체 최신 cache를 이벤트와 구독자에 전달!
+    window.dispatchEvent(new CustomEvent("emojichange", { detail: cache }));
     _emojiSubscribers.forEach(fn => fn(cache as CustomEmoji[]));
   }
 }
