@@ -1085,6 +1085,10 @@ body:has(.modal-overlay) {
   font-weight: bold;
 }
 
+/* ── Profile custom fields ── */
+.custom-field-name { font-weight: 600; }
+.custom-field-url { display: inline-block; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+
 /* ── Profile edit ── */
 
 .profile-edit-avatar-wrap {
@@ -3244,7 +3248,7 @@ input[type="checkbox"] {
   .timeline-tabs { border-radius: 0; gap: 6px; margin-left: 12px; margin-right: 12px; position: sticky; top: 0; z-index: 100; background: var(--bg-primary); padding-top: 4px; padding-bottom: 4px; }
   .profile-header-banner { border-radius: 0; }
   .profile-header { border-radius: 0; }
-  .profile-info { margin-right: 0; margin-left: 0; }
+  .profile-info { margin-right: 0; margin-left: 0; padding-right: 16px; }
   .profile-info-relative { overflow: hidden; }
   .notif-card { border-radius: 0; }
   .reply-form { border-radius: 0; }
