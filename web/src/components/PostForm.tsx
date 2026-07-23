@@ -647,11 +647,16 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     setSubmitting(true);
     try {
       const uploaded = mediaItems.filter(m => !m.file).map(m => ({ url: m.url, type: m.type, alt: m.alt || "" }));
-      for (const m of mediaItems.filter(m => m.file)) {
-        const formData = new FormData();
-        formData.append("file", m.file!);
-        const res = await fetch("/api/media/upload", { method: "POST", credentials: "include", body: formData });
-        if (res.ok) { const d = await res.json(); uploaded.push({ url: d.url, type: d.type, alt: m.alt || "" }); }
+      const filesToUpload = mediaItems.filter(m => m.file);
+      if (filesToUpload.length > 0) {
+        const results = await Promise.all(filesToUpload.map(async (m) => {
+          const formData = new FormData();
+          formData.append("file", m.file!);
+          const res = await fetch("/api/media/upload", { method: "POST", credentials: "include", body: formData });
+          if (res.ok) { const d = await res.json(); return { url: d.url, type: d.type, alt: m.alt || "" }; }
+          return null;
+        }));
+        results.forEach(r => { if (r) uploaded.push(r); });
       }
       const opts = showPoll ? pollOptions.filter(o => o.trim()).map(o => o.trim()) : [];
       const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: quoteUrl || shareUrl, media_attachments: JSON.stringify(uploaded), is_sensitive: postSensitive, poll_options: opts.length >= 2 ? JSON.stringify(opts) : "", poll_expires_in: pollExpiresIn, link_preview: linkPreview ? JSON.stringify(linkPreview) : "" });

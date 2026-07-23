@@ -1025,6 +1025,7 @@ def api_create_post(
     user = require_active_auth(request)
     quote_of_ap_id = ""
     quote_of_id = None
+    pending_quote_url = None
     if share_url:
         with get_session() as _qs:
             local = _qs.query(Post).filter(Post.ap_id == share_url).first()
@@ -1032,19 +1033,7 @@ def api_create_post(
                 quote_of_ap_id = local.ap_id
                 quote_of_id = local.id
             else:
-                try:
-                    from app.activitypub import _ap_fetch as _ap_fetch_quote
-                    data = _ap_fetch_quote(share_url, user)
-                    if data:
-                        obj = data.get("object", data)
-                        if obj.get("type") in ("Note", "Article"):
-                            from app.activitypub import _fetch_and_save_ap_object as _fsao
-                            result = _fsao(obj, user)
-                            if result:
-                                quote_of_ap_id = result.ap_id
-                                quote_of_id = result.id
-                except:
-                    pass
+                pending_quote_url = share_url
     # 🌟 [추가] DB 저장 전에 로컬 쌩 텍스트 규칙으로 멘션/태그/URL을 HTML <a> 태그로 파싱!
     content_html = process_post_content(content, None)
     mentions = extract_mentions(content, None)
@@ -1136,35 +1125,59 @@ def api_create_post(
                 post.in_reply_to_ap_id = parent.ap_id or ""
         s.commit()
 
-        # notify mentioned users
-        mentioned_notified = set()
-        for mu_id in mentioned_ids:
-            if mu_id != user.id:
-                notif = Notification(user_id=mu_id, from_user_id=user.id, notification_type="mention", post_id=post.id)
-                s.add(notif)
-                mentioned_notified.add(mu_id)
-        if parent_id:
-            parent = s.query(Post).filter_by(id=parent_id).first()
-            if parent and parent.author_id != user.id and parent.author_id not in mentioned_notified:
-                notif = Notification(user_id=parent.author_id, from_user_id=user.id, notification_type="reply", post_id=post.id)
-                s.add(notif)
-        s.commit()
+        pj = _post_json(post, s, user)
 
-        from app.push import send_push_to_user
-        from app.timeline_stream import broadcast_refresh_notifs as _brn, broadcast_notif_sound
-        for mu_id in mentioned_ids:
-            if mu_id != user.id:
-                send_push_to_user(mu_id, "mention", user.username, post.id)
-                broadcast_notif_sound(mu_id)
-                _brn(mu_id)
-        if parent_id:
-            parent = s.query(Post).filter_by(id=parent_id).first()
-            if parent and parent.author_id != user.id and parent.author_id not in [mid for mid in mentioned_ids if mid != user.id]:
-                send_push_to_user(parent.author_id, "reply", user.username, post.id)
-                broadcast_notif_sound(parent.author_id)
-                _brn(parent.author_id)
+        def _create_notifications_and_broadcast():
+            try:
+                if pending_quote_url:
+                    try:
+                        from app.activitypub import _ap_fetch as _ap_fetch_quote, _fetch_and_save_ap_object as _fsao
+                        data = _ap_fetch_quote(pending_quote_url, user)
+                        if data:
+                            obj = data.get("object", data)
+                            if obj.get("type") in ("Note", "Article"):
+                                result = _fsao(obj, user)
+                                if result:
+                                    with get_session() as uqs:
+                                        uqs.query(Post).filter_by(id=post.id).update({
+                                            "quote_of_ap_id": result.ap_id, "quote_of_id": result.id
+                                        })
+                                        uqs.commit()
+                    except Exception:
+                        pass
 
-        # Async federation broadcast (background thread so it doesn't block response)
+                with get_session() as ns:
+                    mentioned_notified = set()
+                    for mu_id in mentioned_ids:
+                        if mu_id != user.id:
+                            notif = Notification(user_id=mu_id, from_user_id=user.id, notification_type="mention", post_id=post.id)
+                            ns.add(notif)
+                            mentioned_notified.add(mu_id)
+                    if parent_id:
+                        parent = ns.query(Post).filter_by(id=parent_id).first()
+                        if parent and parent.author_id != user.id and parent.author_id not in mentioned_notified:
+                            notif = Notification(user_id=parent.author_id, from_user_id=user.id, notification_type="reply", post_id=post.id)
+                            ns.add(notif)
+                    ns.commit()
+
+                from app.push import send_push_to_user
+                from app.timeline_stream import broadcast_refresh_notifs as _brn, broadcast_notif_sound
+                for mu_id in mentioned_ids:
+                    if mu_id != user.id:
+                        send_push_to_user(mu_id, "mention", user.username, post.id)
+                        broadcast_notif_sound(mu_id)
+                        _brn(mu_id)
+                if parent_id:
+                    with get_session() as ps:
+                        parent = ps.query(Post).filter_by(id=parent_id).first()
+                    if parent and parent.author_id != user.id and parent.author_id not in [mid for mid in mentioned_ids if mid != user.id]:
+                        send_push_to_user(parent.author_id, "reply", user.username, post.id)
+                        broadcast_notif_sound(parent.author_id)
+                        _brn(parent.author_id)
+            except Exception as e:
+                logger.warning("Failed to create notifications: %s", e)
+
+        threading.Thread(target=_create_notifications_and_broadcast, daemon=True).start()
         threading.Thread(target=_broadcast_federation, args=(user.id, post.id, visibility, content), daemon=True).start()
 
         try:
