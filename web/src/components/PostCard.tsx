@@ -458,6 +458,9 @@ const localReactionEmojiMap = useMemo(() => {
         credentials: "include",
         body: form
       })
+        .then((r) => { if (!r.ok) throw new Error("Episode not found"); return r.json(); })
+        .then((d) => { if (d && d.type === "episode" && d.episode) setQuotedEpisode(d); })
+        .then(() => setLoadingQuote(false))
         .catch(() => setLoadingQuote(false));
     } else if (seriesOnlyMatch) {
       setLoadingQuote(true); // 🌟 누락되었던 로딩 시작 세팅 추가
