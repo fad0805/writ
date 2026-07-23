@@ -4611,9 +4611,26 @@ def api_by_number(request: Request, username: str, number: str):
     accept = request.headers.get("accept", "")
     with get_session() as s:
         author = s.query(User).filter_by(username=username).first()
-        if not author:
-            raise HTTPException(status_code=404, detail="User not found")
-        post = s.query(Post).filter_by(author_id=author.id, number=number).first()
+        post = None
+        if author:
+            post = s.query(Post).filter_by(author_id=author.id, number=number).first()
+        if not post:
+            # 로컬에 없으면 원격 AP에서 가져오기 시도
+            from app.activitypub import _fetch_remote_post, _get_instance_actor, _resolve_actor
+            remote_user = None
+            if author:
+                remote_user = author
+            elif "@" in username:
+                parts = username.split("@", 1)
+                uname, domain = parts[0], parts[1]
+                remote_url = f"https://{domain}/users/{uname}"
+                remote_user = _resolve_actor(remote_url, sign_as=_get_instance_actor(s))
+            if remote_user and remote_user.remote_url:
+                base = remote_user.remote_url.rsplit("/users/", 1)[0] if "/users/" in remote_user.remote_url else ""
+                if base:
+                    remote_post_url = f"{base}/users/{remote_user.username.split('@')[0]}/statuses/{number}"
+                    signer = _get_instance_actor(s)
+                    post = _fetch_remote_post(remote_post_url, signer, s)
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
         # ActivityPub 요청 → AP JSON 반환
