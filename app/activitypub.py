@@ -757,6 +757,14 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
         _uname = _p.path.split("/@")[-1].strip("/")
         if _uname and "/" not in _uname:
             actor_url = f"{_p.scheme}://{_p.netloc}/users/{_uname}"
+            _webfinger_user = _uname
+            _webfinger_domain = _p.netloc
+        else:
+            _webfinger_user = None
+            _webfinger_domain = None
+    else:
+        _webfinger_user = None
+        _webfinger_domain = None
 
     data = None
     if sign_as:
@@ -777,6 +785,24 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
 
     if data is None:
         data = _fetch_ap_json(actor_url)
+
+    # Webfinger fallback for /@username URLs that /users/username doesn't serve
+    if data is None and _webfinger_user and _webfinger_domain:
+        try:
+            wf_url = f"https://{_webfinger_domain}/.well-known/webfinger?resource=acct:{_webfinger_user}@{_webfinger_domain}"
+            wf_resp = _safe_fetch(wf_url, timeout=10, headers={"Accept": "application/jrd+json, application/json"})
+            if wf_resp and wf_resp.status_code == 200:
+                wf_data = wf_resp.json()
+                for link in wf_data.get("links", []):
+                    if link.get("type") in ("application/activity+json", "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\""):
+                        alt_actor = link.get("href", "")
+                        if alt_actor:
+                            data = _fetch_ap_json(alt_actor)
+                            if data:
+                                actor_url = alt_actor
+                                break
+        except Exception:
+            pass
 
     if not data:
         return None
