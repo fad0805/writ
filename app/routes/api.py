@@ -4952,7 +4952,7 @@ def _ap_fetch(url, user):
     import re, datetime, time
 
     # Convert web URL /@username/id to AP URL /users/username/statuses/id
-    m = re.match(r'^(https?://[^/]+)/@(\w+(?:@\S+)?)/([a-f0-9]+)(\?.*)?$', url)
+    m = re.match(r'^(https?://[^/]+)/@(\w+(?:@\S+)?)/([\w-]+)(\?.*)?$', url)
     if m:
         base, username, status_id, query = m.group(1), m.group(2), m.group(3), m.group(4) or ""
         url = f"{base}/users/{username}/statuses/{status_id}{query}"
