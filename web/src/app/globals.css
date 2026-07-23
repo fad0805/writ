@@ -1229,10 +1229,20 @@ body:has(.modal-overlay) {
   color: var(--text-secondary);
   font-size: 0.9em;
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 .notif-body .post-card {
   width: 100%;
   margin: 8px 0 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+.notif-body .post-card .post-content,
+.notif-body .post-card .reply-context {
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
 }
 .notif-time {
   display: block;
