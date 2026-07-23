@@ -73,6 +73,31 @@ _PRIVATE_SUBNETS = [
 ]
 
 
+def _fetch_ap_json(url, headers=None, timeout=10, _depth=0):
+    """Fetch AP JSON. If server returns HTML, parse for rel=alternate AP link and retry."""
+    if _depth > 2:
+        return None
+    unsigned_headers = {"Accept": "application/activity+json"}
+    try:
+        resp = _safe_fetch(url, timeout=timeout, headers=headers or unsigned_headers)
+        if not resp or resp.status_code != 200:
+            return None
+        ct = resp.headers.get("content-type", "")
+        body = resp.text[:200000] if "json" not in ct and "activity" not in ct else ""
+        if body:
+            alt_m = re.search(r'<link[^>]+rel=["\']alternate["\'][^>]+type=["\']application/activity\+json["\'][^>]+href=["\']([^"\']+)["\']', body, re.I)
+            if not alt_m:
+                alt_m = re.search(r'<link[^>]+type=["\']application/activity\+json["\'][^>]+rel=["\']alternate["\'][^>]+href=["\']([^"\']+)["\']', body, re.I)
+            if not alt_m:
+                alt_m = re.search(r'href=["\']([^"\']+)["\'][^>]*type=["\']application/activity\+json["\']', body, re.I)
+            if alt_m:
+                return _fetch_ap_json(alt_m.group(1), headers=unsigned_headers, timeout=timeout, _depth=_depth + 1)
+            return None
+        return resp.json()
+    except Exception:
+        return None
+
+
 def _validate_url(url: str) -> bool:
     """Reject URLs pointing to private/internal IPs (SSRF protection)."""
     parsed = urlparse(url)
@@ -736,29 +761,22 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
     data = None
     if sign_as:
         try:
-            import datetime, time
+            import datetime, time as _t
             from app.crypto_utils import sign_string, get_private_key
             date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
             parsed = urlparse(actor_url)
-            created = int(time.time())
+            created = int(_t.time())
             ss = f"(request-target): get {parsed.path}\nhost: {parsed.netloc}\ndate: {date}\n(created): {created}"
             priv = get_private_key(sign_as, SECRET_KEY)
             sig = sign_string(ss, priv)
             sig_header = f'keyId="{sign_as.actor_uri()}#main-key",algorithm="hs2019",created="{created}",headers="(request-target) host date (created)",signature="{sig}"'
             headers = {"Accept": "application/activity+json", "Signature": sig_header, "Date": date, "Host": parsed.netloc}
-            resp = _safe_fetch(actor_url, timeout=10, headers=headers)
-            if resp:
-                data = resp.json()
+            data = _fetch_ap_json(actor_url, headers=headers)
         except Exception:
             pass
 
     if data is None:
-        try:
-            resp = _safe_fetch(actor_url, timeout=10, headers={"Accept": "application/activity+json"})
-            if resp:
-                data = resp.json()
-        except Exception as e:
-            logger.error("Failed to fetch actor %s: %s", actor_url, e)
+        data = _fetch_ap_json(actor_url)
 
     if not data:
         return None
