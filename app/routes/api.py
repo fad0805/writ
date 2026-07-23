@@ -1083,7 +1083,14 @@ def api_create_post(
         try:
             media = _json.loads(media_attachments)
             if isinstance(media, list):
-                post.media_attachments = [m for m in media[:16] if isinstance(m, str) and _validate_media_url(m)]
+                cleaned = []
+                for m in media[:16]:
+                    if isinstance(m, str):
+                        if _validate_media_url(m):
+                            cleaned.append({"url": m, "type": "image", "alt": ""})
+                    elif isinstance(m, dict) and _validate_media_url(m.get("url", "")):
+                        cleaned.append({"url": m["url"], "type": m.get("type", "image"), "alt": m.get("alt", "")})
+                post.media_attachments = cleaned
         except (_json.JSONDecodeError, TypeError):
             pass
         if poll_options:
