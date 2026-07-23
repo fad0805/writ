@@ -6869,7 +6869,7 @@ def _resolve_admin_users(s, admin_ids_str: str):
 
 @router.post("/link-preview")
 def api_link_preview(url: str = Form(...)):
-    import httpx, re as _re
+    import httpx, re as _re, html as _html
     from urllib.parse import urlparse
     parsed = urlparse(url)
     domain = parsed.netloc
@@ -6877,15 +6877,15 @@ def api_link_preview(url: str = Form(...)):
     try:
         resp = httpx.get(url, headers={"User-Agent": "WRIT/1.0"}, timeout=10, follow_redirects=True)
         if resp.status_code == 200:
-            html = resp.text
+            html_text = resp.text
             def _og(n):
-                m = _re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', html, _re.I)
+                m = _re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', html_text, _re.I)
                 if not m:
-                    m = _re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', html, _re.I)
+                    m = _re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', html_text, _re.I)
                 return m.group(1) if m else ""
-            og_title = _og("title") or _re.search(r'<title>([^<]*)</title>', html, _re.I)
-            result["title"] = (_og("title") or (og_title.group(1) if og_title else domain))[:200]
-            result["description"] = (_og("description") or "")[:400]
+            og_title = _og("title") or _re.search(r'<title>([^<]*)</title>', html_text, _re.I)
+            result["title"] = _html.unescape((_og("title") or (og_title.group(1) if og_title else domain)))[:200]
+            result["description"] = _html.unescape(_og("description") or "")[:400]
             result["image"] = _og("image") or ""
             if result["image"] and result["image"].startswith("/"):
                 result["image"] = f"{parsed.scheme}://{parsed.netloc}{result['image']}"

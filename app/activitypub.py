@@ -1360,7 +1360,8 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
                     _p = urlparse(_url)
                     _og_img = f"{_p.scheme}://{_p.netloc}{_og_img}"
                 if _og_title:
-                    post.link_preview = {"url": _url, "title": _og_title[:200], "description": _og_desc[:400] if _og_desc else "", "image": _og_img or ""}
+                    import html as _html_mod
+                    post.link_preview = {"url": _url, "title": _html_mod.unescape(_og_title[:200]), "description": _html_mod.unescape(_og_desc[:400]) if _og_desc else "", "image": _og_img or ""}
         except Exception:
             pass
 
@@ -1778,7 +1779,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             _p_lp = urlparse(_url_lp)
                             _og_img_lp = f"{_p_lp.scheme}://{_p_lp.netloc}{_og_img_lp}"
                         if _og_title_lp:
-                            link_preview = {"url": _url_lp, "title": _og_title_lp[:200], "description": _og_desc_lp[:400] if _og_desc_lp else "", "image": _og_img_lp or ""}
+                            import html as _html_mod2
+                            link_preview = {"url": _url_lp, "title": _html_mod2.unescape(_og_title_lp[:200]), "description": _html_mod2.unescape(_og_desc_lp[:400]) if _og_desc_lp else "", "image": _og_img_lp or ""}
                 except Exception:
                     pass
 
