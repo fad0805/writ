@@ -726,6 +726,13 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
                 if user and not force_refresh:
                     return user
 
+    # Convert web URL /@username to AP URL /users/username before fetching
+    _p = urlparse(actor_url)
+    if "/@" in _p.path:
+        _uname = _p.path.split("/@")[-1].strip("/")
+        if _uname and "/" not in _uname:
+            actor_url = f"{_p.scheme}://{_p.netloc}/users/{_uname}"
+
     data = None
     if sign_as:
         try:

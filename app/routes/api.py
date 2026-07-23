@@ -5091,6 +5091,7 @@ def _background_fetch_outbox(url: str, user_id: int, actor_id: int):
 
 @router.post("/fetch-actor")
 def api_fetch_actor(request: Request, background_tasks: BackgroundTasks, url: str = Form(...)):
+    from urllib.parse import urlparse
     user = require_auth(request)
     if not url.startswith("http"):
         raise HTTPException(status_code=400, detail="Invalid URL")
@@ -5098,9 +5099,17 @@ def api_fetch_actor(request: Request, background_tasks: BackgroundTasks, url: st
     if err:
         raise HTTPException(status_code=403, detail=err)
 
+    # Normalize /@username to /users/username for DB lookup
+    _p = urlparse(url)
+    _db_url = url
+    if "/@" in _p.path:
+        _uname = _p.path.split("/@")[-1].strip("/")
+        if _uname and "/" not in _uname:
+            _db_url = f"{_p.scheme}://{_p.netloc}/users/{_uname}"
+
     # 로컬 DB에 이미 존재하는 유저인지 먼저 확인 (외부 네트워크 요청 회피)
     with get_session() as _s:
-        local_user = _s.query(User).filter_by(remote_url=url).first()
+        local_user = _s.query(User).filter(or_(User.remote_url == url, User.remote_url == _db_url)).first()
         if local_user:
             background_tasks.add_task(_background_fetch_outbox, url, user.id, local_user.id)
             return _user_json(local_user)
@@ -5113,7 +5122,7 @@ def api_fetch_actor(request: Request, background_tasks: BackgroundTasks, url: st
     background_tasks.add_task(_background_fetch_outbox, url, user.id, actor.id)
 
     with get_session() as _s:
-        _attached = _s.query(User).filter_by(remote_url=url).first()
+        _attached = _s.query(User).filter(or_(User.remote_url == url, User.remote_url == _db_url)).first()
         if not _attached:
             _attached = _s.query(User).get(actor.id)
         return _user_json(_attached)
