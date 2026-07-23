@@ -1223,8 +1223,9 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
             except Exception as e:
                 print(f"[FETCH-POST] Failed to resolve mentioned actor={actor_href}: {e}", flush=True)
         elif t.get('type') == "Hashtag":
-            tag_name = t.get("name", "") or ""
-            hashtag_list.append(Tag(name=tag_name))
+            tag_name = (t.get("name", "") or "").lstrip("#").strip().lower()
+            if tag_name:
+                hashtag_list.append(Tag(name=tag_name))
     mentioned_ids = list(set(mentioned_ids))
 
     if pub not in all_auds and has_mention_tag:
@@ -1552,7 +1553,9 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     if name and name.startswith("@"):
                         mentioned_names.add(name.lstrip("@"))
                 if isinstance(tag, dict) and tag.get("type") == "Hashtag":
-                    tag_names.append(tag.get("name", "").lower())
+                    _tn = (tag.get("name", "") or "").lstrip("#").strip().lower()
+                    if _tn:
+                        tag_names.append(_tn)
 
             for _aud in all_audiences:
                 _a = _aud.rstrip("/")

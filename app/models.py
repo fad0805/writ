@@ -330,9 +330,19 @@ class Post(Base):
                             "icon": {"type": "Image", "mediaType": "image/webp", "url": url}
                         })
 
-        # 2-3. 시리즈/에피소드 내부 링크를 절대 경로로 변환 (AP 전송 시)
+        # 2-3. 내부 링크를 절대 경로로 변환 (AP 전송 시)
         content = re.sub(
             r'href="(/(?:series|episode)/[^"]*)"',
+            lambda m: f'href="{BASE_URL}{m.group(1)}"',
+            content
+        )
+        content = re.sub(
+            r'href="(/explore\?[^"]*)"',
+            lambda m: f'href="{BASE_URL}{m.group(1)}"',
+            content
+        )
+        content = re.sub(
+            r'href="(/@\w+)"',
             lambda m: f'href="{BASE_URL}{m.group(1)}"',
             content
         )
