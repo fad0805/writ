@@ -4965,7 +4965,9 @@ def _ap_fetch(url, user):
 
     from app.crypto_utils import sign_string
 
-    def _sign_and_fetch(target_url):
+    def _sign_and_fetch(target_url, _depth=0):
+        if _depth > 2:
+            return None
         date_str = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
         parsed = urlparse(target_url)
         path_with_query = parsed.path or "/"
@@ -4994,6 +4996,20 @@ def _ap_fetch(url, user):
         resp = _safe_httpx_get(target_url, headers=headers)
         if not resp or resp.status_code != 200:
             print(f"[AP_FETCH] url={target_url} status={resp.status_code if resp else 'None resp'}", flush=True)
+            return None
+        ct = resp.headers.get("content-type", "")
+        if "json" not in ct and "activity" not in ct:
+            html = resp.text[:100000]
+            alt_m = re.search(r'<link[^>]+rel=["\']alternate["\'][^>]+type=["\']application/activity\+json["\'][^>]+href=["\']([^"\']+)["\']', html, re.I)
+            if not alt_m:
+                alt_m = re.search(r'<link[^>]+type=["\']application/activity\+json["\'][^>]+rel=["\']alternate["\'][^>]+href=["\']([^"\']+)["\']', html, re.I)
+            if not alt_m:
+                alt_m = re.search(r'href=["\']([^"\']+)["\'][^>]*type=["\']application/activity\+json["\']', html, re.I)
+            if alt_m:
+                alt_url = alt_m.group(1)
+                print(f"[AP_FETCH] HTML response, found alternate AP URL: {alt_url}", flush=True)
+                return _sign_and_fetch(alt_url, _depth + 1)
+            print(f"[AP_FETCH] HTML response, no alternate link found for {target_url}", flush=True)
             return None
         try:
             return resp.json()
