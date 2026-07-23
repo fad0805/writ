@@ -4794,7 +4794,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 novels = s.query(Novel).options(selectinload(Novel.author)).filter(
                     Novel.tag_list.any(name=tag.name),
                     Novel.is_published == True,
-                    Novel.visibility == "public",
+                    Novel.visibility != "private",
                 ).order_by(desc(Novel.updated_at)).limit(20).all()
             else:
                 # 태그가 디비에 없으면 둘 다 깔끔하게 빈 리스트 처리
