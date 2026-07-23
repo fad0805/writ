@@ -205,9 +205,6 @@ export default function NotificationsPage() {
     return () => window.removeEventListener("resize", updateTabMask);
   }, [updateTabMask]);
 
-  if (authLoading) return <div className="empty-state">로딩 중...</div>;
-  if (!user) return null;
-
   const handleMarkAllRead = useCallback(async () => {
     try {
       if (filter === "direct") {
@@ -224,6 +221,9 @@ export default function NotificationsPage() {
       window.dispatchEvent(new Event("notifchange"));
     } catch {}
   }, [filter, notifs]);
+
+  if (authLoading) return <div className="empty-state">로딩 중...</div>;
+  if (!user) return null;
 
   return (
     <>
