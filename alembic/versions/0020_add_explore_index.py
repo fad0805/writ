@@ -20,7 +20,7 @@ def upgrade() -> None:
     op.execute("""
         CREATE INDEX IF NOT EXISTS ix_posts_explore
         ON posts (created_at DESC)
-        WHERE visibility = 'public' AND is_deleted = 0 AND in_reply_to_id IS NULL
+        WHERE visibility = 'public' AND is_deleted = FALSE AND in_reply_to_id IS NULL
     """)
 
 
