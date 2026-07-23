@@ -4802,9 +4802,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
         else:
             posts = s.query(Post).options(selectinload(Post.author)).filter(
                 Post.content.ilike(pattern),
-                Post.visibility == "public",
                 Post.is_deleted == False,
-                Post.in_reply_to_id == None,
             ).order_by(desc(Post.created_at)).limit(20).all()
             novels = _apply_latest_activity_order(s.query(Novel).options(selectinload(Novel.author)).filter(
                 or_(Novel.title.ilike(pattern), Novel.description.ilike(pattern)),
