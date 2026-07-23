@@ -728,9 +728,35 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
         print(f"[SIG] bind_check FAIL (no activity_actor)", flush=True)
         return (False, None)
     if signer_uri != activity_actor:
-        print(f"[SIG] bind_check FAIL (signer != actor)", flush=True)
-        print(activity)
-        return (False, None)
+        # Inbox forwarding 허용: 서명자가 actor가 아니더라도, activity의 수신자 도메인에 서명자 도메인이 있으면 허용
+        from urllib.parse import urlparse as _urlparse
+        try:
+            signer_domain = _urlparse(signer_uri).netloc
+            actor_domain = _urlparse(activity_actor).netloc
+            if signer_domain and actor_domain and signer_domain != actor_domain:
+                audience = []
+                for key in ("to", "cc", "bto", "bcc"):
+                    val = activity.get(key)
+                    if val:
+                        if isinstance(val, list):
+                            audience.extend(val)
+                        else:
+                            audience.append(val)
+                forwarded = any(
+                    _urlparse(a).netloc == signer_domain
+                    for a in audience if isinstance(a, str) and a.startswith("http")
+                )
+                if forwarded:
+                    print(f"[SIG] bind_check OK (inbox forwarding from {signer_domain})", flush=True)
+                else:
+                    print(f"[SIG] bind_check FAIL (signer != actor, no forwarding auth)", flush=True)
+                    return (False, None)
+            else:
+                print(f"[SIG] bind_check FAIL (signer != actor)", flush=True)
+                return (False, None)
+        except Exception:
+            print(f"[SIG] bind_check FAIL (signer != actor)", flush=True)
+            return (False, None)
     print(f"[SIG] bind_check OK", flush=True)
 
     # Domain check — activity id must be from actor's domain
