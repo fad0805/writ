@@ -119,7 +119,7 @@ export default function PostDetailPage() {
       {ancestors.filter((a) => !a.is_deleted).map((a) => (
         <div key={a.id} className="thread-child"><PostCard post={a} hideContext onDelete={() => setPost((prev) => prev ? { ...prev, ancestors: (prev.ancestors || []).filter((x) => x.id !== a.id) } : prev)} /></div>
       ))}
-      <div ref={currentRef}><PostCard post={post} onUpdate={load} onDelete={() => setDeleted(true)} current hideContext /></div>
+      <div ref={currentRef}><PostCard post={post} onUpdate={load} onReply={(newPost) => { if (newPost) { setReplies((prev) => [...prev, newPost]); setTotalReplies((prev) => prev + 1); } }} onDelete={() => setDeleted(true)} current hideContext /></div>
       <div className="thread-list">
         <h4>답글 {totalReplies}개</h4>
         <ThreadList posts={replies} parentId={post.id} depth={0} onDelete={(id) => { setReplies((prev) => prev.filter((r) => r.id !== id)); setTotalReplies((prev) => prev - 1); }} />
