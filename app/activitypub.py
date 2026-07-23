@@ -517,9 +517,13 @@ def _cleanup_remote_data():
                 Post.author.has(is_remote=True),
                 Post.created_at < post_cutoff,
             ).limit(500).all()
-            for p in old_remote_posts:
-                s.delete(p)
             if old_remote_posts:
+                old_ids = [p.id for p in old_remote_posts]
+                s.query(Post).filter(Post.in_reply_to_id.in_(old_ids)).update(
+                    {Post.in_reply_to_id: None}, synchronize_session=False
+                )
+                for p in old_remote_posts:
+                    s.delete(p)
                 logger.info("Cleaned %d old remote posts", len(old_remote_posts))
 
             # Clean old processed activities (dedup tracking)
@@ -1060,14 +1064,19 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
 
 
 def _retry_fetch_reply(post_id: int, in_reply_to_ap_id: str, attempt: int = 0):
-    """Background: fetch remote parent and link to local post. Max 3 attempts."""
+    """Background: fetch remote parent and link to local post. Max 5 attempts with increasing delay."""
     import threading
-    MAX_ATTEMPTS = 3
+    MAX_ATTEMPTS = 5
     def _worker():
         try:
             with get_session() as s:
                 post = s.query(Post).get(post_id)
                 if not post or post.in_reply_to_id:
+                    return
+                existing_parent = s.query(Post).filter_by(ap_id=in_reply_to_ap_id).first()
+                if existing_parent:
+                    post.in_reply_to_id = existing_parent.id
+                    s.commit()
                     return
                 signer = s.query(User).filter_by(id=post.author_id).first() or _get_instance_actor(s)
                 parent = _fetch_remote_post(in_reply_to_ap_id, signer, s)
@@ -1075,12 +1084,13 @@ def _retry_fetch_reply(post_id: int, in_reply_to_ap_id: str, attempt: int = 0):
                     post.in_reply_to_id = parent.id
                     s.commit()
                 elif attempt + 1 < MAX_ATTEMPTS:
-                    time.sleep(10 * (attempt + 1))
+                    delay = min(30 * (2 ** attempt), 600)
+                    time.sleep(delay)
                     _retry_fetch_reply(post_id, in_reply_to_ap_id, attempt + 1)
                 else:
-                    print(f"[RETRY-REPLY] gave up post_id={post_id} after {MAX_ATTEMPTS} attempts", flush=True)
+                    logger.warning("[RETRY-REPLY] gave up post_id=%s ap_id=%s after %d attempts", post_id, in_reply_to_ap_id, MAX_ATTEMPTS)
         except Exception as e:
-            print(f"[RETRY-REPLY] failed post_id={post_id} err={e}", flush=True)
+            logger.warning("[RETRY-REPLY] failed post_id=%s err=%s", post_id, e)
     threading.Thread(target=_worker, daemon=True).start()
 
 
@@ -2250,6 +2260,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
             content="",
             boost_of_id=post.id,
             visibility=post.visibility or "public",
+            ap_id=boost_ap_id,
         )
         session.add(boost_post)
 
