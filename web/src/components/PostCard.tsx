@@ -32,15 +32,21 @@ function formatRelative(iso: string, now: number = Date.now()): string {
 }
 
 export function rewriteLinks(text: string, validMentions?: Set<string>): string {
+  const protectedTags: string[] = [];
+  text = text.replace(/<a\b[^>]*>[\s\S]*?<\/a>/gi, (m) => {
+    protectedTags.push(m);
+    return `\x00LINK_${protectedTags.length - 1}\x00`;
+  });
+
   text = text.replace(
-    /(?<!<[^>]*)(^|>|\s)#([\p{L}\p{N}_]+)/gu, 
+    /(^|>|\s)#([\p{L}\p{N}_]+)/gu,
     (_m, before, tag) => {
       return `${before}<a href="/explore?q=%23${encodeURIComponent(tag)}" class="hashtag-link">#${tag}</a>`;
     }
   );
 
   text = text.replace(
-    /(?<!<[^>]*)(?<!href=")(?<!src=")(^|>| |\s)(https?:\/\/[^\s<>"')\]]+)/g,
+    /(^|>| |\s)(https?:\/\/[^\s<>"')\]]+)/g,
     (_m: string, before: string, url: string) => {
       const isLocal = typeof window !== "undefined" && url.startsWith(window.location.origin);
       const targetUrl = isLocal ? url.replace(window.location.origin, "") : url;
@@ -49,6 +55,8 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
       return `${before}<a href="${targetUrl}"${isLocal ? "" : ' target="_blank" rel="noopener noreferrer"'}>${display}</a>`;
     }
   );
+
+  text = text.replace(/\x00LINK_(\d+)\x00/g, (_, i) => protectedTags[parseInt(i)]);
   return text;
 }
 
