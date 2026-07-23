@@ -20,7 +20,7 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (open) setTimeout(() => searchRef.current?.focus(), 50);
+    if (open) setSearch("");
   }, [open]);
 
   useEffect(() => {

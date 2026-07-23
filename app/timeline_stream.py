@@ -186,6 +186,15 @@ def broadcast_delete(post_id: int):
         _enqueue(info["queue"], payload)
 
 
+def broadcast_reaction_update(post_id: int, reactions: dict):
+    """Broadcast updated reactions dict for a post to all connected timeline streams."""
+    if not _streams:
+        return
+    payload = json.dumps({"type": "update", "id": post_id, "reactions": reactions}, default=str)
+    for info in list(_streams.values()):
+        _enqueue(info["queue"], payload)
+
+
 def _should_deliver_fast(user_id: int, tl_type: str, author_id: int, visibility: str,
                          follower_ids: set[int], booster_ids: set[int], author_is_local: bool,
                          mentioned_ids: list[int] | None = None) -> bool:

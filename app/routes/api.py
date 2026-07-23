@@ -61,7 +61,7 @@ from app.database import get_db
 from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED, SCHEME
 from app.crypto_utils import encrypt_key, get_private_key
 from app.eventbus import broadcast
-from app.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream
+from app.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream, broadcast_reaction_update
 from app.utils.storage import LocalStorage
 
 logger = logging.getLogger("writ.api")
@@ -1464,6 +1464,11 @@ def api_like_post(request: Request, background_tasks: BackgroundTasks, post_id: 
                     if keep_id:
                         s.query(Like).filter(Like.user_id == user.id, Like.post_id == post_id, Like.id != keep_id[0]).delete(synchronize_session=False)
                     s.commit()
+                    from sqlalchemy import func as _sqlfunc
+                    _reactions = {}
+                    for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).all():
+                        _reactions[_react or "★"] = _cnt
+                    broadcast_reaction_update(post_id, _reactions)
                     if post.author_id != user.id:
                         broadcast_refresh_notifs(post.author_id)
                         from app.push import send_push_to_user
@@ -1524,6 +1529,11 @@ def api_unlike_post(request: Request, background_tasks: BackgroundTasks, post_id
                         from_user_id=user.id, notification_type="like", post_id=post_id
                     ).delete()
                     s.commit()
+                    from sqlalchemy import func as _sqlfunc
+                    _reactions = {}
+                    for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).all():
+                        _reactions[_react or "★"] = _cnt
+                    broadcast_reaction_update(post_id, _reactions)
                     broadcast_refresh_notifs(post.author_id)
                 if post.author.is_remote and post.author.shared_inbox_url:
                     undo = {
@@ -1856,6 +1866,11 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
         if keep_id:
             s.query(Like).filter(Like.user_id == user.id, Like.post_id == post_id, Like.id != keep_id[0]).delete(synchronize_session=False)
         s.commit()
+        from sqlalchemy import func as _sqlfunc
+        _reactions = {}
+        for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).all():
+            _reactions[_react or "★"] = _cnt
+        broadcast_reaction_update(post_id, _reactions)
         if post.author_id != user.id:
             from app.timeline_stream import broadcast_refresh_notifs
             broadcast_refresh_notifs(post.author_id)
@@ -1910,6 +1925,11 @@ def api_unreact_post(request: Request, post_id: int):
                 from_user_id=user.id, notification_type="like", post_id=post_id
             ).delete()
             s.commit()
+            from sqlalchemy import func as _sqlfunc
+            _reactions = {}
+            for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).all():
+                _reactions[_react or "★"] = _cnt
+            broadcast_reaction_update(post_id, _reactions)
             broadcast_refresh_notifs(post.author_id)
             if post.author.is_remote and post.author.shared_inbox_url:
                 from app.activitypub import _post_to_inbox
