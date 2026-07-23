@@ -9,6 +9,7 @@ import NotifSound from "@/components/NotifSound";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import DeactivatedRedirect from "@/components/DeactivatedRedirect";
 import CsrfInit from "@/components/CsrfInit";
+import ScrollRestoration from "@/components/ScrollRestoration";
 
 const siteUrl = process.env.BASE_URL || "http://localhost:3000";
 const API_HOST = process.env.API_HOST || "http://localhost:8000";
@@ -74,6 +75,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
           <MobileNav />
           <KeyboardShortcuts />
+          <ScrollRestoration />
           <NotifSound />
           <DeactivatedRedirect />
           <CsrfInit />
