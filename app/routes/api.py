@@ -4459,6 +4459,13 @@ def api_fetch_series(request: Request, url: str = Form(...)):
                 novel = s.query(Novel).filter_by(author_id=author.id, number=m.group(2)).first()
                 if novel and novel.visibility != "private":
                     return {"type": "series", "novel": _novel_json(novel, s), "author": _user_json(author)}
+        m = re.match(r"https?://[^/]+/series/@(\w+)/(\S+)", url)
+        if m:
+            author = s.query(User).filter_by(username=m.group(1)).first()
+            if author:
+                novel = s.query(Novel).filter_by(author_id=author.id, number=m.group(2)).first()
+                if novel and novel.visibility != "private":
+                    return {"type": "series", "novel": _novel_json(novel, s), "author": _user_json(author)}
         raise HTTPException(status_code=404, detail="Series not found")
 
 
@@ -4482,6 +4489,22 @@ def api_fetch_episode(request: Request, url: str = Form(...)):
                 "novel": _novel_json(novel, s),
                 "author": _user_json(author) if author else None,
             }
+        m = re.match(r"https?://[^/]+/series/@(\w+)/(\S+?)/episodes/(\d+)", url)
+        if m:
+            author = s.query(User).filter_by(username=m.group(1)).first()
+            if author:
+                novel = s.query(Novel).filter_by(author_id=author.id, number=m.group(2)).first()
+                if novel and novel.visibility == "private":
+                    raise HTTPException(status_code=404, detail="Episode not found")
+                if novel:
+                    episode = s.query(Episode).filter_by(id=int(m.group(3)), novel_id=novel.id).first()
+                    if episode and episode.is_published:
+                        return {
+                            "type": "episode",
+                            "episode": _episode_json(episode),
+                            "novel": _novel_json(novel, s),
+                            "author": _user_json(author) if author else None,
+                        }
         raise HTTPException(status_code=404, detail="Episode not found")
 
 

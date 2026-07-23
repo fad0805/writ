@@ -275,9 +275,8 @@ const localReactionEmojiMap = useMemo(() => {
   // series/episode 매칭 추출용 Effect
   useEffect(() => {
     const rawContent = post.content || "";
-    const base = typeof window !== "undefined" ? window.location.origin : "";
-    const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const baseDomain = escapedBase.replace(/\\\//g, "/");
+    const base = typeof window !== "undefined" ? window.location.host : "";
+    const baseDomain = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     // 기존: series:/episode: 접두사 패턴
     const seriesMatches = rawContent.match(/(?:<br\s*\/?>|\n|^)\s*(series):\s*(?:<a[^>]*href="([^"]+)"[^>]*>.*?<\/a>|(https?:\/\/[^\s<>]+))/i);
     const episodeMatches = rawContent.match(/(?:<br\s*\/?>|\n|^)\s*(episode):\s*(?:<a[^>]*href="([^"]+)"[^>]*>.*?<\/a>|(https?:\/\/[^\s<>]+))/i);
@@ -285,8 +284,8 @@ const localReactionEmojiMap = useMemo(() => {
     setEpisodeMatch(episodeMatches && (episodeMatches[2] || episodeMatches[3]) ? episodeMatches : null);
     // 확장: 본문에서 접두사 없는 시리즈/에피소드 URL도 감지
     if (!seriesMatches && !episodeMatches) {
-      const epUrl = rawContent.match(new RegExp(`https?://${baseDomain}/series/(\\d+)/episodes/(\\d+)`, "i"));
-      const serUrl = rawContent.match(new RegExp(`https?://${baseDomain}/series/(\\d+)(?!/episodes)`, "i"));
+      const epUrl = rawContent.match(new RegExp(`https?://${baseDomain}/series/(?:@[^/]+/)?(\\d+)/episodes/(\\d+)`, "i"));
+      const serUrl = rawContent.match(new RegExp(`https?://${baseDomain}/series/(?:@[^/]+/)?(\\d+)(?!/episodes)`, "i"));
       if (epUrl) {
         setEpisodeMatch(Object.assign([epUrl[0], epUrl[0]], { 0: epUrl[0], index: 0 }) as RegExpMatchArray);
       } else if (serUrl) {
@@ -468,9 +467,9 @@ const localReactionEmojiMap = useMemo(() => {
     if (!url) return;
     // 🌟 [정규식 수정] 실제 주소 스펙에 맞춤
     // 1. 에피소드 주소 (ex: /series/1/episodes/5)
-    const epMatch = url.match(/\/series\/(\d+)\/episodes\/(\d+)/);
-    // 2. 시리즈 단독 주소 (ex: /series/1)
-    const seriesOnlyMatch = url.match(/\/series\/(?:by-number\/[^/]+\/)?([a-zA-Z0-9]+)(?:\?.*)?$/);
+    const epMatch = url.match(/\/series\/(?:@[^/]+\/)?(\d+)\/episodes\/(\d+)/);
+    // 2. 시리즈 단독 주소 (ex: /series/1, /series/@user/1)
+    const seriesOnlyMatch = url.match(/\/series\/(?:by-number\/[^/]+\/|@[^/]+\/)?([a-zA-Z0-9]+)(?:\?.*)?$/);
     if (epMatch) {
       const novelId = parseInt(epMatch[1]);
       const episodeId = parseInt(epMatch[2]);

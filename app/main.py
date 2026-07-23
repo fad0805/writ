@@ -729,6 +729,7 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
         return (False, None)
     if signer_uri != activity_actor:
         print(f"[SIG] bind_check FAIL (signer != actor)", flush=True)
+        print(activity)
         return (False, None)
     print(f"[SIG] bind_check OK", flush=True)
 
