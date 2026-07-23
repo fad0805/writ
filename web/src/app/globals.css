@@ -1068,8 +1068,9 @@ body:has(.modal-overlay) {
   position: relative;
   margin-left: 4px;
   margin-right: 30px;
+  min-width: 0;
 }
-.profile-info h2 { margin-bottom: 5px; }
+.profile-info h2 { margin-bottom: 5px; overflow-wrap: break-word; word-break: break-word; min-width: 0; }
 
 .profile-avatar {
   width: 80px; height: 80px;
@@ -1144,6 +1145,9 @@ body:has(.modal-overlay) {
 .profile-username {
   color: var(--text-muted);
   margin-bottom: 10px;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
 }
 .profile-summary {
   color: var(--text-secondary);
@@ -2898,6 +2902,8 @@ input[type="checkbox"] {
   min-height: 100px;
   flex: 1;
   position: relative;
+  min-width: 0;
+  overflow: hidden;
 }
 .profile-info-relative .profile-bottom-actions {
   margin-top: auto;
@@ -3175,6 +3181,8 @@ input[type="checkbox"] {
   .timeline-tabs { border-radius: 0; gap: 6px; margin-left: 12px; margin-right: 12px; position: sticky; top: 0; z-index: 100; background: var(--bg-primary); padding-top: 4px; padding-bottom: 4px; }
   .profile-header-banner { border-radius: 0; }
   .profile-header { border-radius: 0; }
+  .profile-info { margin-right: 0; margin-left: 0; }
+  .profile-info-relative { overflow: hidden; }
   .notif-card { border-radius: 0; }
   .reply-form { border-radius: 0; }
   .notif-tabs { border-radius: 0; margin-left: 12px; margin-right: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
