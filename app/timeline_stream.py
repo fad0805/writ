@@ -68,21 +68,21 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
             if parent_author:
                 parent_author_id = parent_author.get("id")
 
-        # If not in JSON, look up from DB
-        _pid = post_json.get("id")
-        _is_reply = bool(post_json.get("in_reply_to_id") or post_json.get("in_reply_to_ap_id") or reply_ctx)
-        if not _is_reply and _pid:
-            try:
-                _db_post = s.query(Post).filter_by(id=_pid).first()
-                if _db_post and _db_post.in_reply_to_id:
-                    _is_reply = True
-                    _parent = s.query(Post).filter_by(id=_db_post.in_reply_to_id).first()
-                    if _parent:
-                        parent_author_id = _parent.author_id
-            except Exception:
-                pass
-
         with get_session() as s:
+            # If not in JSON, look up from DB
+            _pid = post_json.get("id")
+            _is_reply = bool(post_json.get("in_reply_to_id") or post_json.get("in_reply_to_ap_id") or reply_ctx)
+            if not _is_reply and _pid:
+                try:
+                    _db_post = s.query(Post).filter_by(id=_pid).first()
+                    if _db_post and _db_post.in_reply_to_id:
+                        _is_reply = True
+                        _parent = s.query(Post).filter_by(id=_db_post.in_reply_to_id).first()
+                        if _parent:
+                            parent_author_id = _parent.author_id
+                except Exception:
+                    pass
+
             post_id_for_boost = post_json.get("id")
             follower_ids = {f.follower_id for f in s.query(Follow).filter_by(
                 following_id=post_author_id, accepted=True
@@ -169,6 +169,7 @@ def broadcast_refresh_notifs(target_user_id: int = 0):
 def broadcast_notif_sound(target_user_id: int):
     """Send a JSON event that triggers notification sound in the browser."""
     try:
+        from app.models import Notification
         from sqlalchemy import func
         with get_session() as s:
             cnt = s.query(func.count(Notification.id)).filter_by(user_id=target_user_id, is_read=False).scalar()
