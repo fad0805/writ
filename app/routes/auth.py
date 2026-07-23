@@ -74,9 +74,6 @@ def get_current_user(request: Request):
         ls = session.query(LoginSession).filter_by(session_key=session_key).first()
         if ls:
             now = datetime.now(timezone.utc)
-            if not ls.last_active or (now - ls.last_active.replace(tzinfo=timezone.utc)).total_seconds() > 300:
-                ls.last_active = now
-                session.commit()
             return session.query(User).filter_by(id=ls.user_id, is_remote=False).first()
         # Backward compat: old cookies encode user_id as the first field
         try:
