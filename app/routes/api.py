@@ -5145,7 +5145,10 @@ def api_fetch_post(request: Request, url: str = Form(...)):
         raise HTTPException(status_code=400, detail="Cannot fetch post")
 
     obj = data.get("object", data)
-    obj_type = data.get("type", obj.get("type", ""))
+    obj_type = data.get("type", "")
+    if obj_type in ("Create", "Announce"):
+        obj = obj.get("object", obj) if isinstance(obj, dict) else obj
+        obj_type = obj.get("type", "") if isinstance(obj, dict) else ""
     if obj_type in ("Person", "Application", "Service"):
         with get_session() as _us:
             from app.activitypub import _resolve_actor
