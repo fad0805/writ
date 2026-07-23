@@ -3239,7 +3239,8 @@ input[type="checkbox"] {
   .layout { grid-template-columns: 1fr; }
   .sidebar { display: none; }
   .cover-wrap-120 { width: 25vw; height: calc(25vw * 4 / 3); }
-  .main-content { padding: 0; padding-top: calc(15px + env(safe-area-inset-top, 0px)); padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
+  .main-content { padding: 0; padding-top: calc(15px + env(safe-area-inset-top, 0px)); padding-bottom: 0; overflow-y: auto; }
+  .main-content::after { content: ""; display: block; height: calc(64px + env(safe-area-inset-bottom, 0px)); }
   .post-card { border-radius: 0; max-width: 100%; }
   .post-form { border-radius: 0; margin-left: 12px; margin-right: 12px; }
   .visibility-selector label { flex-shrink: 0; }
@@ -3265,7 +3266,8 @@ input[type="checkbox"] {
 
 
 @media (max-width: 380px) {
-  .main-content { padding-top: calc(10px + env(safe-area-inset-top, 0px)); padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); }
+  .main-content { padding-top: calc(10px + env(safe-area-inset-top, 0px)); padding-bottom: 0; }
+  .main-content::after { height: calc(64px + env(safe-area-inset-bottom, 0px)); }
   .auth-container { margin: 20px auto; width: calc(100% - 20px); padding: 24px 16px 20px; }
   .notif-tabs { gap: 4px; }
   .notif-tab { padding: 6px 10px; font-size: 0.78em; flex: none; }

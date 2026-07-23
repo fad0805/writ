@@ -210,7 +210,7 @@ export default function Sidebar() {
         if (q.startsWith("http")) {
           const segments = q.replace(/\/$/, "").split("/");
           const lastSegment = segments[segments.length - 1];
-          const hasPostId = /^\d+$/.test(lastSegment);
+          const hasPostId = /^[\w-]{20,}$/.test(lastSegment);
           const toExplore = () => { setSidebarQ(""); router.push(`/explore?q=${encodeURIComponent(q)}`); };
           if (q.includes("/@") && !hasPostId) {
             try {
