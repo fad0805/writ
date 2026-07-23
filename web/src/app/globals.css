@@ -2966,7 +2966,6 @@ input[type="checkbox"] {
 .profile-info-relative {
   display: flex;
   flex-direction: column;
-  min-height: 100px;
   flex: 1;
   position: relative;
   min-width: 0;
@@ -2981,13 +2980,12 @@ input[type="checkbox"] {
   box-sizing: border-box;
 }
 .profile-corner-actions {
-  position: absolute;
-  top: 0;
-  right: 0;
   display: flex;
   gap: 6px;
   z-index: 1;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 .profile-follower-status {
   font-size: 0.82em;
