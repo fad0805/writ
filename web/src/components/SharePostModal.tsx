@@ -18,7 +18,7 @@ export default function SharePostModal({ url, title, authorName, description, ta
     const parts = [`「${title || url}」`];
     if (authorName) parts.push(`by ${authorName}`);
     if (description) parts.push(`\n${description}`);
-    if (tags) parts.push(`\n#${tags.split(/[ ,]+/).filter(Boolean).join(" #")}`);
+    if (tags) parts.push(`\n${tags.split(/[ ,]+/).filter(Boolean).map(tag => tag.startsWith('#') ? tag : `#${tag}`).join(' ')}`);
     if (content) parts.push(`\n${content}`)
     if (episodeRegex.test(url)) parts.push(`episode : ${fullUrl}`)
     else if (seriesRegex.test(url)) parts.push(`series : ${fullUrl}`)
