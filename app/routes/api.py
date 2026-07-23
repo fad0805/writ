@@ -4991,16 +4991,19 @@ def _ap_fetch(url, user):
         }
         resp = _safe_httpx_get(target_url, headers=headers)
         if not resp or resp.status_code != 200:
+            logger.info("ap_fetch _sign_and_fetch url=%s status=%s", target_url, resp.status_code if resp else None)
             return None
         try:
             return resp.json()
-        except Exception:
+        except Exception as e:
+            logger.info("ap_fetch json parse error url=%s: %s", target_url, e)
             return None
 
     result = _sign_and_fetch(url)
     # Fallback: try original /@username/id URL if /users/.../statuses/... returned 404
     if not result and original_url != url:
         result = _sign_and_fetch(original_url)
+    logger.info("ap_fetch result_is_none=%s original=%s converted=%s", result is None, original_url, url)
     return result
 
 _unread_cache: dict[int, tuple[int, float]] = {}
@@ -5141,6 +5144,7 @@ def api_fetch_post(request: Request, url: str = Form(...)):
         raise HTTPException(status_code=403, detail=err)
 
     data = _ap_fetch(url, user)
+    logger.info("fetch-post url=%s data_is_none=%s", url, data is None)
     if not data:
         raise HTTPException(status_code=400, detail="Cannot fetch post")
 
