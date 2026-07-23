@@ -93,14 +93,22 @@ function ExploreContent() {
 
   const handleUrlFetch = useCallback(async (url: string) => {
     setLoading(true); setSearched(true); setFetchedUrl(null);
+    // /@username profile URL (no long ID after) → fetch-actor
+    const isProfileUrl = /\/@[\w]+\/?$/.test(url.replace(/\/$/, ""));
+    const apiPath = isProfileUrl ? "/api/fetch-actor" : "/api/fetch-post";
     try {
       const form = new FormData();
       form.append("url", url);
-      const res = await fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form });
+      const res = await fetch(apiPath, { method: "POST", credentials: "include", body: form });
       if (res.ok) {
         const data = await res.json();
         if (data.type === "user" && data.redirect) {
           router.push(data.redirect);
+          setLoading(false);
+          return;
+        }
+        if (isProfileUrl && data.username) {
+          router.push(`/@${data.username}`);
           setLoading(false);
           return;
         }
