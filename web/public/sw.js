@@ -1,6 +1,7 @@
 self.addEventListener("push", function (event) {
   if (!event.data) return;
   try {
+    if (Notification.permission === "denied") return;
     const data = event.data.json();
     const title = data.title || "WRIT";
     const options = {

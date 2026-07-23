@@ -82,6 +82,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           __html: `
             if ('serviceWorker' in navigator) {
               navigator.serviceWorker.register('/sw.js').catch(function() {});
+              if ('Notification' in window && 'PushManager' in window && Notification.permission === 'denied') {
+                navigator.serviceWorker.ready.then(function(reg) {
+                  reg.pushManager.getSubscription().then(function(sub) {
+                    if (sub) {
+                      var ep = sub.endpoint;
+                      sub.unsubscribe().then(function() {
+                        var f = new FormData(); f.append('endpoint', ep);
+                        fetch('/api/push/unsubscribe', {method:'POST',credentials:'include',body:f});
+                      });
+                    }
+                  });
+                });
+              }
             }
             window.__toggleTheme = function() {
               document.body.classList.toggle('dark-theme');

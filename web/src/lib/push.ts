@@ -90,6 +90,21 @@ export async function unsubscribePush(): Promise<boolean> {
   return true;
 }
 
+export async function syncPushPermission(): Promise<void> {
+  if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  if (Notification.permission === "denied") {
+    const reg = await navigator.serviceWorker.ready;
+    const subscription = await reg.pushManager.getSubscription();
+    if (subscription) {
+      const endpoint = subscription.endpoint;
+      await subscription.unsubscribe().catch(() => {});
+      const form = new FormData();
+      form.append("endpoint", endpoint);
+      await fetch("/api/push/unsubscribe", { method: "POST", credentials: "include", body: form }).catch(() => {});
+    }
+  }
+}
+
 export async function isSubscribed(): Promise<boolean> {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
   const reg = await navigator.serviceWorker.ready;
