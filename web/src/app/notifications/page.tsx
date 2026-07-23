@@ -84,7 +84,7 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [offset, setOffset] = useState(20);
+  const offsetRef = useRef(20);
   const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
   const touchStartX = useRef(0);
 
@@ -130,7 +130,7 @@ export default function NotificationsPage() {
         const data = await api.getNotifications(filter || undefined, 20, 0);
         setNotifs(data.notifications);
         setHasMore(data.has_more);
-        setOffset(20);
+        offsetRef.current = 20;
         setDirectGroups([]);
       }
     } catch {}
@@ -141,13 +141,13 @@ export default function NotificationsPage() {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     try {
-      const data = await api.getNotifications(filter || undefined, 5, offset);
+      const data = await api.getNotifications(filter || undefined, 5, offsetRef.current);
       setNotifs((prev) => { const merged = [...prev, ...data.notifications]; if (merged.length >= 200) setHasMore(false); return merged; });
       setHasMore(data.has_more);
-      setOffset((prev) => prev + 5);
+      offsetRef.current += 5;
     } catch {}
     setLoadingMore(false);
-  }, [filter, offset, hasMore, loadingMore]);
+  }, [filter, hasMore, loadingMore]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { window.dispatchEvent(new Event("notificationsread")); }, []);
