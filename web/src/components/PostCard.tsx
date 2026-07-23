@@ -283,9 +283,11 @@ const localReactionEmojiMap = useMemo(() => {
     setSeriesMatch(seriesMatches && (seriesMatches[2] || seriesMatches[3]) ? seriesMatches : null);
     setEpisodeMatch(episodeMatches && (episodeMatches[2] || episodeMatches[3]) ? episodeMatches : null);
     // 확장: 본문에서 접두사 없는 시리즈/에피소드 URL도 감지
+    let epUrl: RegExpMatchArray | null = null;
+    let serUrl: RegExpMatchArray | null = null;
     if (!seriesMatches && !episodeMatches) {
-      const epUrl = rawContent.match(new RegExp(`https?://${baseDomain}/series/(?:@[^/]+/)?(\\d+)/episodes/(\\d+)`, "i"));
-      const serUrl = rawContent.match(new RegExp(`https?://${baseDomain}/series/(?:@[^/]+/)?(\\d+)(?!/episodes)`, "i"));
+      epUrl = rawContent.match(new RegExp(`https?://${baseDomain}/series/(?:@[^/]+/)?(\\d+)/episodes/(\\d+)`, "i"));
+      serUrl = rawContent.match(new RegExp(`https?://${baseDomain}/series/(?:@[^/]+/)?(\\d+)(?!/episodes)`, "i"));
       if (epUrl) {
         setEpisodeMatch(Object.assign([epUrl[0], epUrl[0]], { 0: epUrl[0], index: 0 }) as RegExpMatchArray);
       } else if (serUrl) {
@@ -293,7 +295,9 @@ const localReactionEmojiMap = useMemo(() => {
       }
     }
     // 확장: 본문에서 로컬 포스트 URL 감지 → quote_of_id가 없을 때 자동 로드
-    if (!(post as any).quote_of_id && !(post as any).quote_of_ap_id && !seriesMatch && !episodeMatch) {
+    // NOTE: 로컬 변수로 시리즈/에피소드 매칭 여부 판단 (클로저 stale 방지)
+    const hasSeriesEpisodeMatch = !!(seriesMatches || episodeMatches || epUrl || serUrl);
+    if (!(post as any).quote_of_id && !(post as any).quote_of_ap_id && !hasSeriesEpisodeMatch) {
       const localPostMatch = rawContent.match(new RegExp(`https?://${baseDomain}/@([^/]+)/(\\d+)`, "i"));
       if (localPostMatch && !loadingQuote && !quotedPost) {
         setLoadingQuote(true);
