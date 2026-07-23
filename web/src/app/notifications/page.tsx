@@ -46,7 +46,11 @@ const ACTION_NAMES: Record<string, string> = { warning: "경고", freeze: "동�
 const typeText = (t: string, meta?: any) => {
   if (t === "follow") return "님이 회원님을 팔로우했습니다";
   if (t === "follow_request") return "님이 회원님을 팔로우 요청했습니다";
-  if (t === "like") return "님이 회원님의 글을 즐겨찾기했습니다";
+  if (t === "like") {
+    const reaction = meta?.reaction;
+    if (reaction) return `님이 ${reaction} 리액션했습니다`;
+    return "님이 회원님의 글을 즐겨찾기했습니다";
+  }
   if (t === "boost") return "님이 회원님의 글을 부스트했습니다";
   if (t === "reply" || t === "mention") return "님이 회원님을 언급했습니다";
   if (t === "post") return "님이 새 글을 작성했습니다";
