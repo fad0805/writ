@@ -4453,20 +4453,20 @@ def api_by_series_number(request: Request, username: str, number: str):
 def api_fetch_series(request: Request, url: str = Form(...)):
     with get_session() as s:
         import re
-        m = re.match(r"https?://[^/]+/series/(\d+)", url)
+        m = re.match(r"(?:https?://[^/]+)?/series/(\d+)$", url)
         if m:
             novel = s.query(Novel).filter_by(id=int(m.group(1))).first()
             if novel and novel.visibility != "private":
                 author = s.query(User).get(novel.author_id)
                 return {"type": "series", "novel": _novel_json(novel, s), "author": _user_json(author) if author else None}
-        m = re.match(r"https?://[^/]+/series/by-number/(\w+)/([a-f0-9]+)", url)
+        m = re.match(r"(?:https?://[^/]+)?/series/by-number/(\w+)/([a-f0-9]+)", url)
         if m:
             author = s.query(User).filter_by(username=m.group(1)).first()
             if author:
                 novel = s.query(Novel).filter_by(author_id=author.id, number=m.group(2)).first()
                 if novel and novel.visibility != "private":
                     return {"type": "series", "novel": _novel_json(novel, s), "author": _user_json(author)}
-        m = re.match(r"https?://[^/]+/series/@(\w+)/(\S+)", url)
+        m = re.match(r"(?:https?://[^/]+)?/series/@(\w+)/(\S+)", url)
         if m:
             author = s.query(User).filter_by(username=m.group(1)).first()
             if author:
@@ -4481,7 +4481,7 @@ def api_fetch_episode(request: Request, url: str = Form(...)):
     user = get_current_user(request)
     with get_session() as s:
         import re
-        m = re.match(r"https?://[^/]+/series/(\d+)/episodes/(\d+)", url)
+        m = re.match(r"(?:https?://[^/]+)?/series/(\d+)/episodes/(\d+)", url)
         if m:
             novel = s.query(Novel).filter_by(id=int(m.group(1))).first()
             if not novel or novel.visibility == "private":
@@ -4496,7 +4496,7 @@ def api_fetch_episode(request: Request, url: str = Form(...)):
                 "novel": _novel_json(novel, s),
                 "author": _user_json(author) if author else None,
             }
-        m = re.match(r"https?://[^/]+/series/@(\w+)/(\S+?)/episodes/(\d+)", url)
+        m = re.match(r"(?:https?://[^/]+)?/series/@(\w+)/(\S+?)/episodes/(\d+)", url)
         if m:
             author = s.query(User).filter_by(username=m.group(1)).first()
             if author:
