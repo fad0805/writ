@@ -4952,6 +4952,7 @@ def _ap_fetch(url, user):
     import re, datetime, time
 
     # Convert web URL /@username/id to AP URL /users/username/statuses/id
+    original_url = url
     m = re.match(r'^(https?://[^/]+)/@(\w+(?:@\S+)?)/([\w-]+)(\?.*)?$', url)
     if m:
         base, username, status_id, query = m.group(1), m.group(2), m.group(3), m.group(4) or ""
@@ -4962,43 +4963,45 @@ def _ap_fetch(url, user):
 
     from app.crypto_utils import sign_string
 
-    date_str = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
-    parsed = urlparse(url)
-    path_with_query = parsed.path or "/"
-    if parsed.query:
-        path_with_query += f"?{parsed.query}"
+    def _sign_and_fetch(target_url):
+        date_str = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+        parsed = urlparse(target_url)
+        path_with_query = parsed.path or "/"
+        if parsed.query:
+            path_with_query += f"?{parsed.query}"
+        signed_string = (
+            f"(request-target): get {path_with_query}\n"
+            f"host: {parsed.netloc}\n"
+            f"date: {date_str}"
+        )
+        try:
+            signature = sign_string(signed_string, get_private_key(user, SECRET_KEY))
+        except Exception:
+            return None
+        signature_header = (
+            f'keyId="{user.actor_uri()}#main-key",'
+            f'headers="(request-target) host date",'
+            f'signature="{signature}"'
+        )
+        headers = {
+            "Accept": "application/activity+json",
+            "Signature": signature_header,
+            "Date": date_str,
+            "Host": parsed.netloc,
+        }
+        resp = _safe_httpx_get(target_url, headers=headers)
+        if not resp or resp.status_code != 200:
+            return None
+        try:
+            return resp.json()
+        except Exception:
+            return None
 
-    signed_string = (
-        f"(request-target): get {path_with_query}\n"
-        f"host: {parsed.netloc}\n"
-        f"date: {date_str}"
-    )
-
-    try:
-        signature = sign_string(signed_string, get_private_key(user, SECRET_KEY))
-    except Exception:
-        return None
-
-    signature_header = (
-        f'keyId="{user.actor_uri()}#main-key",'
-        f'headers="(request-target) host date",'
-        f'signature="{signature}"'
-    )
-
-    headers = {
-        "Accept": "application/activity+json",
-        "Signature": signature_header,
-        "Date": date_str,
-        "Host": parsed.netloc,
-    }
-
-    resp = _safe_httpx_get(url, headers=headers)
-    if not resp or resp.status_code != 200:
-        return None
-    try:
-        return resp.json()
-    except Exception:
-        return None
+    result = _sign_and_fetch(url)
+    # Fallback: try original /@username/id URL if /users/.../statuses/... returned 404
+    if not result and original_url != url:
+        result = _sign_and_fetch(original_url)
+    return result
 
 _unread_cache: dict[int, tuple[int, float]] = {}
 _UNREAD_CACHE_TTL = 5.0
