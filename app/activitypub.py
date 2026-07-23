@@ -1204,6 +1204,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     if isinstance(cc, str): cc = [cc]
     all_auds = to + cc
     pub = "https://www.w3.org/ns/activitystreams#Public"
+    pub_set = {pub, "as:Public"}
 
     tags = obj.get("tag", [])
     if isinstance(tags, dict): 
@@ -1238,11 +1239,11 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
                 hashtag_list.append(Tag(name=tag_name))
     mentioned_ids = list(set(mentioned_ids))
 
-    if pub not in all_auds and has_mention_tag:
+    if not (pub_set & set(all_auds)) and has_mention_tag:
         vis = "mention"
-    elif pub in to:
+    elif pub_set & set(to):
         vis = "public"
-    elif pub in cc:
+    elif pub_set & set(cc):
         vis = "home"
     elif any(a.endswith("/followers") for a in all_auds):
         vis = "followers"
@@ -1429,12 +1430,12 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if isinstance(cc, str):
             cc = [cc]
         all_audiences = to + cc
-        public_uri = "https://www.w3.org/ns/activitystreams#Public"
+        public_uris = {"https://www.w3.org/ns/activitystreams#Public", "as:Public"}
 
         is_incoming_dm = False
-        if public_uri in to:
+        if public_uris & set(to):
             visibility = "public"
-        elif public_uri in cc:
+        elif public_uris & set(cc):
             visibility = "home"
         elif any(aud.endswith("/followers") for aud in all_audiences):
             visibility = "followers"
