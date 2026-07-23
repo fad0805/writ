@@ -28,25 +28,29 @@ export default function RightSidebar() {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
+    let debounceTimer: ReturnType<typeof setTimeout>;
     api.getMyNovels().then((d) => { if (!cancelled) setNovels(d.novels); }).catch(() => {});
     api.getNotifications(undefined, 10, 0).then((d) => { if (!cancelled) setNotifs(d.notifications); }).catch(() => {});
     const es = new EventSource("/api/notifications/stream");
     es.onmessage = (event) => {
       if (event.data === "refresh") {
         invalidateEmojiCache();
-        api.getNotifications(undefined, 5, 0, false).then((d) => {
-          setNotifs((prev) => {
-            const existing = new Set(prev.map((n) => n.id));
-            const newItems = d.notifications.filter((n) => !existing.has(n.id));
-            if (newItems.length === 0) return prev;
-            window.dispatchEvent(new Event("notifchange"));
-            return [...newItems, ...prev];
-          });
-        }).catch(() => {});
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          api.getNotifications(undefined, 5, 0, false).then((d) => {
+            setNotifs((prev) => {
+              const existing = new Set(prev.map((n) => n.id));
+              const newItems = d.notifications.filter((n) => !existing.has(n.id));
+              if (newItems.length === 0) return prev;
+              window.dispatchEvent(new Event("notifchange"));
+              return [...newItems, ...prev];
+            });
+          }).catch(() => {});
+        }, 300);
       }
     };
     es.onerror = () => {};
-    return () => { cancelled = true; es.close(); };
+    return () => { cancelled = true; clearTimeout(debounceTimer); es.close(); };
   }, [user, refreshKey]);
 
   const [serverRefreshKey, setServerRefreshKey] = useState(0);

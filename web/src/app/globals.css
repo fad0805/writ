@@ -1299,6 +1299,59 @@ input[type="checkbox"] {
   overflow-y: auto;
   overflow-x: hidden;
 }
+.notif-mini-item {
+  background: var(--bg-tertiary);
+  cursor: pointer;
+}
+.notif-mini-item:hover {
+  opacity: 0.9;
+}
+.notif-mini-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.notif-mini-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.notif-mini-content {
+  flex: 1;
+  min-width: 0;
+}
+.notif-mini-author {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+.notif-mini-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+}
+.notif-mini-handle {
+  color: var(--text-muted);
+  font-size: 0.85em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notif-mini-text {
+  font-size: 0.875em;
+  color: var(--text-muted);
+}
+.notif-mini-btns {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
 .novel-mini-list {
   margin-bottom: 10px;
 }

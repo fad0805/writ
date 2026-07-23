@@ -40,6 +40,37 @@ const NOTIF_ICONS: Record<string, string> = {
   poll_ended: "chart",
 };
 
+const TYPE_NAMES: Record<string, string> = { post: "게시글", novel: "시리즈", episode: "에피소드" };
+const ACTION_NAMES: Record<string, string> = { warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지", unsuspend: "정지 해제" };
+
+const typeText = (t: string, meta?: any) => {
+  if (t === "follow") return "님이 회원님을 팔로우했습니다";
+  if (t === "follow_request") return "님이 회원님을 팔로우 요청했습니다";
+  if (t === "like") return "님이 회원님의 글을 즐겨찾기했습니다";
+  if (t === "boost") return "님이 회원님의 글을 부스트했습니다";
+  if (t === "reply" || t === "mention") return "님이 회원님을 언급했습니다";
+  if (t === "post") return "님이 새 글을 작성했습니다";
+  if (t === "new_episode") {
+    if (meta) return `님이 시리즈 "${meta.novel_title}"에 새 에피소드를 작성했습니다`;
+    return "님이 새 에피소드를 작성했습니다";
+  }
+  if (t === "moderation") {
+    if (meta?.type === "report") return `님이 ${TYPE_NAMES[meta.target_type] || meta.target_type}을(를) 신고했습니다`;
+    if (meta?.type === "new_user") return `님이 가입했습니다`;
+    const act = ACTION_NAMES[meta?.action] || meta?.action || "중재";
+    return `계정에 ${act} 조치가 적용되었습니다.`;
+  }
+  return "";
+};
+
+const fmtTime = (t: string | null) => {
+  if (!t) return "";
+  const d = new Date(t);
+  return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+
+const DEFAULT_ICON_COLOR = "var(--text-muted)";
+
 export default function NotificationsPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -123,19 +154,23 @@ export default function NotificationsPage() {
   useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
   useEffect(() => {
     if (!user || filter === "direct") return;
+    let timeout: ReturnType<typeof setTimeout>;
     const handler = () => {
-      api.getNotifications(undefined, 5, 0, false).then((data) => {
-        setNotifs((prev) => {
-          const existing = new Set(prev.map((n) => n.id));
-          const newItems = data.notifications.filter((n) => !existing.has(n.id));
-          if (newItems.length === 0) return prev;
-          return [...newItems, ...prev];
-        });
-        setHasMore(data.has_more);
-      }).catch(() => {});
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        api.getNotifications(undefined, 5, 0, false).then((data) => {
+          setNotifs((prev) => {
+            const existing = new Set(prev.map((n) => n.id));
+            const newItems = data.notifications.filter((n) => !existing.has(n.id));
+            if (newItems.length === 0) return prev;
+            return [...newItems, ...prev];
+          });
+          setHasMore(data.has_more);
+        }).catch(() => {});
+      }, 300);
     };
     window.addEventListener("notifchange", handler);
-    return () => window.removeEventListener("notifchange", handler);
+    return () => { clearTimeout(timeout); window.removeEventListener("notifchange", handler); };
   }, [filter, user]);
 
   const handleApprove = useCallback(async (username: string) => {
@@ -173,53 +208,22 @@ export default function NotificationsPage() {
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
   if (!user) return null;
 
-  const actionNames: Record<string, string> = {
-    warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지", unsuspend: "정지 해제",
-  };
-  const targetTypeNames: Record<string, string> = {
-    post: "게시글", novel: "시리즈", episode: "에피소드",
-  };
-
-  const typeText = (t: string, meta?: any) => {
-    if (t === "follow") return "님이 회원님을 팔로우했습니다";
-    if (t === "follow_request") return "님이 회원님을 팔로우 요청했습니다";
-    if (t === "like") return "님이 회원님의 글을 즐겨찾기했습니다";
-    if (t === "boost") return "님이 회원님의 글을 부스트했습니다";
-    if (t === "reply" || t === "mention") return "님이 회원님을 언급했습니다";
-    if (t === "post") return "님이 새 글을 작성했습니다";
-    if (t === "new_episode") {
-      if (meta) return `님이 시리즈 "${meta.novel_title}"에 새 에피소드를 작성했습니다`;
-      return "님이 새 에피소드를 작성했습니다";
-    }
-    if (t === "moderation") {
-      if (meta?.type === "report") return `님이 ${targetTypeNames[meta.target_type] || meta.target_type}을(를) 신고했습니다`;
-      if (meta?.type === "new_user") return `님이 가입했습니다`;
-      const act = actionNames[meta?.action] || meta?.action || "중재";
-      return `계정에 ${act} 조치가 적용되었습니다.`;
-    }
-    return "";
-  };
-
-  const fmtTime = (t: string | null) => {
-    if (!t) return "";
-    const d = new Date(t);
-    return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  };
-
-  const handleMarkAllRead = async () => {
+  const handleMarkAllRead = useCallback(async () => {
     try {
       if (filter === "direct") {
         const res = await fetch("/api/notifications/direct-threads", { credentials: "include" });
         const data = await res.json();
         setDirectGroups(data.users || []);
       } else {
-        await api.getNotifications(filter || undefined, 9999, 0, true);
+        const unreadIds = notifs.filter(n => !n.is_read).map(n => n.id);
+        if (unreadIds.length === 0) return;
+        await api.getNotifications(filter || undefined, 20, 0, true);
       }
       setNotifs((prev) => prev.map((n) => ({ ...n, is_read: true })));
       window.dispatchEvent(new Event("notificationsread"));
       window.dispatchEvent(new Event("notifchange"));
     } catch {}
-  };
+  }, [filter, notifs]);
 
   return (
     <>
@@ -274,7 +278,7 @@ export default function NotificationsPage() {
               {n.type === "moderation" && n.metadata?.type === "report" ? (
                 <>
                   <Link href={`/@${n.from_user?.username}`} className="notif-from-link"><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user?.display_name || "", emojiMap)) }} /></Link>{" "}
-                  님이 <strong>{targetTypeNames[n.metadata.target_type] || n.metadata.target_type}</strong>을(를) 신고했습니다
+                  님이 <strong>{TYPE_NAMES[n.metadata.target_type] || n.metadata.target_type}</strong>을(를) 신고했습니다
                   <div className="notif-mod-message">
                     <div style={{ fontSize: 13, marginBottom: 2 }}>
                       {n.metadata.target_author && <span>작성자: {n.metadata.target_author} · </span>}
@@ -304,7 +308,7 @@ export default function NotificationsPage() {
                   }} className="btn btn-small btn-outline">거절</button>
                 </div></>
               ) : n.type === "moderation" ? (
-                <><span className="font-bold" style={{ color: "var(--danger)" }}>{actionNames[n.metadata?.action] || n.metadata?.action || "중재"}</span> 조치가 적용되었습니다.</>
+                <><span className="font-bold" style={{ color: "var(--danger)" }}>{ACTION_NAMES[n.metadata?.action] || n.metadata?.action || "중재"}</span> 조치가 적용되었습니다.</>
               ) : n.type === "poll_ended" ? (
                 <>회원님이 참여한 투표가 끝났습니다</>
               ) : (
