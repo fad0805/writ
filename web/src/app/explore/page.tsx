@@ -48,7 +48,7 @@ function ExploreContent() {
     setLoadingMore(true);
     exploreOffsetRef.current += 20;
     try {
-      const d = await api.explore(5, exploreOffsetRef.current);
+      const d = await api.explore(20, exploreOffsetRef.current);
       setPosts((prev) => { const ids = new Set(prev.map((p) => p.id)); return [...prev, ...d.posts.filter((p: any) => !ids.has(p.id))]; });
       setHasMore(d.has_more);
     } catch {}

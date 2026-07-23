@@ -3165,7 +3165,7 @@ def _sync_tags(n, s):
         n.tag_list.remove(tag)
 
 
-def _novel_json(n, s=None):
+def _novel_json(n, s=None, _followers_map=None):
     author = None
     if hasattr(n, 'author') and n.author:
         author = _user_json(n.author)
@@ -3188,7 +3188,9 @@ def _novel_json(n, s=None):
         "author": author,
         "author_id": n.author_id,
     }
-    if s is not None:
+    if _followers_map is not None:
+        result["followers_count"] = _followers_map.get(n.id, 0)
+    elif s is not None:
         result["followers_count"] = s.query(SeriesFollow).filter_by(novel_id=n.id).count()
     return result
 
@@ -4654,6 +4656,12 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
         _reactions_map = {}
         _booster_map = {}
         _mentioned_users_map = {}
+        _boost_originals = {}
+        if post_ids:
+            boost_pointer_ids = {p.boost_of_id for p in posts if p.boost_of_id}
+            if boost_pointer_ids:
+                for orig in s.query(Post).options(selectinload(Post.author)).filter(Post.id.in_(boost_pointer_ids), Post.is_deleted == False).all():
+                    _boost_originals[orig.id] = orig
         if user and post_ids:
             _liked_ids = {l.post_id for l in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(post_ids)).all()}
             _boosted_ids = {b.post_id for b in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(post_ids)).all()}
@@ -4693,6 +4701,7 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
 
         # 3. 첫 페이지에서만 소설 목록 조회
         novels = []
+        _followers_map = {}
         if offset == 0:
             novels = _apply_latest_activity_order(s.query(Novel).options(
                 selectinload(Novel.author),
@@ -4701,11 +4710,16 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
                 Novel.visibility == "public",
                 Novel.is_published == True,
             ), s).limit(20).all()
+            if novels:
+                from sqlalchemy import func as _func2
+                novel_ids = [n.id for n in novels]
+                for nid, cnt in s.query(SeriesFollow.novel_id, _func2.count(SeriesFollow.id)).filter(SeriesFollow.novel_id.in_(novel_ids)).group_by(SeriesFollow.novel_id).all():
+                    _followers_map[nid] = cnt
 
         return {
-            "posts": [_post_json(p, s, user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids, _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map, _booster_map=_booster_map, _mentioned_users_map=_mentioned_users_map, _skip_emojis=True) for p in posts],
+            "posts": [_post_json(p, s, user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids, _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map, _booster_map=_booster_map, _mentioned_users_map=_mentioned_users_map, _boost_originals=_boost_originals, _skip_emojis=True) for p in posts],
             "has_more": has_more,
-            "novels": [_novel_json(n, s) for n in novels],
+            "novels": [_novel_json(n, s, _followers_map=_followers_map) for n in novels],
         }
 
 
