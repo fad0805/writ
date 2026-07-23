@@ -354,7 +354,7 @@ input[type="text"].explore-search-input:focus {
   .right-sidebar .novel-mini-card { padding: 3px 6px; }
   .right-sidebar .novel-mini-card strong { font-size: 0.8em; }
   .right-sidebar .novel-mini-card span { font-size: 0.7em; }
-  .right-sidebar .mini-post-link { padding: 3px 6px; }
+  .right-sidebar .mini-post-link { padding: 5px 7px; margin-top: 4px; }
   .right-sidebar .mini-post-link .text-sm { font-size: 0.75em; }
   .right-sidebar .mini-post-author { font-size: 0.78em; }
   .right-sidebar .btn-primary.btn-small { font-size: 0.72em; padding: 2px 7px; }
@@ -1309,7 +1309,7 @@ input[type="checkbox"] {
 
 /* ── Sidebar widgets (right) ── */
 .notif-mini-list {
-  max-height: 420px;
+  max-height: 280px;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -1321,16 +1321,16 @@ input[type="checkbox"] {
   opacity: 0.9;
 }
 .notif-mini-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
   overflow: hidden;
   flex-shrink: 0;
 }
 .notif-mini-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
   flex-shrink: 0;
 }
 .notif-mini-content {
@@ -1358,7 +1358,7 @@ input[type="checkbox"] {
   white-space: nowrap;
 }
 .notif-mini-text {
-  font-size: 0.875em;
+  font-size: 0.8em;
   color: var(--text-muted);
 }
 .notif-mini-btns {
