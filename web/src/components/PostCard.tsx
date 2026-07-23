@@ -963,7 +963,7 @@ const localReactionEmojiMap = useMemo(() => {
           )}
         </div>}
       </div>
-      {!readonly && showReply && <ReplyModal post={post} onClose={() => setShowReply(false)} onDone={(newPost) => { setShowReply(false); if (onReply) onReply(newPost); else if (onUpdate) onUpdate(); }} />}
+      {!readonly && showReply && <ReplyModal post={post} onClose={() => setShowReply(false)} onDone={(newPost) => { setShowReply(false); if (onReply) onReply(newPost); }} />}
       {!readonly && showEdit && <EditModal post={post} onClose={() => setShowEdit(false)} onDone={(updated) => { setShowEdit(false); if (onUpdate) onUpdate(updated); }} />}
       {!readonly && showReport && (
         <div className="reply-modal-backdrop active" onClick={() => setShowReport(false)}>
