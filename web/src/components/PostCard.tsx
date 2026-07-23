@@ -275,10 +275,35 @@ const localReactionEmojiMap = useMemo(() => {
   // series/episode 매칭 추출용 Effect
   useEffect(() => {
     const rawContent = post.content || "";
+    const base = typeof window !== "undefined" ? window.location.origin : "";
+    const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const baseDomain = escapedBase.replace(/\\\//g, "/");
+    // 기존: series:/episode: 접두사 패턴
     const seriesMatches = rawContent.match(/(?:<br\s*\/?>|\n|^)\s*(series):\s*(?:<a[^>]*href="([^"]+)"[^>]*>.*?<\/a>|(https?:\/\/[^\s<>]+))/i);
     const episodeMatches = rawContent.match(/(?:<br\s*\/?>|\n|^)\s*(episode):\s*(?:<a[^>]*href="([^"]+)"[^>]*>.*?<\/a>|(https?:\/\/[^\s<>]+))/i);
     setSeriesMatch(seriesMatches && (seriesMatches[2] || seriesMatches[3]) ? seriesMatches : null);
     setEpisodeMatch(episodeMatches && (episodeMatches[2] || episodeMatches[3]) ? episodeMatches : null);
+    // 확장: 본문에서 접두사 없는 시리즈/에피소드 URL도 감지
+    if (!seriesMatches && !episodeMatches) {
+      const epUrl = rawContent.match(new RegExp(`https?://${baseDomain}/series/(\\d+)/episodes/(\\d+)`, "i"));
+      const serUrl = rawContent.match(new RegExp(`https?://${baseDomain}/series/(\\d+)(?!/episodes)`, "i"));
+      if (epUrl) {
+        setEpisodeMatch(Object.assign([epUrl[0], epUrl[0]], { 0: epUrl[0], index: 0 }) as RegExpMatchArray);
+      } else if (serUrl) {
+        setSeriesMatch(Object.assign([serUrl[0], serUrl[0]], { 0: serUrl[0], index: 0 }) as RegExpMatchArray);
+      }
+    }
+    // 확장: 본문에서 로컬 포스트 URL 감지 → quote_of_id가 없을 때 자동 로드
+    if (!(post as any).quote_of_id && !(post as any).quote_of_ap_id && !seriesMatch && !episodeMatch) {
+      const localPostMatch = rawContent.match(new RegExp(`https?://${baseDomain}/@([^/]+)/(\\d+)`, "i"));
+      if (localPostMatch && !loadingQuote && !quotedPost) {
+        setLoadingQuote(true);
+        fetch(`/api/by-number/${localPostMatch[1]}/${localPostMatch[2]}`, { credentials: "include" })
+          .then(r => { if (r.ok) return r.json(); throw new Error(); })
+          .then(d => { if (d._emojis) { import("@/lib/emojis").then(m => m.injectEmojis(d._emojis)); } setQuotedPost(d); setLoadingQuote(false); })
+          .catch(() => setLoadingQuote(false));
+      }
+    }
   }, [post.id, post.content, post.summary]);
 
   // contentHtml: emojiList 변경 시 즉시 재계산하여 이모지 렌더링 깜빡임 방지
@@ -602,7 +627,7 @@ const localReactionEmojiMap = useMemo(() => {
             <summary onClick={(e) => e.stopPropagation()}>⚠️ {post.summary}</summary>
             <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
             {(post as any).media_attachments?.length > 0 && _renderMedia()}
-            {post.link_preview && !(post as any).quote_of_id && !(post as any).quote_of_ap_id && (() => {
+            {post.link_preview && !(post as any).quote_of_id && !(post as any).quote_of_ap_id && !seriesMatch && !episodeMatch && (() => {
                 const lp = post.link_preview!;
                 const isLocalLink = (() => { try { return new URL(lp.url).hostname === window.location.hostname; } catch { return false; } })();
                 const lpImage = isLocalLink ? ((window as any).__serverLogo || lp.image) : lp.image;
@@ -751,7 +776,7 @@ const localReactionEmojiMap = useMemo(() => {
             </div>
           </div>
         )}
-        {!post.summary && post.link_preview && !(post as any).quote_of_id && !(post as any).quote_of_ap_id && (() => {
+        {!post.summary && post.link_preview && !(post as any).quote_of_id && !(post as any).quote_of_ap_id && !seriesMatch && !episodeMatch && (() => {
             const lp = post.link_preview!;
             const isLocalLink = (() => { try { return new URL(lp.url).hostname === window.location.hostname; } catch { return false; } })();
             const lpImage = isLocalLink ? ((window as any).__serverLogo || lp.image) : lp.image;
