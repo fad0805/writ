@@ -51,4 +51,6 @@ export default function ScrollRestoration() {
       container?.scrollTo(0, 0);
     }
   }, [pathname]);
+
+  return null;
 }
