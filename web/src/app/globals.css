@@ -1309,7 +1309,7 @@ input[type="checkbox"] {
 
 /* ── Sidebar widgets (right) ── */
 .notif-mini-list {
-  max-height: 280px;
+  max-height: 420px;
   overflow-y: auto;
   overflow-x: hidden;
 }
