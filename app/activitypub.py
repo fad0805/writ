@@ -1159,6 +1159,10 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         url = f"{base}/users/{username}/statuses/{status_id}{query}"
         print(f"[FETCH-POST] Mastodon URL converted to: {url}", flush=True)
 
+    if url.endswith("/activity"):
+        url = url[:-len("/activity")]
+        print(f"[FETCH-POST] stripped /activity suffix → {url}", flush=True)
+
     parsed = urlparse(url)
     headers = {"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}
 
@@ -2272,6 +2276,10 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
     if not object_url:
         print("[ANNOUNCE] no object_url, returning early", flush=True)
         return (200, "OK")
+
+    if object_url.endswith("/activity"):
+        object_url = object_url[:-len("/activity")]
+        print(f"[ANNOUNCE] stripped /activity suffix → {object_url[:120]}", flush=True)
 
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
