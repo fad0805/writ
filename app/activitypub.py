@@ -2271,6 +2271,8 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
 
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
+        if post and post.boost_of_id:
+            post = session.query(Post).get(post.boost_of_id)
         _sign_as = session.query(User).get(post.author_id) if post else None
         if not _sign_as:
             _sign_as = _get_instance_actor(session)
@@ -2285,11 +2287,15 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
 
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
+        if post and post.boost_of_id:
+            post = session.query(Post).get(post.boost_of_id)
         print(f"[ANNOUNCE] session2 post={'found id='+str(post.id) if post else 'none'}", flush=True)
         if not post:
             _local_signer = _get_instance_actor(session)
             try:
                 post = _fetch_remote_post(object_url, _local_signer, session)
+                if post and post.boost_of_id:
+                    post = session.query(Post).get(post.boost_of_id)
                 print(f"[ANNOUNCE] fetch_remote_post result={'id='+str(post.id) if post else 'None'}", flush=True)
             except Exception as e:
                 logger.warning("Announce: _fetch_remote_post failed for %s: %s", object_url, e)
