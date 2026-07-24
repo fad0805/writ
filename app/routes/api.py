@@ -162,19 +162,25 @@ def _json_array_has_user(column, user_id):
 def _sync_post_tags(post, s):
     """Parse #hashtags from post content and sync with Tag model."""
     tags = set(re.findall(r'(?<!\w)#([\w_가-힣]+)', post.content))
-    desired = set(t.lower() for t in tags)
-    current = {t.name for t in (post.tag_list or [])}
-    for name in desired - current:
-        tag = s.query(Tag).filter_by(name=name).first()
-        if not tag:
-            tag = Tag(name=name)
-            s.add(tag)
-            s.flush()
-        post.tag_list.append(tag)
-    for name in current - desired:
-        tag = next((t for t in post.tag_list if t.name == name), None)
-        if tag:
-            post.tag_list.remove(tag)
+    desired = {t.lower(): t for t in tags}
+    current = {t.name: t for t in (post.tag_list or [])}
+    for lower_name, display in desired.items():
+        if lower_name in current:
+            tag = current[lower_name]
+            if tag.display_name != display:
+                tag.display_name = display
+        else:
+            tag = s.query(Tag).filter_by(name=lower_name).first()
+            if not tag:
+                tag = Tag(name=lower_name, display_name=display)
+                s.add(tag)
+                s.flush()
+            else:
+                tag.display_name = display
+            post.tag_list.append(tag)
+    for name in set(current.keys()) - set(desired.keys()):
+        tag = current[name]
+        post.tag_list.remove(tag)
 
 
 TIMELINE_LABELS = {
@@ -3219,17 +3225,27 @@ def api_followed_novels(request: Request, limit: int = Query(12), offset: int = 
 
 def _sync_tags(n, s):
     raw = n.tags or ""
-    desired = set(t.lower() for t in raw.replace(",", " ").split() if t)
-    current = {t.name for t in (n.tag_list or [])}
-    for name in desired - current:
-        tag = s.query(Tag).filter_by(name=name).first()
-        if not tag:
-            tag = Tag(name=name)
-            s.add(tag)
-            s.flush()
-        n.tag_list.append(tag)
-    for name in current - desired:
-        tag = next(t for t in n.tag_list if t.name == name)
+    desired = {}
+    for t in raw.replace(",", " ").split():
+        if t:
+            desired[t.lower()] = t
+    current = {t.name: t for t in (n.tag_list or [])}
+    for lower_name, display in desired.items():
+        if lower_name in current:
+            tag = current[lower_name]
+            if tag.display_name != display:
+                tag.display_name = display
+        else:
+            tag = s.query(Tag).filter_by(name=lower_name).first()
+            if not tag:
+                tag = Tag(name=lower_name, display_name=display)
+                s.add(tag)
+                s.flush()
+            else:
+                tag.display_name = display
+            n.tag_list.append(tag)
+    for name in set(current.keys()) - set(desired.keys()):
+        tag = current[name]
         n.tag_list.remove(tag)
 
 
@@ -3237,7 +3253,7 @@ def _novel_json(n, s=None, _followers_map=None):
     author = None
     if hasattr(n, 'author') and n.author:
         author = _user_json(n.author)
-    tag_names = " ".join(t.name for t in (n.tag_list or [])) or (n.tags or "")
+    tag_names = " ".join(t.display_name or t.name for t in (n.tag_list or [])) or (n.tags or "")
     result = {
         "id": n.id,
         "number": n.number or "",
