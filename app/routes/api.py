@@ -1492,7 +1492,8 @@ def api_like_post(request: Request, background_tasks: BackgroundTasks, post_id: 
                 if not existing:
                     s.add(Like(user_id=user.id, post_id=post_id, reaction=reaction))
                     if post.author_id != user.id and not existing_notif:
-                        _notif_meta = {"reaction": reaction} if reaction else {}
+                        _author_reactions = getattr(post.author, 'enable_reactions', True)
+                        _notif_meta = {"reaction": reaction} if reaction and _author_reactions else {}
                         s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="like", post_id=post_id, metadata_json=json.dumps(_notif_meta) if _notif_meta else ""))
                     s.flush()
                     keep_id = s.query(Like.id).filter_by(user_id=user.id, post_id=post_id).order_by(Like.id.desc()).first()
@@ -1907,12 +1908,12 @@ def api_react_post(request: Request, background_tasks: BackgroundTasks, post_id:
                 if existing:
                     existing.reaction = final_emoji
                     if post_author_id != user.id and existing_notif:
-                        _notif_meta = {"reaction": final_emoji} if final_emoji else {}
+                        _notif_meta = {"reaction": final_emoji} if final_emoji and post_author_enable_reactions else {}
                         existing_notif.metadata_json = json.dumps(_notif_meta) if _notif_meta else ""
                 else:
                     s.add(Like(user_id=user.id, post_id=post_id, reaction=final_emoji))
                     if post_author_id != user.id and not existing_notif:
-                        _notif_meta = {"reaction": final_emoji} if final_emoji else {}
+                        _notif_meta = {"reaction": final_emoji} if final_emoji and post_author_enable_reactions else {}
                         s.add(Notification(user_id=post_author_id, from_user_id=user.id, notification_type="like", post_id=post_id, metadata_json=json.dumps(_notif_meta) if _notif_meta else ""))
                 s.flush()
                 keep_id = s.query(Like.id).filter_by(user_id=user.id, post_id=post_id).order_by(Like.id.desc()).first()
