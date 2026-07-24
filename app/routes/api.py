@@ -1302,6 +1302,8 @@ def api_delete_post(request: Request, post_id: int):
         post.link_preview = None
         post.is_deleted = True
         s.query(Notification).filter_by(post_id=post.id).delete()
+        from app.timeline_stream import broadcast_refresh_notifs as _brfn
+        _brfn(post.author_id)
         s.flush()
 
         # Cascade purge: if parent shell's entire subtree is now all deleted, hard-delete it too
@@ -1311,6 +1313,7 @@ def api_delete_post(request: Request, post_id: int):
             ).first()
 
         _pid = post.id
+        _cascade_authors = set()
         while True:
             _parent = s.query(Post).filter(Post.in_reply_to_id == _pid).first()
             if not _parent:
@@ -1329,13 +1332,16 @@ def api_delete_post(request: Request, post_id: int):
             s.query(Bookmark).filter(Bookmark.post_id == _parent.id).delete()
             s.query(Vote).filter(Vote.post_id == _parent.id).delete()
             s.query(Notification).filter(Notification.post_id == _parent.id).delete()
+            _cascade_authors.add(_parent.author_id)
             s.delete(_parent)
             _pid = _parent.in_reply_to_id
         s.commit()
     # Broadcast delete to all connected timeline streams
     try:
-        from app.timeline_stream import broadcast_delete
+        from app.timeline_stream import broadcast_delete, broadcast_refresh_notifs as _brfn2
         broadcast_delete(post_id)
+        for _aid in _cascade_authors:
+            _brfn2(_aid)
     except Exception:
         pass
     # Media 삭제 & AP 브로드캐스트는 백그라운드에서
@@ -2698,6 +2704,11 @@ def api_remove_follower(request: Request, username: str):
         ).delete(synchronize_session=False)
         s.delete(follow)
         s.commit()
+        try:
+            from app.timeline_stream import broadcast_refresh_notifs as _brfn7
+            _brfn7(user.id)
+        except Exception:
+            pass
     return {"ok": True}
 
 @router.get("/follow-requests")
@@ -2724,6 +2735,11 @@ def api_reject_follow(request: Request, username: str):
         ).delete()
         s.delete(target)
         s.commit()
+        try:
+            from app.timeline_stream import broadcast_refresh_notifs as _brfn8
+            _brfn8(user.id)
+        except Exception:
+            pass
         if follower_is_remote and follower:
             from app.activitypub import _send_reject
             try:
@@ -2750,6 +2766,11 @@ def api_unfollow(request: Request, username: str):
                 Notification.notification_type.in_(["follow", "follow_request"])
             ).delete(synchronize_session=False)
             s.commit()
+            try:
+                from app.timeline_stream import broadcast_refresh_notifs as _brfn9
+                _brfn9(target.id)
+            except Exception:
+                pass
             if target.is_remote and target.inbox_url:
                 follow_activity_id = f"{user.actor_uri()}#follows/{target.id}"
                 undo = {
@@ -4170,6 +4191,7 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
                 threading.Thread(target=_post_to_inbox, args=(_inbox, _delete_activity, db), daemon=True).start()
 
         # Delete posts: hard-delete if no replies, shell+delete activity if in thread
+        _del_notif_user_ids = set()
         for p in s.query(Post).filter_by(author_id=db.id).all():
             has_replies = s.query(Post).filter(Post.in_reply_to_id == p.id).first() is not None
             if not has_replies and p.ap_id:
@@ -4178,6 +4200,8 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
             s.query(Boost).filter(Boost.post_id == p.id).delete()
             s.query(Bookmark).filter(Bookmark.post_id == p.id).delete()
             s.query(Vote).filter(Vote.post_id == p.id).delete()
+            for _n in s.query(Notification.user_id).filter(Notification.post_id == p.id).distinct().all():
+                _del_notif_user_ids.add(_n[0])
             s.query(Notification).filter(Notification.post_id == p.id).delete()
             if has_replies:
                 p.content = ""
@@ -4234,6 +4258,13 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
         db.custom_fields = []
         db.profile_hashtags = []
         s.commit()
+        try:
+            from app.timeline_stream import broadcast_refresh_notifs as _brfn3
+            for _uid in _del_notif_user_ids:
+                if _uid != db.id:
+                    _brfn3(_uid)
+        except Exception:
+            pass
         user_id = db.id
         username = db.username
 
@@ -5791,8 +5822,11 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
                 p.visibility = "home"
         elif action == "suspend":
             u.is_suspended = True
+            _suspend_notif_users = set()
             for p in s.query(Post).filter(Post.author_id == u.id).all():
                 s.query(Post).filter(Post.in_reply_to_id == p.id).update({"in_reply_to_id": None})
+                for _n in s.query(Notification.user_id).filter(Notification.post_id == p.id).distinct().all():
+                    _suspend_notif_users.add(_n[0])
                 s.query(Notification).filter(Notification.post_id == p.id).delete()
                 s.delete(p)
         elif action == "unlimit":
@@ -5822,6 +5856,12 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
         )
         s.add(notif)
         s.commit()
+        try:
+            from app.timeline_stream import broadcast_refresh_notifs as _brfn4
+            for _uid in _suspend_notif_users:
+                _brfn4(_uid)
+        except Exception:
+            pass
         log_admin_action(user.id, user.username, f"moderate:{action}", target_type="user", target_id=user_id, target_username=u.username, details=message or "", ip_address=request.client.host if request.client else "")
 
         if send_email and u.email:

@@ -213,6 +213,7 @@ def _auto_delete_expired_posts():
                     User.is_remote == False,
                 ).all()
                 deleted = 0
+                _autodel_notif_users = set()
                 for u in users_with_lifetime:
                     exc = u.post_lifetime_exceptions or []
                     cutoff = now - _dt.timedelta(days=u.post_lifetime)
@@ -240,6 +241,8 @@ def _auto_delete_expired_posts():
                                 continue
                             if "media" in exc and post.media_attachments:
                                 continue
+                            for _n in s.query(Notification.user_id).filter(Notification.post_id == post.id).distinct().all():
+                                _autodel_notif_users.add(_n[0])
                             s.query(Notification).filter(Notification.post_id == post.id).delete()
                             s.query(Like).filter(Like.post_id == post.id).delete()
                             s.query(Boost).filter(Boost.post_id == post.id).delete()
@@ -284,6 +287,12 @@ def _auto_delete_expired_posts():
                 if deleted:
                     s.commit()
                     logger.info("Auto-deleted %d expired posts", deleted)
+                    try:
+                        from app.timeline_stream import broadcast_refresh_notifs as _brfn6
+                        for _uid in _autodel_notif_users:
+                            _brfn6(_uid)
+                    except Exception:
+                        pass
         except Exception as e:
             logger.error("Auto-delete worker error: %s", e)
         _time.sleep(_next_3am() + 60)

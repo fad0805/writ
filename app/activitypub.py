@@ -2771,12 +2771,14 @@ def _handle_delete(activity: dict) -> tuple[int, str]:
             if post.author and post.author.remote_url != actor_url:
                 print(f"[AP] _handle_delete REJECTED: actor {actor_url} does not own post {object_url} (author={post.author.remote_url})", flush=True)
                 return (403, "Actor does not own this post")
+            _del_author_id = post.author_id
             post.is_deleted = True
             session.query(Notification).filter_by(post_id=post.id).delete()
             session.commit()
             try:
-                from app.timeline_stream import broadcast_delete
+                from app.timeline_stream import broadcast_delete, broadcast_refresh_notifs as _brfn5
                 broadcast_delete(post.id)
+                _brfn5(_del_author_id)
             except Exception:
                 pass
 
