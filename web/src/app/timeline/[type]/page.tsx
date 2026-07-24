@@ -75,7 +75,6 @@ export default function TimelinePage() {
       setHasMore(saved.hasMore);
       offsetRef.current = saved.offset;
       setLoading(false);
-      load();
       return;
     }
     load();
