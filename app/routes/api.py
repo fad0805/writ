@@ -524,7 +524,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             ),
             Post.is_deleted == False,
             or_(Post.visibility != "home", Post.author_id.in_(final), _mentioned_self),
-        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
+        ).order_by(desc(Post.created_at)).offset(offset).limit(limit + 1).all()
     elif tl_type == "social":
         following_ids = list(_following_ids) if _following_ids else [user.id]
         all_boost_user_ids = list(set(following_ids) | {user.id})
@@ -540,18 +540,18 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 ),
                 and_(Post.author_id.in_(_local_ids), Post.visibility == "public", Post.is_deleted == False),
             ),
-        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
+        ).order_by(desc(Post.created_at)).offset(offset).limit(limit + 1).all()
     elif tl_type == "local":
         posts = session.query(Post).options(*_base_opts).filter(
             Post.author_id.in_(_local_ids),
             Post.visibility == "public",
             Post.is_deleted == False,
-        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
+        ).order_by(desc(Post.created_at)).offset(offset).limit(limit + 1).all()
     else:
         posts = session.query(Post).options(*_base_opts).filter(
             Post.visibility == "public",
             Post.is_deleted == False,
-        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
+        ).order_by(desc(Post.created_at)).offset(offset).limit(limit + 1).all()
     raw_total = len(posts)
     print(f"[feed] raw query: {raw_total} posts for tl={tl_type}", flush=True)
     posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm and p.author_id != user.id and user.id not in (p.mentioned_user_ids or []))]
@@ -572,7 +572,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             seen_ids.add(p.boost_of_id)
             if p.boost_of_id not in boost_originals:
                 continue
-        elif p.id in seen_ids and p.author_id != user.id:
+        elif p.id in seen_ids:
             continue
         seen_ids.add(p.id)
         deduped.append(p)
@@ -627,7 +627,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         from sqlalchemy import func as _func
         _reaction_rows = session.query(
             Like.post_id, _func.coalesce(Like.reaction, _default_react), _func.count(Like.id)
-        ).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).all()
+        ).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, _func.min(Like.id)).all()
         for pid, react, cnt in _reaction_rows:
             if pid not in _reactions_map:
                 _reactions_map[pid] = {}
@@ -1515,7 +1515,7 @@ def api_like_post(request: Request, background_tasks: BackgroundTasks, post_id: 
                     s.commit()
                     from sqlalchemy import func as _sqlfunc
                     _reactions = {}
-                    for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).all():
+                    for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
                         _reactions[_react or "★"] = _cnt
                     broadcast_reaction_update(post_id, _reactions)
                     if post.author_id != user.id:
@@ -1580,7 +1580,7 @@ def api_unlike_post(request: Request, background_tasks: BackgroundTasks, post_id
                     s.commit()
                     from sqlalchemy import func as _sqlfunc
                     _reactions = {}
-                    for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).all():
+                    for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
                         _reactions[_react or "★"] = _cnt
                     broadcast_reaction_update(post_id, _reactions)
                     broadcast_refresh_notifs(post.author_id)
@@ -1639,12 +1639,6 @@ def api_boost_post(request: Request, post_id: int):
                 visibility=post.visibility or "public",
             )
             s.add(boost_post)
-            if post.created_at and post.created_at < datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3):
-                twentieth = s.query(Post.created_at).filter(
-                    Post.is_deleted == False,
-                ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(19).limit(1).scalar()
-                if not twentieth or post.created_at < twentieth:
-                    post.bumped_at = datetime.datetime.now(datetime.timezone.utc)
             if post.author_id != user.id and not existing_notif:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id))
             s.commit()
@@ -1702,52 +1696,50 @@ def api_boost_post(request: Request, post_id: int):
                 send_push_to_user(post.author_id, "boost", user.username, post_id)
                 broadcast_notif_sound(post.author_id)
 
-        # 1. Announce 활동(Activity) 페이로드 생성 (로컬/원격 글 공통)
-        announce_id = f"{BASE_URL}/boosts/{uuid.uuid4()}"
+            # 1. Announce 활동(Activity) 페이로드 생성 (로컬/원격 글 공통)
+            announce_id = f"{BASE_URL}/boosts/{uuid.uuid4()}"
 
-        if post.author.is_remote and post.author.shared_inbox_url:
-            # 기존 Boost 레코드나 새로 생긴 Boost 레코드에 ap_id 기록
-            boost_rec = existing or s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
-            if boost_rec:
-                boost_rec.ap_id = announce_id
-                s.commit()
+            if post.author.is_remote and post.author.shared_inbox_url:
+                boost_rec = s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
+                if boost_rec:
+                    boost_rec.ap_id = announce_id
+                    s.commit()
 
-        announce = {
-            "@context": "https://www.w3.org/ns/activitystreams",
-            "id": announce_id,
-            "type": "Announce",
-            "actor": user.actor_uri(),
-            "object": post.ap_id,
-            "to": ["https://www.w3.org/ns/activitystreams#Public"],
-            "cc": [
-                post.author.actor_uri(),
-                f'{BASE_URL}/users/{user.username}/followers'
-            ],
-        }
+            announce = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": announce_id,
+                "type": "Announce",
+                "actor": user.actor_uri(),
+                "object": post.ap_id,
+                "to": ["https://www.w3.org/ns/activitystreams#Public"],
+                "cc": [
+                    post.author.actor_uri(),
+                    f'{BASE_URL}/users/{user.username}/followers'
+                ],
+            }
 
-        # 2. 원격 작성자 본인에게 Announce 전송 (원격 글일 경우)
-        if post.author.is_remote and post.author.shared_inbox_url:
+            # 2. 원격 작성자 본인에게 Announce 전송 (원격 글일 경우)
+            if post.author.is_remote and post.author.shared_inbox_url:
+                try:
+                    threading.Thread(target=_post_to_inbox, args=(inbox, announce, user), daemon=True).start()
+                except Exception as e:
+                    logger.error("Failed to send boost to author inbox: %s", e, exc_info=True)
+
+            # 3. 내 원격 팔로워들의 인박스로 Fan-out 전송
             try:
-                threading.Thread(target=_post_to_inbox, args=(inbox, announce, user), daemon=True).start()
+                followers = s.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == user.id).all()
+                sent_inboxes = set()
+                for follower in followers:
+                    if follower.is_remote and (follower.shared_inbox_url or follower.inbox_url):
+                        inbox = follower.shared_inbox_url or follower.inbox_url
+                        if inbox not in sent_inboxes:
+                            sent_inboxes.add(inbox)
+                            try:
+                                threading.Thread(target=_post_to_inbox, args=(inbox, announce, user), daemon=True).start()
+                            except Exception as e:
+                                logger.error("Failed to fan-out boost to inbox %s: %s", inbox, e, exc_info=True)
             except Exception as e:
-                logger.error("Failed to send boost to author inbox: %s", e, exc_info=True)
-
-        # 3. 내 원격 팔로워들의 인박스로 Fan-out 전송
-        try:
-            # 프로젝트 내 기존 팔로워 조회 방식에 맞춰 정렬 (예: Follow.following_id == user.id 등)
-            followers = s.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == user.id).all()
-            sent_inboxes = set()
-            for follower in followers:
-                if follower.is_remote and (follower.shared_inbox_url or follower.inbox_url):
-                    inbox = follower.shared_inbox_url or follower.inbox_url
-                    if inbox not in sent_inboxes:
-                        sent_inboxes.add(inbox)
-                        try:
-                            threading.Thread(target=_post_to_inbox, args=(inbox, announce, user), daemon=True).start()
-                        except Exception as e:
-                            logger.error("Failed to fan-out boost to inbox %s: %s", inbox, e, exc_info=True)
-        except Exception as e:
-            logger.error("Failed to query followers for boost fan-out: %s", e, exc_info=True)
+                logger.error("Failed to query followers for boost fan-out: %s", e, exc_info=True)
 
         return {"ok": True}
 
@@ -1819,9 +1811,6 @@ def api_unboost_post(request: Request, post_id: int):
             s.query(Notification).filter_by(
                 from_user_id=user.id, notification_type="boost", post_id=post_id
             ).delete()
-            remaining = s.query(Boost).filter_by(post_id=post_id).count()
-            if remaining == 0:
-                post.bumped_at = None
             s.commit()
             if post.author_id != user.id:
                 broadcast_refresh_notifs(post.author_id)
@@ -1838,47 +1827,47 @@ def api_unboost_post(request: Request, post_id: int):
             except Exception as e:
                 logger.error("Failed to broadcast unboost update: %s", e, exc_info=True)
 
-        # 1. Undo 활동 페이로드 구성 (로컬/원격 글 공통)
-        undo_id = f"{BASE_URL}/boosts/{uuid.uuid4()}#undo"
-        target_announce_id = announce_id or f"{BASE_URL}/boosts/{uuid.uuid4()}"
-        undo = {
-            "@context": "https://www.w3.org/ns/activitystreams",
-            "id": undo_id,
-            "type": "Undo",
-            "actor": user.actor_uri(),
-            "to": ["https://www.w3.org/ns/activitystreams#Public"],
-            "cc": [
-                post.author.actor_uri(),
-                f'{BASE_URL}/users/{user.username}/followers'
-            ],
-            "object": {
-                "id": target_announce_id,
-                "type": "Announce",
+            # 1. Undo 활동 페이로드 구성 (로컬/원격 글 공통)
+            undo_id = f"{BASE_URL}/boosts/{uuid.uuid4()}#undo"
+            target_announce_id = announce_id or f"{BASE_URL}/boosts/{uuid.uuid4()}"
+            undo = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": undo_id,
+                "type": "Undo",
                 "actor": user.actor_uri(),
-                "object": post.ap_id,
-            },
-        }
-        # 2. 원격 작성자 본인에게 Undo 전송 (원격 글일 경우)
-        if post.author.is_remote and post.author.shared_inbox_url:
+                "to": ["https://www.w3.org/ns/activitystreams#Public"],
+                "cc": [
+                    post.author.actor_uri(),
+                    f'{BASE_URL}/users/{user.username}/followers'
+                ],
+                "object": {
+                    "id": target_announce_id,
+                    "type": "Announce",
+                    "actor": user.actor_uri(),
+                    "object": post.ap_id,
+                },
+            }
+            # 2. 원격 작성자 본인에게 Undo 전송 (원격 글일 경우)
+            if post.author.is_remote and post.author.shared_inbox_url:
+                try:
+                    threading.Thread(target=_post_to_inbox, args=(post.author.shared_inbox_url, undo, user), daemon=True).start()
+                except Exception as e:
+                    logger.error("Failed to send unboost to author inbox: %s", e, exc_info=True)
+            # 3. 내 팔로워들의 인박스로도 Undo를 뿌려주어 타임라인에서 취소 반영
             try:
-                threading.Thread(target=_post_to_inbox, args=(post.author.shared_inbox_url, undo, user), daemon=True).start()
+                followers = s.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == user.id).all()
+                sent_inboxes = set()
+                for follower in followers:
+                    if follower.is_remote and (follower.shared_inbox_url or follower.inbox_url):
+                        inbox = follower.shared_inbox_url or follower.inbox_url
+                        if inbox not in sent_inboxes:
+                            sent_inboxes.add(inbox)
+                            try:
+                                _post_to_inbox(inbox, undo, user)
+                            except Exception as e:
+                                logger.error("Failed to fan-out unboost to inbox %s: %s", inbox, e, exc_info=True)
             except Exception as e:
-                logger.error("Failed to send unboost to author inbox: %s", e, exc_info=True)
-        # 3. ★ [핵심] 내 팔로워들의 인박스로도 Undo를 뿌려주어 타임라인에서 취소 반영
-        try:
-            followers = s.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == user.id).all()
-            sent_inboxes = set()
-            for follower in followers:
-                if follower.is_remote and (follower.shared_inbox_url or follower.inbox_url):
-                    inbox = follower.shared_inbox_url or follower.inbox_url
-                    if inbox not in sent_inboxes:
-                        sent_inboxes.add(inbox)
-                        try:
-                            _post_to_inbox(inbox, undo, user)
-                        except Exception as e:
-                            logger.error("Failed to fan-out unboost to inbox %s: %s", inbox, e, exc_info=True)
-        except Exception as e:
-            logger.error("Failed to query followers for unboost fan-out: %s", e, exc_info=True)
+                logger.error("Failed to query followers for unboost fan-out: %s", e, exc_info=True)
     return {"ok": True}
 
 
@@ -1941,7 +1930,7 @@ def api_react_post(request: Request, background_tasks: BackgroundTasks, post_id:
                 s.commit()
                 from sqlalchemy import func as _sqlfunc
                 _reactions = {}
-                for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).all():
+                for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
                     _reactions[_react or "★"] = _cnt
                 broadcast_reaction_update(post_id, _reactions)
                 if post_author_id != user.id:
@@ -2017,7 +2006,7 @@ def api_unreact_post(request: Request, background_tasks: BackgroundTasks, post_i
                     s.commit()
                     from sqlalchemy import func as _sqlfunc
                     _reactions = {}
-                    for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).all():
+                    for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
                         _reactions[_react or "★"] = _cnt
                     broadcast_reaction_update(post_id, _reactions)
                     broadcast_refresh_notifs(post.author_id)
@@ -2453,7 +2442,7 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                 if p.boost_of_id in seen_ids:
                     continue
                 seen_ids.add(p.boost_of_id)
-            elif p.id in seen_ids and (not user or p.author_id != user.id):
+            elif p.id in seen_ids:
                 continue
             seen_ids.add(p.id)
             deduped.append(p)
@@ -2514,7 +2503,7 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                 _my_reaction_map[l.post_id] = l.reaction
             from sqlalchemy import func as _func
             _reactions_map = {}
-            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(_all_post_ids)).group_by(Like.post_id, Like.reaction).all():
+            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(_all_post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, _func.min(Like.id)).all():
                 if pid not in _reactions_map:
                     _reactions_map[pid] = {}
                 _reactions_map[pid][react] = cnt
@@ -3055,7 +3044,7 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
                 _booster_map = {pid: _booster_users.get(uid) for pid, uid in _booster_map.items()}
 
             from sqlalchemy import func as _func
-            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(notif_post_ids)).group_by(Like.post_id, Like.reaction).all():
+            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(notif_post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, _func.min(Like.id)).all():
                 if pid not in _reactions_map:
                     _reactions_map[pid] = {}
                 _reactions_map[pid][react] = cnt
@@ -4790,7 +4779,7 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
                 _booster_users = {u.id: u for u in s.query(User).filter(User.id.in_(set(_booster_map.values()))).all()}
                 _booster_map = {pid: _booster_users.get(uid) for pid, uid in _booster_map.items()}
             from sqlalchemy import func as _func
-            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).all():
+            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, _func.min(Like.id)).all():
                 if pid not in _reactions_map:
                     _reactions_map[pid] = {}
                 _reactions_map[pid][react] = cnt
@@ -5016,6 +5005,8 @@ def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
             traceback.print_exc() 
             return None # 껍데기를 만들지 않도록 에러 시 None 리턴 구조로 방어
 
+        if not post:
+            return None
         return _post_json(post, session, user)
 
 
@@ -5326,7 +5317,7 @@ def api_list_emojis(limit: int = Query(30), offset: int = Query(0), q: str = Que
             }
             for e in emojis
         ]
-    return JSONResponse({"emojis": result, "total": total, "has_more": offset + limit < total}, headers={"Cache-Control": "public, max-age=3600"})
+    return JSONResponse({"emojis": result, "total": total, "has_more": offset + limit < total}, headers={"Cache-Control": "no-cache, must-revalidate"})
 
 
 @router.post("/emojis")

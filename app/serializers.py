@@ -11,6 +11,8 @@ def _post_json(p, session, user, tl_type=None,
                _liked_ids=None, _boosted_ids=None, _bookmarked_ids=None,
                _vote_map=None, _my_reaction_map=None, _reactions_map=None,
                _booster_map=None, _mentioned_users_map=None, _boost_originals=None, _skip_emojis=False):
+    if not p:
+        return None
     if p.is_deleted:
         return {
             "id": p.id,
@@ -41,6 +43,9 @@ def _post_json(p, session, user, tl_type=None,
                                 _vote_map, _my_reaction_map, _reactions_map,
                                 _booster_map, _mentioned_users_map, _boost_originals)
             result["boosted_by"] = _user_json(p.author)
+            result["created_at"] = _fmt_dt(p.created_at)
+            if user and _boosted_ids is not None:
+                result["i_boosted"] = original.id in _boosted_ids
             return result
         else:
             return {"id": p.id, "is_deleted": True, "boosted_by": _user_json(p.author)}

@@ -102,7 +102,8 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, onRewrite,
     return () => unsubscribe();
   }, []);
   const [reactions, setReactions] = useState(post.reactions || {});
-  const [myReaction, setMyReaction] = useState(post.my_reaction || null);
+  const [myReactionOverride, setMyReactionOverride] = useState<string | null | undefined>(undefined);
+  const myReaction = myReactionOverride !== undefined ? myReactionOverride : (post.my_reaction || null);
   const reactionEmojiMap = useMemo(() => {
     const m = (window as any).__emojiMap as Record<string, string> | undefined;
     if (m && Object.keys(m).length > 0) return m;
@@ -148,13 +149,12 @@ const localReactionEmojiMap = useMemo(() => {
       setLikesCount(post.likes_count);
       setBoostsCount(post.boosts_count);
       setReactions(post.reactions || {});
-      setMyReaction(post.my_reaction || null);
+      setMyReactionOverride(post.my_reaction || null);
     }
   }, [post.id, post.liked, post.boosted, post.bookmarked, post.likes_count, post.boosts_count, post.reactions, post.my_reaction]);
   useEffect(() => {
     setReactions(post.reactions || {});
-    setMyReaction(post.my_reaction || null);
-  }, [post.reactions, post.my_reaction]);
+  }, [post.reactions]);
 
   useEffect(() => {
     if (!post.poll_data) return;
@@ -595,7 +595,7 @@ const localReactionEmojiMap = useMemo(() => {
     <>
       <div ref={cardRef} className={`post-card${current ? " current" : ""}${selected ? " selected" : ""}${post.visibility === "mention" ? " mention-card" : ""}`} onClick={(e) => { if (current || (e.target as HTMLElement).closest('a')) return; router.push(post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`); }}>
         {post.boosted_by && (
-          <div className={`boost-badge${currentUser?.id === post.boosted_by.id ? " boost-self" : ""}`}>
+          <div className={`boost-badge${(currentUser?.id === post.boosted_by.id || (post as any).i_boosted) ? " boost-self" : ""}`}>
             <Icon name="refresh" size={12} /> <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.boosted_by.display_name || post.boosted_by.username, emojiList, 14)) }} />님이 부스트
           </div>
         )}
@@ -837,7 +837,7 @@ const localReactionEmojiMap = useMemo(() => {
                       if (next[emoji] <= 1) delete next[emoji];
                       else next[emoji] -= 1;
                       setReactions(next);
-                      setMyReaction(null);
+                      setMyReactionOverride(null);
                       setLiked(false);
                       setLikesCount(Math.max(0, likesCount - 1));
                       try {
@@ -851,7 +851,7 @@ const localReactionEmojiMap = useMemo(() => {
                       }
                       next[emoji] = (next[emoji] || 0) + 1;
                       setReactions(next);
-                      setMyReaction(emoji);
+                      setMyReactionOverride(emoji);
                       setLiked(true);
                       setLikesCount(myReaction ? likesCount : likesCount + 1);
                       try {
@@ -921,7 +921,7 @@ const localReactionEmojiMap = useMemo(() => {
                 }
                 next[emoji] = (next[emoji] || 0) + 1;
                 setReactions(next);
-                setMyReaction(emoji);
+                setMyReactionOverride(emoji);
                 setLiked(true);
                 setLikesCount(myReaction ? likesCount : likesCount + 1);
                 try {
@@ -1110,15 +1110,24 @@ const localReactionEmojiMap = useMemo(() => {
           padding: "6px 10px",
           fontSize: 12,
           color: "var(--text-primary)",
-          whiteSpace: "nowrap",
           zIndex: 9999,
           pointerEvents: "none",
           boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
           lineHeight: 1.4,
         }}>
-          {reactionTooltip.users.length <= 3
-            ? reactionTooltip.users.map((u) => u.display_name || u.username).join(", ")
-            : `${reactionTooltip.users.slice(0, 3).map((u) => u.display_name || u.username).join(", ")} 외 ${reactionTooltip.users.length - 3}명`}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, flexWrap: "wrap", maxWidth: 260 }}>
+            {reactionTooltip.users.slice(0, 3).map((u) => (
+              <span key={u.id} style={{ display: "inline-flex", alignItems: "center", gap: 3, whiteSpace: "nowrap" }}>
+                <Avatar user={u} style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: "middle" }} />
+                {u.display_name || u.username}
+              </span>
+            )).reduce((acc, el, i) => {
+              if (i > 0) acc.push(<span key={`,${i}`} style={{ color: "var(--text-muted)" }}>,</span>);
+              acc.push(el);
+              return acc;
+            }, [] as React.ReactNode[])}
+            {reactionTooltip.users.length > 3 && <span style={{ color: "var(--text-muted)" }}> 외 {reactionTooltip.users.length - 3}명</span>}
+          </span>
         </div>
       )}
     </>

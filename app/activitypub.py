@@ -1159,6 +1159,10 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         url = f"{base}/users/{username}/statuses/{status_id}{query}"
         print(f"[FETCH-POST] Mastodon URL converted to: {url}", flush=True)
 
+    if url.endswith("/activity"):
+        url = url[:-len("/activity")]
+        print(f"[FETCH-POST] stripped /activity suffix → {url}", flush=True)
+
     parsed = urlparse(url)
     headers = {"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}
 
@@ -1291,7 +1295,11 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         elif t.get('type') == "Hashtag":
             tag_name = (t.get("name", "") or "").lstrip("#").strip().lower()
             if tag_name:
-                hashtag_list.append(Tag(name=tag_name))
+                existing_tag = session.query(Tag).filter_by(name=tag_name).first()
+                if existing_tag:
+                    hashtag_list.append(existing_tag)
+                else:
+                    hashtag_list.append(Tag(name=tag_name))
     mentioned_ids = list(set(mentioned_ids))
 
     if not (pub_set & set(all_auds)) and has_mention_tag:
@@ -2058,7 +2066,7 @@ def _build_reactions(session, post_id: int) -> dict:
     _default_react = "★"
     for _pid, _react, _cnt in session.query(_Like.post_id, _func.coalesce(_Like.reaction, _default_react), _func.count(_Like.id)).filter(
         _Like.post_id == post_id
-    ).group_by(_Like.post_id, _Like.reaction).all():
+    ).group_by(_Like.post_id, _Like.reaction).order_by(_Like.post_id, _func.min(_Like.id)).all():
         if _pid not in _reactions:
             _reactions[_pid] = {}
         _reactions[_pid][_react] = _cnt
@@ -2127,7 +2135,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                 from app.timeline_stream import broadcast_reaction_update
                 from sqlalchemy import func as _sqlfunc
                 _reactions = {}
-                for _react, _cnt in session.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).all():
+                for _react, _cnt in session.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
                     _reactions[_react or "★"] = _cnt
                 broadcast_reaction_update(post.id, _reactions)
             return (200, "Already liked")
@@ -2166,7 +2174,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             _brn(post.author_id)
             from sqlalchemy import func as _sqlfunc
             _reactions = {}
-            for _react, _cnt in session.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).all():
+            for _react, _cnt in session.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
                 _reactions[_react or "★"] = _cnt
             broadcast_reaction_update(post.id, _reactions)
         else:
@@ -2174,7 +2182,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             from app.timeline_stream import broadcast_reaction_update
             from sqlalchemy import func as _sqlfunc
             _reactions = {}
-            for _react, _cnt in session.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).all():
+            for _react, _cnt in session.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
                 _reactions[_react or "★"] = _cnt
             broadcast_reaction_update(post.id, _reactions)
 
@@ -2268,6 +2276,10 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
     if not object_url:
         print("[ANNOUNCE] no object_url, returning early", flush=True)
         return (200, "OK")
+
+    if object_url.endswith("/activity"):
+        object_url = object_url[:-len("/activity")]
+        print(f"[ANNOUNCE] stripped /activity suffix → {object_url[:120]}", flush=True)
 
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
