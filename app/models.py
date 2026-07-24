@@ -312,7 +312,7 @@ class Post(Base):
 
             if self.tag_list:
                 for t in self.tag_list:
-                    tags.append({"type": "Hashtag", "href": f"{BASE_URL}/tags/{_urlencode(t.display_name)}", "name": f"#{t.display_name}"})
+                    tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?q=#{_urlencode(t.display_name)}", "name": f"#{t.display_name}"})
 
         # 2. 이모지 구축
         _emoji_pattern = re.compile(r':([a-z0-9_]{2,}):')
@@ -337,7 +337,7 @@ class Post(Base):
         )
         content = re.sub(
             r'href="[^"]*explore\?q=(?:%23|#)([^&"]+)[^"]*"',
-            lambda m: f'href="{BASE_URL}/tags/{m.group(1)}"',
+            lambda m: f'href="{BASE_URL}/explore?q=#{m.group(1)}"',
             content
         )
         content = re.sub(

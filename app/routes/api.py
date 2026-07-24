@@ -210,7 +210,7 @@ def api_me(request: Request, s: Session = Depends(get_db)):
 
 @router.post("/auth/login")
 def api_login(request: Request, username: str = Form(...), password: str = Form(...)):
-    from app.routes.auth import hash_password, verify_password, create_session
+    from app.routes.auth import verify_password, create_session
     try:
         client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
         backoff = _get_auth_backoff_seconds(client_ip)
@@ -7611,29 +7611,3 @@ def delete_session(request: Request, session_id: int):
         s.delete(ls)
         s.commit()
     return {"ok": True}
-
-
-@router.get("/tags/{tag_name}")
-async def get_hashtag(tag_name: str, request: Request):
-    accept = request.headers.get("accept", "")
-    if "application/activity+json" in accept or "application/ld+json" in accept:
-        posts = []
-        with get_session() as s:
-            tag = s.query(Tag).filter_by(name=tag_name.lower()).first()
-            if tag:
-                q_posts = s.query(Post).options(selectinload(Post.author)).filter(
-                    Post.tag_list.any(name=tag.name),
-                    Post.is_deleted == False,
-                    Post.author.has(User.is_suspended == False),
-                )
-                q_posts = q_posts.filter(Post.visibility == "public" or Post.visibility == "home")
-                posts = q_posts.order_by(desc(Post.created_at)).limit(20).all()
-        return {
-            "@context": ["https://www.w3.org/ns/activitystreams"],
-            "id": f"{BASE_URL}/tags/{tag_name}",
-            "type": "OrderedCollection",
-            "totalItems": len(posts),
-            "orderedItems": [p.id for p in posts]
-        }
-    # 일반 브라우저 접속인 경우 -> Next.js 탐색 페이지 등으로 리다이렉트 또는 HTML 반환
-    return RedirectResponse(url=f"/explore?q=%23{tag_name}")

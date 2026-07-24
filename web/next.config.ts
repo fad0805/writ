@@ -62,10 +62,6 @@ const nextConfig: NextConfig = {
         source: "/series/@:username/:number",
         destination: "/series/by-number/:username/:number",
       },
-      {
-        source: "/tags/:path*",
-        destination: `${API_HOST}/api/tags/:path*`,
-      },
     ];
   },
 };
