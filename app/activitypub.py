@@ -1291,7 +1291,11 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         elif t.get('type') == "Hashtag":
             tag_name = (t.get("name", "") or "").lstrip("#").strip().lower()
             if tag_name:
-                hashtag_list.append(Tag(name=tag_name))
+                existing_tag = session.query(Tag).filter_by(name=tag_name).first()
+                if existing_tag:
+                    hashtag_list.append(existing_tag)
+                else:
+                    hashtag_list.append(Tag(name=tag_name))
     mentioned_ids = list(set(mentioned_ids))
 
     if not (pub_set & set(all_auds)) and has_mention_tag:
