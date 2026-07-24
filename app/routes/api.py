@@ -1620,6 +1620,9 @@ def api_boost_post(request: Request, post_id: int):
             raise HTTPException(status_code=404, detail="Post not found")
         if not _can_view(post, user, s):
             raise HTTPException(status_code=404, detail="Post not found")
+        if post.boost_of_id:
+            post = s.query(Post).get(post.boost_of_id)
+            post_id = post.id
         if post.author_id != user.id and post.visibility in ("followers", "mention"):
             raise HTTPException(status_code=403, detail="Cannot boost followers-only or mention-only posts from other users")
         existing = s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
@@ -1804,6 +1807,9 @@ def api_unboost_post(request: Request, post_id: int):
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
+        if post.boost_of_id:
+            post = s.query(Post).get(post.boost_of_id)
+            post_id = post.id
         existing = s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
         announce_id = existing.ap_id if existing and existing.ap_id else ""
         if existing:
