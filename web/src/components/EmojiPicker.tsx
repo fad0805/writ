@@ -89,7 +89,7 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
               ))}
             </div>
           )}
-          {customEmojis.length > 0 && Object.entries(groupedCustom).map(([catName, emos]) => (
+          {customEmojis.length > 0 && Object.entries(groupedCustom).sort(([a], [b]) => a.localeCompare(b, 'ko')).map(([catName, emos]) => (
             <div key={`c-${catName}`} className="emoji-custom-row">
               <div className="emoji-row-label">{catName}</div>
               <div className="emoji-row-grid">

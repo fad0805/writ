@@ -2066,7 +2066,7 @@ def _build_reactions(session, post_id: int) -> dict:
     _default_react = "★"
     for _pid, _react, _cnt in session.query(_Like.post_id, _func.coalesce(_Like.reaction, _default_react), _func.count(_Like.id)).filter(
         _Like.post_id == post_id
-    ).group_by(_Like.post_id, _Like.reaction).all():
+    ).group_by(_Like.post_id, _Like.reaction).order_by(_Like.post_id, _func.min(_Like.id)).all():
         if _pid not in _reactions:
             _reactions[_pid] = {}
         _reactions[_pid][_react] = _cnt
@@ -2135,7 +2135,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                 from app.timeline_stream import broadcast_reaction_update
                 from sqlalchemy import func as _sqlfunc
                 _reactions = {}
-                for _react, _cnt in session.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).all():
+                for _react, _cnt in session.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
                     _reactions[_react or "★"] = _cnt
                 broadcast_reaction_update(post.id, _reactions)
             return (200, "Already liked")
@@ -2174,7 +2174,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             _brn(post.author_id)
             from sqlalchemy import func as _sqlfunc
             _reactions = {}
-            for _react, _cnt in session.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).all():
+            for _react, _cnt in session.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
                 _reactions[_react or "★"] = _cnt
             broadcast_reaction_update(post.id, _reactions)
         else:
@@ -2182,7 +2182,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             from app.timeline_stream import broadcast_reaction_update
             from sqlalchemy import func as _sqlfunc
             _reactions = {}
-            for _react, _cnt in session.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).all():
+            for _react, _cnt in session.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
                 _reactions[_react or "★"] = _cnt
             broadcast_reaction_update(post.id, _reactions)
 

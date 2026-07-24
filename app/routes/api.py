@@ -627,7 +627,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         from sqlalchemy import func as _func
         _reaction_rows = session.query(
             Like.post_id, _func.coalesce(Like.reaction, _default_react), _func.count(Like.id)
-        ).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).all()
+        ).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, _func.min(Like.id)).all()
         for pid, react, cnt in _reaction_rows:
             if pid not in _reactions_map:
                 _reactions_map[pid] = {}
@@ -1515,7 +1515,7 @@ def api_like_post(request: Request, background_tasks: BackgroundTasks, post_id: 
                     s.commit()
                     from sqlalchemy import func as _sqlfunc
                     _reactions = {}
-                    for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).all():
+                    for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
                         _reactions[_react or "★"] = _cnt
                     broadcast_reaction_update(post_id, _reactions)
                     if post.author_id != user.id:
@@ -1580,7 +1580,7 @@ def api_unlike_post(request: Request, background_tasks: BackgroundTasks, post_id
                     s.commit()
                     from sqlalchemy import func as _sqlfunc
                     _reactions = {}
-                    for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).all():
+                    for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
                         _reactions[_react or "★"] = _cnt
                     broadcast_reaction_update(post_id, _reactions)
                     broadcast_refresh_notifs(post.author_id)
@@ -1930,7 +1930,7 @@ def api_react_post(request: Request, background_tasks: BackgroundTasks, post_id:
                 s.commit()
                 from sqlalchemy import func as _sqlfunc
                 _reactions = {}
-                for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).all():
+                for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
                     _reactions[_react or "★"] = _cnt
                 broadcast_reaction_update(post_id, _reactions)
                 if post_author_id != user.id:
@@ -2006,7 +2006,7 @@ def api_unreact_post(request: Request, background_tasks: BackgroundTasks, post_i
                     s.commit()
                     from sqlalchemy import func as _sqlfunc
                     _reactions = {}
-                    for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).all():
+                    for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
                         _reactions[_react or "★"] = _cnt
                     broadcast_reaction_update(post_id, _reactions)
                     broadcast_refresh_notifs(post.author_id)
@@ -2503,7 +2503,7 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                 _my_reaction_map[l.post_id] = l.reaction
             from sqlalchemy import func as _func
             _reactions_map = {}
-            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(_all_post_ids)).group_by(Like.post_id, Like.reaction).all():
+            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(_all_post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, _func.min(Like.id)).all():
                 if pid not in _reactions_map:
                     _reactions_map[pid] = {}
                 _reactions_map[pid][react] = cnt
@@ -3044,7 +3044,7 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
                 _booster_map = {pid: _booster_users.get(uid) for pid, uid in _booster_map.items()}
 
             from sqlalchemy import func as _func
-            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(notif_post_ids)).group_by(Like.post_id, Like.reaction).all():
+            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(notif_post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, _func.min(Like.id)).all():
                 if pid not in _reactions_map:
                     _reactions_map[pid] = {}
                 _reactions_map[pid][react] = cnt
@@ -4779,7 +4779,7 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
                 _booster_users = {u.id: u for u in s.query(User).filter(User.id.in_(set(_booster_map.values()))).all()}
                 _booster_map = {pid: _booster_users.get(uid) for pid, uid in _booster_map.items()}
             from sqlalchemy import func as _func
-            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).all():
+            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, _func.min(Like.id)).all():
                 if pid not in _reactions_map:
                     _reactions_map[pid] = {}
                 _reactions_map[pid][react] = cnt
