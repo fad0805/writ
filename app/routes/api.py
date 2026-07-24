@@ -7633,7 +7633,7 @@ async def get_hashtag(tag_name: str, request: Request):
             "id": f"{BASE_URL}/tags/{tag_name}",
             "type": "OrderedCollection",
             "totalItems": len(posts),
-            "orderedItems": [id for posts.id in posts]
+            "orderedItems": [p.id for p in posts]
         }
     # 일반 브라우저 접속인 경우 -> Next.js 탐색 페이지 등으로 리다이렉트 또는 HTML 반환
     return RedirectResponse(url=f"/explore?q=%23{tag_name}")
