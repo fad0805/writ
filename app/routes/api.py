@@ -4885,10 +4885,12 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
             ), s).limit(20).all()
         local_users = s.query(User).filter(
             User.is_remote == False,
+            User.is_suspended == False,
             or_(User.username.ilike(pattern), User.display_name.ilike(pattern)),
         ).limit(20).all()
         remote_users = s.query(User).filter(
             User.is_remote == True,
+            User.is_suspended == False,
             or_(User.username.ilike(pattern), User.display_name.ilike(pattern)),
         ).limit(10).all()
         all_users = list(local_users) + list(remote_users)
