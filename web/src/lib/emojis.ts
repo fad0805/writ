@@ -133,7 +133,7 @@ export function renderCustomEmojis(html: string, emojis: CustomEmoji[], size?: n
   for (const emoji of sorted) {
     if (!emoji.url) continue;
     const safeUrl = emoji.url.replace(/"/g, "%22").replace(/</g, "%3C").replace(/>/g, "%3E");
-    if (!safeUrl.startsWith("https:")) continue;
+    if (!safeUrl.startsWith("https:") && !safeUrl.startsWith("/")) continue;
     const kw = emoji.keyword;
     const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp(`:${escaped}:`, "g");
