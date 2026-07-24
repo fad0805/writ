@@ -1070,6 +1070,10 @@ def api_create_post(
         import secrets
         post_number = secrets.token_hex(4)
         author_is_sensitive = getattr(user, 'is_sensitive', False) or False
+        if parent_id:
+            _parent_exists = s.query(Post.id).filter_by(id=parent_id).first()
+            if not _parent_exists:
+                parent_id = None
         post = Post(
             author_id=user.id,
             content=content_html,
