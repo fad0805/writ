@@ -1702,52 +1702,50 @@ def api_boost_post(request: Request, post_id: int):
                 send_push_to_user(post.author_id, "boost", user.username, post_id)
                 broadcast_notif_sound(post.author_id)
 
-        # 1. Announce 활동(Activity) 페이로드 생성 (로컬/원격 글 공통)
-        announce_id = f"{BASE_URL}/boosts/{uuid.uuid4()}"
+            # 1. Announce 활동(Activity) 페이로드 생성 (로컬/원격 글 공통)
+            announce_id = f"{BASE_URL}/boosts/{uuid.uuid4()}"
 
-        if post.author.is_remote and post.author.shared_inbox_url:
-            # 기존 Boost 레코드나 새로 생긴 Boost 레코드에 ap_id 기록
-            boost_rec = existing or s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
-            if boost_rec:
-                boost_rec.ap_id = announce_id
-                s.commit()
+            if post.author.is_remote and post.author.shared_inbox_url:
+                boost_rec = s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
+                if boost_rec:
+                    boost_rec.ap_id = announce_id
+                    s.commit()
 
-        announce = {
-            "@context": "https://www.w3.org/ns/activitystreams",
-            "id": announce_id,
-            "type": "Announce",
-            "actor": user.actor_uri(),
-            "object": post.ap_id,
-            "to": ["https://www.w3.org/ns/activitystreams#Public"],
-            "cc": [
-                post.author.actor_uri(),
-                f'{BASE_URL}/users/{user.username}/followers'
-            ],
-        }
+            announce = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": announce_id,
+                "type": "Announce",
+                "actor": user.actor_uri(),
+                "object": post.ap_id,
+                "to": ["https://www.w3.org/ns/activitystreams#Public"],
+                "cc": [
+                    post.author.actor_uri(),
+                    f'{BASE_URL}/users/{user.username}/followers'
+                ],
+            }
 
-        # 2. 원격 작성자 본인에게 Announce 전송 (원격 글일 경우)
-        if post.author.is_remote and post.author.shared_inbox_url:
+            # 2. 원격 작성자 본인에게 Announce 전송 (원격 글일 경우)
+            if post.author.is_remote and post.author.shared_inbox_url:
+                try:
+                    threading.Thread(target=_post_to_inbox, args=(inbox, announce, user), daemon=True).start()
+                except Exception as e:
+                    logger.error("Failed to send boost to author inbox: %s", e, exc_info=True)
+
+            # 3. 내 원격 팔로워들의 인박스로 Fan-out 전송
             try:
-                threading.Thread(target=_post_to_inbox, args=(inbox, announce, user), daemon=True).start()
+                followers = s.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == user.id).all()
+                sent_inboxes = set()
+                for follower in followers:
+                    if follower.is_remote and (follower.shared_inbox_url or follower.inbox_url):
+                        inbox = follower.shared_inbox_url or follower.inbox_url
+                        if inbox not in sent_inboxes:
+                            sent_inboxes.add(inbox)
+                            try:
+                                threading.Thread(target=_post_to_inbox, args=(inbox, announce, user), daemon=True).start()
+                            except Exception as e:
+                                logger.error("Failed to fan-out boost to inbox %s: %s", inbox, e, exc_info=True)
             except Exception as e:
-                logger.error("Failed to send boost to author inbox: %s", e, exc_info=True)
-
-        # 3. 내 원격 팔로워들의 인박스로 Fan-out 전송
-        try:
-            # 프로젝트 내 기존 팔로워 조회 방식에 맞춰 정렬 (예: Follow.following_id == user.id 등)
-            followers = s.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == user.id).all()
-            sent_inboxes = set()
-            for follower in followers:
-                if follower.is_remote and (follower.shared_inbox_url or follower.inbox_url):
-                    inbox = follower.shared_inbox_url or follower.inbox_url
-                    if inbox not in sent_inboxes:
-                        sent_inboxes.add(inbox)
-                        try:
-                            threading.Thread(target=_post_to_inbox, args=(inbox, announce, user), daemon=True).start()
-                        except Exception as e:
-                            logger.error("Failed to fan-out boost to inbox %s: %s", inbox, e, exc_info=True)
-        except Exception as e:
-            logger.error("Failed to query followers for boost fan-out: %s", e, exc_info=True)
+                logger.error("Failed to query followers for boost fan-out: %s", e, exc_info=True)
 
         return {"ok": True}
 
@@ -1838,47 +1836,47 @@ def api_unboost_post(request: Request, post_id: int):
             except Exception as e:
                 logger.error("Failed to broadcast unboost update: %s", e, exc_info=True)
 
-        # 1. Undo 활동 페이로드 구성 (로컬/원격 글 공통)
-        undo_id = f"{BASE_URL}/boosts/{uuid.uuid4()}#undo"
-        target_announce_id = announce_id or f"{BASE_URL}/boosts/{uuid.uuid4()}"
-        undo = {
-            "@context": "https://www.w3.org/ns/activitystreams",
-            "id": undo_id,
-            "type": "Undo",
-            "actor": user.actor_uri(),
-            "to": ["https://www.w3.org/ns/activitystreams#Public"],
-            "cc": [
-                post.author.actor_uri(),
-                f'{BASE_URL}/users/{user.username}/followers'
-            ],
-            "object": {
-                "id": target_announce_id,
-                "type": "Announce",
+            # 1. Undo 활동 페이로드 구성 (로컬/원격 글 공통)
+            undo_id = f"{BASE_URL}/boosts/{uuid.uuid4()}#undo"
+            target_announce_id = announce_id or f"{BASE_URL}/boosts/{uuid.uuid4()}"
+            undo = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": undo_id,
+                "type": "Undo",
                 "actor": user.actor_uri(),
-                "object": post.ap_id,
-            },
-        }
-        # 2. 원격 작성자 본인에게 Undo 전송 (원격 글일 경우)
-        if post.author.is_remote and post.author.shared_inbox_url:
+                "to": ["https://www.w3.org/ns/activitystreams#Public"],
+                "cc": [
+                    post.author.actor_uri(),
+                    f'{BASE_URL}/users/{user.username}/followers'
+                ],
+                "object": {
+                    "id": target_announce_id,
+                    "type": "Announce",
+                    "actor": user.actor_uri(),
+                    "object": post.ap_id,
+                },
+            }
+            # 2. 원격 작성자 본인에게 Undo 전송 (원격 글일 경우)
+            if post.author.is_remote and post.author.shared_inbox_url:
+                try:
+                    threading.Thread(target=_post_to_inbox, args=(post.author.shared_inbox_url, undo, user), daemon=True).start()
+                except Exception as e:
+                    logger.error("Failed to send unboost to author inbox: %s", e, exc_info=True)
+            # 3. 내 팔로워들의 인박스로도 Undo를 뿌려주어 타임라인에서 취소 반영
             try:
-                threading.Thread(target=_post_to_inbox, args=(post.author.shared_inbox_url, undo, user), daemon=True).start()
+                followers = s.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == user.id).all()
+                sent_inboxes = set()
+                for follower in followers:
+                    if follower.is_remote and (follower.shared_inbox_url or follower.inbox_url):
+                        inbox = follower.shared_inbox_url or follower.inbox_url
+                        if inbox not in sent_inboxes:
+                            sent_inboxes.add(inbox)
+                            try:
+                                _post_to_inbox(inbox, undo, user)
+                            except Exception as e:
+                                logger.error("Failed to fan-out unboost to inbox %s: %s", inbox, e, exc_info=True)
             except Exception as e:
-                logger.error("Failed to send unboost to author inbox: %s", e, exc_info=True)
-        # 3. ★ [핵심] 내 팔로워들의 인박스로도 Undo를 뿌려주어 타임라인에서 취소 반영
-        try:
-            followers = s.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == user.id).all()
-            sent_inboxes = set()
-            for follower in followers:
-                if follower.is_remote and (follower.shared_inbox_url or follower.inbox_url):
-                    inbox = follower.shared_inbox_url or follower.inbox_url
-                    if inbox not in sent_inboxes:
-                        sent_inboxes.add(inbox)
-                        try:
-                            _post_to_inbox(inbox, undo, user)
-                        except Exception as e:
-                            logger.error("Failed to fan-out unboost to inbox %s: %s", inbox, e, exc_info=True)
-        except Exception as e:
-            logger.error("Failed to query followers for unboost fan-out: %s", e, exc_info=True)
+                logger.error("Failed to query followers for unboost fan-out: %s", e, exc_info=True)
     return {"ok": True}
 
 
