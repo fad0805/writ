@@ -132,15 +132,23 @@ const localReactionEmojiMap = useMemo(() => {
     if (currentUser?.pinned_posts) setPinned(currentUser.pinned_posts.includes(post.id));
   }, [currentUser, post.id]);
 
+  const postIdRef = useRef(post.id);
   useEffect(() => {
-    setLiked(post.liked);
-    setBoosted(post.boosted);
-    setBookmarked(post.bookmarked);
-    setLikesCount(post.likes_count);
-    setBoostsCount(post.boosts_count);
+    if (postIdRef.current !== post.id) {
+      postIdRef.current = post.id;
+      setLiked(post.liked);
+      setBoosted(post.boosted);
+      setBookmarked(post.bookmarked);
+      setLikesCount(post.likes_count);
+      setBoostsCount(post.boosts_count);
+      setReactions(post.reactions || {});
+      setMyReaction(post.my_reaction || null);
+    }
+  }, [post.id, post.liked, post.boosted, post.bookmarked, post.likes_count, post.boosts_count, post.reactions, post.my_reaction]);
+  useEffect(() => {
     setReactions(post.reactions || {});
     setMyReaction(post.my_reaction || null);
-  }, [post.liked, post.boosted, post.bookmarked, post.likes_count, post.boosts_count, post.content, post.summary, post.reactions, post.my_reaction]);
+  }, [post.reactions, post.my_reaction]);
 
   useEffect(() => {
     if (!post.poll_data) return;
