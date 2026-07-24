@@ -4734,6 +4734,7 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
             Post.visibility == "public",
             Post.is_deleted == False,
             Post.in_reply_to_id == None,
+            Post.author.has(User.is_suspended == False),
         ).order_by(
             desc(Post.created_at)
         ).offset(offset).limit(limit + 1).all()
@@ -4848,6 +4849,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 q_posts = s.query(Post).options(selectinload(Post.author)).filter(
                     Post.tag_list.any(name=tag.name),
                     Post.is_deleted == False,
+                    Post.author.has(User.is_suspended == False),
                 )
                 if user:
                     q_posts = q_posts.filter(
@@ -4877,6 +4879,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
             posts = s.query(Post).options(selectinload(Post.author)).filter(
                 Post.content.ilike(pattern),
                 Post.is_deleted == False,
+                Post.author.has(User.is_suspended == False),
             ).order_by(desc(Post.created_at)).limit(20).all()
             novels = _apply_latest_activity_order(s.query(Novel).options(selectinload(Novel.author)).filter(
                 or_(Novel.title.ilike(pattern), Novel.description.ilike(pattern)),
