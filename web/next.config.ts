@@ -62,6 +62,10 @@ const nextConfig: NextConfig = {
         source: "/series/@:username/:number",
         destination: "/series/by-number/:username/:number",
       },
+      {
+        source: "/tags/:path*",
+        destination: "/explore?q=%23:path*"
+      },
     ];
   },
 };
