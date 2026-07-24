@@ -3215,7 +3215,7 @@ def api_followed_novels(request: Request, limit: int = Query(12), offset: int = 
 
 def _sync_tags(n, s):
     raw = n.tags or ""
-    desired = set(t for t in raw.replace(",", " ").split() if t)
+    desired = set(t.lower() for t in raw.replace(",", " ").split() if t)
     current = {t.name for t in (n.tag_list or [])}
     for name in desired - current:
         tag = s.query(Tag).filter_by(name=name).first()
