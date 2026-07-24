@@ -524,7 +524,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             ),
             Post.is_deleted == False,
             or_(Post.visibility != "home", Post.author_id.in_(final), _mentioned_self),
-        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
+        ).order_by(desc(Post.created_at)).offset(offset).limit(limit + 1).all()
     elif tl_type == "social":
         following_ids = list(_following_ids) if _following_ids else [user.id]
         all_boost_user_ids = list(set(following_ids) | {user.id})
@@ -540,18 +540,18 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 ),
                 and_(Post.author_id.in_(_local_ids), Post.visibility == "public", Post.is_deleted == False),
             ),
-        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
+        ).order_by(desc(Post.created_at)).offset(offset).limit(limit + 1).all()
     elif tl_type == "local":
         posts = session.query(Post).options(*_base_opts).filter(
             Post.author_id.in_(_local_ids),
             Post.visibility == "public",
             Post.is_deleted == False,
-        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
+        ).order_by(desc(Post.created_at)).offset(offset).limit(limit + 1).all()
     else:
         posts = session.query(Post).options(*_base_opts).filter(
             Post.visibility == "public",
             Post.is_deleted == False,
-        ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(offset).limit(limit + 1).all()
+        ).order_by(desc(Post.created_at)).offset(offset).limit(limit + 1).all()
     raw_total = len(posts)
     print(f"[feed] raw query: {raw_total} posts for tl={tl_type}", flush=True)
     posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm and p.author_id != user.id and user.id not in (p.mentioned_user_ids or []))]
@@ -1639,12 +1639,6 @@ def api_boost_post(request: Request, post_id: int):
                 visibility=post.visibility or "public",
             )
             s.add(boost_post)
-            if post.created_at and post.created_at < datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3):
-                twentieth = s.query(Post.created_at).filter(
-                    Post.is_deleted == False,
-                ).order_by(desc(func.coalesce(Post.bumped_at, Post.created_at))).offset(19).limit(1).scalar()
-                if not twentieth or post.created_at < twentieth:
-                    post.bumped_at = datetime.datetime.now(datetime.timezone.utc)
             if post.author_id != user.id and not existing_notif:
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id))
             s.commit()
@@ -1817,9 +1811,6 @@ def api_unboost_post(request: Request, post_id: int):
             s.query(Notification).filter_by(
                 from_user_id=user.id, notification_type="boost", post_id=post_id
             ).delete()
-            remaining = s.query(Boost).filter_by(post_id=post_id).count()
-            if remaining == 0:
-                post.bumped_at = None
             s.commit()
             if post.author_id != user.id:
                 broadcast_refresh_notifs(post.author_id)
