@@ -54,12 +54,21 @@ export default function TimelinePage() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem("writ:tl-cache");
-      if (raw) tabCache.current = JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const ts = parsed._ts || 0;
+        if (Date.now() - ts > 5 * 60 * 1000) {
+          localStorage.removeItem("writ:tl-cache");
+        } else {
+          delete parsed._ts;
+          tabCache.current = parsed;
+        }
+      }
     } catch {}
   }, []);
 
   const saveTabCache = () => {
-    try { localStorage.setItem("writ:tl-cache", JSON.stringify(tabCache.current)); } catch {}
+    try { localStorage.setItem("writ:tl-cache", JSON.stringify({ ...tabCache.current, _ts: Date.now() })); } catch {}
   };
 
   useEffect(() => {
