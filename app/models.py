@@ -336,8 +336,8 @@ class Post(Base):
             content
         )
         content = re.sub(
-            r'href="(/explore\?[^"]*)"',
-            lambda m: f'href="{BASE_URL}{m.group(1)}"',
+            r'href="[^"]*explore\?q=(?:%23|#)([^&"]+)[^"]*"',
+            lambda m: f'href="{BASE_URL}/tags/{m.group(1)}"',
             content
         )
         content = re.sub(
