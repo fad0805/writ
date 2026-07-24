@@ -258,7 +258,6 @@ class Post(Base):
     expires_at = Column(DateTime(timezone=True), nullable=True)
     tag_list = relationship("Tag", secondary=post_tags, lazy="selectin")
     created_at = Column(DateTime(timezone=True), default=now)
-    bumped_at = Column(DateTime(timezone=True), nullable=True)
 
     author = relationship("User", back_populates="posts", foreign_keys=[author_id], lazy="selectin")
     parent = relationship("Post", back_populates="replies", remote_side=[id], foreign_keys=[in_reply_to_id], lazy="selectin")
@@ -879,7 +878,6 @@ def init_db():
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_follows_follower_following ON follows(follower_id, following_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_follows_follower_accepted ON follows(follower_id, following_id, accepted)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_is_remote ON users(is_remote)"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_posts_bumped ON posts(bumped_at)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_posts_visibility_deleted ON posts(visibility, is_deleted)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_posts_in_reply_to_deleted ON posts(in_reply_to_id, is_deleted)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_likes_user_post ON likes(user_id, post_id)"))
