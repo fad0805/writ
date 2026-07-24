@@ -1906,6 +1906,9 @@ def api_react_post(request: Request, background_tasks: BackgroundTasks, post_id:
                 ).first() if post_author_id != user.id else None
                 if existing:
                     existing.reaction = final_emoji
+                    if post_author_id != user.id and existing_notif:
+                        _notif_meta = {"reaction": final_emoji} if final_emoji else {}
+                        existing_notif.metadata_json = json.dumps(_notif_meta) if _notif_meta else ""
                 else:
                     s.add(Like(user_id=user.id, post_id=post_id, reaction=final_emoji))
                     if post_author_id != user.id and not existing_notif:
