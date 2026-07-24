@@ -188,7 +188,8 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       }
 
       if (!quoteResolved) {
-        if (quoteUrl && url !== quoteUrl) { setQuoteUrl(""); setQuotePost(null); }
+        setQuoteUrl(url);
+        setQuotePost(null);
         try {
           const data = await api.fetchLinkPreview(url);
           if (data && data.title) setLinkPreview(data);
