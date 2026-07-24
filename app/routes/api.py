@@ -3076,6 +3076,10 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
             if n.metadata_json:
                 try: meta = _json.loads(n.metadata_json)
                 except: pass
+            if n.notification_type == "like" and meta.get("reaction"):
+                _post_author = n.post.author if n.post else None
+                if _post_author and not getattr(_post_author, 'enable_reactions', True):
+                    meta = {}
             post = n.post
             item = {
                 "id": n.id,
