@@ -34,14 +34,14 @@ def _get_vapid_key():
             if db_priv and db_pub and _is_valid_pem_private_key(db_priv):
                 return {"privateKey": db_priv, "publicKey": db_pub}
             if (db_priv or db_pub) and not _is_valid_pem_private_key(db_priv):
-                print(f"[PUSH] DB VAPID key invalid (len={len(db_priv)}), clearing and regenerating", flush=True)
+                logger.error(f"[PUSH] DB VAPID key invalid (len={len(db_priv)}), clearing and regenerating")
                 try:
                     ss.vapid_private_key = ''
                     ss.vapid_public_key = ''
                     s.commit()
-                    print("[PUSH] Cleared invalid VAPID key from DB", flush=True)
+                    logger.error("[PUSH] Cleared invalid VAPID key from DB")
                 except Exception as ce:
-                    print(f"[PUSH] Failed to clear DB key: {ce}", flush=True)
+                    logger.error(f"[PUSH] Failed to clear DB key: {ce}", exc_info=True)
     except Exception:
         pass
 
@@ -80,10 +80,10 @@ def _get_vapid_key():
         os.environ["VAPID_PRIVATE_KEY"] = _priv_pem
         os.environ["VAPID_PUBLIC_KEY"] = _pub_b64
 
-        print("[PUSH] Auto-generated new VAPID keys and saved to DB", flush=True)
+        logger.error("[PUSH] Auto-generated new VAPID keys and saved to DB")
         return {"privateKey": _priv_pem, "publicKey": _pub_b64}
     except Exception as e:
-        print(f"[PUSH] Failed to auto-generate VAPID keys: {e}", flush=True)
+        logger.error(f"[PUSH] Failed to auto-generate VAPID keys: {e}", exc_info=True)
 
     return None
 
@@ -152,14 +152,14 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
                 _vapid_obj = _Vapid()
                 _vapid_obj.private_key = _priv_key_obj
             except Exception as _kerr:
-                print(f"[PUSH] Failed to load VAPID key object: {_kerr}", flush=True)
+                logger.error(f"[PUSH] Failed to load VAPID key object: {_kerr}", exc_info=True)
                 return
 
-            print(f"[PUSH] VAPID key loaded OK type={type(_vapid_obj.private_key).__name__}", flush=True)
+            logger.error(f"[PUSH] VAPID key loaded OK type={type(_vapid_obj.private_key).__name__}")
 
             for sub in subs:
                 try:
-                    print(f"[PUSH] sending to sub {sub.id}", flush=True)
+                    logger.error(f"[PUSH] sending to sub {sub.id}")
                     webpush(
                         subscription_info={
                             "endpoint": sub.endpoint,
@@ -169,22 +169,22 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
                         vapid_private_key=_vapid_obj,
                         vapid_claims={"sub": f"mailto:{VAPID_CLAIM_EMAIL}"},
                     )
-                    print(f"[PUSH] OK sub {sub.id}", flush=True)
+                    logger.error(f"[PUSH] OK sub {sub.id}")
                 except (ValueError, TypeError) as _ke:
-                    print(f"[PUSH] key error sub {sub.id}: {_ke}", flush=True)
+                    logger.error(f"[PUSH] key error sub {sub.id}: {_ke}", exc_info=True)
                 except WebPushException as ex:
                     status_code = getattr(ex, "response", None)
                     if status_code is not None and hasattr(status_code, "status_code"):
                         status_code = status_code.status_code
-                    print(f"[PUSH] WebPushException sub {sub.id} status={status_code}: {ex}", flush=True)
+                    logger.error(f"[PUSH] WebPushException sub {sub.id} status={status_code}: {ex}", exc_info=True)
                     if status_code in (404, 410, 401, 403):
-                        print(f"[PUSH] Removing stale subscription {sub.id} (status={status_code}, VAPID key changed)", flush=True)
+                        logger.error(f"[PUSH] Removing stale subscription {sub.id} (status={status_code}, VAPID key changed)", exc_info=True)
                         s.delete(sub)
                     else:
-                        print(f"[PUSH] WebPushException sub {sub.id} (not 404/410/401/403): {ex}", flush=True)
+                        logger.error(f"[PUSH] WebPushException sub {sub.id} (not 404/410/401/403): {ex}", exc_info=True)
                 except Exception as ex:
-                    print(f"[PUSH] error sub {sub.id}: {ex}", flush=True)
+                    logger.error(f"[PUSH] error sub {sub.id}: {ex}", exc_info=True)
 
             s.commit()
     except Exception as ex:
-        print(f"[PUSH] send_push_to_user error: {ex}", flush=True)
+        logger.error(f"[PUSH] send_push_to_user error: {ex}", exc_info=True)

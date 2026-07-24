@@ -485,7 +485,7 @@ def _cache_remote_media(remote_url: str) -> str:
                         ext = save_format.lower()
 
                 except Exception as img_err:
-                    logger.warning("Image processing failed, fallback to original bytes: %s", img_err)
+                    logger.error("Image processing failed, fallback to original bytes: %s", img_err, exc_info=True)
                     data = resp.content
                     ext = orig_ext
 
@@ -504,7 +504,7 @@ def _cache_remote_media(remote_url: str) -> str:
             s.commit()
         return local_url
     except Exception as e:
-        logger.warning("Failed to cache remote media %s: %s", remote_url, e)
+        logger.error("Failed to cache remote media %s: %s", remote_url, e, exc_info=True)
     return remote_url
 
 
@@ -523,7 +523,7 @@ def _cleanup_expired_media():
                 s.delete(item)
             s.commit()
     except Exception as e:
-        logger.warning("Failed to cleanup expired media: %s", e)
+        logger.error("Failed to cleanup expired media: %s", e, exc_info=True)
 
 
 _REMOTE_POST_RETENTION_DAYS = 90
@@ -581,7 +581,7 @@ def _cleanup_remote_data():
                 logger.info("Cleaned %d stale remote users", removed)
             s.commit()
     except Exception as e:
-        logger.warning("Failed to cleanup remote data: %s", e)
+        logger.error("Failed to cleanup remote data: %s", e, exc_info=True)
 
 
 def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url: str = "") -> str:
@@ -637,7 +637,7 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
 
             except Exception as img_err:
                 # 이미지 파싱 자체가 안 되거나 Pillow가 지원하지 않는 특이 포맷은 안전하게 원본 바이너리 저장
-                logger.warning("Pillow could not process image %s, saving raw data. Error: %s", image_url, img_err)
+                logger.error("Pillow could not process image %s, saving raw data: %s", image_url, img_err, exc_info=True)
                 filename = f"{uuid.uuid4().hex}.{ext}"
                 key = f"{prefix}/remote/{filename}"
                 new_url = storage.save(key, data, content_type_header or f"image/{ext}")
@@ -1141,7 +1141,7 @@ def _retry_fetch_reply(post_id: int, in_reply_to_ap_id: str, attempt: int = 0):
                 else:
                     logger.warning("[RETRY-REPLY] gave up post_id=%s ap_id=%s after %d attempts", post_id, in_reply_to_ap_id, MAX_ATTEMPTS)
         except Exception as e:
-            logger.warning("[RETRY-REPLY] failed post_id=%s err=%s", post_id, e)
+            logger.error("[RETRY-REPLY] failed post_id=%s err=%s", post_id, e, exc_info=True)
     threading.Thread(target=_worker, daemon=True).start()
 
 
@@ -1198,7 +1198,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         if resp is not None and resp.status_code == 200:
             data = resp.json()
     except Exception as e:
-        print(f"[FETCH-POST] url={url} error={e}", flush=True)
+        logger.error("[FETCH-POST] url=%s error=%s", url, e, exc_info=True)
 
     if data is None:
         try:
@@ -1207,7 +1207,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
             if resp is not None and resp.status_code == 200:
                 data = resp.json()
         except Exception as e:
-            print(f"[FETCH-POST] retry url={url} error={e}", flush=True)
+            logger.error("[FETCH-POST] retry url=%s error=%s", url, e, exc_info=True)
 
     if data is None:
         print(f"[FETCH-POST] FAILED url={url}", flush=True)
@@ -1287,7 +1287,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
                 if mentioned_user:
                     mentioned_ids.append(mentioned_user.id)
             except Exception as e:
-                print(f"[FETCH-POST] Failed to resolve mentioned actor={actor_href}: {e}", flush=True)
+                logger.error("[FETCH-POST] Failed to resolve mentioned actor=%s: %s", actor_href, e, exc_info=True)
         elif t.get('type') == "Hashtag":
             tag_name = (t.get("name", "") or "").lstrip("#").strip().lower()
             if tag_name:
@@ -1824,7 +1824,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         else:
                             print(f"[_handle_create QUOTE FETCH FAIL] url={quote_url}", flush=True)
                 except Exception as e:
-                    print(f"[_handle_create QUOTE ERR] url={quote_url} {e}", flush=True)
+                    logger.error("[QUOTE] url=%s %s", quote_url, e, exc_info=True)
 
         # Fetch link preview for URLs in remote post content (skip if quote post)
         link_preview = None
@@ -1970,7 +1970,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 from app.eventbus import broadcast
                 broadcast("new_post", {"post_id": post.id, "author_id": actor_id})
             except Exception as e:
-                logger.warning("broadcast failed: %s", e)
+                logger.error("broadcast failed: %s", e, exc_info=True)
             try:
                 from app.timeline_stream import broadcast_post
                 _broadcast_emojis = _broadcast_emoji_list(session)
@@ -2038,7 +2038,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 }
                 broadcast_post(post_json, actor_id, visibility, is_incoming_dm)
             except Exception as e:
-                logger.warning("timeline broadcast failed: %s", e)
+                logger.error("timeline broadcast failed: %s", e, exc_info=True)
 
         return (200, "Created")
     return (200, "OK")
@@ -2209,7 +2209,7 @@ def _handle_vote(activity: dict) -> tuple[int, str]:
             return (404, "Actor not found")
         actor_id = actor.id
     except Exception as e:
-        logger.error("Failed to resolve actor %s: %s", actor_url, e)
+        logger.error("Failed to resolve actor %s: %s", actor_url, e, exc_info=True)
         return (404, "Actor not found")
 
     with get_session() as session:
@@ -2416,8 +2416,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                 "_emojis": _broadcast_emoji_list(session),
             }, actor_id, post.visibility or "public", False)
         except Exception as e:
-            logger.warning("Failed to broadcast boost from AP: %s", e)
-            print(f"Failed to broadcast boost from AP: {e}", flush=True)
+            logger.error("Failed to broadcast boost from AP: %s", e, exc_info=True)
 
     print(f"[ANNOUNCE] success post_id={post.id} by actor_id={actor_id}", flush=True)
     return (200, "Announced")
@@ -2465,7 +2464,7 @@ def _handle_block(activity: dict) -> tuple[int, str]:
                 session.commit()
             return (200, "Blocked")
     except Exception as e:
-        logger.error("Error processing Block from %s: %s", actor_url, e)
+        logger.error("Error processing Block from %s: %s", actor_url, e, exc_info=True)
         return (200, "OK")
 
 
@@ -2664,7 +2663,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
                 session.commit()
             return (200, "Unblocked")
         except Exception as e:
-            logger.error("Error processing Undo Block from %s: %s", actor_url, e)
+            logger.error("Error processing Undo Block from %s: %s", actor_url, e, exc_info=True)
             return (200, "OK")
 
     return (200, "OK")
@@ -2814,7 +2813,7 @@ def _send_delete_post(post: Post, sender: User):
     try:
         broadcast_to_followers(sender, delete)
     except Exception as e:
-        logger.warning("Failed to broadcast Delete: %s", e)
+        logger.error("Failed to broadcast Delete: %s", e, exc_info=True)
     # Also send Delete directly to parent author's inbox for remote replies
     if post.in_reply_to_ap_id:
         try:
@@ -2825,7 +2824,7 @@ def _send_delete_post(post: Post, sender: User):
                     if inbox:
                         _post_to_inbox(inbox, delete, sender)
         except Exception as e:
-            logger.warning("Failed to send Delete to parent author: %s", e)
+            logger.error("Failed to send Delete to parent author: %s", e, exc_info=True)
 
 
 def _notify_admins(session, reporter, target_type, target_id, reason):
@@ -2914,7 +2913,7 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
                         _s.flush()
                         logger.info("FLAG reporter created via direct fetch: %s", reporter.id)
         except Exception as e:
-            logger.warning("FLAG direct fetch failed: %s", e)
+            logger.error("FLAG direct fetch failed: %s", e, exc_info=True)
 
     if not reporter:
         return (202, "Accepted (unknown reporter)")
@@ -3192,7 +3191,7 @@ def _background_import_emoji(url: str, keyword: str, domain: str):
                 from app.routes.api import _refresh_emoji_cache_forcibly
                 _refresh_emoji_cache_forcibly(_es)
     except Exception as e:
-        logger.warning("Background emoji import failed %s: %s", keyword, e)
+        logger.error("Background emoji import failed %s: %s", keyword, e, exc_info=True)
 
 
 def _process_emoji_tags(tags: list, session):
@@ -3309,7 +3308,7 @@ def _process_emoji_tags(tags: list, session):
             )
             session.add(emoji)
         except Exception as e:
-            logger.warning("Failed to process remote emoji %s: %s", keyword, e)
+            logger.error("Failed to process remote emoji %s: %s", keyword, e, exc_info=True)
 
 
 def broadcast_to_followers(user: User, activity: dict):

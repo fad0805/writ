@@ -128,8 +128,7 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                         continue
                 _enqueue(info["queue"], payload)
     except Exception as e:
-        print("!!! BROADCAST_POST ERROR !!!", flush=True)
-        traceback.print_exc()
+        logger.error("BROADCAST_POST ERROR", exc_info=True)
 
 _notif_streams: dict[int, dict] = {}
 _notif_counter = 0

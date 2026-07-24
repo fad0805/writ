@@ -132,7 +132,7 @@ def _delivery_worker():
                             item.status = "failed"
                 s.commit()
         except Exception as e:
-            logger.error("Delivery worker error: %s", e)
+            logger.error("Delivery worker error: %s", e, exc_info=True)
 
 
 def _refresh_remote_profiles():
@@ -294,7 +294,7 @@ def _auto_delete_expired_posts():
                     except Exception:
                         pass
         except Exception as e:
-            logger.error("Auto-delete worker error: %s", e)
+            logger.error("Auto-delete worker error: %s", e, exc_info=True)
         _time.sleep(_next_3am() + 60)
 
 

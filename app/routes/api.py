@@ -583,7 +583,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             posts = _timeline_filter(posts, session, user, tl_type, _following_ids)
             print(f"[feed] after mention filter: {len(posts)} posts", flush=True)
         except Exception as e:
-            print(f'[feed] mention filter error: {e}', flush=True)
+            logger.error("feed mention filter error: %s", e, exc_info=True)
     has_more = raw_total > limit
     print(f"[feed] has_more={has_more} (raw_total={raw_total}, after_filter={len(posts)}, limit={limit})", flush=True)
     posts = posts[:limit]
@@ -823,12 +823,10 @@ def api_get_post(request: Request, post_id: int):
                 if remote_parent is not None:
                     result["ancestors"] = [_post_json(remote_parent, remote_s, user)]
                 else:
-                    print(f"[WARN] Remote parent fetch returned None for URL: {fetch_remote_url}", flush=True)
+                    logger.warning("Remote parent fetch returned None for URL: %s", fetch_remote_url)
         except Exception as e:
             # 💡 pass로 에러를 완전히 지우지 말고, 개발 중에는 최소한 어떤 에러인지 로그를 남겨줍니다.
-            print(f"[ERROR] Failed to fetch or process remote parent: {e}", flush=True)
-            import traceback
-            traceback.print_exc()
+            logger.error("Failed to fetch or process remote parent: %s", e, exc_info=True)
     return result
 
 
@@ -1002,7 +1000,7 @@ def _broadcast_update_actor(user):
         }
         broadcast_to_followers(user, update)
     except Exception as e:
-        logger.warning("Failed to broadcast Update actor: %s", e)
+        logger.error("Failed to broadcast Update actor: %s", e, exc_info=True)
 
 
 def _broadcast_timeline(post_json, author_id, visibility, is_dm):
@@ -1010,7 +1008,7 @@ def _broadcast_timeline(post_json, author_id, visibility, is_dm):
     try:
         broadcast_post(post_json, author_id, visibility, is_dm)
     except Exception as e:
-        logger.warning("Failed to broadcast timeline: %s", e)
+        logger.error("Failed to broadcast timeline: %s", e, exc_info=True)
 
 
 @router.post("/posts")
@@ -1185,7 +1183,7 @@ def api_create_post(
                         broadcast_notif_sound(parent.author_id)
                         _brn(parent.author_id)
             except Exception as e:
-                logger.warning("Failed to create notifications: %s", e)
+                logger.error("Failed to create notifications: %s", e, exc_info=True)
 
         threading.Thread(target=_create_notifications_and_broadcast, daemon=True).start()
         threading.Thread(target=_broadcast_federation, args=(user.id, post.id, visibility, content), daemon=True).start()
@@ -1193,7 +1191,7 @@ def api_create_post(
         try:
             broadcast("new_post", {"post_id": post.id, "author_id": user.id})
         except Exception as e:
-            logger.warning("Failed to broadcast new_post event: %s", e)
+            logger.error("Failed to broadcast new_post event: %s", e, exc_info=True)
 
         pj = _post_json(post, s, user)
         threading.Thread(target=_broadcast_timeline, args=(pj, user.id, visibility, bool(dm_target_id)), daemon=True).start()
@@ -1285,11 +1283,11 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
                         broadcast_to_followers(user, update_activity)
                     except Exception as e:
                         # 🌟 logger.warning 대신 즉시 출력되도록 print flush 적용
-                        print(f"[Warning] Update federation failed: {e}", file=sys.stderr, flush=True)
+                        logger.error("Update federation failed: %s", e, exc_info=True)
                 threading.Thread(target=_send_update, daemon=True).start()
             except Exception as e:
                 # 🌟 에러 로그 즉시 출력
-                print(f"[Warning] Update activity build failed: {e}", file=sys.stderr, flush=True)
+                logger.error("Update activity build failed: %s", e, exc_info=True)
 
         return _post_json(post, s, user)
 
@@ -1377,8 +1375,7 @@ def api_delete_post(request: Request, post_id: int):
                         else:
                             print(f"DELETE_FAIL: post {_pid} not found in DB")
                 except Exception as e:
-                    print(f"DELETE_FAIL: {e}")
-                    import traceback; traceback.print_exc()
+                    logger.error("DELETE_FAIL: %s", e, exc_info=True)
         threading.Thread(target=_background, daemon=True).start()
     return {"ok": True}
 
@@ -1472,7 +1469,7 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
                 from app.activitypub import _send_flag
                 _send_flag(user, target_type, target_obj, reason.strip()[:200], parsed_rule_ids)
             except Exception as e:
-                logger.warning("Failed to send Flag activity: %s", e)
+                logger.error("Failed to send Flag activity: %s", e, exc_info=True)
     return {"ok": True, "report_id": report_id}
 
 
@@ -1685,7 +1682,7 @@ def api_boost_post(request: Request, post_id: int):
                             _broadcast_timeline(_og, _boost_user_id, post.visibility or "public", False)
                 threading.Thread(target=_safe_broadcast_boost_pointer, daemon=True).start()
             except Exception as e:
-                logger.warning("Failed to broadcast boost stream: %s", e)
+                logger.error("Failed to broadcast boost stream: %s", e, exc_info=True)
             # Also send an update event for the original post (count sync)
             try:
                 broadcast_post({
@@ -1694,7 +1691,7 @@ def api_boost_post(request: Request, post_id: int):
                     "boosted_by": _user_json(user),
                 }, post.author_id, post.visibility or "public", False)
             except Exception as e:
-                logger.warning("Failed to broadcast boost update: %s", e)
+                logger.error("Failed to broadcast boost update: %s", e, exc_info=True)
             if post.author_id != user.id:
                 from app.push import send_push_to_user
                 from app.timeline_stream import broadcast_notif_sound, broadcast_refresh_notifs
@@ -1730,7 +1727,7 @@ def api_boost_post(request: Request, post_id: int):
             try:
                 threading.Thread(target=_post_to_inbox, args=(inbox, announce, user), daemon=True).start()
             except Exception as e:
-                logger.warning("Failed to send boost to author inbox: %s", e)
+                logger.error("Failed to send boost to author inbox: %s", e, exc_info=True)
 
         # 3. 내 원격 팔로워들의 인박스로 Fan-out 전송
         try:
@@ -1745,9 +1742,9 @@ def api_boost_post(request: Request, post_id: int):
                         try:
                             threading.Thread(target=_post_to_inbox, args=(inbox, announce, user), daemon=True).start()
                         except Exception as e:
-                            logger.warning("Failed to fan-out boost to inbox %s: %s", inbox, e)
+                            logger.error("Failed to fan-out boost to inbox %s: %s", inbox, e, exc_info=True)
         except Exception as e:
-            logger.warning("Failed to query followers for boost fan-out: %s", e)
+            logger.error("Failed to query followers for boost fan-out: %s", e, exc_info=True)
 
         return {"ok": True}
 
@@ -1833,7 +1830,7 @@ def api_unboost_post(request: Request, post_id: int):
                     "boosted_by": None,
                 }, post.author_id, post.visibility or "public", False)
             except Exception as e:
-                logger.warning("Failed to broadcast unboost update: %s", e)
+                logger.error("Failed to broadcast unboost update: %s", e, exc_info=True)
 
         # 1. Undo 활동 페이로드 구성 (로컬/원격 글 공통)
         undo_id = f"{BASE_URL}/boosts/{uuid.uuid4()}#undo"
@@ -1860,7 +1857,7 @@ def api_unboost_post(request: Request, post_id: int):
             try:
                 threading.Thread(target=_post_to_inbox, args=(post.author.shared_inbox_url, undo, user), daemon=True).start()
             except Exception as e:
-                logger.warning("Failed to send unboost to author inbox: %s", e)
+                logger.error("Failed to send unboost to author inbox: %s", e, exc_info=True)
         # 3. ★ [핵심] 내 팔로워들의 인박스로도 Undo를 뿌려주어 타임라인에서 취소 반영
         try:
             followers = s.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == user.id).all()
@@ -1873,9 +1870,9 @@ def api_unboost_post(request: Request, post_id: int):
                         try:
                             _post_to_inbox(inbox, undo, user)
                         except Exception as e:
-                            logger.warning("Failed to fan-out unboost to inbox %s: %s", inbox, e)
+                            logger.error("Failed to fan-out unboost to inbox %s: %s", inbox, e, exc_info=True)
         except Exception as e:
-            logger.warning("Failed to query followers for unboost fan-out: %s", e)
+            logger.error("Failed to query followers for unboost fan-out: %s", e, exc_info=True)
     return {"ok": True}
 
 
@@ -2692,7 +2689,7 @@ def api_approve_follow(request: Request, username: str):
                 inbox = follower.inbox_url or (follower.actor_uri().rstrip("/") + "/inbox")
                 _send_accept(inbox, follow_activity_id, user, follower=follower)
             except Exception as e:
-                logger.warning("Failed to send Accept: %s", e)
+                logger.error("Failed to send Accept: %s", e, exc_info=True)
     return {"ok": True}
 
 @router.post("/users/{username}/remove-follower")
@@ -2757,7 +2754,7 @@ def api_reject_follow(request: Request, username: str):
                 inbox = follower.inbox_url or (follower.actor_uri().rstrip("/") + "/inbox")
                 _send_reject(inbox, follow_activity_id, user, follower_actor_url=follower.actor_uri())
             except Exception as e:
-                logger.warning("Failed to send Reject: %s", e)
+                logger.error("Failed to send Reject: %s", e, exc_info=True)
     return {"ok": True}
 
 @router.post("/users/{username}/unfollow")
@@ -2798,7 +2795,7 @@ def api_unfollow(request: Request, username: str):
                 try:
                     _post_to_inbox(target.inbox_url, undo, user)
                 except Exception as e:
-                    logger.warning("Failed to send Undo Follow: %s", e)
+                    logger.error("Failed to send Undo Follow: %s", e, exc_info=True)
     return {"ok": True}
 
 
