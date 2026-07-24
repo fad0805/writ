@@ -572,7 +572,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             seen_ids.add(p.boost_of_id)
             if p.boost_of_id not in boost_originals:
                 continue
-        elif p.id in seen_ids and p.author_id != user.id:
+        elif p.id in seen_ids:
             continue
         seen_ids.add(p.id)
         deduped.append(p)
@@ -2442,7 +2442,7 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                 if p.boost_of_id in seen_ids:
                     continue
                 seen_ids.add(p.boost_of_id)
-            elif p.id in seen_ids and (not user or p.author_id != user.id):
+            elif p.id in seen_ids:
                 continue
             seen_ids.add(p.id)
             deduped.append(p)
