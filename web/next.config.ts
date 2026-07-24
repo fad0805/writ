@@ -64,7 +64,7 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/tags/:path*",
-        destination: "/explore?q=%23:path*"
+        destination: `${API_HOST}/api/tags/:path*`,
       },
     ];
   },
