@@ -1073,7 +1073,7 @@ def api_create_post(
         if parent_id:
             _parent_exists = s.query(Post.id).filter_by(id=parent_id).first()
             if not _parent_exists:
-                parent_id = None
+                raise HTTPException(status_code=404, detail="부모 게시글이 삭제되었습니다.")
         post = Post(
             author_id=user.id,
             content=content_html,
