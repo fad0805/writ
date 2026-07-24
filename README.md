@@ -35,7 +35,7 @@ WRIT는 **연재(Series)**와 **장문 작성**을 자연스럽게 지원하는 
 ```bash
 git clone https://github.com/fad0805/writ.git
 cd writ
-cp .env.example .env
+cp .env.production.example .env
 docker compose up -d
 ```
 
