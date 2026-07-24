@@ -298,7 +298,7 @@ export default function RightSidebar() {
         </div>
       </div>
       </>)}
-      <div className="widget" style={{ marginTop: "auto", borderTop: "1px solid var(--border)", paddingTop: 12, marginBottom: 0 }}>
+      <div className="widget" style={{ borderTop: "1px solid var(--border)", paddingTop: 12, marginBottom: 0 }}>
         <h4><Icon name="globe" /> 서버 정보</h4>
         {serverInfo ? (
           <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>

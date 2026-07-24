@@ -555,18 +555,18 @@ const localReactionEmojiMap = useMemo(() => {
     const gridColumns = n <= 2 ? n : n <= 4 ? 2 : 3;
     return (
       <div style={{ position: "relative", marginTop: 8, overflow: "hidden", borderRadius: 8 }}>
-        <div className="post-media-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${gridColumns}, 1fr)`, gridAutoRows: "200px", gap: 4 }}>
+        <div className="post-media-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${gridColumns}, 1fr)`, gridAutoRows: "200px", gap: 2 }}>
           {media.slice(0, 16).map((m: any, i: number) => {
             const blurred = postSensitive && !revealedSensitive;
             return m.type === "video" ? (
-              <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", height: "100%" }}>
-                {blurred && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 8, zIndex: 1 }} />}
-                <video src={m.url} controls style={{ width: "100%", height: "100%", borderRadius: 8, objectFit: "cover", background: "#000", filter: blurred ? "blur(20px)" : "none" }} />
+              <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", background: "#000", borderRadius: 6 }}>
+                {blurred && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 6, zIndex: 1 }} />}
+                <video src={m.url} controls style={{ width: "100%", height: "100%", borderRadius: 6, objectFit: "contain", background: "#000", filter: blurred ? "blur(20px)" : "none" }} />
               </div>
             ) : (
-              <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", height: "100%" }}>
-                {blurred && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 8, zIndex: 1 }} />}
-                <img src={m.url} alt={m.alt || ""} style={{ width: "100%", height: "100%", borderRadius: 8, objectFit: "cover", background: "#000", cursor: blurred ? "default" : "pointer", filter: blurred ? "blur(20px)" : "none" }} onClick={(e) => { if (!blurred) { e.stopPropagation(); setViewerIndex(i); } }} />
+              <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", background: "#000", borderRadius: 6 }}>
+                {blurred && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 6, zIndex: 1 }} />}
+                <img src={m.url} alt={m.alt || ""} style={{ width: "100%", height: "100%", borderRadius: 6, objectFit: "contain", background: "#000", cursor: blurred ? "default" : "pointer", filter: blurred ? "blur(20px)" : "none" }} onClick={(e) => { if (!blurred) { e.stopPropagation(); setViewerIndex(i); } }} />
               </div>
             );
           })}
