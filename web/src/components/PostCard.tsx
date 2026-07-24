@@ -132,6 +132,12 @@ const localReactionEmojiMap = useMemo(() => {
     if (currentUser?.pinned_posts) setPinned(currentUser.pinned_posts.includes(post.id));
   }, [currentUser, post.id]);
 
+  const [reactionTooltip, setReactionTooltip] = useState<{ emoji: string; users: User[]; x: number; y: number } | null>(null);
+  const tooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => { if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current); };
+  }, []);
+
   const postIdRef = useRef(post.id);
   useEffect(() => {
     if (postIdRef.current !== post.id) {
@@ -853,6 +859,21 @@ const localReactionEmojiMap = useMemo(() => {
                       } catch {}
                     }
                   }}
+                  onMouseEnter={(e) => {
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current);
+                    tooltipTimerRef.current = setTimeout(() => {
+                      api.reactionUsers(post.id, emoji).then((d) => {
+                        if (d.users.length > 0) {
+                          setReactionTooltip({ emoji, users: d.users, x: rect.left + rect.width / 2, y: rect.top - 6 });
+                        }
+                      }).catch(() => {});
+                    }, 300);
+                  }}
+                  onMouseLeave={() => {
+                    if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current);
+                    setReactionTooltip(null);
+                  }}
                   style={{ 
                     display: "inline-flex", 
                     alignItems: "center", 
@@ -1077,8 +1098,30 @@ const localReactionEmojiMap = useMemo(() => {
           </div>
         </div>
       )}
+      {reactionTooltip && (
+        <div style={{
+          position: "fixed",
+          left: reactionTooltip.x,
+          top: reactionTooltip.y,
+          transform: "translate(-50%, -100%)",
+          background: "var(--bg-primary)",
+          border: "1px solid var(--border)",
+          borderRadius: 8,
+          padding: "6px 10px",
+          fontSize: 12,
+          color: "var(--text-primary)",
+          whiteSpace: "nowrap",
+          zIndex: 9999,
+          pointerEvents: "none",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+          lineHeight: 1.4,
+        }}>
+          {reactionTooltip.users.length <= 3
+            ? reactionTooltip.users.map((u) => u.display_name || u.username).join(", ")
+            : `${reactionTooltip.users.slice(0, 3).map((u) => u.display_name || u.username).join(", ")} 외 ${reactionTooltip.users.length - 3}명`}
+        </div>
+      )}
     </>
   );
 }
-
 

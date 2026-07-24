@@ -2028,6 +2028,32 @@ def api_unreact_post(request: Request, background_tasks: BackgroundTasks, post_i
     return {"ok": True}
 
 
+@router.get("/posts/{post_id}/reaction-users")
+def api_reaction_users(request: Request, post_id: int, emoji: str = ""):
+    user = require_active_auth(request)
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        if not _can_view(post, user, s):
+            raise HTTPException(status_code=404, detail="Post not found")
+        from app.models import Like as _Like
+        q = s.query(_Like).filter(_Like.post_id == post_id)
+        if emoji == "★":
+            q = q.filter((_Like.reaction.is_(None)) | (_Like.reaction == "★"))
+        elif emoji:
+            q = q.filter(_Like.reaction == emoji)
+        else:
+            q = q.filter(_Like.reaction.is_(None))
+        like_rows = q.order_by(_Like.id.desc()).limit(20).all()
+        user_ids = list(dict.fromkeys(l.user_id for l in like_rows))
+        if not user_ids:
+            return {"users": []}
+        users = {u.id: u for u in s.query(User).filter(User.id.in_(user_ids)).all()}
+        from app.serializers import _user_json as _uj
+        return {"users": [_uj(users[uid]) for uid in user_ids if uid in users]}
+
+
 @router.post("/posts/{post_id}/vote")
 def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
     user = require_active_auth(request)

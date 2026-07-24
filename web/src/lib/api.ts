@@ -234,6 +234,7 @@ export const api = {
   refreshPoll: (id: number) => request<{ ok: boolean; post?: PostData }>(`/api/posts/${id}/refresh-poll`, { method: "POST" }),
   react: (id: number, emoji: string) => formRequest<{ ok: boolean }>(`/api/posts/${id}/react`, { emoji }),
   unreact: (id: number) => formRequest<{ ok: boolean }>(`/api/posts/${id}/unreact`, {}),
+  reactionUsers: (id: number, emoji: string) => request<{ users: User[] }>(`/api/posts/${id}/reaction-users?emoji=${encodeURIComponent(emoji)}`),
 
   // Users
   getProfile: (username: string) =>
