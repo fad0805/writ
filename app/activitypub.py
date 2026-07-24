@@ -2105,6 +2105,12 @@ def _handle_like(activity: dict) -> tuple[int, str]:
         if existing:
             if reaction and existing.reaction != reaction:
                 existing.reaction = reaction
+                _existing_n = session.query(Notification).filter_by(
+                    user_id=post.author_id, from_user_id=actor_id, notification_type="like", post_id=post.id
+                ).first()
+                if _existing_n:
+                    _r = reaction or "★"
+                    _existing_n.metadata_json = json.dumps({"reaction": _r})
                 session.commit()
                 from app.timeline_stream import broadcast_reaction_update
                 from sqlalchemy import func as _sqlfunc
@@ -2130,11 +2136,13 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             user_id=post.author_id, from_user_id=actor_id, notification_type="like", post_id=post.id
         ).first()
         if not existing_n:
+            _r = reaction or "★"
             n = Notification(
                 user_id=post.author_id,
                 from_user_id=actor_id,
                 notification_type="like",
                 post_id=post.id,
+                metadata_json=json.dumps({"reaction": _r}),
             )
             session.add(n)
             session.commit()
