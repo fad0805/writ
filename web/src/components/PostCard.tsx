@@ -1110,15 +1110,24 @@ const localReactionEmojiMap = useMemo(() => {
           padding: "6px 10px",
           fontSize: 12,
           color: "var(--text-primary)",
-          whiteSpace: "nowrap",
           zIndex: 9999,
           pointerEvents: "none",
           boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
           lineHeight: 1.4,
         }}>
-          {reactionTooltip.users.length <= 3
-            ? reactionTooltip.users.map((u) => u.display_name || u.username).join(", ")
-            : `${reactionTooltip.users.slice(0, 3).map((u) => u.display_name || u.username).join(", ")} 외 ${reactionTooltip.users.length - 3}명`}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, flexWrap: "wrap", maxWidth: 260 }}>
+            {reactionTooltip.users.slice(0, 3).map((u) => (
+              <span key={u.id} style={{ display: "inline-flex", alignItems: "center", gap: 3, whiteSpace: "nowrap" }}>
+                <Avatar user={u} style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: "middle" }} />
+                {u.display_name || u.username}
+              </span>
+            )).reduce((acc, el, i) => {
+              if (i > 0) acc.push(<span key={`,${i}`} style={{ color: "var(--text-muted)" }}>,</span>);
+              acc.push(el);
+              return acc;
+            }, [] as React.ReactNode[])}
+            {reactionTooltip.users.length > 3 && <span style={{ color: "var(--text-muted)" }}> 외 {reactionTooltip.users.length - 3}명</span>}
+          </span>
         </div>
       )}
     </>
