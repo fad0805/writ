@@ -11,6 +11,8 @@ def _post_json(p, session, user, tl_type=None,
                _liked_ids=None, _boosted_ids=None, _bookmarked_ids=None,
                _vote_map=None, _my_reaction_map=None, _reactions_map=None,
                _booster_map=None, _mentioned_users_map=None, _boost_originals=None, _skip_emojis=False):
+    if not p:
+        return None
     if p.is_deleted:
         return {
             "id": p.id,

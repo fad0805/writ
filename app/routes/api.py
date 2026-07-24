@@ -5005,6 +5005,8 @@ def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
             traceback.print_exc() 
             return None # 껍데기를 만들지 않도록 에러 시 None 리턴 구조로 방어
 
+        if not post:
+            return None
         return _post_json(post, session, user)
 
 
