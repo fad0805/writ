@@ -1244,6 +1244,10 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         return None
 
     raw_content = obj.get("content", "") or ""
+    if not raw_content:
+        cm = obj.get("contentMap")
+        if isinstance(cm, dict) and cm:
+            raw_content = next(iter(cm.values()), "")
     if len(raw_content) > 65536:
         raw_content = raw_content[:65536]
     content = _html_to_newlines(process_post_content(_sanitize_html(raw_content), obj))
@@ -1466,6 +1470,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
 
         # Limit content length (65536 chars ~ 64KB)
         raw_content = obj.get("content", "") or ""
+        if not raw_content:
+            cm = obj.get("contentMap")
+            if isinstance(cm, dict) and cm:
+                raw_content = next(iter(cm.values()), "")
         if len(raw_content) > 65536:
             raw_content = raw_content[:65536]
         post_id = obj.get("id", "")
@@ -2690,6 +2698,10 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                         return (403, "Actor does not own this post")
                     # Update content/summary
                     new_content = object_data.get("content", "")
+                    if not new_content:
+                        cm = object_data.get("contentMap")
+                        if isinstance(cm, dict) and cm:
+                            new_content = next(iter(cm.values()), "")
                     if new_content:
                         post.content = _html_to_newlines(process_post_content(_sanitize_html(new_content), post))
                     if "summary" in object_data:
