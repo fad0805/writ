@@ -102,7 +102,8 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, onRewrite,
     return () => unsubscribe();
   }, []);
   const [reactions, setReactions] = useState(post.reactions || {});
-  const [myReaction, setMyReaction] = useState(post.my_reaction || null);
+  const [myReactionOverride, setMyReactionOverride] = useState<string | null | undefined>(undefined);
+  const myReaction = myReactionOverride !== undefined ? myReactionOverride : (post.my_reaction || null);
   const reactionEmojiMap = useMemo(() => {
     const m = (window as any).__emojiMap as Record<string, string> | undefined;
     if (m && Object.keys(m).length > 0) return m;
@@ -148,13 +149,12 @@ const localReactionEmojiMap = useMemo(() => {
       setLikesCount(post.likes_count);
       setBoostsCount(post.boosts_count);
       setReactions(post.reactions || {});
-      setMyReaction(post.my_reaction || null);
+      setMyReactionOverride(post.my_reaction || null);
     }
   }, [post.id, post.liked, post.boosted, post.bookmarked, post.likes_count, post.boosts_count, post.reactions, post.my_reaction]);
   useEffect(() => {
     setReactions(post.reactions || {});
-    setMyReaction(post.my_reaction || null);
-  }, [post.reactions, post.my_reaction]);
+  }, [post.reactions]);
 
   useEffect(() => {
     if (!post.poll_data) return;
@@ -837,7 +837,7 @@ const localReactionEmojiMap = useMemo(() => {
                       if (next[emoji] <= 1) delete next[emoji];
                       else next[emoji] -= 1;
                       setReactions(next);
-                      setMyReaction(null);
+                      setMyReactionOverride(null);
                       setLiked(false);
                       setLikesCount(Math.max(0, likesCount - 1));
                       try {
@@ -851,7 +851,7 @@ const localReactionEmojiMap = useMemo(() => {
                       }
                       next[emoji] = (next[emoji] || 0) + 1;
                       setReactions(next);
-                      setMyReaction(emoji);
+                      setMyReactionOverride(emoji);
                       setLiked(true);
                       setLikesCount(myReaction ? likesCount : likesCount + 1);
                       try {
@@ -921,7 +921,7 @@ const localReactionEmojiMap = useMemo(() => {
                 }
                 next[emoji] = (next[emoji] || 0) + 1;
                 setReactions(next);
-                setMyReaction(emoji);
+                setMyReactionOverride(emoji);
                 setLiked(true);
                 setLikesCount(myReaction ? likesCount : likesCount + 1);
                 try {
