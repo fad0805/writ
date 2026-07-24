@@ -1360,6 +1360,8 @@ input[type="checkbox"] {
 .notif-mini-text {
   font-size: 0.8em;
   color: var(--text-muted);
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .notif-mini-btns {
   display: flex;

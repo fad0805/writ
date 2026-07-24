@@ -159,9 +159,12 @@ export default function RightSidebar() {
             if (n.post) return (
               <MiniPostCard key={n.id} post={n.post} notifType={n.type} notifLabel={
                 (n.type === "like" || n.type === "boost" || n.type === "mention" || n.type === "reply") && n.from_user ? (
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                    <Avatar user={n.from_user} style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: "middle" }} />
-                    <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{renderName(n.from_user.display_name || n.from_user.username)}</strong> {n.type === "like" ? (n.metadata?.reaction ? `님이 ${n.metadata.reaction} 리액션했습니다` : "님이 즐겨찾기했습니다") : n.type === "boost" ? "님이 부스트했습니다" : "님이 회원님을 언급했습니다"}
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                    <Avatar user={n.from_user} style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: "middle", flexShrink: 0 }} />
+                    <span style={{ minWidth: 0 }}>
+                      <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120, display: "inline-block", verticalAlign: "middle" }}>{renderName(n.from_user.display_name || n.from_user.username)}</strong>{" "}
+                      {n.type === "like" ? (n.metadata?.reaction ? `님이 ${n.metadata.reaction} 리액션했습니다` : "님이 즐겨찾기했습니다") : n.type === "boost" ? "님이 부스트했습니다" : "님이 회원님을 언급했습니다"}
+                    </span>
                   </span>
                 ) : undefined
               } />
