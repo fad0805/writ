@@ -5317,7 +5317,7 @@ def api_list_emojis(limit: int = Query(30), offset: int = Query(0), q: str = Que
             }
             for e in emojis
         ]
-    return JSONResponse({"emojis": result, "total": total, "has_more": offset + limit < total}, headers={"Cache-Control": "public, max-age=3600"})
+    return JSONResponse({"emojis": result, "total": total, "has_more": offset + limit < total}, headers={"Cache-Control": "no-cache, must-revalidate"})
 
 
 @router.post("/emojis")
