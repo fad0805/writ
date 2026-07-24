@@ -84,13 +84,14 @@ export default function TimelinePage() {
       setHasMore(saved.hasMore);
       offsetRef.current = saved.offset;
       setLoading(false);
+      load(true);
       return;
     }
     load();
   }, [tlType]);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true);
     setError("");
     try {
       const data = await api.timeline(tlType, LIMIT, 0);
