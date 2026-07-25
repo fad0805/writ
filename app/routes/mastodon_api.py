@@ -216,6 +216,7 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         "emojis": [],
         "card": None,
         "poll": None,
+        "reactions": [],
     }
 
     if post.in_reply_to_id and post.parent:
@@ -270,6 +271,22 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         status["favourited"] = post.id in _liked_ids
         status["reblogged"] = post.id in _boosted_ids
         status["bookmarked"] = post.id in _bookmarked_ids
+
+    reaction_rows = db.query(
+        sqlfunc.coalesce(Like.reaction, "★"), sqlfunc.count(Like.id)
+    ).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(sqlfunc.min(Like.id)).all()
+    my_reaction = None
+    if viewer:
+        my_like = db.query(Like).filter_by(user_id=viewer.id, post_id=post.id).first()
+        if my_like:
+            my_reaction = my_like.reaction or "★"
+    for react, cnt in reaction_rows:
+        name = react or "★"
+        status["reactions"].append({
+            "name": name,
+            "count": cnt,
+            "me": name == my_reaction,
+        })
 
     return status
 
@@ -1234,6 +1251,86 @@ def unbookmark_status(status_id: str, request: Request, db: SASession = Depends(
 
 
 # ---------------------------------------------------------------------------
+# POST /api/v1/statuses/:id/react/:name  (Glitch-soc)
+# ---------------------------------------------------------------------------
+@router.post("/statuses/{status_id}/react/{name}")
+def react_to_status(status_id: str, name: str, request: Request, db: SASession = Depends(get_db)):
+    user = _require_bearer(request, db)
+    post = db.query(Post).filter_by(id=int(status_id)).first()
+    if not post or post.is_deleted:
+        raise HTTPException(status_code=404, detail="Record not found")
+
+    from app.routes.api import api_like_post as _like_fn
+    from starlette.background import BackgroundTasks
+
+    existing = db.query(Like).filter_by(user_id=user.id, post_id=post.id).first()
+    if existing:
+        if existing.reaction == name:
+            return _status_json(post, db, viewer=user)
+        existing.reaction = name
+        db.commit()
+    else:
+        like = Like(user_id=user.id, post_id=post.id, reaction=name)
+        db.add(like)
+        db.commit()
+
+    post = db.query(Post).filter_by(id=int(status_id)).first()
+    _liked_ids = {post.id}
+    _boosted_ids = {post.id} if db.query(Boost).filter_by(user_id=user.id, post_id=post.id).first() else set()
+    _bookmarked_ids = {post.id} if db.query(Bookmark).filter_by(user_id=user.id, post_id=post.id).first() else set()
+    return _status_json(post, db, viewer=user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/statuses/:id/unreact/:name  (Glitch-soc)
+# ---------------------------------------------------------------------------
+@router.post("/statuses/{status_id}/unreact/{name}")
+def unreact_to_status(status_id: str, name: str, request: Request, db: SASession = Depends(get_db)):
+    user = _require_bearer(request, db)
+    post = db.query(Post).filter_by(id=int(status_id)).first()
+    if not post or post.is_deleted:
+        raise HTTPException(status_code=404, detail="Record not found")
+
+    existing = db.query(Like).filter_by(user_id=user.id, post_id=post.id).first()
+    if existing and existing.reaction == name:
+        db.delete(existing)
+        db.commit()
+
+    post = db.query(Post).filter_by(id=int(status_id)).first()
+    _liked_ids = {post.id} if db.query(Like).filter_by(user_id=user.id, post_id=post.id).first() else set()
+    _boosted_ids = {post.id} if db.query(Boost).filter_by(user_id=user.id, post_id=post.id).first() else set()
+    _bookmarked_ids = {post.id} if db.query(Bookmark).filter_by(user_id=user.id, post_id=post.id).first() else set()
+    return _status_json(post, db, viewer=user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/statuses/:id/reactions  (Glitch-soc)
+# ---------------------------------------------------------------------------
+@router.get("/statuses/{status_id}/reactions")
+def list_reactions(status_id: str, request: Request, db: SASession = Depends(get_db)):
+    user = _maybe_bearer(request, db)
+    post = db.query(Post).filter_by(id=int(status_id)).first()
+    if not post or post.is_deleted:
+        raise HTTPException(status_code=404, detail="Record not found")
+
+    reaction_rows = db.query(
+        Like.reaction, sqlfunc.count(Like.id), sqlfunc.min(Like.user_id)
+    ).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(sqlfunc.min(Like.id)).all()
+
+    result = []
+    for react, cnt, first_user_id in reaction_rows:
+        name = react or "★"
+        first_user = db.query(User).filter_by(id=first_user_id).first()
+        result.append({
+            "name": name,
+            "count": cnt,
+            "me": user is not None and db.query(Like).filter_by(user_id=user.id, post_id=post.id, reaction=react).first() is not None,
+            "account": _account_json(first_user, db, viewer=user) if first_user else None,
+        })
+    return result
+
+
+# ---------------------------------------------------------------------------
 # POST /api/v1/statuses/:id/mute
 # ---------------------------------------------------------------------------
 @router.post("/statuses/{status_id}/mute")
@@ -1618,6 +1715,9 @@ def mastodon_instance(db: SASession = Depends(get_db)):
                 "max_characters_per_option": 50,
                 "min_expiration": 300,
                 "max_expiration": 2629746,
+            },
+            "reactions": {
+                "max_reactions": 10,
             },
         },
         "rules": [],
