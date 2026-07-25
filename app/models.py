@@ -1,16 +1,16 @@
 import datetime
 import re
 import uuid
+import contextvars
+
 from urllib.parse import quote as _urlencode, urlparse
-from sqlalchemy import (
-    create_engine, Column, Integer, String, Text, DateTime, Boolean,
-    ForeignKey, JSON, text, Table
-)
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, ForeignKey, JSON, text, Table, inspect
 from sqlalchemy.orm import DeclarativeBase, relationship, Session
 
 from app.config.settings import DATABASE_URL, BASE_URL
 
 _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
@@ -940,9 +940,8 @@ def init_db():
 
 def _add_missing_columns():
     """Add columns that exist in SQLAlchemy models but are missing from DB tables."""
-    from sqlalchemy import inspect as sa_inspect
     try:
-        inspector = sa_inspect(engine)
+        inspector = inspect(engine)
     except Exception:
         return
     _add_cols("users", inspector, [
@@ -1016,8 +1015,7 @@ def _add_cols(table: str, inspector, cols: list[tuple[str, str]]):
         pass
 
 
-import contextvars as _cv
-_request_session: _cv.ContextVar = _cv.ContextVar("request_session", default=None)
+_request_session: contextvars.ContextVar = contextvars.ContextVar("request_session", default=None)
 
 
 def get_session():
