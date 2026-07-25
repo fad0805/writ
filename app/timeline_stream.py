@@ -124,7 +124,8 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                         _filter_cache[uid] = _load_user_filters(s, stream_users.get(uid))
                     viewer = stream_users.get(uid)
                     following_set = home_follows.get(uid, set()) | {uid}
-                    if _db_post and not should_deliver_post(_db_post, s, viewer, tl, following_set, _filter_cache[uid]):
+                    _is_boosted = bool(booster_ids)
+                    if _db_post and not should_deliver_post(_db_post, s, viewer, tl, following_set, _filter_cache[uid], is_boosted=_is_boosted):
                         continue
                 _enqueue(info["queue"], payload)
     except Exception as e:
