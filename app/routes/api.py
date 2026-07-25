@@ -1,19 +1,38 @@
 import os
+import base64
+import csv
 import re
 import json
 import io
 import asyncio
-import datetime
+from datetime import datetime, timedelta, timezone
 import uuid
 import logging
+import secrets
 import time
+import httpx
 import threading
-from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File, Depends, BackgroundTasks
-from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import desc, or_, and_, func, String
-from sqlalchemy.orm import selectinload, Session
+import traceback
+from uuid import uuid4
+import zipfile
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PushSubscription, LoginSession
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.serialization import load_pem_public_key, Encoding, PublicFormat
+from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File, Depends, BackgroundTasks
+from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse, Response, FileResponse
+from PIL import Image
+from sqlalchemy import desc, or_, and_, func, String, text, select
+from sqlalchemy.orm import selectinload, Session, joinedload
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql import JSONB
+from urllib.parse import urlparse
+
+from email.mime.text import MIMEText
+import smtplib
+
+from app.main import generate_csrf_token
+from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PushSubscription, LoginSession, ServerSetting
 from app.serializers import _post_json, _user_json
 from app.config.settings import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED, APP_ENV, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, INITIAL_OWNER_PASSWORD, SESSION_EXPIRE_DAYS
 from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _post_to_inbox, _federation_allowed, _build_reactions, _resolve_actor, _send_delete_post, _send_flag, _send_accept, _send_reject, _get_instance_actor, _validate_url
@@ -22,7 +41,7 @@ from app.core.push import send_push_to_user, VAPID_PUBLIC_KEY
 from app.core.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream, broadcast_reaction_update, add_post_stream, remove_post_stream, broadcast_notif_sound, broadcast_delete
 from app.db.database import get_session, get_db
 from app.db.mention_resolver import resolve_handles_to_ids
-from app.routes.auth import require_auth, require_active_auth, get_current_user
+from app.routes.auth import require_auth, require_active_auth, get_current_user, hash_password, verify_password, create_session, get_session_key_from_cookie, delete_session_by_key
 from app.utils.content_parser import process_post_content, extract_mentions
 from app.utils.crypto import encrypt_key, get_private_key, generate_keypair, sign_string
 from app.utils.datetime import _fmt_dt
@@ -30,7 +49,7 @@ from app.utils.emoji import EMOJI_DIR, _refresh_emoji_cache_forcibly, _emoji_url
 from app.utils.filter import _timeline_filter
 from app.utils.log import log_admin_action
 from app.utils.post import _get_descendant_ids
-from app.utils.storage import LocalStorage
+from app.utils.storage import LocalStorage, get_storage
 
 # Auth rate limiting (IP-based, in-memory)
 _auth_failures: dict[str, list[float]] = {}
@@ -83,7 +102,6 @@ VIDEO_MIME_TYPES = {"video/mp4", "video/webm", "video/ogg", "video/quicktime"}
 
 
 def _validate_upload(file: UploadFile, *, allow_video: bool = True, max_size: int = MAX_IMAGE_SIZE, label: str = "file"):
-    import os
     ext = os.path.splitext(file.filename or "file")[1].lower() if file.filename else ""
     is_video = ext in ALLOWED_VIDEO_EXTENSIONS
     is_image = ext in ALLOWED_IMAGE_EXTENSIONS
@@ -105,7 +123,6 @@ def _validate_upload(file: UploadFile, *, allow_video: bool = True, max_size: in
 
 
 def _validate_media_url(url: str) -> bool:
-    from urllib.parse import urlparse
     if not url or not isinstance(url, str):
         return False
     parsed = urlparse(url)
@@ -148,9 +165,7 @@ def _can_view(post, viewer, session):
 
 def _json_array_has_user(column, user_id):
     """JSON 배열 컬럼에 user_id가 정확히 포함되어 있는지 확인"""
-    from sqlalchemy.dialects import postgresql
     if isinstance(column.type, postgresql.JSONB):
-        from sqlalchemy.dialects.postgresql import JSONB
         return column.cast(JSONB).op('@>')(func.json_build_array(user_id).cast(JSONB))
     else:
         # SQLite fallback: cast to text and check containment via LIKE
@@ -194,12 +209,10 @@ def api_me(request: Request, s: Session = Depends(get_db)):
     if not user:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
     result = _user_json(user)
-    from app.models import ServerSetting as _SS
-    _settings = _SS.get(s)
+    _settings = ServerSetting.get(s)
     if not _settings.enable_reactions:
         result["enable_reactions"] = False
     resp = JSONResponse(result)
-    from app.main import generate_csrf_token
     secure = APP_ENV != "development"
     resp.set_cookie(key="csrf_token", value=generate_csrf_token(user.id), max_age=30*86400, httponly=False, samesite="lax", path="/", secure=secure)
     return resp
@@ -207,7 +220,6 @@ def api_me(request: Request, s: Session = Depends(get_db)):
 
 @router.post("/auth/login")
 def api_login(request: Request, username: str = Form(...), password: str = Form(...)):
-    from app.routes.auth import verify_password, create_session
     try:
         client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
         backoff = _get_auth_backoff_seconds(client_ip)
@@ -252,7 +264,6 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
                 s.commit()
             log_admin_action(db_user.id, db_user.username, "login", ip_address=client_ip)
             resp = JSONResponse(_user_json(db_user))
-            from app.main import generate_csrf_token
             secure = APP_ENV != "development"
             resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/", secure=secure)
             resp.set_cookie(key="csrf_token", value=generate_csrf_token(db_user.id), max_age=3600, httponly=False, samesite="lax", path="/", secure=secure)
@@ -265,7 +276,6 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
 
 
 def _send_verification_email(u: User):
-    import secrets
     if not SMTP_SERVER:
         if APP_ENV == "development":
             u.email_verified = True
@@ -276,8 +286,6 @@ def _send_verification_email(u: User):
     u.verification_token = token
     verify_url = f"{BASE_URL}/verify-email?token={token}"
     try:
-        from email.mime.text import MIMEText
-        import smtplib
         msg = MIMEText(
             f"안녕하세요, {u.display_name}님.\n\n"
             f"WRIT 계정 생성을 환영합니다. 아래 링크를 클릭하여 이메일 인증을 완료해 주세요.\n\n"
@@ -309,7 +317,6 @@ def _send_verification_email(u: User):
 @router.post("/auth/register")
 def api_register(request: Request, username: str = Form(...), password: str = Form(...),
                  display_name: str = Form(""), email: str = Form(...)):
-    from app.routes.auth import hash_password
     client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
     if not _check_auth_rate_limit(client_ip):
         raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
@@ -415,7 +422,6 @@ def api_resend_verification(request: Request, email: str = Form(...)):
 
 @router.post("/auth/forgot-password")
 def api_forgot_password(request: Request, email: str = Form(...)):
-    import secrets
     client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
     if not _check_auth_rate_limit(client_ip):
         raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
@@ -428,8 +434,6 @@ def api_forgot_password(request: Request, email: str = Form(...)):
         s.commit()
         reset_url = f"{BASE_URL}/reset-password?token={token}"
         try:
-            from email.mime.text import MIMEText
-            import smtplib
             msg = MIMEText(
                 f"안녕하세요, {u.display_name or u.username}님.\n\n"
                 f"WRIT 비밀번호 재설정 요청을 받았습니다.\n"
@@ -461,7 +465,6 @@ def api_forgot_password(request: Request, email: str = Form(...)):
 
 @router.post("/auth/reset-password")
 def api_reset_password(request: Request, token: str = Form(...), password: str = Form(...)):
-    from app.routes.auth import hash_password
     with get_session() as s:
         u = s.query(User).filter_by(reset_token=token, is_remote=False).first()
         if not u:
@@ -475,7 +478,6 @@ def api_reset_password(request: Request, token: str = Form(...), password: str =
 
 @router.post("/auth/logout")
 def api_logout(request: Request):
-    from app.routes.auth import get_session_key_from_cookie, delete_session_by_key
     session_key = get_session_key_from_cookie(request)
     if session_key:
         delete_session_by_key(session_key)
@@ -603,7 +605,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         ).all()}
         # Batch load latest boost per post
         _booster_map = {}
-        _cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3)
+        _cutoff = datetime.now(timezone.utc) - timedelta(hours=3)
         for b in session.query(Boost).filter(
             Boost.post_id.in_(post_ids), Boost.created_at > _cutoff
         ).order_by(Boost.created_at.desc()).all():
@@ -617,10 +619,9 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         # Batch load reactions (GROUP BY in SQL)
         _reactions_map = {}
         _default_react = "★"
-        from sqlalchemy import func as _func
         _reaction_rows = session.query(
-            Like.post_id, _func.coalesce(Like.reaction, _default_react), _func.count(Like.id)
-        ).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, _func.min(Like.id)).all()
+            Like.post_id, func.coalesce(Like.reaction, _default_react), func.count(Like.id)
+        ).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all()
         for pid, react, cnt in _reaction_rows:
             if pid not in _reactions_map:
                 _reactions_map[pid] = {}
@@ -632,12 +633,11 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 all_mentioned_ids.update(p.mentioned_user_ids)
         _mentioned_users_map = {}
         if all_mentioned_ids:
-            from urllib.parse import urlparse as _urlparse
             _mentioned_users = {}
             for _mu in session.query(User).filter(User.id.in_(all_mentioned_ids)).all():
                 if _mu.is_remote and _mu.remote_url:
                     _name = _mu.username.split("@")[0]
-                    _domain = _urlparse(_mu.remote_url).hostname or ""
+                    _domain = urlparse(_mu.remote_url).hostname or ""
                     _mentioned_users[_mu.id] = f"{_name}@{_domain}"
                 else:
                     _mentioned_users[_mu.id] = _mu.username
@@ -851,8 +851,7 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                     _remote_mentioned = True
             if not _remote_mentioned:
                 broadcast_to_followers(user, create_activity)
-            import re as _re
-            remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', plain_content or ""))
+            remote_handles = set(re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', plain_content or ""))
             _resolved_handles = []
             for handle in remote_handles:
                 remote_user = ap_s.query(User).filter(
@@ -874,8 +873,7 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                         except Exception:
                             continue
                     if not resolved:
-                        import httpx as _httpx
-                        wf = _httpx.get(
+                        wf = httpx.get(
                             f"https://{r_domain}/.well-known/webfinger?resource=acct:{handle}",
                             timeout=5,
                         )
@@ -903,12 +901,11 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
         else:
             broadcast_to_followers(user, create_activity)
             # 답글인 경우 부모 작성자의 리모트 팔로워에게도 전달
-            from urllib.parse import urlparse as _urlparse
             if post.in_reply_to_id and post.parent:
                 parent_author = post.parent.author
                 if parent_author and parent_author.is_remote:
                     inbox = parent_author.inbox_url
-                    if inbox and _federation_allowed(_urlparse(inbox).hostname or ""):
+                    if inbox and _federation_allowed(urlparse(inbox).hostname or ""):
                         _post_to_inbox(inbox, create_activity, user)
                 elif parent_author and not parent_author.is_remote:
                     pf_follows = ap_s.query(Follow).filter(
@@ -919,7 +916,7 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                         inbox = pf.follower.shared_inbox_url or pf.follower.inbox_url
                         if not inbox:
                             continue
-                        domain = _urlparse(inbox).hostname or ""
+                        domain = urlparse(inbox).hostname or ""
                         if domain and not _federation_allowed(domain):
                             continue
                         _post_to_inbox(inbox, create_activity, user)
@@ -945,8 +942,7 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                         _post_to_inbox(inbox, create_activity, user)
                         delivered_domains.add(domain)
 
-            import re as _re
-            remote_handles = set(_re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', plain_content or ""))
+            remote_handles = set(re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', plain_content or ""))
             for handle in remote_handles:
                 remote_user = ap_s.query(User).filter(
                     User.username == handle, User.is_remote == True
@@ -971,8 +967,7 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                             except Exception:
                                 continue
                         if not resolved:
-                            import httpx as _httpx
-                            wf = _httpx.get(
+                            wf = httpx.get(
                                 f"https://{r_domain}/.well-known/webfinger?resource=acct:{handle}",
                                 timeout=5,
                             )
@@ -1098,7 +1093,6 @@ def _do_create_post(
         _author = s.query(User).filter_by(id=user_id).first()
         if not _author:
             raise HTTPException(status_code=404, detail="User not found")
-        import secrets
         post_number = secrets.token_hex(4)
         author_is_sensitive = user_sensitive
         if parent_id:
@@ -1119,14 +1113,13 @@ def _do_create_post(
             quote_of_ap_id=quote_of_ap_id,
             quote_of_id=quote_of_id,
         )
-        import json as _json
         if link_preview:
             try:
-                post.link_preview = _json.loads(link_preview)
-            except (_json.JSONDecodeError, TypeError):
+                post.link_preview = json.loads(link_preview)
+            except (json.JSONDecodeError, TypeError):
                 pass
         try:
-            media = _json.loads(media_attachments)
+            media = json.loads(media_attachments)
             if isinstance(media, list):
                 cleaned = []
                 for m in media[:16]:
@@ -1136,19 +1129,19 @@ def _do_create_post(
                     elif isinstance(m, dict) and _validate_media_url(m.get("url", "")):
                         cleaned.append({"url": m["url"], "type": m.get("type", "image"), "alt": m.get("alt", "")})
                 post.media_attachments = cleaned
-        except (_json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError):
             pass
         if poll_options:
             try:
-                opts = _json.loads(poll_options)
+                opts = json.loads(poll_options)
                 if isinstance(opts, list) and 2 <= len(opts) <= 10 and all(isinstance(o, str) and o.strip() for o in opts):
-                    now = datetime.datetime.now(datetime.timezone.utc)
-                    expires_at = (now + datetime.timedelta(minutes=poll_expires_in)).isoformat() if poll_expires_in > 0 else None
+                    now = datetime.now(timezone.utc)
+                    expires_at = (now + timedelta(minutes=poll_expires_in)).isoformat() if poll_expires_in > 0 else None
                     post.poll_data = {
                         "options": [{"text": o.strip(), "votes_count": 0} for o in opts],
                         "expires_at": expires_at,
                     }
-            except (_json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError):
                 pass
         s.add(post)
         s.flush()
@@ -1284,7 +1277,7 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
                 note_data.pop("@context", None)
                 note_data.pop("url", None)
                 note_data["atomUri"] = post.ap_id
-                note_data["updated"] = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+                note_data["updated"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
                 note_data.setdefault("summary", None)
                 note_data.setdefault("sensitive", False)
                 note_data.setdefault("attachment", [])
@@ -1379,7 +1372,6 @@ def api_delete_post(request: Request, post_id: int):
     if media or (ap_id and ap_id.startswith("http") and not is_remote_author):
         def _background(_pid=post_id, _media=media, _ap_id=ap_id, _remote=is_remote_author, _user=user):
             if _media:
-                from app.utils.storage import get_storage
                 storage = get_storage()
                 for m in _media:
                     if isinstance(m, dict) and m.get("url"):
@@ -1389,9 +1381,8 @@ def api_delete_post(request: Request, post_id: int):
                             pass
             if _ap_id and _ap_id.startswith("http") and not _remote:
                 try:
-                    from app.models import get_session as _gs, Post as _Po
-                    with _gs() as _s:
-                        p = _s.query(_Po).get(_pid)
+                    with get_session() as _s:
+                        p = _s.query(Post).get(_pid)
                         if p:
                             _send_delete_post(p, _user)
                         else:
@@ -1409,7 +1400,7 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
     if target_type not in ("post", "novel", "episode"):
         raise HTTPException(status_code=400, detail="Invalid target_type")
     if forward_to_remote:
-        _cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=1)
+        _cutoff = datetime.now(timezone.utc) - timedelta(minutes=1)
         with get_session() as _s:
             _recent = _s.query(Report).filter(
                 Report.reporter_id == user.id,
@@ -1531,9 +1522,8 @@ def api_like_post(request: Request, background_tasks: BackgroundTasks, post_id: 
                     if keep_id:
                         s.query(Like).filter(Like.user_id == user.id, Like.post_id == post_id, Like.id != keep_id[0]).delete(synchronize_session=False)
                     s.commit()
-                    from sqlalchemy import func as _sqlfunc
                     _reactions = {}
-                    for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
+                    for _react, _cnt in s.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
                         _reactions[_react or "★"] = _cnt
                     broadcast_reaction_update(post_id, _reactions)
                     if post.author_id != user.id:
@@ -1594,9 +1584,8 @@ def api_unlike_post(request: Request, background_tasks: BackgroundTasks, post_id
                         from_user_id=user.id, notification_type="like", post_id=post_id
                     ).delete()
                     s.commit()
-                    from sqlalchemy import func as _sqlfunc
                     _reactions = {}
-                    for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
+                    for _react, _cnt in s.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
                         _reactions[_react or "★"] = _cnt
                     broadcast_reaction_update(post_id, _reactions)
                     broadcast_refresh_notifs(post.author_id)
@@ -1942,9 +1931,8 @@ def api_react_post(request: Request, background_tasks: BackgroundTasks, post_id:
                 if keep_id:
                     s.query(Like).filter(Like.user_id == user.id, Like.post_id == post_id, Like.id != keep_id[0]).delete(synchronize_session=False)
                 s.commit()
-                from sqlalchemy import func as _sqlfunc
                 _reactions = {}
-                for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
+                for _react, _cnt in s.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
                     _reactions[_react or "★"] = _cnt
                 broadcast_reaction_update(post_id, _reactions)
                 if post_author_id != user.id:
@@ -2017,9 +2005,8 @@ def api_unreact_post(request: Request, background_tasks: BackgroundTasks, post_i
                         from_user_id=user.id, notification_type="like", post_id=post_id
                     ).delete()
                     s.commit()
-                    from sqlalchemy import func as _sqlfunc
                     _reactions = {}
-                    for _react, _cnt in s.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
+                    for _react, _cnt in s.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
                         _reactions[_react or "★"] = _cnt
                     broadcast_reaction_update(post_id, _reactions)
                     broadcast_refresh_notifs(post.author_id)
@@ -2058,21 +2045,19 @@ def api_reaction_users(request: Request, post_id: int, emoji: str = ""):
             raise HTTPException(status_code=404, detail="Post not found")
         if not _can_view(post, user, s):
             raise HTTPException(status_code=404, detail="Post not found")
-        from app.models import Like as _Like
-        q = s.query(_Like).filter(_Like.post_id == post_id)
+        q = s.query(Like).filter(Like.post_id == post_id)
         if emoji == "★":
-            q = q.filter((_Like.reaction.is_(None)) | (_Like.reaction == "★"))
+            q = q.filter((Like.reaction.is_(None)) | (Like.reaction == "★"))
         elif emoji:
-            q = q.filter(_Like.reaction == emoji)
+            q = q.filter(Like.reaction == emoji)
         else:
-            q = q.filter(_Like.reaction.is_(None))
-        like_rows = q.order_by(_Like.id.desc()).limit(20).all()
+            q = q.filter(Like.reaction.is_(None))
+        like_rows = q.order_by(Like.id.desc()).limit(20).all()
         user_ids = list(dict.fromkeys(l.user_id for l in like_rows))
         if not user_ids:
             return {"users": []}
         users = {u.id: u for u in s.query(User).filter(User.id.in_(user_ids)).all()}
-        from app.serializers import _user_json as _uj
-        return {"users": [_uj(users[uid]) for uid in user_ids if uid in users]}
+        return {"users": [_user_json(users[uid]) for uid in user_ids if uid in users]}
 
 
 @router.post("/posts/{post_id}/vote")
@@ -2091,7 +2076,7 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
         expires_at = post.poll_data.get("expires_at")
         if expires_at:
             try:
-                if datetime.datetime.fromisoformat(expires_at) < datetime.datetime.now(datetime.timezone.utc):
+                if datetime.fromisoformat(expires_at) < datetime.now(timezone.utc):
                     raise HTTPException(status_code=400, detail="Poll has ended")
             except (ValueError, TypeError):
                 pass
@@ -2125,7 +2110,6 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
                 remote_vote_data = (post.ap_id, post.author.actor_uri(), inbox, options[option]["text"])
         s.commit()
     if remote_vote_data:
-        from uuid import uuid4
         ap_id, author_uri, inbox, option_text = remote_vote_data
         vote_activity = {
             "@context": "https://www.w3.org/ns/activitystreams",
@@ -2270,7 +2254,6 @@ def api_unpin_post(request: Request, post_id: int):
 def api_pin_series(request: Request, novel_id: int):
     user = require_active_auth(request)
     with get_session() as s:
-        from app.models import Novel
         novel = s.query(Novel).filter_by(id=novel_id).first()
         if not novel or novel.author_id != user.id:
             raise HTTPException(status_code=404, detail="Series not found")
@@ -2394,7 +2377,6 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             actor_url = f"https://{remote_domain}/@{remote_user}"
             # Fire-and-forget: don't block profile load on remote actor refresh
             try:
-                import threading
                 threading.Thread(target=_resolve_actor, args=(actor_url,), daemon=True).start()
             except Exception:
                 pass
@@ -2428,7 +2410,6 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                 "pinned_series_data": [],
             }
         boosted_ids = [b.post_id for b in s.query(Boost).filter_by(user_id=profile.id).all()]
-        from sqlalchemy import select
         boost_subq = select(Boost.created_at).where(
             Boost.user_id == profile.id, Boost.post_id == Post.id
         ).correlate(Post).scalar_subquery()
@@ -2522,16 +2503,15 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             _my_reaction_map = {}
             for l in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(_all_post_ids), Like.reaction.isnot(None)).all():
                 _my_reaction_map[l.post_id] = l.reaction
-            from sqlalchemy import func as _func
             _reactions_map = {}
-            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(_all_post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, _func.min(Like.id)).all():
+            for pid, react, cnt in s.query(Like.post_id, func.coalesce(Like.reaction, "★"), func.count(Like.id)).filter(Like.post_id.in_(_all_post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all():
                 if pid not in _reactions_map:
                     _reactions_map[pid] = {}
                 _reactions_map[pid][react] = cnt
             # Batch-load booster info to avoid N+1 queries in _post_json
             # On profile page, only show boosts by the profile user
             _booster_map = {}
-            _three_hours_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=10800)
+            _three_hours_ago = datetime.now(timezone.utc) - timedelta(seconds=10800)
             _boost_rows = s.query(Boost).filter(
                 Boost.post_id.in_(_all_post_ids),
                 Boost.user_id == profile.id,
@@ -2549,12 +2529,11 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                     all_mentioned_ids.update(pp.mentioned_user_ids)
             _mentioned_users_map = {}
             if all_mentioned_ids:
-                from urllib.parse import urlparse as _urlparse
                 _mu = {}
                 for _um in s.query(User).filter(User.id.in_(all_mentioned_ids)).all():
                     if _um.is_remote and _um.remote_url:
                         _name = _um.username.split("@")[0]
-                        _domain = _urlparse(_um.remote_url).hostname or ""
+                        _domain = urlparse(_um.remote_url).hostname or ""
                         _mu[_um.id] = f"{_name}@{_domain}"
                     else:
                         _mu[_um.id] = _um.username
@@ -2602,7 +2581,6 @@ def api_user_media(request: Request, username: str, limit: int = Query(12), offs
         profile = s.query(User).filter_by(username=username).first()
         if not profile:
             raise HTTPException(status_code=404, detail="User not found")
-        from sqlalchemy import text
         # Use raw SQL to filter non-empty media_attachments at DB level (cast to text for cross-DB compatibility)
         rows = s.execute(
             text("SELECT id FROM posts WHERE author_id = :aid AND is_deleted = FALSE AND CAST(media_attachments AS TEXT) NOT IN ('null', '[]') ORDER BY created_at DESC LIMIT :lim OFFSET :off"),
@@ -2891,7 +2869,7 @@ def api_direct_conversation(request: Request, other_id: int):
 @router.get("/notifications/direct-threads")
 def api_direct_threads(request: Request):
     user = require_auth(request)
-    three_months_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=90)
+    three_months_ago = datetime.now(timezone.utc) - timedelta(days=90)
     with get_session() as s:
         posts = s.query(Post).filter(
             Post.visibility == "mention",
@@ -2928,7 +2906,7 @@ def api_direct_threads(request: Request):
         result = []
         for aid, data in author_map.items():
             u = data["user"]
-            sorted_msgs = sorted(data["all_msgs"], key=lambda x: x.created_at or datetime.datetime.min, reverse=True)
+            sorted_msgs = sorted(data["all_msgs"], key=lambda x: x.created_at or datetime.min, reverse=True)
             previews = []
             for msg in sorted_msgs[:3]:
                 text = re.sub(r'<[^>]*>', '', msg.content or "")
@@ -2943,7 +2921,7 @@ def api_direct_threads(request: Request):
 
 
 def _generate_poll_end_notifications(user_id: int, session):
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.now(timezone.utc)
     # 빠른 확인: 사용자의 poll이 없으면 skip
     has_any_poll = session.query(Post.id).filter(
         Post.poll_data.isnot(None), Post.is_deleted == False,
@@ -2979,9 +2957,9 @@ def _generate_poll_end_notifications(user_id: int, session):
         if not expires_at:
             continue
         try:
-            exp = datetime.datetime.fromisoformat(expires_at)
+            exp = datetime.fromisoformat(expires_at)
             if exp.tzinfo is None:
-                exp = exp.replace(tzinfo=datetime.timezone.utc)
+                exp = exp.replace(tzinfo=timezone.utc)
             if exp > now:
                 continue
         except (ValueError, TypeError):
@@ -2992,13 +2970,12 @@ def _generate_poll_end_notifications(user_id: int, session):
             .first()
         )
         if not existing:
-            import json as _json
             session.add(Notification(
                 user_id=user_id,
                 from_user_id=post.author_id,
                 notification_type="poll_ended",
                 post_id=post.id,
-                metadata_json=_json.dumps({"is_author": post.author_id == user_id}),
+                metadata_json=json.dumps({"is_author": post.author_id == user_id}),
             ))
     session.commit()
 
@@ -3056,8 +3033,7 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
                 _booster_users = {u.id: u for u in s.query(User).filter(User.id.in_(set(_booster_map.values()))).all()}
                 _booster_map = {pid: _booster_users.get(uid) for pid, uid in _booster_map.items()}
 
-            from sqlalchemy import func as _func
-            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(notif_post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, _func.min(Like.id)).all():
+            for pid, react, cnt in s.query(Like.post_id, func.coalesce(Like.reaction, "★"), func.count(Like.id)).filter(Like.post_id.in_(notif_post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all():
                 if pid not in _reactions_map:
                     _reactions_map[pid] = {}
                 _reactions_map[pid][react] = cnt
@@ -3069,12 +3045,11 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
                     all_mentioned_ids.update(p.mentioned_user_ids)
 
             if all_mentioned_ids:
-                from urllib.parse import urlparse as _urlparse
                 _mentioned_users = {}
                 for _um in s.query(User).filter(User.id.in_(all_mentioned_ids)).all():
                     if _um.is_remote and _um.remote_url:
                         _name = _um.username.split("@")[0]
-                        _domain = _urlparse(_um.remote_url).hostname or ""
+                        _domain = urlparse(_um.remote_url).hostname or ""
                         _mentioned_users[_um.id] = f"{_name}@{_domain}"
                     else:
                         _mentioned_users[_um.id] = _um.username
@@ -3086,10 +3061,9 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
 
         result = []
         for n in notifs:
-            import json as _json
             meta = {}
             if n.metadata_json:
-                try: meta = _json.loads(n.metadata_json)
+                try: meta = json.loads(n.metadata_json)
                 except: pass
             if n.notification_type == "like":
                 _post_author = n.post.author if n.post else None
@@ -3301,37 +3275,32 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
         raise HTTPException(status_code=400, detail="Title cannot be empty")
     if visibility not in ("public", "unlisted", "private"):
         visibility = "public"
-    from app.utils.storage import get_storage
     storage = get_storage()
     cover_url = ""
     if cover_image and cover_image.filename:
-        from uuid import uuid4
-        from PIL import Image as PILImage
-        import io
         ext, is_image, is_video = _validate_upload(cover_image, allow_video=False, max_size=MAX_AVATAR_SIZE, label="커버 이미지")
         ct = cover_image.content_type or ""
         if "gif" in ct:
             ext = "gif"
         key = f"series/covers/{uuid4().hex[:16]}.{ext}"
-        img = PILImage.open(cover_image.file)
+        img = Image.open(cover_image.file)
         target_w, target_h = 120, 160
         img_w, img_h = img.size
         ratio = max(target_w / img_w, target_h / img_h)
         new_w = int(img_w * ratio)
         new_h = int(img_h * ratio)
-        img = img.resize((new_w, new_h), PILImage.Resampling.LANCZOS)
+        img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
         left = (new_w - target_w) // 2
         top = (new_h - target_h) // 2
         img = img.crop((left, top, left + target_w, top + target_h))
         if img.mode in ("RGBA", "P"):
-            bg = PILImage.new("RGB", img.size, (255, 255, 255))
+            bg = Image.new("RGB", img.size, (255, 255, 255))
             bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
             img = bg
         out = io.BytesIO()
         img.save(out, format="WEBP" if ext != "gif" else "GIF", quality=90)
         cover_url = storage.save(key, out.getvalue(), f"image/{ext}")
     with get_session() as s:
-        import secrets
         novel_number = secrets.token_hex(4)
         novel_status = status if status in ("ongoing", "hiatus", "discontinued", "completed") else "ongoing"
         novel = Novel(author_id=user.id, title=title, description=description, tags=tags,
@@ -3411,30 +3380,26 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
         raise HTTPException(status_code=400, detail="Title cannot be empty")
     if visibility not in ("public", "unlisted", "private"):
         visibility = "public"
-    from app.utils.storage import get_storage
     storage = get_storage()
     cover_url = ""
     if cover_image and cover_image.filename:
-        from uuid import uuid4
-        from PIL import Image as PILImage
-        import io
         ext, is_image, is_video = _validate_upload(cover_image, allow_video=False, max_size=MAX_AVATAR_SIZE, label="커버 이미지")
         ct = cover_image.content_type or ""
         if "gif" in ct:
             ext = "gif"
         key = f"series/covers/{uuid4().hex[:16]}.{ext}"
-        img = PILImage.open(cover_image.file)
+        img = Image.open(cover_image.file)
         target_w, target_h = 120, 160
         img_w, img_h = img.size
         ratio = max(target_w / img_w, target_h / img_h)
         new_w = int(img_w * ratio)
         new_h = int(img_h * ratio)
-        img = img.resize((new_w, new_h), PILImage.Resampling.LANCZOS)
+        img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
         left = (new_w - target_w) // 2
         top = (new_h - target_h) // 2
         img = img.crop((left, top, left + target_w, top + target_h))
         if img.mode in ("RGBA", "P"):
-            bg = PILImage.new("RGB", img.size, (255, 255, 255))
+            bg = Image.new("RGB", img.size, (255, 255, 255))
             bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
             img = bg
         out = io.BytesIO()
@@ -3489,7 +3454,6 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
         s.add(episode)
         s.flush()
         if announce:
-            import secrets
             parts = []
             if announce_comment:
                 parts.append(announce_comment)
@@ -3537,7 +3501,6 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
             s.commit()
 
         # Notify series followers
-        import json
         followers = s.query(SeriesFollow).filter_by(novel_id=novel.id).all()
         for sf in followers:
             if sf.user_id != user.id:
@@ -3593,7 +3556,6 @@ def api_get_episode(request: Request, novel_id: int, episode_id: int):
             next_ep = next_ep.filter(Episode.is_published == True)
         next_ep = next_ep.order_by(Episode.episode_number).first()
         if user and not is_mine:
-            from datetime import datetime
             today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
             existing_view = s.query(EpisodeView).filter(
                 EpisodeView.user_id == user.id,
@@ -3635,7 +3597,6 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
         episode.is_published = is_published
 
         if announce:
-            import secrets
             parts = []
             if announce_comment:
                 parts.append(announce_comment)
@@ -3869,8 +3830,6 @@ def api_toggle_pin_notice(request: Request, novel_id: int, notice_id: int):
 
 
 def _cleanup_avatars():
-    import time
-    from app.utils.storage import get_storage
     storage = get_storage()
     if not isinstance(storage, LocalStorage):
         return
@@ -3919,8 +3878,7 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
         db.enable_reactions = enable_reactions
         db.post_lifetime = post_lifetime
         try:
-            import json as _json
-            exc = _json.loads(post_lifetime_exceptions)
+            exc = json.loads(post_lifetime_exceptions)
             if isinstance(exc, list):
                 db.post_lifetime_exceptions = exc
         except Exception:
@@ -3934,7 +3892,6 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
 @router.post("/settings/change-email")
 def api_settings_change_email(request: Request, email: str = Form(...)):
     user = require_auth(request)
-    import re
     if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
         raise HTTPException(status_code=400, detail="Invalid email address")
     domain = email.split("@")[-1] if "@" in email else ""
@@ -3974,16 +3931,12 @@ MAX_VIDEO_SIZE = 26214400
 @router.post("/media/upload")
 def api_upload_media(request: Request, file: UploadFile = File(...)):
     user = require_active_auth(request)
-    from app.utils.storage import get_storage
     storage = get_storage()
-    from PIL import Image as PILImage
-    import io, os
     ext, is_image, is_video = _validate_upload(file, allow_video=True, max_size=MAX_IMAGE_SIZE, label="미디어")
-    from uuid import uuid4
     name = f"{uuid4().hex}.webp" if is_image else f"{uuid4().hex}{ext}"
     key = f"media/{name}"
     if is_image:
-        img = PILImage.open(io.BytesIO(file.file.read()))
+        img = Image.open(io.BytesIO(file.file.read()))
         buf = io.BytesIO()
         img.save(buf, "WEBP", quality=85, lossless=(img.mode == "RGBA"))
         storage.save(key, buf.getvalue())
@@ -3996,7 +3949,6 @@ def api_upload_media(request: Request, file: UploadFile = File(...)):
 
 @router.post("/settings/change-password")
 def api_settings_change_password(request: Request, current_password: str = Form(...), new_password: str = Form(...)):
-    from app.routes.auth import hash_password, verify_password
     user = require_auth(request)
     if len(new_password) < 6:
         raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
@@ -4033,16 +3985,15 @@ def api_migrate_account(request: Request, target_username: str = Form(...), seri
         if getattr(target, 'is_deactivated', False) or getattr(target, 'moved_to', ''):
             raise HTTPException(status_code=400, detail="대상 계정이 이미 이전된 계정입니다.")
 
-        import json as _json
         try:
-            sids = _json.loads(series_ids)
+            sids = json.loads(series_ids)
             if not isinstance(sids, list):
                 sids = []
-        except (_json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError):
             sids = []
 
         # Notify target user for approval
-        meta = _json.dumps({
+        meta = json.dumps({
             "type": "migrate_request",
             "from_user_id": user.id,
             "from_username": user.username,
@@ -4117,12 +4068,11 @@ def api_reject_migrate(request: Request, notification_id: int = Form(...)):
 @router.post("/settings/aliases")
 def api_set_aliases(request: Request, aliases: str = Form("[]")):
     user = require_auth(request)
-    import json as _json
     try:
-        parsed = _json.loads(aliases)
+        parsed = json.loads(aliases)
         if not isinstance(parsed, list):
             parsed = []
-    except (_json.JSONDecodeError, TypeError):
+    except (json.JSONDecodeError, TypeError):
         parsed = []
     parsed = [a.strip() for a in parsed if isinstance(a, str) and a.strip()]
     own_handle = f"{user.username}@{_domain_from_actor(user)}"
@@ -4167,7 +4117,6 @@ def api_reactivate_account(request: Request):
 
 @router.post("/settings/delete-account")
 def api_delete_account(request: Request, password: str = Form(...), confirm: str = Form(...)):
-    from app.routes.auth import verify_password
     user = require_auth(request)
     if user.is_admin:
         raise HTTPException(status_code=400, detail="관리자 계정은 탈퇴할 수 없습니다.")
@@ -4183,7 +4132,6 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
             raise HTTPException(status_code=400, detail="비밀번호가 올바르지 않습니다.")
 
         # Broadcast Delete to all related remote servers BEFORE deleting data
-        import json as _json
         _actor_uri = db.actor_uri()
         # Collect all remote user IDs that have interacted with this user
         _interacted = set()
@@ -4312,16 +4260,13 @@ def _domain_from_actor(u) -> str:
     if not u:
         return ""
     if u.is_remote and u.remote_url:
-        from urllib.parse import urlparse
         return urlparse(u.remote_url).hostname or ""
-    from urllib.parse import urlparse
     return urlparse(BASE_URL).hostname or ""
 
 
 @router.get("/settings/export/{export_type}")
 def api_export_account(request: Request, export_type: str):
     user = require_auth(request)
-    import csv, io
     buf = io.StringIO()
     w = csv.writer(buf)
     with get_session() as s:
@@ -4380,7 +4325,6 @@ def api_export_account(request: Request, export_type: str):
                 w.writerow([p.id, p.content or "", str(p.created_at)])
         else:
             raise HTTPException(status_code=400, detail="Invalid type")
-    from fastapi.responses import PlainTextResponse
     return PlainTextResponse(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={export_type}.csv"})
 
 
@@ -4417,7 +4361,6 @@ def api_export_data(request: Request):
 @router.get("/settings/export-archive")
 def api_export_archive(request: Request):
     user = require_auth(request)
-    import zipfile, json as _json
     buf = io.BytesIO()
     with get_session() as s:
         posts = s.query(Post).filter_by(author_id=user.id, is_deleted=False).order_by(Post.created_at).all()
@@ -4447,8 +4390,8 @@ def api_export_archive(request: Request):
                 "episodes": episodes_data,
             })
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("posts.json", _json.dumps(posts_data, ensure_ascii=False, indent=2))
-        zf.writestr("novels.json", _json.dumps(novels_data, ensure_ascii=False, indent=2))
+        zf.writestr("posts.json", json.dumps(posts_data, ensure_ascii=False, indent=2))
+        zf.writestr("novels.json", json.dumps(novels_data, ensure_ascii=False, indent=2))
     buf.seek(0)
     return StreamingResponse(buf, media_type="application/zip",
                              headers={"Content-Disposition": f"attachment; filename=writ_archive_{user.username}.zip"})
@@ -4457,9 +4400,8 @@ def api_export_archive(request: Request):
 @router.post("/settings/import-data")
 def api_import_data(request: Request, data: str = Form(...)):
     user = require_active_auth(request)
-    import json as _json
     try:
-        payload = _json.loads(data)
+        payload = json.loads(data)
     except Exception:
         raise HTTPException(status_code=400, detail="잘못된 JSON 형식입니다.")
     imported = {"follows": 0, "mutes": 0, "blocks": 0, "bookmarks": 0, "keyword_mutes": 0}
@@ -4503,8 +4445,7 @@ def api_import_data(request: Request, data: str = Form(...)):
                 continue
             post = s.query(Post).filter(Post.ap_id == url).first()
             if not post:
-                import re as _re
-                m = _re.search(r"/post/(\d+)", url)
+                m = re.search(r"/post/(\d+)", url)
                 if m:
                     post = s.query(Post).filter_by(id=int(m.group(1))).first()
             if not post or post.is_deleted:
@@ -4543,15 +4484,13 @@ def api_archive_request(request: Request):
 
 
 def _save_profile_image(user_id: int, file: UploadFile, prefix: str, max_size: tuple[int, int], storage) -> str:
-    from PIL import Image as PILImage
-    import io
-    from uuid import uuid4
     _validate_upload(file, allow_video=False, max_size=MAX_AVATAR_SIZE, label="프로필 이미지")
     key = f"{prefix}/local/u{user_id}_{uuid4().hex[:8]}.webp"
-    img = PILImage.open(file.file)
-    img.thumbnail(max_size, PILImage.Resampling.LANCZOS)
+    img = Image.open(file.file)
+    img.thumbnail(max_size, Image.Resampling.LANCZOS)
     if img.mode in ("RGBA", "P"):
-        bg = PILImage.new("RGB", img.size, (255, 255, 255))
+        bg = Image.new("RGB", img.size, (255, 255, 255))
+
         bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
         img = bg
     out = io.BytesIO()
@@ -4564,7 +4503,6 @@ def api_update_profile(request: Request, display_name: str = Form(""), summary: 
                        image: UploadFile = File(None), header_image: UploadFile = File(None),
                        custom_fields: str = Form("[]"), profile_hashtags: str = Form("[]"),
                        remove_avatar: bool = Form(False), remove_header: bool = Form(False)):
-    from app.utils.storage import get_storage
     user = require_active_auth(request)
     storage = get_storage()
     with get_session() as s:
@@ -4597,7 +4535,6 @@ def api_update_profile(request: Request, display_name: str = Form(""), summary: 
             s.flush()
             if old:
                 storage.delete(old)
-        import json
         try:
             parsed_fields = json.loads(custom_fields)
             if isinstance(parsed_fields, list):
@@ -4637,7 +4574,6 @@ def api_by_series_number(request: Request, username: str, number: str):
 @router.post("/fetch-series")
 def api_fetch_series(request: Request, url: str = Form(...)):
     with get_session() as s:
-        import re
         m = re.match(r"(?:https?://[^/]+)?/series/(\d+)$", url)
         if m:
             novel = s.query(Novel).filter_by(id=int(m.group(1))).first()
@@ -4665,7 +4601,6 @@ def api_fetch_series(request: Request, url: str = Form(...)):
 def api_fetch_episode(request: Request, url: str = Form(...)):
     user = get_current_user(request)
     with get_session() as s:
-        import re
         m = re.match(r"(?:https?://[^/]+)?/series/(\d+)/episodes/(\d+)", url)
         if m:
             novel = s.query(Novel).filter_by(id=int(m.group(1))).first()
@@ -4785,8 +4720,7 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
             if _booster_map:
                 _booster_users = {u.id: u for u in s.query(User).filter(User.id.in_(set(_booster_map.values()))).all()}
                 _booster_map = {pid: _booster_users.get(uid) for pid, uid in _booster_map.items()}
-            from sqlalchemy import func as _func
-            for pid, react, cnt in s.query(Like.post_id, _func.coalesce(Like.reaction, "★"), _func.count(Like.id)).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, _func.min(Like.id)).all():
+            for pid, react, cnt in s.query(Like.post_id, func.coalesce(Like.reaction, "★"), func.count(Like.id)).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all():
                 if pid not in _reactions_map:
                     _reactions_map[pid] = {}
                 _reactions_map[pid][react] = cnt
@@ -4795,12 +4729,11 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
                 if p.mentioned_user_ids:
                     all_mentioned_ids.update(p.mentioned_user_ids)
             if all_mentioned_ids:
-                from urllib.parse import urlparse as _urlparse
                 _mentioned_users = {}
                 for _um in s.query(User).filter(User.id.in_(all_mentioned_ids)).all():
                     if _um.is_remote and _um.remote_url:
                         _name = _um.username.split("@")[0]
-                        _domain = _urlparse(_um.remote_url).hostname or ""
+                        _domain = urlparse(_um.remote_url).hostname or ""
                         _mentioned_users[_um.id] = f"{_name}@{_domain}"
                     else:
                         _mentioned_users[_um.id] = _um.username
@@ -4822,9 +4755,8 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
                 Novel.is_published == True,
             ), s).limit(20).all()
             if novels:
-                from sqlalchemy import func as _func2
                 novel_ids = [n.id for n in novels]
-                for nid, cnt in s.query(SeriesFollow.novel_id, _func2.count(SeriesFollow.id)).filter(SeriesFollow.novel_id.in_(novel_ids)).group_by(SeriesFollow.novel_id).all():
+                for nid, cnt in s.query(SeriesFollow.novel_id, func.count(SeriesFollow.id)).filter(SeriesFollow.novel_id.in_(novel_ids)).group_by(SeriesFollow.novel_id).all():
                     _followers_map[nid] = cnt
 
         return {
@@ -4847,7 +4779,6 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
         if len(parts) == 2 and parts[1]:
             domain = parts[1].strip().lower()
             if domain:
-                from app.models import ServerSetting, FederationBlock, AllowedServer
                 with get_session() as s_check:
                     mode = ServerSetting.get(s_check).federation_mode or "blacklist"
                     if mode == "whitelist":
@@ -4951,7 +4882,6 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 )
                 if not already_found:
                     try:
-                        import httpx
                         urls = [
                             f"https://{r_domain}/users/{r_handle}",
                             f"https://{r_domain}/@{r_handle}",
@@ -4994,8 +4924,6 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
             result["blocked_domain"] = blocked_domain
         return result
 
-
-import traceback
 
 def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
     """Fetch a remote AP object, resolve its author, save to DB, return post.
@@ -5042,7 +4970,6 @@ def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
 
 def _safe_httpx_get(url, headers=None, timeout=15, max_size=5*1024*1024):
     """HTTP GET with redirect validation and size limit."""
-    import httpx
     if not _validate_url(url):
         print(f"[SAFE_GET] blocked by _validate_url url={url}", flush=True)
         return None
@@ -5069,9 +4996,6 @@ def _safe_httpx_get(url, headers=None, timeout=15, max_size=5*1024*1024):
 
 def _ap_fetch(url, user):
     """Fetch a remote URL with HTTP Signature, return parsed JSON."""
-    from urllib.parse import urlparse
-    import re, datetime, time
-
     # Convert web URL /@username/id to AP URL /users/username/statuses/id
     original_url = url
     m = re.match(r'^(https?://[^/]+)/@(\w+(?:@\S+)?)/([\w-]+)(\?.*)?$', url)
@@ -5085,7 +5009,7 @@ def _ap_fetch(url, user):
     def _sign_and_fetch(target_url, _depth=0):
         if _depth > 2:
             return None
-        date_str = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+        date_str = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
         parsed = urlparse(target_url)
         path_with_query = parsed.path or "/"
         if parsed.query:
@@ -5150,8 +5074,7 @@ def api_unread_count(request: Request):
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
-    import time as _time
-    now = _time.time()
+    now = time.time()
     cached = _unread_cache.get(user.id)
     if cached and now - cached[1] < _UNREAD_CACHE_TTL:
         return {"count": cached[0]}
@@ -5163,7 +5086,6 @@ def api_unread_count(request: Request):
 
 def _check_fetch_domain_allowed(url: str) -> str | None:
     """Return an error message if the URL's domain is federated-blocked, else None."""
-    from urllib.parse import urlparse
     domain = urlparse(url).hostname or ""
     if domain:
         with get_session() as s:
@@ -5189,10 +5111,8 @@ def _background_fetch_outbox(url: str, user_id: int, actor_id: int):
         try:
             outbox_url = getattr(actor, "outbox_url", None) or getattr(actor, "endpoints", {}).get("sharedInbox", "")
             if not outbox_url:
-                import time
-                from urllib.parse import urlparse as _up
-                date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
-                parsed = _up(url)
+                date = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+                parsed = urlparse(url)
                 created = int(time.time())
                 ss = f"(request-target): get {parsed.path}\nhost: {parsed.netloc}\ndate: {date}\n(created): {created}"
                 priv = get_private_key(user, SECRET_KEY)
@@ -5203,10 +5123,8 @@ def _background_fetch_outbox(url: str, user_id: int, actor_id: int):
                 if r:
                     outbox_url = r.json().get("outbox", "")
             if outbox_url:
-                import time
-                from urllib.parse import urlparse as _up
-                parsed2 = _up(outbox_url)
-                date2 = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+                parsed2 = urlparse(outbox_url)
+                date2 = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
                 created2 = int(time.time())
                 path2 = parsed2.path or "/"
                 if parsed2.query:
@@ -5231,7 +5149,6 @@ def _background_fetch_outbox(url: str, user_id: int, actor_id: int):
 
 @router.post("/fetch-actor")
 def api_fetch_actor(request: Request, background_tasks: BackgroundTasks, url: str = Form(...)):
-    from urllib.parse import urlparse
     user = require_auth(request)
     if not url.startswith("http"):
         raise HTTPException(status_code=400, detail="Invalid URL")
@@ -5363,17 +5280,15 @@ def api_create_emoji(
     if image.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail=f"Unsupported image type: {image.content_type}")
 
-    import uuid
     ct_to_ext = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}
     ext = ct_to_ext.get(image.content_type, "png")
-    file_name = f"{uuid.uuid4().hex}.{ext}"
+    file_name = f"{uuid4().hex}.{ext}"
     local_dir = os.path.join(EMOJI_DIR, "local")
     os.makedirs(local_dir, exist_ok=True)
     file_path = os.path.join(local_dir, file_name)
     _emoji_data = None
 
     try:
-        from PIL import Image
         tmp = Image.open(image.file)
         w, h = tmp.size
         tmp.close()
@@ -5385,7 +5300,7 @@ def api_create_emoji(
             with open(file_path, "wb") as f:
                 f.write(_emoji_data)
         else:
-            file_name = f"{uuid.uuid4().hex}.webp"
+            file_name = f"{uuid4().hex}.webp"
             file_path = os.path.join(local_dir, file_name)
             img = Image.open(image.file)
             if img.mode == "RGBA" or img.mode == "P":
@@ -5401,7 +5316,6 @@ def api_create_emoji(
                 f.write(_emoji_data)
         if S3_ENABLED and _emoji_data:
             try:
-                from app.utils.storage import get_storage
                 get_storage().save(f"emojis/local/{file_name}", _emoji_data, f"image/{ext}")
             except Exception:
                 pass
@@ -5477,8 +5391,7 @@ def api_copy_emoji(request: Request, emoji_id: int):
         _src_sub = "remote" if src.domain or src.category == "remote" else "local"
         _data = None
 
-        from app.utils.storage import get_storage as _get_storage
-        _storage = _get_storage()
+        _storage = get_storage()
         try:
             _data = _storage.get(f"emojis/{_src_sub}/{src.file_name}")
         except Exception:
@@ -5515,7 +5428,6 @@ def api_delete_emoji(request: Request, emoji_id: int):
         emoji = s.query(CustomEmoji).get(emoji_id)
         if not emoji:
             raise HTTPException(status_code=404, detail="Emoji not found")
-        from app.utils.storage import get_storage
         _del_sub = "remote" if emoji.domain or emoji.category == "remote" else "local"
         try:
             get_storage().delete(f"emojis/{_del_sub}/{emoji.file_name}")
@@ -5564,7 +5476,6 @@ def api_admin_users(request: Request, location: str = Query("local"), status: st
             qb = qb.filter(User.email_verified == False, User.is_remote == False)
         elif status == "inactive":
             # no recent activity > 30 days (local only)
-            from datetime import datetime, timedelta
             cutoff = datetime.utcnow() - timedelta(days=30)
             qb = qb.filter(User.is_remote == False, User.created_at < cutoff)
         if role == "admin":
@@ -5623,7 +5534,6 @@ def api_admin_users(request: Request, location: str = Query("local"), status: st
 
 @router.get("/admin/users/{user_id}")
 def api_admin_user_detail(request: Request, user_id: int):
-    import json
     user = require_auth(request)
     if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -5664,8 +5574,6 @@ def api_admin_reset_password(request: Request, user_id: int):
     user = require_auth(request)
     if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
-    from app.routes.auth import hash_password
-    import secrets
     new_pass = secrets.token_hex(8)
     salt, hsh = hash_password(new_pass)
     with get_session() as s:
@@ -5898,7 +5806,6 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
             u.is_deceased = False
 
         # Create notification for the moderated user
-        import json
         notif = Notification(
             user_id=u.id,
             from_user_id=user.id,
@@ -5916,8 +5823,6 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
 
         if send_email and u.email:
             try:
-                from email.mime.text import MIMEText
-                import smtplib
                 if not SMTP_SERVER:
                     return {"ok": True, "action": action}
                 action_names = {"warning": "경고", "freeze": "동결", "sensitive": "민감 처리", "limit": "제한", "suspend": "정지", "unsuspend": "정지 해제"}
@@ -5969,7 +5874,6 @@ def api_admin_content_search(request: Request, q: str = "", mode: str = "series"
     if not q.strip():
         return {"novels": [], "episodes": []}
     with get_session() as s:
-        from sqlalchemy.orm import selectinload, joinedload
         query = q.strip()
         like = f"%{query}%"
         if mode == "episode":
@@ -6502,7 +6406,6 @@ def api_admin_remote_servers(request: Request):
         domains = set()
         for u in remote_users:
             if u.remote_url:
-                from urllib.parse import urlparse
                 domain = urlparse(u.remote_url).hostname
                 if domain:
                     domains.add(domain)
@@ -6514,9 +6417,7 @@ def api_admin_remote_server(domain: str, request: Request, offset: int = 0, limi
     user = require_auth(request)
     if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
-    from urllib.parse import urlparse
     with get_session() as s:
-        from sqlalchemy import or_
         candidates = s.query(User).filter(
             User.is_remote == True,
             or_(
@@ -6551,7 +6452,6 @@ def api_admin_remote_server(domain: str, request: Request, offset: int = 0, limi
         is_muted = mute_entry is not None and mute_entry.muted
         is_media_muted = mute_entry is not None and mute_entry.media_muted
 
-        import httpx
         try:
             resp = httpx.get(f"https://{domain}", timeout=5)
             is_reachable = resp.status_code < 500
@@ -6621,7 +6521,6 @@ def api_admin_federation_search(request: Request, q: str = ""):
                     ).first()
                     logger.info("federation-search casefold=%s id=%s", remote_user is not None, getattr(remote_user, 'id', None))
                 if not remote_user:
-                    from urllib.parse import urlparse
                     all_remote = s.query(User).filter(
                         User.is_remote == True,
                         User.remote_url.isnot(None),
@@ -6646,7 +6545,6 @@ def api_admin_federation_search(request: Request, q: str = ""):
                     })
                 else:
                     # Try to resolve via ActivityPub
-                    import httpx
                     # Try actor URL patterns
                     actor_urls = [
                         f"https://{domain}/users/{handle}",
@@ -6723,8 +6621,6 @@ def api_admin_federation_search(request: Request, q: str = ""):
 
 def _domain_users(s, domain):
     """Return all remote User objects whose remote_url hostname matches domain."""
-    from urllib.parse import urlparse
-    from sqlalchemy import or_
     candidates = s.query(User).filter(
         User.is_remote == True,
         or_(
@@ -6860,7 +6756,6 @@ def api_admin_remote_server_purge(domain: str, request: Request):
     user = require_auth(request)
     if user.role not in ("admin", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
-    from app.utils.storage import get_storage
     storage = get_storage()
     with get_session() as s:
         users = _domain_users(s, domain)
@@ -7111,7 +7006,6 @@ def api_add_keyword_mute(request: Request, keyword: str = Form(...), mode: str =
         raise HTTPException(status_code=400, detail="Keyword cannot be empty")
     if mode not in ("and", "or"):
         raise HTTPException(status_code=400, detail="Invalid mode")
-    import json
     if is_regex:
         kw = json.dumps([kw])
     else:
@@ -7146,8 +7040,6 @@ def _resolve_admin_users(s, admin_ids_str: str):
 
 @router.post("/link-preview")
 def api_link_preview(url: str = Form(...)):
-    import httpx, re as _re, html as _html
-    from urllib.parse import urlparse
     parsed = urlparse(url)
     domain = parsed.netloc
     result = {"url": url, "title": domain, "description": "", "image": ""}
@@ -7156,13 +7048,13 @@ def api_link_preview(url: str = Form(...)):
         if resp.status_code == 200:
             html_text = resp.text
             def _og(n):
-                m = _re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', html_text, _re.I)
+                m = re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', html_text, re.I)
                 if not m:
-                    m = _re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', html_text, _re.I)
+                    m = re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', html_text, re.I)
                 return m.group(1) if m else ""
-            og_title = _og("title") or _re.search(r'<title>([^<]*)</title>', html_text, _re.I)
-            result["title"] = _html.unescape((_og("title") or (og_title.group(1) if og_title else domain)))[:200]
-            result["description"] = _html.unescape(_og("description") or "")[:400]
+            og_title = _og("title") or re.search(r'<title>([^<]*)</title>', html_text, re.I)
+            result["title"] = html.unescape((_og("title") or (og_title.group(1) if og_title else domain)))[:200]
+            result["description"] = html.unescape(_og("description") or "")[:400]
             result["image"] = _og("image") or ""
             if result["image"] and result["image"].startswith("/"):
                 result["image"] = f"{parsed.scheme}://{parsed.netloc}{result['image']}"
@@ -7174,7 +7066,6 @@ def api_link_preview(url: str = Form(...)):
 @router.get("/server-info")
 def api_server_info():
     with get_session() as s:
-        from app.models import ServerSetting
         settings = ServerSetting.get(s)
         admins = _resolve_admin_users(s, settings.admin_ids or "")
         admin_email = settings.admin_email or (admins[0].email if admins else "")
@@ -7198,7 +7089,6 @@ def api_admin_get_settings(request: Request):
     if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
-        from app.models import ServerSetting
         settings = ServerSetting.get(s)
         return {
             "server_name": settings.server_name,
@@ -7228,8 +7118,6 @@ def api_admin_update_settings(request: Request,
     if len(server_name) > 20:
         raise HTTPException(status_code=400, detail="서버명은 20자 이하여야 합니다.")
     with get_session() as s:
-        from app.models import ServerSetting
-        from app.utils.storage import get_storage
         storage = get_storage()
         settings = ServerSetting.get(s)
         if server_name.strip():
@@ -7266,7 +7154,6 @@ def api_admin_update_settings(request: Request,
 
 def _read_storage_file(url: str) -> bytes:
     """Read file from storage by URL. Handles both /uploads/... and absolute URLs."""
-    from app.utils.storage import get_storage
     storage = get_storage()
     if isinstance(storage, LocalStorage):
         key = storage._extract_path(url)
@@ -7276,7 +7163,6 @@ def _read_storage_file(url: str) -> bytes:
     try:
         if not url.startswith("http"):
             url = f"{BASE_URL}{url}"
-        import httpx
         resp = httpx.get(url, timeout=10)
         if resp.is_success:
             return resp.content
@@ -7288,9 +7174,6 @@ def _read_storage_file(url: str) -> bytes:
 def _save_pwa_icons(source_url: str):
     if not source_url:
         return
-    from PIL import Image
-    from app.utils.storage import get_storage
-    import io, os
     try:
         data = _read_storage_file(source_url)
         img = Image.open(io.BytesIO(data))
@@ -7309,9 +7192,6 @@ def _save_pwa_icons(source_url: str):
 def _save_favicon(source_url: str):
     if not source_url:
         return
-    from PIL import Image
-    from app.utils.storage import get_storage
-    import io, os
     try:
         data = _read_storage_file(source_url)
         img = Image.open(io.BytesIO(data))
@@ -7327,7 +7207,6 @@ def _save_favicon(source_url: str):
 
 
 def _delete_favicon():
-    from app.utils.storage import get_storage
     try:
         get_storage().delete("pwa/favicon.png")
     except Exception:
@@ -7336,7 +7215,6 @@ def _delete_favicon():
 
 def _delete_pwa_icons():
     """Remove PWA icons from storage, restoring default."""
-    from app.utils.storage import get_storage
     storage = get_storage()
     for size in (192, 512):
         try:
@@ -7347,7 +7225,6 @@ def _delete_pwa_icons():
 
 @router.get("/pwa/manifest")
 def api_pwa_manifest():
-    from app.models import ServerSetting
     with get_session() as s:
         settings = ServerSetting.get(s)
         name = settings.server_name or "WRIT"
@@ -7374,8 +7251,6 @@ def api_pwa_manifest():
 
 @router.get("/pwa/favicon")
 def api_pwa_favicon():
-    from fastapi.responses import Response, FileResponse
-    from app.utils.storage import get_storage
     storage = get_storage()
     try:
         data = storage.get("pwa/favicon.png")
@@ -7384,7 +7259,6 @@ def api_pwa_favicon():
             return Response(content=data, media_type="image/png", headers={"Cache-Control": "no-cache, max-age=0", "Vary": "Accept-Encoding"})
     except Exception as e:
         logger.info("[favicon] no custom favicon: %s", e)
-    import os
     for path in [
         os.path.join(os.path.dirname(__file__), "..", "..", "static", "favicon.ico"),
         os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "favicon.ico"),
@@ -7396,21 +7270,16 @@ def api_pwa_favicon():
 
 @router.get("/pwa/icon/{size}")
 def api_pwa_icon(size: int):
-    from fastapi.responses import Response, FileResponse
-    from app.utils.storage import get_storage
     storage = get_storage()
     try:
         data = storage.get(f"pwa/icon-{size}.png")
         if data:
-            from fastapi.responses import Response
             return Response(content=data, media_type="image/png")
     except Exception:
         pass
     # Fallback to default icon
-    import os
     default_path = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "icons", f"icon-{size}.png")
     if os.path.exists(default_path):
-        from fastapi.responses import FileResponse
         return FileResponse(default_path, media_type="image/png")
     return JSONResponse({"error": "Not found"}, status_code=404)
 
@@ -7482,17 +7351,13 @@ def api_client_log(request: Request):
 
 @router.get("/push/vapid-public-key")
 def get_vapid_public_key():
-    import base64
     key = VAPID_PUBLIC_KEY
     if not key:
         try:
-            from cryptography.hazmat.primitives.asymmetric import ec
-            from cryptography.hazmat.primitives import serialization
             _k = ec.generate_private_key(ec.SECP256R1())
             _priv_pem = _k.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode()
             _raw_pub = _k.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
             key = base64.urlsafe_b64encode(_raw_pub).rstrip(b"=").decode()
-            import os
             os.environ["VAPID_PRIVATE_KEY"] = _priv_pem
             os.environ["VAPID_PUBLIC_KEY"] = key
             print("[PUSH] Auto-generated VAPID keys", flush=True)
@@ -7500,8 +7365,6 @@ def get_vapid_public_key():
             print(f"[PUSH] Failed to generate VAPID key: {e}", flush=True)
             raise HTTPException(500, "Web Push configuration error")
     if key.startswith("-----"):
-        from cryptography.hazmat.primitives.serialization import load_pem_public_key, Encoding, PublicFormat
-        from cryptography.hazmat.primitives.asymmetric import ec
         pub = load_pem_public_key(key.encode())
         if isinstance(pub, ec.EllipticCurvePublicKey):
             raw = pub.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
@@ -7564,14 +7427,12 @@ def push_status(request: Request):
 
 # ── Login session management ──
 
-import re as _re
-
 _UA_BROWSER = {
-    "chrome": ("Chrome", _re.compile(r"Chrome/(\d+)")),
-    "edge": ("Edge", _re.compile(r"Edg/(\d+)")),
-    "firefox": ("Firefox", _re.compile(r"Firefox/(\d+)")),
-    "safari": ("Safari", _re.compile(r"Version/(\d+).*Safari")),
-    "opera": ("Opera", _re.compile(r"(?:OPR|Opera)/(\d+)")),
+    "chrome": ("Chrome", re.compile(r"Chrome/(\d+)")),
+    "edge": ("Edge", re.compile(r"Edg/(\d+)")),
+    "firefox": ("Firefox", re.compile(r"Firefox/(\d+)")),
+    "safari": ("Safari", re.compile(r"Version/(\d+).*Safari")),
+    "opera": ("Opera", re.compile(r"(?:OPR|Opera)/(\d+)")),
 }
 
 
@@ -7590,11 +7451,9 @@ def _parse_device_name(ua: str) -> str:
 @router.get("/sessions")
 def list_sessions(request: Request):
     user = require_active_auth(request)
-    from app.routes.auth import get_session_key_from_cookie
-    from datetime import timedelta, timezone
     current_key = get_session_key_from_cookie(request)
     with get_session() as s:
-        cutoff = datetime.datetime.now(timezone.utc) - timedelta(days=SESSION_EXPIRE_DAYS)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=SESSION_EXPIRE_DAYS)
         s.query(LoginSession).filter(LoginSession.user_id == user.id, LoginSession.created_at < cutoff).delete(synchronize_session=False)
         s.commit()
         sessions = s.query(LoginSession).filter_by(user_id=user.id).order_by(LoginSession.last_active.desc()).limit(50).all()
@@ -7614,7 +7473,6 @@ def list_sessions(request: Request):
 @router.post("/sessions/{session_id}/delete")
 def delete_session(request: Request, session_id: int):
     user = require_active_auth(request)
-    from app.routes.auth import get_session_key_from_cookie
     current_key = get_session_key_from_cookie(request)
     with get_session() as s:
         ls = s.query(LoginSession).filter_by(id=session_id, user_id=user.id).first()
