@@ -1096,9 +1096,53 @@ def delete_status(status_id: str, request: Request, db: SASession = Depends(get_
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.author_id != user.id:
         raise HTTPException(status_code=404, detail="Record not found")
+
+    media = list(post.media_attachments or [])
+    ap_id = post.ap_id or ""
+    is_remote_author = bool(post.author.is_remote)
+    post.content = ""
+    post.media_attachments = []
+    post.poll_data = None
+    post.link_preview = None
     post.is_deleted = True
+    db.query(Notification).filter_by(post_id=post.id).delete()
     db.commit()
-    return _status_json(post, db, viewer=user)
+
+    try:
+        from app.timeline_stream import broadcast_delete, broadcast_refresh_notifs as _brfn
+        broadcast_delete(post.id)
+        _brfn(post.author_id)
+    except Exception:
+        pass
+
+    if ap_id and ap_id.startswith("http") and not is_remote_author:
+        def _bg_delete():
+            try:
+                from app.activitypub import _send_delete_post
+                with get_session() as s:
+                    p = s.query(Post).filter_by(id=post.id).first()
+                    if p:
+                        _send_delete_post(p, user)
+            except Exception as e:
+                logger.error("Mastodon API: Failed to send delete activity: %s", e, exc_info=True)
+        threading.Thread(target=_bg_delete, daemon=True).start()
+
+    if media:
+        def _bg_media():
+            try:
+                from app.utils.storage import get_storage
+                storage = get_storage()
+                for m in media:
+                    if isinstance(m, dict) and m.get("url"):
+                        try:
+                            storage.delete(m["url"])
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+        threading.Thread(target=_bg_media, daemon=True).start()
+
+    return {}
 
 
 # ---------------------------------------------------------------------------
