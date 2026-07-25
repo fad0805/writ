@@ -51,7 +51,6 @@ function OAuthAuthorizeForm() {
     e.preventDefault();
     setLoading(true);
     setError("");
-    console.log("[oauth] handleSubmit called", { username, clientId, redirectUri });
     try {
       const res = await fetch("/api/oauth/authorize", {
         method: "POST",
@@ -66,9 +65,7 @@ function OAuthAuthorizeForm() {
           state,
         }),
       });
-      console.log("[oauth] fetch returned", res.status);
       const data = await res.json();
-      console.log("[oauth] data", data);
 
       if (data.error) {
         setError(data.error);
