@@ -29,12 +29,6 @@ SESSION_EXPIRE_DAYS = 30
 ACTIVITYPUB_NS = "https://www.w3.org/ns/activitystreams"
 PUBLIC_URI = "https://www.w3.org/ns/activitystreams#Public"
 
-# Federation domain filters (comma-separated; empty = allow all)
-_fed_wl = os.environ.get("FEDERATION_DOMAIN_WHITELIST", "")
-FEDERATION_DOMAIN_WHITELIST = [d.strip() for d in _fed_wl.split(",") if d.strip()] if _fed_wl else []
-_fed_bl = os.environ.get("FEDERATION_DOMAIN_BLACKLIST", "")
-FEDERATION_DOMAIN_BLACKLIST = [d.strip() for d in _fed_bl.split(",") if d.strip()] if _fed_bl else []
-
 # Pagination
 PAGE_SIZE = 20
 

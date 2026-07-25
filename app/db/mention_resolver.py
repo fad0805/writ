@@ -6,12 +6,20 @@ logger = logging.getLogger(__name__)
 
 
 def _federation_allowed(domain: str) -> bool:
-    from app.config import FEDERATION_DOMAIN_WHITELIST, FEDERATION_DOMAIN_BLACKLIST
-    if FEDERATION_DOMAIN_WHITELIST:
-        return domain.lower() in {d.lower() for d in FEDERATION_DOMAIN_WHITELIST}
-    if FEDERATION_DOMAIN_BLACKLIST:
-        return domain.lower() not in {d.lower() for d in FEDERATION_DOMAIN_BLACKLIST}
-    return True
+    from app.models import FederationBlock, AllowedServer, ServerSetting, get_session
+    with get_session() as s:
+        try:
+            settings = s.query(ServerSetting).first()
+            if not settings:
+                return True
+            mode = settings.federation_mode or "blacklist"
+            domain = domain.lower().strip()
+            if mode == "whitelist":
+                return s.query(AllowedServer).filter_by(domain=domain).first() is not None
+            else:
+                return s.query(FederationBlock).filter_by(domain=domain).first() is None
+        except Exception:
+            return False
 
 
 def _resolve_remote_user(handle: str) -> User | None:
