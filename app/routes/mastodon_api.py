@@ -1413,6 +1413,13 @@ def react_to_status(status_id: str, name: str, request: Request, db: SASession =
     if not name.endswith(":"):
         name = f"{name}:"
 
+    keyword = name.strip(":")
+    emoji_row = db.query(CustomEmoji).filter_by(keyword=keyword, domain="").first()
+    if not emoji_row:
+        emoji_row = db.query(CustomEmoji).filter_by(keyword=keyword).first()
+    if not emoji_row or (emoji_row.domain and emoji_row.domain.strip()):
+        raise HTTPException(status_code=400, detail="Remote emojis cannot be used as reactions")
+
     existing = db.query(Like).filter_by(user_id=user.id, post_id=post.id).first()
     if existing:
         if existing.reaction == name:
