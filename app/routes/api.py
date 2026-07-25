@@ -1038,7 +1038,7 @@ def _broadcast_timeline(post_json, author_id, visibility, is_dm):
 
 
 @router.post("/posts")
-def api_create_post(
+async def api_create_post(
     request: Request,
     content: str = Form(...),
     summary: str = Form(""),
@@ -1053,6 +1053,21 @@ def api_create_post(
     link_preview: str = Form(""),
 ):
     user = require_active_auth(request)
+    loop = asyncio.get_running_loop()
+    pj = await loop.run_in_executor(
+        None, _do_create_post,
+        user, content, summary, visibility, parent_id,
+        dm_target_id, share_url, media_attachments, is_sensitive,
+        poll_options, poll_expires_in, link_preview,
+    )
+    return pj
+
+
+def _do_create_post(
+    user, content, summary, visibility, parent_id,
+    dm_target_id, share_url, media_attachments, is_sensitive,
+    poll_options, poll_expires_in, link_preview,
+):
     quote_of_ap_id = ""
     quote_of_id = None
     pending_quote_url = None
@@ -1064,16 +1079,12 @@ def api_create_post(
                 quote_of_id = local.id
             else:
                 pending_quote_url = share_url
-    # 🌟 [추가] DB 저장 전에 로컬 쌩 텍스트 규칙으로 멘션/태그/URL을 HTML <a> 태그로 파싱!
     content_html = process_post_content(content, None)
     mentions = extract_mentions(content, None)
     mentioned_handles = [m["handle"] for m in mentions]
-
-    # 2. 핸들을 ID로 변환
     mentioned_ids = resolve_handles_to_ids(mentioned_handles)
     if dm_target_id:
         mentioned_ids.append(dm_target_id)
-    # 중복 제거 후 리스트로 변환 (알림 발송 루프를 위해 리스트 상태 유지)
     mentioned_ids = list(set(mentioned_ids))
 
     if not content_html.strip() and not poll_options:
@@ -1158,8 +1169,6 @@ def api_create_post(
             if parent:
                 post.in_reply_to_ap_id = parent.ap_id or ""
         s.commit()
-
-        pj = _post_json(post, s, user)
 
         def _create_notifications_and_broadcast():
             try:
