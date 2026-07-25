@@ -1,8 +1,10 @@
+import asyncio
 import base64
 import datetime
 import email.utils
 import hashlib
 import hmac as _hmac
+import httpx
 import json
 import os
 import logging
@@ -13,24 +15,23 @@ from typing import AsyncGenerator
 
 logger = logging.getLogger(__name__)
 
-import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException, WebSocket
 from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-
 from urllib.parse import urlparse
-from app.utils.crypto import verify_signature, sign_string, get_private_key
+
 from app.config.settings import SECRET_KEY, BASE_URL, DOMAIN, CORS_ORIGINS, S3_ENABLED, init_vapid_keys
 from app.config.logging import _request_logger
-from app.models import User, Follow, Post, Novel, ProcessedActivity, get_session, init_db
+from app.core.activitypub import get_outbox, get_followers, get_following, handle_inbox, _deliver_sync, _cleanup_expired_media, _cleanup_remote_data, _resolve_actor, _send_delete_post, get_featured
+from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs
+from app.models import User, Follow, Post, Novel, ProcessedActivity, get_session, init_db, PendingDelivery
 from app.routes.auth import router as auth_router
 from app.routes.api import router as api_router
 from app.routes.admin import router as admin_router
 from app.routes.mastodon_api import router as mastodon_api_router
-from app.core.activitypub import get_outbox, get_followers, get_following, handle_inbox, _deliver_sync, _cleanup_expired_media, _cleanup_remote_data, _resolve_actor, _send_delete_post, get_featured
-from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs
+from app.utils.crypto import verify_signature, sign_string, get_private_key
 
 _RATE_LIMIT_WINDOW = 60
 _RATE_LIMIT_MAX = 30
@@ -79,7 +80,6 @@ def _check_daily_limit(key: str) -> bool:
         return True
 
 def _delivery_worker():
-    from app.models import PendingDelivery, get_session
     while True:
         time.sleep(30)
         try:
@@ -136,7 +136,6 @@ def _refresh_remote_profiles():
     while True:
         time.sleep(600)
         try:
-            from app.models import User, get_session
             with get_session() as _s:
                 for ru in _s.query(User).filter(User.is_remote == True).order_by(User.updated_at.asc()).limit(5).all():
                     ru.updated_at = datetime.datetime.now(datetime.timezone.utc)
@@ -149,14 +148,12 @@ def _auto_delete_expired_posts():
     """Hard-delete expired posts daily at 3 AM server time.
     Checks CPU and DB load before and during execution; aborts if too busy.
     Uses user.post_lifetime (days) + post.created_at to determine expiry."""
-    import time as _time
-    import datetime as _dt
 
     def _next_3am():
-        now = _dt.datetime.now()
+        now = datetime.datetime.now()
         target = now.replace(hour=3, minute=0, second=0, microsecond=0)
         if target <= now:
-            target += _dt.timedelta(days=1)
+            target += datetime.timedelta(days=1)
         return (target - now).total_seconds()
 
     def _get_cpu_percent():
@@ -165,8 +162,7 @@ def _auto_delete_expired_posts():
                 parts = f.readline().split()
             idle1 = int(parts[4])
             total1 = sum(int(x) for x in parts[1:])
-            import time as _time
-            _time.sleep(1)
+            time.sleep(1)
             with open("/proc/stat") as f:
                 parts = f.readline().split()
             idle2 = int(parts[4])
@@ -193,17 +189,17 @@ def _auto_delete_expired_posts():
             pass
         return False
 
-    _time.sleep(min(_next_3am(), 300))
+    time.sleep(min(_next_3am(), 300))
     while True:
         try:
             if _server_busy():
                 logger.info("Auto-delete: server busy, skipping")
-                _time.sleep(1800)
+                time.sleep(1800)
                 continue
 
             from app.models import get_session, Post, User, Like, Boost, Bookmark, Vote, Notification
             with get_session() as s:
-                now = _dt.datetime.now(_dt.timezone.utc)
+                now = datetime.datetime.now(datetime.timezone.utc)
                 users_with_lifetime = s.query(User).filter(
                     User.post_lifetime > 0,
                     User.is_remote == False,
@@ -212,7 +208,7 @@ def _auto_delete_expired_posts():
                 _autodel_notif_users = set()
                 for u in users_with_lifetime:
                     exc = u.post_lifetime_exceptions or []
-                    cutoff = now - _dt.timedelta(days=u.post_lifetime)
+                    cutoff = now - datetime.timedelta(days=u.post_lifetime)
                     expired = s.query(Post).filter(
                         Post.author_id == u.id,
                         Post.is_deleted == False,
@@ -288,7 +284,7 @@ def _auto_delete_expired_posts():
                         pass
         except Exception as e:
             logger.error("Auto-delete worker error: %s", e, exc_info=True)
-        _time.sleep(_next_3am() + 60)
+        time.sleep(_next_3am() + 60)
 
 
 @asynccontextmanager
@@ -418,18 +414,16 @@ async def csrf_protection(request: Request, call_next):
         origin = request.headers.get("Origin", "")
         referer = request.headers.get("Referer", "")
         if origin:
-            from urllib.parse import urlparse as _urlparse
             try:
-                origin_host = _urlparse(origin).netloc
+                origin_host = urlparse(origin).netloc
             except Exception:
                 origin_host = ""
             if origin_host and origin_host != host_header:
                 print(f"[CSRF] origin mismatch: origin={origin_host} host={host_header}", flush=True)
                 return JSONResponse({"detail": "CSRF origin mismatch"}, status_code=403)
         elif referer:
-            from urllib.parse import urlparse as _urlparse
             try:
-                referer_host = _urlparse(referer).netloc
+                referer_host = urlparse(referer).netloc
             except Exception:
                 referer_host = ""
             if referer_host and referer_host != host_header:
@@ -678,12 +672,10 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
             if BASE_URL in actor_url:
                 print(f"[SIG] skip self-fetch ({BASE_URL})", flush=True)
             else:
-                import httpx as _httpx, datetime as _dt, time as _time, hashlib as _hl, base64 as _b64
-                from urllib.parse import urlparse as _up
                 from app.models import User as _Usr, get_session as _gs
-                _parsed = _up(actor_url)
-                _date = _dt.datetime.now(_dt.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
-                _created = int(_time.time())
+                _parsed = urlparse(actor_url)
+                _date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+                _created = int(time.time())
                 _ss = f"(request-target): get {_parsed.path}\nhost: {_parsed.netloc}\ndate: {_date}\n(created): {_created}"
                 _headers = {"Accept": "application/activity+json", "Date": _date, "Host": _parsed.netloc}
                 with _gs() as _s:
@@ -692,7 +684,7 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
                         _priv = get_private_key(_signer, SECRET_KEY)
                         _sig = sign_string(_ss, _priv)
                         _headers["Signature"] = f'keyId="{_signer.actor_uri()}#main-key",algorithm="hs2019",created="{_created}",headers="(request-target) host date (created)",signature="{_sig}"'
-                _resp = _httpx.get(actor_url, headers=_headers, timeout=10, follow_redirects=True)
+                _resp = httpx.get(actor_url, headers=_headers, timeout=10, follow_redirects=True)
                 print(f"[SIG] fetch status={_resp.status_code}", flush=True)
                 if _resp.status_code == 200:
                     _data = _resp.json()
@@ -726,10 +718,9 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
         return (False, None)
     if signer_uri != activity_actor:
         # Inbox forwarding 허용: 서명자가 actor가 아니더라도, activity의 수신자 도메인에 서명자 도메인이 있으면 허용
-        from urllib.parse import urlparse as _urlparse
         try:
-            signer_domain = _urlparse(signer_uri).netloc
-            actor_domain = _urlparse(activity_actor).netloc
+            signer_domain = urlparse(signer_uri).netloc
+            actor_domain = urlparse(activity_actor).netloc
             if signer_domain and actor_domain and signer_domain != actor_domain:
                 audience = []
                 for key in ("to", "cc", "bto", "bcc"):
@@ -740,7 +731,7 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
                         else:
                             audience.append(val)
                 forwarded = any(
-                    _urlparse(a).netloc == signer_domain
+                    urlparse(a).netloc == signer_domain
                     for a in audience if isinstance(a, str) and a.startswith("http")
                 )
                 if forwarded:
@@ -759,10 +750,9 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
     # Domain check — activity id must be from actor's domain
     activity_id = activity.get("id", "")
     if activity_id:
-        from urllib.parse import urlparse as _urlparse
         try:
-            actor_domain = _urlparse(activity_actor).netloc
-            id_domain = _urlparse(activity_id).netloc
+            actor_domain = urlparse(activity_actor).netloc
+            id_domain = urlparse(activity_id).netloc
             if actor_domain and id_domain and actor_domain != id_domain:
                 print(f"[SIG] domain_check FAIL (actor_domain={actor_domain} != id_domain={id_domain})", flush=True)
                 return (False, None)
@@ -1213,8 +1203,7 @@ def _verify_session_cookie(request: Request) -> bool:
     if not token:
         return False
     try:
-        import base64 as _b64
-        decoded = _b64.urlsafe_b64decode(token.encode()).decode()
+        decoded = base64.urlsafe_b64decode(token.encode()).decode()
         parts = decoded.split(":")
         if len(parts) != 3:
             return False
@@ -1256,8 +1245,7 @@ async def websocket_stream(websocket: WebSocket):
         await websocket.close(code=4001, reason="Unauthorized")
         return
     try:
-        import base64 as _b64
-        decoded = _b64.urlsafe_b64decode(token.encode()).decode()
+        decoded = base64.urlsafe_b64decode(token.encode()).decode()
         parts = decoded.split(":")
         if len(parts) != 3 or int(parts[2]) <= 0:
             await websocket.close(code=4001, reason="Unauthorized")
@@ -1370,7 +1358,6 @@ async def oauth_token(request: Request):
     from app.models import MastodonApp, MastodonAccessToken, User, get_session as _get_session
     from app.routes.auth import verify_password
     import secrets as _secrets
-    import time as _time
 
     ct = request.headers.get("content-type", "")
     if "application/json" in ct:
@@ -1393,7 +1380,7 @@ async def oauth_token(request: Request):
             mat = MastodonAccessToken(app_id=app_obj.id, user_id=1, access_token=token, scopes="read")
             db.add(mat)
             db.commit()
-            return {"access_token": token, "token_type": "bearer", "scope": "read", "created_at": int(_time.time())}
+            return {"access_token": token, "token_type": "bearer", "scope": "read", "created_at": int(time.time())}
 
         if grant_type == "password":
             username = body.get("username", "")
@@ -1413,7 +1400,7 @@ async def oauth_token(request: Request):
             mat = MastodonAccessToken(app_id=app_obj.id, user_id=user.id, access_token=token, scopes=scope)
             db.add(mat)
             db.commit()
-            return {"access_token": token, "token_type": "bearer", "scope": scope, "created_at": int(_time.time())}
+            return {"access_token": token, "token_type": "bearer", "scope": scope, "created_at": int(time.time())}
 
         if grant_type == "authorization_code":
             code = body.get("code", "")
@@ -1428,7 +1415,7 @@ async def oauth_token(request: Request):
             mat = MastodonAccessToken(app_id=app_obj.id, user_id=auth_code.user_id, access_token=token, scopes=scope)
             db.add(mat)
             db.commit()
-            return {"access_token": token, "token_type": "bearer", "scope": scope, "created_at": int(_time.time())}
+            return {"access_token": token, "token_type": "bearer", "scope": scope, "created_at": int(time.time())}
 
         return JSONResponse({"error": "unsupported_grant_type"}, status_code=400)
 
