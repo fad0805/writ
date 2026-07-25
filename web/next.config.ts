@@ -59,8 +59,8 @@ const nextConfig: NextConfig = {
         destination: `${API_HOST}/emojis/:path*`,
       },
       {
-        source: "/oauth/:path*",
-        destination: `${API_HOST}/oauth/:path*`,
+        source: "/oauth/token",
+        destination: `${API_HOST}/oauth/token`,
       },
       {
         source: "/@:username",
