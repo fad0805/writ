@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload, Session
 
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PushSubscription, LoginSession, get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
-from app.log_utils import log_admin_action
+from app.utils.log import log_admin_action
 from app.activitypub import _fetch_remote_post
 from app.serializers import _post_json, _user_json
 from app.db.mention_resolver import resolve_handles_to_ids
@@ -25,8 +25,15 @@ from app.utils.filter import _timeline_filter
 from app.utils.content_parser import process_post_content, extract_mentions
 from app.utils.post import _get_descendant_ids
 
+from app.activitypub import broadcast_to_followers, _post_to_inbox, _federation_allowed, _build_reactions
+from app.database import get_db
+from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED
+from app.utils.crypto import encrypt_key, get_private_key, generate_keypair, sign_string
+from app.eventbus import broadcast
+from app.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream, broadcast_reaction_update, add_post_stream, remove_post_stream
+from app.utils.storage import LocalStorage
+
 # Auth rate limiting (IP-based, in-memory)
-import threading
 _auth_failures: dict[str, list[float]] = {}
 _auth_lock = threading.Lock()
 _AUTH_FAIL_WINDOW = 900  # 15 min
@@ -55,14 +62,6 @@ def _get_auth_backoff_seconds(ip: str) -> int:
         return 0
     return _AUTH_FAIL_BACKOFF_BASE * (2 ** min(count - _AUTH_FAIL_MAX, 6))
 
-
-from app.activitypub import broadcast_to_followers, _post_to_inbox, _federation_allowed, _build_reactions
-from app.database import get_db
-from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED, SCHEME
-from app.crypto_utils import encrypt_key, get_private_key
-from app.eventbus import broadcast
-from app.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream, broadcast_reaction_update, add_post_stream, remove_post_stream
-from app.utils.storage import LocalStorage
 
 logger = logging.getLogger("writ.api")
 
@@ -318,7 +317,6 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
     client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
     if not _check_auth_rate_limit(client_ip):
         raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
-    from app.crypto_utils import generate_keypair
     display_handle = username
     username = username.lower()
     if username in RESERVED_HANDLES:
@@ -5127,8 +5125,6 @@ def _ap_fetch(url, user):
     if not _validate_url(url):
         return None
 
-    from app.crypto_utils import sign_string
-
     def _sign_and_fetch(target_url, _depth=0):
         if _depth > 2:
             return None
@@ -5237,7 +5233,6 @@ def _background_fetch_outbox(url: str, user_id: int, actor_id: int):
             outbox_url = getattr(actor, "outbox_url", None) or getattr(actor, "endpoints", {}).get("sharedInbox", "")
             if not outbox_url:
                 import time
-                from app.crypto_utils import sign_string, get_private_key
                 from urllib.parse import urlparse as _up
                 date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
                 parsed = _up(url)
@@ -5252,7 +5247,6 @@ def _background_fetch_outbox(url: str, user_id: int, actor_id: int):
                     outbox_url = r.json().get("outbox", "")
             if outbox_url:
                 import time
-                from app.crypto_utils import sign_string, get_private_key
                 from urllib.parse import urlparse as _up
                 parsed2 = _up(outbox_url)
                 date2 = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")

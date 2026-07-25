@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 
 from app.models import User, Post, get_session
 from app.routes.auth import require_auth
-from app.log_utils import log_admin_action
+from app.utils.log import log_admin_action
 
 router = APIRouter()
 

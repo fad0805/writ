@@ -10,14 +10,13 @@ import socket
 import time
 import uuid
 from typing import Optional
-from urllib.parse import urlparse, quote, unquote
+from urllib.parse import urlparse
 
 import httpx
-from sqlalchemy.orm import object_session
 
 from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, UserBlock, Tag, get_session
 from app.config import BASE_URL, SECRET_KEY
-from app.crypto_utils import generate_keypair, sign_string, encrypt_key, get_private_key
+from app.utils.crypto import generate_keypair, sign_string, encrypt_key, get_private_key
 from app.utils.content_parser import _sanitize_html, process_post_content
 
 WRIT_USER_AGENT = "WRIT/1.0 (+https://daydream.ink)"
@@ -686,7 +685,6 @@ def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> 
     try:
         headers = {"Accept": "application/activity+json, application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"", "User-Agent": WRIT_USER_AGENT}
         if sign_as:
-            from app.crypto_utils import sign_string, get_private_key
             from app.config import SECRET_KEY
             parsed = urlparse(collection_url)
             date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
@@ -708,7 +706,6 @@ def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> 
 
 def _get_instance_actor(session) -> User:
     """Get or create the instance actor (system account for server-level requests)."""
-    from app.crypto_utils import generate_keypair, encrypt_key
     from app.config import SECRET_KEY
     actor = session.query(User).filter_by(username="actor", is_remote=False).first()
     if not actor:
@@ -770,7 +767,6 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
     if sign_as:
         try:
             import datetime, time as _t
-            from app.crypto_utils import sign_string, get_private_key
             date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
             parsed = urlparse(actor_url)
             created = int(_t.time())
@@ -2904,7 +2900,6 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
                 _d = _r.json()
                 _pref = _d.get("preferredUsername", "")
                 if _pref:
-                    from app.crypto_utils import generate_keypair
                     _domain = urlparse(actor_url).netloc
                     _username = f"{_pref}@{_domain}"
                     _pubkey = _d.get("publicKey", {}).get("publicKeyPem", "") if isinstance(_d.get("publicKey"), dict) else ""

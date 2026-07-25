@@ -6,7 +6,6 @@ import hmac as _hmac
 import json
 import os
 import logging
-import secrets
 import threading
 import time
 from collections import defaultdict
@@ -16,13 +15,13 @@ logger = logging.getLogger(__name__)
 
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse, FileResponse
+from fastapi import FastAPI, Request, HTTPException, WebSocket
+from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from urllib.parse import urlparse
-from app.crypto_utils import verify_signature
+from app.utils.crypto import verify_signature, sign_string, get_private_key
 from app.config import SECRET_KEY, BASE_URL, DOMAIN, CORS_ORIGINS
 from app.logging_config import _request_logger
 from app.models import User, Follow, Post, Novel, ProcessedActivity, get_session, init_db
@@ -84,7 +83,6 @@ def _check_daily_limit(key: str) -> bool:
 
 def _delivery_worker():
     from app.models import PendingDelivery, get_session
-    from app.crypto_utils import sign_string, get_private_key
     while True:
         time.sleep(30)
         try:
@@ -692,7 +690,6 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
             else:
                 import httpx as _httpx, datetime as _dt, time as _time, hashlib as _hl, base64 as _b64
                 from urllib.parse import urlparse as _up
-                from app.crypto_utils import sign_string, get_private_key
                 from app.models import User as _Usr, get_session as _gs
                 _parsed = _up(actor_url)
                 _date = _dt.datetime.now(_dt.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
