@@ -1322,6 +1322,7 @@ app.include_router(mastodon_api_router, prefix="/api/v1")
 @app.post("/api/oauth/authorize")
 async def api_oauth_authorize(request: Request):
     from fastapi.responses import JSONResponse
+    from app.models import MastodonApp, MastodonAuthorizationCode
     import secrets as _secrets
 
     body = await request.json()
@@ -1356,7 +1357,6 @@ async def api_oauth_authorize(request: Request):
             return JSONResponse({"error": "이메일/사용자 이름 또는 비밀번호가 틀렸습니다."}, status_code=401)
 
         code = _secrets.token_urlsafe(32)
-        from app.models import MastodonAuthorizationCode
         auth_code = MastodonAuthorizationCode(
             code=code,
             app_id=app_obj.id,
