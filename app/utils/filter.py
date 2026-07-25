@@ -100,8 +100,8 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
     if tl_type in ("home", "social"):
         allowed_authors = following_set | {user.id}
 
-        # 작성자가 팔로우 대상이 아니면 드롭
-        if post.author_id not in allowed_authors:
+        # 작성자가 팔로우 대상이 아니면 드롭 (단, 팔로우한 사람이 부스트한 글은 통과)
+        if post.author_id not in allowed_authors and not is_boosted:
             return False
 
         # --- 3. 답글 필터: 캐시 데이터 기반으로 N+1 없이 칼같이 검사 ---
@@ -127,7 +127,7 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
     return True
 
 
-def _timeline_filter(posts, session: Session, user, tl_type, following_ids):
+def _timeline_filter(posts, session: Session, user, tl_type, following_ids, boosted_ids: set | None = None):
     """Filter a batch of posts for timeline display."""
     if not user:
         return posts
@@ -145,7 +145,8 @@ def _timeline_filter(posts, session: Session, user, tl_type, following_ids):
 
     filtered = []
     for p in posts:
-        if should_deliver_post(p, session, user, tl_type, following_set, filter_ctx):
+        is_boosted = bool(boosted_ids and p.id in boosted_ids)
+        if should_deliver_post(p, session, user, tl_type, following_set, filter_ctx, is_boosted=is_boosted):
             filtered.append(p)
 
     print(f"[feed] after _timeline_filter: {len(filtered)}/{len(posts)} posts", flush=True)

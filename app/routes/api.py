@@ -508,12 +508,14 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     _local_ids = None
     if tl_type in ("social", "local"):
         _local_ids = session.query(User.id).filter_by(is_remote=False).subquery()
+    _all_boosted_ids = set()
     if tl_type == "home":
         following_ids = list(_following_ids) if _following_ids else [user.id]
         all_boost_user_ids = list(set(following_ids) | {user.id})
         boosted_ids = list({row[0] for row in session.query(Boost.post_id).filter(
             Boost.user_id.in_(all_boost_user_ids),
         ).all()})
+        _all_boosted_ids = set(boosted_ids)
         final = following_ids[:]
         _mentioned_self = _json_array_has_user(Post.mentioned_user_ids, user.id)
         posts = session.query(Post).options(*_base_opts).filter(
@@ -531,6 +533,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         boosted_ids = list({row[0] for row in session.query(Boost.post_id).filter(
             Boost.user_id.in_(all_boost_user_ids),
         ).all()})
+        _all_boosted_ids = set(boosted_ids)
         posts = session.query(Post).options(*_base_opts).filter(
             or_(
                 and_(
@@ -585,7 +588,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     print(f"[feed] after dedup: {len(posts)} posts", flush=True)
     if _following_ids:
         try:
-            posts = _timeline_filter(posts, session, user, tl_type, _following_ids)
+            posts = _timeline_filter(posts, session, user, tl_type, _following_ids, boosted_ids=_all_boosted_ids)
             print(f"[feed] after mention filter: {len(posts)} posts", flush=True)
         except Exception as e:
             logger.error("feed mention filter error: %s", e, exc_info=True)
