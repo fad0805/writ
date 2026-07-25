@@ -29,12 +29,8 @@ from app.routes.auth import router as auth_router
 from app.routes.api import router as api_router
 from app.routes.admin import router as admin_router
 from app.routes.mastodon_api import router as mastodon_api_router
-from app.activitypub import (
-    get_outbox, get_followers, get_following, handle_inbox,
-    _deliver_sync, _cleanup_expired_media, _cleanup_remote_data,
-    _resolve_actor,
-)
-from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs as _brfn6
+from app.core.activitypub import get_outbox, get_followers, get_following, handle_inbox, _deliver_sync, _cleanup_expired_media, _cleanup_remote_data, _resolve_actor, _send_delete_post, get_featured
+from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs
 
 _RATE_LIMIT_WINDOW = 60
 _RATE_LIMIT_MAX = 30
@@ -266,7 +262,6 @@ def _auto_delete_expired_posts():
                             ap_id = post.ap_id or ""
                             if ap_id and ap_id.startswith("http"):
                                 try:
-                                    from app.activitypub import _send_delete_post
                                     _send_delete_post(post, u)
                                 except Exception:
                                     pass
@@ -288,7 +283,7 @@ def _auto_delete_expired_posts():
                     logger.info("Auto-deleted %d expired posts", deleted)
                     try:
                         for _uid in _autodel_notif_users:
-                            _brfn6(_uid)
+                            broadcast_refresh_notifs(_uid)
                     except Exception:
                         pass
         except Exception as e:
@@ -584,7 +579,6 @@ def user_following(request: Request, username: str, page: int = None):
 
 @app.get("/users/{username}/featured")
 def user_featured(request: Request, username: str, page: int = None):
-    from app.activitypub import get_featured
     if not _check_collection_access(username, request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     result = get_featured(username, page)

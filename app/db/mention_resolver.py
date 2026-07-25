@@ -1,7 +1,9 @@
 import logging
 from sqlalchemy import or_
-from app.models import User, get_session
 from urllib.parse import urlparse as _urlparse
+
+from app.models import User, get_session
+from app.core.activitypub import _resolve_actor
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +35,6 @@ def _resolve_remote_user(handle: str) -> User | None:
     if not _federation_allowed(domain):
         return None
     try:
-        from app.activitypub import _resolve_actor
         resolved = None
         for url in [f"https://{domain}/@{local_part}", f"https://{domain}/users/{local_part}"]:
             try:

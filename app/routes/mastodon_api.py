@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session as SASession
 
 from app.db.database import get_db
 from app.config.settings import BASE_URL, DOMAIN, MAX_POST_LENGTH
+from app.core.activitypub import broadcast_to_followers, _send_delete_post
 from app.core.eventbus import broadcast as _broadcast_sse
 from app.core.push import send_push_to_user
 from app.core.timeline_stream import broadcast_refresh_notifs, broadcast_notif_sound, broadcast_post, broadcast_delete
@@ -1220,7 +1221,6 @@ async def update_status(status_id: str, request: Request, db: SASession = Depend
                     "cc": note_data.get("cc", []),
                     "object": note_data,
                 }
-                from app.activitypub import broadcast_to_followers
                 broadcast_to_followers(user, update_activity)
             except Exception as e:
                 logger.error("Mastodon API: Update federation failed: %s", e, exc_info=True)
@@ -1260,7 +1260,6 @@ def delete_status(status_id: str, request: Request, db: SASession = Depends(get_
     if ap_id and ap_id.startswith("http") and not is_remote_author:
         def _bg_delete():
             try:
-                from app.activitypub import _send_delete_post
                 with get_session() as s:
                     p = s.query(Post).filter_by(id=post.id).first()
                     if p:

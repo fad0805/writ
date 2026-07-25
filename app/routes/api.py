@@ -16,7 +16,7 @@ from sqlalchemy.orm import selectinload, Session
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PushSubscription, LoginSession, get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.utils.log import log_admin_action
-from app.activitypub import _fetch_remote_post
+from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _post_to_inbox, _federation_allowed, _build_reactions, _resolve_actor, _ap_fetch, _fetch_and_save_ap_object, _send_delete_post, _send_flag, _send_accept, _send_reject, _get_instance_actor, _validate_url
 from app.serializers import _post_json, _user_json
 from app.db.mention_resolver import resolve_handles_to_ids
 from app.utils.datetime import _fmt_dt
@@ -25,7 +25,6 @@ from app.utils.filter import _timeline_filter
 from app.utils.content_parser import process_post_content, extract_mentions
 from app.utils.post import _get_descendant_ids
 
-from app.activitypub import broadcast_to_followers, _post_to_inbox, _federation_allowed, _build_reactions
 from app.db.database import get_db
 from app.config.settings import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED, APP_ENV, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, INITIAL_OWNER_PASSWORD, VAPID_PUBLIC_KEY, SESSION_EXPIRE_DAYS
 from app.utils.crypto import encrypt_key, get_private_key, generate_keypair, sign_string
@@ -864,7 +863,6 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                     _resolved_handles.append((handle, remote_user))
                     continue
                 try:
-                    from app.activitypub import _resolve_actor
                     r_name, r_domain = handle.split("@", 1)
                     if not _federation_allowed(r_domain):
                         continue
@@ -960,7 +958,6 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                     _unknown_handles.add(handle)
 
             if _unknown_handles:
-                from app.activitypub import _resolve_actor
                 for handle in _unknown_handles:
                     try:
                         r_name, r_domain = handle.split("@", 1)
@@ -1168,16 +1165,15 @@ def _do_create_post(
             try:
                 if pending_quote_url:
                     try:
-                        from app.activitypub import _ap_fetch as _ap_fetch_quote, _fetch_and_save_ap_object as _fsao
                         with get_session() as _qs:
                             _signer = _qs.query(User).get(user_id)
                         if not _signer:
                             return
-                        data = _ap_fetch_quote(pending_quote_url, _signer)
+                        data = _ap_fetch(pending_quote_url, _signer)
                         if data:
                             obj = data.get("object", data)
                             if obj.get("type") in ("Note", "Article"):
-                                result = _fsao(obj, _signer)
+                                result = _fetch_and_save_ap_object(obj, _signer)
                                 if result:
                                     with get_session() as uqs:
                                         uqs.query(Post).filter_by(id=post.id).update({
@@ -1393,7 +1389,6 @@ def api_delete_post(request: Request, post_id: int):
                         except Exception:
                             pass
             if _ap_id and _ap_id.startswith("http") and not _remote:
-                from app.activitypub import _send_delete_post
                 try:
                     from app.models import get_session as _gs, Post as _Po
                     with _gs() as _s:
@@ -1491,7 +1486,6 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
 
         if forward_to_remote and target_obj and hasattr(target_obj, 'author') and target_obj.author and target_obj.author.is_remote:
             try:
-                from app.activitypub import _send_flag
                 _send_flag(user, target_type, target_obj, reason.strip()[:200], parsed_rule_ids)
             except Exception as e:
                 logger.error("Failed to send Flag activity: %s", e, exc_info=True)
@@ -1957,7 +1951,6 @@ def api_react_post(request: Request, background_tasks: BackgroundTasks, post_id:
                 if post_author_id != user.id:
                     broadcast_refresh_notifs(post_author_id)
                 if post_author_is_remote and post_author_shared_inbox:
-                    from app.activitypub import _post_to_inbox
                     _tag = []
                     if emoji.startswith(":") and emoji.endswith(":"):
                         _kw = emoji[1:-1]
@@ -2032,7 +2025,6 @@ def api_unreact_post(request: Request, background_tasks: BackgroundTasks, post_i
                     broadcast_reaction_update(post_id, _reactions)
                     broadcast_refresh_notifs(post.author_id)
                     if post_author_is_remote and post_author_shared_inbox:
-                        from app.activitypub import _post_to_inbox
                         undo = {
                             "@context": "https://www.w3.org/ns/activitystreams",
                             "id": f"{BASE_URL}/likes/{uuid.uuid4()}#undo",
@@ -2403,7 +2395,6 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             actor_url = f"https://{remote_domain}/@{remote_user}"
             # Fire-and-forget: don't block profile load on remote actor refresh
             try:
-                from app.activitypub import _resolve_actor
                 import threading
                 threading.Thread(target=_resolve_actor, args=(actor_url,), daemon=True).start()
             except Exception:
@@ -2639,7 +2630,6 @@ def api_user_media(request: Request, username: str, limit: int = Query(12), offs
 def api_follow(request: Request, username: str):
     user = require_active_auth(request)
     if "@" in username and not username.startswith("@"):
-        from app.activitypub import _resolve_actor, _post_to_inbox
         remote_username = username
         with get_session() as s:
             target = s.query(User).filter_by(username=remote_username).first()
@@ -2707,7 +2697,6 @@ def api_approve_follow(request: Request, username: str):
         ).update({"notification_type": "follow"})
         s.commit()
         if follower_is_remote and follower:
-            from app.activitypub import _send_accept
             try:
                 follow_activity_id = target.activity_id or f"{follower.actor_uri()}#follows/{user.id}"
                 inbox = follower.inbox_url or (follower.actor_uri().rstrip("/") + "/inbox")
@@ -2770,7 +2759,6 @@ def api_reject_follow(request: Request, username: str):
         except Exception:
             pass
         if follower_is_remote and follower:
-            from app.activitypub import _send_reject
             try:
                 follow_activity_id = f"{follower.actor_uri()}#follows/{user.id}"
                 inbox = follower.inbox_url or (follower.actor_uri().rstrip("/") + "/inbox")
@@ -4197,7 +4185,6 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
 
         # Broadcast Delete to all related remote servers BEFORE deleting data
         import json as _json
-        from app.activitypub import _post_to_inbox
         _actor_uri = db.actor_uri()
         # Collect all remote user IDs that have interacted with this user
         _interacted = set()
@@ -4724,7 +4711,6 @@ def api_by_number(request: Request, username: str, number: str):
             post = s.query(Post).filter_by(author_id=author.id, number=number).first()
         if not post:
             # 로컬에 없으면 원격 AP에서 가져오기 시도
-            from app.activitypub import _fetch_remote_post, _get_instance_actor, _resolve_actor
             remote_user = None
             if author:
                 remote_user = author
@@ -4967,7 +4953,6 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 if not already_found:
                     try:
                         import httpx
-                        from app.activitypub import _resolve_actor
                         urls = [
                             f"https://{r_domain}/users/{r_handle}",
                             f"https://{r_domain}/@{r_handle}",
@@ -5059,7 +5044,6 @@ def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
 def _safe_httpx_get(url, headers=None, timeout=15, max_size=5*1024*1024):
     """HTTP GET with redirect validation and size limit."""
     import httpx
-    from app.activitypub import _validate_url
     if not _validate_url(url):
         print(f"[SAFE_GET] blocked by _validate_url url={url}", flush=True)
         return None
@@ -5086,7 +5070,6 @@ def _safe_httpx_get(url, headers=None, timeout=15, max_size=5*1024*1024):
 
 def _ap_fetch(url, user):
     """Fetch a remote URL with HTTP Signature, return parsed JSON."""
-    from app.activitypub import _validate_url
     from urllib.parse import urlparse
     import re, datetime, time
 
@@ -5272,7 +5255,6 @@ def api_fetch_actor(request: Request, background_tasks: BackgroundTasks, url: st
             background_tasks.add_task(_background_fetch_outbox, url, user.id, local_user.id)
             return _user_json(local_user)
 
-    from app.activitypub import _resolve_actor
     actor = _resolve_actor(url, force_refresh=False, sign_as=user)
     if not actor:
         raise HTTPException(status_code=400, detail="Cannot resolve actor")
@@ -5309,7 +5291,6 @@ def api_fetch_post(request: Request, url: str = Form(...)):
     logger.info("fetch-post obj_type=%s obj_keys=%s", obj_type, list(obj.keys())[:10] if isinstance(obj, dict) else type(obj))
     if obj_type in ("Person", "Application", "Service"):
         with get_session() as _us:
-            from app.activitypub import _resolve_actor
             actor = _resolve_actor(url, sign_as=user)
             if actor:
                 return {"type": "user", "redirect": f"/@{actor.username}"}
@@ -5788,7 +5769,6 @@ def api_admin_refresh_profile(request: Request, user_id: int):
             raise HTTPException(status_code=400, detail="Not a remote user or no remote_url")
         remote_url = u.remote_url
     try:
-        from app.activitypub import _resolve_actor, _fetch_remote_count
         actor = _resolve_actor(remote_url, force_refresh=True, sign_as=user)
         if not actor:
             raise HTTPException(status_code=400, detail="Failed to refresh profile")
@@ -6256,7 +6236,6 @@ def api_admin_forward_report(request: Request, report_id: int):
             target_obj = s.query(Post).get(report.target_id)
         if not target_obj or not hasattr(target_obj, 'author') or not target_obj.author or not target_obj.author.is_remote:
             raise HTTPException(status_code=400, detail="Target not remote")
-        from app.activitypub import _send_flag
         reporter = s.query(User).get(report.reporter_id)
         if not reporter:
             raise HTTPException(status_code=400, detail="Reporter not found")
@@ -6669,7 +6648,6 @@ def api_admin_federation_search(request: Request, q: str = ""):
                 else:
                     # Try to resolve via ActivityPub
                     import httpx
-                    from app.activitypub import _resolve_actor
                     # Try actor URL patterns
                     actor_urls = [
                         f"https://{domain}/users/{handle}",
