@@ -1795,7 +1795,9 @@ def search_v2(
 # ---------------------------------------------------------------------------
 @router.get("/custom_emojis")
 def custom_emojis(db: SASession = Depends(get_db)):
-    emojis = db.query(CustomEmoji).all()
+    emojis = db.query(CustomEmoji).filter(
+        (CustomEmoji.domain == "") | (CustomEmoji.domain.is_(None))
+    ).all()
     return [
         {
             "shortcode": e.keyword,
