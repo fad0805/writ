@@ -105,10 +105,15 @@ def _account_json(user: User, db: SASession, viewer: User | None = None) -> dict
     ).scalar() or 0
 
     acct = user.display_handle or user.username
-    # 일부 기존 데이터에 username이 "user@domain@domain"처럼 중복 도메인으로 저장된 경우 정규화
     if acct.count('@') > 1:
         parts = acct.split('@')
         acct = f"{parts[0]}@{parts[1]}"
+
+    # Mastodon API 규격: username은 로컬 부분만, acct에 전체 핸들
+    if user.is_remote:
+        username = user.username.split("@")[0] if "@" in user.username else user.username
+    else:
+        username = user.username
 
     display_name = user.display_name or ""
     note_html = f"<p>{user.summary}</p>" if user.summary else "<p></p>"
@@ -130,14 +135,14 @@ def _account_json(user: User, db: SASession, viewer: User | None = None) -> dict
 
     account = {
         "id": str(user.id),
-        "username": user.username,
+        "username": username,
         "acct": acct,
         "display_name": display_name,
         "locked": bool(user.is_locked),
         "bot": bool(user.is_bot),
         "created_at": _ap_datetime(user.created_at),
         "note": note_html,
-        "url": user.profile_url or f"{BASE_URL}/@{user.username}",
+        "url": user.profile_url or (user.remote_url if user.is_remote else f"{BASE_URL}/@{username}"),
         "avatar": user.profile_image or f"{BASE_URL}/default-avatar.png",
         "avatar_static": user.profile_image or f"{BASE_URL}/default-avatar.png",
         "header": user.header_image or f"{BASE_URL}/default-header.png",
