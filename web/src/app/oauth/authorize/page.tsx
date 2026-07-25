@@ -76,15 +76,21 @@ function OAuthAuthorizeForm() {
         return;
       }
 
+      if (data.redirect) {
+        const isHttp = data.redirect.startsWith("http://") || data.redirect.startsWith("https://");
+        if (isHttp) {
+          window.location.href = data.redirect;
+          return;
+        }
+        setDeepLink(data.redirect);
+        setLoading(false);
+        return;
+      }
+
       if (data.code) {
         if (redirectUri === "urn:ietf:wg:oauth:2.0:oob") {
           setAuthCode(data.code);
           setLoading(false);
-          return;
-        }
-        const isHttpRedirect = redirectUri.startsWith("http://") || redirectUri.startsWith("https://");
-        if (isHttpRedirect && data.redirect) {
-          window.location.href = data.redirect;
           return;
         }
         const sep = redirectUri.includes("?") ? "&" : "?";
