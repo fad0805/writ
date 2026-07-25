@@ -309,6 +309,11 @@ class Post(Base):
                     domain = u.username.split('@', 1)[1] if '@' in u.username else urlparse(BASE_URL).netloc
                     username = u.username.split('@', 1)[0]
                     content = content.replace(target_rel, f'href="https://{domain}/@{username}"')
+                    if not u.is_remote:
+                        content = re.sub(
+                            rf'>@{re.escape(username)}</a>',
+                            f'>@{username}@{domain}</a>',
+                            content)
 
             if self.tag_list:
                 for t in self.tag_list:
