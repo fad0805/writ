@@ -22,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from urllib.parse import urlparse
 from app.utils.crypto import verify_signature, sign_string, get_private_key
-from app.config import SECRET_KEY, BASE_URL, DOMAIN, CORS_ORIGINS
+from app.config.settings import SECRET_KEY, BASE_URL, DOMAIN, CORS_ORIGINS, S3_ENABLED, init_vapid_keys
 from app.logging_config import _request_logger
 from app.models import User, Follow, Post, Novel, ProcessedActivity, get_session, init_db
 from app.routes.auth import router as auth_router
@@ -335,7 +335,6 @@ async def lifespan(app: FastAPI):
         pass
     # Initialize VAPID keys (DB-first, then auto-generate)
     try:
-        from app.config import init_vapid_keys
         init_vapid_keys()
     except Exception:
         pass
@@ -466,7 +465,6 @@ app.add_middleware(
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 # Mount uploads directory (local storage only)
-from app.config import S3_ENABLED
 if not S3_ENABLED:
     os.makedirs("uploads", exist_ok=True)
     app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
@@ -684,7 +682,6 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
             return (False, None)
         print(f"[SIG] trying network fetch for {actor_url}", flush=True)
         try:
-            from app.config import BASE_URL
             if BASE_URL in actor_url:
                 print(f"[SIG] skip self-fetch ({BASE_URL})", flush=True)
             else:
@@ -801,7 +798,6 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
     host_header = request.headers.get("Host", "")
     # Rewrite가 Host를 api:8000으로 변경하면 DOMAIN으로 대체
     if host_header in ("api:8000", "localhost:8000") or host_header.startswith("172."):
-        from app.config import DOMAIN
         host_header = DOMAIN
     digest_val = request.headers.get("Digest", "")
     signed_parts = {
@@ -1088,7 +1084,6 @@ def get_like(like_uuid: str):
 def get_emoji(keyword: str):
     """Return an Emoji activity (dereferenceable URI)."""
     from app.models import CustomEmoji, get_session
-    from app.config import S3_ENABLED
     ap_id = f"{BASE_URL}/emojis/{keyword}"
     with get_session() as s:
         emoji = s.query(CustomEmoji).filter_by(keyword=keyword).first()

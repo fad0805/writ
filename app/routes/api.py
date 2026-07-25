@@ -9,7 +9,7 @@ import logging
 import time
 import threading
 from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File, Depends, BackgroundTasks
-from fastapi.responses import JSONResponse, StreamingResponse, RedirectResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import desc, or_, and_, func, String
 from sqlalchemy.orm import selectinload, Session
 
@@ -27,7 +27,7 @@ from app.utils.post import _get_descendant_ids
 
 from app.activitypub import broadcast_to_followers, _post_to_inbox, _federation_allowed, _build_reactions
 from app.db.database import get_db
-from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED
+from app.config.settings import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED, APP_ENV, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, INITIAL_OWNER_PASSWORD, VAPID_PUBLIC_KEY, SESSION_EXPIRE_DAYS
 from app.utils.crypto import encrypt_key, get_private_key, generate_keypair, sign_string
 from app.eventbus import broadcast
 from app.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream, broadcast_reaction_update, add_post_stream, remove_post_stream
@@ -201,7 +201,6 @@ def api_me(request: Request, s: Session = Depends(get_db)):
         result["enable_reactions"] = False
     resp = JSONResponse(result)
     from app.main import generate_csrf_token
-    from app.config import APP_ENV
     secure = APP_ENV != "development"
     resp.set_cookie(key="csrf_token", value=generate_csrf_token(user.id), max_age=30*86400, httponly=False, samesite="lax", path="/", secure=secure)
     return resp
@@ -255,7 +254,6 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
             log_admin_action(db_user.id, db_user.username, "login", ip_address=client_ip)
             resp = JSONResponse(_user_json(db_user))
             from app.main import generate_csrf_token
-            from app.config import APP_ENV
             secure = APP_ENV != "development"
             resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/", secure=secure)
             resp.set_cookie(key="csrf_token", value=generate_csrf_token(db_user.id), max_age=3600, httponly=False, samesite="lax", path="/", secure=secure)
@@ -269,7 +267,6 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
 
 def _send_verification_email(u: User):
     import secrets
-    from app.config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, APP_ENV
     if not SMTP_SERVER:
         if APP_ENV == "development":
             u.email_verified = True
@@ -343,7 +340,6 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
                 raise HTTPException(status_code=400, detail="해당 이메일 도메인은 가입이 차단되었습니다.")
         user_count = s.query(User).count()
         is_first = user_count == 0
-        from app.config import INITIAL_OWNER_PASSWORD, APP_ENV
         if is_first and INITIAL_OWNER_PASSWORD and password != INITIAL_OWNER_PASSWORD:
             raise HTTPException(status_code=400, detail="초기 관리자 암호가 일치하지 않습니다.")
         salt, pwd_hash = hash_password(password)
@@ -421,7 +417,6 @@ def api_resend_verification(request: Request, email: str = Form(...)):
 @router.post("/auth/forgot-password")
 def api_forgot_password(request: Request, email: str = Form(...)):
     import secrets
-    from app.config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
     client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
     if not _check_auth_rate_limit(client_ip):
         raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
@@ -4352,7 +4347,6 @@ def _domain_from_actor(u) -> str:
     if u.is_remote and u.remote_url:
         from urllib.parse import urlparse
         return urlparse(u.remote_url).hostname or ""
-    # 🌟 app.config 임포트를 제거하고, 이미 전역에 정의된 BASE_URL을 안전하게 파싱!
     from urllib.parse import urlparse
     return urlparse(BASE_URL).hostname or ""
 
@@ -5965,7 +5959,6 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
             try:
                 from email.mime.text import MIMEText
                 import smtplib
-                from app.config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
                 if not SMTP_SERVER:
                     return {"ok": True, "action": action}
                 action_names = {"warning": "경고", "freeze": "동결", "sensitive": "민감 처리", "limit": "제한", "suspend": "정지", "unsuspend": "정지 해제"}
@@ -7325,7 +7318,6 @@ def _read_storage_file(url: str) -> bytes:
                 return f.read()
     try:
         if not url.startswith("http"):
-            from app.config import BASE_URL
             url = f"{BASE_URL}{url}"
         import httpx
         resp = httpx.get(url, timeout=10)
@@ -7534,7 +7526,6 @@ def api_client_log(request: Request):
 @router.get("/push/vapid-public-key")
 def get_vapid_public_key():
     import base64
-    from app.config import VAPID_PUBLIC_KEY
     key = VAPID_PUBLIC_KEY
     if not key:
         try:
@@ -7644,7 +7635,6 @@ def list_sessions(request: Request):
     user = require_active_auth(request)
     from app.routes.auth import get_session_key_from_cookie
     from datetime import timedelta, timezone
-    from app.config import SESSION_EXPIRE_DAYS
     current_key = get_session_key_from_cookie(request)
     with get_session() as s:
         cutoff = datetime.datetime.now(timezone.utc) - timedelta(days=SESSION_EXPIRE_DAYS)

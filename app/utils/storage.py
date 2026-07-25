@@ -3,6 +3,13 @@ import logging
 from abc import ABC, abstractmethod
 from urllib.parse import urlparse
 
+
+from app.config.settings import (
+    S3_ENABLED,
+    S3_ENDPOINT, S3_REGION, S3_ACCESS_KEY, S3_SECRET_KEY,
+    S3_BUCKET, S3_PUBLIC_URL,
+)
+
 logger = logging.getLogger("writ.storage")
 
 
@@ -146,11 +153,6 @@ class S3Storage(StorageBackend):
 
 
 def get_storage() -> StorageBackend:
-    from app.config import (
-        S3_ENABLED,
-        S3_ENDPOINT, S3_REGION, S3_ACCESS_KEY, S3_SECRET_KEY,
-        S3_BUCKET, S3_PUBLIC_URL,
-    )
     if S3_ENABLED:
         return S3Storage(
             endpoint=S3_ENDPOINT,

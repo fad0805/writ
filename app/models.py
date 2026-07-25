@@ -8,7 +8,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, relationship, Session
 
-from app.config import DATABASE_URL, BASE_URL
+from app.config.settings import DATABASE_URL, BASE_URL
 
 _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 if DATABASE_URL.startswith("sqlite"):

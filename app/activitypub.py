@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 import httpx
 
 from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, UserBlock, Tag, get_session
-from app.config import BASE_URL, SECRET_KEY
+from app.config.settings import BASE_URL, SECRET_KEY, DOMAIN
 from app.utils.crypto import generate_keypair, sign_string, encrypt_key, get_private_key
 from app.utils.content_parser import _sanitize_html, process_post_content
 
@@ -28,7 +28,6 @@ logger = logging.getLogger("writ.activitypub")
 def _federation_allowed(domain: str) -> bool:
     if not domain:
         return False
-    from app.config import DOMAIN
     if domain.lower().strip() == DOMAIN.lower().strip():
         return True
     with get_session() as s:
@@ -102,7 +101,6 @@ def _validate_url(url: str) -> bool:
     parsed = urlparse(url)
     host = parsed.hostname or ""
     # Allow configured allowed domains and own server
-    from app.config import DOMAIN, BASE_URL
     _SSRF_ALLOWED = {s.strip() for s in os.environ.get("SSRF_ALLOWED_DOMAINS", "").split(",") if s.strip()}
     own_domain = urlparse(BASE_URL).hostname or DOMAIN
     _SSRF_ALLOWED.add(own_domain)
@@ -685,7 +683,6 @@ def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> 
     try:
         headers = {"Accept": "application/activity+json, application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"", "User-Agent": WRIT_USER_AGENT}
         if sign_as:
-            from app.config import SECRET_KEY
             parsed = urlparse(collection_url)
             date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
             created = int(time.time())
@@ -706,7 +703,6 @@ def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> 
 
 def _get_instance_actor(session) -> User:
     """Get or create the instance actor (system account for server-level requests)."""
-    from app.config import SECRET_KEY
     actor = session.query(User).filter_by(username="actor", is_remote=False).first()
     if not actor:
         priv, pub = generate_keypair()
@@ -2998,8 +2994,6 @@ def _handle_move(activity: dict) -> tuple[int, str]:
         new_actor_url = new_actor_url[0] if new_actor_url else ""
     if not new_actor_url:
         return (400, "Missing target")
-
-    from app.config import BASE_URL
 
     # Resolve new actor BEFORE session (network I/O)
     new_actor = _resolve_actor(new_actor_url)

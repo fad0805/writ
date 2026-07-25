@@ -5,7 +5,7 @@ import nh3
 from bs4 import BeautifulSoup, NavigableString
 
 from app.models import Post
-from app.config import BASE_URL
+from app.config.settings import BASE_URL
 
 
 def process_post_content(sanitized_content: str, post: dict | Post | None) -> str:

@@ -3,7 +3,7 @@ import logging
 import re
 import threading
 
-from app.config import VAPID_CLAIM_EMAIL, get_vapid_keys
+from app.config.settings import VAPID_CLAIM_EMAIL, get_vapid_keys, _sanitize_pem, _is_valid_pem_private_key
 
 logger = logging.getLogger("writ.push")
 
@@ -23,7 +23,6 @@ NOTIF_LABELS = {
 
 
 def _get_vapid_key():
-    from app.config import _sanitize_pem, _is_valid_pem_private_key
     # 1. Try DB first (authoritative source)
     try:
         from app.models import ServerSetting, get_session

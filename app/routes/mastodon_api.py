@@ -2,8 +2,6 @@
 
 Enables third-party Mastodon clients (Tusky, Metatext, etc.) to interact with WRIT.
 """
-import hashlib
-import hmac
 import secrets
 import html
 import re
@@ -11,17 +9,15 @@ import json
 import logging
 import threading
 from datetime import datetime, timezone, timedelta as _timedelta
-from urllib.parse import urlparse
 
 logger = logging.getLogger("writ.mastodon_api")
 
 from fastapi import APIRouter, Request, HTTPException, Depends, Query, UploadFile, File, Form
-from fastapi.responses import JSONResponse
-from sqlalchemy import func as sqlfunc, desc, or_, and_
+from sqlalchemy import func as sqlfunc, or_
 from sqlalchemy.orm import Session as SASession
 
 from app.db.database import get_db
-from app.config import BASE_URL, DOMAIN, MAX_POST_LENGTH
+from app.config.settings import BASE_URL, DOMAIN, MAX_POST_LENGTH
 from app.models import (
     User, Post, Follow, Like, Boost, Bookmark, Notification, Tag,
     CustomEmoji, ServerSetting, MastodonApp, MastodonAccessToken,

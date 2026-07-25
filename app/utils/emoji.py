@@ -4,6 +4,7 @@ import time
 from sqlalchemy import desc
 
 from app.models import CustomEmoji
+from app.config.settings import S3_ENABLED
 
 EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "emojis")
 
@@ -34,7 +35,6 @@ def _emoji_url(file_name: str, domain: str = "", category: str = "") -> str:
     """Return the correct emoji URL (local or S3)."""
     global _emoji_storage
     sub = "remote" if domain or category == "remote" else "local"
-    from app.config import S3_ENABLED
     if S3_ENABLED:
         if _emoji_storage is None:
             from app.utils.storage import get_storage
