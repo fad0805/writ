@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from urllib.parse import urlparse
 from app.utils.crypto import verify_signature, sign_string, get_private_key
 from app.config.settings import SECRET_KEY, BASE_URL, DOMAIN, CORS_ORIGINS, S3_ENABLED, init_vapid_keys
-from app.logging_config import _request_logger
+from app.config.logging import _request_logger
 from app.models import User, Follow, Post, Novel, ProcessedActivity, get_session, init_db
 from app.routes.auth import router as auth_router
 from app.routes.api import router as api_router
