@@ -369,8 +369,9 @@ class Post(Base):
         followers_uri = self.author.followers_uri()
 
         # 답글 처리 (DB 모델의 parent 관계 활용)
-        if self.in_reply_to_ap_id and self.parent:
-            obj["inReplyTo"] = self.parent.ap_id
+        if self.parent:
+            ap_id = self.parent.ap_id or f"{BASE_URL}/posts/{self.parent.id}"
+            obj["inReplyTo"] = ap_id
             if self.parent.author.actor_uri().strip() not in to_list:
                 to_list.append(self.parent.author.actor_uri().strip())
 
@@ -388,7 +389,7 @@ class Post(Base):
             to_list.append(followers_uri)
 
         # [수정] 본인에게 보내는 답글일 경우, to_list에 본인을 포함
-        if self.in_reply_to_ap_id and self.parent and self.parent.author_id == self.author_id:
+        if self.parent and self.parent.author_id == self.author_id:
             if self.author.actor_uri().strip() not in to_list:
                 to_list.append(self.author.actor_uri().strip())
 

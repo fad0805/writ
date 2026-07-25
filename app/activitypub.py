@@ -821,6 +821,9 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
     preferred_username = data.get("preferredUsername", "")
     if not preferred_username:
         return None
+    # 일부 서버는 preferredUsername에 도메인을 포함해 보냄 (e.g. "user@domain")
+    if "@" in preferred_username:
+        preferred_username = preferred_username.split("@")[0]
 
     parsed = urlparse(actor_url)
     domain = parsed.netloc

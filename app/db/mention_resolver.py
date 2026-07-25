@@ -1,4 +1,5 @@
 import logging
+from sqlalchemy import or_
 from app.models import User, get_session
 from urllib.parse import urlparse as _urlparse
 
@@ -73,7 +74,7 @@ def resolve_handles_to_ids(handles: list[str]) -> list[int]:
             if '@' in clean_handle:
                 local_part, domain = clean_handle.split('@', 1)
                 u = s.query(User).filter(
-                    User.username == local_part,
+                    or_(User.username == local_part, User.username == clean_handle),
                     User.is_remote == True
                 ).first()
                 if u and u.remote_url:
