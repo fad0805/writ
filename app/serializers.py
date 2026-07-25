@@ -152,12 +152,20 @@ def _post_json(p, session, user, tl_type=None,
     }
 
 
+def _clean_username(username: str) -> str:
+    if username.count('@') > 1:
+        parts = username.split('@')
+        return f"{parts[0]}@{parts[1]}"
+    return username
+
+
 def _user_json(u):
     role = getattr(u, 'role', 'user') or 'user'
+    _name = _clean_username(u.username)
     return {
         "id": u.id,
-        "username": u.username,
-        "display_name": u.display_name or u.username,
+        "username": _name,
+        "display_name": u.display_name or _name,
         "avatar": u.profile_image or "",
         "header": u.header_image or "",
         "summary": u.summary or "",

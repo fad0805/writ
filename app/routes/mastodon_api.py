@@ -104,10 +104,11 @@ def _account_json(user: User, db: SASession, viewer: User | None = None) -> dict
         Post.author_id == user.id, Post.is_deleted == False
     ).scalar() or 0
 
-    if user.is_remote:
-        acct = user.display_handle or user.username
-    else:
-        acct = user.display_handle or user.username
+    acct = user.display_handle or user.username
+    # 일부 기존 데이터에 username이 "user@domain@domain"처럼 중복 도메인으로 저장된 경우 정규화
+    if acct.count('@') > 1:
+        parts = acct.split('@')
+        acct = f"{parts[0]}@{parts[1]}"
 
     display_name = user.display_name or ""
     note_html = f"<p>{user.summary}</p>" if user.summary else "<p></p>"
