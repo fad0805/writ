@@ -763,6 +763,9 @@ input:focus {
   border-radius: 0;
   font-size: 1em;
 }
+.post-content ul {
+  padding: 0 inherit;
+}
 .code-copy-btn {
   position: absolute;
   top: 6px;
