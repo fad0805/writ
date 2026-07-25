@@ -40,8 +40,23 @@ def upgrade():
     op.create_index("ix_mastodon_access_tokens_user_id", "mastodon_access_tokens", ["user_id"])
     op.create_index("ix_mastodon_access_tokens_access_token", "mastodon_access_tokens", ["access_token"])
 
+    op.create_table(
+        "mastodon_authorization_codes",
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("code", sa.String(128), unique=True, nullable=False),
+        sa.Column("app_id", sa.Integer, sa.ForeignKey("mastodon_apps.id"), nullable=False),
+        sa.Column("user_id", sa.Integer, sa.ForeignKey("users.id"), nullable=False),
+        sa.Column("redirect_uri", sa.Text, default=""),
+        sa.Column("scopes", sa.String(256), default="read write push"),
+        sa.Column("used", sa.Boolean, default=False),
+        sa.Column("created_at", sa.DateTime(timezone=True)),
+    )
+    op.create_index("ix_mastodon_auth_codes_code", "mastodon_authorization_codes", ["code"])
+
 
 def downgrade():
+    op.drop_index("ix_mastodon_auth_codes_code", table_name="mastodon_authorization_codes")
+    op.drop_table("mastodon_authorization_codes")
     op.drop_index("ix_mastodon_access_tokens_access_token", table_name="mastodon_access_tokens")
     op.drop_index("ix_mastodon_access_tokens_user_id", table_name="mastodon_access_tokens")
     op.drop_index("ix_mastodon_access_tokens_app_id", table_name="mastodon_access_tokens")

@@ -367,7 +367,7 @@ async def debug_exception_handler(request: Request, exc: Exception):
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
     return JSONResponse({"detail": "Internal server error"}, status_code=500)
 
-CSRF_EXEMPT_PREFIXES = ("/.well-known/", "/nodeinfo", "/webfinger", "/static/", "/uploads/", "/api/auth/", "/api/push/", "/api/v1/", "/oauth/", "/inbox", "/outbox")
+CSRF_EXEMPT_PREFIXES = ("/.well-known/", "/nodeinfo", "/webfinger", "/static/", "/uploads/", "/api/auth/", "/api/push/", "/api/v1/", "/api/oauth/", "/oauth/", "/inbox", "/outbox")
 CSRF_EXEMPT_EXACT = ("/users/", "/posts/", "/activities/", "/@/")
 CSRF_EXEMPT_METHODS = ("GET", "HEAD", "OPTIONS")
 
@@ -1317,6 +1317,67 @@ app.include_router(mastodon_api_router, prefix="/api/v1")
 
 
 # ---------------------------------------------------------------------------
+# POST /api/oauth/authorize — JSON API for React OAuth authorize page
+# ---------------------------------------------------------------------------
+@app.post("/api/oauth/authorize")
+async def api_oauth_authorize(request: Request):
+    from fastapi.responses import JSONResponse
+    import secrets as _secrets
+
+    body = await request.json()
+    client_id = body.get("client_id", "")
+    redirect_uri = body.get("redirect_uri", "urn:ietf:wg:oauth:2.0:oob")
+    response_type = body.get("response_type", "code")
+    scope = body.get("scope", "read write push")
+    state = body.get("state", "")
+    username = body.get("username", "")
+    password = body.get("password", "")
+
+    with get_session() as db:
+        app_obj = db.query(MastodonApp).filter_by(client_id=client_id).first()
+        if not app_obj:
+            return JSONResponse({"error": "client_id가 유효하지 않습니다."}, status_code=400)
+
+        user = db.query(User).filter(
+            User.is_remote == False,
+            ((User.username == username) | (User.email == username))
+        ).first()
+        if not user or not user.password_hash:
+            return JSONResponse({"error": "이메일/사용자 이름 또는 비밀번호가 틀렸습니다."}, status_code=401)
+
+        if getattr(user, "is_frozen", False):
+            return JSONResponse({"error": "계정이 동결되었습니다."}, status_code=403)
+        if getattr(user, "is_suspended", False):
+            return JSONResponse({"error": "계정이 정지되었습니다."}, status_code=403)
+
+        salt, hval = user.password_hash.split(":", 1)
+        from app.routes.auth import verify_password
+        if not verify_password(password, salt, hval):
+            return JSONResponse({"error": "이메일/사용자 이름 또는 비밀번호가 틀렸습니다."}, status_code=401)
+
+        code = _secrets.token_urlsafe(32)
+        from app.models import MastodonAuthorizationCode
+        auth_code = MastodonAuthorizationCode(
+            code=code,
+            app_id=app_obj.id,
+            user_id=user.id,
+            redirect_uri=redirect_uri,
+            scopes=scope,
+        )
+        db.add(auth_code)
+        db.commit()
+
+    if redirect_uri == "urn:ietf:wg:oauth:2.0:oob":
+        return JSONResponse({"code": code})
+
+    sep = "&" if "?" in redirect_uri else "?"
+    url = f"{redirect_uri}{sep}code={code}"
+    if state:
+        url += f"&state={state}"
+    return JSONResponse({"redirect": url})
+
+
+# ---------------------------------------------------------------------------
 # POST /oauth/token — Mastodon OAuth token endpoint
 # ---------------------------------------------------------------------------
 @app.post("/oauth/token")
@@ -1365,6 +1426,21 @@ async def oauth_token(request: Request):
             scope = body.get("scope", "read write push")
             token = _secrets.token_urlsafe(48)
             mat = MastodonAccessToken(app_id=app_obj.id, user_id=user.id, access_token=token, scopes=scope)
+            db.add(mat)
+            db.commit()
+            return {"access_token": token, "token_type": "bearer", "scope": scope, "created_at": int(_time.time())}
+
+        if grant_type == "authorization_code":
+            code = body.get("code", "")
+            from app.models import MastodonAuthorizationCode
+            auth_code = db.query(MastodonAuthorizationCode).filter_by(code=code, used=False).first()
+            if not auth_code:
+                return JSONResponse({"error": "invalid_grant"}, status_code=400)
+            auth_code.used = True
+            db.commit()
+            scope = body.get("scope", auth_code.scopes or "read write push")
+            token = _secrets.token_urlsafe(48)
+            mat = MastodonAccessToken(app_id=app_obj.id, user_id=auth_code.user_id, access_token=token, scopes=scope)
             db.add(mat)
             db.commit()
             return {"access_token": token, "token_type": "bearer", "scope": scope, "created_at": int(_time.time())}

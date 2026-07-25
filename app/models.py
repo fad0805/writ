@@ -889,6 +889,19 @@ class MastodonAccessToken(Base):
     user = relationship("User", lazy="selectin")
 
 
+class MastodonAuthorizationCode(Base):
+    __tablename__ = "mastodon_authorization_codes"
+
+    id = Column(Integer, primary_key=True)
+    code = Column(String(128), unique=True, nullable=False, index=True)
+    app_id = Column(Integer, ForeignKey("mastodon_apps.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    redirect_uri = Column(Text, default="")
+    scopes = Column(String(256), default="read write push")
+    used = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+
 def init_db():
     Base.metadata.create_all(engine)
     # Direct SQL fallback — add missing columns that Alembic may have skipped
