@@ -556,7 +556,9 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     print(f"[feed] raw query: {raw_total} posts for tl={tl_type}", flush=True)
     posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm and p.author_id != user.id and user.id not in (p.mentioned_user_ids or []))]
     print(f"[feed] after DM filter: {len(posts)} posts", flush=True)
-    # Deduplicate: track seen post IDs and boost_of targets
+    # Deduplicate: prioritize original posts over boost pointers
+    # When multiple boosts of the same post exist, show the original first,
+    # then the oldest boost. Later boosts are collapsed.
     seen_ids = set()
     deduped = []
     # Pre-fetch originals for all boost pointers in one query
@@ -565,17 +567,29 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     if boost_pointer_ids:
         for orig in session.query(Post).options(selectinload(Post.author)).filter(Post.id.in_(boost_pointer_ids), Post.is_deleted == False).all():
             boost_originals[orig.id] = orig
+    # First pass: collect normal posts and track boost pointers (keep oldest per original)
+    pending_boosts = {}
     for p in posts:
         if p.boost_of_id:
-            if p.boost_of_id in seen_ids:
-                continue
-            seen_ids.add(p.boost_of_id)
             if p.boost_of_id not in boost_originals:
                 continue
+            # Keep the last one encountered (= oldest in DESC order)
+            pending_boosts[p.boost_of_id] = p
         elif p.id in seen_ids:
             continue
-        seen_ids.add(p.id)
-        deduped.append(p)
+        else:
+            seen_ids.add(p.id)
+            deduped.append(p)
+    # Second pass: insert one boost pointer after each original
+    for boost_of_id, bp in pending_boosts.items():
+        inserted = False
+        for i, d in enumerate(deduped):
+            if d.id == boost_of_id:
+                deduped.insert(i + 1, bp)
+                inserted = True
+                break
+        if not inserted:
+            deduped.append(bp)
     posts = deduped
     print(f"[feed] after dedup: {len(posts)} posts", flush=True)
     if _following_ids:
@@ -2434,18 +2448,28 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         ).offset(offset).limit(limit + 1).all()
         has_more = len(posts) > limit
         posts = [p for p in posts[:limit] if _can_view(p, user, s)]
-        # Deduplicate: if a post appears both as original and as boost pointer, keep only the boost
+        # Deduplicate: prioritize original posts over boost pointers
         seen_ids = set()
         deduped = []
+        pending_boosts = {}
         for p in posts:
             if p.boost_of_id:
-                if p.boost_of_id in seen_ids:
-                    continue
-                seen_ids.add(p.boost_of_id)
+                # Keep the last one encountered (= oldest in DESC order)
+                pending_boosts[p.boost_of_id] = p
             elif p.id in seen_ids:
                 continue
-            seen_ids.add(p.id)
-            deduped.append(p)
+            else:
+                seen_ids.add(p.id)
+                deduped.append(p)
+        for boost_of_id, bp in pending_boosts.items():
+            inserted = False
+            for i, d in enumerate(deduped):
+                if d.id == boost_of_id:
+                    deduped.insert(i + 1, bp)
+                    inserted = True
+                    break
+            if not inserted:
+                deduped.append(bp)
         posts = deduped
         total_posts = s.query(Post).filter(
             or_(
