@@ -227,19 +227,20 @@ function ExploreContent() {
           )}
           {user && searched && (
             <>
-              {fetchedUrl && posts.length > 0 && (
+              {users.length > 0 && (
                 <>
-                  <h4 className="search-section-title">
-                    <Icon name="globe" /> 리모트 게시글
-                    <span className="fetched-url-label">{fetchedUrl}</span>
-                  </h4>
-                  {posts.map((p) => <PostCard key={p.id} post={p} />)}
-                </>
-              )}
-              {!fetchedUrl && posts.length > 0 && (
-                <>
-                  <h4 className="search-section-title"><Icon name="globe" /> 게시글</h4>
-                  {posts.map((p) => <PostCard key={p.id} post={p} />)}
+                  <h4 className="search-section-title"><Icon name="users" /> 사용자</h4>
+                  <div className="user-search-list">
+                    {users.map((u) => (
+                      <Link key={u.id} href={`/@${u.username}`} className="user-search-card">
+                        <Avatar user={u} className="sidebar-avatar rounded-[8px]" style={{ width: 36, height: 36, minWidth: 36 }} />
+                        <div>
+                          <strong dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(u.display_name, emojiMap, 14)) }} />
+                          <span>@{u.username}</span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
                 </>
               )}
               {novels.length > 0 && (
@@ -275,20 +276,19 @@ function ExploreContent() {
                   </div>
                 </>
               )}
-              {users.length > 0 && (
+              {fetchedUrl && posts.length > 0 && (
                 <>
-                  <h4 className="search-section-title"><Icon name="users" /> 사용자</h4>
-                  <div className="user-search-list">
-                    {users.map((u) => (
-                      <Link key={u.id} href={`/@${u.username}`} className="user-search-card">
-                        <Avatar user={u} className="sidebar-avatar rounded-[8px]" style={{ width: 36, height: 36, minWidth: 36 }} />
-                        <div>
-                          <strong dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(u.display_name, emojiMap, 14)) }} />
-                          <span>@{u.username}</span>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
+                  <h4 className="search-section-title">
+                    <Icon name="globe" /> 리모트 게시글
+                    <span className="fetched-url-label">{fetchedUrl}</span>
+                  </h4>
+                  {posts.map((p) => <PostCard key={p.id} post={p} />)}
+                </>
+              )}
+              {!fetchedUrl && posts.length > 0 && (
+                <>
+                  <h4 className="search-section-title"><Icon name="globe" /> 게시글</h4>
+                  {posts.map((p) => <PostCard key={p.id} post={p} />)}
                 </>
               )}
             </>
