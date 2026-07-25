@@ -31,6 +31,7 @@ from app.routes.auth import hash_password, verify_password
 from app.utils.content_parser import process_post_content, extract_mentions
 from app.db.mention_resolver import resolve_handles_to_ids
 from app.routes.api import _sync_post_tags
+from app.serializers import _post_json
 
 router = APIRouter()
 
