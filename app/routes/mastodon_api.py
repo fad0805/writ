@@ -1047,7 +1047,7 @@ async def create_status(request: Request, db: SASession = Depends(get_db)):
 
     pj = _post_json(post, db, user)
     threading.Thread(target=_broadcast_timeline, args=(pj, user.id, vis, False), daemon=True).start()
-    return pj
+    return _status_json(post, db, viewer=user)
 
 
 # ---------------------------------------------------------------------------
