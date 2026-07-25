@@ -4,30 +4,32 @@ Enables third-party Mastodon clients (Tusky, Metatext, etc.) to interact with WR
 """
 import secrets
 import html
+import os
 import re
 import json
 import logging
 import threading
-from datetime import datetime, timezone, timedelta as _timedelta
-
-logger = logging.getLogger("writ.mastodon_api")
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Request, HTTPException, Depends, Query, UploadFile, File, Form
 from sqlalchemy import func as sqlfunc, or_
 from sqlalchemy.orm import Session as SASession
 
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Tag, CustomEmoji, ServerSetting, MastodonApp, MastodonAccessToken, now
+from app.serializers import _post_json
 from app.db.database import get_db, get_session
+from app.db.mention_resolver import resolve_handles_to_ids
 from app.config.settings import BASE_URL, DOMAIN, MAX_POST_LENGTH
 from app.core.activitypub import broadcast_to_followers, _send_delete_post
-from app.core.eventbus import broadcast as _broadcast_sse
+from app.core.eventbus import broadcast
 from app.core.push import send_push_to_user
 from app.core.timeline_stream import broadcast_refresh_notifs, broadcast_notif_sound, broadcast_post, broadcast_delete
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Tag, CustomEmoji, ServerSetting, MastodonApp, MastodonAccessToken, now
+from app.routes.api import _sync_post_tags, _broadcast_update_actor, _broadcast_federation, _broadcast_timeline
 from app.utils.content_parser import process_post_content, extract_mentions
 from app.utils.emoji import _emoji_url, _load_emojis
-from app.db.mention_resolver import resolve_handles_to_ids
-from app.routes.api import _sync_post_tags, _broadcast_update_actor
-from app.serializers import _post_json
+from app.utils.storage import get_storage
+
+logger = logging.getLogger("writ.mastodon_api")
 
 router = APIRouter()
 
@@ -1072,7 +1074,7 @@ async def create_status(request: Request, db: SASession = Depends(get_db)):
             if isinstance(opts, list) and 2 <= len(opts) <= 10 and all(isinstance(o, str) and o.strip() for o in opts):
                 expires_in = int(poll_expires) if poll_expires else 60
                 now_dt = datetime.now(timezone.utc)
-                expires_at = (now_dt + _timedelta(minutes=expires_in)).isoformat() if expires_in > 0 else None
+                expires_at = (now_dt + timedelta(minutes=expires_in)).isoformat() if expires_in > 0 else None
                 post.poll_data = {
                     "options": [{"text": o.strip(), "votes_count": 0} for o in opts],
                     "expires_at": expires_at,
@@ -1085,8 +1087,6 @@ async def create_status(request: Request, db: SASession = Depends(get_db)):
     db.refresh(post)
 
     pj = _post_json(post, db, user)
-
-    from app.routes.api import _broadcast_federation, _broadcast_timeline
 
     def _create_notifications_and_broadcast():
         try:
@@ -1123,7 +1123,7 @@ async def create_status(request: Request, db: SASession = Depends(get_db)):
     threading.Thread(target=_broadcast_federation, args=(user.id, post.id, vis, text), daemon=True).start()
 
     try:
-        _broadcast_sse("new_post", {"post_id": post.id, "author_id": user.id})
+        broadcast("new_post", {"post_id": post.id, "author_id": user.id})
     except Exception as e:
         logger.error("Mastodon API: Failed to broadcast new_post event: %s", e, exc_info=True)
 
@@ -1198,12 +1198,11 @@ async def update_status(status_id: str, request: Request, db: SASession = Depend
     if post.ap_id and not post.author.is_remote:
         def _bg_federation():
             try:
-                import datetime as _dt
                 note_data = post.to_ap_note()
                 note_data.pop("@context", None)
                 note_data.pop("url", None)
                 note_data["atomUri"] = post.ap_id
-                note_data["updated"] = _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z")
+                note_data["updated"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
                 note_data.setdefault("summary", None)
                 note_data.setdefault("sensitive", False)
                 note_data.setdefault("attachment", [])
@@ -1271,7 +1270,6 @@ def delete_status(status_id: str, request: Request, db: SASession = Depends(get_
     if media:
         def _bg_media():
             try:
-                from app.utils.storage import get_storage
                 storage = get_storage()
                 for m in media:
                     if isinstance(m, dict) and m.get("url"):
@@ -1860,7 +1858,6 @@ async def upload_media(
 ):
     user = _require_bearer(request, db)
 
-    import os
     upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "media")
     os.makedirs(upload_dir, exist_ok=True)
 
