@@ -31,7 +31,7 @@ from app.routes.auth import hash_password, verify_password
 from app.utils.content_parser import process_post_content, extract_mentions
 from app.utils.emoji import _emoji_url, _load_emojis
 from app.db.mention_resolver import resolve_handles_to_ids
-from app.routes.api import _sync_post_tags
+from app.routes.api import _sync_post_tags, _broadcast_update_actor
 from app.serializers import _post_json
 
 router = APIRouter()
@@ -125,9 +125,7 @@ def _account_json(user: User, db: SASession, viewer: User | None = None) -> dict
             safe_url = emoji["url"].replace('"', "%22")
             return f'<img src="{safe_url}" alt=":{kw}:" title=":{kw}:" class="custom-emoji" style="display:inline-block;width:1.2em;height:1.2em;vertical-align:-0.2em;">'
         return m.group(0)
-    display_name = shortcode_re.sub(_emoji_to_img, display_name)
     note_html = shortcode_re.sub(_emoji_to_img, note_html)
-    source_note = shortcode_re.sub(_emoji_to_img, source_note)
 
     account = {
         "id": str(user.id),
@@ -1598,6 +1596,7 @@ def pin_status(status_id: str, request: Request, db: SASession = Depends(get_db)
         db.query(User).filter_by(id=user.id).update({"pinned_posts": pinned})
     post.is_pinned = True
     db.commit()
+    threading.Thread(target=_broadcast_update_actor, args=(user,), daemon=True).start()
     return _status_json(post, db, viewer=user)
 
 
@@ -1616,6 +1615,7 @@ def unpin_status(status_id: str, request: Request, db: SASession = Depends(get_d
         db.query(User).filter_by(id=user.id).update({"pinned_posts": pinned})
     post.is_pinned = False
     db.commit()
+    threading.Thread(target=_broadcast_update_actor, args=(user,), daemon=True).start()
     return _status_json(post, db, viewer=user)
 
 
