@@ -3,35 +3,40 @@ import base64
 import datetime
 import email.utils
 import hashlib
-import hmac as _hmac
+import hmac
+import secrets
 import httpx
 import json
 import os
 import logging
 import threading
 import time
-from collections import defaultdict
+import traceback
+import sys
+import uvicorn
+
+import sqlalchemy
 from typing import AsyncGenerator
-
-logger = logging.getLogger(__name__)
-
+from collections import defaultdict
 from contextlib import asynccontextmanager
+from urllib.parse import urlparse
+
 from fastapi import FastAPI, Request, HTTPException, WebSocket
 from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from urllib.parse import urlparse
 
 from app.config.settings import SECRET_KEY, BASE_URL, DOMAIN, CORS_ORIGINS, S3_ENABLED, init_vapid_keys
 from app.config.logging import _request_logger
 from app.core.activitypub import get_outbox, get_followers, get_following, handle_inbox, _deliver_sync, _cleanup_expired_media, _cleanup_remote_data, _resolve_actor, _send_delete_post, get_featured
 from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs
-from app.models import User, Follow, Post, Novel, ProcessedActivity, get_session, init_db, PendingDelivery
-from app.routes.auth import router as auth_router
-from app.routes.api import router as api_router
+from app.models import User, Follow, Post, Novel, ProcessedActivity, get_session, init_db, PendingDelivery, engine, Like, Boost, Bookmark, Vote, Notification, CustomEmoji, ServerSetting, MastodonApp, MastodonAuthorizationCode, MastodonAccessToken, User
+from app.routes.auth import router as auth_router, verify_password
+from app.routes.api import router as api_router, _cleanup_avatars
 from app.routes.admin import router as admin_router
 from app.routes.mastodon_api import router as mastodon_api_router
 from app.utils.crypto import verify_signature, sign_string, get_private_key
+from app.utils.storage import get_storage
 
 _RATE_LIMIT_WINDOW = 60
 _RATE_LIMIT_MAX = 30
@@ -43,6 +48,8 @@ _rate_limit_lock = threading.Lock()
 
 _actor_fail_cache: dict[str, float] = {}  # actor_url -> timestamp of last failure
 _ACTOR_FAIL_TTL = 3600  # 1 hour
+
+logger = logging.getLogger(__name__)
 
 
 def _check_rate_limit(key: str) -> bool:
@@ -179,7 +186,6 @@ def _auto_delete_expired_posts():
         if _get_cpu_percent() > 70:
             return True
         try:
-            from app.models import engine
             pool = engine.pool
             checkedout = pool.checkedout()
             size = pool.size()
@@ -197,7 +203,6 @@ def _auto_delete_expired_posts():
                 time.sleep(1800)
                 continue
 
-            from app.models import get_session, Post, User, Like, Boost, Bookmark, Vote, Notification
             with get_session() as s:
                 now = datetime.datetime.now(datetime.timezone.utc)
                 users_with_lifetime = s.query(User).filter(
@@ -244,7 +249,6 @@ def _auto_delete_expired_posts():
                             media = list(post.media_attachments or [])
                             if media:
                                 try:
-                                    from app.utils.storage import get_storage
                                     storage = get_storage()
                                     for m in media:
                                         if isinstance(m, dict) and m.get("url"):
@@ -289,22 +293,19 @@ def _auto_delete_expired_posts():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from app.routes.api import _cleanup_avatars
     init_db()
     try:
-        from app.models import get_session, Post
-        import sqlalchemy as _sa
         with get_session() as s:
-            inspector = _sa.inspect(s.bind)
+            inspector = sqlalchemy.inspect(s.bind)
             cols = [c["name"] for c in inspector.get_columns("posts")]
             if "link_preview" not in cols:
-                s.execute(_sa.text("ALTER TABLE posts ADD COLUMN link_preview JSON"))
+                s.execute(sqlalchemy.text("ALTER TABLE posts ADD COLUMN link_preview JSON"))
                 s.commit()
             if "quote_of_id" not in cols:
-                s.execute(_sa.text("ALTER TABLE posts ADD COLUMN quote_of_id INTEGER"))
+                s.execute(sqlalchemy.text("ALTER TABLE posts ADD COLUMN quote_of_id INTEGER"))
                 s.commit()
             if "quote_of_ap_id" not in cols:
-                s.execute(_sa.text("ALTER TABLE posts ADD COLUMN quote_of_ap_id VARCHAR(1024) DEFAULT ''"))
+                s.execute(sqlalchemy.text("ALTER TABLE posts ADD COLUMN quote_of_ap_id VARCHAR(1024) DEFAULT ''"))
                 s.commit()
     except Exception:
         pass
@@ -313,13 +314,11 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
     try:
-        from app.models import get_session, PushSubscription
-        import sqlalchemy as _sa
         with get_session() as s:
-            inspector = _sa.inspect(s.bind)
+            inspector = sqlalchemy.inspect(s.bind)
             cols = [c["name"] for c in inspector.get_columns("push_subscriptions")]
             if "device_name" not in cols:
-                s.execute(_sa.text("ALTER TABLE push_subscriptions ADD COLUMN device_name VARCHAR(256) DEFAULT ''"))
+                s.execute(sqlalchemy.text("ALTER TABLE push_subscriptions ADD COLUMN device_name VARCHAR(256) DEFAULT ''"))
                 s.commit()
     except Exception:
         pass
@@ -342,8 +341,6 @@ app = FastAPI(title="WRIT, the sns for writers", version="1.0.0", lifespan=lifes
 
 @app.exception_handler(Exception)
 async def debug_exception_handler(request: Request, exc: Exception):
-    import traceback
-    import sys
     print(f"[ERROR] {request.method} {request.url.path} raised {type(exc).__name__}: {exc}", flush=True)
     print(f"[ERROR] {'='*60}", flush=True)
     traceback.print_exc()
@@ -362,7 +359,7 @@ CSRF_EXEMPT_METHODS = ("GET", "HEAD", "OPTIONS")
 def generate_csrf_token(user_id: int) -> str:
     expires = int(time.time()) + 3600
     payload = f"{user_id}:{expires}"
-    sig = _hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+    sig = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
     return base64.urlsafe_b64encode(f"{payload}:{sig}".encode()).decode()
 
 
@@ -375,18 +372,18 @@ def validate_csrf_token(token: str, session_token: str) -> bool:
         user_id = int(parts[0])
         expires = int(parts[1])
         sig = parts[2]
-        expected = _hmac.new(SECRET_KEY.encode(), f"{user_id}:{expires}".encode(),
+        expected = hmac.new(SECRET_KEY.encode(), f"{user_id}:{expires}".encode(),
                              hashlib.sha256).hexdigest()[:16]
-        if not _hmac.compare_digest(sig, expected) or expires <= time.time():
+        if not hmac.compare_digest(sig, expected) or expires <= time.time():
             return False
         # Verify session cookie is also valid HMAC-signed (same browser)
         session_decoded = base64.urlsafe_b64decode(session_token.encode()).decode()
         session_parts = session_decoded.split(":")
         session_payload = f"{session_parts[0]}:{session_parts[1]}"
         session_sig = session_parts[2]
-        session_expected = _hmac.new(SECRET_KEY.encode(), session_payload.encode(),
+        session_expected = hmac.new(SECRET_KEY.encode(), session_payload.encode(),
                                      hashlib.sha256).hexdigest()[:16]
-        return _hmac.compare_digest(session_sig, session_expected)
+        return hmac.compare_digest(session_sig, session_expected)
     except Exception:
         return False
 
@@ -403,7 +400,6 @@ async def csrf_protection(request: Request, call_next):
         return await call_next(request)
     session_token = request.cookies.get("session", "")
     csrf_token = request.headers.get("X-CSRF-Token", "")
-    import os
     is_dev = os.getenv("APP_ENV", "production") == "development"
     if is_dev:
         pass
@@ -436,7 +432,6 @@ async def csrf_protection(request: Request, call_next):
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    import time
     start = time.time()
     response = await call_next(request)
     elapsed = time.time() - start
@@ -672,14 +667,13 @@ def _verify_http_signature(request: Request, body: bytes, activity: dict) -> tup
             if BASE_URL in actor_url:
                 print(f"[SIG] skip self-fetch ({BASE_URL})", flush=True)
             else:
-                from app.models import User as _Usr, get_session as _gs
                 _parsed = urlparse(actor_url)
                 _date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
                 _created = int(time.time())
                 _ss = f"(request-target): get {_parsed.path}\nhost: {_parsed.netloc}\ndate: {_date}\n(created): {_created}"
                 _headers = {"Accept": "application/activity+json", "Date": _date, "Host": _parsed.netloc}
-                with _gs() as _s:
-                    _signer = _s.query(_Usr).filter_by(is_remote=False).first()
+                with get_session() as _s:
+                    _signer = _s.query(User).filter_by(is_remote=False).first()
                     if _signer:
                         _priv = get_private_key(_signer, SECRET_KEY)
                         _sig = sign_string(_ss, _priv)
@@ -848,7 +842,6 @@ async def shared_inbox(request: Request):
                 return JSONResponse({"status": 200, "message": "Already processed"})
             s.add(ProcessedActivity(id=activity_id))
             s.commit()
-    import asyncio
     loop = asyncio.get_event_loop()
     status_code, message = await loop.run_in_executor(None, handle_inbox, activity)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)
@@ -945,14 +938,12 @@ async def user_inbox(request: Request, username: str):
             if obj_actor and obj_actor != actor_url:
                 return JSONResponse({"status": "error", "message": "Undo actor mismatch"}, status_code=403)
 
-    import sys
     # Record activity ID to prevent replay
     if activity_id:
         with get_session() as s:
             s.add(ProcessedActivity(id=activity_id))
             s.commit()
 
-    import asyncio
     loop = asyncio.get_event_loop()
     status_code, message = await loop.run_in_executor(None, handle_inbox, activity)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)
@@ -960,7 +951,6 @@ async def user_inbox(request: Request, username: str):
 
 @app.get("/activities/follow/{follow_uuid}")
 def get_follow_activity(request: Request, follow_uuid: str):
-    from app.models import Follow, User, get_session
     accept = request.headers.get("Accept", "")
     if "application/activity+json" not in accept:
         return JSONResponse({"error": "Not found"}, status_code=404)
@@ -986,7 +976,6 @@ def get_follow_activity(request: Request, follow_uuid: str):
 
 @app.get("/activities/create/{post_id}")
 def get_create_activity(request: Request, post_id: int):
-    from app.models import Post, get_session
     accept = request.headers.get("Accept", "")
     if "application/activity+json" not in accept:
         return JSONResponse({"error": "Not found"}, status_code=404)
@@ -1044,7 +1033,6 @@ def get_user_by_handle(request: Request, username: str):
 @app.get("/likes/{like_uuid}")
 def get_like(like_uuid: str):
     """Return a Like activity (dereferenceable URI)."""
-    from app.models import Like, User, get_session
     ap_id = f"{BASE_URL}/likes/{like_uuid}"
     with get_session() as s:
         like = s.query(Like).filter_by(ap_id=ap_id).first()
@@ -1066,7 +1054,6 @@ def get_like(like_uuid: str):
 @app.get("/emojis/{keyword}")
 def get_emoji(keyword: str):
     """Return an Emoji activity (dereferenceable URI)."""
-    from app.models import CustomEmoji, get_session
     ap_id = f"{BASE_URL}/emojis/{keyword}"
     with get_session() as s:
         emoji = s.query(CustomEmoji).filter_by(keyword=keyword).first()
@@ -1074,7 +1061,6 @@ def get_emoji(keyword: str):
             return JSONResponse({"error": "Not found"}, status_code=404)
         sub = "remote" if emoji.domain or emoji.category == "remote" else "local"
         if S3_ENABLED:
-            from app.utils.storage import get_storage
             try:
                 storage = get_storage()
                 url = storage.url(f"emojis/{sub}/{emoji.file_name}")
@@ -1099,7 +1085,6 @@ def get_emoji(keyword: str):
 @app.get("/boosts/{boost_uuid}")
 def get_boost(boost_uuid: str):
     """Return an Announce activity (dereferenceable URI)."""
-    from app.models import Boost, User, get_session
     ap_id = f"{BASE_URL}/boosts/{boost_uuid}"
     with get_session() as s:
         boost = s.query(Boost).filter_by(ap_id=ap_id).first()
@@ -1170,7 +1155,6 @@ def nodeinfo():
             User.id.in_(session.query(Post.author_id).filter(Post.created_at > (now - datetime.timedelta(days=180))))
         ).count()
         local_post_count = session.query(Post).filter(Post.author.has(is_remote=False)).count()
-        from app.models import ServerSetting
         settings = ServerSetting.get(session)
         server_name = settings.server_name or "WRIT"
         server_desc = getattr(settings, 'server_description', '') or ''
@@ -1209,8 +1193,7 @@ def _verify_session_cookie(request: Request) -> bool:
             return False
         user_id = int(parts[0])
         expires = int(parts[1])
-        import time as _t
-        if expires <= _t.time():
+        if expires <= time.time():
             return False
         return True
     except Exception:
@@ -1294,10 +1277,6 @@ app.include_router(mastodon_api_router, prefix="/api/v1")
 # ---------------------------------------------------------------------------
 @app.post("/api/oauth/authorize")
 async def api_oauth_authorize(request: Request):
-    from fastapi.responses import JSONResponse
-    from app.models import MastodonApp, MastodonAuthorizationCode
-    import secrets as _secrets
-
     body = await request.json()
     client_id = body.get("client_id", "")
     redirect_uri = body.get("redirect_uri", "urn:ietf:wg:oauth:2.0:oob")
@@ -1325,11 +1304,10 @@ async def api_oauth_authorize(request: Request):
             return JSONResponse({"error": "계정이 정지되었습니다."}, status_code=403)
 
         salt, hval = user.password_hash.split(":", 1)
-        from app.routes.auth import verify_password
         if not verify_password(password, salt, hval):
             return JSONResponse({"error": "이메일/사용자 이름 또는 비밀번호가 틀렸습니다."}, status_code=401)
 
-        code = _secrets.token_urlsafe(32)
+        code = secrets.token_urlsafe(32)
         auth_code = MastodonAuthorizationCode(
             code=code,
             app_id=app_obj.id,
@@ -1355,10 +1333,6 @@ async def api_oauth_authorize(request: Request):
 # ---------------------------------------------------------------------------
 @app.post("/oauth/token")
 async def oauth_token(request: Request):
-    from app.models import MastodonApp, MastodonAccessToken, User, get_session as _get_session
-    from app.routes.auth import verify_password
-    import secrets as _secrets
-
     ct = request.headers.get("content-type", "")
     if "application/json" in ct:
         body = await request.json()
@@ -1370,13 +1344,13 @@ async def oauth_token(request: Request):
     client_id = body.get("client_id", "")
     client_secret = body.get("client_secret", "")
 
-    with _get_session() as db:
+    with get_session() as db:
         app_obj = db.query(MastodonApp).filter_by(client_id=client_id, client_secret=client_secret).first()
         if not app_obj:
             return JSONResponse({"error": "invalid_client"}, status_code=400)
 
         if grant_type == "client_credentials":
-            token = _secrets.token_urlsafe(48)
+            token = secrets.token_urlsafe(48)
             mat = MastodonAccessToken(app_id=app_obj.id, user_id=1, access_token=token, scopes="read")
             db.add(mat)
             db.commit()
@@ -1396,7 +1370,7 @@ async def oauth_token(request: Request):
             if user.is_suspended:
                 return JSONResponse({"error": "invalid_grant"}, status_code=400)
             scope = body.get("scope", "read write push")
-            token = _secrets.token_urlsafe(48)
+            token = secrets.token_urlsafe(48)
             mat = MastodonAccessToken(app_id=app_obj.id, user_id=user.id, access_token=token, scopes=scope)
             db.add(mat)
             db.commit()
@@ -1404,14 +1378,13 @@ async def oauth_token(request: Request):
 
         if grant_type == "authorization_code":
             code = body.get("code", "")
-            from app.models import MastodonAuthorizationCode
             auth_code = db.query(MastodonAuthorizationCode).filter_by(code=code, used=False).first()
             if not auth_code:
                 return JSONResponse({"error": "invalid_grant"}, status_code=400)
             auth_code.used = True
             db.commit()
             scope = body.get("scope", auth_code.scopes or "read write push")
-            token = _secrets.token_urlsafe(48)
+            token = secrets.token_urlsafe(48)
             mat = MastodonAccessToken(app_id=app_obj.id, user_id=auth_code.user_id, access_token=token, scopes=scope)
             db.add(mat)
             db.commit()
@@ -1422,5 +1395,4 @@ async def oauth_token(request: Request):
 
 # Run
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
