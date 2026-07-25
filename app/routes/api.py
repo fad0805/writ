@@ -4854,6 +4854,9 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
     with get_session() as s:
         pattern = f"%{query}%"
         is_hashtag_search = q.strip().startswith("#")
+        following_ids = []
+        if user:
+            following_ids = [f.following_id for f in s.query(Follow).filter_by(follower_id=user.id, is_accepted=True).all()]
         if is_hashtag_search:
             tag = s.query(Tag).filter_by(name=query.lower()).first()
             if tag:
@@ -4865,7 +4868,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 )
                 if user:
                     q_posts = q_posts.filter(
-                        or_(Post.visibility == "public", Post.author_id == user.id)
+                        Post.author_id.in_(following_ids) | (Post.author_id == user.id) | Post.mentioned_user_ids.contains([user.id]) | (Post.visibility == "public")
                     )
                 else:
                     q_posts = q_posts.filter(Post.visibility == "public")
@@ -4873,7 +4876,11 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                     author_user = s.query(User).filter_by(username=author).first()
                     if author_user:
                         q_posts = q_posts.filter(Post.author_id == author_user.id)
-                posts = q_posts.order_by(desc(Post.created_at)).limit(20).all()
+                posts = q_posts.order_by(desc(Post.created_at)).limit(60).all()
+                if user:
+                    posts = _timeline_filter(posts, s, user, "federated", following_ids)[:20]
+                else:
+                    posts = posts[:20]
             else:
                 # 태그가 디비에 없으면 둘 다 깔끔하게 빈 리스트 처리
                 posts = []
@@ -4888,11 +4895,22 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 # 태그가 디비에 없으면 둘 다 깔끔하게 빈 리스트 처리
                 novels = []
         else:
-            posts = s.query(Post).options(selectinload(Post.author)).filter(
+            q_posts = s.query(Post).options(selectinload(Post.author)).filter(
                 Post.content.ilike(pattern),
                 Post.is_deleted == False,
                 Post.author.has(User.is_suspended == False),
-            ).order_by(desc(Post.created_at)).limit(20).all()
+            )
+            if user:
+                q_posts = q_posts.filter(
+                    Post.author_id.in_(following_ids) | (Post.author_id == user.id) | Post.mentioned_user_ids.contains([user.id]) | (Post.visibility == "public")
+                )
+            else:
+                q_posts = q_posts.filter(Post.visibility == "public")
+            posts = q_posts.order_by(desc(Post.created_at)).limit(60).all()
+            if user:
+                posts = _timeline_filter(posts, s, user, "federated", following_ids)[:20]
+            else:
+                posts = posts[:20]
             novels = _apply_latest_activity_order(s.query(Novel).options(selectinload(Novel.author)).filter(
                 or_(Novel.title.ilike(pattern), Novel.description.ilike(pattern)),
                 Novel.is_published == True,
