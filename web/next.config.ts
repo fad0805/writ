@@ -15,6 +15,14 @@ const nextConfig: NextConfig = {
         destination: `${API_HOST}/.well-known/:path*`,
       },
       {
+        source: "/host-meta",
+        destination: `${API_HOST}/host-meta`,
+      },
+      {
+        source: "/host-meta/:path*",
+        destination: `${API_HOST}/host-meta/:path*`,
+      },
+      {
         source: "/nodeinfo/:path*",
         destination: `${API_HOST}/nodeinfo/:path*`,
       },
@@ -49,6 +57,10 @@ const nextConfig: NextConfig = {
       {
         source: "/emojis/:path*",
         destination: `${API_HOST}/emojis/:path*`,
+      },
+      {
+        source: "/oauth/:path*",
+        destination: `${API_HOST}/oauth/:path*`,
       },
       {
         source: "/@:username",
