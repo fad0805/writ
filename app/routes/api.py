@@ -26,7 +26,7 @@ from app.utils.content_parser import process_post_content, extract_mentions
 from app.utils.post import _get_descendant_ids
 
 from app.activitypub import broadcast_to_followers, _post_to_inbox, _federation_allowed, _build_reactions
-from app.database import get_db
+from app.db.database import get_db
 from app.config import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED
 from app.utils.crypto import encrypt_key, get_private_key, generate_keypair, sign_string
 from app.eventbus import broadcast

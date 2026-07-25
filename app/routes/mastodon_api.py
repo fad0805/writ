@@ -20,14 +20,13 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import func as sqlfunc, desc, or_, and_
 from sqlalchemy.orm import Session as SASession
 
-from app.database import get_db
+from app.db.database import get_db
 from app.config import BASE_URL, DOMAIN, MAX_POST_LENGTH
 from app.models import (
     User, Post, Follow, Like, Boost, Bookmark, Notification, Tag,
-    CustomEmoji, LoginSession, ServerSetting, MastodonApp, MastodonAccessToken,
+    CustomEmoji, ServerSetting, MastodonApp, MastodonAccessToken,
     get_session, now,
 )
-from app.routes.auth import hash_password, verify_password
 from app.utils.content_parser import process_post_content, extract_mentions
 from app.utils.emoji import _emoji_url, _load_emojis
 from app.db.mention_resolver import resolve_handles_to_ids
