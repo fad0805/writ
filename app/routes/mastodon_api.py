@@ -8,8 +8,12 @@ import secrets
 import html
 import re
 import json
-from datetime import datetime, timezone
+import logging
+import threading
+from datetime import datetime, timezone, timedelta as _timedelta
 from urllib.parse import urlparse
+
+logger = logging.getLogger("writ.mastodon_api")
 
 from fastapi import APIRouter, Request, HTTPException, Depends, Query, UploadFile, File, Form
 from fastapi.responses import JSONResponse
@@ -24,6 +28,9 @@ from app.models import (
     get_session, now,
 )
 from app.routes.auth import hash_password, verify_password
+from app.utils.content_parser import process_post_content, extract_mentions
+from app.db.mention_resolver import resolve_handles_to_ids
+from app.routes.api import _sync_post_tags
 
 router = APIRouter()
 
@@ -611,11 +618,12 @@ def home_timeline(
     following_ids = [f.following_id for f in db.query(Follow.following_id).filter(
         Follow.follower_id == user.id, Follow.accepted == True
     ).all()]
+    following_ids.append(user.id)
 
     q = db.query(Post).filter(
         Post.author_id.in_(following_ids),
         Post.is_deleted == False,
-        Post.visibility.in_(["public", "home"]),
+        Post.visibility.in_(["public", "home", "followers"]),
         Post.boost_of_id.is_(None),
     )
 
@@ -638,17 +646,29 @@ def home_timeline(
         Bookmark.user_id == user.id, Bookmark.post_id.in_([p.id for p in posts])
     ).all()) if posts else set()
 
+    following_set = set(following_ids)
+
     result = []
     for p in posts:
         if p.boost_of_id:
             original = db.query(Post).filter_by(id=p.boost_of_id).first()
             if original and not original.is_deleted:
+                # Reply filtering for boosted replies
+                if original.in_reply_to_id:
+                    parent = db.query(Post).filter_by(id=original.in_reply_to_id).first()
+                    if parent and parent.author_id not in following_set and parent.author_id != user.id:
+                        continue
                 s = _boost_status_json(p, original, db, viewer=user,
                                        _boosted_ids=_boosted_ids, _liked_ids=_liked_ids,
                                        _bookmarked_ids=_bookmarked_ids)
                 if s:
                     result.append(s)
         else:
+            # Reply filtering: drop replies to posts by non-followed, non-self users
+            if p.in_reply_to_id:
+                parent = db.query(Post).filter_by(id=p.in_reply_to_id).first()
+                if parent and parent.author_id not in following_set and parent.author_id != user.id:
+                    continue
             s = _status_json(p, db, viewer=user, _boosted_ids=_boosted_ids,
                              _liked_ids=_liked_ids, _bookmarked_ids=_bookmarked_ids)
             if s:
@@ -807,7 +827,13 @@ def get_status(status_id: str, request: Request, db: SASession = Depends(get_db)
     if not post or post.is_deleted:
         raise HTTPException(status_code=404, detail="Record not found")
     viewer = _maybe_bearer(request, db)
-    s = _status_json(post, db, viewer)
+    if not viewer:
+        s = _status_json(post, db, None)
+    else:
+        _liked_ids = {post.id} if db.query(Like).filter_by(user_id=viewer.id, post_id=post.id).first() else set()
+        _boosted_ids = {post.id} if db.query(Boost).filter_by(user_id=viewer.id, post_id=post.id).first() else set()
+        _bookmarked_ids = {post.id} if db.query(Bookmark).filter_by(user_id=viewer.id, post_id=post.id).first() else set()
+        s = _status_json(post, db, viewer, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids)
     if s is None:
         raise HTTPException(status_code=404, detail="Record not found")
     return s
@@ -823,12 +849,33 @@ def get_statuses(
     id: list[str] = Query(default=[]),
 ):
     viewer = _maybe_bearer(request, db)
-    result = []
+    post_ids = []
+    posts_map = {}
     for sid in id:
         try:
             post = db.query(Post).filter_by(id=int(sid), is_deleted=False).first()
             if post:
-                s = _status_json(post, db, viewer)
+                post_ids.append(post.id)
+                posts_map[post.id] = post
+        except ValueError:
+            continue
+    _liked_ids = set(r[0] for r in db.query(Like.post_id).filter(
+        Like.user_id == viewer.id, Like.post_id.in_(post_ids)
+    ).all()) if viewer and post_ids else set()
+    _boosted_ids = set(r[0] for r in db.query(Boost.post_id).filter(
+        Boost.user_id == viewer.id, Boost.post_id.in_(post_ids)
+    ).all()) if viewer and post_ids else set()
+    _bookmarked_ids = set(r[0] for r in db.query(Bookmark.post_id).filter(
+        Bookmark.user_id == viewer.id, Bookmark.post_id.in_(post_ids)
+    ).all()) if viewer and post_ids else set()
+    result = []
+    for sid in id:
+        try:
+            pid = int(sid)
+            post = posts_map.get(pid)
+            if post:
+                s = _status_json(post, db, viewer, _liked_ids=_liked_ids,
+                                 _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids)
                 if s:
                     result.append(s)
         except ValueError:
@@ -883,20 +930,40 @@ async def create_status(request: Request, db: SASession = Depends(get_db)):
 
     vis = _visibility_from_mastodon(visibility) if visibility in ("public", "unlisted", "private", "direct") else user.default_visibility
 
-    mentioned_user_ids = []
-    mentioned_usernames = re.findall(r'@(\w+)', text)
-    for uname in mentioned_usernames:
-        mentioned_user = db.query(User).filter_by(username=uname).first()
-        if mentioned_user and mentioned_user.id != user.id:
-            mentioned_user_ids.append(mentioned_user.id)
+    if vis in ("public", "home") and in_reply_to_id:
+        parent = db.query(Post).filter_by(id=int(in_reply_to_id)).first()
+        if parent:
+            vis_order = {"public": 0, "home": 1, "followers": 2, "mention": 3}
+            parent_vis = parent.visibility or "public"
+            if vis_order.get(parent_vis, 0) > vis_order.get(vis, 0):
+                vis = parent_vis
 
+    content_html = process_post_content(text, None)
+    mentions = extract_mentions(text, None)
+    mentioned_handles = [m["handle"] for m in mentions]
+    mentioned_ids = resolve_handles_to_ids(mentioned_handles)
+    mentioned_ids = list(set(mentioned_ids))
+
+    if not content_html.strip() and not poll_options:
+        raise HTTPException(status_code=400, detail="Content cannot be empty")
+    total_len = len(text) + len(spoiler_text or "")
+    if total_len > MAX_POST_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Total length exceeds {MAX_POST_LENGTH}")
+
+    if user.is_limited and vis == "public":
+        vis = "home"
+
+    post_number = secrets.token_hex(4)
+    author_is_sensitive = getattr(user, 'is_sensitive', False) or False
     post = Post(
         author_id=user.id,
-        content=text[:MAX_POST_LENGTH] if text else "",
+        content=content_html,
         summary=spoiler_text[:512] if spoiler_text else "",
         visibility=vis,
-        is_sensitive=bool(sensitive),
-        mentioned_user_ids=mentioned_user_ids,
+        is_sensitive=bool(sensitive) or author_is_sensitive,
+        mentioned_user_ids=mentioned_ids,
+        number=post_number,
+        ap_id="",
     )
 
     if in_reply_to_id:
@@ -904,20 +971,82 @@ async def create_status(request: Request, db: SASession = Depends(get_db)):
         if parent:
             post.in_reply_to_id = parent.id
             post.in_reply_to_ap_id = parent.ap_id or ""
-            if vis in ("public", "home") and parent.visibility in ("public", "home"):
-                pass
 
     db.add(post)
     db.flush()
 
-    post.ap_id = f"{BASE_URL}/users/{user.username}/statuses/{post.id}"
+    post.ap_id = f"{BASE_URL}/@{user.username}/{post.number}"
 
     if media_ids:
         post.media_attachments = [{"id": str(mid), "url": "", "type": "image", "alt": ""} for mid in media_ids[:4]]
 
+    if poll_options:
+        try:
+            opts = json.loads(poll_options) if isinstance(poll_options, str) else poll_options
+            if isinstance(opts, list) and 2 <= len(opts) <= 10 and all(isinstance(o, str) and o.strip() for o in opts):
+                expires_in = int(poll_expires) if poll_expires else 60
+                now_dt = datetime.now(timezone.utc)
+                expires_at = (now_dt + _timedelta(minutes=expires_in)).isoformat() if expires_in > 0 else None
+                post.poll_data = {
+                    "options": [{"text": o.strip(), "votes_count": 0} for o in opts],
+                    "expires_at": expires_at,
+                }
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+
+    _sync_post_tags(post, db)
     db.commit()
     db.refresh(post)
-    return _status_json(post, db, viewer=user)
+
+    pj = _post_json(post, db, user)
+
+    from app.routes.api import _broadcast_federation, _broadcast_timeline
+
+    def _create_notifications_and_broadcast():
+        try:
+            with get_session() as ns:
+                mentioned_notified = set()
+                for mu_id in mentioned_ids:
+                    if mu_id != user.id:
+                        notif = Notification(user_id=mu_id, from_user_id=user.id, notification_type="mention", post_id=post.id)
+                        ns.add(notif)
+                        mentioned_notified.add(mu_id)
+                if in_reply_to_id:
+                    parent = ns.query(Post).filter_by(id=in_reply_to_id).first()
+                    if parent and parent.author_id != user.id and parent.author_id not in mentioned_notified:
+                        notif = Notification(user_id=parent.author_id, from_user_id=user.id, notification_type="reply", post_id=post.id)
+                        ns.add(notif)
+                ns.commit()
+
+            from app.push import send_push_to_user
+            from app.timeline_stream import broadcast_refresh_notifs as _brn, broadcast_notif_sound
+            for mu_id in mentioned_ids:
+                if mu_id != user.id:
+                    send_push_to_user(mu_id, "mention", user.username, post.id)
+                    broadcast_notif_sound(mu_id)
+                    _brn(mu_id)
+            if in_reply_to_id:
+                with get_session() as ps:
+                    parent = ps.query(Post).filter_by(id=in_reply_to_id).first()
+                if parent and parent.author_id != user.id and parent.author_id not in [mid for mid in mentioned_ids if mid != user.id]:
+                    send_push_to_user(parent.author_id, "reply", user.username, post.id)
+                    broadcast_notif_sound(parent.author_id)
+                    _brn(parent.author_id)
+        except Exception as e:
+            logger.error("Mastodon API: Failed to create notifications: %s", e, exc_info=True)
+
+    threading.Thread(target=_create_notifications_and_broadcast, daemon=True).start()
+    threading.Thread(target=_broadcast_federation, args=(user.id, post.id, vis, text), daemon=True).start()
+
+    try:
+        from app.eventbus import broadcast as _broadcast_sse
+        _broadcast_sse("new_post", {"post_id": post.id, "author_id": user.id})
+    except Exception as e:
+        logger.error("Mastodon API: Failed to broadcast new_post event: %s", e, exc_info=True)
+
+    pj = _post_json(post, db, user)
+    threading.Thread(target=_broadcast_timeline, args=(pj, user.id, vis, False), daemon=True).start()
+    return pj
 
 
 # ---------------------------------------------------------------------------
@@ -989,7 +1118,7 @@ def favourite_status(status_id: str, request: Request, db: SASession = Depends(g
         db.commit()
 
     post = db.query(Post).filter_by(id=int(status_id)).first()
-    return _status_json(post, db, viewer=user)
+    return _status_json(post, db, viewer=user, _liked_ids={post.id})
 
 
 # ---------------------------------------------------------------------------
@@ -1008,7 +1137,7 @@ def unfavourite_status(status_id: str, request: Request, db: SASession = Depends
         db.commit()
 
     post = db.query(Post).filter_by(id=int(status_id)).first()
-    return _status_json(post, db, viewer=user)
+    return _status_json(post, db, viewer=user, _liked_ids=set())
 
 
 # ---------------------------------------------------------------------------
@@ -1023,7 +1152,7 @@ def reblog_status(status_id: str, request: Request, db: SASession = Depends(get_
 
     existing = db.query(Boost).filter_by(user_id=user.id, post_id=post.id).first()
     if existing:
-        return _status_json(post, db, viewer=user)
+        return _status_json(post, db, viewer=user, _boosted_ids={post.id})
 
     boost = Boost(user_id=user.id, post_id=post.id)
     db.add(boost)
@@ -1039,7 +1168,7 @@ def reblog_status(status_id: str, request: Request, db: SASession = Depends(get_
     db.commit()
     db.refresh(post)
 
-    return _status_json(post, db, viewer=user)
+    return _status_json(post, db, viewer=user, _boosted_ids={post.id})
 
 
 # ---------------------------------------------------------------------------
@@ -1061,7 +1190,7 @@ def unreblog_status(status_id: str, request: Request, db: SASession = Depends(ge
         db.commit()
 
     post = db.query(Post).filter_by(id=int(status_id)).first()
-    return _status_json(post, db, viewer=user)
+    return _status_json(post, db, viewer=user, _boosted_ids=set())
 
 
 # ---------------------------------------------------------------------------
@@ -1081,7 +1210,7 @@ def bookmark_status(status_id: str, request: Request, db: SASession = Depends(ge
         db.commit()
 
     post = db.query(Post).filter_by(id=int(status_id)).first()
-    return _status_json(post, db, viewer=user)
+    return _status_json(post, db, viewer=user, _bookmarked_ids={post.id})
 
 
 # ---------------------------------------------------------------------------
@@ -1100,7 +1229,7 @@ def unbookmark_status(status_id: str, request: Request, db: SASession = Depends(
         db.commit()
 
     post = db.query(Post).filter_by(id=int(status_id)).first()
-    return _status_json(post, db, viewer=user)
+    return _status_json(post, db, viewer=user, _bookmarked_ids=set())
 
 
 # ---------------------------------------------------------------------------
