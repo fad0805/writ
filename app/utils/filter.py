@@ -100,9 +100,13 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
     if tl_type in ("home", "social"):
         allowed_authors = following_set | {user.id}
 
-        # 작성자가 팔로우 대상이 아니면 드롭 (단, 팔로우한 사람이 부스트한 글은 통과)
-        if post.author_id not in allowed_authors and not is_boosted:
-            return False
+        # 작성자가 팔로우 대상이 아니면 드롭
+        # (부스트된 글은 예외 — 단, 팔로워 공개 글은 부스트여도 원작자 팔로우 필수)
+        if post.author_id not in allowed_authors:
+            if not is_boosted:
+                return False
+            if post.visibility == "followers":
+                return False
 
         # --- 3. 답글 필터: 캐시 데이터 기반으로 N+1 없이 칼같이 검사 ---
         if not is_boosted and (post.in_reply_to_id or post.in_reply_to_ap_id):
@@ -127,7 +131,7 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
     return True
 
 
-def _timeline_filter(posts, session: Session, user, tl_type, following_ids, boosted_ids: set | None = None):
+def _timeline_filter(posts, session: Session, user, tl_type, following_ids, boosted_ids: set | None = None, boost_originals: dict | None = None):
     """Filter a batch of posts for timeline display."""
     if not user:
         return posts
@@ -145,6 +149,11 @@ def _timeline_filter(posts, session: Session, user, tl_type, following_ids, boos
 
     filtered = []
     for p in posts:
+        # 부스트 포인터이고 원본이 팔로워 공개면 원작자 팔로우 여부 확인
+        if p.boost_of_id and tl_type in ("home", "social"):
+            _orig = (boost_originals or {}).get(p.boost_of_id) or session.query(Post).filter_by(id=p.boost_of_id).first()
+            if _orig and _orig.visibility == "followers" and _orig.author_id not in following_set:
+                continue
         is_boosted = bool(boosted_ids and p.id in boosted_ids)
         if should_deliver_post(p, session, user, tl_type, following_set, filter_ctx, is_boosted=is_boosted):
             filtered.append(p)

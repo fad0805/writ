@@ -88,8 +88,8 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
                 following_id=post_author_id, accepted=True
             ).all()}
             booster_ids = {b.user_id for b in s.query(Boost).filter_by(post_id=post_id_for_boost).all()}
-            # Also include followers of any user who boosted this post
-            if booster_ids:
+            # 팔로워 공개 글은 부스트한 사람의 팔로워에게 전파하지 않음
+            if booster_ids and post_visibility != "followers":
                 for bf in s.query(Follow).filter(
                     Follow.following_id.in_(booster_ids), Follow.accepted == True
                 ).all():
