@@ -1,10 +1,14 @@
 import base64
+import time
+import hmac
 import hashlib
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.backends import default_backend
 from cryptography.fernet import Fernet
+
+from app.config.settings import SECRET_KEY
 
 
 def generate_keypair():
@@ -85,3 +89,41 @@ def verify_signature(text: str, signature_b64: str, public_key_pem: str) -> bool
             return True
     except Exception:
         return False
+
+
+CSRF_EXEMPT_PREFIXES = ("/.well-known/", "/nodeinfo", "/webfinger", "/static/", "/uploads/", "/api/auth/", "/api/push/", "/api/v1/", "/api/oauth/", "/oauth/", "/inbox", "/outbox")
+CSRF_EXEMPT_EXACT = ("/users/", "/posts/", "/activities/", "/@/")
+CSRF_EXEMPT_METHODS = ("GET", "HEAD", "OPTIONS")
+
+
+def generate_csrf_token(user_id: int) -> str:
+    expires = int(time.time()) + 3600
+    payload = f"{user_id}:{expires}"
+    sig = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+    return base64.urlsafe_b64encode(f"{payload}:{sig}".encode()).decode()
+
+
+def validate_csrf_token(token: str, session_token: str) -> bool:
+    if not token or not session_token:
+        return False
+    try:
+        decoded = base64.urlsafe_b64decode(token.encode()).decode()
+        parts = decoded.split(":")
+        user_id = int(parts[0])
+        expires = int(parts[1])
+        sig = parts[2]
+        expected = hmac.new(SECRET_KEY.encode(), f"{user_id}:{expires}".encode(),
+                             hashlib.sha256).hexdigest()[:16]
+        if not hmac.compare_digest(sig, expected) or expires <= time.time():
+            return False
+        # Verify session cookie is also valid HMAC-signed (same browser)
+        session_decoded = base64.urlsafe_b64decode(session_token.encode()).decode()
+        session_parts = session_decoded.split(":")
+        session_payload = f"{session_parts[0]}:{session_parts[1]}"
+        session_sig = session_parts[2]
+        session_expected = hmac.new(SECRET_KEY.encode(), session_payload.encode(),
+                                     hashlib.sha256).hexdigest()[:16]
+        return hmac.compare_digest(session_sig, session_expected)
+    except Exception:
+        return False
+

@@ -3,7 +3,6 @@ import base64
 import datetime
 import email.utils
 import hashlib
-import hmac
 import secrets
 import httpx
 import json
@@ -37,7 +36,7 @@ from app.routes.auth import router as auth_router, verify_password
 from app.routes.api import router as api_router, _cleanup_avatars
 from app.routes.admin import router as admin_router
 from app.routes.mastodon_api import router as mastodon_api_router
-from app.utils.crypto import verify_signature, sign_string, get_private_key
+from app.utils.crypto import verify_signature, sign_string, get_private_key, CSRF_EXEMPT_EXACT, CSRF_EXEMPT_METHODS, CSRF_EXEMPT_PREFIXES
 from app.utils.storage import get_storage
 
 _RATE_LIMIT_WINDOW = 60
@@ -352,42 +351,6 @@ async def debug_exception_handler(request: Request, exc: Exception):
     if isinstance(exc, HTTPException):
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
     return JSONResponse({"detail": "Internal server error"}, status_code=500)
-
-CSRF_EXEMPT_PREFIXES = ("/.well-known/", "/nodeinfo", "/webfinger", "/static/", "/uploads/", "/api/auth/", "/api/push/", "/api/v1/", "/api/oauth/", "/oauth/", "/inbox", "/outbox")
-CSRF_EXEMPT_EXACT = ("/users/", "/posts/", "/activities/", "/@/")
-CSRF_EXEMPT_METHODS = ("GET", "HEAD", "OPTIONS")
-
-
-def generate_csrf_token(user_id: int) -> str:
-    expires = int(time.time()) + 3600
-    payload = f"{user_id}:{expires}"
-    sig = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
-    return base64.urlsafe_b64encode(f"{payload}:{sig}".encode()).decode()
-
-
-def validate_csrf_token(token: str, session_token: str) -> bool:
-    if not token or not session_token:
-        return False
-    try:
-        decoded = base64.urlsafe_b64decode(token.encode()).decode()
-        parts = decoded.split(":")
-        user_id = int(parts[0])
-        expires = int(parts[1])
-        sig = parts[2]
-        expected = hmac.new(SECRET_KEY.encode(), f"{user_id}:{expires}".encode(),
-                             hashlib.sha256).hexdigest()[:16]
-        if not hmac.compare_digest(sig, expected) or expires <= time.time():
-            return False
-        # Verify session cookie is also valid HMAC-signed (same browser)
-        session_decoded = base64.urlsafe_b64decode(session_token.encode()).decode()
-        session_parts = session_decoded.split(":")
-        session_payload = f"{session_parts[0]}:{session_parts[1]}"
-        session_sig = session_parts[2]
-        session_expected = hmac.new(SECRET_KEY.encode(), session_payload.encode(),
-                                     hashlib.sha256).hexdigest()[:16]
-        return hmac.compare_digest(session_sig, session_expected)
-    except Exception:
-        return False
 
 
 @app.middleware("http")

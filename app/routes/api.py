@@ -31,7 +31,6 @@ from urllib.parse import urlparse
 from email.mime.text import MIMEText
 import smtplib
 
-from app.main import generate_csrf_token
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PushSubscription, LoginSession, ServerSetting
 from app.serializers import _post_json, _user_json
 from app.config.settings import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED, APP_ENV, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, INITIAL_OWNER_PASSWORD, SESSION_EXPIRE_DAYS
@@ -43,7 +42,7 @@ from app.db.database import get_session, get_db
 from app.db.mention_resolver import resolve_handles_to_ids
 from app.routes.auth import require_auth, require_active_auth, get_current_user, hash_password, verify_password, create_session, get_session_key_from_cookie, delete_session_by_key
 from app.utils.content_parser import process_post_content, extract_mentions
-from app.utils.crypto import encrypt_key, get_private_key, generate_keypair, sign_string
+from app.utils.crypto import encrypt_key, get_private_key, generate_keypair, sign_string, generate_csrf_token
 from app.utils.datetime import _fmt_dt
 from app.utils.emoji import EMOJI_DIR, _refresh_emoji_cache_forcibly, _emoji_url, _load_emojis
 from app.utils.filter import _timeline_filter
