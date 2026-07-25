@@ -16,6 +16,7 @@ import httpx
 
 from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, UserBlock, Tag, get_session
 from app.core.eventbus import broadcast
+from app.core.push import send_push_to_user
 from app.core.timeline_stream import broadcast_notif_sound, broadcast_refresh_notifs, broadcast_refresh_notifs, broadcast_post, broadcast_reaction_update, broadcast_delete
 from app.config.settings import BASE_URL, SECRET_KEY, DOMAIN
 from app.utils.crypto import generate_keypair, sign_string, encrypt_key, get_private_key
@@ -970,7 +971,6 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
             )
             session.add(notification)
             session.commit()
-            from app.push import send_push_to_user
             send_push_to_user(target.id, "follow" if accepted else "follow_request", follower.username)
             broadcast_notif_sound(target.id)
 
@@ -1600,7 +1600,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     for _vid in _voter_ids:
                         broadcast_refresh_notifs(_vid)
                     if poll_post.author_id != actor_id:
-                        from app.push import send_push_to_user
                         send_push_to_user(poll_post.author_id, "vote", actor_username, poll_post.id)
                         broadcast_notif_sound(poll_post.author_id)
                     broadcast_post({
@@ -1947,7 +1946,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     _refresh_emoji_cache_forcibly(emoji_s)
             except Exception:
                 pass
-            from app.push import send_push_to_user
             _push_notified = set()
             if reply_to_post and reply_to_post.author_id != actor_id and reply_to_post.author_id not in _push_notified:
                 _push_notified.add(reply_to_post.author_id)
@@ -2154,7 +2152,6 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             )
             session.add(n)
             session.commit()
-            from app.push import send_push_to_user
             send_push_to_user(post.author_id, "like", actor_username, post.id)
             broadcast_notif_sound(post.author_id)
             broadcast_refresh_notifs(post.author_id)
@@ -2354,7 +2351,6 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
 
         # 5. 커밋 이후 외부 연동 (푸시 및 스트리밍) 처리
         if not existing_n:
-            from app.push import send_push_to_user
             send_push_to_user(post.author_id, "boost", actor_username, post.id)
             broadcast_notif_sound(post.author_id)
 
@@ -2834,7 +2830,6 @@ def _notify_admins(session, reporter, target_type, target_id, reason):
             metadata_json=json.dumps({"type": "report", "target_type": target_type, "target_id": target_id, "target_label": "", "reason": (reason or "")[:200]}),
         ))
     session.flush()
-    from app.push import send_push_to_user
     for _a in _admins:
         if _a.id != reporter.id:
             send_push_to_user(_a.id, "moderation", reporter.username)

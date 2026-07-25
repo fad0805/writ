@@ -30,6 +30,7 @@ from app.db.database import get_db
 from app.config.settings import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED, APP_ENV, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, INITIAL_OWNER_PASSWORD, VAPID_PUBLIC_KEY, SESSION_EXPIRE_DAYS
 from app.utils.crypto import encrypt_key, get_private_key, generate_keypair, sign_string
 from app.core.eventbus import broadcast
+from app.core.push import send_push_to_user
 from app.core.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream, broadcast_reaction_update, add_post_stream, remove_post_stream, broadcast_notif_sound, broadcast_delete
 from app.utils.storage import LocalStorage
 
@@ -1200,7 +1201,6 @@ def _do_create_post(
                             ns.add(notif)
                     ns.commit()
 
-                from app.push import send_push_to_user
                 for mu_id in mentioned_ids:
                     if mu_id != user_id:
                         send_push_to_user(mu_id, "mention", _author.username, post.id)
@@ -1484,7 +1484,6 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
         s.commit()
         for admin in admins:
             broadcast_refresh_notifs(admin.id)
-        from app.push import send_push_to_user
         for admin in admins:
             if admin.id != user.id:
                 send_push_to_user(admin.id, "moderation", user.username)
@@ -1546,7 +1545,6 @@ def api_like_post(request: Request, background_tasks: BackgroundTasks, post_id: 
                     broadcast_reaction_update(post_id, _reactions)
                     if post.author_id != user.id:
                         broadcast_refresh_notifs(post.author_id)
-                        from app.push import send_push_to_user
                         send_push_to_user(post.author_id, "like", user.username, post_id)
                         broadcast_notif_sound(post.author_id)
                 if post.author.is_remote and post.author.shared_inbox_url:
@@ -1715,7 +1713,6 @@ def api_boost_post(request: Request, post_id: int):
             except Exception as e:
                 logger.error("Failed to broadcast boost update: %s", e, exc_info=True)
             if post.author_id != user.id:
-                from app.push import send_push_to_user
                 broadcast_refresh_notifs(post.author_id)
                 send_push_to_user(post.author_id, "boost", user.username, post_id)
                 broadcast_notif_sound(post.author_id)
@@ -2688,7 +2685,6 @@ def api_follow(request: Request, username: str):
                 s.add(Notification(user_id=target.id, from_user_id=user.id, notification_type="follow_request" if not accepted else "follow"))
             s.commit()
             broadcast_refresh_notifs(target.id)
-            from app.push import send_push_to_user
             send_push_to_user(target.id, "follow" if accepted else "follow_request", user.username)
             broadcast_notif_sound(target.id)
     return {"ok": True}
@@ -3573,7 +3569,6 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
                 s.add(n)
         if followers:
             s.commit()
-            from app.push import send_push_to_user
             for sf in followers:
                 if sf.user_id != user.id:
                     send_push_to_user(sf.user_id, "new_episode", user.username, metadata={"novel_id": novel.id})
