@@ -1,6 +1,13 @@
 import os
+import base64
+
 from urllib.parse import urlparse
 from dotenv import load_dotenv
+from cryptography.hazmat.primitives.serialization import load_pem_private_key
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives import serialization
+
+from app.models import ServerSetting, get_session, PushSubscription
 
 # Load environment files
 _app_env = os.environ.get("APP_ENV", "development")
@@ -83,7 +90,6 @@ def _is_valid_pem_private_key(pem: str) -> bool:
     if not pem.startswith("-----BEGIN ") or not pem.rstrip().endswith("-----"):
         return False
     try:
-        from cryptography.hazmat.primitives.serialization import load_pem_private_key
         load_pem_private_key(pem.encode("utf-8"), password=None)
         return True
     except Exception:
@@ -112,7 +118,6 @@ def init_vapid_keys():
         return
 
     try:
-        from app.models import ServerSetting, get_session
         with get_session() as _s:
             _ss = ServerSetting.get(_s)
             _db_priv = getattr(_ss, 'vapid_private_key', '') or ''
@@ -147,10 +152,6 @@ def init_vapid_keys():
         return
 
     try:
-        import base64
-        from cryptography.hazmat.primitives.asymmetric import ec
-        from cryptography.hazmat.primitives import serialization
-
         _private_key = ec.generate_private_key(ec.SECP256R1())
         _public_key = _private_key.public_key()
 
@@ -172,7 +173,6 @@ def init_vapid_keys():
         os.environ["VAPID_PUBLIC_KEY"] = VAPID_PUBLIC_KEY
 
         try:
-            from app.models import ServerSetting, get_session
             with get_session() as _s:
                 _ss = ServerSetting.get(_s)
                 _ss.vapid_private_key = VAPID_PRIVATE_KEY
@@ -180,7 +180,6 @@ def init_vapid_keys():
                 _s.commit()
                 print(f"[VAPID] Auto-generated and saved new key (priv len={len(VAPID_PRIVATE_KEY)})", flush=True)
                 try:
-                    from app.models import PushSubscription
                     _deleted = _s.query(PushSubscription).delete()
                     _s.commit()
                     if _deleted:

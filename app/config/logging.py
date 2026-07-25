@@ -2,6 +2,7 @@ import os
 import datetime
 import logging
 import logging.handlers
+import sys
 
 
 class _MidnightRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
@@ -28,7 +29,6 @@ if _log_file_dir:
     try:
         _log_handlers.append(_MidnightRotatingFileHandler(_log_file_dir))
     except PermissionError:
-        import sys
         print(f"[WARN] Cannot write to log file logs/ - check permissions", file=sys.stderr)
 
 logging.basicConfig(
