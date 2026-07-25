@@ -1,10 +1,11 @@
 import os
 import time
 
-from sqlalchemy import desc
+from sqlalchemy import desc, case
 
 from app.models import CustomEmoji
 from app.config.settings import S3_ENABLED
+from app.utils.storage import get_storage
 
 EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "emojis")
 
@@ -37,7 +38,6 @@ def _emoji_url(file_name: str, domain: str = "", category: str = "") -> str:
     sub = "remote" if domain or category == "remote" else "local"
     if S3_ENABLED:
         if _emoji_storage is None:
-            from app.utils.storage import get_storage
             _emoji_storage = get_storage()
         try:
             return _emoji_storage.url(f"emojis/{sub}/{file_name}")
@@ -48,12 +48,10 @@ def _emoji_url(file_name: str, domain: str = "", category: str = "") -> str:
 
 def _load_emojis(session):
     """Load all emojis from DB, with simple in-memory TTL caching."""
-    import time as _time
-    now = _time.time()
+    now = time.time()
     if _emoji_cache["data"] is not None and now - _emoji_cache["ts"] < _EMOJI_CACHE_TTL:
         return _emoji_cache["data"]
     emojis = session.query(CustomEmoji).order_by(desc(CustomEmoji.created_at)).all()
-    from sqlalchemy import case
     emojis = session.query(CustomEmoji).order_by(
         case(
             (CustomEmoji.category == "remote", 1),

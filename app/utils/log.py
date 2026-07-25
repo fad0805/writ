@@ -1,5 +1,5 @@
-import json
 import logging
+from app.models import AdminLog, get_session
 
 logger = logging.getLogger("writ.audit")
 
@@ -16,7 +16,6 @@ def log_admin_action(
 ):
     """Persist an admin-relevant action to the DB and write to the audit log."""
     try:
-        from app.models import AdminLog, get_session
         with get_session() as s:
             s.add(AdminLog(
                 user_id=user_id,

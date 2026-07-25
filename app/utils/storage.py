@@ -1,8 +1,9 @@
 import os
 import logging
-from abc import ABC, abstractmethod
-from urllib.parse import urlparse
 
+from abc import ABC, abstractmethod
+import boto3
+from urllib.parse import urlparse
 
 from app.config.settings import (
     S3_ENABLED,
@@ -99,7 +100,6 @@ class LocalStorage(StorageBackend):
 class S3Storage(StorageBackend):
     def __init__(self, endpoint: str, region: str, access_key: str, secret_key: str,
                  bucket: str, public_url: str = ""):
-        import boto3
         self.bucket = bucket
         self.endpoint = endpoint.rstrip("/")
         self.public_url = public_url.rstrip("/") if public_url else self.endpoint
@@ -126,7 +126,6 @@ class S3Storage(StorageBackend):
             return False
 
     def get(self, key: str) -> bytes:
-        import io
         resp = self.client.get_object(Bucket=self.bucket, Key=key)
         return resp["Body"].read()
 
