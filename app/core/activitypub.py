@@ -1,27 +1,38 @@
-import datetime
 import io
-import ipaddress
-import json
-import hashlib
-import logging
 import os
 import re
-import socket
+import copy
+import sys
 import time
+import datetime
+import json
+import logging
+import threading
+
+import base64
+import ipaddress
+import hashlib
+import httpx
+import html
+import socket
 import uuid
 from typing import Optional
-from urllib.parse import urlparse
 
-import httpx
+from urllib.parse import urlparse, urljoin
+from PIL import Image, ImageSequence
+from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, UserBlock, Tag
 from app.core.eventbus import broadcast
 from app.core.push import send_push_to_user
 from app.core.timeline_stream import broadcast_notif_sound, broadcast_refresh_notifs, broadcast_refresh_notifs, broadcast_post, broadcast_reaction_update, broadcast_delete
 from app.config.settings import BASE_URL, SECRET_KEY, DOMAIN
 from app.db.database import get_session
+from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, UserBlock, Tag, RemoteMedia, ProcessedActivity, PendingDelivery
+from app.routes.api import _refresh_emoji_cache_forcibly, _load_emojis
 from app.utils.crypto import generate_keypair, sign_string, encrypt_key, get_private_key
 from app.utils.content_parser import _sanitize_html, process_post_content
+from app.utils.storage import get_storage
 
 WRIT_USER_AGENT = "WRIT/1.0 (+https://daydream.ink)"
 
@@ -51,11 +62,11 @@ def _federation_allowed(domain: str) -> bool:
             return False
 
 
-def _html_to_newlines(html: str) -> str:
+def _html_to_newlines(raw_html: str) -> str:
     """Convert HTML line breaks/paragraphs to \\n for consistent storage."""
-    html = re.sub(r'<br\s*/?>', '\n', html, flags=re.I)
-    html = re.sub(r'</?p>', '\n', html, flags=re.I)
-    return html.strip('\n')
+    new_html = re.sub(r'<br\s*/?>', '\n', raw_html, flags=re.I)
+    new_html = re.sub(r'</?p>', '\n', new_html, flags=re.I)
+    return new_html.strip('\n')
 
 
 _PRIVATE_SUBNETS = [
@@ -409,8 +420,7 @@ def _validated_get(url: str, headers: dict = None, timeout: int = 15, max_redire
             location = resp.headers.get("location", "")
             if not location:
                 return resp
-            from urllib.parse import urljoin as _urljoin
-            url = _urljoin(url, location)
+            url = urljoin(url, location)
             if not _validate_url(url):
                 logger.warning("SSRF blocked redirect to %s", url)
                 return None
@@ -426,10 +436,6 @@ _REMOTE_MEDIA_EXPIRY_DAYS = 30
 
 
 def _cache_remote_media(remote_url: str) -> str:
-    from app.models import RemoteMedia
-    from app.utils.storage import get_storage
-    from PIL import Image, ImageSequence
-
     if not _validate_url(remote_url):
         return remote_url
 
@@ -510,8 +516,6 @@ def _cache_remote_media(remote_url: str) -> str:
 
 
 def _cleanup_expired_media():
-    from app.models import RemoteMedia
-    from app.utils.storage import get_storage
     storage = get_storage()
     try:
         with get_session() as s:
@@ -554,7 +558,6 @@ def _cleanup_remote_data():
 
             # Clean old processed activities (dedup tracking)
             pa_cutoff = cutoff - datetime.timedelta(days=_PROCESSED_ACTIVITY_RETENTION_DAYS)
-            from app.models import ProcessedActivity
             old_pa = s.query(ProcessedActivity).filter(
                 ProcessedActivity.created_at < pa_cutoff
             ).limit(1000).all()
@@ -587,9 +590,6 @@ def _cleanup_remote_data():
 
 def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url: str = "") -> str:
     """Download remote image. Keep GIF/PNG as-is, convert others (like JPG) to WebP."""
-    from PIL import Image as PILImage
-    from app.utils.storage import get_storage
-
     if not _validate_url(image_url):
         return ""
 
@@ -616,7 +616,7 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
         else:
             # 2차 필터: 외관은 JPG 같지만 실제 파일 내부를 검사
             try:
-                img = PILImage.open(io.BytesIO(data))
+                img = Image.open(io.BytesIO(data))
                 is_animated = getattr(img, "is_animated", False)
                 real_format = (img.format or "").lower()
                 if is_animated or real_format in ("gif", "png"):
@@ -627,7 +627,7 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
                 else:
                     # 3차 필터: 진짜 순수 정지 이미지(JPEG 등)인 경우에만 WebP 압축 최적화 진행
                     if img.mode in ("RGBA", "P"):
-                        bg = PILImage.new("RGB", img.size, (255, 255, 255))
+                        bg = Image.new("RGB", img.size, (255, 255, 255))
                         bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
                         img = bg
                     out = io.BytesIO()
@@ -663,7 +663,6 @@ def _save_remote_avatar(avatar_url: str, local_username: str, old_url: str = "")
 
 def _extract_custom_fields(attachment: list) -> list:
     """Extract PropertyValue entries from remote actor attachment field."""
-    import re
     fields = []
     for item in attachment:
         if not isinstance(item, dict):
@@ -766,10 +765,9 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
     data = None
     if sign_as:
         try:
-            import datetime, time as _t
             date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
             parsed = urlparse(actor_url)
-            created = int(_t.time())
+            created = int(time.time())
             ss = f"(request-target): get {parsed.path}\nhost: {parsed.netloc}\ndate: {date}\n(created): {created}"
             priv = get_private_key(sign_as, SECRET_KEY)
             sig = sign_string(ss, priv)
@@ -1016,7 +1014,6 @@ def _send_reject(inbox_url: str, activity_id: str, target: User, follower_actor_
 
 
 def _handle_reject(activity: dict) -> tuple[int, str]:
-    import sys
     rejecter_url = activity.get("actor", "")
     if isinstance(rejecter_url, list):
         rejecter_url = rejecter_url[0]
@@ -1112,7 +1109,6 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
 
 def _retry_fetch_reply(post_id: int, in_reply_to_ap_id: str, attempt: int = 0):
     """Background: fetch remote parent and link to local post. Max 5 attempts with increasing delay."""
-    import threading
     MAX_ATTEMPTS = 5
     def _worker():
         try:
@@ -1409,29 +1405,26 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         return post
 
     # 원격 포스트에 포함된 URL의 링크 미리보기 fetch
-    import re as _re
-    _url_match = _re.search(r'https?://(?:(?!/tags/)[^\s<>"\')\]#])+', content or "")
+    _url_match = re.search(r'https?://(?:(?!/tags/)[^\s<>"\')\]#])+', content or "")
     if _url_match:
         _url = _url_match.group(0)
         try:
-            import httpx as _httpx
-            _resp = _httpx.get(_url, headers={"User-Agent": "WRIT/1.0"}, timeout=5, follow_redirects=True)
+            _resp = httpx.get(_url, headers={"User-Agent": "WRIT/1.0"}, timeout=5, follow_redirects=True)
             if _resp.status_code == 200:
                 _html = _resp.text
                 def _og(n):
-                    _m = _re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', _html, _re.I)
+                    _m = re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', _html, _re.I)
                     if not _m:
-                        _m = _re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', _html, _re.I)
+                        _m = re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', _html, _re.I)
                     return _m.group(1) if _m else ""
-                _og_title = _og("title") or (_re.search(r'<title>([^<]*)</title>', _html, _re.I).group(1) if _re.search(r'<title>([^<]*)</title>', _html, _re.I) else "")
+                _og_title = _og("title") or (re.search(r'<title>([^<]*)</title>', _html, re.I).group(1) if re.search(r'<title>([^<]*)</title>', _html, re.I) else "")
                 _og_desc = _og("description")
                 _og_img = _og("image")
                 if _og_img and _og_img.startswith("/"):
                     _p = urlparse(_url)
                     _og_img = f"{_p.scheme}://{_p.netloc}{_og_img}"
                 if _og_title:
-                    import html as _html_mod
-                    post.link_preview = {"url": _url, "title": _html_mod.unescape(_og_title[:200]), "description": _html_mod.unescape(_og_desc[:400]) if _og_desc else "", "image": _og_img or ""}
+                    post.link_preview = {"url": _url, "title": html.unescape(_og_title[:200]), "description": html.unescape(_og_desc[:400]) if _og_desc else "", "image": _og_img or ""}
         except Exception:
             pass
 
@@ -1439,7 +1432,6 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
 
 
 def _handle_create(activity: dict) -> tuple[int, str]:
-    import sys
     obj = activity.get("object", {})
     obj_type = obj.get("type") if isinstance(obj, dict) else ""
     if obj_type in ("Note", "Question"):
@@ -1535,9 +1527,9 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         muted_visibility = False
 
         with get_session() as session:
-            import sys; sys.stdout.flush()
+            sys.stdout.flush()
             existing = session.query(Post).filter_by(ap_id=post_id).first()
-            import sys; sys.stdout.flush()
+            sys.stdout.flush()
             if existing:
                 if existing.poll_data and poll_data:
                     for new_opt in poll_data.get("options", []):
@@ -1591,7 +1583,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         existing_vote.option_index = option_idx
                     else:
                         session.add(Vote(user_id=actor_id, post_id=poll_post.id, option_index=option_idx))
-                    import copy
                     new_options = copy.deepcopy(options)
                     new_options[option_idx]["votes_count"] = new_options[option_idx].get("votes_count", 0) + 1
                     poll_post.poll_data = {**poll_post.poll_data, "options": new_options}
@@ -1833,8 +1824,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             if _url_match_lp:
                 _url_lp = _url_match_lp.group(0)
                 try:
-                    import httpx as _httpx_lp
-                    _resp_lp = _httpx_lp.get(_url_lp, headers={"User-Agent": "WRIT/1.0"}, timeout=5, follow_redirects=True)
+                    _resp_lp = httpx.get(_url_lp, headers={"User-Agent": "WRIT/1.0"}, timeout=5, follow_redirects=True)
                     if _resp_lp.status_code == 200:
                         _html_lp = _resp_lp.text
                         def _og_lp(n):
@@ -1849,8 +1839,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             _p_lp = urlparse(_url_lp)
                             _og_img_lp = f"{_p_lp.scheme}://{_p_lp.netloc}{_og_img_lp}"
                         if _og_title_lp:
-                            import html as _html_mod2
-                            link_preview = {"url": _url_lp, "title": _html_mod2.unescape(_og_title_lp[:200]), "description": _html_mod2.unescape(_og_desc_lp[:400]) if _og_desc_lp else "", "image": _og_img_lp or ""}
+                            link_preview = {"url": _url_lp, "title": html.unescape(_og_title_lp[:200]), "description": html.unescape(_og_desc_lp[:400]) if _og_desc_lp else "", "image": _og_img_lp or ""}
                 except Exception:
                     pass
 
@@ -1943,7 +1932,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 with get_session() as emoji_s:
                     _process_emoji_tags(obj.get("tag", []), emoji_s)
                     emoji_s.commit()
-                    from app.routes.api import _refresh_emoji_cache_forcibly
                     _refresh_emoji_cache_forcibly(emoji_s)
             except Exception:
                 pass
@@ -2041,19 +2029,16 @@ def _handle_create(activity: dict) -> tuple[int, str]:
 
 def _broadcast_emoji_list(session):
     """Return ALL emojis from DB formatted for SSE broadcast payload."""
-    from app.routes.api import _load_emojis
     return [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)]
 
 
 def _build_reactions(session, post_id: int) -> dict:
     """Build reactions dict from Like table for a given post."""
-    from app.models import Like as _Like
-    from sqlalchemy import func as _func
     _reactions = {}
     _default_react = "★"
-    for _pid, _react, _cnt in session.query(_Like.post_id, _func.coalesce(_Like.reaction, _default_react), _func.count(_Like.id)).filter(
-        _Like.post_id == post_id
-    ).group_by(_Like.post_id, _Like.reaction).order_by(_Like.post_id, _func.min(_Like.id)).all():
+    for _pid, _react, _cnt in session.query(Like.post_id, func.coalesce(Like.reaction, _default_react), func.count(Like.id)).filter(
+        Like.post_id == post_id
+    ).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all():
         if _pid not in _reactions:
             _reactions[_pid] = {}
         _reactions[_pid][_react] = _cnt
@@ -2119,9 +2104,8 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                     else:
                         _existing_n.metadata_json = ""
                 session.commit()
-                from sqlalchemy import func as _sqlfunc
                 _reactions = {}
-                for _react, _cnt in session.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
+                for _react, _cnt in session.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
                     _reactions[_react or "★"] = _cnt
                 broadcast_reaction_update(post.id, _reactions)
             return (200, "Already liked")
@@ -2156,16 +2140,14 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             send_push_to_user(post.author_id, "like", actor_username, post.id)
             broadcast_notif_sound(post.author_id)
             broadcast_refresh_notifs(post.author_id)
-            from sqlalchemy import func as _sqlfunc
             _reactions = {}
-            for _react, _cnt in session.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
+            for _react, _cnt in session.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
                 _reactions[_react or "★"] = _cnt
             broadcast_reaction_update(post.id, _reactions)
         else:
             session.commit()
-            from sqlalchemy import func as _sqlfunc
             _reactions = {}
-            for _react, _cnt in session.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
+            for _react, _cnt in session.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
                 _reactions[_react or "★"] = _cnt
             broadcast_reaction_update(post.id, _reactions)
 
@@ -2473,7 +2455,6 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
     if not isinstance(obj, dict) and isinstance(obj, str):
         fetched = None
         try:
-            import httpx
             resp = _validated_get(obj, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, timeout=10)
             if resp is not None and resp.status_code < 300:
                 fetched = resp.json()
@@ -2723,7 +2704,6 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     # Update emoji tags
                     _process_emoji_tags(object_data.get("tag", []), session)
                     session.commit()
-                    from app.routes.api import _refresh_emoji_cache_forcibly
                     _refresh_emoji_cache_forcibly(session)
                     try:
                         _ua = post.author
@@ -3070,7 +3050,6 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     body = json.dumps(activity, ensure_ascii=True, sort_keys=True).encode("utf-8")
     print(f"DEBUG_BODY_LENGTH: {len(body)}")
     print(f"DEBUG_BODY: {body.decode('utf-8')}") # 실제 전송되는 JSON
-    import base64
     digest = base64.b64encode(hashlib.sha256(body).digest()).decode()
     digest_header = f"SHA-256={digest}" # 공백 없음 확인
     now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
@@ -3108,7 +3087,6 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
         return
 
     # Queue for background retry if immediate delivery fails
-    from app.models import PendingDelivery
     with get_session() as session:
         session.add(PendingDelivery(
             inbox_url=inbox_url,
@@ -3121,7 +3099,6 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
 
 def send_to_shared_inbox(user: User, activity: dict):
     with get_session() as session:
-        from sqlalchemy.orm import selectinload
         followers = session.query(Follow).options(
             selectinload(Follow.following)
         ).filter(
@@ -3144,8 +3121,7 @@ def send_to_shared_inbox(user: User, activity: dict):
 def _background_import_emoji(url: str, keyword: str, domain: str):
     """백그라운드에서 리모트 에모지 다운로드 + 저장. GIF/PNG는 원본 보존, 그 외 WebP 변환."""
     try:
-        import httpx as _hx
-        _resp = _hx.get(url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=15)
+        _resp = httpx.get(url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=15)
         if _resp.status_code != 200:
             return
         _ct = _resp.headers.get("content-type", "")
@@ -3155,7 +3131,6 @@ def _background_import_emoji(url: str, keyword: str, domain: str):
         elif "png" in _ct or _ext_from_url == "png":
             _ext, _ct_save = "png", "image/png"
         else:
-            from PIL import Image
             _img = Image.open(io.BytesIO(_resp.content))
             if _img.mode in ("RGBA", "P"):
                 _img = _img.convert("RGBA")
@@ -3168,14 +3143,12 @@ def _background_import_emoji(url: str, keyword: str, domain: str):
         if _ext in ("gif", "png"):
             _content = _resp.content
         _fname = f"{keyword}.{_ext}"
-        from app.utils.storage import get_storage
         get_storage().save(f"emojis/remote/{_fname}", _content, _ct_save)
         with get_session() as _es:
             _existing = _es.query(CustomEmoji).filter_by(keyword=keyword).first()
             if not _existing:
                 _es.add(CustomEmoji(keyword=keyword, file_name=_fname, category="remote", domain=domain))
                 _es.commit()
-                from app.routes.api import _refresh_emoji_cache_forcibly
                 _refresh_emoji_cache_forcibly(_es)
     except Exception as e:
         logger.error("Background emoji import failed %s: %s", keyword, e, exc_info=True)
@@ -3185,8 +3158,6 @@ def _process_emoji_tags(tags: list, session):
     """Parse Emoji tags from an ActivityPub object, download and save custom emojis safely."""
     if not tags or not isinstance(tags, list):
         return
-    from PIL import Image
-    from app.utils.storage import get_storage
     _storage = get_storage()
     EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "web", "public", "emojis")
     os.makedirs(EMOJI_DIR, exist_ok=True)
@@ -3300,7 +3271,6 @@ def _process_emoji_tags(tags: list, session):
 
 def broadcast_to_followers(user: User, activity: dict):
     with get_session() as session:
-        from sqlalchemy.orm import selectinload
         followers = session.query(Follow).options(
             selectinload(Follow.follower)
         ).filter(
