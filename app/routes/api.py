@@ -559,31 +559,24 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     print(f"[feed] raw query: {raw_total} posts for tl={tl_type}", flush=True)
     posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm and p.author_id != user.id and user.id not in (p.mentioned_user_ids or []))]
     print(f"[feed] after DM filter: {len(posts)} posts", flush=True)
-    # Deduplicate: show at most one entry per unique post.
-    # Priority 1: original post (if in the feed).
-    # Priority 2: earliest boost of that post (only if original is absent).
-    seen_ids = set()
-    deduped = []
-    # Pre-fetch originals for all boost pointers in one query
+    # Deduplicate: when both original and boost of the same post exist,
+    # show the boost pointer (at its current timestamp) and skip the original.
+    # This matches Mastodon behavior — a boost appears in timeline at boost time.
     boost_pointer_ids = {p.boost_of_id for p in posts if p.boost_of_id}
     boost_originals = {}
     if boost_pointer_ids:
         for orig in session.query(Post).options(selectinload(Post.author)).filter(Post.id.in_(boost_pointer_ids), Post.is_deleted == False).all():
             boost_originals[orig.id] = orig
-    # Track earliest boost per original (last in DESC order = oldest)
-    pending_boosts = {}
+    _boosted_originals_in_feed = set()
+    deduped = []
     for p in posts:
         if p.boost_of_id:
             if p.boost_of_id not in boost_originals:
                 continue
-            pending_boosts[p.boost_of_id] = p
-        elif p.id not in seen_ids:
-            seen_ids.add(p.id)
+            _boosted_originals_in_feed.add(p.boost_of_id)
             deduped.append(p)
-    # Include boost pointers only when the original is missing from the feed
-    for boost_of_id, bp in pending_boosts.items():
-        if boost_of_id not in seen_ids:
-            deduped.append(bp)
+        elif p.id not in _boosted_originals_in_feed:
+            deduped.append(p)
     posts = deduped
     print(f"[feed] after dedup: {len(posts)} posts", flush=True)
     if _following_ids:
@@ -4924,7 +4917,10 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 )
                 if user:
                     q_posts = q_posts.filter(
-                        Post.author_id.in_(following_ids) | (Post.author_id == user.id) | Post.mentioned_user_ids.contains([user.id]) | (Post.visibility == "public")
+                        Post.visibility == "public"
+                        | (Post.author_id.in_(following_ids) & Post.visibility.in_(["public", "home", "followers"]))
+                        | (Post.author_id == user.id)
+                        | Post.mentioned_user_ids.contains([user.id])
                     )
                 else:
                     q_posts = q_posts.filter(Post.visibility == "public")
@@ -4958,7 +4954,10 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
             )
             if user:
                 q_posts = q_posts.filter(
-                    Post.author_id.in_(following_ids) | (Post.author_id == user.id) | Post.mentioned_user_ids.contains([user.id]) | (Post.visibility == "public")
+                    Post.visibility == "public"
+                    | (Post.author_id.in_(following_ids) & Post.visibility.in_(["public", "home", "followers"]))
+                    | (Post.author_id == user.id)
+                    | Post.mentioned_user_ids.contains([user.id])
                 )
             else:
                 q_posts = q_posts.filter(Post.visibility == "public")
