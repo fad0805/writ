@@ -915,6 +915,27 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                 _post_to_inbox(inbox, create_activity, user)
         else:
             broadcast_to_followers(user, create_activity)
+            # 답글인 경우 부모 작성자의 리모트 팔로워에게도 전달
+            from urllib.parse import urlparse as _urlparse
+            if post.in_reply_to_id and post.parent:
+                parent_author = post.parent.author
+                if parent_author and parent_author.is_remote:
+                    inbox = parent_author.inbox_url
+                    if inbox and _federation_allowed(_urlparse(inbox).hostname or ""):
+                        _post_to_inbox(inbox, create_activity, user)
+                elif parent_author and not parent_author.is_remote:
+                    pf_follows = ap_s.query(Follow).filter(
+                        Follow.following_id == parent_author.id,
+                        Follow.follower.has(is_remote=True),
+                    ).all()
+                    for pf in pf_follows:
+                        inbox = pf.follower.shared_inbox_url or pf.follower.inbox_url
+                        if not inbox:
+                            continue
+                        domain = _urlparse(inbox).hostname or ""
+                        if domain and not _federation_allowed(domain):
+                            continue
+                        _post_to_inbox(inbox, create_activity, user)
             delivered_domains = set()
             _known_handles = {}
             _unknown_handles = set()

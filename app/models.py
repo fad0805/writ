@@ -374,6 +374,9 @@ class Post(Base):
             obj["inReplyTo"] = ap_id
             if self.parent.author.actor_uri().strip() not in to_list:
                 to_list.append(self.parent.author.actor_uri().strip())
+            parent_followers = self.parent.author.followers_uri()
+            if parent_followers not in to_list and parent_followers not in cc_list:
+                cc_list.append(parent_followers)
 
         # 공개 범위
         if self.visibility == "public":
