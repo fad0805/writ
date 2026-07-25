@@ -33,8 +33,10 @@ function ExploreContent() {
   const [blockedDomain, setBlockedDomain] = useState<string | null>(null);
   const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
   const [searchAuthor, setSearchAuthor] = useState("");
+  const [postDisplayCount, setPostDisplayCount] = useState(10);
   const inputRef = useRef<HTMLInputElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const searchSentinelRef = useRef<HTMLDivElement>(null);
   const exploreOffsetRef = useRef(0);
   const searchParams = useSearchParams();
 
@@ -54,6 +56,21 @@ function ExploreContent() {
     } catch {}
     setLoadingMore(false);
   }, [loadingMore, hasMore]);
+
+  const loadMoreSearch = useCallback(() => {
+    setPostDisplayCount((prev) => Math.min(prev + 5, posts.length));
+  }, [posts.length]);
+
+  useEffect(() => {
+    const el = searchSentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) loadMoreSearch(); },
+      { rootMargin: "200px" }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [loadMoreSearch]);
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -80,7 +97,7 @@ function ExploreContent() {
         }
       } catch {}
     }
-    setLoading(true); setSearched(true); setFetchedUrl(null); setBlockedDomain(null);
+    setLoading(true); setSearched(true); setFetchedUrl(null); setBlockedDomain(null); setPostDisplayCount(10);
     try {
       const res = await api.search(q.trim(), author);
       setPosts(res.posts);
@@ -288,7 +305,8 @@ function ExploreContent() {
               {!fetchedUrl && posts.length > 0 && (
                 <>
                   <h4 className="search-section-title"><Icon name="globe" /> 게시글</h4>
-                  {posts.map((p) => <PostCard key={p.id} post={p} />)}
+                  {posts.slice(0, postDisplayCount).map((p) => <PostCard key={p.id} post={p} />)}
+                  {postDisplayCount < posts.length && <div ref={searchSentinelRef} style={{ height: 1 }} />}
                 </>
               )}
             </>
