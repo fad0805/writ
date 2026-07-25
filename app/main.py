@@ -36,7 +36,7 @@ from app.routes.auth import router as auth_router, verify_password
 from app.routes.api import router as api_router, _cleanup_avatars
 from app.routes.admin import router as admin_router
 from app.routes.mastodon_api import router as mastodon_api_router
-from app.utils.crypto import verify_signature, sign_string, get_private_key, CSRF_EXEMPT_EXACT, CSRF_EXEMPT_METHODS, CSRF_EXEMPT_PREFIXES
+from app.utils.crypto import verify_signature, sign_string, get_private_key, CSRF_EXEMPT_EXACT, CSRF_EXEMPT_METHODS, CSRF_EXEMPT_PREFIXES, validate_csrf_token
 from app.utils.storage import get_storage
 
 _RATE_LIMIT_WINDOW = 60
