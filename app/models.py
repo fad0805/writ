@@ -6,6 +6,7 @@ from urllib.parse import quote as _urlencode, urlparse
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, JSON, Table
 from sqlalchemy.orm import relationship
 
+from app.config.settings import BASE_URL
 from app.db.database import get_session, Base
 
 def generate_uuid():
