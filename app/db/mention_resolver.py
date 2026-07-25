@@ -4,8 +4,9 @@ import logging
 from sqlalchemy import or_
 from urllib.parse import urlparse
 
-from app.models import User, get_session, FederationBlock, AllowedServer, ServerSetting
+from app.db.database import get_session
 from app.core.activitypub import _resolve_actor
+from app.models import User, FederationBlock, AllowedServer, ServerSetting
 
 logger = logging.getLogger(__name__)
 

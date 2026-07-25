@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.models import User, Post, get_session
+from app.db.database import get_session
+from app.models import User, Post
 from app.routes.auth import require_auth
 from app.utils.log import log_admin_action
 

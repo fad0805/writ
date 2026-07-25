@@ -1,5 +1,6 @@
 import logging
-from app.models import AdminLog, get_session
+from app.db.database import get_session
+from app.models import AdminLog
 
 logger = logging.getLogger("writ.audit")
 

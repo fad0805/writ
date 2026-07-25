@@ -26,11 +26,13 @@ from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config.settings import SECRET_KEY, BASE_URL, DOMAIN, CORS_ORIGINS, S3_ENABLED, init_vapid_keys
+from app.config.settings import SECRET_KEY, BASE_URL, DOMAIN, CORS_ORIGINS, S3_ENABLED
 from app.config.logging import _request_logger
 from app.core.activitypub import get_outbox, get_followers, get_following, handle_inbox, _deliver_sync, _cleanup_expired_media, _cleanup_remote_data, _resolve_actor, _send_delete_post, get_featured
+from app.core.push import init_vapid_keys
 from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs
-from app.models import User, Follow, Post, Novel, ProcessedActivity, get_session, init_db, PendingDelivery, engine, Like, Boost, Bookmark, Vote, Notification, CustomEmoji, ServerSetting, MastodonApp, MastodonAuthorizationCode, MastodonAccessToken, User
+from app.db.database import get_session, engine, init_db
+from app.models import User, Follow, Post, Novel, ProcessedActivity, PendingDelivery, Like, Boost, Bookmark, Vote, Notification, CustomEmoji, ServerSetting, MastodonApp, MastodonAuthorizationCode, MastodonAccessToken, User
 from app.routes.auth import router as auth_router, verify_password
 from app.routes.api import router as api_router, _cleanup_avatars
 from app.routes.admin import router as admin_router

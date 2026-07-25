@@ -16,13 +16,13 @@ from fastapi import APIRouter, Request, HTTPException, Depends, Query, UploadFil
 from sqlalchemy import func as sqlfunc, or_
 from sqlalchemy.orm import Session as SASession
 
-from app.db.database import get_db
+from app.db.database import get_db, get_session
 from app.config.settings import BASE_URL, DOMAIN, MAX_POST_LENGTH
 from app.core.activitypub import broadcast_to_followers, _send_delete_post
 from app.core.eventbus import broadcast as _broadcast_sse
 from app.core.push import send_push_to_user
 from app.core.timeline_stream import broadcast_refresh_notifs, broadcast_notif_sound, broadcast_post, broadcast_delete
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Tag, CustomEmoji, ServerSetting, MastodonApp, MastodonAccessToken, get_session, now
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Tag, CustomEmoji, ServerSetting, MastodonApp, MastodonAccessToken, now
 from app.utils.content_parser import process_post_content, extract_mentions
 from app.utils.emoji import _emoji_url, _load_emojis
 from app.db.mention_resolver import resolve_handles_to_ids

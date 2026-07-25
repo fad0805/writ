@@ -1,9 +1,10 @@
 import json
 import asyncio
 import logging
-import traceback
-from app.models import get_session, Post, Follow, User, Boost
+
+from app.models import Post, Follow, User, Boost
 from app.utils.filter import should_deliver_post, _load_user_filters
+from app.db.database import get_session
 
 logger = logging.getLogger(__name__)
 

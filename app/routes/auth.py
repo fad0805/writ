@@ -6,8 +6,9 @@ import secrets
 from datetime import datetime, timezone
 from fastapi import APIRouter, Request, HTTPException
 
-from app.models import User, LoginSession, get_session
+from app.db.database import get_session
 from app.config.settings import SECRET_KEY, SESSION_EXPIRE_DAYS
+from app.models import User, LoginSession
 
 router = APIRouter()
 
