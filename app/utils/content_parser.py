@@ -318,10 +318,12 @@ def extract_mentions_from_local(text: str) -> list[dict]:
     for m in re.finditer(short_pattern, text):
         user_part = m.group(1) # @ 제외한 순수 유저명
         handle = f"@{user_part}"
+        parsed_url = urlparse(BASE_URL)
+        domain = parsed_url.netloc or parsed_url.path
         if handle not in seen_handles:
             mentions.append({
-                "handle": f"@{user_part}@{BASE_URL}",
-                "href": f'https://{BASE_URL}/users/{user_part}'
+                "handle": f"@{user_part}@{domain}",
+                "href": f'https://{domain}/users/{user_part}'
             })
             seen_handles.add(handle)
     return mentions
