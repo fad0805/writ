@@ -461,6 +461,38 @@ async def update_credentials(request: Request, db: SASession = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
+# GET /api/v1/accounts/relationships
+# ---------------------------------------------------------------------------
+@router.get("/accounts/relationships")
+def get_relationships(
+    request: Request,
+    db: SASession = Depends(get_db),
+    id: list[str] = Query(default=[]),
+):
+    user = _require_bearer(request, db)
+    result = []
+    for uid in id:
+        try:
+            uid_int = int(uid)
+        except ValueError:
+            continue
+        follow = db.query(Follow).filter_by(follower_id=user.id, following_id=uid_int).first()
+        result.append({
+            "id": uid,
+            "following": bool(follow),
+            "showing_reblogs": True,
+            "notifying": bool(follow and follow.notify_on_post),
+            "blocking": False,
+            "muting": False,
+            "domain_blocking": False,
+            "endorsed": False,
+            "followed_by": bool(db.query(Follow).filter_by(follower_id=uid_int, following_id=user.id).first()),
+            "note": "",
+        })
+    return result
+
+
+# ---------------------------------------------------------------------------
 # GET /api/v1/accounts/:id
 # ---------------------------------------------------------------------------
 @router.get("/accounts/{account_id}")
@@ -605,38 +637,6 @@ async def unfollow_account(account_id: str, request: Request, db: SASession = De
 
     viewer = _maybe_bearer(request, db)
     return _account_json(target, db, viewer)
-
-
-# ---------------------------------------------------------------------------
-# GET /api/v1/accounts/relationships
-# ---------------------------------------------------------------------------
-@router.get("/accounts/relationships")
-def get_relationships(
-    request: Request,
-    db: SASession = Depends(get_db),
-    id: list[str] = Query(default=[]),
-):
-    user = _require_bearer(request, db)
-    result = []
-    for uid in id:
-        try:
-            uid_int = int(uid)
-        except ValueError:
-            continue
-        follow = db.query(Follow).filter_by(follower_id=user.id, following_id=uid_int).first()
-        result.append({
-            "id": uid,
-            "following": bool(follow),
-            "showing_reblogs": True,
-            "notifying": bool(follow and follow.notify_on_post),
-            "blocking": False,
-            "muting": False,
-            "domain_blocking": False,
-            "endorsed": False,
-            "followed_by": bool(db.query(Follow).filter_by(follower_id=uid_int, following_id=user.id).first()),
-            "note": "",
-        })
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -875,6 +875,22 @@ def get_status(status_id: str, request: Request, db: SASession = Depends(get_db)
     if s is None:
         raise HTTPException(status_code=404, detail="Record not found")
     return s
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/statuses/:id/source
+# ---------------------------------------------------------------------------
+@router.get("/statuses/{status_id}/source")
+def get_status_source(status_id: str, request: Request, db: SASession = Depends(get_db)):
+    user = _require_bearer(request, db)
+    post = db.query(Post).filter_by(id=int(status_id)).first()
+    if not post or post.is_deleted or post.author_id != user.id:
+        raise HTTPException(status_code=404, detail="Record not found")
+    return {
+        "id": str(post.id),
+        "text": post.content or "",
+        "spoiler_text": post.summary or "",
+    }
 
 
 # ---------------------------------------------------------------------------
