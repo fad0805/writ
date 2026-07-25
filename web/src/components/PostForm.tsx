@@ -660,7 +660,12 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         results.forEach(r => { if (r) uploaded.push(r); });
       }
       const opts = showPoll ? pollOptions.filter(o => o.trim()).map(o => o.trim()) : [];
-      const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: quoteUrl || shareUrl, media_attachments: JSON.stringify(uploaded), is_sensitive: postSensitive, poll_options: opts.length >= 2 ? JSON.stringify(opts) : "", poll_expires_in: pollExpiresIn, link_preview: linkPreview ? JSON.stringify(linkPreview) : "" });
+      let shareUrlFinal = quoteUrl || shareUrl;
+      if (!shareUrlFinal) {
+        const urlMatch = content.match(/https?:\/\/[^\s<>"')\]]+/i);
+        if (urlMatch) shareUrlFinal = urlMatch[0].replace(/[.,;:!?)]+$/, "");
+      }
+      const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrlFinal, media_attachments: JSON.stringify(uploaded), is_sensitive: postSensitive, poll_options: opts.length >= 2 ? JSON.stringify(opts) : "", poll_expires_in: pollExpiresIn, link_preview: linkPreview ? JSON.stringify(linkPreview) : "" });
       setContent(""); setSummary(""); setPostSensitive(false); setMediaItems([]); setShowPoll(false); setPollOptions(["", ""]); setPollExpiresIn(24); setLinkPreview(null); setQuoteUrl(""); setQuotePost(null);
       if (typeof localStorage !== "undefined") localStorage.removeItem(draftKey);
       if (onDone) onDone(result);
