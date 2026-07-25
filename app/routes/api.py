@@ -16,7 +16,7 @@ from sqlalchemy.orm import selectinload, Session
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PushSubscription, LoginSession, get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.utils.log import log_admin_action
-from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _post_to_inbox, _federation_allowed, _build_reactions, _resolve_actor, _ap_fetch, _fetch_and_save_ap_object, _send_delete_post, _send_flag, _send_accept, _send_reject, _get_instance_actor, _validate_url
+from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _post_to_inbox, _federation_allowed, _build_reactions, _resolve_actor, _fetch_and_save_ap_object, _send_delete_post, _send_flag, _send_accept, _send_reject, _get_instance_actor, _validate_url
 from app.serializers import _post_json, _user_json
 from app.db.mention_resolver import resolve_handles_to_ids
 from app.utils.datetime import _fmt_dt
