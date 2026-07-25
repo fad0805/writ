@@ -1,15 +1,16 @@
+import httpx
 import logging
-from sqlalchemy import or_
-from urllib.parse import urlparse as _urlparse
 
-from app.models import User, get_session
+from sqlalchemy import or_
+from urllib.parse import urlparse
+
+from app.models import User, get_session, FederationBlock, AllowedServer, ServerSetting
 from app.core.activitypub import _resolve_actor
 
 logger = logging.getLogger(__name__)
 
 
 def _federation_allowed(domain: str) -> bool:
-    from app.models import FederationBlock, AllowedServer, ServerSetting, get_session
     with get_session() as s:
         try:
             settings = s.query(ServerSetting).first()
@@ -27,7 +28,6 @@ def _federation_allowed(domain: str) -> bool:
 
 def _resolve_remote_user(handle: str) -> User | None:
     """WebFinger + Actor resolution로 리모트 유저를 DB에 저장하고 반환."""
-    import httpx
     clean = handle.lstrip('@')
     if '@' not in clean:
         return None
@@ -79,7 +79,7 @@ def resolve_handles_to_ids(handles: list[str]) -> list[int]:
                     User.is_remote == True
                 ).first()
                 if u and u.remote_url:
-                    parsed = _urlparse(u.remote_url)
+                    parsed = urlparse(u.remote_url)
                     if parsed.hostname and parsed.hostname.lower() == domain.lower():
                         user_ids.append(u.id)
                         continue
@@ -90,7 +90,7 @@ def resolve_handles_to_ids(handles: list[str]) -> list[int]:
                 found = False
                 for _c in candidates:
                     if _c.remote_url:
-                        _p = _urlparse(_c.remote_url)
+                        _p = urlparse(_c.remote_url)
                         if _p.hostname and _p.hostname.lower() == domain.lower():
                             user_ids.append(_c.id)
                             found = True
