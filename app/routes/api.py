@@ -556,9 +556,9 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     print(f"[feed] raw query: {raw_total} posts for tl={tl_type}", flush=True)
     posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm and p.author_id != user.id and user.id not in (p.mentioned_user_ids or []))]
     print(f"[feed] after DM filter: {len(posts)} posts", flush=True)
-    # Deduplicate: prioritize original posts over boost pointers
-    # When multiple boosts of the same post exist, show the original first,
-    # then the oldest boost. Later boosts are collapsed.
+    # Deduplicate: show at most one entry per unique post.
+    # Priority 1: original post (if in the feed).
+    # Priority 2: earliest boost of that post (only if original is absent).
     seen_ids = set()
     deduped = []
     # Pre-fetch originals for all boost pointers in one query
@@ -567,28 +567,19 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     if boost_pointer_ids:
         for orig in session.query(Post).options(selectinload(Post.author)).filter(Post.id.in_(boost_pointer_ids), Post.is_deleted == False).all():
             boost_originals[orig.id] = orig
-    # First pass: collect normal posts and track boost pointers (keep oldest per original)
+    # Track earliest boost per original (last in DESC order = oldest)
     pending_boosts = {}
     for p in posts:
         if p.boost_of_id:
             if p.boost_of_id not in boost_originals:
                 continue
-            # Keep the last one encountered (= oldest in DESC order)
             pending_boosts[p.boost_of_id] = p
-        elif p.id in seen_ids:
-            continue
-        else:
+        elif p.id not in seen_ids:
             seen_ids.add(p.id)
             deduped.append(p)
-    # Second pass: insert one boost pointer after each original
+    # Include boost pointers only when the original is missing from the feed
     for boost_of_id, bp in pending_boosts.items():
-        inserted = False
-        for i, d in enumerate(deduped):
-            if d.id == boost_of_id:
-                deduped.insert(i + 1, bp)
-                inserted = True
-                break
-        if not inserted:
+        if boost_of_id not in seen_ids:
             deduped.append(bp)
     posts = deduped
     print(f"[feed] after dedup: {len(posts)} posts", flush=True)
