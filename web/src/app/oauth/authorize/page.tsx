@@ -94,17 +94,13 @@ function OAuthAuthorizeForm() {
       }
 
       if (data.code) {
-        if (redirectUri === "urn:ietf:wg:oauth:2.0:oob") {
-          setAuthCode(data.code);
-          setLoading(false);
+        const isHttpRedirect = redirectUri.startsWith("http://") || redirectUri.startsWith("https://");
+        if (isHttpRedirect && data.redirect) {
+          window.location.href = data.redirect;
           return;
         }
-        window.location.href = data.redirect;
-        return;
-      }
-
-      if (data.redirect) {
-        window.location.href = data.redirect;
+        setAuthCode(data.code);
+        setLoading(false);
         return;
       }
     } catch (err: unknown) {
