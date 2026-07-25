@@ -733,6 +733,13 @@ input:focus {
 .post-content .quote-inline-block a:hover {
   text-decoration: underline;
 }
+.post-content blockquote,
+.mini-post-body blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 12px;
+  margin: 8px 0;
+  color: var(--text-muted);
+}
 .post-content pre, .episode-body pre {
   position: relative;
   background: var(--bg-tertiary);

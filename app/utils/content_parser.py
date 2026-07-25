@@ -96,6 +96,15 @@ def _serialize_html(soup):
             attrs_str = f" {' '.join(attrs_list)}" if attrs_list else ""
             children_str = "".join(_to_html(c) for c in list(node.children))
             return f"<a{attrs_str}>{children_str}</a>"
+        if node.name in ("blockquote", "strong", "em", "b", "i", "code", "pre", "del", "span"):
+            children_str = "".join(_to_html(c) for c in list(node.children))
+            return f"<{node.name}>{children_str}</{node.name}>"
+        if node.name in ("ul", "ol"):
+            children_str = "".join(_to_html(c) for c in list(node.children))
+            return f"<{node.name}>{children_str}</{node.name}>"
+        if node.name == "li":
+            children_str = "".join(_to_html(c) for c in list(node.children))
+            return f"<li>{children_str}</li>\n"
         return "".join(_to_html(c) for c in list(node.children))
 
     result = "".join(_to_html(c) for c in list(soup.contents))
