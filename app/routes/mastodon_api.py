@@ -1376,11 +1376,22 @@ def list_notifications(
 
     notifs = q.order_by(Notification.id.desc()).limit(limit).all()
 
+    _NOTIF_TYPE_MAP_RESPONSE = {
+        "like": "favourite",
+        "reply": "mention",
+        "boost": "reblog",
+        "follow": "follow",
+        "follow_request": "follow_request",
+        "poll": "poll",
+        "status": "status",
+        "mention": "mention",
+    }
+
     result = []
     for n in notifs:
         item = {
             "id": str(n.id),
-            "type": n.notification_type,
+            "type": _NOTIF_TYPE_MAP_RESPONSE.get(n.notification_type, n.notification_type),
             "created_at": _ap_datetime(n.created_at),
             "account": _account_json(n.from_user, db, viewer=user) if n.from_user else _account_json(user, db),
         }
@@ -1429,6 +1440,9 @@ def notification_types():
         "favourite": "favourite",
         "poll": "poll",
         "status": "status",
+        "move": "move",
+        "report": "report",
+    }
     }
 
 
