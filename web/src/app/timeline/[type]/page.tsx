@@ -37,7 +37,6 @@ export default function TimelinePage() {
   const [showComposer, setShowComposer] = useState(false);
   const [rewriteContent, setRewriteContent] = useState<string | null>(null);
   const [rewriteVisibility, setRewriteVisibility] = useState<string | undefined>(undefined);
-  const [rewriteReplyTo, setRewriteReplyTo] = useState<{ id: number; number: string; content: string; author: any; visibility: string } | null>(null);
   
   // 💡 상태 변경 비동기 문제를 해결하기 위해 offset을 최신 ref로 관리합니다.
   const offsetRef = useRef(0);
@@ -287,37 +286,6 @@ export default function TimelinePage() {
 
   return (
     <>
-      {rewriteReplyTo ? (
-        <ReplyModal post={{
-          id: rewriteReplyTo.id,
-          number: rewriteReplyTo.number,
-          content: rewriteReplyTo.content,
-          author: rewriteReplyTo.author,
-          visibility: rewriteReplyTo.visibility,
-          summary: null,
-          created_at: null,
-          ap_id: "",
-          likes_count: 0,
-          boosts_count: 0,
-          replies_count: 0,
-          liked: false,
-          boosted: false,
-          bookmarked: false,
-          is_mine: false,
-          reply_context: null,
-          media_attachments: [],
-        } as any} onClose={() => { setRewriteContent(null); setRewriteVisibility(undefined); setRewriteReplyTo(null); }} onDone={(newPost) => {
-          setRewriteContent(null);
-          setRewriteVisibility(undefined);
-          setRewriteReplyTo(null);
-          if (newPost) {
-            setPosts((prev) => {
-              if (prev.some((p) => p.id === newPost.id)) return prev;
-              return [newPost, ...prev];
-            });
-          }
-        }} initialContent={rewriteContent ?? undefined} />
-      ) : (
         <div className="post-form post-form-desktop">
           <PostForm key={rewriteContent ? `rewrite-${Date.now()}` : "main"} onDone={(newPost) => {
             if (newPost) {
@@ -330,7 +298,6 @@ export default function TimelinePage() {
             setRewriteVisibility(undefined);
           }} initialContent={rewriteContent ?? undefined} initialVisibility={rewriteVisibility} />
         </div>
-      )}
       <div className="timeline-tabs">
         {TABS.map((t) => (
           <Link
@@ -382,7 +349,7 @@ export default function TimelinePage() {
                     onRewrite={(content, visibility, replyTo) => {
                       setRewriteContent(content);
                       setRewriteVisibility(visibility);
-                      setRewriteReplyTo(replyTo ?? null);
+                      setShowComposer(true);
                     }}
                     selected={i === selectedIdx} 
                   />
@@ -397,15 +364,15 @@ export default function TimelinePage() {
         <Icon name="pen_solid" size={22} />
       </button>
       {showComposer && (
-        <div className="mobile-composer-overlay" onClick={() => setShowComposer(false)}>
+        <div className="mobile-composer-overlay" onClick={() => { setShowComposer(false); setRewriteContent(null); setRewriteVisibility(undefined); }}>
           <div className="mobile-composer-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="mobile-composer-header">
               <span>글쓰기</span>
-              <button className="mobile-composer-close" onClick={() => setShowComposer(false)}>
+              <button className="mobile-composer-close" onClick={() => { setShowComposer(false); setRewriteContent(null); setRewriteVisibility(undefined); }}>
                 <Icon name="x" size={18} />
               </button>
             </div>
-            <PostForm onDone={(newPost) => {
+            <PostForm key={rewriteContent ? `rewrite-${Date.now()}` : "mobile"} onDone={(newPost) => {
               if (newPost) {
                 setPosts((prev) => {
                   if (prev.some((p) => p.id === newPost.id)) return prev;
@@ -413,7 +380,9 @@ export default function TimelinePage() {
                 });
               }
               setShowComposer(false);
-            }} />
+              setRewriteContent(null);
+              setRewriteVisibility(undefined);
+            }} initialContent={rewriteContent ?? undefined} initialVisibility={rewriteVisibility} />
           </div>
         </div>
       )}
