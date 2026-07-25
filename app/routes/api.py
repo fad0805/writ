@@ -1056,7 +1056,8 @@ async def api_create_post(
     loop = asyncio.get_running_loop()
     pj = await loop.run_in_executor(
         None, _do_create_post,
-        user, content, summary, visibility, parent_id,
+        user.id, user.is_limited, getattr(user, 'is_sensitive', False),
+        content, summary, visibility, parent_id,
         dm_target_id, share_url, media_attachments, is_sensitive,
         poll_options, poll_expires_in, link_preview,
     )
@@ -1064,7 +1065,7 @@ async def api_create_post(
 
 
 def _do_create_post(
-    user, content, summary, visibility, parent_id,
+    user_id, user_limited, user_sensitive, content, summary, visibility, parent_id,
     dm_target_id, share_url, media_attachments, is_sensitive,
     poll_options, poll_expires_in, link_preview,
 ):
@@ -1095,7 +1096,7 @@ def _do_create_post(
     if visibility not in ("public", "home", "followers", "mention"):
         visibility = "public"
 
-    if user.is_limited and visibility == "public":
+    if user_limited and visibility == "public":
         visibility = "home"
 
     if parent_id:
@@ -1108,15 +1109,18 @@ def _do_create_post(
                     visibility = parent_vis
 
     with get_session() as s:
+        _author = s.query(User).filter_by(id=user_id).first()
+        if not _author:
+            raise HTTPException(status_code=404, detail="User not found")
         import secrets
         post_number = secrets.token_hex(4)
-        author_is_sensitive = getattr(user, 'is_sensitive', False) or False
+        author_is_sensitive = user_sensitive
         if parent_id:
             _parent_exists = s.query(Post.id).filter_by(id=parent_id).first()
             if not _parent_exists:
                 raise HTTPException(status_code=404, detail="부모 게시글이 삭제되었습니다.")
         post = Post(
-            author_id=user.id,
+            author_id=user_id,
             content=content_html,
             summary=summary,
             visibility=visibility,
@@ -1162,7 +1166,7 @@ def _do_create_post(
                 pass
         s.add(post)
         s.flush()
-        post.ap_id = f"{BASE_URL}/@{user.username}/{post.number}"
+        post.ap_id = f"{BASE_URL}/@{_author.username}/{post.number}"
         _sync_post_tags(post, s)
         if parent_id:
             parent = s.query(Post).filter_by(id=parent_id).first()
@@ -1175,11 +1179,15 @@ def _do_create_post(
                 if pending_quote_url:
                     try:
                         from app.activitypub import _ap_fetch as _ap_fetch_quote, _fetch_and_save_ap_object as _fsao
-                        data = _ap_fetch_quote(pending_quote_url, user)
+                        with get_session() as _qs:
+                            _signer = _qs.query(User).get(user_id)
+                        if not _signer:
+                            return
+                        data = _ap_fetch_quote(pending_quote_url, _signer)
                         if data:
                             obj = data.get("object", data)
                             if obj.get("type") in ("Note", "Article"):
-                                result = _fsao(obj, user)
+                                result = _fsao(obj, _signer)
                                 if result:
                                     with get_session() as uqs:
                                         uqs.query(Post).filter_by(id=post.id).update({
@@ -1192,44 +1200,44 @@ def _do_create_post(
                 with get_session() as ns:
                     mentioned_notified = set()
                     for mu_id in mentioned_ids:
-                        if mu_id != user.id:
-                            notif = Notification(user_id=mu_id, from_user_id=user.id, notification_type="mention", post_id=post.id)
+                        if mu_id != user_id:
+                            notif = Notification(user_id=mu_id, from_user_id=user_id, notification_type="mention", post_id=post.id)
                             ns.add(notif)
                             mentioned_notified.add(mu_id)
                     if parent_id:
                         parent = ns.query(Post).filter_by(id=parent_id).first()
-                        if parent and parent.author_id != user.id and parent.author_id not in mentioned_notified:
-                            notif = Notification(user_id=parent.author_id, from_user_id=user.id, notification_type="reply", post_id=post.id)
+                        if parent and parent.author_id != user_id and parent.author_id not in mentioned_notified:
+                            notif = Notification(user_id=parent.author_id, from_user_id=user_id, notification_type="reply", post_id=post.id)
                             ns.add(notif)
                     ns.commit()
 
                 from app.push import send_push_to_user
                 from app.timeline_stream import broadcast_refresh_notifs as _brn, broadcast_notif_sound
                 for mu_id in mentioned_ids:
-                    if mu_id != user.id:
-                        send_push_to_user(mu_id, "mention", user.username, post.id)
+                    if mu_id != user_id:
+                        send_push_to_user(mu_id, "mention", _author.username, post.id)
                         broadcast_notif_sound(mu_id)
                         _brn(mu_id)
                 if parent_id:
                     with get_session() as ps:
                         parent = ps.query(Post).filter_by(id=parent_id).first()
-                    if parent and parent.author_id != user.id and parent.author_id not in [mid for mid in mentioned_ids if mid != user.id]:
-                        send_push_to_user(parent.author_id, "reply", user.username, post.id)
+                    if parent and parent.author_id != user_id and parent.author_id not in [mid for mid in mentioned_ids if mid != user_id]:
+                        send_push_to_user(parent.author_id, "reply", _author.username, post.id)
                         broadcast_notif_sound(parent.author_id)
                         _brn(parent.author_id)
             except Exception as e:
                 logger.error("Failed to create notifications: %s", e, exc_info=True)
 
         threading.Thread(target=_create_notifications_and_broadcast, daemon=True).start()
-        threading.Thread(target=_broadcast_federation, args=(user.id, post.id, visibility, content), daemon=True).start()
+        threading.Thread(target=_broadcast_federation, args=(user_id, post.id, visibility, content), daemon=True).start()
 
         try:
-            broadcast("new_post", {"post_id": post.id, "author_id": user.id})
+            broadcast("new_post", {"post_id": post.id, "author_id": user_id})
         except Exception as e:
             logger.error("Failed to broadcast new_post event: %s", e, exc_info=True)
 
-        pj = _post_json(post, s, user)
-        threading.Thread(target=_broadcast_timeline, args=(pj, user.id, visibility, bool(dm_target_id)), daemon=True).start()
+        pj = _post_json(post, s, _author)
+        threading.Thread(target=_broadcast_timeline, args=(pj, user_id, visibility, bool(dm_target_id)), daemon=True).start()
         return pj
 
 
