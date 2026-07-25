@@ -1168,6 +1168,38 @@ async def update_status(status_id: str, request: Request, db: SASession = Depend
     except Exception:
         pass
 
+    if post.ap_id and not post.author.is_remote:
+        def _bg_federation():
+            try:
+                import datetime as _dt
+                note_data = post.to_ap_note()
+                note_data.pop("@context", None)
+                note_data.pop("url", None)
+                note_data["atomUri"] = post.ap_id
+                note_data["updated"] = _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z")
+                note_data.setdefault("summary", None)
+                note_data.setdefault("sensitive", False)
+                note_data.setdefault("attachment", [])
+                note_data.setdefault("tag", [])
+                note_data.setdefault("inReplyTo", None)
+                update_activity = {
+                    "@context": [
+                        "https://www.w3.org/ns/activitystreams",
+                        "https://w3id.org/security/v1",
+                    ],
+                    "id": f"{BASE_URL}/activities/update/{post.id}",
+                    "type": "Update",
+                    "actor": user.actor_uri(),
+                    "to": note_data.get("to", []),
+                    "cc": note_data.get("cc", []),
+                    "object": note_data,
+                }
+                from app.activitypub import broadcast_to_followers
+                broadcast_to_followers(user, update_activity)
+            except Exception as e:
+                logger.error("Mastodon API: Update federation failed: %s", e, exc_info=True)
+        threading.Thread(target=_bg_federation, daemon=True).start()
+
     return _status_json(post, db, viewer=user)
 
 
