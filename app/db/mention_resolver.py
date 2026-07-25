@@ -1,5 +1,56 @@
+import logging
 from app.models import User, get_session
 from urllib.parse import urlparse as _urlparse
+
+logger = logging.getLogger(__name__)
+
+
+def _federation_allowed(domain: str) -> bool:
+    from app.config import FEDERATION_DOMAIN_WHITELIST, FEDERATION_DOMAIN_BLACKLIST
+    if FEDERATION_DOMAIN_WHITELIST:
+        return domain.lower() in {d.lower() for d in FEDERATION_DOMAIN_WHITELIST}
+    if FEDERATION_DOMAIN_BLACKLIST:
+        return domain.lower() not in {d.lower() for d in FEDERATION_DOMAIN_BLACKLIST}
+    return True
+
+
+def _resolve_remote_user(handle: str) -> User | None:
+    """WebFinger + Actor resolution로 리모트 유저를 DB에 저장하고 반환."""
+    import httpx
+    clean = handle.lstrip('@')
+    if '@' not in clean:
+        return None
+    local_part, domain = clean.split('@', 1)
+    if not _federation_allowed(domain):
+        return None
+    try:
+        from app.activitypub import _resolve_actor
+        resolved = None
+        for url in [f"https://{domain}/@{local_part}", f"https://{domain}/users/{local_part}"]:
+            try:
+                resolved = _resolve_actor(url)
+                if resolved:
+                    break
+            except Exception:
+                continue
+        if not resolved:
+            wf = httpx.get(
+                f"https://{domain}/.well-known/webfinger?resource=acct:{clean}",
+                timeout=5,
+            )
+            if wf.status_code == 200:
+                for link in wf.json().get("links", []):
+                    if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
+                        href = link.get("href", "")
+                        if href:
+                            resolved = _resolve_actor(href)
+                            break
+        if resolved:
+            return resolved
+    except Exception as e:
+        logger.debug("Failed to resolve remote handle %s: %s", handle, e)
+    return None
+
 
 def resolve_handles_to_ids(handles: list[str]) -> list[int]:
     """핸들 리스트를 받아 DB에서 일치하는 User.id 리스트를 반환합니다."""
@@ -7,14 +58,12 @@ def resolve_handles_to_ids(handles: list[str]) -> list[int]:
         return []
 
     user_ids = []
+    unresolved = []
     with get_session() as s:
         for handle in handles:
-            # 핸들에서 @ 제거
             clean_handle = handle.lstrip('@')
-            # 리모트 유저 (handle에 @가 포함된 경우)
             if '@' in clean_handle:
                 local_part, domain = clean_handle.split('@', 1)
-                # 1. 직접 매칭 시도
                 u = s.query(User).filter(
                     User.username == local_part,
                     User.is_remote == True
@@ -24,18 +73,20 @@ def resolve_handles_to_ids(handles: list[str]) -> list[int]:
                     if parsed.hostname and parsed.hostname.lower() == domain.lower():
                         user_ids.append(u.id)
                         continue
-                # 2. 후보군 매칭 (username@domain 형태 고려)
                 candidates = s.query(User).filter(
                     User.username.like(f"{local_part}@%"),
                     User.is_remote == True
                 ).all()
+                found = False
                 for _c in candidates:
                     if _c.remote_url:
                         _p = _urlparse(_c.remote_url)
                         if _p.hostname and _p.hostname.lower() == domain.lower():
                             user_ids.append(_c.id)
+                            found = True
                             break
-            # 로컬 유저
+                if not found:
+                    unresolved.append(handle)
             else:
                 u = s.query(User).filter(
                     User.username == clean_handle,
@@ -43,6 +94,10 @@ def resolve_handles_to_ids(handles: list[str]) -> list[int]:
                 ).first()
                 if u:
                     user_ids.append(u.id)
-    # 중복 제거 후 반환
-    return list(set(user_ids))
 
+    for handle in unresolved:
+        user = _resolve_remote_user(handle)
+        if user:
+            user_ids.append(user.id)
+
+    return list(set(user_ids))
