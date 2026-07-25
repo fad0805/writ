@@ -315,6 +315,33 @@ class Post(Base):
                             f'>@{username}@{domain}</a>',
                             content)
 
+            # 콘텐츠에서 언급 링크를 파싱해 누락된 Mention 태그 보충
+            from urllib.parse import urlparse as _up
+            _local_host = _up(BASE_URL).hostname
+            for m in re.finditer(r'<a[^>]*class="[^"]*\bu-url mention\b[^"]*"[^>]*href="([^"]+)"[^>]*>@([^<]+)</a>', content):
+                href = m.group(1)
+                handle = m.group(2)
+                if href in mentioned_uris:
+                    continue
+                # href에서 유저 찾기
+                _u = None
+                if _up(href).hostname == _local_host:
+                    _local_name = href.rstrip("/").rsplit("/", 1)[-1]
+                    _u = s.query(User).filter(
+                        User.username == _local_name, User.is_remote == False
+                    ).first()
+                if not _u:
+                    _u = s.query(User).filter(
+                        User.remote_url == href, User.is_remote == True
+                    ).first()
+                if _u:
+                    tags.append({"type": "Mention", "href": _u.actor_uri(), "name": f"@{handle}"})
+                    mentioned_uris.append(_u.actor_uri())
+                    content = content.replace(
+                        f'href="{href}"',
+                        f'href="{_u.actor_uri()}"'
+                    )
+
             if self.tag_list:
                 for t in self.tag_list:
                     tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?q=#{_urlencode(t.display_name)}", "name": f"#{t.display_name}"})
