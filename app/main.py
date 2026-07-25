@@ -29,6 +29,7 @@ from app.models import User, Follow, Post, Novel, ProcessedActivity, get_session
 from app.routes.auth import router as auth_router
 from app.routes.api import router as api_router
 from app.routes.admin import router as admin_router
+from app.routes.mastodon_api import router as mastodon_api_router
 from app.activitypub import (
     get_outbox, get_followers, get_following, handle_inbox,
     _deliver_sync, _cleanup_expired_media, _cleanup_remote_data,
@@ -1312,31 +1313,63 @@ if os.path.isdir(_emoji_static_dir):
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(api_router)
+app.include_router(mastodon_api_router, prefix="/api/v1")
 
 
-@app.get("/api/v1/instance")
-def api_instance():
-    with get_session() as session:
-        user_count = session.query(User).filter_by(is_remote=False).count()
-        post_count = session.query(Post).filter(Post.author.has(is_remote=False)).count()
-    return JSONResponse({
-        "uri": DOMAIN,
-        "title": "SNS + Novel Blog",
-        "description": "ActivityPub SNS with serial novel publishing blog",
-        "version": "1.0.0",
-        "urls": {
-            "streaming_api": "",
-        },
-        "stats": {
-            "user_count": user_count,
-            "status_count": post_count,
-            "domain_count": 0,
-        },
-        "thumbnail": "",
-        "languages": ["ko"],
-        "registrations": True,
-        "short_description": "소설 연재가 가능한 ActivityPub SNS",
-    })
+# ---------------------------------------------------------------------------
+# POST /oauth/token — Mastodon OAuth token endpoint
+# ---------------------------------------------------------------------------
+@app.post("/oauth/token")
+async def oauth_token(request: Request):
+    from app.models import MastodonApp, MastodonAccessToken, User, get_session as _get_session
+    from app.routes.auth import verify_password
+    import secrets as _secrets
+    import time as _time
+
+    ct = request.headers.get("content-type", "")
+    if "application/json" in ct:
+        body = await request.json()
+    else:
+        form = await request.form()
+        body = dict(form)
+
+    grant_type = body.get("grant_type", "")
+    client_id = body.get("client_id", "")
+    client_secret = body.get("client_secret", "")
+
+    with _get_session() as db:
+        app_obj = db.query(MastodonApp).filter_by(client_id=client_id, client_secret=client_secret).first()
+        if not app_obj:
+            return JSONResponse({"error": "invalid_client"}, status_code=400)
+
+        if grant_type == "client_credentials":
+            token = _secrets.token_urlsafe(48)
+            mat = MastodonAccessToken(app_id=app_obj.id, user_id=1, access_token=token, scopes="read")
+            db.add(mat)
+            db.commit()
+            return {"access_token": token, "token_type": "bearer", "scope": "read", "created_at": int(_time.time())}
+
+        if grant_type == "password":
+            username = body.get("username", "")
+            password = body.get("password", "")
+            user = db.query(User).filter(
+                (User.username == username) | (User.email == username)
+            ).first()
+            if not user or not user.password_hash:
+                return JSONResponse({"error": "invalid_grant"}, status_code=400)
+            salt = user.password_hash[:32]
+            if not verify_password(password, salt, user.password_hash):
+                return JSONResponse({"error": "invalid_grant"}, status_code=400)
+            if user.is_suspended:
+                return JSONResponse({"error": "invalid_grant"}, status_code=400)
+            scope = body.get("scope", "read write push")
+            token = _secrets.token_urlsafe(48)
+            mat = MastodonAccessToken(app_id=app_obj.id, user_id=user.id, access_token=token, scopes=scope)
+            db.add(mat)
+            db.commit()
+            return {"access_token": token, "token_type": "bearer", "scope": scope, "created_at": int(_time.time())}
+
+        return JSONResponse({"error": "unsupported_grant_type"}, status_code=400)
 
 
 # Run

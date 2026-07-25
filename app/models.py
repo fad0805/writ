@@ -862,6 +862,33 @@ class PendingDelivery(Base):
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
 
 
+class MastodonApp(Base):
+    __tablename__ = "mastodon_apps"
+
+    id = Column(Integer, primary_key=True)
+    client_name = Column(String(256), nullable=False)
+    redirect_uris = Column(Text, default="urn:ietf:wg:oauth:2.0:oob")
+    scopes = Column(String(256), default="read write push")
+    website = Column(String(512), default="")
+    client_id = Column(String(128), unique=True, nullable=False, index=True)
+    client_secret = Column(String(128), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+
+class MastodonAccessToken(Base):
+    __tablename__ = "mastodon_access_tokens"
+
+    id = Column(Integer, primary_key=True)
+    app_id = Column(Integer, ForeignKey("mastodon_apps.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    access_token = Column(String(256), unique=True, nullable=False, index=True)
+    scopes = Column(String(256), default="read write push")
+    created_at = Column(DateTime(timezone=True), default=now)
+
+    app = relationship("MastodonApp", lazy="selectin")
+    user = relationship("User", lazy="selectin")
+
+
 def init_db():
     Base.metadata.create_all(engine)
     # Direct SQL fallback — add missing columns that Alembic may have skipped
@@ -945,7 +972,8 @@ _SAFE_TABLE_NAMES = {"users", "posts", "novels", "episodes", "follows", "likes",
                       "custom_emojis", "votes", "reactions", "user_blocks", "user_mutes",
                       "keyword_mutes", "series_mutes", "reports", "report_rules",
                       "federation_blocks", "federation_modes", "allowed_servers", "custom_fields",
-                      "episode_comments", "series_notices", "remote_followers"}
+                      "episode_comments", "series_notices", "remote_followers",
+                      "mastodon_apps", "mastodon_access_tokens"}
 
 
 def _add_cols(table: str, inspector, cols: list[tuple[str, str]]):
