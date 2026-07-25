@@ -34,7 +34,7 @@ import smtplib
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PushSubscription, LoginSession, ServerSetting
 from app.serializers import _post_json, _user_json
 from app.config.settings import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED, APP_ENV, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, INITIAL_OWNER_PASSWORD, SESSION_EXPIRE_DAYS
-from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _post_to_inbox, _federation_allowed, _build_reactions, _resolve_actor, _send_delete_post, _send_flag, _send_accept, _send_reject, _get_instance_actor, _validate_url
+from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _post_to_inbox, _federation_allowed, _build_reactions, _resolve_actor, _send_delete_post, _send_flag, _send_accept, _send_reject, _get_instance_actor, _validate_url, _fetch_remote_count
 from app.core.eventbus import broadcast
 from app.core.push import send_push_to_user, VAPID_PUBLIC_KEY
 from app.core.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream, broadcast_reaction_update, add_post_stream, remove_post_stream, broadcast_notif_sound, broadcast_delete
