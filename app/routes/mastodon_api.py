@@ -446,7 +446,7 @@ def get_account_statuses(
     max_id: str | None = None,
     since_id: str | None = None,
     min_id: str | None = None,
-    limit: int = Query(default=20, le=40),
+    limit: int = Query(default=20, le=80),
 ):
     user = db.query(User).filter_by(id=int(account_id)).first()
     if not user:
@@ -612,7 +612,7 @@ def home_timeline(
     max_id: str | None = None,
     since_id: str | None = None,
     min_id: str | None = None,
-    limit: int = Query(default=20, le=40),
+    limit: int = Query(default=20, le=80),
 ):
     user = _require_bearer(request, db)
 
@@ -690,7 +690,7 @@ def public_timeline(
     max_id: str | None = None,
     since_id: str | None = None,
     min_id: str | None = None,
-    limit: int = Query(default=20, le=40),
+    limit: int = Query(default=20, le=80),
 ):
     viewer = _maybe_bearer(request, db)
 
@@ -766,7 +766,7 @@ def hashtag_timeline(
     max_id: str | None = None,
     since_id: str | None = None,
     min_id: str | None = None,
-    limit: int = Query(default=20, le=40),
+    limit: int = Query(default=20, le=80),
 ):
     viewer = _maybe_bearer(request, db)
     tag_obj = db.query(Tag).filter(Tag.name == tag.lower()).first()
@@ -1441,7 +1441,7 @@ def search_v2(
     db: SASession = Depends(get_db),
     q: str = "",
     type: str = "",
-    limit: int = Query(default=20, le=40),
+    limit: int = Query(default=20, le=80),
     offset: int = 0,
     account_id: str | None = None,
     following: bool = False,
@@ -1723,7 +1723,7 @@ def list_bookmarks(
     max_id: str | None = None,
     since_id: str | None = None,
     min_id: str | None = None,
-    limit: int = Query(default=20, le=40),
+    limit: int = Query(default=20, le=80),
 ):
     user = _require_bearer(request, db)
     q = db.query(Bookmark).filter(Bookmark.user_id == user.id)
@@ -1766,7 +1766,7 @@ def list_favourites(
     max_id: str | None = None,
     since_id: str | None = None,
     min_id: str | None = None,
-    limit: int = Query(default=20, le=40),
+    limit: int = Query(default=20, le=80),
 ):
     user = _require_bearer(request, db)
     q = db.query(Like).filter(Like.user_id == user.id)
@@ -1952,7 +1952,7 @@ def get_trending_tags(db: SASession = Depends(get_db)):
 def get_trending_statuses(
     request: Request,
     db: SASession = Depends(get_db),
-    limit: int = Query(default=20, le=40),
+    limit: int = Query(default=20, le=80),
 ):
     return []
 
@@ -1984,7 +1984,7 @@ def list_conversations(
     request: Request,
     db: SASession = Depends(get_db),
     max_id: str | None = None,
-    limit: int = Query(default=20, le=40),
+    limit: int = Query(default=20, le=80),
 ):
     user = _require_bearer(request, db)
     return []
