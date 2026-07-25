@@ -1305,12 +1305,12 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
                     hashtag_list.append(Tag(name=tag_name))
     mentioned_ids = list(set(mentioned_ids))
 
-    if any(a.endswith("/followers") for a in all_auds):
-        vis = "followers"
-    elif pub_set & set(to):
+    if pub_set & set(to):
         vis = "public"
     elif pub_set & set(cc):
         vis = "home"
+    elif any(a.endswith("/followers") for a in all_auds):
+        vis = "followers"
     elif not (pub_set & set(all_auds)) and has_mention_tag:
         vis = "mention"
     elif all(a.startswith("http") for a in all_auds if a):
