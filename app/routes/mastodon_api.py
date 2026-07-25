@@ -95,7 +95,10 @@ def _account_json(user: User, db: SASession, viewer: User | None = None) -> dict
         Post.author_id == user.id, Post.is_deleted == False
     ).scalar() or 0
 
-    acct = user.display_handle or (f"{user.username}@{DOMAIN}" if user.is_remote else user.username)
+    if user.is_remote:
+        acct = user.display_handle or user.username
+    else:
+        acct = user.display_handle or user.username
 
     account = {
         "id": str(user.id),
@@ -106,7 +109,7 @@ def _account_json(user: User, db: SASession, viewer: User | None = None) -> dict
         "bot": bool(user.is_bot),
         "created_at": _ap_datetime(user.created_at),
         "note": f"<p>{user.summary}</p>" if user.summary else "<p></p>",
-        "url": f"{BASE_URL}/@{user.username}",
+        "url": user.profile_url or f"{BASE_URL}/@{user.username}",
         "avatar": user.profile_image or f"{BASE_URL}/default-avatar.png",
         "avatar_static": user.profile_image or f"{BASE_URL}/default-avatar.png",
         "header": user.header_image or f"{BASE_URL}/default-header.png",
@@ -849,10 +852,10 @@ async def create_status(request: Request, db: SASession = Depends(get_db)):
         spoiler_text = form.get("spoiler_text", "")
         visibility = form.get("visibility", user.default_visibility)
         language = form.get("language", "ko")
-        media_ids = form.getlist("media_ids") if hasattr(form, "getlist") else []
+        media_ids = [v for k, v in form.multi_items() if k == "media_ids"]
         poll_options = form.get("poll[options]")
         poll_expires = form.get("poll[expires_in]")
-    else:
+    elif "json" in ct:
         body = await request.json()
         text = body.get("status", "")
         in_reply_to_id = body.get("in_reply_to_id")
@@ -863,6 +866,17 @@ async def create_status(request: Request, db: SASession = Depends(get_db)):
         media_ids = body.get("media_ids", [])
         poll_options = body.get("poll", {}).get("options") if body.get("poll") else None
         poll_expires = body.get("poll", {}).get("expires_in") if body.get("poll") else None
+    else:
+        form = await request.form()
+        text = form.get("status", "")
+        in_reply_to_id = form.get("in_reply_to_id")
+        sensitive = form.get("sensitive", "false")
+        spoiler_text = form.get("spoiler_text", "")
+        visibility = form.get("visibility", user.default_visibility)
+        language = form.get("language", "ko")
+        media_ids = [v for k, v in form.multi_items() if k == "media_ids"]
+        poll_options = form.get("poll[options]")
+        poll_expires = form.get("poll[expires_in]")
 
     if not text and not media_ids:
         raise HTTPException(status_code=422, detail="Validation failed: Text can't be blank")
