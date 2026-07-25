@@ -29,6 +29,7 @@ from app.models import (
 )
 from app.routes.auth import hash_password, verify_password
 from app.utils.content_parser import process_post_content, extract_mentions
+from app.utils.emoji import _emoji_url
 from app.db.mention_resolver import resolve_handles_to_ids
 from app.routes.api import _sync_post_tags
 from app.serializers import _post_json
@@ -1692,10 +1693,10 @@ def custom_emojis(db: SASession = Depends(get_db)):
     return [
         {
             "shortcode": e.keyword,
-            "url": e.source_url or f"{BASE_URL}/emojis/{('remote' if e.domain else 'local')}/{e.file_name}",
-            "static_url": e.source_url or f"{BASE_URL}/emojis/{('remote' if e.domain else 'local')}/{e.file_name}",
+            "url": e.source_url or _emoji_url(e.file_name, e.domain or "", e.category or ""),
+            "static_url": e.source_url or _emoji_url(e.file_name, e.domain or "", e.category or ""),
             "visible_in_picker": True,
-            "category": e.category or "",
+            "aliases": e.aliases or [],
         }
         for e in emojis
     ]
