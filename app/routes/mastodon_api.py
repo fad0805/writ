@@ -1105,6 +1105,73 @@ async def create_status(request: Request, db: SASession = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
+# PUT /api/v1/statuses/:id
+# ---------------------------------------------------------------------------
+@router.put("/statuses/{status_id}")
+async def update_status(status_id: str, request: Request, db: SASession = Depends(get_db)):
+    user = _require_bearer(request, db)
+    post = db.query(Post).filter_by(id=int(status_id)).first()
+    if not post or post.author_id != user.id:
+        raise HTTPException(status_code=404, detail="Record not found")
+
+    ct = request.headers.get("content-type", "")
+    if "multipart" in ct:
+        form = await request.form()
+        text = form.get("status", "")
+        sensitive = form.get("sensitive", "false")
+        spoiler_text = form.get("spoiler_text", "")
+        visibility = form.get("visibility")
+    elif "json" in ct:
+        body = await request.json()
+        text = body.get("status", "")
+        sensitive = body.get("sensitive", False)
+        spoiler_text = body.get("spoiler_text", "")
+        visibility = body.get("visibility")
+    else:
+        form = await request.form()
+        text = form.get("status", "")
+        sensitive = form.get("sensitive", "false")
+        spoiler_text = form.get("spoiler_text", "")
+        visibility = form.get("visibility")
+
+    if post.summary and post.summary.startswith("[관리자 강제] ") and not (spoiler_text or "").startswith("[관리자 강제] "):
+        raise HTTPException(status_code=403, detail="관리자가 강제한 CW는 수정할 수 없습니다")
+
+    new_content = text.replace('\r\n', '\n').replace('\r', '\n') if text else post.content
+    post.content = process_post_content(new_content, post=post)
+    if spoiler_text is not None:
+        post.summary = spoiler_text[:512]
+    if visibility and visibility in ("public", "unlisted", "private", "direct"):
+        post.visibility = _visibility_from_mastodon(visibility)
+    post.is_sensitive = bool(sensitive)
+
+    _sync_post_tags(post, db)
+    db.commit()
+    db.refresh(post)
+
+    from app.timeline_stream import broadcast_post
+    try:
+        _ua = post.author
+        broadcast_post({
+            "id": post.id, "number": post.number or "",
+            "content": post.content, "summary": post.summary or "",
+            "visibility": post.visibility or "public",
+            "created_at": post.created_at.isoformat() if post.created_at else "",
+            "author": {
+                "id": _ua.id, "username": _ua.username,
+                "display_name": _ua.display_name or _ua.username,
+                "avatar": _ua.profile_image or "", "header": _ua.header_image or "",
+                "summary": _ua.summary or "", "is_admin": _ua.is_admin,
+                "is_remote": _ua.is_remote,
+            },
+        }, post.author_id, post.visibility or "public")
+    except Exception:
+        pass
+
+    return _status_json(post, db, viewer=user)
+
+
+# ---------------------------------------------------------------------------
 # DELETE /api/v1/statuses/:id
 # ---------------------------------------------------------------------------
 @router.delete("/statuses/{status_id}")
