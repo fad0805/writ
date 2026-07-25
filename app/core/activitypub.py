@@ -29,9 +29,9 @@ from app.core.timeline_stream import broadcast_notif_sound, broadcast_refresh_no
 from app.config.settings import BASE_URL, SECRET_KEY, DOMAIN
 from app.db.database import get_session
 from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, UserBlock, Tag, RemoteMedia, ProcessedActivity, PendingDelivery
-from app.routes.api import _refresh_emoji_cache_forcibly, _load_emojis
 from app.utils.crypto import generate_keypair, sign_string, encrypt_key, get_private_key
 from app.utils.content_parser import _sanitize_html, process_post_content
+from app.utils.emoji import _refresh_emoji_cache_forcibly, _load_emojis
 from app.utils.storage import get_storage
 
 WRIT_USER_AGENT = "WRIT/1.0 (+https://daydream.ink)"
