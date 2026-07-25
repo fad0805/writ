@@ -2412,7 +2412,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                 _a = session.query(User).get(post.author_id)
                 _author_data = _safe_user_json(_a)
             broadcast_post({
-                "id": boost_post.id,
+                "id": post.id,
                 "number": post.number or "",
                 "content": post.content,
                 "summary": post.summary or "",
@@ -2432,7 +2432,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                 "mentioned_user_ids": [],
                 "quote_of_id": post.quote_of_id or None, "quote_of_ap_id": post.quote_of_ap_id or "",
                 "_emojis": _broadcast_emoji_list(session),
-            }, actor_id, post.visibility or "public", False)
+            }, post.author_id, post.visibility or "public", False)
         except Exception as e:
             logger.error("Failed to broadcast boost from AP: %s", e, exc_info=True)
 
