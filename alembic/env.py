@@ -14,7 +14,7 @@ if config.config_file_name is not None:
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.config import DATABASE_URL as APP_DATABASE_URL
+from app.config.settings import DATABASE_URL as APP_DATABASE_URL
 db_url = APP_DATABASE_URL or os.environ.get("DATABASE_URL", "sqlite:///./sns_blog.db")
 config.set_main_option("sqlalchemy.url", db_url)
 

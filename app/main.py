@@ -34,6 +34,7 @@ from app.activitypub import (
     _deliver_sync, _cleanup_expired_media, _cleanup_remote_data,
     _resolve_actor,
 )
+from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs as _brfn6
 
 _RATE_LIMIT_WINDOW = 60
 _RATE_LIMIT_MAX = 30
@@ -274,7 +275,6 @@ def _auto_delete_expired_posts():
                             s.flush()
 
                             try:
-                                from app.timeline_stream import broadcast_delete
                                 broadcast_delete(post.id)
                             except Exception:
                                 pass
@@ -287,7 +287,6 @@ def _auto_delete_expired_posts():
                     s.commit()
                     logger.info("Auto-deleted %d expired posts", deleted)
                     try:
-                        from app.timeline_stream import broadcast_refresh_notifs as _brfn6
                         for _uid in _autodel_notif_users:
                             _brfn6(_uid)
                     except Exception:

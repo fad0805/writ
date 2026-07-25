@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session as SASession
 from app.db.database import get_db
 from app.config.settings import BASE_URL, DOMAIN, MAX_POST_LENGTH
 from app.core.eventbus import broadcast as _broadcast_sse
+from app.core.timeline_stream import broadcast_refresh_notifs, broadcast_notif_sound, broadcast_post, broadcast_delete
 from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Tag, CustomEmoji, ServerSetting, MastodonApp, MastodonAccessToken, get_session, now
 from app.utils.content_parser import process_post_content, extract_mentions
 from app.utils.emoji import _emoji_url, _load_emojis
@@ -1102,19 +1103,18 @@ async def create_status(request: Request, db: SASession = Depends(get_db)):
                 ns.commit()
 
             from app.push import send_push_to_user
-            from app.timeline_stream import broadcast_refresh_notifs as _brn, broadcast_notif_sound
             for mu_id in mentioned_ids:
                 if mu_id != user.id:
                     send_push_to_user(mu_id, "mention", user.username, post.id)
                     broadcast_notif_sound(mu_id)
-                    _brn(mu_id)
+                    broadcast_refresh_notifs(mu_id)
             if in_reply_to_id:
                 with get_session() as ps:
                     parent = ps.query(Post).filter_by(id=in_reply_to_id).first()
                 if parent and parent.author_id != user.id and parent.author_id not in [mid for mid in mentioned_ids if mid != user.id]:
                     send_push_to_user(parent.author_id, "reply", user.username, post.id)
                     broadcast_notif_sound(parent.author_id)
-                    _brn(parent.author_id)
+                    broadcast_refresh_notifs(parent.author_id)
         except Exception as e:
             logger.error("Mastodon API: Failed to create notifications: %s", e, exc_info=True)
 
@@ -1176,7 +1176,6 @@ async def update_status(status_id: str, request: Request, db: SASession = Depend
     db.commit()
     db.refresh(post)
 
-    from app.timeline_stream import broadcast_post
     try:
         _ua = post.author
         broadcast_post({
@@ -1253,9 +1252,8 @@ def delete_status(status_id: str, request: Request, db: SASession = Depends(get_
     db.commit()
 
     try:
-        from app.timeline_stream import broadcast_delete, broadcast_refresh_notifs as _brfn
         broadcast_delete(post.id)
-        _brfn(post.author_id)
+        broadcast_refresh_notifs(post.author_id)
     except Exception:
         pass
 

@@ -30,7 +30,7 @@ from app.db.database import get_db
 from app.config.settings import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED, APP_ENV, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, INITIAL_OWNER_PASSWORD, VAPID_PUBLIC_KEY, SESSION_EXPIRE_DAYS
 from app.utils.crypto import encrypt_key, get_private_key, generate_keypair, sign_string
 from app.core.eventbus import broadcast
-from app.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream, broadcast_reaction_update, add_post_stream, remove_post_stream
+from app.core.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream, broadcast_reaction_update, add_post_stream, remove_post_stream, broadcast_notif_sound, broadcast_delete
 from app.utils.storage import LocalStorage
 
 # Auth rate limiting (IP-based, in-memory)
@@ -1201,19 +1201,18 @@ def _do_create_post(
                     ns.commit()
 
                 from app.push import send_push_to_user
-                from app.timeline_stream import broadcast_refresh_notifs as _brn, broadcast_notif_sound
                 for mu_id in mentioned_ids:
                     if mu_id != user_id:
                         send_push_to_user(mu_id, "mention", _author.username, post.id)
                         broadcast_notif_sound(mu_id)
-                        _brn(mu_id)
+                        broadcast_refresh_notifs(mu_id)
                 if parent_id:
                     with get_session() as ps:
                         parent = ps.query(Post).filter_by(id=parent_id).first()
                     if parent and parent.author_id != user_id and parent.author_id not in [mid for mid in mentioned_ids if mid != user_id]:
                         send_push_to_user(parent.author_id, "reply", _author.username, post.id)
                         broadcast_notif_sound(parent.author_id)
-                        _brn(parent.author_id)
+                        broadcast_refresh_notifs(parent.author_id)
             except Exception as e:
                 logger.error("Failed to create notifications: %s", e, exc_info=True)
 
@@ -1251,7 +1250,6 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
 
         # Broadcast update to local timeline streams
         try:
-            from app.timeline_stream import broadcast_post
             _ua = post.author
             broadcast_post({
                 "id": post.id,
@@ -1342,8 +1340,7 @@ def api_delete_post(request: Request, post_id: int):
         post.link_preview = None
         post.is_deleted = True
         s.query(Notification).filter_by(post_id=post.id).delete()
-        from app.timeline_stream import broadcast_refresh_notifs as _brfn
-        _brfn(post.author_id)
+        broadcast_refresh_notifs(post.author_id)
         s.flush()
 
         # Cascade purge: if parent shell's entire subtree is now all deleted, hard-delete it too
@@ -1378,10 +1375,9 @@ def api_delete_post(request: Request, post_id: int):
         s.commit()
     # Broadcast delete to all connected timeline streams
     try:
-        from app.timeline_stream import broadcast_delete, broadcast_refresh_notifs as _brfn2
         broadcast_delete(post_id)
         for _aid in _cascade_authors:
-            _brfn2(_aid)
+            broadcast_refresh_notifs(_aid)
     except Exception:
         pass
     # Media 삭제 & AP 브로드캐스트는 백그라운드에서
@@ -1486,11 +1482,9 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
                 metadata_json=json.dumps(meta),
             ))
         s.commit()
-        from app.timeline_stream import broadcast_refresh_notifs
         for admin in admins:
             broadcast_refresh_notifs(admin.id)
         from app.push import send_push_to_user
-        from app.timeline_stream import broadcast_notif_sound
         for admin in admins:
             if admin.id != user.id:
                 send_push_to_user(admin.id, "moderation", user.username)
@@ -1553,7 +1547,6 @@ def api_like_post(request: Request, background_tasks: BackgroundTasks, post_id: 
                     if post.author_id != user.id:
                         broadcast_refresh_notifs(post.author_id)
                         from app.push import send_push_to_user
-                        from app.timeline_stream import broadcast_notif_sound
                         send_push_to_user(post.author_id, "like", user.username, post_id)
                         broadcast_notif_sound(post.author_id)
                 if post.author.is_remote and post.author.shared_inbox_url:
@@ -1723,7 +1716,6 @@ def api_boost_post(request: Request, post_id: int):
                 logger.error("Failed to broadcast boost update: %s", e, exc_info=True)
             if post.author_id != user.id:
                 from app.push import send_push_to_user
-                from app.timeline_stream import broadcast_notif_sound, broadcast_refresh_notifs
                 broadcast_refresh_notifs(post.author_id)
                 send_push_to_user(post.author_id, "boost", user.username, post_id)
                 broadcast_notif_sound(post.author_id)
@@ -2697,7 +2689,6 @@ def api_follow(request: Request, username: str):
             s.commit()
             broadcast_refresh_notifs(target.id)
             from app.push import send_push_to_user
-            from app.timeline_stream import broadcast_notif_sound
             send_push_to_user(target.id, "follow" if accepted else "follow_request", user.username)
             broadcast_notif_sound(target.id)
     return {"ok": True}
@@ -2749,8 +2740,7 @@ def api_remove_follower(request: Request, username: str):
         s.delete(follow)
         s.commit()
         try:
-            from app.timeline_stream import broadcast_refresh_notifs as _brfn7
-            _brfn7(user.id)
+            broadcast_refresh_notifs(user.id)
         except Exception:
             pass
     return {"ok": True}
@@ -2780,8 +2770,7 @@ def api_reject_follow(request: Request, username: str):
         s.delete(target)
         s.commit()
         try:
-            from app.timeline_stream import broadcast_refresh_notifs as _brfn8
-            _brfn8(user.id)
+            broadcast_refresh_notifs(user.id)
         except Exception:
             pass
         if follower_is_remote and follower:
@@ -2811,8 +2800,7 @@ def api_unfollow(request: Request, username: str):
             ).delete(synchronize_session=False)
             s.commit()
             try:
-                from app.timeline_stream import broadcast_refresh_notifs as _brfn9
-                _brfn9(target.id)
+                broadcast_refresh_notifs(target.id)
             except Exception:
                 pass
             if target.is_remote and target.inbox_url:
@@ -3586,7 +3574,6 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
         if followers:
             s.commit()
             from app.push import send_push_to_user
-            from app.timeline_stream import broadcast_notif_sound
             for sf in followers:
                 if sf.user_id != user.id:
                     send_push_to_user(sf.user_id, "new_episode", user.username, metadata={"novel_id": novel.id})
@@ -4324,10 +4311,9 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
         db.profile_hashtags = []
         s.commit()
         try:
-            from app.timeline_stream import broadcast_refresh_notifs as _brfn3
             for _uid in _del_notif_user_ids:
                 if _uid != db.id:
-                    _brfn3(_uid)
+                    broadcast_refresh_notifs(_uid)
         except Exception:
             pass
         user_id = db.id
@@ -5948,9 +5934,8 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
         s.add(notif)
         s.commit()
         try:
-            from app.timeline_stream import broadcast_refresh_notifs as _brfn4
             for _uid in _suspend_notif_users:
-                _brfn4(_uid)
+                broadcast_refresh_notifs(_uid)
         except Exception:
             pass
         log_admin_action(user.id, user.username, f"moderate:{action}", target_type="user", target_id=user_id, target_username=u.username, details=message or "", ip_address=request.client.host if request.client else "")

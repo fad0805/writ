@@ -16,6 +16,7 @@ import httpx
 
 from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, UserBlock, Tag, get_session
 from app.core.eventbus import broadcast
+from app.core.timeline_stream import broadcast_notif_sound, broadcast_refresh_notifs, broadcast_refresh_notifs, broadcast_post, broadcast_reaction_update, broadcast_delete
 from app.config.settings import BASE_URL, SECRET_KEY, DOMAIN
 from app.utils.crypto import generate_keypair, sign_string, encrypt_key, get_private_key
 from app.utils.content_parser import _sanitize_html, process_post_content
@@ -970,7 +971,6 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
             session.add(notification)
             session.commit()
             from app.push import send_push_to_user
-            from app.timeline_stream import broadcast_notif_sound
             send_push_to_user(target.id, "follow" if accepted else "follow_request", follower.username)
             broadcast_notif_sound(target.id)
 
@@ -1055,7 +1055,6 @@ def _handle_reject(activity: dict) -> tuple[int, str]:
         session.delete(follow_rel)
         session.commit()
 
-    from app.timeline_stream import broadcast_refresh_notifs
     broadcast_refresh_notifs(local_user_id)
     return (200, "Rejected follow removed")
 
@@ -1596,14 +1595,12 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     new_options[option_idx]["votes_count"] = new_options[option_idx].get("votes_count", 0) + 1
                     poll_post.poll_data = {**poll_post.poll_data, "options": new_options}
                     session.commit()
-                    from app.timeline_stream import broadcast_post, broadcast_refresh_notifs
                     _voter_ids = {v.user_id for v in session.query(vote).filter_by(post_id=poll_post.id).all()}
                     _voter_ids.add(poll_post.author_id)
                     for _vid in _voter_ids:
                         broadcast_refresh_notifs(_vid)
                     if poll_post.author_id != actor_id:
                         from app.push import send_push_to_user
-                        from app.timeline_stream import broadcast_notif_sound
                         send_push_to_user(poll_post.author_id, "vote", actor_username, poll_post.id)
                         broadcast_notif_sound(poll_post.author_id)
                     broadcast_post({
@@ -1722,7 +1719,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     fetch_s.commit()
                     reply_to_post_id = fetched_reply.id
                     try:
-                        from app.timeline_stream import broadcast_post
                         _ra = fetched_reply.author
                         broadcast_post({
                             "id": fetched_reply.id,
@@ -1952,7 +1948,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             except Exception:
                 pass
             from app.push import send_push_to_user
-            from app.timeline_stream import broadcast_notif_sound
             _push_notified = set()
             if reply_to_post and reply_to_post.author_id != actor_id and reply_to_post.author_id not in _push_notified:
                 _push_notified.add(reply_to_post.author_id)
@@ -1968,14 +1963,12 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     _push_notified.add(f.follower.id)
                     send_push_to_user(f.follower.id, "post", actor_username, post.id)
                     broadcast_notif_sound(f.follower.id)
-            from app.timeline_stream import broadcast_refresh_notifs
             broadcast_refresh_notifs()
             try:
                 broadcast("new_post", {"post_id": post.id, "author_id": actor_id})
             except Exception as e:
                 logger.error("broadcast failed: %s", e, exc_info=True)
             try:
-                from app.timeline_stream import broadcast_post
                 _broadcast_emojis = _broadcast_emoji_list(session)
                 author = post.author
                 _reply_ctx = None
@@ -2127,7 +2120,6 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                     else:
                         _existing_n.metadata_json = ""
                 session.commit()
-                from app.timeline_stream import broadcast_reaction_update
                 from sqlalchemy import func as _sqlfunc
                 _reactions = {}
                 for _react, _cnt in session.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
@@ -2163,10 +2155,9 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             session.add(n)
             session.commit()
             from app.push import send_push_to_user
-            from app.timeline_stream import broadcast_notif_sound, broadcast_reaction_update, broadcast_refresh_notifs as _brn
             send_push_to_user(post.author_id, "like", actor_username, post.id)
             broadcast_notif_sound(post.author_id)
-            _brn(post.author_id)
+            broadcast_refresh_notifs(post.author_id)
             from sqlalchemy import func as _sqlfunc
             _reactions = {}
             for _react, _cnt in session.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
@@ -2174,7 +2165,6 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             broadcast_reaction_update(post.id, _reactions)
         else:
             session.commit()
-            from app.timeline_stream import broadcast_reaction_update
             from sqlalchemy import func as _sqlfunc
             _reactions = {}
             for _react, _cnt in session.query(Like.reaction, _sqlfunc.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(_sqlfunc.min(Like.id)).all():
@@ -2365,12 +2355,10 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
         # 5. 커밋 이후 외부 연동 (푸시 및 스트리밍) 처리
         if not existing_n:
             from app.push import send_push_to_user
-            from app.timeline_stream import broadcast_notif_sound
             send_push_to_user(post.author_id, "boost", actor_username, post.id)
             broadcast_notif_sound(post.author_id)
 
         try:
-            from app.timeline_stream import broadcast_post
             def _safe_user_json(u):
                 if not u:
                     return None
@@ -2519,7 +2507,6 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
                 follower_id=follower_id, following_id=target.id
             ).delete()
             session.commit()
-            from app.timeline_stream import broadcast_refresh_notifs
             broadcast_refresh_notifs(target.id)
 
         return (200, "Unfollowed")
@@ -2551,7 +2538,6 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
                 notification_type="like", post_id=post.id,
             ).delete()
             session.commit()
-            from app.timeline_stream import broadcast_refresh_notifs, broadcast_post
             broadcast_refresh_notifs(post.author_id)
             try:
                 _la = post.author
@@ -2613,7 +2599,6 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
                 notification_type="boost", post_id=post.id,
             ).delete()
             session.commit()
-            from app.timeline_stream import broadcast_refresh_notifs, broadcast_post
             broadcast_refresh_notifs(post.author_id)
             try:
                 _ba = post.author
@@ -2744,7 +2729,6 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     from app.routes.api import _refresh_emoji_cache_forcibly
                     _refresh_emoji_cache_forcibly(session)
                     try:
-                        from app.timeline_stream import broadcast_post
                         _ua = post.author
                         broadcast_post({
                             "id": post.id,
@@ -2800,9 +2784,8 @@ def _handle_delete(activity: dict) -> tuple[int, str]:
             session.query(Notification).filter_by(post_id=post.id).delete()
             session.commit()
             try:
-                from app.timeline_stream import broadcast_delete, broadcast_refresh_notifs as _brfn5
                 broadcast_delete(post.id)
-                _brfn5(_del_author_id)
+                broadcast_refresh_notifs(_del_author_id)
             except Exception:
                 pass
 
@@ -2852,7 +2835,6 @@ def _notify_admins(session, reporter, target_type, target_id, reason):
         ))
     session.flush()
     from app.push import send_push_to_user
-    from app.timeline_stream import broadcast_notif_sound
     for _a in _admins:
         if _a.id != reporter.id:
             send_push_to_user(_a.id, "moderation", reporter.username)
@@ -2966,7 +2948,6 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
             else:
                 logger.info("FLAG no match for obj: %s", obj_url)
         s.commit()
-        from app.timeline_stream import broadcast_refresh_notifs
         broadcast_refresh_notifs()
         logger.info("FLAG done, committed")
     return (200, "Flagged")
