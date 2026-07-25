@@ -54,7 +54,7 @@ def _sanitize_html(html: str) -> str:
         return ""
     # ActivityPub(마스토돈, 미스키 등)에서 흔히 사용하는 안전한 태그 목록
     allowed_tags = {
-        "a", "p", "br", "span", "b", "i", "strong", "em", 
+        "a", "p", "del", "br", "span", "b", "i", "strong", "em", 
         "ul", "ol", "li", "blockquote", "code", "pre", "del"
     }
     # 각 태그별로 허용할 속성 (XSS 방지를 위해 href는 https/http만 허용)
