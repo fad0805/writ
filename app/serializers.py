@@ -2,6 +2,7 @@ import re
 import datetime
 
 from sqlalchemy import desc
+from urllib.parse import urlparse
 
 from app.models import Like, Boost, Bookmark, User, Vote, Post, Follow
 from app.utils.datetime import _fmt_dt
@@ -104,12 +105,11 @@ def _post_json(p, session, user, tl_type=None,
     if _mentioned_users_map is not None and p.id in _mentioned_users_map:
         mentioned_handles = _mentioned_users_map[p.id]
     elif p.mentioned_user_ids:
-        from urllib.parse import urlparse as _urlparse2
         mentioned_handles = []
         for u in session.query(User).filter(User.id.in_(p.mentioned_user_ids or [])).all():
             if u.is_remote and u.remote_url:
                 _name = u.username.split("@")[0]
-                _domain = _urlparse2(u.remote_url).hostname or ""
+                _domain = urlparse(u.remote_url).hostname or ""
                 mentioned_handles.append(f"{_name}@{_domain}")
             else:
                 mentioned_handles.append(u.username)
