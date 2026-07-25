@@ -29,7 +29,7 @@ from app.models import (
 )
 from app.routes.auth import hash_password, verify_password
 from app.utils.content_parser import process_post_content, extract_mentions
-from app.utils.emoji import _emoji_url
+from app.utils.emoji import _emoji_url, _load_emojis
 from app.db.mention_resolver import resolve_handles_to_ids
 from app.routes.api import _sync_post_tags
 from app.serializers import _post_json
@@ -109,15 +109,35 @@ def _account_json(user: User, db: SASession, viewer: User | None = None) -> dict
     else:
         acct = user.display_handle or user.username
 
+    display_name = user.display_name or ""
+    note_html = f"<p>{user.summary}</p>" if user.summary else "<p></p>"
+    source_note = user.summary or ""
+
+    all_emojis = _load_emojis(db)
+    shortcode_re = re.compile(r':(\w+):')
+    used = set(shortcode_re.findall(display_name)) | set(shortcode_re.findall(source_note))
+    emojis_in_account = [e for e in all_emojis if e["keyword"] in used]
+
+    def _emoji_to_img(m):
+        kw = m.group(1)
+        emoji = next((e for e in emojis_in_account if e["keyword"] == kw), None)
+        if emoji and emoji.get("url"):
+            safe_url = emoji["url"].replace('"', "%22")
+            return f'<img src="{safe_url}" alt=":{kw}:" title=":{kw}:" class="custom-emoji" style="display:inline-block;width:1.2em;height:1.2em;vertical-align:-0.2em;">'
+        return m.group(0)
+    display_name = shortcode_re.sub(_emoji_to_img, display_name)
+    note_html = shortcode_re.sub(_emoji_to_img, note_html)
+    source_note = shortcode_re.sub(_emoji_to_img, source_note)
+
     account = {
         "id": str(user.id),
         "username": user.username,
         "acct": acct,
-        "display_name": user.display_name or "",
+        "display_name": display_name,
         "locked": bool(user.is_locked),
         "bot": bool(user.is_bot),
         "created_at": _ap_datetime(user.created_at),
-        "note": f"<p>{user.summary}</p>" if user.summary else "<p></p>",
+        "note": note_html,
         "url": user.profile_url or f"{BASE_URL}/@{user.username}",
         "avatar": user.profile_image or f"{BASE_URL}/default-avatar.png",
         "avatar_static": user.profile_image or f"{BASE_URL}/default-avatar.png",
@@ -127,10 +147,13 @@ def _account_json(user: User, db: SASession, viewer: User | None = None) -> dict
         "following_count": following_count,
         "statuses_count": statuses_count,
         "last_status_at": _ap_datetime(user.updated_at) if user.updated_at else None,
-        "emojis": [],
+        "emojis": [
+            {"shortcode": e["keyword"], "url": e["url"], "static_url": e["url"], "visible_in_picker": True}
+            for e in emojis_in_account
+        ],
         "fields": [],
         "source": {
-            "note": user.summary or "",
+            "note": source_note,
             "privacy": _visibility_to_mastodon(user.default_visibility),
             "language": "ko",
             "follow_requests_count": 0,
@@ -178,7 +201,6 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
 
     content = post.content or ""
 
-    from app.utils.emoji import _load_emojis
     all_emojis = _load_emojis(db)
     shortcode_pattern = re.compile(r':(\w+):')
     used_shortcodes = set(shortcode_pattern.findall(content))
