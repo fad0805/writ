@@ -1324,8 +1324,10 @@ def react_to_status(status_id: str, name: str, request: Request, db: SASession =
     if not post or post.is_deleted:
         raise HTTPException(status_code=404, detail="Record not found")
 
-    from app.routes.api import api_like_post as _like_fn
-    from starlette.background import BackgroundTasks
+    if not name.startswith(":"):
+        name = f":{name}"
+    if not name.endswith(":"):
+        name = f"{name}:"
 
     existing = db.query(Like).filter_by(user_id=user.id, post_id=post.id).first()
     if existing:
@@ -1354,6 +1356,11 @@ def unreact_to_status(status_id: str, name: str, request: Request, db: SASession
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
         raise HTTPException(status_code=404, detail="Record not found")
+
+    if not name.startswith(":"):
+        name = f":{name}"
+    if not name.endswith(":"):
+        name = f"{name}:"
 
     existing = db.query(Like).filter_by(user_id=user.id, post_id=post.id).first()
     if existing and existing.reaction == name:
