@@ -2,9 +2,11 @@ import json
 import asyncio
 import logging
 
-from app.models import Post, Follow, User, Boost
-from app.utils.filter import should_deliver_post, _load_user_filters
+from sqlalchemy import func
+
 from app.db.database import get_session
+from app.models import Post, Follow, User, Boost, Notification
+from app.utils.filter import should_deliver_post, _load_user_filters
 
 logger = logging.getLogger(__name__)
 
@@ -159,8 +161,6 @@ def broadcast_refresh_notifs(target_user_id: int = 0):
     broadcast_notif("refresh", target_user_id)
     if target_user_id != 0:
         try:
-            from app.models import Notification, get_session
-            from sqlalchemy import func
             with get_session() as s:
                 cnt = s.query(func.count(Notification.id)).filter_by(user_id=target_user_id, is_read=False).scalar()
             broadcast_notif(json.dumps({"event": "notif", "unread": cnt}), target_user_id)
@@ -170,8 +170,6 @@ def broadcast_refresh_notifs(target_user_id: int = 0):
 def broadcast_notif_sound(target_user_id: int):
     """Send a JSON event that triggers notification sound in the browser."""
     try:
-        from app.models import Notification
-        from sqlalchemy import func
         with get_session() as s:
             cnt = s.query(func.count(Notification.id)).filter_by(user_id=target_user_id, is_read=False).scalar()
         broadcast_notif(json.dumps({"event": "notif", "unread": cnt, "sound": True}), target_user_id)
