@@ -1216,6 +1216,7 @@ def delete_status(status_id: str, request: Request, db: SASession = Depends(get_
     media = list(post.media_attachments or [])
     ap_id = post.ap_id or ""
     is_remote_author = bool(post.author.is_remote)
+    status_data = _status_json(post, db, viewer=user)
     post.content = ""
     post.media_attachments = []
     post.poll_data = None
@@ -1258,7 +1259,7 @@ def delete_status(status_id: str, request: Request, db: SASession = Depends(get_
                 pass
         threading.Thread(target=_bg_media, daemon=True).start()
 
-    return {}
+    return status_data
 
 
 # ---------------------------------------------------------------------------
