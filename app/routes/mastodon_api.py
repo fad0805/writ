@@ -539,6 +539,7 @@ def get_account_statuses(
     since_id: str | None = None,
     min_id: str | None = None,
     limit: int = Query(default=20, le=80),
+    pinned: bool | None = None,
 ):
     user = db.query(User).filter_by(id=int(account_id)).first()
     if not user:
@@ -546,11 +547,20 @@ def get_account_statuses(
 
     viewer = _maybe_bearer(request, db)
 
-    q = db.query(Post).filter(
-        Post.author_id == user.id,
-        Post.is_deleted == False,
-        Post.boost_of_id.is_(None),
-    )
+    if pinned:
+        pinned_ids = user.pinned_posts or []
+        if not pinned_ids:
+            return []
+        q = db.query(Post).filter(
+            Post.id.in_(pinned_ids),
+            Post.is_deleted == False,
+        )
+    else:
+        q = db.query(Post).filter(
+            Post.author_id == user.id,
+            Post.is_deleted == False,
+            Post.boost_of_id.is_(None),
+        )
 
     if max_id:
         q = q.filter(Post.id < int(max_id))
@@ -1580,6 +1590,12 @@ def pin_status(status_id: str, request: Request, db: SASession = Depends(get_db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.author_id != user.id:
         raise HTTPException(status_code=404, detail="Record not found")
+    pinned = list(user.pinned_posts or [])
+    if post.id not in pinned:
+        if len(pinned) >= 5:
+            raise HTTPException(status_code=422, detail="Maximum of 5 pinned posts")
+        pinned.append(post.id)
+        db.query(User).filter_by(id=user.id).update({"pinned_posts": pinned})
     post.is_pinned = True
     db.commit()
     return _status_json(post, db, viewer=user)
@@ -1594,6 +1610,10 @@ def unpin_status(status_id: str, request: Request, db: SASession = Depends(get_d
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.author_id != user.id:
         raise HTTPException(status_code=404, detail="Record not found")
+    pinned = list(user.pinned_posts or [])
+    if post.id in pinned:
+        pinned.remove(post.id)
+        db.query(User).filter_by(id=user.id).update({"pinned_posts": pinned})
     post.is_pinned = False
     db.commit()
     return _status_json(post, db, viewer=user)
