@@ -1187,6 +1187,26 @@ with get_session() as s:
         print(json.dumps(p.to_ap_create(), indent=2, ensure_ascii=False))
 "
 
+elif [ "$1" = "fix-usernames" ]; then
+  docker compose exec -T api python3 << 'PYEOF'
+from app.models import User, Follow, Post, Like, Boost, Bookmark, Vote, Notification, get_session
+
+with get_session() as s:
+    fixed = 0
+    for u in s.query(User).filter(User.is_remote == True).all():
+        if u.username and u.username.count("@") > 1:
+            parts = u.username.split("@")
+            old = u.username
+            new = f"{parts[0]}@{parts[1]}"
+            u.username = new
+            fixed += 1
+            print(f"  #{u.id} {old} -> {new}")
+    s.commit()
+    print(f"\nfixed {fixed} remote usernames")
+    if fixed == 0:
+        print("no double-domain usernames found")
+PYEOF
+
 elif [ "$1" = "replay-mastodon" ]; then
   # 받은 Mastodon Create를 거의 그대로 다시 보내기 (_mention만 WRIT 로컬 유저로)
   # 사용법: ./gogo.sh replay-mastodon <post_id> <target_inbox_url>
@@ -1295,4 +1315,5 @@ else
   echo "  check-custom-fields - 원격 액터의 attachment/custom_fields 확인 (예: ./gogo.sh check-custom-fields https://daydream.ink/users/siarte)"
   echo "  check-create    - 포스트의 AP Create JSON 출력 (예: ./gogo.sh check-create 5371)"
   echo "  replay-mastodon - 받은 Create를 Mastodon 포맷으로 재전송 (예: ./gogo.sh replay-mastodon 5371 https://qdon.space/inbox)"
+  echo "  fix-usernames   - 리모트 유저 username 중복 도메인(user@dom@dom → user@dom) 정리"
 fi
