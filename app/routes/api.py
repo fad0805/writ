@@ -4909,7 +4909,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
         is_hashtag_search = q.strip().startswith("#")
         following_ids = []
         if user:
-            following_ids = [f.following_id for f in s.query(Follow).filter_by(follower_id=user.id, is_accepted=True).all()]
+            following_ids = [f.following_id for f in s.query(Follow).filter_by(follower_id=user.id, accepted=True).all()]
         if is_hashtag_search:
             tag = s.query(Tag).filter_by(name=query.lower()).first()
             if tag:
