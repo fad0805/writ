@@ -18,11 +18,8 @@ from sqlalchemy.orm import Session as SASession
 
 from app.db.database import get_db
 from app.config.settings import BASE_URL, DOMAIN, MAX_POST_LENGTH
-from app.models import (
-    User, Post, Follow, Like, Boost, Bookmark, Notification, Tag,
-    CustomEmoji, ServerSetting, MastodonApp, MastodonAccessToken,
-    get_session, now,
-)
+from app.core.eventbus import broadcast as _broadcast_sse
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Tag, CustomEmoji, ServerSetting, MastodonApp, MastodonAccessToken, get_session, now
 from app.utils.content_parser import process_post_content, extract_mentions
 from app.utils.emoji import _emoji_url, _load_emojis
 from app.db.mention_resolver import resolve_handles_to_ids
@@ -1125,7 +1122,6 @@ async def create_status(request: Request, db: SASession = Depends(get_db)):
     threading.Thread(target=_broadcast_federation, args=(user.id, post.id, vis, text), daemon=True).start()
 
     try:
-        from app.eventbus import broadcast as _broadcast_sse
         _broadcast_sse("new_post", {"post_id": post.id, "author_id": user.id})
     except Exception as e:
         logger.error("Mastodon API: Failed to broadcast new_post event: %s", e, exc_info=True)

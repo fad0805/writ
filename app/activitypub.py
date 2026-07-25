@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 import httpx
 
 from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, UserBlock, Tag, get_session
+from app.core.eventbus import broadcast
 from app.config.settings import BASE_URL, SECRET_KEY, DOMAIN
 from app.utils.crypto import generate_keypair, sign_string, encrypt_key, get_private_key
 from app.utils.content_parser import _sanitize_html, process_post_content
@@ -1970,7 +1971,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             from app.timeline_stream import broadcast_refresh_notifs
             broadcast_refresh_notifs()
             try:
-                from app.eventbus import broadcast
                 broadcast("new_post", {"post_id": post.id, "author_id": actor_id})
             except Exception as e:
                 logger.error("broadcast failed: %s", e, exc_info=True)

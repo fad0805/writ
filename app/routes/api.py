@@ -29,7 +29,7 @@ from app.activitypub import broadcast_to_followers, _post_to_inbox, _federation_
 from app.db.database import get_db
 from app.config.settings import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED, APP_ENV, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, INITIAL_OWNER_PASSWORD, VAPID_PUBLIC_KEY, SESSION_EXPIRE_DAYS
 from app.utils.crypto import encrypt_key, get_private_key, generate_keypair, sign_string
-from app.eventbus import broadcast
+from app.core.eventbus import broadcast
 from app.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream, broadcast_reaction_update, add_post_stream, remove_post_stream
 from app.utils.storage import LocalStorage
 
