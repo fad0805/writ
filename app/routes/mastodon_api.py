@@ -177,6 +177,21 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
 
     content = post.content or ""
 
+    from app.utils.emoji import _load_emojis
+    all_emojis = _load_emojis(db)
+    shortcode_pattern = re.compile(r':(\w+):')
+    used_shortcodes = set(shortcode_pattern.findall(content))
+    post_emojis = [e for e in all_emojis if e["keyword"] in used_shortcodes]
+
+    def _emoji_to_img(m):
+        kw = m.group(1)
+        emoji = next((e for e in post_emojis if e["keyword"] == kw), None)
+        if emoji and emoji.get("url"):
+            safe_url = emoji["url"].replace('"', "%22")
+            return f'<img src="{safe_url}" alt=":{kw}:" title=":{kw}:" class="custom-emoji" style="display:inline-block;width:1.2em;height:1.2em;vertical-align:-0.2em;">'
+        return m.group(0)
+    content = shortcode_pattern.sub(_emoji_to_img, content)
+
     replies_count = db.query(sqlfunc.count(Post.id)).filter(
         Post.in_reply_to_id == post.id, Post.is_deleted == False
     ).scalar() or 0
@@ -258,7 +273,12 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
             "voted": False,
             "own_votes": [],
             "options": [{"title": o.get("text", ""), "votes_count": o.get("votes_count", 0)} for o in options],
-            "emojis": [],
+        "emojis": [{
+            "shortcode": e["keyword"],
+            "url": e["url"],
+            "static_url": e["url"],
+            "visible_in_picker": True,
+        } for e in post_emojis],
         }
 
     if viewer:
