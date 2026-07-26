@@ -1,6 +1,7 @@
 """Shared helpers for the interactions package."""
 import logging
 import json
+from datetime import datetime, timezone
 from sqlalchemy import String, func
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB

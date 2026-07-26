@@ -8,6 +8,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
+import uuid
 from uuid import uuid4
 from fastapi import APIRouter, Request, Form, HTTPException, Query, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse, StreamingResponse
