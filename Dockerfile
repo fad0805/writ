@@ -7,7 +7,7 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev gcc && \
+    libpq-dev gcc su-exec && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -16,11 +16,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 RUN mkdir -p /app/data /app/uploads /app/static /app/logs && \
-    groupadd -r writ && useradd -r -g writ -d /app -s /sbin/nologin writ && \
-    chown -R writ:writ /app
+    groupadd -r writ && useradd -r -g writ -d /app -s /sbin/nologin writ
 
-USER writ
+COPY entrypoint.sh run.sh /app/
+RUN chmod +x /app/entrypoint.sh /app/run.sh
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "alembic upgrade head && logfile=/app/logs/$(date +%Y-%m-%d).log && (touch $logfile 2>/dev/null) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 2>&1 | tee -a $logfile || exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+ENTRYPOINT ["/app/entrypoint.sh"]
