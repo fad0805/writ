@@ -723,7 +723,6 @@ def home_timeline(
         Post.author_id.in_(following_ids),
         Post.is_deleted == False,
         Post.visibility.in_(["public", "home", "followers"]),
-        Post.boost_of_id.is_(None),
     )
 
     if max_id:
