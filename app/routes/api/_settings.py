@@ -29,7 +29,8 @@ from app.utils.datetime import _fmt_dt
 from app.utils.log import log_admin_action
 from app.utils.storage import get_storage
 
-from app.routes.api._core import _validate_upload, _send_verification_email, MAX_IMAGE_SIZE, MAX_VIDEO_SIZE
+from app.routes.api._core import _validate_upload, MAX_IMAGE_SIZE, MAX_VIDEO_SIZE
+from app.routes.api._auth import _send_verification_email
 
 logger = logging.getLogger("writ.api.settings")
 

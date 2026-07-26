@@ -40,6 +40,9 @@ from app.routes.api._settings import settings_router
 
 from app.routes.api._users import users_router
 
+from app.routes.api._auth import auth_router
+
+router.include_router(auth_router)
 router.include_router(posts_router)
 router.include_router(interactions_router)
 router.include_router(series_router)
