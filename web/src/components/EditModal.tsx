@@ -34,12 +34,11 @@ export default function EditModal({ post, onClose, onDone }: { post: PostData; o
       } else if (isMention && href.startsWith("/@")) {
         link.textContent = href.substring(1);
       } else if (isSeriesLink || isEpisodeLink) {
-        const label = isSeriesLink ? "series" : "episode";
         const original = link.textContent || "";
         if (original.startsWith("http")) {
-          link.textContent = `${label}: ${original}`;
+          link.textContent = original;
         } else {
-          link.textContent = `${label}: ${window.location.origin}${href}`;
+          link.textContent = `${window.location.origin}${href}`;
         }
       } else if (href.startsWith("/") && !href.startsWith("//")) {
         link.textContent = href;
