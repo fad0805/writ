@@ -24,7 +24,7 @@ from app.routes.auth import get_current_user
 from app.utils.emoji import _load_emojis
 from app.utils.filter import _timeline_filter
 
-from app.routes.api._interactions import _json_array_has_user
+
 
 logger = logging.getLogger("writ.api.feed")
 
@@ -36,6 +36,7 @@ TIMELINE_LABELS = {
 
 
 def _get_feed(user, tl_type, session, limit=10, offset=0):
+    from app.routes.api._interactions import _json_array_has_user
     print(f"[feed] _get_feed uid={user.id if user else None} tl={tl_type} limit={limit} offset={offset}", flush=True)
     _base_opts = [selectinload(Post.author), selectinload(Post.parent)]
     _following_ids = None
