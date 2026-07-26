@@ -98,7 +98,11 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
             <div className="emoji-custom-row">
               <div className="emoji-row-label">자주 쓰는 에모지</div>
               <div className="emoji-row-grid">
-                {frequent.filter(e => !e.includes('@')).map((emoji) => {
+                {frequent.filter(e => {
+                    if (!e.startsWith(":")) return true;
+                    const kw = e.slice(1, -1);
+                    return customEmojis.some(c => c.keyword === kw);
+                  }).map((emoji) => {
                   const isCustom = emoji.startsWith(":") && emoji.endsWith(":");
                   const kw = isCustom ? emoji.slice(1, -1) : emoji;
                   const matched = isCustom ? customEmojis.find(e => e.keyword === kw) : null;
