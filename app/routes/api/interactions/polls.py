@@ -76,7 +76,7 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
                     user_id=user.id,
                     post_id=post_id,
                     option_index=option,
-                    expires_at=post.poll_data.get("expires_at")
+                    expires_at=post.poll_data.get("expires_at") or None
                 )
             )
         s.flush()
