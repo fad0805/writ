@@ -36,9 +36,12 @@ from app.routes.api._interactions import (
 
 from app.routes.api._admin import admin_router
 
+from app.routes.api._settings import settings_router
+
 router.include_router(posts_router)
 router.include_router(interactions_router)
 router.include_router(series_router)
+router.include_router(settings_router)
 router.include_router(admin_router)
 
 __all__ = ["router"]
