@@ -193,3 +193,8 @@ def api_refresh_poll(request: Request, post_id: int):
         }
         s.commit()
         s.expire_all()
+
+        post = s.query(Post).filter_by(id=post_id).first()
+        updated = _post_json(post, s, user)
+
+    return {"ok": True, "post": updated}
