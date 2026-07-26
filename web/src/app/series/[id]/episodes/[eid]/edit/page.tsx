@@ -2,7 +2,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/lib/api";
-import { useBeforeUnload } from "@/lib/useBeforeUnload";
+import { useNavigationBlock } from "@/lib/useNavigationBlock";
 import EpisodeEditor from "@/components/EpisodeEditor";
 import VisibilitySelector from "@/components/VisibilitySelector";
 import Icon from "@/components/Icon";
@@ -60,7 +60,7 @@ export default function EditEpisodePage() {
   const novelId = Number(Array.isArray(params.id) ? params.id[0] : params.id);
   const episodeId = Number(Array.isArray(params.eid) ? params.eid[0] : params.eid);
 
-  useBeforeUnload(dirty);
+  useNavigationBlock(dirty);
   useEffect(() => { if (!loading) loadedRef.current = true; }, [loading]);
   useEffect(() => { if (loadedRef.current) setDirty(true); }, [title, summary, comment, content, isPublished, announce, announceComment, visibility]);
 

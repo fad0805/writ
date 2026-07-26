@@ -2,6 +2,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/lib/api";
+import { useNavigationBlock } from "@/lib/useNavigationBlock";
 import Icon from "@/components/Icon";
 import EpisodeEditor from "@/components/EpisodeEditor";
 import Link from "next/link";
@@ -50,6 +51,7 @@ export default function NewEpisodePage() {
   const [drafts, setDrafts] = useState<DraftData[]>([]);
   const [showDraftList, setShowDraftList] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const novelId = Number(Array.isArray(params.id) ? params.id[0] : params.id);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedRef = useRef(false);
@@ -111,6 +113,9 @@ export default function NewEpisodePage() {
 
   useEffect(() => { loadedRef.current = true; }, []);
 
+  useNavigationBlock(dirty);
+  useEffect(() => { if (loadedRef.current) setDirty(true); }, [title, summary, comment, content, isPublished, announce, announceComment]);
+
   const loadDraft = (d: DraftData) => {
     setTitle(d.title);
     setSummary(d.summary);
@@ -150,6 +155,7 @@ export default function NewEpisodePage() {
       const data = await res.json();
       if (res.ok) {
         if (draftId) await fetch(`/api/series/${novelId}/drafts/${draftId}/delete`, { method: "POST", credentials: "include" });
+        setDirty(false);
         router.push(`/series/${params.id}/episodes/${data.episode_id}`);
       } else alert("게시 실패");
     } catch { alert("게시 실패"); }
