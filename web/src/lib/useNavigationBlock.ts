@@ -20,25 +20,34 @@ export function useNavigationBlock(active: boolean) {
     };
     window.addEventListener("beforeunload", beforeUnload);
 
-    const onPopState = () => {
-      if (!activeRef.current || confirmLeave()) return;
-      history.pushState(null, "", location.href);
-    };
-    history.pushState(null, "", location.href);
-    window.addEventListener("popstate", onPopState);
+    const origBack = window.history.back.bind(window.history);
+    const origGo = window.history.go.bind(window.history);
+    const origPushState = history.pushState.bind(history);
+    const origReplaceState = history.replaceState.bind(history);
 
-    const origPush = router.push.bind(router);
-    const origReplace = router.replace.bind(router);
-    const origBack = router.back.bind(router);
-
-    (router as any).push = (...args: Parameters<typeof origPush>) => {
-      if (!activeRef.current || confirmLeave()) return origPush(...args);
+    window.history.back = () => {
+      if (!activeRef.current || confirmLeave()) origBack();
     };
-    (router as any).replace = (...args: Parameters<typeof origReplace>) => {
-      if (!activeRef.current || confirmLeave()) return origReplace(...args);
+    window.history.go = (delta?: number) => {
+      if (!activeRef.current || (delta !== undefined && delta < 0)) {
+        if (!activeRef.current || confirmLeave()) origGo(delta);
+      } else {
+        origGo(delta);
+      }
+    };
+
+    const origRouterPush = router.push.bind(router);
+    const origRouterReplace = router.replace.bind(router);
+    const origRouterBack = router.back.bind(router);
+
+    (router as any).push = (...args: Parameters<typeof origRouterPush>) => {
+      if (!activeRef.current || confirmLeave()) return origRouterPush(...args);
+    };
+    (router as any).replace = (...args: Parameters<typeof origRouterReplace>) => {
+      if (!activeRef.current || confirmLeave()) return origRouterReplace(...args);
     };
     (router as any).back = () => {
-      if (!activeRef.current || confirmLeave()) return origBack();
+      if (!activeRef.current || confirmLeave()) return origRouterBack();
     };
 
     const onClick = (e: MouseEvent) => {
@@ -50,17 +59,20 @@ export function useNavigationBlock(active: boolean) {
       if ((anchor as HTMLAnchorElement).target === "_blank") return;
       if (anchor.closest("form")) return;
       e.preventDefault();
-      if (confirmLeave()) origPush(href);
+      if (confirmLeave()) origRouterPush(href);
     };
     document.addEventListener("click", onClick, true);
 
     return () => {
-      window.removeEventListener("popstate", onPopState);
       window.removeEventListener("beforeunload", beforeUnload);
       document.removeEventListener("click", onClick, true);
-      router.push = origPush;
-      router.replace = origReplace;
-      router.back = origBack;
+      window.history.back = origBack;
+      window.history.go = origGo;
+      window.history.pushState = origPushState;
+      window.history.replaceState = origReplaceState;
+      router.push = origRouterPush;
+      router.replace = origRouterReplace;
+      router.back = origRouterBack;
     };
   }, [active, router]);
 }
