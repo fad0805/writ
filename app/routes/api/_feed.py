@@ -36,7 +36,7 @@ TIMELINE_LABELS = {
 
 
 def _get_feed(user, tl_type, session, limit=10, offset=0):
-    from app.routes.api._interactions import _json_array_has_user
+    from app.routes.api.interactions import _json_array_has_user
     print(f"[feed] _get_feed uid={user.id if user else None} tl={tl_type} limit={limit} offset={offset}", flush=True)
     _base_opts = [selectinload(Post.author), selectinload(Post.parent)]
     _following_ids = None

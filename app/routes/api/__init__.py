@@ -36,7 +36,7 @@ from app.routes.api._feed import (
     _broadcast_timeline,
 )
 
-from app.routes.api._interactions import (
+from app.routes.api.interactions import (
     interactions_router,
     _json_array_has_user,
 )

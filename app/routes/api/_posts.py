@@ -38,7 +38,7 @@ from app.utils.storage import get_storage
 
 from app.routes.api._core import _can_view, _ap_fetch, _fetch_and_save_ap_object, _check_fetch_domain_allowed
 from app.routes.api._series import _novel_json, _episode_json
-from app.routes.api._interactions import _json_array_has_user
+from app.routes.api.interactions import _json_array_has_user
 from app.routes.api._feed import _broadcast_federation, _broadcast_timeline
 
 logger = logging.getLogger("writ.api.posts")
