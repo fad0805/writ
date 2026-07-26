@@ -332,9 +332,13 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
     with get_session() as s:
         pattern = f"%{query}%"
         is_hashtag_search = q.strip().startswith("#")
+
         following_ids = []
         if user:
             following_ids = [f.following_id for f in s.query(Follow).filter_by(follower_id=user.id, accepted=True).all()]
+
+        visible_author_ids = following_ids + [user.id]
+
         if is_hashtag_search:
             tag = s.query(Tag).filter_by(name=query.lower()).first()
             if tag:
@@ -346,14 +350,17 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                         Post.author.has(User.is_suspended == False),
                     )
                 )
-                if not user:
-                    q_posts = q_posts.filter(Post.visibility != "mention")
+                if user:
+                    q_posts = q_posts.filter(Post.author_id.in_(visible_author_ids))
+                else:
+                    q_posts = q_posts.filter(Post.visibility in ["public", "home"])
+
                 if author:
                     author_user = s.query(User).filter_by(username=author).first()
                     if author_user:
                         q_posts = q_posts.filter(Post.author_id == author_user.id)
 
-                posts = q_posts.order_by(desc(Post.created_at)).limit(60).all()
+                posts = q_posts.order_by(desc(Post.created_at)).limit(100).all()
                 if user:
                     posts = _timeline_filter(posts, s, user, "federated", following_ids)[:20]
                 else:
@@ -382,10 +389,13 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 )
             )
 
-            if not user:
-                q_posts = q_posts.filter(Post.visibility != "mention")
+            if user:
+                q_posts = q_posts.filter(Post.author_id.in_(visible_author_ids))
+            else:
+                q_posts = q_posts.filter(Post.visibility in ["public", "home"])
 
-            posts = q_posts.order_by(desc(Post.created_at)).limit(60).all()
+            posts = q_posts.order_by(desc(Post.created_at)).limit(100).all()
+
             if user:
                 posts = _timeline_filter(posts, s, user, "federated", following_ids)[:20]
             else:
