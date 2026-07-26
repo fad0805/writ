@@ -28,7 +28,7 @@ export function useNavigationBlock(active: boolean) {
     window.history.back = () => {
       if (navigatingRef.current || !activeRef.current || confirmLeave()) {
         navigatingRef.current = true;
-        origBack();
+        origGo(-2);
       }
     };
     window.history.go = (delta?: number) => {
@@ -56,7 +56,7 @@ export function useNavigationBlock(active: boolean) {
     (router as any).back = () => {
       if (navigatingRef.current || !activeRef.current || confirmLeave()) {
         navigatingRef.current = true;
-        origBack();
+        origGo(-2);
       }
     };
 
