@@ -947,7 +947,7 @@ const localReactionEmojiMap = useMemo(() => {
               </button>
               {showMoreActions && (
                 <div className="post-actions-dropdown">
-                  <ShareButton url={post.author?.username?.includes('@') && post.ap_id ? post.ap_id : (post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`)} className="post-actions-dropdown-item" />
+                  <ShareButton url={(() => { if (!post.author?.username?.includes('@') || !post.ap_id) return post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`; const m = post.ap_id.match(/^(https?:\/\/[^/]+)\/users\/([^/]+)\/statuses\/(\d+)$/); return m ? `${m[1]}/@${m[2]}/${m[3]}` : post.ap_id; })()} className="post-actions-dropdown-item" />
                   {post.is_mine && (
                     <button onClick={() => { setShowMoreActions(false); (async () => {
                       const newPinned = !pinned;
