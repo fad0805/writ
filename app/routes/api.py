@@ -538,8 +538,21 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             ),
         ).order_by(desc(Post.created_at)).offset(offset).limit(limit + 1).all()
     elif tl_type == "local":
+        # 1. local 타임라인에서도 로컬 유저들의 부스트를 함께 고려하기 위해 부스트 ID 수집
+        _local_user_ids = [row[0] for row in session.query(User.id).filter_by(is_remote=False).all()]
+        boosted_ids = list({row[0] for row in session.query(Boost.post_id).join(Post, Boost.post_id == Post.id).filter(
+            Boost.user_id.in_(_local_user_ids),
+            Post.visibility == "public",
+            Post.is_deleted == False
+        ).all()})
+        _all_boosted_ids = set(boosted_ids)
+
+        # 2. 로컬 작성자의 글이거나, 로컬 유저가 부스트한(단, 원본이 퍼블릭인) 게시물 포함
         posts = session.query(Post).options(*_base_opts).filter(
-            Post.author_id.in_(_local_ids),
+            or_(
+                Post.author_id.in_(_local_ids),
+                Post.id.in_(boosted_ids),
+            ),
             Post.visibility == "public",
             Post.is_deleted == False,
         ).order_by(desc(Post.created_at)).offset(offset).limit(limit + 1).all()
@@ -561,6 +574,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         for orig in session.query(Post).options(selectinload(Post.author)).filter(Post.id.in_(boost_pointer_ids), Post.is_deleted == False).all():
             boost_originals[orig.id] = orig
     _boosted_originals_in_feed = set()
+
     deduped = []
     for p in posts:
         if p.boost_of_id:
