@@ -23,7 +23,8 @@ print('content-type:', r.headers.get('content-type'))
 elif [ "$1" = "key-test" ]; then
   docker compose exec api python3 -c "
 from app.crypto_utils import sign_string, verify_signature, get_private_key
-from app.models import User, get_session
+from app.models import User
+from app.db.database import get_session
 from app.config import SECRET_KEY
 import time
 with get_session() as s:
@@ -47,7 +48,8 @@ elif [ "$1" = "actual-test" ]; then
   docker compose exec api python3 -c "
 import httpx, time, datetime
 from app.crypto_utils import sign_string, get_private_key
-from app.models import User, get_session
+from app.models import User
+from app.db.database import get_session
 from app.config import SECRET_KEY
 from urllib.parse import urlparse
 
@@ -73,7 +75,8 @@ elif [ "$1" = "try-legacy" ]; then
 import httpx, time, datetime
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from app.models import User, get_session
+from app.models import User
+from app.db.database import get_session
 from app.config import SECRET_KEY
 from app.crypto_utils import get_private_key
 from urllib.parse import urlparse
@@ -115,7 +118,8 @@ with get_session() as s:
 elif [ "$1" = "debug-path" ]; then
   docker compose exec api python3 -c "
 import httpx
-from app.models import User, get_session
+from app.models import User
+from app.db.database import get_session
 
 with get_session() as s:
     me = s.query(User).filter_by(username='siarte').first()
@@ -141,7 +145,8 @@ elif [ "$1" = "raw-headers" ]; then
   docker compose exec api python3 -c "
 import httpx, time, datetime
 from app.crypto_utils import sign_string, get_private_key
-from app.models import User, get_session
+from app.models import User
+from app.db.database import get_session
 from app.config import SECRET_KEY
 from urllib.parse import urlparse
 
@@ -170,7 +175,8 @@ print('path:', repr(req.url.path))
 
 elif [ "$1" = "debug-follow" ]; then
   docker compose exec api python3 -c "
-from app.models import Follow, User, get_session
+from app.models import Follow, User
+from app.db.database import get_session
 with get_session() as s:
     local = s.query(User).filter_by(username='siarte', is_remote=False).first()
     remote = s.query(User).filter_by(username='siarte@daydream.ink').first()
@@ -232,7 +238,8 @@ else:
 
 elif [ "$1" = "check-thread" ]; then
   docker compose exec api python3 -c "
-from app.models import Post, get_session
+from app.models import Post
+from app.db.database import get_session
 with get_session() as s:
     p = s.query(Post).filter(Post.ap_id.like('%116901658252254236')).first()
     if p:
@@ -248,7 +255,8 @@ with get_session() as s:
 
 elif [ "$1" = "check-db" ]; then
   docker compose exec api python3 -c "
-from app.models import Post, Vote, get_session
+from app.models import Post, Vote
+from app.db.database import get_session
 with get_session() as s:
     p = s.query(Post).filter(Post.poll_data.isnot(None)).order_by(Post.id.desc()).first()
     if p:
@@ -277,7 +285,8 @@ print('cc:', obj.get('cc'))
 
 elif [ "$1" = "clear-pending" ]; then
   docker compose exec api python3 -c "
-from app.models import PendingDelivery, get_session
+from app.models import PendingDelivery
+from app.db.database import get_session
 with get_session() as s:
     n = s.query(PendingDelivery).delete()
     s.commit()
@@ -286,7 +295,8 @@ with get_session() as s:
 
 elif [ "$1" = "clear-follow" ]; then
   docker compose exec api python3 -c "
-from app.models import Follow, User, ProcessedActivity, get_session
+from app.models import Follow, User, ProcessedActivity
+from app.db.database import get_session
 with get_session() as s:
     local = s.query(User).filter_by(username='siarte', is_remote=False).first()
     remote = s.query(User).filter_by(username='siarte@daydream.ink').first()
@@ -299,7 +309,8 @@ with get_session() as s:
 
 elif [ "$1" = "check-pending" ]; then
   docker compose exec api python3 -c "
-from app.models import Follow, User, get_session
+from app.models import Follow, User
+from app.db.database import get_session
 with get_session() as s:
     local = s.query(User).filter_by(username='siarte', is_remote=False).first()
     remote = s.query(User).filter_by(username='siarte@daydream.ink').first()
@@ -311,7 +322,8 @@ with get_session() as s:
 
 elif [ "$1" = "check-remote" ]; then
   docker compose exec api python3 -c "
-from app.models import User, get_session
+from app.models import User
+from app.db.database import get_session
 with get_session() as s:
     u = s.query(User).filter(User.username.like('%@%')).first()
     if u:
@@ -326,7 +338,8 @@ with get_session() as s:
 
 elif [ "$1" = "check-follow" ]; then
   docker compose exec api python3 -c "
-from app.models import Follow, User, get_session
+from app.models import Follow, User
+from app.db.database import get_session
 with get_session() as s:
     u = s.query(User).filter_by(username='siarte').first()
     if not u: print('user not found'); exit()
@@ -468,7 +481,8 @@ elif [ "$1" = "direct-fetch" ]; then
 import sys, traceback
 sys.path.insert(0, '.')
 from app.routes.api import _ap_fetch, _fetch_and_save_ap_object
-from app.models import User, get_session
+from app.models import User
+from app.db.database import get_session
 
 url = '$2'
 with get_session() as s:
@@ -493,8 +507,9 @@ except Exception as e:
 "
 
 elif [ "$1" = "purge-deleted" ]; then
-  docker compose exec -T api python3 << 'PYEOF'
-from app.models import Post, Like, Boost, Bookmark, Vote, Notification, get_session
+  docker compose exec -T api python3 <<'PYEOF'
+from app.models import Post, Like, Boost, Bookmark, Vote, Notification
+from app.db.database import get_session
 
 def _hard_delete(s, pid):
     s.query(Like).filter(Like.post_id == pid).delete()
@@ -555,7 +570,8 @@ PYEOF
 
 elif [ "$1" = "clear-notifs" ]; then
   docker compose exec api python3 -c "
-from app.models import Notification, Post, get_session
+from app.models import Notification, Post
+from app.db.database import get_session
 with get_session() as s:
     deleted = 0
     for n in s.query(Notification).filter(Notification.post_id.isnot(None)).all():
@@ -574,10 +590,11 @@ elif [ "$1" = "refresh-actor" ]; then
     echo "예시: ./gogo.sh refresh-actor https://misskey.io/users/xxx" >&2
     exit 1
   fi
-  docker compose exec -T -e ACTOR_URL="$actor_url" api python3 << 'PYEOF'
+  docker compose exec -T -e ACTOR_URL="$actor_url" api python3 <<'PYEOF'
 import os, httpx
 from app.activitypub import _resolve_actor, _process_emoji_tags
-from app.models import User, get_session
+from app.models import User
+from app.db.database import get_session
 
 url = os.environ["ACTOR_URL"]
 # First check if user exists
@@ -610,9 +627,10 @@ else:
 PYEOF
 
 elif [ "$1" = "dedup-users" ]; then
-  docker compose exec -T api python3 << 'PYEOF'
+  docker compose exec -T api python3 <<'PYEOF'
 import re
-from app.models import User, Follow, Post, Like, Boost, Bookmark, Vote, Notification, UserBlock, UserMute, get_session
+from app.models import User, Follow, Post, Like, Boost, Bookmark, Vote, Notification, UserBlock, UserMute
+from app.db.database import get_session
 
 def _merge(s, keep, dup):
     print(f"  KEEP id={keep.id} ({keep.username})  MERGE id={dup.id} ({dup.username})")
@@ -658,8 +676,9 @@ with get_session() as s:
 PYEOF
 
 elif [ "$1" = "purge-orphan" ]; then
-  docker compose exec -T api python3 << 'PYEOF'
-from app.models import Post, Notification, Like, Boost, Bookmark, Vote, get_session
+  docker compose exec -T api python3 <<'PYEOF'
+from app.models import Post, Notification, Like, Boost, Bookmark, Vote
+from app.db.database import get_session
 
 with get_session() as s:
     orphans = s.query(Post).filter(
@@ -692,9 +711,10 @@ elif [ "$1" = "check-post" ]; then
     echo "사용법: ./gogo.sh check-post [post_id]" >&2
     exit 1
   fi
-  docker compose exec -T api python3 << PYEOF
+  docker compose exec -T api python3 <<PYEOF
 import json, sys
-from app.models import Post, User, get_session
+from app.models import Post, User
+from app.db.database import get_session
 
 with get_session() as s:
     try:
@@ -738,7 +758,7 @@ elif [ "$1" = "check-custom-fields" ]; then
     echo "예시: ./gogo.sh check-custom-fields https://daydream.ink/users/siarte" >&2
     exit 1
   fi
-  docker compose exec -T -e ACTOR_URL="$actor_url" api python3 << 'PYEOF'
+  docker compose exec -T -e ACTOR_URL="$actor_url" api python3 <<'PYEOF'
 import os, json, httpx, re, sys
 
 url = os.environ["ACTOR_URL"]
@@ -780,9 +800,10 @@ elif [ "$1" = "fix-follow" ]; then
     echo "예시: ./gogo.sh fix-follow siarte alex@daydream.ink" >&2
     exit 1
   fi
-  docker compose exec -T -e LOCAL_USER="$local_name" -e REMOTE_HANDLE="$remote_handle" api python3 << 'PYEOF'
+  docker compose exec -T -e LOCAL_USER="$local_name" -e REMOTE_HANDLE="$remote_handle" api python3 <<'PYEOF'
 import os, json, time
-from app.models import Follow, User, get_session
+from app.models import Follow, User
+from app.db.database import get_session
 from app.activitypub import _post_to_inbox
 from app.config import BASE_URL
 
@@ -843,10 +864,11 @@ with get_session() as s:
         print(f"send failed: {e}")
 PYEOF
 elif [ "$1" = "flag-test-signed" ]; then
-  docker compose exec -T api python3 << 'PYEOF'
+  docker compose exec -T api python3 <<'PYEOF'
 import httpx, json, time, datetime, hashlib, base64
 from app.crypto_utils import sign_string, get_private_key, verify_signature
-from app.models import User, get_session
+from app.models import User
+from app.db.database import get_session
 from app.config import SECRET_KEY, DOMAIN
 from urllib.parse import urlparse
 
@@ -879,7 +901,8 @@ PYEOF
 elif [ "$1" = "whitelist-add" ]; then
   domain="${2:-daydream.ink}"
   docker compose exec -T api python3 -c "
-from app.models import AllowedServer, get_session
+from app.models import AllowedServer
+from app.db.database import get_session
 with get_session() as s:
     exists = s.query(AllowedServer).filter_by(domain='$domain').first()
     if exists:
@@ -908,7 +931,8 @@ print('status:', r.status_code, 'body:', r.text[:200])
 
 elif [ "$1" = "check-notifs" ]; then
   docker compose exec api python3 -c "
-from app.models import Notification, get_session
+from app.models import Notification
+from app.db.database import get_session
 with get_session() as s:
     notifs = s.query(Notification).order_by(Notification.created_at.desc()).limit(5).all()
     if not notifs:
@@ -970,7 +994,8 @@ elif [ "$1" = "flag-test" ]; then
   docker compose exec api python3 -c "
 import httpx, json, sys
 from app.crypto_utils import sign_string, get_private_key
-from app.models import User, get_session
+from app.models import User
+from app.db.database import get_session
 from app.config import SECRET_KEY
 from urllib.parse import urlparse
 
@@ -1012,7 +1037,8 @@ elif [ "$1" = "check-inbox" ]; then
   docker compose exec api python3 -c "
 import httpx
 # 루트 인박스로 테스트 Flag 발송
-from app.models import User, Report, get_session
+from app.models import User, Report
+from app.db.database import get_session
 from app.config import BASE_URL
 flag = {
     '@context': 'https://www.w3.org/ns/activitystreams',
@@ -1039,7 +1065,8 @@ for target in ['https://daydream.ink', 'https://writ.daydream.ink', 'https://myl
 
 elif [ "$1" = "check-emoji-domains" ]; then
   docker compose exec api python3 -c "
-from app.models import CustomEmoji, get_session
+from app.models import CustomEmoji
+from app.db.database import get_session
 with get_session() as s:
     emojis = s.query(CustomEmoji).all()
     local_count = 0
@@ -1055,7 +1082,8 @@ with get_session() as s:
 elif [ "$1" = "migrate-emojis" ]; then
   docker compose exec api python3 -c "
 import os, shutil
-from app.models import CustomEmoji, get_session
+from app.models import CustomEmoji
+from app.db.database import get_session
 from app.config import S3_ENABLED
 
 EMOJI_DIR = '/app/web/public/emojis'
@@ -1103,10 +1131,11 @@ print(f'done: {moved} moved, {skipped} skipped, {errors} errors (total {len(emoj
 "
 
 elif [ "$1" = "purge-shadows" ]; then
-  docker compose exec -T api python3 << 'PYEOF'
+  docker compose exec -T api python3 <<'PYEOF'
 from urllib.parse import urlparse
 from app.config import BASE_URL
-from app.models import User, Follow, Post, Like, Boost, Bookmark, Vote, Notification, UserBlock, UserMute, get_session
+from app.models import User, Follow, Post, Like, Boost, Bookmark, Vote, Notification, UserBlock, UserMute
+from app.db.database import get_session
 
 own_domain = urlparse(BASE_URL).hostname or ""
 print(f"own domain: {own_domain}")
@@ -1173,7 +1202,8 @@ PYEOF
 
 elif [ "$1" = "check-create" ]; then
   docker compose exec api python3 -c "
-from app.models import Post, get_session
+from app.models import Post
+from app.db.database import get_session
 from app.utils.to_ap_serializer import to_ap_create
 import json
 
@@ -1189,8 +1219,9 @@ with get_session() as s:
 "
 
 elif [ "$1" = "fix-usernames" ]; then
-  docker compose exec -T api python3 << 'PYEOF'
-from app.models import User, Follow, Post, Like, Boost, Bookmark, Vote, Notification, get_session
+  docker compose exec -T api python3 <<'PYEOF'
+from app.models import User, Follow, Post, Like, Boost, Bookmark, Vote, Notification
+from app.db.database import get_session
 
 with get_session() as s:
     fixed = 0
@@ -1215,7 +1246,8 @@ elif [ "$1" = "replay-mastodon" ]; then
   docker compose exec api python3 -c "
 import json, datetime, hashlib, base64, httpx
 from urllib.parse import urlparse
-from app.models import Post, User, get_session
+from app.models import Post, User
+from app.db.database import get_session
 from app.utils.to_ap_serializer import to_ap_note
 from app.config import SECRET_KEY, BASE_URL
 from app.crypto_utils import sign_string, get_private_key
