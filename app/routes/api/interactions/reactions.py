@@ -42,6 +42,8 @@ from app.routes.api.interactions._common import _json_array_has_user
 
 reactions_router = APIRouter()
 
+
+@reactions_router.post("/posts/{post_id}/react")
 def api_react_post(request: Request, background_tasks: BackgroundTasks, post_id: int, emoji: str = Form(...)):
     user = require_active_auth(request)
     with get_session() as s:
