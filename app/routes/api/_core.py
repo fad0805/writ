@@ -347,7 +347,6 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 if user:
                     q_posts = q_posts.filter(
                         or_(
-                            Post.visibility != "mention",
                             (Post.author_id.in_(following_ids) & Post.visibility.in_(["public", "home", "followers"])),
                             (Post.author_id == user.id),
                             Post.mentioned_user_ids.contains([user.id]),
@@ -386,7 +385,6 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
             if user:
                 q_posts = q_posts.filter(
                     or_(
-                        Post.visibility != "mention",
                         (Post.author_id.in_(following_ids) & Post.visibility.in_(["public", "home", "followers"])),
                         (Post.author_id == user.id),
                         Post.mentioned_user_ids.contains([user.id]),
