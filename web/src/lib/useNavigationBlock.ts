@@ -65,7 +65,7 @@ export function useNavigationBlock(active: boolean) {
       origPushState(null, "", location.href);
       if (!activeRef.current || confirmLeave()) {
         navigatingRef.current = true;
-        origBack();
+        origGo(-2);
       }
     };
     origPushState(null, "", location.href);

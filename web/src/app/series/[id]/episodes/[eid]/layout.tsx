@@ -12,8 +12,9 @@ async function getEpisodeData(novelId: string, episodeId: string) {
   }
 }
 
-export async function generateMetadata({ params }: { params: { id: string; eid: string } }): Promise<Metadata> {
-  const data = await getEpisodeData(params.id, params.eid);
+export async function generateMetadata({ params }: { params: Promise<{ id: string; eid: string }> }): Promise<Metadata> {
+  const { id, eid } = await params;
+  const data = await getEpisodeData(id, eid);
   const episode = data?.episode;
   const novel = data?.novel;
   if (!episode || !novel) return {};

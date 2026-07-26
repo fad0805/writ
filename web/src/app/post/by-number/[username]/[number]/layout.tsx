@@ -12,8 +12,9 @@ async function getPostData(username: string, number: string) {
   }
 }
 
-export async function generateMetadata({ params }: { params: { username: string; number: string } }): Promise<Metadata> {
-  const data = await getPostData(params.username, params.number);
+export async function generateMetadata({ params }: { params: Promise<{ username: string; number: string }> }): Promise<Metadata> {
+  const { username, number } = await params;
+  const data = await getPostData(username, number);
   if (!data) return {};
   const displayName = data.author?.display_name || data.author?.username || "WRIT";
   const content = (data.content || "").replace(/<[^>]*>/g, "").slice(0, 200);

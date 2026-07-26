@@ -16,8 +16,9 @@ async function getSeriesData(username: string, number: string) {
   }
 }
 
-export async function generateMetadata({ params }: { params: { username: string; number: string } }): Promise<Metadata> {
-  const data = await getSeriesData(params.username, params.number);
+export async function generateMetadata({ params }: { params: Promise<{ username: string; number: string }> }): Promise<Metadata> {
+  const { username, number } = await params;
+  const data = await getSeriesData(username, number);
   const novel = data?.novel;
   if (!novel) return {};
   const title = `${novel.title} — WRIT`;
