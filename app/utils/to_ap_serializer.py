@@ -172,12 +172,9 @@ def to_ap_note(post, session=None) -> dict:
         # 오직 멘션된 사람들과 작성자 본인만 to_list에 남아야 함
         if public_uri in to_list:
             to_list.remove(public_uri)
-        if public_uri in cc_list:
-            cc_list.remove(public_uri)
         if followers_uri in to_list:
             to_list.remove(followers_uri)
-        if followers_uri in cc_list:
-            cc_list.remove(followers_uri)
+        cc_list.clear()
 
     # 본인에게 보내는 답글일 경우, to_list에 본인을 포함
     if post.parent and post.parent.author_id == post.author_id:
