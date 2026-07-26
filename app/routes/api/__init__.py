@@ -28,6 +28,10 @@ from app.routes.api._series import (
 from app.routes.api._posts import (
     posts_router,
     _sync_post_tags,
+)
+
+from app.routes.api._feed import (
+    feed_router,
     _broadcast_federation,
     _broadcast_timeline,
 )
@@ -49,6 +53,7 @@ from app.routes.api._misc import misc_router
 
 router.include_router(auth_router)
 router.include_router(misc_router)
+router.include_router(feed_router)
 router.include_router(posts_router)
 router.include_router(interactions_router)
 router.include_router(series_router)
