@@ -334,6 +334,15 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
             "count": cnt,
             "me": name == (my_reaction or "").strip(":"),
         })
+        if name != "★" and not any(e["shortcode"] == name for e in status["emojis"]):
+            emoji_row = next((e for e in all_emojis if e["keyword"] == name), None)
+            if emoji_row:
+                status["emojis"].append({
+                    "shortcode": emoji_row["keyword"],
+                    "url": emoji_row["url"],
+                    "static_url": emoji_row["url"],
+                    "visible_in_picker": True,
+                })
 
     return status
 
