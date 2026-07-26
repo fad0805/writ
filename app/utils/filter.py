@@ -124,9 +124,10 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
                 parent_author_id = parent.author_id if parent else None
 
             # 대원칙 B: 부모 글의 작성자를 알 수 없거나, (내가 팔로우하는 사람도 아니고 + 나 자신도 아니라면) 드롭
+            # 단, 내 글이면 어떤 부모에게든 보임
             if parent_author_id is None:
                 return False
-            if parent_author_id not in following_set and parent_author_id != user.id:
+            if post.author_id != user.id and parent_author_id not in following_set and parent_author_id != user.id:
                 return False
     return True
 

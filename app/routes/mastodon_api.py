@@ -752,7 +752,7 @@ def home_timeline(
             original = db.query(Post).filter_by(id=p.boost_of_id).first()
             if original and not original.is_deleted:
                 # Reply filtering for boosted replies
-                if original.in_reply_to_id:
+                if original.in_reply_to_id and original.author_id != user.id:
                     parent = db.query(Post).filter_by(id=original.in_reply_to_id).first()
                     if parent and parent.author_id not in following_set and parent.author_id != user.id:
                         continue
@@ -762,8 +762,8 @@ def home_timeline(
                 if s:
                     result.append(s)
         else:
-            # Reply filtering: drop replies to posts by non-followed, non-self users
-            if p.in_reply_to_id:
+            # Reply filtering: drop replies to posts by non-followed, non-self users (but always keep own posts)
+            if p.in_reply_to_id and p.author_id != user.id:
                 parent = db.query(Post).filter_by(id=p.in_reply_to_id).first()
                 if parent and parent.author_id not in following_set and parent.author_id != user.id:
                     continue
