@@ -23,6 +23,7 @@ export function useNavigationBlock(active: boolean) {
 
     const origBack = window.history.back.bind(window.history);
     const origGo = window.history.go.bind(window.history);
+    const origPushState = history.pushState.bind(history);
 
     window.history.back = () => {
       if (navigatingRef.current || !activeRef.current || confirmLeave()) {
@@ -61,13 +62,13 @@ export function useNavigationBlock(active: boolean) {
 
     const onPopState = () => {
       if (navigatingRef.current) return;
+      origPushState(null, "", location.href);
       if (!activeRef.current || confirmLeave()) {
         navigatingRef.current = true;
-        return;
+        origBack();
       }
-      history.pushState(null, "", location.href);
     };
-    history.pushState(null, "", location.href);
+    origPushState(null, "", location.href);
     window.addEventListener("popstate", onPopState);
 
     const onClick = (e: MouseEvent) => {
@@ -92,6 +93,7 @@ export function useNavigationBlock(active: boolean) {
       document.removeEventListener("click", onClick, true);
       window.history.back = origBack;
       window.history.go = origGo;
+      history.pushState = origPushState;
       router.push = origRouterPush;
       router.replace = origRouterReplace;
       router.back = () => { origBack(); };
