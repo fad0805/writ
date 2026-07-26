@@ -3,6 +3,7 @@ import { PostData, NovelData, User, EpisodeData, api } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { recordEmojiUsage } from "@/lib/emoji-usage";
 import EditModal from "./EditModal";
 import ReplyModal from "./ReplyModal";
 import ClickableCover from "./ClickableCover";
@@ -854,6 +855,7 @@ const localReactionEmojiMap = useMemo(() => {
                       setMyReactionOverride(emoji);
                       setLiked(true);
                       setLikesCount(myReaction ? likesCount : likesCount + 1);
+                      recordEmojiUsage(emoji);
                       try {
                         await api.react(post.id, emoji);
                       } catch {}
@@ -922,6 +924,7 @@ const localReactionEmojiMap = useMemo(() => {
                 setMyReactionOverride(emoji);
                 setLiked(true);
                 setLikesCount(myReaction ? likesCount : likesCount + 1);
+                recordEmojiUsage(emoji);
                 try {
                   await api.react(post.id, emoji);
                 } catch {}

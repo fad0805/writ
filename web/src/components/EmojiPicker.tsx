@@ -3,6 +3,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import Icon from "./Icon";
 import { getCustomEmojis, CustomEmoji } from "@/lib/emojis";
+import { getFrequentEmojis } from "@/lib/emoji-usage";
 
 const CATEGORIES: { name: string; emojis: string[] }[] = [
   { name: "표정", emojis: ["😀","😃","😄","😁","😅","😂","🤣","😊","😇","🙂","😉","😌","😍","🥰","😘","😗","😋","😛","😜","🤪","😝","🤑","🤗","🤭","🤫","🤔","🤐","🤨","😐","😑","😶","😏","😒","🙄","😬","🤥","😌","😔","😪","🤤","😴","😷","🤒","🤕","🤢","🤮","🥴","😵","🤯","🤠","🥳","🥸","😎","🤓","🧐","😕","😟","🙁","😮","😯","😲","😳","🥺","😦","😧","😨","😰","😥","😢","😭","😱","😖","😣","😞","😓","😩","😫","🥱","😤","😡","😠","🤬"] },
@@ -16,11 +17,15 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
   const [open, setOpen] = useState(false);
   const [customEmojis, setCustomEmojis] = useState<CustomEmoji[]>([]);
   const [search, setSearch] = useState("");
+  const [frequent, setFrequent] = useState<string[]>([]);
   const pickerRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (open) setSearch("");
+    if (open) {
+      setSearch("");
+      setFrequent(getFrequentEmojis(5));
+    }
   }, [open]);
 
   useEffect(() => {
@@ -87,6 +92,27 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
                   <img src={emo.url} alt={emo.keyword} width={33} height={33} className="emoji-img" />
                 </button>
               ))}
+            </div>
+          )}
+          {!search && frequent.length > 0 && (
+            <div className="emoji-custom-row">
+              <div className="emoji-row-label">자주 쓰는 에모지</div>
+              <div className="emoji-row-grid">
+                {frequent.map((emoji) => {
+                  const isCustom = emoji.startsWith(":") && emoji.endsWith(":");
+                  const kw = isCustom ? emoji.slice(1, -1) : emoji;
+                  const matched = isCustom ? customEmojis.find(e => e.keyword === kw) : null;
+                  return (
+                    <button key={emoji} type="button" onClick={() => { onEmoji(emoji); setOpen(false); }} className="emoji-cell emoji-cell-large">
+                      {matched ? (
+                        <img src={matched.url} alt={kw} width={33} height={33} className="emoji-img" />
+                      ) : (
+                        <span style={{ fontSize: 28 }}>{emoji}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
           {customEmojis.length > 0 && Object.entries(groupedCustom).sort(([a], [b]) => a.localeCompare(b, 'ko')).map(([catName, emos]) => (
