@@ -346,13 +346,15 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 )
                 if user:
                     q_posts = q_posts.filter(
-                        Post.visibility == "public"
-                        | (Post.author_id.in_(following_ids) & Post.visibility.in_(["public", "home", "followers"]))
-                        | (Post.author_id == user.id)
-                        | Post.mentioned_user_ids.contains([user.id])
+                        or_(
+                            Post.visibility != "mention",
+                            (Post.author_id.in_(following_ids) & Post.visibility.in_(["public", "home", "followers"])),
+                            (Post.author_id == user.id),
+                            Post.mentioned_user_ids.contains([user.id]),
+                        )
                     )
                 else:
-                    q_posts = q_posts.filter(Post.visibility == "public")
+                    q_posts = q_posts.filter(Post.visibility != "mention")
                 if author:
                     author_user = s.query(User).filter_by(username=author).first()
                     if author_user:
@@ -383,13 +385,15 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
             )
             if user:
                 q_posts = q_posts.filter(
-                    Post.visibility == "public"
-                    | (Post.author_id.in_(following_ids) & Post.visibility.in_(["public", "home", "followers"]))
-                    | (Post.author_id == user.id)
-                    | Post.mentioned_user_ids.contains([user.id])
+                    or_(
+                        Post.visibility != "mention",
+                        (Post.author_id.in_(following_ids) & Post.visibility.in_(["public", "home", "followers"])),
+                        (Post.author_id == user.id),
+                        Post.mentioned_user_ids.contains([user.id]),
+                    )
                 )
             else:
-                q_posts = q_posts.filter(Post.visibility == "public")
+                q_posts = q_posts.filter(Post.visibility != "mention")
             posts = q_posts.order_by(desc(Post.created_at)).limit(60).all()
             if user:
                 posts = _timeline_filter(posts, s, user, "federated", following_ids)[:20]
@@ -398,7 +402,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
             novels = _apply_latest_activity_order(s.query(Novel).options(selectinload(Novel.author)).filter(
                 or_(Novel.title.ilike(pattern), Novel.description.ilike(pattern)),
                 Novel.is_published == True,
-                Novel.visibility == "public",
+                Novel.visibility != "private",
             ), s).limit(20).all()
         local_users = s.query(User).filter(
             User.is_remote == False,
