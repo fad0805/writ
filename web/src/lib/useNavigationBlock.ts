@@ -39,7 +39,6 @@ export function useNavigationBlock(active: boolean) {
 
     const origRouterPush = router.push.bind(router);
     const origRouterReplace = router.replace.bind(router);
-    const origRouterBack = router.back.bind(router);
 
     (router as any).push = (...args: Parameters<typeof origRouterPush>) => {
       if (navigatingRef.current || !activeRef.current || confirmLeave()) {
@@ -60,6 +59,17 @@ export function useNavigationBlock(active: boolean) {
       }
     };
 
+    const onPopState = () => {
+      if (navigatingRef.current) return;
+      if (!activeRef.current || confirmLeave()) {
+        navigatingRef.current = true;
+        return;
+      }
+      history.pushState(null, "", location.href);
+    };
+    history.pushState(null, "", location.href);
+    window.addEventListener("popstate", onPopState);
+
     const onClick = (e: MouseEvent) => {
       if (navigatingRef.current || !activeRef.current) return;
       const anchor = (e.target as HTMLElement).closest("a[href]");
@@ -78,12 +88,13 @@ export function useNavigationBlock(active: boolean) {
 
     return () => {
       window.removeEventListener("beforeunload", beforeUnload);
+      window.removeEventListener("popstate", onPopState);
       document.removeEventListener("click", onClick, true);
       window.history.back = origBack;
       window.history.go = origGo;
       router.push = origRouterPush;
       router.replace = origRouterReplace;
-      router.back = origRouterBack;
+      router.back = () => { origBack(); };
     };
   }, [active, router]);
 }
