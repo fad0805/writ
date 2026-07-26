@@ -43,12 +43,18 @@ const NOTIF_ICONS: Record<string, string> = {
 const TYPE_NAMES: Record<string, string> = { post: "게시글", novel: "시리즈", episode: "에피소드" };
 const ACTION_NAMES: Record<string, string> = { warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지", unsuspend: "정지 해제" };
 
-const typeText = (t: string, meta?: any) => {
+const typeText = (t: string, meta?: any, emojiMap?: CustomEmoji[]) => {
   if (t === "follow") return "님이 회원님을 팔로우했습니다";
   if (t === "follow_request") return "님이 회원님을 팔로우 요청했습니다";
   if (t === "like") {
     const reaction = meta?.reaction;
-    if (reaction) return `님이 ${reaction} 리액션했습니다`;
+    if (reaction) {
+      const rendered = renderCustomEmojis(reaction, emojiMap || []);
+      if (rendered !== reaction) {
+        return <span>님이 <span dangerouslySetInnerHTML={{ __html: rendered }} /> 리액션했습니다</span>;
+      }
+      return `님이 ${reaction} 리액션했습니다`;
+    }
     return "님이 회원님의 글을 즐겨찾기했습니다";
   }
   if (t === "boost") return "님이 회원님의 글을 부스트했습니다";
@@ -321,7 +327,7 @@ export default function NotificationsPage() {
                     <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user.display_name, emojiMap)) }} />
                   </Link>
                 )}{" "}
-                {typeText(n.type, n.metadata)}</>
+                {typeText(n.type, n.metadata, emojiMap)}</>
               )}
               <span className="notif-time">{fmtTime(n.created_at)}</span>
               {n.type === "moderation" && n.metadata?.message && n.metadata?.type !== "report" && n.metadata?.type !== "new_user" && (
