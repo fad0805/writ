@@ -29,6 +29,7 @@ from app.core.timeline_stream import broadcast_notif_sound, broadcast_refresh_no
 from app.config.settings import BASE_URL, SECRET_KEY, DOMAIN
 from app.db.database import get_session
 from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, FederationBlock, AllowedServer, MutedServer, ServerSetting, UserBlock, Tag, RemoteMedia, ProcessedActivity, PendingDelivery
+from app.utils.to_ap_serializer import to_ap_note, to_ap_create, to_ap_actor
 from app.utils.crypto import generate_keypair, sign_string, encrypt_key, get_private_key
 from app.utils.content_parser import _sanitize_html, process_post_content
 from app.utils.emoji import _refresh_emoji_cache_forcibly, _load_emojis
@@ -162,7 +163,7 @@ def get_actor(username: str):
         user = session.query(User).filter_by(username=username).first()
         if not user:
             return None
-        return user.to_ap_actor()
+        return to_ap_actor(user)
 
 
 def get_outbox(username: str, page: Optional[int] = None):
@@ -183,7 +184,7 @@ def get_outbox(username: str, page: Optional[int] = None):
         if page is not None:
             offset = (page - 1) * 20
             posts = query.offset(offset).limit(20).all()
-            items = [p.to_ap_create() for p in posts]
+            items = [to_ap_create(p) for p in posts]
             return {
                 "@context": "https://www.w3.org/ns/activitystreams",
                 "id": f"{outbox_url}?page={page}",
@@ -310,7 +311,7 @@ def get_featured(username: str, page: Optional[int] = None):
         if page is not None:
             offset = (page - 1) * 20
             page_posts = ordered[offset:offset + 20]
-            items = [p.to_ap_note() for p in page_posts]
+            items = [to_ap_note(p) for p in page_posts]
             return {
                 "@context": "https://www.w3.org/ns/activitystreams",
                 "id": f"{featured_url}?page={page}",

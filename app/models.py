@@ -1,13 +1,11 @@
 import datetime
-import re
 import uuid
 
-from urllib.parse import quote, urlparse
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, JSON, Table
 from sqlalchemy.orm import relationship
 
 from app.config.settings import BASE_URL
-from app.db.database import get_session, Base
+from app.db.database import Base
 
 def generate_uuid():
     return str(uuid.uuid4())
@@ -17,13 +15,6 @@ def now():
 
 def get_24hours_later():
     return datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
-
-def _ap_datetime(dt):
-    if dt is None:
-        return ""
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=datetime.timezone.utc)
-    return dt.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class User(Base):
@@ -111,55 +102,6 @@ class User(Base):
     def featured_uri(self):
         return f"{BASE_URL}/users/{self.username}/featured"
 
-    def to_ap_actor(self):
-        tags = []
-        for ht in (getattr(self, 'profile_hashtags', None) or []):
-            tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={ht}", "name": f"#{ht}"})
-        result = {
-            "@context": [
-                "https://www.w3.org/ns/activitystreams",
-                "https://w3id.org/security/v1",
-                {"PropertyValue": "https://schema.org/PropertyValue", "value": "https://schema.org/value"},
-            ],
-            "id": self.actor_uri(),
-            "type": "Person",
-            "preferredUsername": self.username,
-            "name": self.display_name or self.username,
-            "summary": self.summary or "",
-            "url": f"{BASE_URL}/@{self.username}",
-            "inbox": self.inbox_uri(),
-            "outbox": self.outbox_uri(),
-            "featured": self.featured_uri(),
-            "followers": self.followers_uri(),
-            "following": self.following_uri(),
-            "publicKey": {
-                "id": f"{self.actor_uri()}#main-key",
-                "owner": self.actor_uri(),
-                "publicKeyPem": self.public_key,
-            },
-            "published": _ap_datetime(self.created_at),
-            "discoverable": True,
-            "manuallyApprovesFollowers": bool(self.is_locked),
-        }
-        if tags:
-            result["tag"] = tags
-        if self.profile_image:
-            result["icon"] = {"type": "Image", "url": self.profile_image}
-        if self.header_image:
-            result["image"] = {"type": "Image", "url": self.header_image}
-        if self.shared_inbox_url:
-            result["endpoints"] = {"sharedInbox": self.shared_inbox_url}
-        elif not self.is_remote:
-            result["endpoints"] = {"sharedInbox": f"{BASE_URL}/inbox"}
-        if self.updated_at:
-            result["updated"] = self.updated_at.isoformat()
-        custom_fields = getattr(self, 'custom_fields', None) or []
-        if custom_fields:
-            result["attachment"] = [
-                {"type": "PropertyValue", "name": cf.get("name") or cf.get("label", ""), "value": cf.get("value", "")}
-                for cf in custom_fields if (cf.get("name") or cf.get("label")) and cf.get("value")
-            ]
-        return result
 
 
 class Follow(Base):
@@ -269,155 +211,6 @@ class Post(Base):
             return sum(1 for r in self.replies if not r.is_deleted) if self.replies is not None else 0
         except Exception:
             return 0
-
-    def to_ap_note(self):
-        content = self.content
-        tags = []
-        mentioned_uris = []
-
-        # 1. 멘션 및 해시태그 구축
-        with get_session() as s:
-            if self.mentioned_user_ids:
-                users = s.query(User).filter(User.id.in_(self.mentioned_user_ids)).all()
-                for u in users:
-                    actor_uri = u.actor_uri()
-                    mentioned_uris.append(actor_uri)
-                    tag_name = f"@{u.username}" if u.is_remote else f"@{u.username}@{urlparse(BASE_URL).hostname}"
-                    tags.append({"type": "Mention", "href": actor_uri, "name": tag_name})
-                    target_rel = f'href="/@{u.username}"'
-                    domain = u.username.split('@', 1)[1] if '@' in u.username else urlparse(BASE_URL).netloc
-                    username = u.username.split('@', 1)[0]
-                    content = content.replace(target_rel, f'href="https://{domain}/@{username}"')
-                    if not u.is_remote:
-                        content = re.sub(
-                            rf'>@{re.escape(username)}</a>',
-                            f'>@{username}@{domain}</a>',
-                            content)
-
-            if self.tag_list:
-                for t in self.tag_list:
-                    tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?q=#{_urlencode(t.display_name)}", "name": f"#{t.display_name}"})
-
-        # 2. 이모지 구축
-        _emoji_pattern = re.compile(r':([a-z0-9_]{2,}):')
-        _emoji_keywords = set(_emoji_pattern.findall(content))
-        if _emoji_keywords:
-            with get_session() as _es:
-                for kw in _emoji_keywords:
-                    emoji = _es.query(CustomEmoji).filter_by(keyword=kw).first()
-                    if emoji:
-                        sub = "remote" if (emoji.domain or emoji.category == "remote") else "local"
-                        url = emoji.source_url
-                        tags.append({
-                            "type": "Emoji", "id": f"{BASE_URL}/emojis/{kw}", "name": f":{kw}:",
-                            "icon": {"type": "Image", "mediaType": "image/webp", "url": url}
-                        })
-
-        # 2-3. 내부 링크를 절대 경로로 변환 (AP 전송 시)
-        content = re.sub(
-            r'href="(/(?:series|episode)/[^"]*)"',
-            lambda m: f'href="{BASE_URL}{m.group(1)}"',
-            content
-        )
-        content = re.sub(
-            r'href="[^"]*explore\?q=(?:%23|#)([^&"]+)[^"]*"',
-            lambda m: f'href="{BASE_URL}/explore?q=#{m.group(1)}"',
-            content
-        )
-        content = re.sub(
-            r'href="(/@\w+)"',
-            lambda m: f'href="{BASE_URL}{m.group(1)}"',
-            content
-        )
-
-        # 3. 객체 생성
-        obj = {
-            "@context": ["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1", {
-                "manuallyapprovesfollowers": "as:manuallyapprovesfollowers", "toot": "http://joinmastodon.org/ns#",
-                "emoji": "toot:emoji", "quote": {"@id": "https://w3id.org/fep/044f#quote", "@type": "@id"}
-            }],
-            #"id": f"{BASE_URL}/posts/{self.id}",
-            "id": self.ap_id,
-            "type": "Question" if self.poll_data else "Note",
-            "attributedTo": self.author.actor_uri().strip(),
-            "content": f"<p>{content}</p>" if not content.strip().startswith("<p>") else content,
-            "mediaType": "text/html",
-            "tag": tags,
-            "to": [], "cc": []
-        }
-
-        # 4. 수신자 및 답글 관계 설정
-        to_list = list(set(mentioned_uris))
-        cc_list = []
-        public_uri = "https://www.w3.org/ns/activitystreams#Public"
-        followers_uri = self.author.followers_uri()
-
-        # 답글 처리 (DB 모델의 parent 관계 활용)
-        if self.parent:
-            ap_id = self.parent.ap_id or f"{BASE_URL}/posts/{self.parent.id}"
-            obj["inReplyTo"] = ap_id
-            if self.parent.author.actor_uri().strip() not in to_list:
-                to_list.append(self.parent.author.actor_uri().strip())
-            parent_followers = self.parent.author.followers_uri()
-            if parent_followers not in to_list and parent_followers not in cc_list:
-                cc_list.append(parent_followers)
-
-        # 공개 범위
-        if self.visibility == "public":
-            to_list.append(public_uri)
-            cc_list.append(followers_uri)
-        elif self.visibility == "home":
-            # 홈공개는 '팔로워에게 전달(to)'하고 '공개(cc)'로 처리해야 미스키에서 보임
-            if followers_uri not in to_list:
-                to_list.append(followers_uri)
-            if public_uri not in cc_list:
-                cc_list.append(public_uri)
-        elif self.visibility == "followers":
-            to_list.append(followers_uri)
-
-        # [수정] 본인에게 보내는 답글일 경우, to_list에 본인을 포함
-        if self.parent and self.parent.author_id == self.author_id:
-            if self.author.actor_uri().strip() not in to_list:
-                to_list.append(self.author.actor_uri().strip())
-
-        # 5. 미디어, 인용, 설문 처리
-        if self.media_attachments:
-            obj["attachment"] = [{"type": "Video" if m.get("type")=="video" else "Image", 
-                                 "mediaType": "video/webm" if m.get("type")=="video" else f"image/{m.get('url', '').rsplit('.',1)[-1]}", 
-                                 "url": m.get("url")} for m in self.media_attachments[:4]]
-        if self.quote_of_ap_id:
-            obj.update({"quoteUrl": self.quote_of_ap_id, "quote": self.quote_of_ap_id, "quoteUri": self.quote_of_ap_id})
-        if self.poll_data:
-            obj["oneOf"] = [
-                {
-                    "type": "Note",
-                    "name": o["text"],
-                    "replies": {
-                        "type": "Collection",
-                        "totalItems": o.get("votes_count", 0)
-                    }} for o in self.poll_data.get("options", [])
-            ]
-            obj["votersCount"] = sum(o.get("votes_count", 0) for o in self.poll_data.get("options", []))
-            obj["endTime"] = self.poll_data.get('expires_at')
-
-        # 6. 최종 수신자 정리
-        cc_list.append(self.author.actor_uri().strip())
-        obj["to"] = list(set(to_list))
-        obj["cc"] = list(set(cc_list) - set(obj["to"]))
-        return obj
-
-    def to_ap_create(self):
-        note = self.to_ap_note()
-        return {
-            "@context": note.get("@context"),
-            "id": f"{BASE_URL}/activities/create/{self.id}",
-            "type": "Create",
-            "actor": self.author.actor_uri(),
-            "published": note.get("published"),
-            "to": note.get("to", []),
-            "cc": note.get("cc", []),
-            "object": note,
-        }
 
 
 class Vote(Base):

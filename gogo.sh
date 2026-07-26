@@ -1174,6 +1174,7 @@ PYEOF
 elif [ "$1" = "check-create" ]; then
   docker compose exec api python3 -c "
 from app.models import Post, get_session
+from app.utils.to_ap_serializer import to_ap_create
 import json
 
 post_id = int('$2')
@@ -1184,7 +1185,7 @@ with get_session() as s:
     if not p:
         print('post not found')
     else:
-        print(json.dumps(p.to_ap_create(), indent=2, ensure_ascii=False))
+        print(json.dumps(to_ap_create(p), indent=2, ensure_ascii=False))
 "
 
 elif [ "$1" = "fix-usernames" ]; then
@@ -1215,6 +1216,7 @@ elif [ "$1" = "replay-mastodon" ]; then
 import json, datetime, hashlib, base64, httpx
 from urllib.parse import urlparse
 from app.models import Post, User, get_session
+from app.utils.to_ap_serializer import to_ap_note
 from app.config import SECRET_KEY, BASE_URL
 from app.crypto_utils import sign_string, get_private_key
 
@@ -1228,7 +1230,7 @@ with get_session() as s:
     author = p.author
 
     # 1. to_ap_note() 로 현재 WRIT 포맷 가져오기
-    note = p.to_ap_note()
+    note = to_ap_note(p)
 
     # 2. Mastodon 포맷으로 최소한의 차이만 적용
     #    - <p> 래핑 제거 (Mastodon은 짧은 글에 <p> 없음)

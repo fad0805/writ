@@ -32,6 +32,7 @@ from email.mime.text import MIMEText
 import smtplib
 
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PushSubscription, LoginSession, ServerSetting
+from app.utils.to_ap_serializer import to_ap_note, to_ap_create, to_ap_actor
 from app.serializers import _post_json, _user_json
 from app.config.settings import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED, APP_ENV, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, INITIAL_OWNER_PASSWORD, SESSION_EXPIRE_DAYS
 from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _post_to_inbox, _federation_allowed, _build_reactions, _resolve_actor, _send_delete_post, _send_flag, _send_accept, _send_reject, _get_instance_actor, _validate_url, _fetch_remote_count
@@ -742,7 +743,7 @@ def api_get_post(request: Request, post_id: int):
             post = s.query(Post).filter_by(id=post_id).first()
             if not post:
                 raise HTTPException(status_code=404, detail="Not Found")
-            note = post.to_ap_note()
+            note = to_ap_note(post)
             return JSONResponse(content=note, media_type="application/activity+json")
     # --- [추가 끝] ---
 
@@ -857,7 +858,7 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
             logger.warning(f"Broadcast aborted: user_id={user_id} or post_id={post_id} not found")
             return
 
-        create_activity = post.to_ap_create()
+        create_activity = to_ap_create(post)
         if visibility == "mention":
             _remote_mentioned = False
             if post.mentioned_user_ids:
@@ -1027,7 +1028,7 @@ def _broadcast_update_actor(user):
             "id": f"{user.actor_uri()}#updates/{uuid.uuid4()}",
             "type": "Update",
             "actor": user.actor_uri(),
-            "object": user.to_ap_actor(),
+            "object": to_ap_actor(user),
         }
         broadcast_to_followers(user, update)
     except Exception as e:
@@ -1297,7 +1298,7 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
         # Federation: send Update to remote followers
         if post.ap_id:
             try:
-                note_data = post.to_ap_note()
+                note_data = to_ap_note(post)
                 note_data.pop("@context", None)
                 note_data.pop("url", None)
                 note_data["atomUri"] = post.ap_id
@@ -3507,7 +3508,7 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
                     "id": f"{BASE_URL}/activities/create/{post.id}",
                     "type": "Create",
                     "actor": user.actor_uri(),
-                    "object": post.to_ap_note(),
+                    "object": to_ap_note(post),
                 }
                 s.commit()
                 if visibility == "mention":
@@ -3650,7 +3651,7 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
                     "id": f"{BASE_URL}/activities/create/{post.id}",
                     "type": "Create",
                     "actor": user.actor_uri(),
-                    "object": post.to_ap_note(),
+                    "object": to_ap_note(post),
                 }
                 s.commit()
                 broadcast_to_followers(user, create_activity)
@@ -4689,7 +4690,7 @@ def api_by_number(request: Request, username: str, number: str):
         if "application/activity+json" in accept or "application/ld+json" in accept:
             if post.visibility not in ("public", "unlisted", "home"):
                 raise HTTPException(status_code=403, detail="Not authorized")
-            return JSONResponse(content=post.to_ap_note(), media_type="application/activity+json")
+            return JSONResponse(content=to_ap_note(post), media_type="application/activity+json")
         # 일반 요청 → 로그인 필요
         user = get_current_user(request)
         if not user:

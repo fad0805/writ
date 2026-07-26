@@ -16,6 +16,7 @@ from sqlalchemy import func as sqlfunc, or_
 from sqlalchemy.orm import Session as SASession
 
 from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Tag, CustomEmoji, ServerSetting, MastodonApp, MastodonAccessToken, now
+from app.utils.to_ap_serializer import to_ap_note, to_ap_create, to_ap_actor
 from app.serializers import _post_json
 from app.db.database import get_db, get_session
 from app.db.mention_resolver import resolve_handles_to_ids
@@ -1224,7 +1225,7 @@ async def update_status(status_id: str, request: Request, db: SASession = Depend
     if post.ap_id and not post.author.is_remote:
         def _bg_federation():
             try:
-                note_data = post.to_ap_note()
+                note_data = to_ap_note(post)
                 note_data.pop("@context", None)
                 note_data.pop("url", None)
                 note_data["atomUri"] = post.ap_id

@@ -32,6 +32,7 @@ from app.core.push import init_vapid_keys
 from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs
 from app.db.database import get_session, engine, init_db
 from app.models import User, Follow, Post, Novel, ProcessedActivity, PendingDelivery, Like, Boost, Bookmark, Vote, Notification, CustomEmoji, ServerSetting, MastodonApp, MastodonAuthorizationCode, MastodonAccessToken, User
+from app.utils.to_ap_serializer import to_ap_note, to_ap_create, to_ap_actor
 from app.routes.auth import router as auth_router, verify_password
 from app.routes.api import router as api_router, _cleanup_avatars
 from app.routes.admin import router as admin_router
@@ -483,7 +484,7 @@ def user_actor(request: Request, username: str):
 
         # If ActivityPub request, return actor JSON
         if "application/activity+json" in accept or "application/ld+json" in accept:
-            return JSONResponse(content=user.to_ap_actor(),
+            return JSONResponse(content=to_ap_actor(user),
                                 media_type="application/activity+json")
 
         # Browser request — redirect to web frontend
@@ -950,7 +951,7 @@ def get_create_activity(request: Request, post_id: int):
             raise HTTPException(status_code=404, detail="Not found")
         if not _ap_post_visible(post, request, session):
             raise HTTPException(status_code=404, detail="Not found")
-        return JSONResponse(content=post.to_ap_create(),
+        return JSONResponse(content=to_ap_create(post),
                             media_type="application/activity+json")
 
 
@@ -966,7 +967,7 @@ def get_post(request: Request, post_id: int):
         if "application/activity+json" in accept or "application/ld+json" in accept:
             if not _ap_post_visible(post, request, session):
                 raise HTTPException(status_code=404, detail="Not found")
-            return JSONResponse(content=post.to_ap_note(),
+            return JSONResponse(content=to_ap_note(post),
                                 media_type="application/activity+json")
 
         return RedirectResponse(url=f"/post/{post_id}")
@@ -989,7 +990,7 @@ def get_user_by_handle(request: Request, username: str):
             raise HTTPException(status_code=410, detail="Account deleted")
 
         if "application/activity+json" in accept or "application/ld+json" in accept:
-            return JSONResponse(content=user.to_ap_actor(),
+            return JSONResponse(content=to_ap_actor(user),
                                 media_type="application/activity+json")
 
         return RedirectResponse(url=f"{BASE_URL}/profile/{username}")
@@ -1081,11 +1082,11 @@ def get_post_by_handle(request: Request, username: str, number: str):
 
         if "application/activity+json" in accept or "application/ld+json" in accept:
             if post.is_deleted:
-                return JSONResponse(content=post.to_ap_note(),
+                return JSONResponse(content=to_ap_note(post),
                                     media_type="application/activity+json")
             if not _ap_post_visible(post, request, session):
                 raise HTTPException(status_code=404, detail="Not found")
-            return JSONResponse(content=post.to_ap_note(),
+            return JSONResponse(content=to_ap_note(post),
                                 media_type="application/activity+json")
 
         return RedirectResponse(url=f"/post/{post.id}")
