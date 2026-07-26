@@ -44,8 +44,10 @@ def add_stream(user_id: int, tl_type: str) -> tuple[int, asyncio.Queue]:
     _streams[_counter] = {"queue": q, "user_id": user_id, "tl_type": tl_type}
     return _counter, q
 
+
 def remove_stream(sid: int):
     _streams.pop(sid, None)
+
 
 def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, post_is_dm: bool, mentioned_ids = None):
     try:

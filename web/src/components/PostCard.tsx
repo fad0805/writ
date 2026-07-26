@@ -632,7 +632,7 @@ const localReactionEmojiMap = useMemo(() => {
               const hasCw = !!(post.reply_context as any).summary || !!(post.reply_context as any).is_sensitive;
               if (hasCw) {
                 const cwLabel = (post.reply_context as any).summary || "내용 숨김";
-                return `<span style="opacity:0.5;font-size:0.9em">🔒 ${cwLabel}</span>`;
+                return `<span style="opacity:0.5;font-size:0.9em">${cwLabel}</span>`;
               }
               const rawText = (post.reply_context.content || "");
               const text = rawText.slice(0, 90);

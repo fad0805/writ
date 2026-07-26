@@ -1965,6 +1965,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         "id": reply_to_post.id,
                         "number": reply_to_post.number or "",
                         "content": (reply_to_post.content or "")[:200],
+                        "summary": (reply_to_post.summary or "")
                         "author": {
                             "id": _rp_author.id, "username": _rp_author.username,
                             "display_name": _rp_author.display_name or _rp_author.username,

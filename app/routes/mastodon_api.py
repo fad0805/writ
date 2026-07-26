@@ -218,15 +218,6 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
     used_shortcodes = set(shortcode_pattern.findall(content))
     post_emojis = [e for e in all_emojis if e["keyword"] in used_shortcodes]
 
-    def _emoji_to_img(m):
-        kw = m.group(1)
-        emoji = next((e for e in post_emojis if e["keyword"] == kw), None)
-        if emoji and emoji.get("url"):
-            safe_url = emoji["url"].replace('"', "%22")
-            return f'<img src="{safe_url}" alt=":{kw}:" title=":{kw}:" class="custom-emoji" width="16" height="16">'
-        return m.group(0)
-    content = shortcode_pattern.sub(_emoji_to_img, content)
-
     replies_count = db.query(sqlfunc.count(Post.id)).filter(
         Post.in_reply_to_id == post.id, Post.is_deleted == False
     ).scalar() or 0

@@ -37,12 +37,14 @@ export default function RightSidebar() {
         invalidateEmojiCache();
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
-          api.getNotifications(undefined, 5, 0, false).then((d) => {
+          const autoRead = document.visibilityState === "visible";
+          api.getNotifications(undefined, 5, 0, autoRead).then((d) => {
             setNotifs((prev) => {
               const existing = new Set(prev.map((n) => n.id));
               const newItems = d.notifications.filter((n) => !existing.has(n.id));
               if (newItems.length === 0) return prev;
               window.dispatchEvent(new Event("notifchange"));
+              if (autoRead) window.dispatchEvent(new Event("notificationsread"));
               return [...newItems, ...prev];
             });
           }).catch(() => {});
