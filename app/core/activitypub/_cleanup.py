@@ -27,45 +27,15 @@ def _cleanup_expired_media():
         logger.error("Failed to cleanup expired media: %s", e, exc_info=True)
 
 
-_REMOTE_POST_RETENTION_DAYS = 90
 _PROCESSED_ACTIVITY_RETENTION_DAYS = 7
 _REMOTE_USER_CLEANUP_DAYS = 30
 
 
 def _cleanup_remote_data():
-    """Remove old remote posts, processed activities, and stale remote users."""
+    """Clean up expired media and old processed activities only. Remote posts are kept."""
     cutoff = datetime.datetime.now(datetime.timezone.utc)
     try:
         with get_session() as s:
-            # Clean old remote posts
-            post_cutoff = cutoff - datetime.timedelta(days=_REMOTE_POST_RETENTION_DAYS)
-            old_remote_posts = s.query(Post).filter(
-                Post.author.has(is_remote=True),
-                Post.created_at < post_cutoff,
-            ).limit(500).all()
-            if old_remote_posts:
-                now_check = datetime.datetime.now(datetime.timezone.utc)
-                old_ids = []
-                for p in old_remote_posts:
-                    age = (now_check - p.created_at).total_seconds() / 86400 if p.created_at else 0
-                    if age < _REMOTE_POST_RETENTION_DAYS - 1:
-                        logger.warning("Skipping remote post %d (age=%.1fd, cutoff=%dd)", p.id, age, _REMOTE_POST_RETENTION_DAYS)
-                        continue
-                    old_ids.append(p.id)
-                if not old_ids:
-                    logger.info("All %d candidate remote posts were within retention period", len(old_remote_posts))
-                else:
-                    s.query(Post).filter(Post.in_reply_to_id.in_(old_ids)).update(
-                        {Post.in_reply_to_id: None}, synchronize_session=False
-                    )
-                    s.query(Post).filter(Post.boost_of_id.in_(old_ids)).update(
-                        {Post.boost_of_id: None}, synchronize_session=False
-                    )
-                    for p in old_remote_posts:
-                        if p.id in old_ids:
-                            s.delete(p)
-                    logger.info("Cleaned %d old remote posts (skipped %d within retention)", len(old_ids), len(old_remote_posts) - len(old_ids))
-
             # Clean old processed activities (dedup tracking)
             pa_cutoff = cutoff - datetime.timedelta(days=_PROCESSED_ACTIVITY_RETENTION_DAYS)
             old_pa = s.query(ProcessedActivity).filter(
@@ -76,7 +46,7 @@ def _cleanup_remote_data():
             if old_pa:
                 logger.info("Cleaned %d old processed activities", len(old_pa))
 
-            # Clean stale remote users with no relationships
+            # Clean stale remote users with no relationships (only if they have zero posts)
             user_cutoff = cutoff - datetime.timedelta(days=_REMOTE_USER_CLEANUP_DAYS)
             stale_remotes = s.query(User).filter(
                 User.is_remote == True,
