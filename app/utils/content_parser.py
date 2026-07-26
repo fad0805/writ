@@ -13,21 +13,18 @@ def process_post_content(sanitized_content: str, post: dict | Post | None) -> st
         return ""
 
     # 1. 로컬 포스트인지 리모트 포스트인지 판별
-    # post가 Post 모델이거나 dict 타입 내부에 ap_id가 존재하면 리모트로 간주
     is_remote = False
     if isinstance(post, dict):
-        # dict일 경우 id나 attributedTo가 있으면 리모트
         if post.get("id") or post.get("attributedTo"):
             is_remote = True
-    elif post and hasattr(post, "is_remote"):
-        is_remote = post.is_remote
-    elif post and hasattr(post, "ap_id") and post.ap_id:
-        # 모델에 ap_id가 있다면 리모트일 확률이 높음
-        is_remote = True
+    elif post is not None:
+        # Post ORM 객체: author의 is_remote로 판별 (Post 모델에는 is_remote 없음)
+        if hasattr(post, "author") and post.author:
+            is_remote = bool(post.author.is_remote)
+        elif hasattr(post, "is_remote"):
+            is_remote = post.is_remote
 
-    # 2. 판별된 타입에 따라 함수 호출
     if is_remote:
-        # 리모트 포스트는 dict 타입으로 변환하거나 그대로 전달
         post_data = post if isinstance(post, dict) else {"object": post}
         return process_remote_post(sanitized_content, post_data)
     else:
