@@ -37,7 +37,7 @@ from app.routes.api._feed import _broadcast_timeline
 
 logger = logging.getLogger("writ.api.notify")
 
-from app.routes.api.interactions._common import _json_array_has_user
+from app.routes.api.interactions._common import _json_array_has_user, _generate_poll_end_notifications
 
 notify_router = APIRouter()
 
