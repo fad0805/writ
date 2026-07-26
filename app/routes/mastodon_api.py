@@ -203,6 +203,17 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
     content = post.content or ""
 
     all_emojis = _load_emojis(db)
+
+    content = re.sub(
+        r'!\[":(\w+):"\]\(vector://vector/[^)]*\)',
+        lambda m: next(
+            (f'<img src="{e["url"]}" alt=":{e["keyword"]}:" title=":{e["keyword"]}:" class="custom-emoji" width="16" height="16">'
+             for e in all_emojis if e["keyword"] == m.group(1)),
+            m.group(0)
+        ),
+        content
+    )
+
     shortcode_pattern = re.compile(r':(\w+):')
     used_shortcodes = set(shortcode_pattern.findall(content))
     post_emojis = [e for e in all_emojis if e["keyword"] in used_shortcodes]
