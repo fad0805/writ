@@ -44,16 +44,27 @@ def _cleanup_remote_data():
                 Post.created_at < post_cutoff,
             ).limit(500).all()
             if old_remote_posts:
-                old_ids = [p.id for p in old_remote_posts]
-                s.query(Post).filter(Post.in_reply_to_id.in_(old_ids)).update(
-                    {Post.in_reply_to_id: None}, synchronize_session=False
-                )
-                s.query(Post).filter(Post.boost_of_id.in_(old_ids)).update(
-                    {Post.boost_of_id: None}, synchronize_session=False
-                )
+                now_check = datetime.datetime.now(datetime.timezone.utc)
+                old_ids = []
                 for p in old_remote_posts:
-                    s.delete(p)
-                logger.info("Cleaned %d old remote posts", len(old_remote_posts))
+                    age = (now_check - p.created_at).total_seconds() / 86400 if p.created_at else 0
+                    if age < _REMOTE_POST_RETENTION_DAYS - 1:
+                        logger.warning("Skipping remote post %d (age=%.1fd, cutoff=%dd)", p.id, age, _REMOTE_POST_RETENTION_DAYS)
+                        continue
+                    old_ids.append(p.id)
+                if not old_ids:
+                    logger.info("All %d candidate remote posts were within retention period", len(old_remote_posts))
+                else:
+                    s.query(Post).filter(Post.in_reply_to_id.in_(old_ids)).update(
+                        {Post.in_reply_to_id: None}, synchronize_session=False
+                    )
+                    s.query(Post).filter(Post.boost_of_id.in_(old_ids)).update(
+                        {Post.boost_of_id: None}, synchronize_session=False
+                    )
+                    for p in old_remote_posts:
+                        if p.id in old_ids:
+                            s.delete(p)
+                    logger.info("Cleaned %d old remote posts (skipped %d within retention)", len(old_ids), len(old_remote_posts) - len(old_ids))
 
             # Clean old processed activities (dedup tracking)
             pa_cutoff = cutoff - datetime.timedelta(days=_PROCESSED_ACTIVITY_RETENTION_DAYS)
