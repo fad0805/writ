@@ -889,10 +889,8 @@ const localReactionEmojiMap = useMemo(() => {
                 >
                   {emoji === "★" ? (
                     <Icon name="star_filled" size={18} style={{ color: "#f1c40f" }} />
-                  ) : isCustomEmoji ? (
-                    reactionEmojiMap[emojiKey]
-                      ? <img src={reactionEmojiMap[emojiKey]} alt={emoji} style={{ height: 22, verticalAlign: "middle" }} />
-                      : <span>{emoji}</span>
+                  ) : reactionEmojiMap[emojiKey] ? (
+                    <img src={reactionEmojiMap[emojiKey]} alt={emoji} style={{ height: 22, verticalAlign: "middle" }} />
                   ) : (
                     <span>{emoji}</span>
                   )}
