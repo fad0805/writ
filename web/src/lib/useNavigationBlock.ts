@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 export function useNavigationBlock(active: boolean) {
   const router = useRouter();
   const activeRef = useRef(active);
+  const navigatingRef = useRef(false);
   activeRef.current = active;
 
   useEffect(() => {
@@ -22,16 +23,16 @@ export function useNavigationBlock(active: boolean) {
 
     const origBack = window.history.back.bind(window.history);
     const origGo = window.history.go.bind(window.history);
-    const origPushState = history.pushState.bind(history);
-    const origReplaceState = history.replaceState.bind(history);
 
     window.history.back = () => {
-      if (!activeRef.current || confirmLeave()) origBack();
+      if (navigatingRef.current || !activeRef.current || confirmLeave()) {
+        navigatingRef.current = true;
+        origBack();
+      }
     };
     window.history.go = (delta?: number) => {
-      if (!activeRef.current || (delta !== undefined && delta < 0)) {
-        if (!activeRef.current || confirmLeave()) origGo(delta);
-      } else {
+      if (navigatingRef.current || !(delta !== undefined && delta < 0) || confirmLeave()) {
+        navigatingRef.current = true;
         origGo(delta);
       }
     };
@@ -41,17 +42,26 @@ export function useNavigationBlock(active: boolean) {
     const origRouterBack = router.back.bind(router);
 
     (router as any).push = (...args: Parameters<typeof origRouterPush>) => {
-      if (!activeRef.current || confirmLeave()) return origRouterPush(...args);
+      if (navigatingRef.current || !activeRef.current || confirmLeave()) {
+        navigatingRef.current = true;
+        return origRouterPush(...args);
+      }
     };
     (router as any).replace = (...args: Parameters<typeof origRouterReplace>) => {
-      if (!activeRef.current || confirmLeave()) return origRouterReplace(...args);
+      if (navigatingRef.current || !activeRef.current || confirmLeave()) {
+        navigatingRef.current = true;
+        return origRouterReplace(...args);
+      }
     };
     (router as any).back = () => {
-      if (!activeRef.current || confirmLeave()) return origRouterBack();
+      if (navigatingRef.current || !activeRef.current || confirmLeave()) {
+        navigatingRef.current = true;
+        origBack();
+      }
     };
 
     const onClick = (e: MouseEvent) => {
-      if (!activeRef.current) return;
+      if (navigatingRef.current || !activeRef.current) return;
       const anchor = (e.target as HTMLElement).closest("a[href]");
       if (!anchor) return;
       const href = anchor.getAttribute("href");
@@ -59,7 +69,10 @@ export function useNavigationBlock(active: boolean) {
       if ((anchor as HTMLAnchorElement).target === "_blank") return;
       if (anchor.closest("form")) return;
       e.preventDefault();
-      if (confirmLeave()) origRouterPush(href);
+      if (confirmLeave()) {
+        navigatingRef.current = true;
+        origRouterPush(href);
+      }
     };
     document.addEventListener("click", onClick, true);
 
@@ -68,8 +81,6 @@ export function useNavigationBlock(active: boolean) {
       document.removeEventListener("click", onClick, true);
       window.history.back = origBack;
       window.history.go = origGo;
-      window.history.pushState = origPushState;
-      window.history.replaceState = origReplaceState;
       router.push = origRouterPush;
       router.replace = origRouterReplace;
       router.back = origRouterBack;
