@@ -421,8 +421,8 @@ def api_pwa_favicon(request: Request):
     except Exception as e:
         logger.info("[favicon] no custom favicon: %s", e)
     for path in [
-        os.path.join(os.path.dirname(__file__), "..", "..", "static", "favicon.ico"),
-        os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "favicon.ico"),
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "favicon.ico"),
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", "web", "public", "favicon.ico"),
     ]:
         if os.path.exists(path):
             if request.method == "HEAD":
