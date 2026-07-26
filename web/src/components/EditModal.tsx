@@ -22,12 +22,17 @@ export default function EditModal({ post, onClose, onDone }: { post: PostData; o
       // 1️⃣ 해시태그 검사: 클래스명에 hashtag가 있거나, 주소에 /explore가 포함된 경우
       const isHashtag = link.classList.contains("hashtag") || href.includes("/explore");
 
+      const isMention = link.classList.contains("mention");
+
       if (isHashtag) {
         // 해시태그는 주소로 바꾸지 않고 원래 텍스트(#ActivityPub)를 그대로 둡니다.
         if (!link.textContent?.startsWith("#")) {
           const match = href.match(/[?&]q=%23([^&]+)/);
           if (match) link.textContent = `#${decodeURIComponent(match[1])}`;
         }
+      } else if (isMention && href.startsWith("/@")) {
+        // 멘션: href의Leading '/'를 제거하여 @handle@domain 형태로 복원
+        link.textContent = href.substring(1);
       } else if (href) {
         // 2️⃣ [일반 URL + 시리즈/에피소드 주소 일괄 복구]
         // 해시태그가 아닌 모든 <a> 태그는 말줄임표(...)를 지우고 href의 진짜 원본 주소로 채워 넣습니다.
