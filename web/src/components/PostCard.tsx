@@ -692,7 +692,7 @@ const localReactionEmojiMap = useMemo(() => {
                       if (!canVote) return;
                       try {
                         const result = await api.vote(post.id, i);
-                        if (result.post) {
+                        if (result?.post) {
                           Object.assign(post, result.post);
                         }
                         if (onUpdate) onUpdate();
@@ -727,7 +727,7 @@ const localReactionEmojiMap = useMemo(() => {
                         setPollRefreshing(true);
                         try {
                           const result = await api.refreshPoll(post.id);
-                          if (result.post) Object.assign(post, result.post);
+                          if (result?.post) Object.assign(post, result.post);
                           if (onUpdate) onUpdate();
                           else window.dispatchEvent(new Event("postchange"));
                         } catch (err: any) { alert(err.message); }
