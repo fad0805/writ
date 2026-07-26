@@ -38,10 +38,16 @@ export async function subscribePush(): Promise<boolean> {
   const vapidKey = await getVapidKey();
   const applicationServerKey = urlBase64ToUint8Array(vapidKey);
 
-  const subscription = await reg.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey,
-  });
+  let subscription: PushSubscription;
+  const existing = await reg.pushManager.getSubscription();
+  if (existing) {
+    subscription = existing;
+  } else {
+    subscription = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey,
+    });
+  }
 
   const sub = subscription.toJSON();
   const form = new FormData();
@@ -114,10 +120,7 @@ export async function isSubscribed(): Promise<boolean> {
     const res = await fetch("/api/push/status", { credentials: "include" });
     if (res.ok) {
       const data = await res.json();
-      if (!data.subscribed) {
-        await subscription.unsubscribe().catch(() => {});
-        return false;
-      }
+      if (!data.subscribed) return false;
     }
   } catch {}
   return true;
