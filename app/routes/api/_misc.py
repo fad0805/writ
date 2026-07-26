@@ -21,7 +21,7 @@ from sqlalchemy import desc, or_, func
 
 from app.models import User, CustomEmoji, ServerSetting, PushSubscription, LoginSession
 from app.config.settings import BASE_URL, S3_ENABLED, APP_ENV, SESSION_EXPIRE_DAYS
-from app.core.push import VAPID_PUBLIC_KEY
+from app.core.push import get_vapid_keys
 from app.db.database import get_session
 from app.routes.auth import require_auth, require_active_auth, get_session_key_from_cookie
 from app.utils.emoji import EMOJI_DIR, _refresh_emoji_cache_forcibly, _emoji_url
@@ -477,7 +477,8 @@ def api_client_log(request: Request):
 
 @misc_router.get("/push/vapid-public-key")
 def get_vapid_public_key():
-    key = VAPID_PUBLIC_KEY
+    _, pub = get_vapid_keys()
+    key = pub
     if not key:
         try:
             _k = ec.generate_private_key(ec.SECP256R1())
