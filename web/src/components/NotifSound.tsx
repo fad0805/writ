@@ -14,6 +14,7 @@ export function setNotifSoundEnabled(on: boolean) {
 
 export default function NotifSound() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const prevUnreadRef = useRef<number>(0);
 
   useEffect(() => {
     const init = () => {
@@ -35,7 +36,7 @@ export default function NotifSound() {
       try {
         if (event.data === "refresh") return;
         const parsed = JSON.parse(event.data);
-          if (parsed && parsed.event === "notif") {
+        if (parsed && parsed.event === "notif") {
           if (parsed.unread !== undefined) {
             const badge = document.querySelector(".notif-badge");
             if (badge) badge.textContent = String(parsed.unread);
@@ -43,8 +44,14 @@ export default function NotifSound() {
             window.dispatchEvent(new Event("notifchange"));
           }
           if (parsed.sound && audioRef.current && isNotifSoundEnabled()) {
-            audioRef.current.currentTime = 0;
-            audioRef.current.play().catch(() => {});
+            const curUnread = typeof parsed.unread === "number" ? parsed.unread : (prevUnreadRef.current + 1);
+            if (curUnread > prevUnreadRef.current) {
+              audioRef.current.currentTime = 0;
+              audioRef.current.play().catch(() => {});
+            }
+            if (typeof parsed.unread === "number") prevUnreadRef.current = parsed.unread;
+          } else if (typeof parsed.unread === "number") {
+            prevUnreadRef.current = parsed.unread;
           }
         }
       } catch {}
