@@ -1,4 +1,4 @@
-"""API package — core + posts + admin endpoints assembled into one router.
+"""API package — core + posts + interactions + admin endpoints assembled into one router.
 
 Import ``router`` from here:
     from app.routes.api import router, _cleanup_avatars
@@ -24,9 +24,12 @@ from app.routes.api._posts import (
     _broadcast_timeline,
 )
 
+from app.routes.api._interactions import interactions_router
+
 from app.routes.api._admin import admin_router
 
 router.include_router(posts_router)
+router.include_router(interactions_router)
 router.include_router(admin_router)
 
 __all__ = ["router"]
