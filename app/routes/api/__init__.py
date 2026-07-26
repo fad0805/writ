@@ -8,6 +8,9 @@ from app.routes.api._core import (
     router,
     _cleanup_avatars,
     _broadcast_update_actor,
+)
+
+from app.routes.api._misc import (
     _read_storage_file,
     _save_pwa_icons,
     _save_favicon,
@@ -42,7 +45,10 @@ from app.routes.api._users import users_router
 
 from app.routes.api._auth import auth_router
 
+from app.routes.api._misc import misc_router
+
 router.include_router(auth_router)
+router.include_router(misc_router)
 router.include_router(posts_router)
 router.include_router(interactions_router)
 router.include_router(series_router)

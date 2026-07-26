@@ -28,7 +28,7 @@ from app.utils.datetime import _fmt_dt
 from app.utils.log import log_admin_action
 from app.utils.storage import get_storage
 
-from app.routes.api._core import _read_storage_file, _save_pwa_icons, _save_favicon, _delete_favicon, _delete_pwa_icons
+from app.routes.api._misc import _read_storage_file, _save_pwa_icons, _save_favicon, _delete_favicon, _delete_pwa_icons
 from app.routes.api._series import _novel_json, _apply_latest_activity_order
 
 logger = logging.getLogger(__name__)
