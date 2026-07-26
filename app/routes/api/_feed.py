@@ -221,78 +221,24 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
             return
 
         create_activity = to_ap_create(post)
+
+        inboxes = set()
         if visibility == "mention":
-            _remote_mentioned = False
             if post.mentioned_user_ids:
                 mu_users = ap_s.query(User).filter(
                     User.id.in_(post.mentioned_user_ids), User.is_remote == True
                 ).all()
                 for mu in mu_users:
                     inbox = mu.inbox_url
-                    if not inbox:
-                        continue
-                    domain = mu.actor_uri().split("/")[2] if "//" in mu.actor_uri() else ""
-                    if domain and not _federation_allowed(domain):
-                        continue
-                    _post_to_inbox(inbox, create_activity, user)
-                    _remote_mentioned = True
-            if not _remote_mentioned:
-                broadcast_to_followers(user, create_activity)
-            remote_handles = set(re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', plain_content or ""))
-            _resolved_handles = []
-            for handle in remote_handles:
-                remote_user = ap_s.query(User).filter(
-                    User.username == handle, User.is_remote == True
-                ).first()
-                if remote_user:
-                    _resolved_handles.append((handle, remote_user))
-                    continue
-                try:
-                    r_name, r_domain = handle.split("@", 1)
-                    if not _federation_allowed(r_domain):
-                        continue
-                    resolved = None
-                    for url in [f"https://{r_domain}/@{r_name}", f"https://{r_domain}/users/{r_name}"]:
-                        try:
-                            resolved = _resolve_actor(url, sign_as=user)
-                            if resolved:
-                                break
-                        except Exception:
-                            continue
-                    if not resolved:
-                        wf = httpx.get(
-                            f"https://{r_domain}/.well-known/webfinger?resource=acct:{handle}",
-                            timeout=5,
-                        )
-                        if wf.status_code == 200:
-                            for link in wf.json().get("links", []):
-                                if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
-                                    href = link.get("href", "")
-                                    if href:
-                                        resolved = _resolve_actor(href, sign_as=user)
-                                        break
-                    if resolved:
-                        remote_user = ap_s.query(User).get(resolved.id)
-                except Exception:
-                    pass
-                if remote_user:
-                    _resolved_handles.append((handle, remote_user))
-            for handle, remote_user in _resolved_handles:
-                inbox = remote_user.inbox_url
-                if not inbox:
-                    continue
-                domain = remote_user.actor_uri().split("/")[2] if "//" in remote_user.actor_uri() else ""
-                if domain and not _federation_allowed(domain):
-                    continue
-                _post_to_inbox(inbox, create_activity, user)
+                    if inbox:
+                        inboxes.add(inbox)
         else:
-            broadcast_to_followers(user, create_activity)
             if post.in_reply_to_id and post.parent:
                 parent_author = post.parent.author
                 if parent_author and parent_author.is_remote:
                     inbox = parent_author.inbox_url
-                    if inbox and _federation_allowed(urlparse(inbox).hostname or ""):
-                        _post_to_inbox(inbox, create_activity, user)
+                    if inbox:
+                        inboxes.add(inbox)
                 elif parent_author and not parent_author.is_remote:
                     pf_follows = ap_s.query(Follow).filter(
                         Follow.following_id == parent_author.id,
@@ -300,85 +246,72 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                     ).all()
                     for pf in pf_follows:
                         inbox = pf.follower.shared_inbox_url or pf.follower.inbox_url
-                        if not inbox:
-                            continue
-                        domain = urlparse(inbox).hostname or ""
-                        if domain and not _federation_allowed(domain):
-                            continue
-                        _post_to_inbox(inbox, create_activity, user)
-            delivered_domains = set()
-            _known_handles = {}
-            _unknown_handles = set()
+                        if inbox:
+                            inboxes.add(inbox)
+
             if post.mentioned_user_ids:
                 follower_ids = {f.following_id for f in ap_s.query(Follow).filter(
                     Follow.following_id == user.id,
                     Follow.follower.has(is_remote=True),
-                ).all()}
+                ).all()} if post.mentioned_user_ids else set()
                 mu_users = ap_s.query(User).filter(
                     User.id.in_(post.mentioned_user_ids), User.is_remote == True
                 ).all()
                 for mu in mu_users:
                     if mu.id not in follower_ids:
                         inbox = mu.inbox_url
-                        if not inbox:
-                            continue
-                        domain = mu.actor_uri().split("/")[2] if "//" in mu.actor_uri() else ""
-                        if domain and not _federation_allowed(domain):
-                            continue
-                        _post_to_inbox(inbox, create_activity, user)
-                        delivered_domains.add(domain)
+                        if inbox:
+                            inboxes.add(inbox)
+    for inbox in inboxes:
+        _post_to_inbox(inbox, create_activity, user)
 
-            remote_handles = set(re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', plain_content or ""))
-            for handle in remote_handles:
-                remote_user = ap_s.query(User).filter(
+    broadcast_to_followers(user, create_activity)
+
+    if visibility != "mention":
+        remote_handles = set(re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', plain_content or ""))
+        for handle in remote_handles:
+            with get_session() as s:
+                remote_user = s.query(User).filter(
                     User.username == handle, User.is_remote == True
                 ).first()
-                if remote_user:
-                    _known_handles[handle] = remote_user
-                else:
-                    _unknown_handles.add(handle)
-
-            if _unknown_handles:
-                for handle in _unknown_handles:
-                    try:
-                        r_name, r_domain = handle.split("@", 1)
-                        if not _federation_allowed(r_domain):
-                            continue
-                        resolved = None
-                        for url in [f"https://{r_domain}/@{r_name}", f"https://{r_domain}/users/{r_name}"]:
-                            try:
-                                resolved = _resolve_actor(url, sign_as=user)
-                                if resolved:
-                                    break
-                            except Exception:
-                                continue
-                        if not resolved:
-                            wf = httpx.get(
-                                f"https://{r_domain}/.well-known/webfinger?resource=acct:{handle}",
-                                timeout=5,
-                            )
-                            if wf.status_code == 200:
-                                for link in wf.json().get("links", []):
-                                    if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
-                                        href = link.get("href", "")
-                                        if href:
-                                            resolved = _resolve_actor(href, sign_as=user)
-                                            break
-                        if resolved:
-                            remote_user = ap_s.query(User).get(resolved.id)
-                            if remote_user:
-                                _known_handles[handle] = remote_user
-                    except Exception:
-                        pass
-            for handle, remote_user in _known_handles.items():
+            if remote_user:
                 inbox = remote_user.inbox_url
-                if not inbox:
+                if inbox:
+                    _post_to_inbox(inbox, create_activity, user)
+                continue
+            try:
+                r_name, r_domain = handle.split("@", 1)
+                if not _federation_allowed(r_domain):
                     continue
-                domain = remote_user.actor_uri().split("/")[2] if "//" in remote_user.actor_uri() else ""
-                if domain and not _federation_allowed(domain):
-                    continue
-                _post_to_inbox(inbox, create_activity, user)
-                delivered_domains.add(domain)
+                resolved = None
+                for url in [f"https://{r_domain}/@{r_name}", f"https://{r_domain}/users/{r_name}"]:
+                    try:
+                        resolved = _resolve_actor(url, sign_as=user)
+                        if resolved:
+                            break
+                    except Exception:
+                        continue
+                if not resolved:
+                    wf = httpx.get(
+                        f"https://{r_domain}/.well-known/webfinger?resource=acct:{handle}",
+                        timeout=5,
+                    )
+                    if wf.status_code == 200:
+                        for link in wf.json().get("links", []):
+                            if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
+                                href = link.get("href", "")
+                                if href:
+                                    resolved = _resolve_actor(href, sign_as=user)
+                                    break
+                if resolved:
+                    with get_session() as s:
+                        remote_user = s.query(User).get(resolved.id)
+                    if remote_user:
+                        inbox = remote_user.inbox_url
+                        if inbox:
+                            _post_to_inbox(inbox, create_activity, user)
+            except Exception:
+                pass
 
 
 def _broadcast_timeline(post_json, author_id, visibility, is_dm):

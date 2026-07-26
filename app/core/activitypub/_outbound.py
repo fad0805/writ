@@ -187,16 +187,17 @@ def send_to_shared_inbox(user: User, activity: dict):
             Follow.following.has(is_remote=True),
         ).all()
 
-        sent = set()
+        inboxes = set()
         for f in followers:
             target = f.following
             inbox = target.shared_inbox_url or target.inbox_url
             if not inbox:
                 continue
-            if inbox in sent:
+            if inbox in inboxes:
                 continue
-            sent.add(inbox)
-            _post_to_inbox(inbox, activity, user)
+            inboxes.add(inbox)
+    for inbox in inboxes:
+        _post_to_inbox(inbox, activity, user)
 
 
 def broadcast_to_followers(user: User, activity: dict):
@@ -208,16 +209,16 @@ def broadcast_to_followers(user: User, activity: dict):
             Follow.follower.has(is_remote=True),
         ).all()
 
-        sent = set()
+        inboxes = set()
         for f in followers:
-            follower = f.follower
-            inbox = follower.shared_inbox_url or follower.inbox_url
+            inbox = f.follower.shared_inbox_url or f.follower.inbox_url
             if not inbox:
                 continue
-            if inbox in sent:
+            if inbox in inboxes:
                 continue
             domain = urlparse(inbox).hostname or ""
             if not _federation_allowed(domain):
                 continue
-            sent.add(inbox)
-            _post_to_inbox(inbox, activity, user)
+            inboxes.add(inbox)
+    for inbox in inboxes:
+        _post_to_inbox(inbox, activity, user)
