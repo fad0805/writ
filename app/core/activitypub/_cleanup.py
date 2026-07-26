@@ -48,6 +48,9 @@ def _cleanup_remote_data():
                 s.query(Post).filter(Post.in_reply_to_id.in_(old_ids)).update(
                     {Post.in_reply_to_id: None}, synchronize_session=False
                 )
+                s.query(Post).filter(Post.boost_of_id.in_(old_ids)).update(
+                    {Post.boost_of_id: None}, synchronize_session=False
+                )
                 for p in old_remote_posts:
                     s.delete(p)
                 logger.info("Cleaned %d old remote posts", len(old_remote_posts))

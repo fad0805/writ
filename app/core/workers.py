@@ -176,6 +176,9 @@ def auto_delete_expired_posts():
                             s.query(Boost).filter(Boost.post_id == post.id).delete()
                             s.query(Bookmark).filter(Bookmark.post_id == post.id).delete()
                             s.query(Vote).filter(Vote.post_id == post.id).delete()
+                            s.query(Post).filter(Post.boost_of_id == post.id).update(
+                                {Post.boost_of_id: None}, synchronize_session=False
+                            )
 
                             media = list(post.media_attachments or [])
                             if media:
