@@ -947,7 +947,7 @@ const localReactionEmojiMap = useMemo(() => {
               </button>
               {showMoreActions && (
                 <div className="post-actions-dropdown">
-                  <ShareButton url={post.ap_id?.startsWith("http") ? post.ap_id : (post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`)} className="post-actions-dropdown-item" />
+                  <ShareButton url={post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`} className="post-actions-dropdown-item" />
                   {post.is_mine && (
                     <button onClick={() => { setShowMoreActions(false); (async () => {
                       const newPinned = !pinned;
