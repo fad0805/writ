@@ -1006,18 +1006,7 @@ async def create_status(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
 
     ct = request.headers.get("content-type", "")
-    if "multipart" in ct:
-        form = await request.form()
-        text = form.get("status", "")
-        in_reply_to_id = form.get("in_reply_to_id")
-        sensitive = form.get("sensitive", "false")
-        spoiler_text = form.get("spoiler_text", "")
-        visibility = form.get("visibility", user.default_visibility)
-        language = form.get("language", "ko")
-        media_ids = [v for k, v in form.multi_items() if k == "media_ids"]
-        poll_options = form.get("poll[options]")
-        poll_expires = form.get("poll[expires_in]")
-    elif "json" in ct:
+    if "json" in ct:
         body = await request.json()
         text = body.get("status", "")
         in_reply_to_id = body.get("in_reply_to_id")
@@ -1040,6 +1029,15 @@ async def create_status(request: Request, db: SASession = Depends(get_db)):
         poll_options = form.get("poll[options]")
         poll_expires = form.get("poll[expires_in]")
 
+    from fastapi.concurrency import run_in_threadpool
+    return await run_in_threadpool(_run_create_status,
+        db, user, text, in_reply_to_id, sensitive, spoiler_text,
+        visibility, language, media_ids, poll_options, poll_expires,
+    )
+
+
+def _run_create_status(db, user, text, in_reply_to_id, sensitive, spoiler_text,
+                        visibility, language, media_ids, poll_options, poll_expires):
     if not text and not media_ids:
         raise HTTPException(status_code=422, detail="Validation failed: Text can't be blank")
 
