@@ -541,6 +541,7 @@ def get_account_statuses(
     min_id: str | None = None,
     limit: int = Query(default=20, le=80),
     pinned: bool | None = None,
+    exclude_reblogs: bool = False,
 ):
     user = db.query(User).filter_by(id=int(account_id)).first()
     if not user:
@@ -556,11 +557,16 @@ def get_account_statuses(
             Post.id.in_(pinned_ids),
             Post.is_deleted == False,
         )
-    else:
+    elif exclude_reblogs:
         q = db.query(Post).filter(
             Post.author_id == user.id,
             Post.is_deleted == False,
             Post.boost_of_id.is_(None),
+        )
+    else:
+        q = db.query(Post).filter(
+            Post.author_id == user.id,
+            Post.is_deleted == False,
         )
 
     if max_id:
@@ -574,9 +580,16 @@ def get_account_statuses(
 
     result = []
     for p in posts:
-        s = _status_json(p, db, viewer)
-        if s:
-            result.append(s)
+        if p.boost_of_id:
+            original = db.query(Post).filter_by(id=p.boost_of_id).first()
+            if original and not original.is_deleted:
+                s = _boost_status_json(p, original, db, viewer=viewer)
+                if s:
+                    result.append(s)
+        else:
+            s = _status_json(p, db, viewer=viewer)
+            if s:
+                result.append(s)
     return result
 
 
