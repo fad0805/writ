@@ -54,13 +54,14 @@ def _sanitize_html(html: str) -> str:
         return ""
     # ActivityPub(마스토돈, 미스키 등)에서 흔히 사용하는 안전한 태그 목록
     allowed_tags = {
-        "a", "p", "del", "br", "span", "b", "i", "strong", "em", 
-        "ul", "ol", "li", "blockquote", "code", "pre", "del"
+        "a", "p", "del", "br", "span", "b", "i", "strong", "em",
+        "ul", "ol", "li", "blockquote", "code", "pre", "del", "img"
     }
     # 각 태그별로 허용할 속성 (XSS 방지를 위해 href는 https/http만 허용)
     allowed_attributes = {
         "a": {"href", "target", "class"},
         "span": {"class", "lang"},
+        "img": {"src", "alt", "title", "class", "width", "height", "style", "draggable"},
     }
     # 스크립트, 스타일, 온클릭 이벤트 등을 전부 날려버리고 안전한 HTML만 반환
     clean_html = nh3.clean(
@@ -105,6 +106,13 @@ def _serialize_html(soup):
         if node.name == "li":
             children_str = "".join(_to_html(c) for c in list(node.children))
             return f"<li>{children_str}</li>\n"
+        if node.name == "img":
+            attrs_list = []
+            for k, v in node.attrs.items():
+                val = " ".join(v) if isinstance(v, list) else v
+                attrs_list.append(f'{k}="{val}"')
+            attrs_str = f" {' '.join(attrs_list)}" if attrs_list else ""
+            return f"<img{attrs_str}>"
         return "".join(_to_html(c) for c in list(node.children))
 
     result = "".join(_to_html(c) for c in list(soup.contents))
