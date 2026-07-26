@@ -346,13 +346,14 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                         Post.author.has(User.is_suspended == False),
                     )
                 )
-                q_posts = q_posts.filter(Post.visibility != "mention")
+                if not user:
+                    q_posts = q_posts.filter(Post.visibility != "mention")
                 if author:
                     author_user = s.query(User).filter_by(username=author).first()
                     if author_user:
                         q_posts = q_posts.filter(Post.author_id == author_user.id)
-                posts = q_posts.order_by(desc(Post.created_at)).limit(60).all()
 
+                posts = q_posts.order_by(desc(Post.created_at)).limit(60).all()
                 if user:
                     posts = _timeline_filter(posts, s, user, "federated", following_ids)[:20]
                 else:
@@ -380,7 +381,9 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                     Post.author.has(User.is_suspended == False),
                 )
             )
-            q_posts = q_posts.filter(Post.visibility != "mention")
+
+            if not user:
+                q_posts = q_posts.filter(Post.visibility != "mention")
 
             posts = q_posts.order_by(desc(Post.created_at)).limit(60).all()
             if user:
