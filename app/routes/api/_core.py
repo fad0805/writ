@@ -123,10 +123,6 @@ TIMELINE_LABELS = {
 }
 
 
-# ── Auth API ──
-
-
-
 # ── Timeline API ──
 
 @router.get("/timeline/stream")
@@ -165,10 +161,6 @@ def _broadcast_update_actor(user):
         logger.error("Failed to broadcast Update actor: %s", e, exc_info=True)
 
 
-# ── User / Profile API ──
-
-
-
 @router.get("/search/series")
 def api_search_series(request: Request, q: str = Query("")):
     user = get_current_user(request)
@@ -205,8 +197,6 @@ def api_recent_tags(request: Request, q: str = Query("")):
         return {"tags": [{"name": t} for t in ordered]}
 
 
-
-
 def _cleanup_avatars():
     storage = get_storage()
     if not isinstance(storage, LocalStorage):
@@ -223,8 +213,6 @@ def _cleanup_avatars():
             mtime = storage.mtime(key)
             if mtime is not None and now - mtime > 86400:
                 storage.delete(key)
-
-
 
 
 @router.get("/explore")
