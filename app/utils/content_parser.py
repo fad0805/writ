@@ -36,8 +36,12 @@ def extract_mentions(post_content: str, post: dict | Post | None) -> list[str]:
     is_remote = False
     if isinstance(post, dict):
         is_remote = bool(post.get("id") or post.get("attributedTo"))
-    elif post and hasattr(post, "is_remote"):
-        is_remote = post.is_remote
+    elif post is not None:
+        # Post ORM 객체: author의 is_remote로 판별 (Post 모델에는 is_remote 없음)
+        if hasattr(post, "author") and post.author:
+            is_remote = bool(post.author.is_remote)
+        elif hasattr(post, "is_remote"):
+            is_remote = post.is_remote
     # 2. 판별된 타입에 따라 빠른 경로 선택
     if is_remote:
         return extract_mentions_from_remote(post if isinstance(post, dict) else {"object": post})
