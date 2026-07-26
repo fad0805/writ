@@ -85,7 +85,8 @@ def api_like_post(request: Request, background_tasks: BackgroundTasks, post_id: 
                         broadcast_refresh_notifs(post.author_id)
                         send_push_to_user(post.author_id, "like", user.username, post_id)
                         broadcast_notif_sound(post.author_id)
-                if post.author.is_remote and post.author.shared_inbox_url:
+                inbox = post.author.shared_inbox_url or post.author.inbox_url
+                if post.author.is_remote and inbox:
                     like_id = f"{BASE_URL}/likes/{uuid.uuid4()}"
                     like_rec = existing or s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
                     if like_rec:
@@ -108,7 +109,6 @@ def api_like_post(request: Request, background_tasks: BackgroundTasks, post_id: 
                     if is_custom or _react:
                         like_activity["content"] = _react
                         like_activity["_misskey_reaction"] = _react
-                    inbox = post.author.shared_inbox_url
                     try:
                         _post_to_inbox(inbox, like_activity, user)
                     except Exception:
@@ -144,7 +144,8 @@ def api_unlike_post(request: Request, background_tasks: BackgroundTasks, post_id
                         _reactions[_react or "★"] = _cnt
                     broadcast_reaction_update(post_id, _reactions)
                     broadcast_refresh_notifs(post.author_id)
-                if post.author.is_remote and post.author.shared_inbox_url:
+                inbox = post.author.shared_inbox_url or post.author.inbox_url
+                if post.author.is_remote and inbox:
                     undo = {
                         "@context": "https://www.w3.org/ns/activitystreams",
                         "id": f"{BASE_URL}/likes/{uuid.uuid4()}#undo",
@@ -159,7 +160,6 @@ def api_unlike_post(request: Request, background_tasks: BackgroundTasks, post_id
                             "_misskey_reaction": existing_reaction or "★",
                         },
                     }
-                    inbox = post.author.shared_inbox_url
                     try:
                         _post_to_inbox(inbox, undo, user)
                     except Exception:
@@ -252,8 +252,9 @@ def api_boost_post(request: Request, post_id: int):
                 broadcast_notif_sound(post.author_id)
 
             announce_id = f"{BASE_URL}/boosts/{uuid.uuid4()}"
+            author_inbox = post.author.shared_inbox_url or post.author.inbox_url
 
-            if post.author.is_remote and post.author.shared_inbox_url:
+            if post.author.is_remote and author_inbox:
                 boost_rec = s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
                 if boost_rec:
                     boost_rec.ap_id = announce_id
@@ -272,9 +273,9 @@ def api_boost_post(request: Request, post_id: int):
                 ],
             }
 
-            if post.author.is_remote and post.author.shared_inbox_url:
+            if post.author.is_remote and author_inbox:
                 try:
-                    threading.Thread(target=_post_to_inbox, args=(inbox, announce, user), daemon=True).start()
+                    threading.Thread(target=_post_to_inbox, args=(author_inbox, announce, user), daemon=True).start()
                 except Exception as e:
                     logger.error("Failed to send boost to author inbox: %s", e, exc_info=True)
 
@@ -394,9 +395,10 @@ def api_unboost_post(request: Request, post_id: int):
                     "object": post.ap_id,
                 },
             }
-            if post.author.is_remote and post.author.shared_inbox_url:
+            author_inbox = post.author.shared_inbox_url or post.author.inbox_url
+            if post.author.is_remote and author_inbox:
                 try:
-                    threading.Thread(target=_post_to_inbox, args=(post.author.shared_inbox_url, undo, user), daemon=True).start()
+                    threading.Thread(target=_post_to_inbox, args=(author_inbox, undo, user), daemon=True).start()
                 except Exception as e:
                     logger.error("Failed to send unboost to author inbox: %s", e, exc_info=True)
             try:
