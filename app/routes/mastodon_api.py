@@ -212,7 +212,7 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         emoji = next((e for e in post_emojis if e["keyword"] == kw), None)
         if emoji and emoji.get("url"):
             safe_url = emoji["url"].replace('"', "%22")
-            return f'<img src="{safe_url}" alt=":{kw}:" title=":{kw}:" class="custom-emoji" style="display:inline-block;width:1.2em;height:1.2em;vertical-align:-0.2em;">'
+            return f'<img src="{safe_url}" alt=":{kw}:" title=":{kw}:" class="custom-emoji" width="16" height="16">'
         return m.group(0)
     content = shortcode_pattern.sub(_emoji_to_img, content)
 
@@ -252,7 +252,10 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         "media_attachments": [],
         "mentions": [],
         "tags": [],
-        "emojis": [],
+        "emojis": [
+            {"shortcode": e["keyword"], "url": e["url"], "static_url": e["url"], "visible_in_picker": True}
+            for e in post_emojis
+        ],
         "card": None,
         "poll": None,
         "reactions": [],
@@ -325,11 +328,11 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         if my_like:
             my_reaction = my_like.reaction or "★"
     for react, cnt in reaction_rows:
-        name = react or "★"
+        name = (react or "★").strip(":")
         status["reactions"].append({
             "name": name,
             "count": cnt,
-            "me": name == my_reaction,
+            "me": name == (my_reaction or "").strip(":"),
         })
 
     return status
