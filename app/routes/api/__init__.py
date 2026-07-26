@@ -24,7 +24,10 @@ from app.routes.api._posts import (
     _broadcast_timeline,
 )
 
-from app.routes.api._interactions import interactions_router
+from app.routes.api._interactions import (
+    interactions_router,
+    _json_array_has_user,
+)
 
 from app.routes.api._admin import admin_router
 
