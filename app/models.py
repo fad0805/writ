@@ -2,7 +2,7 @@ import datetime
 import re
 import uuid
 
-from urllib.parse import quote as _urlencode, urlparse
+from urllib.parse import quote, urlparse
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, JSON, Table
 from sqlalchemy.orm import relationship
 
