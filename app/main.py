@@ -8,7 +8,7 @@ import sqlalchemy
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -89,8 +89,10 @@ async def debug_exception_handler(request: Request, exc: Exception):
     return JSONResponse({"detail": "Internal server error"}, status_code=500)
 
 
-@app.get('/favicon.ico', include_in_schema=False)
-def favicon():
+@app.api_route('/favicon.ico', methods=["GET", "HEAD"], include_in_schema=False)
+def favicon(request: Request):
+    if request.method == "HEAD":
+        return Response(headers={"Cache-Control": "no-cache", "Location": "/api/pwa/favicon"}, status_code=307)
     return RedirectResponse(url="/api/pwa/favicon", headers={"Cache-Control": "no-cache"})
 
 
