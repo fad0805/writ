@@ -580,6 +580,8 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         if p.boost_of_id:
             if p.boost_of_id not in boost_originals:
                 continue
+            if tl_type == "local" and (boost_originals[p.boost_of_id].visibility or "public") != "public":
+                continue
             _boosted_originals_in_feed.add(p.boost_of_id)
             deduped.append(p)
         elif p.id not in _boosted_originals_in_feed:
