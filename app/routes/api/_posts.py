@@ -36,7 +36,8 @@ from app.utils.filter import _timeline_filter
 from app.utils.post import _get_descendant_ids
 from app.utils.storage import get_storage
 
-from app.routes.api._core import _can_view, _json_array_has_user, _ap_fetch, _fetch_and_save_ap_object, _novel_json, _episode_json, _check_fetch_domain_allowed
+from app.routes.api._core import _can_view, _ap_fetch, _fetch_and_save_ap_object, _novel_json, _episode_json, _check_fetch_domain_allowed
+from app.routes.api._interactions import _json_array_has_user
 
 logger = logging.getLogger("writ.api.posts")
 
