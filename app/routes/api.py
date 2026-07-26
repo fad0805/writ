@@ -763,6 +763,8 @@ def api_get_post(request: Request, post_id: int):
 
         limit = min(int(request.query_params.get("reply_limit", 5)), 50)
         offset = int(request.query_params.get("reply_offset", 0))
+        anc_limit = min(int(request.query_params.get("ancestor_limit", 5)), 50)
+        anc_offset = int(request.query_params.get("ancestor_offset", 0))
 
         direct_count = s.query(Post).filter_by(in_reply_to_id=post_id, is_deleted=False).count()
         result["total_replies"] = direct_count
@@ -791,37 +793,44 @@ def api_get_post(request: Request, post_id: int):
         cur = post.parent
         ancestor_ids = []
 
-        # 1단계: 조상 ID를 모을 때 최대 5개까지만 수집
-        max_depth = 10
+        max_depth = 100
         depth = 0
         while cur and depth < max_depth:
             if not cur.is_deleted:
                 ancestor_ids.append(cur.id)
                 depth += 1
             cur = cur.parent
-        if ancestor_ids:
+
+        total_ancestors = len(ancestor_ids)
+        has_more_ancestors = anc_offset + anc_limit < total_ancestors
+        sliced_ids = ancestor_ids[anc_offset:anc_offset + anc_limit]
+
+        if sliced_ids:
             if user:
-                _anc_liked = {a[0] for a in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(ancestor_ids)).all()}
-                _anc_boosted = {a[0] for a in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(ancestor_ids)).all()}
-                _anc_bookmarked = {a[0] for a in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(ancestor_ids)).all()}
+                _anc_liked = {a[0] for a in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(sliced_ids)).all()}
+                _anc_boosted = {a[0] for a in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(sliced_ids)).all()}
+                _anc_bookmarked = {a[0] for a in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(sliced_ids)).all()}
             else:
                 _anc_liked = _anc_boosted = _anc_bookmarked = set()
 
-            cur = post.parent
-            depth = 0
-            while cur and depth < max_depth:
-                if not cur.is_deleted and _can_view(cur, user, s):
-                    ancestors.insert(0, _post_json(cur, s, user, _liked_ids=_anc_liked, _boosted_ids=_anc_boosted, _bookmarked_ids=_anc_bookmarked))
-                    depth += 1
-                cur = cur.parent
+            sliced_posts = s.query(Post).options(
+                selectinload(Post.author), selectinload(Post.parent),
+            ).filter(Post.id.in_(sliced_ids)).all()
+            sliced_map = {p.id: p for p in sliced_posts}
 
-        if not ancestors and post.in_reply_to_ap_id:
+            for aid in sliced_ids:
+                p = sliced_map.get(aid)
+                if p and _can_view(p, user, s):
+                    ancestors.append(_post_json(p, s, user, _liked_ids=_anc_liked, _boosted_ids=_anc_boosted, _bookmarked_ids=_anc_bookmarked))
+
+        if not ancestors and not sliced_ids and post.in_reply_to_ap_id:
             parent = s.query(Post).filter_by(ap_id=post.in_reply_to_ap_id).first()
             if parent and _can_view(parent, user, s):
                 ancestors = [_post_json(parent, s, user)]
             else:
                 fetch_remote_url = post.in_reply_to_ap_id
         result["ancestors"] = ancestors
+        result["has_more_ancestors"] = has_more_ancestors
 
     if fetch_remote_url:
         try:

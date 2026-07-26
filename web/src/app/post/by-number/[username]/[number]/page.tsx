@@ -1,6 +1,6 @@
 "use client";
 import { useParams } from "next/navigation";
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api, PostData } from "@/lib/api";
 import PostCard from "@/components/PostCard";
 import Head from "next/head";
@@ -31,6 +31,9 @@ function ThreadList({ posts, parentId, depth = 0, onDelete }: { posts: PostData[
 export default function PostByNumberPage() {
   const params = useParams();
   const [post, setPost] = useState<PostData | null>(null);
+  const [ancestors, setAncestors] = useState<PostData[]>([]);
+  const [hasMoreAncestors, setHasMoreAncestors] = useState(false);
+  const [loadingAncestors, setLoadingAncestors] = useState(false);
   const [replies, setReplies] = useState<PostData[]>([]);
   const [totalReplies, setTotalReplies] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -38,7 +41,9 @@ export default function PostByNumberPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [deleted, setDeleted] = useState(false);
   const offsetRef = useRef(0);
+  const ancOffsetRef = useRef(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const topSentinelRef = useRef<HTMLDivElement>(null);
   const currentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,14 +53,17 @@ export default function PostByNumberPage() {
   const loadPost = async () => {
     setLoading(true);
     offsetRef.current = 0;
+    ancOffsetRef.current = 0;
     try {
       const username = Array.isArray(params.username) ? params.username[0] : params.username;
       const number = Array.isArray(params.number) ? params.number[0] : params.number;
       if (!username || !number) return;
       const data = await fetch(`/api/by-number/${username}/${number}`, { credentials: "include" });
       const p = await data.json();
-      const full = await api.getPost(p.id, 0, 5);
+      const full = await api.getPost(p.id, 0, 5, 0);
       setPost(full);
+      setAncestors(full.ancestors || []);
+      setHasMoreAncestors(full.has_more_ancestors || false);
       setReplies(full.replies || []);
       setTotalReplies(full.total_replies);
       setHasMore(full.has_more_replies);
@@ -89,12 +97,24 @@ export default function PostByNumberPage() {
     setLoadingMore(true);
     offsetRef.current += 5;
     try {
-      const data = await api.getPost(post.id, offsetRef.current, 5);
+      const data = await api.getPost(post.id, offsetRef.current, 5, ancOffsetRef.current);
       setReplies((prev) => [...prev, ...(data.replies || [])]);
       setHasMore(data.has_more_replies);
     } catch {}
     setLoadingMore(false);
   }, [post, loadingMore, hasMore]);
+
+  const loadMoreAncestors = useCallback(async () => {
+    if (loadingAncestors || !hasMoreAncestors || !post) return;
+    setLoadingAncestors(true);
+    ancOffsetRef.current += 5;
+    try {
+      const data = await api.getPost(post.id, offsetRef.current, 5, ancOffsetRef.current);
+      setAncestors((prev) => [...(data.ancestors || []), ...prev]);
+      setHasMoreAncestors(data.has_more_ancestors || false);
+    } catch {}
+    setLoadingAncestors(false);
+  }, [post, loadingAncestors, hasMoreAncestors]);
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -107,7 +127,16 @@ export default function PostByNumberPage() {
     return () => obs.disconnect();
   }, [loadMore]);
 
-  const ancestors = useMemo(() => post?.ancestors || [], [post]);
+  useEffect(() => {
+    const el = topSentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) loadMoreAncestors(); },
+      { rootMargin: "200px" }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [loadMoreAncestors]);
 
   if (loading) return <div className="empty-state">로딩 중...</div>;
   if (deleted) return <div className="empty-state">삭제된 게시글입니다.</div>;
@@ -121,8 +150,10 @@ export default function PostByNumberPage() {
       <Head>
         <link rel="alternate" type="application/activity+json" href={`/@${username}/${number}`} />
       </Head>
+      {loadingAncestors && <p className="empty-state">위쪽 불러오는 중...</p>}
+      {hasMoreAncestors && <div ref={topSentinelRef} className="sentinel" style={{ height: 1 }} />}
       {ancestors.filter((a) => !a.is_deleted).map((a) => (
-        <div key={a.id} className="thread-child"><PostCard post={a} hideContext onDelete={() => setPost((prev) => prev ? { ...prev, ancestors: (prev.ancestors || []).filter((x) => x.id !== a.id) } : prev)} /></div>
+        <div key={a.id} className="thread-child"><PostCard post={a} hideContext onDelete={() => setAncestors((prev) => prev.filter((x) => x.id !== a.id))} /></div>
       ))}
       <div ref={currentRef}><PostCard post={post} current hideContext onUpdate={() => loadPost()} onReply={(newPost) => { if (newPost) { setReplies((prev) => [...prev, newPost]); setTotalReplies((prev) => prev + 1); } }} onDelete={() => setDeleted(true)} /></div>
       <div className="thread-list">

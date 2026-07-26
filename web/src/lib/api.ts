@@ -212,9 +212,9 @@ export const api = {
     ),
 
   // Posts
-  getPost: (id: number, reply_offset = 0, reply_limit = 5) =>
-    request<PostData & { total_replies: number; has_more_replies: boolean }>(
-      `/api/posts/${id}?reply_offset=${reply_offset}&reply_limit=${reply_limit}`
+  getPost: (id: number, reply_offset = 0, reply_limit = 5, ancestor_offset = 0) =>
+    request<PostData & { total_replies: number; has_more_replies: boolean; has_more_ancestors: boolean }>(
+      `/api/posts/${id}?reply_offset=${reply_offset}&reply_limit=${reply_limit}&ancestor_offset=${ancestor_offset}`
     ),
   createPost: (data: { content: string; summary?: string; visibility?: string; parent_id?: number; share_url?: string; media_attachments?: string; is_sensitive?: boolean; poll_options?: string; poll_expires_in?: number; link_preview?: string }) =>
     formRequest<PostData>("/api/posts", data),
