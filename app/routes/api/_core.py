@@ -337,7 +337,8 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
         if user:
             following_ids = [f.following_id for f in s.query(Follow).filter_by(follower_id=user.id, accepted=True).all()]
 
-        visible_author_ids = following_ids + [user.id]
+        visible_author_ids = set(following_ids)
+        visible_author_ids.add(user.id)
 
         if is_hashtag_search:
             tag = s.query(Tag).filter_by(name=query.lower()).first()
