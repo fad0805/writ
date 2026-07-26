@@ -340,9 +340,11 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
             if tag:
                 # 1. 포스트 쿼리
                 q_posts = s.query(Post).options(selectinload(Post.author)).filter(
-                    Post.tag_list.any(name=tag.name),
-                    Post.is_deleted == False,
-                    Post.author.has(User.is_suspended == False),
+                    or_(
+                        Post.tag_list.any(name=tag.name),
+                        Post.is_deleted == False,
+                        Post.author.has(User.is_suspended == False),
+                    )
                 )
                 if user:
                     q_posts = q_posts.filter(
