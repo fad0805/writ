@@ -44,9 +44,9 @@ export default function RightSidebar() {
               const newItems = d.notifications.filter((n) => !existing.has(n.id));
               if (newItems.length === 0) return prev;
               window.dispatchEvent(new Event("notifchange"));
-              if (autoRead) window.dispatchEvent(new Event("notificationsread"));
               return [...newItems, ...prev];
             });
+            if (autoRead) window.dispatchEvent(new Event("notificationsread"));
           }).catch(() => {});
         }, 300);
       }

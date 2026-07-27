@@ -60,7 +60,7 @@ export default function Sidebar() {
       }
     };
     update();
-    const handler = () => { setUnreadNotifs(0); };
+    const handler = () => { setUnreadNotifs(0); (window as any).__unreadNotifs = 0; };
     const profileHandler = () => refresh();
     window.addEventListener("notificationsread", handler);
     window.addEventListener("profilechange", profileHandler);
