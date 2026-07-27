@@ -1830,6 +1830,28 @@ input[type="checkbox"] {
   outline: 3px solid var(--accent);
   outline-offset: 2px; border-radius: 4px;
 }
+.episode-editor-content[data-page-mode] .ProseMirror {
+  counter-reset: page-counter;
+}
+.episode-editor-content[data-page-mode] .ProseMirror > * {
+  counter-increment: page-counter;
+}
+.episode-editor-content[data-page-mode] .ProseMirror > *:nth-child(20n) {
+  border-bottom: 2px dashed var(--accent);
+  margin-bottom: 4px;
+  padding-bottom: 10px;
+  position: relative;
+}
+.episode-editor-content[data-page-mode] .ProseMirror > *:nth-child(20n)::after {
+  content: "—" counter(page-counter) "페이지 끝 —";
+  display: block;
+  text-align: center;
+  font-size: 11px;
+  color: var(--accent);
+  opacity: 0.5;
+  margin-top: 2px;
+  pointer-events: none;
+}
 .episode-editor-colorpicker {
   position: absolute;
   z-index: 2;
