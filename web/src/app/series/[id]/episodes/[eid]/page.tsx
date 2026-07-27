@@ -33,6 +33,8 @@ export default function EpisodeDetailPage() {
   const [selectedRuleIds, setSelectedRuleIds] = useState<number[]>([]);
   const bodyRef = useRef<HTMLDivElement>(null);
   const [currentPage, setCurrentPage] = useState(0);
+  const [comicPage, setComicPage] = useState(0);
+  const [comicViewMode, setComicViewMode] = useState<"paged" | "scroll">("paged");
 
   function renderEpisodeContent(html: string): string {
     let content = html;
@@ -86,17 +88,56 @@ export default function EpisodeDetailPage() {
 
   const totalPages = pages.length;
   useEffect(() => {
-    if (totalPages <= 1) return;
+    if (!episode || episode.view_mode !== "comic") {
+      if (totalPages <= 1) return;
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === "ArrowLeft") setCurrentPage((p) => Math.max(0, p - 1));
+        else if (e.key === "ArrowRight") setCurrentPage((p) => Math.min(totalPages - 1, p + 1));
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }
+  }, [totalPages, episode?.view_mode]);
+
+  const comicRef = useRef(comicViewMode);
+  comicRef.current = comicViewMode;
+  useEffect(() => {
+    if (!episode || episode.view_mode !== "comic") return;
+    const images = episode.image_urls || [];
+    if (images.length <= 1) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft") setCurrentPage((p) => Math.max(0, p - 1));
-      else if (e.key === "ArrowRight") setCurrentPage((p) => Math.min(totalPages - 1, p + 1));
+      if (comicRef.current !== "paged") return;
+      if (e.key === "ArrowLeft") setComicPage((p) => Math.max(0, p - 1));
+      else if (e.key === "ArrowRight") setComicPage((p) => Math.min(images.length - 1, p + 1));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [totalPages]);
+  }, [episode?.id, episode?.view_mode, comicViewMode]);
 
   const touchStartX = useRef(0);
   useEffect(() => {
+    if (!episode) return;
+    if (episode.view_mode === "comic") {
+      const images = episode.image_urls || [];
+      if (images.length <= 1) return;
+      const el = document.querySelector(".episode-comic-viewer-paged");
+      if (!el) return;
+      const onStart = (e: Event) => { touchStartX.current = (e as any).touches[0].clientX; };
+      const onEnd = (e: Event) => {
+        if (comicRef.current !== "paged") return;
+        const dx = (e as any).changedTouches[0].clientX - touchStartX.current;
+        if (Math.abs(dx) > 50) {
+          if (dx > 0) setComicPage((p) => Math.max(0, p - 1));
+          else setComicPage((p) => Math.min(images.length - 1, p + 1));
+        }
+      };
+      el.addEventListener("touchstart", onStart, { passive: true });
+      el.addEventListener("touchend", onEnd, { passive: true });
+      return () => {
+        el.removeEventListener("touchstart", onStart);
+        el.removeEventListener("touchend", onEnd);
+      };
+    }
     if (totalPages <= 1) return;
     const el = document.querySelector(".episode-view-paged-wrap");
     if (!el) return;
@@ -114,7 +155,7 @@ export default function EpisodeDetailPage() {
       el.removeEventListener("touchstart", onStart);
       el.removeEventListener("touchend", onEnd);
     };
-  }, [totalPages]);
+  }, [totalPages, episode?.view_mode, episode?.id]);
 
   const handleDelete = async () => {
     if (!confirm("정말 삭제하시겠습니까?")) return;
@@ -159,24 +200,70 @@ export default function EpisodeDetailPage() {
           <>
             {episode.summary && <blockquote className="episode-summary">{episode.summary}</blockquote>}
             {episode.audio_url && <div className="episode-audio"><AudioPlayer src={episode.audio_url} /></div>}
-            <div className="episode-view-paged-wrap">
-              <div ref={bodyRef} className="episode-body" dangerouslySetInnerHTML={{ __html: sanitizeEpisode(renderEpisodeContent(pages[currentPage] || "")) }} />
-              {pages.length > 1 && (
-                <>
-                  <button type="button" className="episode-view-page-side-arrow left" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}>‹</button>
-                  <button type="button" className="episode-view-page-side-arrow right" disabled={currentPage === pages.length - 1} onClick={() => setCurrentPage((p) => Math.min(pages.length - 1, p + 1))}>›</button>
-                </>
-              )}
-            </div>
-            {pages.length > 1 && (
-              <div className="episode-view-page-nav">
-                <button type="button" className="episode-view-page-arrow" disabled={currentPage === 0} onClick={() => setCurrentPage(currentPage - 1)}>‹</button>
-                <div className="episode-view-page-slider-wrap">
-                  <input type="range" min={0} max={pages.length - 1} value={currentPage} onChange={(e) => setCurrentPage(Number(e.target.value))} className="episode-view-page-slider" />
+            {episode.view_mode === "comic" ? (
+              (() => {
+                const images = episode.image_urls || [];
+                if (images.length === 0) return <div className="empty-state">이미지가 없습니다</div>;
+                return (
+                  <>
+                    <div className="episode-comic-toolbar">
+                      <button type="button" className={`episode-comic-mode-btn${comicViewMode === "paged" ? " active" : ""}`} onClick={() => setComicViewMode("paged")}>좌우 넘김</button>
+                      <button type="button" className={`episode-comic-mode-btn${comicViewMode === "scroll" ? " active" : ""}`} onClick={() => setComicViewMode("scroll")}>스크롤</button>
+                      <span className="episode-comic-info">{comicViewMode === "paged" ? `${comicPage + 1} / ${images.length}` : `${images.length}장`}</span>
+                    </div>
+                    {comicViewMode === "paged" ? (
+                      <div className="episode-comic-viewer-paged" onClick={(e) => {
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        const x = e.clientX - rect.left;
+                        if (x < rect.width / 3 && comicPage > 0) setComicPage(comicPage - 1);
+                        else if (x > (rect.width / 3) * 2 && comicPage < images.length - 1) setComicPage(comicPage + 1);
+                      }}>
+                        <img src={images[comicPage]} alt={`만화 ${comicPage + 1}페이지`} />
+                        <button type="button" className="episode-comic-paged-arrow left" disabled={comicPage === 0} onClick={(e) => { e.stopPropagation(); setComicPage(Math.max(0, comicPage - 1)); }}>‹</button>
+                        <button type="button" className="episode-comic-paged-arrow right" disabled={comicPage === images.length - 1} onClick={(e) => { e.stopPropagation(); setComicPage(Math.min(images.length - 1, comicPage + 1)); }}>›</button>
+                      </div>
+                    ) : (
+                      <div className="episode-comic-viewer-scroll">
+                        {images.map((url, i) => (
+                          <img key={i} src={url} alt={`만화 ${i + 1}페이지`} />
+                        ))}
+                      </div>
+                    )}
+                    {comicViewMode === "paged" && (
+                      <div className="episode-view-page-nav">
+                        <button type="button" className="episode-view-page-arrow" disabled={comicPage === 0} onClick={() => setComicPage(comicPage - 1)}>‹</button>
+                        <div className="episode-view-page-slider-wrap">
+                          <input type="range" min={0} max={images.length - 1} value={comicPage} onChange={(e) => setComicPage(Number(e.target.value))} className="episode-view-page-slider" />
+                        </div>
+                        <button type="button" className="episode-view-page-arrow" disabled={comicPage === images.length - 1} onClick={() => setComicPage(comicPage + 1)}>›</button>
+                        <span className="episode-view-page-info">{comicPage + 1} / {images.length}</span>
+                      </div>
+                    )}
+                  </>
+                );
+              })()
+            ) : (
+              <>
+                <div className="episode-view-paged-wrap">
+                  <div ref={bodyRef} className="episode-body" dangerouslySetInnerHTML={{ __html: sanitizeEpisode(renderEpisodeContent(pages[currentPage] || "")) }} />
+                  {pages.length > 1 && (
+                    <>
+                      <button type="button" className="episode-view-page-side-arrow left" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}>‹</button>
+                      <button type="button" className="episode-view-page-side-arrow right" disabled={currentPage === pages.length - 1} onClick={() => setCurrentPage((p) => Math.min(pages.length - 1, p + 1))}>›</button>
+                    </>
+                  )}
                 </div>
-                <button type="button" className="episode-view-page-arrow" disabled={currentPage === pages.length - 1} onClick={() => setCurrentPage(currentPage + 1)}>›</button>
-                <span className="episode-view-page-info">{currentPage + 1} / {pages.length}</span>
-              </div>
+                {pages.length > 1 && (
+                  <div className="episode-view-page-nav">
+                    <button type="button" className="episode-view-page-arrow" disabled={currentPage === 0} onClick={() => setCurrentPage(currentPage - 1)}>‹</button>
+                    <div className="episode-view-page-slider-wrap">
+                      <input type="range" min={0} max={pages.length - 1} value={currentPage} onChange={(e) => setCurrentPage(Number(e.target.value))} className="episode-view-page-slider" />
+                    </div>
+                    <button type="button" className="episode-view-page-arrow" disabled={currentPage === pages.length - 1} onClick={() => setCurrentPage(currentPage + 1)}>›</button>
+                    <span className="episode-view-page-info">{currentPage + 1} / {pages.length}</span>
+                  </div>
+                )}
+              </>
             )}
             {episode.comment && <div className="episode-comment" dangerouslySetInnerHTML={{ __html: sanitizeBasic(episode.comment) }} />}
           </>
