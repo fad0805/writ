@@ -84,6 +84,38 @@ export default function EpisodeDetailPage() {
     setCurrentPage(0);
   }, [episode?.id]);
 
+  const totalPages = pages.length;
+  useEffect(() => {
+    if (totalPages <= 1) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") setCurrentPage((p) => Math.max(0, p - 1));
+      else if (e.key === "ArrowRight") setCurrentPage((p) => Math.min(totalPages - 1, p + 1));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [totalPages]);
+
+  const touchStartX = useRef(0);
+  useEffect(() => {
+    if (totalPages <= 1) return;
+    const el = document.querySelector(".episode-view-paged-wrap");
+    if (!el) return;
+    const onStart = (e: Event) => { touchStartX.current = (e as any).touches[0].clientX; };
+    const onEnd = (e: Event) => {
+      const dx = (e as any).changedTouches[0].clientX - touchStartX.current;
+      if (Math.abs(dx) > 50) {
+        if (dx > 0) setCurrentPage((p) => Math.max(0, p - 1));
+        else setCurrentPage((p) => Math.min(totalPages - 1, p + 1));
+      }
+    };
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchend", onEnd, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchend", onEnd);
+    };
+  }, [totalPages]);
+
   const handleDelete = async () => {
     if (!confirm("정말 삭제하시겠습니까?")) return;
     try {
@@ -127,7 +159,15 @@ export default function EpisodeDetailPage() {
           <>
             {episode.summary && <blockquote className="episode-summary">{episode.summary}</blockquote>}
             {episode.audio_url && <div className="episode-audio"><AudioPlayer src={episode.audio_url} /></div>}
-            <div ref={bodyRef} className="episode-body" dangerouslySetInnerHTML={{ __html: sanitizeEpisode(renderEpisodeContent(pages[currentPage] || "")) }} />
+            <div className="episode-view-paged-wrap">
+              <div ref={bodyRef} className="episode-body" dangerouslySetInnerHTML={{ __html: sanitizeEpisode(renderEpisodeContent(pages[currentPage] || "")) }} />
+              {pages.length > 1 && (
+                <>
+                  <button type="button" className="episode-view-page-side-arrow left" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}>‹</button>
+                  <button type="button" className="episode-view-page-side-arrow right" disabled={currentPage === pages.length - 1} onClick={() => setCurrentPage((p) => Math.min(pages.length - 1, p + 1))}>›</button>
+                </>
+              )}
+            </div>
             {pages.length > 1 && (
               <div className="episode-view-page-nav">
                 <button type="button" className="episode-view-page-arrow" disabled={currentPage === 0} onClick={() => setCurrentPage(currentPage - 1)}>‹</button>

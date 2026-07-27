@@ -1985,6 +1985,51 @@ input[type="checkbox"] {
   flex-shrink: 0;
 }
 
+.episode-view-paged-wrap {
+  position: relative;
+}
+.episode-view-page-side-arrow {
+  display: none;
+}
+@media (min-width: 769px) {
+  .episode-view-paged-wrap {
+    position: relative;
+  }
+  .episode-view-page-side-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 28px;
+    cursor: pointer;
+    transition: all 0.15s;
+    z-index: 2;
+    opacity: 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  .episode-view-paged-wrap:hover .episode-view-page-side-arrow {
+    opacity: 1;
+  }
+  .episode-view-page-side-arrow:hover:not(:disabled) {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .episode-view-page-side-arrow:disabled {
+    opacity: 0 !important;
+    cursor: default;
+  }
+  .episode-view-page-side-arrow.left { left: -8px; }
+  .episode-view-page-side-arrow.right { right: -8px; }
+}
+
 /* ── Pinned notices ── */
 .pinned-notices {
   margin-bottom: 16px;
