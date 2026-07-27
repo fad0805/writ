@@ -168,6 +168,7 @@ export default function EditEpisodePage() {
   const handleAudioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
+    if (f.size > 20 * 1024 * 1024) { alert("오디오 파일은 20MB 이하만 업로드 가능합니다."); e.target.value = ""; return; }
     if (audioPreview) URL.revokeObjectURL(audioPreview);
     setAudioFile(f);
     setAudioPreview(URL.createObjectURL(f));
@@ -200,6 +201,7 @@ export default function EditEpisodePage() {
     if (!title.trim() || submitting) return;
     if (viewMode === "text" && !cleanContent) return;
     if (viewMode === "comic" && imageUrls.length === 0) return;
+    if (audioFile && audioFile.size > 20 * 1024 * 1024) { alert("오디오 파일은 20MB 이하만 업로드 가능합니다."); return; }
     setSubmitting(true);
     try {
       let uploadedUrls: string[] = [];
@@ -208,7 +210,10 @@ export default function EditEpisodePage() {
         for (const f of imageFiles) {
           const fd = new FormData();
           fd.append("file", f);
-          const r = await fetch("/api/media/upload", { method: "POST", credentials: "include", body: fd });
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 30000);
+          const r = await fetch("/api/media/upload", { method: "POST", credentials: "include", body: fd, signal: controller.signal });
+          clearTimeout(timeout);
           if (r.ok) { const d = await r.json(); uploadedUrls.push(d.url); }
         }
         setUploadingImages(false);
@@ -232,14 +237,20 @@ export default function EditEpisodePage() {
         form.append("announce_comment", announceComment);
       }
       form.append("visibility", visibility);
-      const res = await fetch(`/api/series/${params.id}/episodes/${params.eid}/edit`, { method: "POST", credentials: "include", body: form });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60000);
+      const res = await fetch(`/api/series/${params.id}/episodes/${params.eid}/edit`, { method: "POST", credentials: "include", body: form, signal: controller.signal });
+      clearTimeout(timeout);
       if (res.ok) {
         if (draftId) await fetch(`/api/series/${novelId}/drafts/${draftId}/delete`, { method: "POST", credentials: "include" });
         setDirty(false);
         suppress();
         router.push(`/series/${params.id}/episodes/${params.eid}`);
       } else alert("저장 실패");
-    } catch { alert("저장 실패"); }
+    } catch (err) {
+      if ((err as any)?.name === "AbortError") alert("요청 시간이 초과되었습니다. 파일 크기를 줄이거나 다시 시도해주세요.");
+      else alert("저장 실패");
+    }
     setSubmitting(false);
   };
 
