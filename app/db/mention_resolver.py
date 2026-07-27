@@ -12,7 +12,7 @@ from app.models import User, FederationBlock, AllowedServer, ServerSetting
 logger = logging.getLogger(__name__)
 
 
-def _federation_allowed(domain: str, session: Session = None) -> bool:
+def _federation_allowed(domain: str, session: Session | None = None) -> bool:
     domain = domain.lower().strip()
     if session is None:
         with get_session() as s:
@@ -32,23 +32,33 @@ def _federation_allowed(domain: str, session: Session = None) -> bool:
         return False
 
 
-def _resolve_remote_user(handle: str) -> User | None:
+def _resolve_remote_user(handle: str, session: Session | None = None) -> User | None:
     """WebFinger + Actor resolution로 리모트 유저를 DB에 저장하고 반환."""
+
     clean = handle.lstrip('@')
     if '@' not in clean:
         return None
+
     local_part, domain = clean.split('@', 1)
-    if not _federation_allowed(domain):
+    if not _federation_allowed(domain, session):
         return None
+
+    urls = [
+        f"https://{domain}/users/{local_part}",
+        f"https://{domain}/@{local_part}",
+        f"https://{domain}/u/{local_part}",
+        f"https://{domain}/profile/{local_part}",
+    ]
     try:
         resolved = None
-        for url in [f"https://{domain}/@{local_part}", f"https://{domain}/users/{local_part}"]:
+        for url in urls:
             try:
                 resolved = _resolve_actor(url)
                 if resolved:
                     break
             except Exception:
                 continue
+
         if not resolved:
             wf = httpx.get(
                 f"https://{domain}/.well-known/webfinger?resource=acct:{clean}",

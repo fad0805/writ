@@ -22,7 +22,7 @@ from app.config.settings import SECRET_KEY
 from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _resolve_actor, _validate_url
 from app.core.timeline_stream import add_stream, remove_stream
 from app.db.database import get_session
-from app.db.mention_resolver import _federation_allowed
+from app.db.mention_resolver import _federation_allowed, _resolve_remote_user
 from app.routes.auth import require_auth, get_current_user
 from app.utils.crypto import get_private_key, sign_string
 from app.utils.filter import _timeline_filter
@@ -398,45 +398,8 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 for u in all_users
             )
 
-            urls = [
-                f"https://{domain}/users/{handle}",
-                f"https://{domain}/@{handle}",
-                f"https://{domain}/u/{handle}",
-                f"https://{domain}/profile/{handle}",
-            ]
             if not already_found:
-                resolved = None
-                try:
-                    for url in urls:
-                        try:
-                            resolved = _resolve_actor(url)
-                            if resolved:
-                                break
-                        except Exception:
-                            continue
-                except Exception as e:
-                    logger.error(f'Cannot resolved actor: {e}')
-
-                if not resolved:
-                    wf = None
-                    try:
-                        wf = httpx.get(
-                            f"https://{domain}/.well-known/webfinger?resource=acct:{handle}@{domain}",
-                            timeout=5,
-                        )
-                    except Exception as e:
-                        logger.error(f'Cannot fetch httpx actor: {e}')
-                    if wf and wf.status_code == 200:
-                        wf_data = wf.json()
-                        for link in wf_data.get("links", []):
-                            if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
-                                href = link.get("href", "")
-                                if href:
-                                    try:
-                                        resolved = _resolve_actor(href)
-                                        break
-                                    except Exception as e:
-                                        logger.error(f'Cannot resolved actor: {e}')
+                resolved = _resolve_remote_user(query)
                 if resolved:
                     refreshed = s.query(User).get(resolved.id)
                     if refreshed:
