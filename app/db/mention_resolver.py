@@ -2,6 +2,7 @@ import httpx
 import logging
 
 from sqlalchemy import or_
+from sqlalchemy.orm import Session
 from urllib.parse import urlparse
 
 from app.db.database import get_session
@@ -11,20 +12,24 @@ from app.models import User, FederationBlock, AllowedServer, ServerSetting
 logger = logging.getLogger(__name__)
 
 
-def _federation_allowed(domain: str) -> bool:
-    with get_session() as s:
-        try:
-            settings = s.query(ServerSetting).first()
-            if not settings:
-                return True
-            mode = settings.federation_mode or "blacklist"
-            domain = domain.lower().strip()
-            if mode == "whitelist":
-                return s.query(AllowedServer).filter_by(domain=domain).first() is not None
-            else:
-                return s.query(FederationBlock).filter_by(domain=domain).first() is None
-        except Exception:
-            return False
+def _federation_allowed(domain: str, session: Session = None) -> bool:
+    domain = domain.lower().strip()
+    if session is None:
+        with get_session() as s:
+            return _federation_allowed(domain, s)
+
+    try:
+        settings = ServerSetting.get(session)
+        if not settings:
+            return True
+
+        mode = settings.federation_mode or "blacklist"
+        if mode == "whitelist":
+            return session.query(AllowedServer).filter_by(domain=domain).first() is not None
+        else:
+            return session.query(FederationBlock).filter_by(domain=domain).first() is None
+    except Exception:
+        return False
 
 
 def _resolve_remote_user(handle: str) -> User | None:

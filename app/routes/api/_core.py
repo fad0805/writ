@@ -22,6 +22,7 @@ from app.config.settings import SECRET_KEY
 from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _resolve_actor, _validate_url
 from app.core.timeline_stream import add_stream, remove_stream
 from app.db.database import get_session
+from app.db.mention_resolver import _federation_allowed
 from app.routes.auth import require_auth, get_current_user
 from app.utils.crypto import get_private_key, sign_string
 from app.utils.filter import _timeline_filter
@@ -387,15 +388,8 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
             if len(at_parts) == 2 and at_parts[0] and at_parts[1]:
                 handle, domain = at_parts[0].strip().lower(), at_parts[1].strip().lower()
         if domain:
-            mode = ServerSetting.get(s).federation_mode or "blacklist"
-            if mode == "whitelist":
-                allowed = s.query(AllowedServer).filter_by(domain=domain).first()
-                if not allowed:
-                    blocked_domain = domain
-            else:
-                blocked = s.query(FederationBlock).filter_by(domain=domain).first()
-                if blocked:
-                    blocked_domain = domain
+            if not _federation_allowed(domain):
+                blocked_domain = domain
 
         # If query is handle@domain and no remote match yet, try to resolve
         if handle and domain and not blocked_domain:
