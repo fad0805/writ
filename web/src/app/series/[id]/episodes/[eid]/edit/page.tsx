@@ -66,7 +66,7 @@ export default function EditEpisodePage() {
   const novelId = Number(Array.isArray(params.id) ? params.id[0] : params.id);
   const episodeId = Number(Array.isArray(params.eid) ? params.eid[0] : params.eid);
 
-  useNavigationBlock(dirty);
+  const { suppress } = useNavigationBlock(dirty);
   useEffect(() => { if (!loading) loadedRef.current = true; }, [loading]);
   useEffect(() => { if (loadedRef.current) setDirty(true); }, [title, summary, comment, content, isPublished, announce, announceComment, visibility, audioFile, removeAudio]);
 
@@ -185,7 +185,8 @@ export default function EditEpisodePage() {
       if (res.ok) {
         if (draftId) await fetch(`/api/series/${novelId}/drafts/${draftId}/delete`, { method: "POST", credentials: "include" });
         setDirty(false);
-        setTimeout(() => router.push(`/series/${params.id}/episodes/${params.eid}`), 0);
+        suppress();
+        router.push(`/series/${params.id}/episodes/${params.eid}`);
       } else alert("저장 실패");
     } catch { alert("저장 실패"); }
     setSubmitting(false);

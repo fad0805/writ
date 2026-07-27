@@ -117,7 +117,7 @@ export default function NewEpisodePage() {
 
   useEffect(() => { loadedRef.current = true; }, []);
 
-  useNavigationBlock(dirty);
+  const { suppress } = useNavigationBlock(dirty);
   useEffect(() => { if (loadedRef.current) setDirty(true); }, [title, summary, comment, content, isPublished, announce, announceComment]);
 
   const loadDraft = (d: DraftData) => {
@@ -169,7 +169,8 @@ export default function NewEpisodePage() {
       if (res.ok) {
         if (draftId) await fetch(`/api/series/${novelId}/drafts/${draftId}/delete`, { method: "POST", credentials: "include" });
         setDirty(false);
-        setTimeout(() => router.push(`/series/${params.id}/episodes/${data.episode_id}`), 0);
+        suppress();
+        router.push(`/series/${params.id}/episodes/${data.episode_id}`);
       } else alert("게시 실패");
     } catch { alert("게시 실패"); }
     setSubmitting(false);

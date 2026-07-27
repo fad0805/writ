@@ -102,7 +102,7 @@ export default function EditNovelPage() {
       if (imageFile) form.append("cover_image", imageFile);
       else if (removeCover) form.append("remove_cover", "true");
       const res = await fetch(`/api/series/${params.id}/edit`, { method: "POST", credentials: "include", body: form });
-      if (res.ok) { setDirty(false); setTimeout(() => router.push(`/series/${params.id}`), 0); }
+      if (res.ok) { setDirty(false); router.push(`/series/${params.id}`); }
       else alert("저장 실패");
     } catch { alert("저장 실패"); }
     setSubmitting(false);

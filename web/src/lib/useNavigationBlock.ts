@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 export function useNavigationBlock(active: boolean) {
@@ -7,6 +7,11 @@ export function useNavigationBlock(active: boolean) {
   const activeRef = useRef(active);
   const navigatingRef = useRef(false);
   activeRef.current = active;
+
+  const suppress = useCallback(() => {
+    activeRef.current = false;
+    navigatingRef.current = true;
+  }, []);
 
   useEffect(() => {
     if (!active) return;
@@ -99,4 +104,6 @@ export function useNavigationBlock(active: boolean) {
       router.back = () => { origBack(); };
     };
   }, [active, router]);
+
+  return { suppress };
 }
