@@ -177,6 +177,7 @@ export default function EditEpisodePage() {
       form.append("summary", summary);
       form.append("comment", comment);
       form.append("is_published", isPublished ? "true" : "false");
+      form.append("page_mode", pageMode ? "true" : "false");
       if (audioFile) form.append("audio", audioFile);
       else if (removeAudio) form.append("remove_audio", "true");
       if (announce) {
