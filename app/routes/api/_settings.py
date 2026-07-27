@@ -120,7 +120,7 @@ def api_settings_send_verification(request: Request):
 def api_upload_media(request: Request, file: UploadFile = File(...)):
     user = require_active_auth(request)
     storage = get_storage()
-    ext, is_image, is_video = _validate_upload(file, allow_video=True, max_size=MAX_IMAGE_SIZE, label="미디어")
+    ext, is_image, is_video, _ = _validate_upload(file, allow_video=True, max_size=MAX_IMAGE_SIZE, label="미디어")
     name = f"{uuid4().hex}.webp" if is_image else f"{uuid4().hex}{ext}"
     key = f"media/{name}"
     if is_image:

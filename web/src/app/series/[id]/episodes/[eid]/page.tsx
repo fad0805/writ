@@ -112,6 +112,7 @@ export default function EpisodeDetailPage() {
           <div className="empty-state" style={{ padding: "40px 0" }}>비공개 에피소드입니다</div>
         ) : (
           <>
+            {episode.audio_url && <div className="episode-audio"><audio controls src={episode.audio_url} style={{ width: "100%" }} /></div>}
             {episode.summary && <blockquote className="episode-summary">{episode.summary}</blockquote>}
             <div ref={bodyRef} className="episode-body" dangerouslySetInnerHTML={{ __html: sanitizeEpisode(renderEpisodeContent(episode.content)) }} />
             {episode.comment && <div className="episode-comment" dangerouslySetInnerHTML={{ __html: sanitizeBasic(episode.comment) }} />}

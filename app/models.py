@@ -346,6 +346,7 @@ class Episode(Base):
     content = Column(Text, nullable=False)
     summary = Column(Text, default="")
     comment = Column(Text, default="")
+    audio_url = Column(String(512), default="")
     views = Column(Integer, default=0)
     is_published = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), default=now)

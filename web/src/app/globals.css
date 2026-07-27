@@ -1524,6 +1524,15 @@ input[type="checkbox"] {
 }
 .episode-content h2 { margin-bottom: 10px; }
 .episode-content .episode-meta { margin-bottom: 20px; }
+.episode-audio {
+  margin-bottom: 20px;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+}
+.episode-audio audio {
+  height: 40px;
+}
 .episode-summary {
   background: var(--bg-tertiary);
   border-left: 3px solid var(--accent);

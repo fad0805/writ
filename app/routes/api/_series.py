@@ -24,7 +24,7 @@ from app.utils.datetime import _fmt_dt
 from app.utils.log import log_admin_action
 from app.utils.storage import get_storage
 
-from app.routes.api._core import _validate_upload
+from app.routes.api._core import _validate_upload, MAX_AUDIO_SIZE
 
 logger = logging.getLogger("writ.api.series")
 
@@ -187,7 +187,7 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
     storage = get_storage()
     cover_url = ""
     if cover_image and cover_image.filename:
-        ext, is_image, is_video = _validate_upload(cover_image, allow_video=False, max_size=5 * 1024 * 1024, label="커버 이미지")
+        ext, is_image, is_video, _ = _validate_upload(cover_image, allow_video=False, max_size=5 * 1024 * 1024, label="커버 이미지")
         ct = cover_image.content_type or ""
         if "gif" in ct:
             ext = "gif"
@@ -292,7 +292,7 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
     storage = get_storage()
     cover_url = ""
     if cover_image and cover_image.filename:
-        ext, is_image, is_video = _validate_upload(cover_image, allow_video=False, max_size=5 * 1024 * 1024, label="커버 이미지")
+        ext, is_image, is_video, _ = _validate_upload(cover_image, allow_video=False, max_size=5 * 1024 * 1024, label="커버 이미지")
         ct = cover_image.content_type or ""
         if "gif" in ct:
             ext = "gif"
@@ -347,19 +347,27 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
 def api_create_episode(request: Request, novel_id: int, title: str = Form(...), content: str = Form(...),
                        summary: str = Form(""), comment: str = Form(""),
                        announce: bool = Form(False), announce_comment: str = Form(""),
-                       is_published: bool = Form(True)):
+                       is_published: bool = Form(True), audio: UploadFile = File(None)):
     user = require_active_auth(request)
     if getattr(user, 'is_deceased', False):
         raise HTTPException(status_code=403, detail="고인 계정은 에피소드를 생성할 수 없습니다.")
     if not title.strip() or not content.strip():
         raise HTTPException(status_code=400, detail="Title and content are required")
+    audio_url = ""
+    if audio and audio.filename:
+        _validate_upload(audio, allow_video=False, allow_audio=True, max_size=MAX_AUDIO_SIZE, label="음악 파일")
+        aext = os.path.splitext(audio.filename)[1].lower()
+        akey = f"episodes/audio/{uuid4().hex[:16]}{aext}"
+        storage = get_storage()
+        storage.save(akey, audio.file.read())
+        audio_url = storage.url(akey)
     with get_session() as s:
         novel = s.query(Novel).filter_by(id=novel_id, author_id=user.id).first()
         if not novel:
             raise HTTPException(status_code=404, detail="Novel not found")
         max_ep = s.query(Episode).filter_by(novel_id=novel.id).order_by(desc(Episode.episode_number)).first()
         next_num = (max_ep.episode_number + 1) if max_ep else 1
-        episode = Episode(novel_id=novel.id, episode_number=next_num, title=title, content=content, summary=summary, comment=comment, is_published=is_published)
+        episode = Episode(novel_id=novel.id, episode_number=next_num, title=title, content=content, summary=summary, comment=comment, audio_url=audio_url, is_published=is_published)
         s.add(episode)
         s.flush()
         if announce:
@@ -485,8 +493,17 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
                      title: str = Form(...), content: str = Form(...),
                      summary: str = Form(""), comment: str = Form(""),
                      is_published: bool = Form(True), announce: bool = Form(False),
-                     visibility: str = Form("public"), announce_comment: str = Form("")):
+                     visibility: str = Form("public"), announce_comment: str = Form(""),
+                     audio: UploadFile = File(None), remove_audio: bool = Form(False)):
     user = require_active_auth(request)
+    audio_url = ""
+    if audio and audio.filename:
+        _validate_upload(audio, allow_video=False, allow_audio=True, max_size=MAX_AUDIO_SIZE, label="음악 파일")
+        aext = os.path.splitext(audio.filename)[1].lower()
+        akey = f"episodes/audio/{uuid4().hex[:16]}{aext}"
+        storage = get_storage()
+        storage.save(akey, audio.file.read())
+        audio_url = storage.url(akey)
     with get_session() as s:
         episode = s.query(Episode).filter_by(id=episode_id, novel_id=novel_id).first()
         if not episode or episode.novel.author_id != user.id:
@@ -496,6 +513,18 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
         episode.summary = summary
         episode.comment = comment
         episode.is_published = is_published
+        if remove_audio:
+            old = episode.audio_url
+            episode.audio_url = ""
+            s.flush()
+            if old and old.startswith("/"):
+                get_storage().delete(old)
+        if audio_url:
+            old = episode.audio_url
+            episode.audio_url = audio_url
+            s.flush()
+            if old and old.startswith("/"):
+                get_storage().delete(old)
 
         if announce:
             parts = []
@@ -580,6 +609,7 @@ def _episode_json(e, summary_only=False):
         "title": e.title,
         "summary": e.summary or "",
         "comment": e.comment or "",
+        "audio_url": e.audio_url or "",
         "views": e.views or 0,
         "is_published": e.is_published,
         "created_at": _fmt_dt(e.created_at),

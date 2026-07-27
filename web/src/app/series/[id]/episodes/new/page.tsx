@@ -37,6 +37,7 @@ function formatDate(iso: string) {
 export default function NewEpisodePage() {
   const params = useParams();
   const router = useRouter();
+  const audioRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [comment, setComment] = useState("");
@@ -45,6 +46,8 @@ export default function NewEpisodePage() {
   const [announce, setAnnounce] = useState(false);
   const [announceComment, setAnnounceComment] = useState("");
   const [novelTitle, setNovelTitle] = useState("");
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioPreview, setAudioPreview] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [draftId, setDraftId] = useState(0);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
@@ -135,6 +138,14 @@ export default function NewEpisodePage() {
     loadDrafts();
   };
 
+  const handleAudioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (audioPreview) URL.revokeObjectURL(audioPreview);
+    setAudioFile(f);
+    setAudioPreview(URL.createObjectURL(f));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanContent = (content || "").replace(/<[^>]*>/g, "").trim();
@@ -147,6 +158,7 @@ export default function NewEpisodePage() {
       form.append("summary", summary);
       form.append("comment", comment);
       form.append("is_published", isPublished ? "true" : "false");
+      if (audioFile) form.append("audio", audioFile);
       if (announce) {
         form.append("announce", "true");
         form.append("announce_comment", announceComment);
@@ -181,6 +193,19 @@ export default function NewEpisodePage() {
         <div className="form-group">
           <label>작가 코멘트</label>
           <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="이 에피소드에 대한 작가의 코멘트 (선택사항)" />
+        </div>
+        <div className="form-group">
+          <label>배경 음악</label>
+          <div className="profile-edit-file-row">
+            <label className="btn btn-outline profile-edit-file-label" style={{ cursor: "pointer" }}>
+              파일 선택
+              <input type="file" ref={audioRef} accept="audio/*" onChange={handleAudioChange} style={{ display: "none" }} />
+            </label>
+            {audioFile && <span className="profile-edit-file-name">{audioFile.name}</span>}
+            {audioPreview && <button type="button" onClick={() => { setAudioFile(null); setAudioPreview(""); if (audioRef.current) audioRef.current.value = ""; }} style={{ color: "var(--danger)", background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>제거</button>}
+          </div>
+          {audioPreview && <audio controls src={audioPreview} style={{ width: "100%", marginTop: 8 }} />}
+          <p className="form-help">에피소드 본문 위에 음악 플레이어가 표시됩니다 (MP3, M4A, WAV, FLAC 등)</p>
         </div>
         <div className="form-group">
           <label className="flex-center" style={{ gap: 6, cursor: "pointer", justifyContent: "flex-start" }}>
