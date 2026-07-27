@@ -34,7 +34,6 @@ export default function EpisodeDetailPage() {
   const bodyRef = useRef<HTMLDivElement>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [comicPage, setComicPage] = useState(0);
-  const [comicViewMode, setComicViewMode] = useState<"paged" | "scroll">("paged");
 
   function renderEpisodeContent(html: string): string {
     let content = html;
@@ -88,43 +87,35 @@ export default function EpisodeDetailPage() {
 
   const totalPages = pages.length;
   useEffect(() => {
-    if (!episode || episode.view_mode !== "comic") {
-      if (totalPages <= 1) return;
-      const onKey = (e: KeyboardEvent) => {
+    if (totalPages <= 1 && episode?.view_mode !== "comic") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (episode?.view_mode === "comic") {
+        const cm = episode.comic_view_mode || "paged";
+        if (cm !== "paged") return;
+        const imgs = episode.image_urls || [];
+        if (imgs.length <= 1) return;
+        if (e.key === "ArrowLeft") setComicPage((p) => Math.max(0, p - 1));
+        else if (e.key === "ArrowRight") setComicPage((p) => Math.min(imgs.length - 1, p + 1));
+      } else {
         if (e.key === "ArrowLeft") setCurrentPage((p) => Math.max(0, p - 1));
         else if (e.key === "ArrowRight") setCurrentPage((p) => Math.min(totalPages - 1, p + 1));
-      };
-      window.addEventListener("keydown", onKey);
-      return () => window.removeEventListener("keydown", onKey);
-    }
-  }, [totalPages, episode?.view_mode]);
-
-  const comicRef = useRef(comicViewMode);
-  comicRef.current = comicViewMode;
-  useEffect(() => {
-    if (!episode || episode.view_mode !== "comic") return;
-    const images = episode.image_urls || [];
-    if (images.length <= 1) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (comicRef.current !== "paged") return;
-      if (e.key === "ArrowLeft") setComicPage((p) => Math.max(0, p - 1));
-      else if (e.key === "ArrowRight") setComicPage((p) => Math.min(images.length - 1, p + 1));
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [episode?.id, episode?.view_mode, comicViewMode]);
+  }, [totalPages, episode?.view_mode, episode?.comic_view_mode, episode?.id]);
 
   const touchStartX = useRef(0);
   useEffect(() => {
-    if (!episode) return;
-    if (episode.view_mode === "comic") {
+    if (episode?.view_mode === "comic") {
+      const cm = episode.comic_view_mode || "paged";
+      if (cm !== "paged") return;
       const images = episode.image_urls || [];
       if (images.length <= 1) return;
       const el = document.querySelector(".episode-comic-viewer-paged");
       if (!el) return;
       const onStart = (e: Event) => { touchStartX.current = (e as any).touches[0].clientX; };
       const onEnd = (e: Event) => {
-        if (comicRef.current !== "paged") return;
         const dx = (e as any).changedTouches[0].clientX - touchStartX.current;
         if (Math.abs(dx) > 50) {
           if (dx > 0) setComicPage((p) => Math.max(0, p - 1));
@@ -155,7 +146,7 @@ export default function EpisodeDetailPage() {
       el.removeEventListener("touchstart", onStart);
       el.removeEventListener("touchend", onEnd);
     };
-  }, [totalPages, episode?.view_mode, episode?.id]);
+  }, [totalPages, episode?.view_mode, episode?.comic_view_mode, episode?.id]);
 
   const handleDelete = async () => {
     if (!confirm("정말 삭제하시겠습니까?")) return;
@@ -203,14 +194,10 @@ export default function EpisodeDetailPage() {
             {episode.view_mode === "comic" ? (
               (() => {
                 const images = episode.image_urls || [];
+                const comicViewMode = episode.comic_view_mode || "paged";
                 if (images.length === 0) return <div className="empty-state">이미지가 없습니다</div>;
                 return (
                   <>
-                    <div className="episode-comic-toolbar">
-                      <button type="button" className={`episode-comic-mode-btn${comicViewMode === "paged" ? " active" : ""}`} onClick={() => setComicViewMode("paged")}>좌우 넘김</button>
-                      <button type="button" className={`episode-comic-mode-btn${comicViewMode === "scroll" ? " active" : ""}`} onClick={() => setComicViewMode("scroll")}>스크롤</button>
-                      <span className="episode-comic-info">{comicViewMode === "paged" ? `${comicPage + 1} / ${images.length}` : `${images.length}장`}</span>
-                    </div>
                     {comicViewMode === "paged" ? (
                       <div className="episode-comic-viewer-paged" onClick={(e) => {
                         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();

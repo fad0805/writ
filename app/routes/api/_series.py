@@ -348,7 +348,8 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
                        summary: str = Form(""), comment: str = Form(""),
                        announce: bool = Form(False), announce_comment: str = Form(""),
                        is_published: bool = Form(True), page_mode: bool = Form(False),
-                       view_mode: str = Form("text"), image_urls: str = Form("[]"),
+                       view_mode: str = Form("text"), comic_view_mode: str = Form("paged"),
+                       image_urls: str = Form("[]"),
                        audio: UploadFile = File(None)):
     user = require_active_auth(request)
     if getattr(user, 'is_deceased', False):
@@ -378,7 +379,7 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
             raise HTTPException(status_code=404, detail="Novel not found")
         max_ep = s.query(Episode).filter_by(novel_id=novel.id).order_by(desc(Episode.episode_number)).first()
         next_num = (max_ep.episode_number + 1) if max_ep else 1
-        episode = Episode(novel_id=novel.id, episode_number=next_num, title=title, content=content, summary=summary, comment=comment, audio_url=audio_url, is_published=is_published, page_mode=page_mode, view_mode=view_mode, image_urls=image_list)
+        episode = Episode(novel_id=novel.id, episode_number=next_num, title=title, content=content, summary=summary, comment=comment, audio_url=audio_url, is_published=is_published, page_mode=page_mode, view_mode=view_mode, comic_view_mode=comic_view_mode, image_urls=image_list)
         s.add(episode)
         s.flush()
         if announce:
@@ -506,6 +507,7 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
                      is_published: bool = Form(True), announce: bool = Form(False),
                      visibility: str = Form("public"), announce_comment: str = Form(""),
                      page_mode: bool = Form(False), view_mode: str = Form("text"),
+                     comic_view_mode: str = Form("paged"),
                      image_urls: str = Form("[]"),
                      audio: UploadFile = File(None), remove_audio: bool = Form(False)):
     user = require_active_auth(request)
@@ -528,6 +530,7 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
         episode.is_published = is_published
         episode.page_mode = page_mode
         episode.view_mode = view_mode
+        episode.comic_view_mode = comic_view_mode
         try:
             episode.image_urls = json.loads(image_urls) if image_urls else []
         except (json.JSONDecodeError, TypeError):
@@ -630,6 +633,7 @@ def _episode_json(e, summary_only=False):
         "comment": e.comment or "",
         "audio_url": e.audio_url or "",
         "view_mode": getattr(e, "view_mode", "text"),
+        "comic_view_mode": getattr(e, "comic_view_mode", "paged"),
         "image_urls": getattr(e, "image_urls", []) or [],
         "views": e.views or 0,
         "is_published": e.is_published,

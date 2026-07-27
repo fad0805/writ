@@ -58,6 +58,7 @@ export default function NewEpisodePage() {
   const [dirty, setDirty] = useState(false);
   const [pageMode, setPageMode] = useState(false);
   const [viewMode, setViewMode] = useState<"text" | "comic">("text");
+  const [comicViewMode, setComicViewMode] = useState<"paged" | "scroll">("paged");
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
@@ -202,6 +203,7 @@ export default function NewEpisodePage() {
       form.append("is_published", isPublished ? "true" : "false");
       form.append("page_mode", String(pageMode));
       form.append("view_mode", viewMode);
+      form.append("comic_view_mode", comicViewMode);
       form.append("image_urls", JSON.stringify(uploadedUrls));
       if (audioFile) form.append("audio", audioFile);
       if (announce) {
@@ -258,6 +260,11 @@ export default function NewEpisodePage() {
                 <input type="file" accept="image/*" multiple onChange={handleImageAdd} style={{ display: "none" }} />
               </label>
               {uploadingImages && <p style={{ color: "var(--text-secondary)", fontSize: 13 }}>이미지 업로드 중...</p>}
+              <div className="episode-comic-mode-select" style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center" }}>
+                <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>보기 방식:</span>
+                <button type="button" className={`episode-view-mode-btn ${comicViewMode === "paged" ? "active" : ""}`} onClick={() => setComicViewMode("paged")}>좌우 넘김</button>
+                <button type="button" className={`episode-view-mode-btn ${comicViewMode === "scroll" ? "active" : ""}`} onClick={() => setComicViewMode("scroll")}>스크롤</button>
+              </div>
             </div>
           )}
         </div>
