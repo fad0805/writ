@@ -388,7 +388,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
             if len(at_parts) == 2 and at_parts[0] and at_parts[1]:
                 handle, domain = at_parts[0].strip().lower(), at_parts[1].strip().lower()
         if domain:
-            if not _federation_allowed(domain):
+            if not _federation_allowed(domain, s):
                 blocked_domain = domain
 
         # If query is handle@domain and no remote match yet, try to resolve
