@@ -47,7 +47,7 @@ export default function EditNoticePage() {
       form.append("title", title);
       form.append("content", content);
       const res = await fetch(`/api/series/${novelId}/notices/${noticeId}/edit`, { method: "POST", credentials: "include", body: form });
-      if (res.ok) { setDirty(false); router.push(`/series/${novelId}/notices`); }
+      if (res.ok) { setDirty(false); setTimeout(() => router.push(`/series/${novelId}/notices`), 0); }
       else alert("수정 실패");
     } catch { alert("수정 실패"); }
     setSubmitting(false);

@@ -169,7 +169,7 @@ export default function NewEpisodePage() {
       if (res.ok) {
         if (draftId) await fetch(`/api/series/${novelId}/drafts/${draftId}/delete`, { method: "POST", credentials: "include" });
         setDirty(false);
-        router.push(`/series/${params.id}/episodes/${data.episode_id}`);
+        setTimeout(() => router.push(`/series/${params.id}/episodes/${data.episode_id}`), 0);
       } else alert("게시 실패");
     } catch { alert("게시 실패"); }
     setSubmitting(false);
