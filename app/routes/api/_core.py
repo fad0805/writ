@@ -320,36 +320,23 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
     query = q.strip().lstrip("@").lstrip("#")
     if not query:
         return {"posts": [], "novels": [], "users": []}
-    # Check if the query contains a blocked/allowed domain (handles only, not URLs)
-    blocked_domain = None
-    if not query.startswith("http") and "@" in query and "." in query:
-        parts = query.split("@")
-        if len(parts) == 2 and parts[1]:
-            domain = parts[1].strip().lower()
-            if domain:
-                with get_session() as s_check:
-                    mode = ServerSetting.get(s_check).federation_mode or "blacklist"
-                    if mode == "whitelist":
-                        allowed = s_check.query(AllowedServer).filter_by(domain=domain).first()
-                        if not allowed:
-                            blocked_domain = domain
-                    else:
-                        blocked = s_check.query(FederationBlock).filter_by(domain=domain).first()
-                        if blocked:
-                            blocked_domain = domain
     with get_session() as s:
         pattern = f"%{query}%"
-        is_hashtag_search = q.strip().startswith("#")
 
         following_ids = []
         if user:
             following_ids = [f.following_id for f in s.query(Follow).filter_by(follower_id=user.id, accepted=True).all()]
-
         visible_author_ids = set(following_ids)
         visible_author_ids.add(user.id)
 
+        is_hashtag_search = q.strip().startswith("#")
+
+        tag = None
+        q_posts = None
+        novels = []
         if is_hashtag_search:
             tag = s.query(Tag).filter_by(name=query.lower()).first()
+
             if tag:
                 # 1. 포스트 쿼리
                 q_posts = s.query(Post).options(selectinload(Post.author)).filter(
@@ -359,30 +346,6 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                         Post.author.has(User.is_suspended == False),
                     )
                 )
-                if user:
-                    q_posts = q_posts.filter(
-                        or_(
-                            Post.author_id.in_(visible_author_ids),
-                            Post.visibility.in_(["public", "home"]),
-                        )
-                    )
-                else:
-                    q_posts = q_posts.filter(Post.visibility in ["public", "home"])
-
-                if author:
-                    author_user = s.query(User).filter_by(username=author).first()
-                    if author_user:
-                        q_posts = q_posts.filter(Post.author_id == author_user.id)
-
-                posts = q_posts.order_by(desc(Post.created_at)).limit(100).all()
-                if user:
-                    posts = _timeline_filter(posts, s, user, "federated", following_ids)[:20]
-                else:
-                    posts = posts[:20]
-            else:
-                # 태그가 디비에 없으면 둘 다 깔끔하게 빈 리스트 처리
-                posts = []
-            if tag:
                 # 2. 소설(Novel) 쿼리 💡 (오류 방지를 위해 tag가 확실히 있을 때만 돌도록 안으로 이동)
                 novels = s.query(Novel).options(selectinload(Novel.author)).filter(
                     and_(
@@ -391,9 +354,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                         Novel.visibility != "private",
                     )
                 ).order_by(desc(Novel.updated_at)).limit(20).all()
-            else:
-                # 태그가 디비에 없으면 둘 다 깔끔하게 빈 리스트 처리
-                novels = []
+
         else:
             q_posts = s.query(Post).options(selectinload(Post.author)).filter(
                 and_(
@@ -403,6 +364,14 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 )
             )
 
+            novels = _apply_latest_activity_order(s.query(Novel).options(selectinload(Novel.author)).filter(
+                or_(Novel.title.ilike(pattern), Novel.description.ilike(pattern)),
+                Novel.is_published == True,
+                Novel.visibility != "private",
+            ), s).limit(20).all()
+
+        posts = []
+        if q_posts:
             if user:
                 q_posts = q_posts.filter(
                     or_(
@@ -411,75 +380,103 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                     )
                 )
             else:
-                q_posts = q_posts.filter(Post.visibility in ["public", "home"])
+                q_posts = q_posts.filter(Post.visibility.in_(["public", "home"]))
+
+            if author:
+                author_user = s.query(User).filter_by(username=author).first()
+                if author_user:
+                    q_posts = q_posts.filter(Post.author_id == author_user.id)
 
             posts = q_posts.order_by(desc(Post.created_at)).limit(100).all()
 
-            if user:
-                posts = _timeline_filter(posts, s, user, "federated", following_ids)[:20]
-            else:
-                posts = posts[:20]
+        if user:
+            posts = _timeline_filter(posts, s, user, "federated", following_ids)[:20]
+        else:
+            posts = posts[:20]
 
-            novels = _apply_latest_activity_order(s.query(Novel).options(selectinload(Novel.author)).filter(
-                or_(Novel.title.ilike(pattern), Novel.description.ilike(pattern)),
-                Novel.is_published == True,
-                Novel.visibility != "private",
-            ), s).limit(20).all()
         local_users = s.query(User).filter(
             User.is_remote == False,
             User.is_suspended == False,
             or_(User.username.ilike(pattern), User.display_name.ilike(pattern)),
         ).limit(20).all()
+
         remote_users = s.query(User).filter(
             User.is_remote == True,
             User.is_suspended == False,
             or_(User.username.ilike(pattern), User.display_name.ilike(pattern)),
         ).limit(10).all()
+
         all_users = list(local_users) + list(remote_users)
-        # If query is handle@domain and no remote match yet, try to resolve
-        if "@" in query and not blocked_domain:
+
+        # Check if the query contains a blocked/allowed domain (handles only, not URLs)
+        blocked_domain = None
+        handle, domain = None, None
+        if not query.startswith("http") and "@" in query and "." in query:
             at_parts = query.split("@", 1)
             if len(at_parts) == 2 and at_parts[0] and at_parts[1]:
-                r_handle, r_domain = at_parts[0].strip().lower(), at_parts[1].strip().lower()
-                already_found = any(
-                    u.is_remote and u.username.lower().startswith(f"{r_handle}@") and u.username.lower().endswith(f"@{r_domain}")
-                    for u in all_users
-                )
-                if not already_found:
+                handle, domain = at_parts[0].strip().lower(), at_parts[1].strip().lower()
+        if domain:
+            mode = ServerSetting.get(s).federation_mode or "blacklist"
+            if mode == "whitelist":
+                allowed = s.query(AllowedServer).filter_by(domain=domain).first()
+                if not allowed:
+                    blocked_domain = domain
+            else:
+                blocked = s.query(FederationBlock).filter_by(domain=domain).first()
+                if blocked:
+                    blocked_domain = domain
+
+        # If query is handle@domain and no remote match yet, try to resolve
+        if handle and domain and not blocked_domain:
+            already_found = any(
+                u.is_remote and u.username.lower().startswith(f"{handle}@") and u.username.lower().endswith(f"@{domain}")
+                for u in all_users
+            )
+
+            urls = [
+                f"https://{domain}/users/{handle}",
+                f"https://{domain}/@{handle}",
+                f"https://{domain}/u/{handle}",
+                f"https://{domain}/profile/{handle}",
+            ]
+            if not already_found:
+                resolved = None
+                try:
+                    for url in urls:
+                        try:
+                            resolved = _resolve_actor(url)
+                            if resolved:
+                                break
+                        except Exception:
+                            continue
+                except Exception as e:
+                    logger.error(f'Cannot resolved actor: {e}')
+
+                if not resolved:
+                    wf = None
                     try:
-                        urls = [
-                            f"https://{r_domain}/users/{r_handle}",
-                            f"https://{r_domain}/@{r_handle}",
-                            f"https://{r_domain}/u/{r_handle}",
-                            f"https://{r_domain}/profile/{r_handle}",
-                        ]
-                        resolved = None
-                        for url in urls:
-                            try:
-                                resolved = _resolve_actor(url)
-                                if resolved:
-                                    break
-                            except Exception:
-                                continue
-                        if not resolved:
-                            wf = httpx.get(
-                                f"https://{r_domain}/.well-known/webfinger?resource=acct:{r_handle}@{r_domain}",
-                                timeout=5,
-                            )
-                            if wf.status_code == 200:
-                                wf_data = wf.json()
-                                for link in wf_data.get("links", []):
-                                    if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
-                                        href = link.get("href", "")
-                                        if href:
-                                            resolved = _resolve_actor(href)
-                                            break
-                        if resolved:
-                            refreshed = s.query(User).get(resolved.id)
-                            if refreshed:
-                                all_users.append(refreshed)
-                    except Exception:
-                        pass
+                        wf = httpx.get(
+                            f"https://{domain}/.well-known/webfinger?resource=acct:{handle}@{domain}",
+                            timeout=5,
+                        )
+                    except Exception as e:
+                        logger.error(f'Cannot fetch httpx actor: {e}')
+                    if wf and wf.status_code == 200:
+                        wf_data = wf.json()
+                        for link in wf_data.get("links", []):
+                            if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
+                                href = link.get("href", "")
+                                if href:
+                                    try:
+                                        resolved = _resolve_actor(href)
+                                        break
+                                    except Exception as e:
+                                        logger.error(f'Cannot resolved actor: {e}')
+                if resolved:
+                    refreshed = s.query(User).get(resolved.id)
+                    if refreshed:
+                        all_users.append(refreshed)
+
         result = {
             "posts": [_post_json(p, s, user) for p in posts],
             "novels": [_novel_json(n, s) for n in novels],
