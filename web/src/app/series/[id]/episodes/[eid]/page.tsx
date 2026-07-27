@@ -1,6 +1,6 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { api, NovelData, EpisodeData } from "@/lib/api";
 import Icon from "@/components/Icon";
 import ShareButton from "@/components/ShareButton";
@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { installCodeCopyButtons } from "@/lib/codeCopy";
 import { sanitizeEpisode, sanitizeBasic } from "@/lib/sanitize";
 import AudioPlayer from "@/components/AudioPlayer";
+import { splitIntoPages } from "@/lib/pages";
 
 
 export default function EpisodeDetailPage() {
@@ -31,6 +32,7 @@ export default function EpisodeDetailPage() {
   const [reportRules, setReportRules] = useState<any[]>([]);
   const [selectedRuleIds, setSelectedRuleIds] = useState<number[]>([]);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const [currentPage, setCurrentPage] = useState(0);
 
   function renderEpisodeContent(html: string): string {
     let content = html;
@@ -71,6 +73,15 @@ export default function EpisodeDetailPage() {
   useEffect(() => {
     if (bodyRef.current) installCodeCopyButtons(bodyRef.current);
   }, [episode]);
+
+  const pages = useMemo(() => {
+    if (!episode?.content) return [""];
+    return splitIntoPages(episode.content);
+  }, [episode?.content]);
+
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [episode?.id]);
 
   const handleDelete = async () => {
     if (!confirm("정말 삭제하시겠습니까?")) return;
@@ -115,7 +126,17 @@ export default function EpisodeDetailPage() {
           <>
             {episode.summary && <blockquote className="episode-summary">{episode.summary}</blockquote>}
             {episode.audio_url && <div className="episode-audio"><AudioPlayer src={episode.audio_url} /></div>}
-            <div ref={bodyRef} className="episode-body" dangerouslySetInnerHTML={{ __html: sanitizeEpisode(renderEpisodeContent(episode.content)) }} />
+            <div ref={bodyRef} className="episode-body" dangerouslySetInnerHTML={{ __html: sanitizeEpisode(renderEpisodeContent(pages[currentPage] || "")) }} />
+            {pages.length > 1 && (
+              <div className="episode-view-page-nav">
+                <button type="button" className="episode-view-page-arrow" disabled={currentPage === 0} onClick={() => setCurrentPage(currentPage - 1)}>‹</button>
+                <div className="episode-view-page-slider-wrap">
+                  <input type="range" min={0} max={pages.length - 1} value={currentPage} onChange={(e) => setCurrentPage(Number(e.target.value))} className="episode-view-page-slider" />
+                </div>
+                <button type="button" className="episode-view-page-arrow" disabled={currentPage === pages.length - 1} onClick={() => setCurrentPage(currentPage + 1)}>›</button>
+                <span className="episode-view-page-info">{currentPage + 1} / {pages.length}</span>
+              </div>
+            )}
             {episode.comment && <div className="episode-comment" dangerouslySetInnerHTML={{ __html: sanitizeBasic(episode.comment) }} />}
           </>
         )}
