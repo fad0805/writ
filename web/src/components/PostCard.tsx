@@ -68,6 +68,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, onRewrite,
   const [showEdit, setShowEdit] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [showRewrite, setShowRewrite] = useState(false);
+  const [rewriteContent, setRewriteContent] = useState<string | null>(null);
   const [showPollResults, setShowPollResults] = useState(false);
   const [pollRefreshing, setPollRefreshing] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -971,7 +972,7 @@ const localReactionEmojiMap = useMemo(() => {
                       if (onDelete) onDelete();
                       else if (onUpdate) onUpdate();
                       if (onRewrite) onRewrite(stripped, post.visibility, post.reply_context);
-                      else setShowRewrite(true);
+                      else { setRewriteContent(stripped); setShowRewrite(true); }
                     }} className="post-actions-dropdown-item">
                       <Icon name="trash" /> 지우고 다시 쓰기
                     </button>
@@ -1082,19 +1083,21 @@ const localReactionEmojiMap = useMemo(() => {
           is_mine: false,
           reply_context: null,
           media_attachments: [],
-        } as any} onClose={() => setShowRewrite(false)} onDone={(newPost) => {
+        } as any} initialContent={rewriteContent ?? undefined} onClose={() => { setShowRewrite(false); setRewriteContent(null); }} onDone={(newPost) => {
           setShowRewrite(false);
+          setRewriteContent(null);
           if (onUpdate) onUpdate();
         }} />
       )}
       {!readonly && showRewrite && !post.reply_context && (
-        <div className="reply-modal-backdrop active" onClick={() => setShowRewrite(false)}>
+        <div className="reply-modal-backdrop active" onClick={() => { setShowRewrite(false); setRewriteContent(null); }}>
           <div className="reply-modal modal-form" onClick={(e) => e.stopPropagation()}>
-            <button className="reply-modal-close" onClick={() => setShowRewrite(false)}>×</button>
+            <button className="reply-modal-close" onClick={() => { setShowRewrite(false); setRewriteContent(null); }}>×</button>
             <h3>지우고 다시 쓰기</h3>
             <PostForm onDone={(newPost) => {
               setShowRewrite(false);
-            }} initialContent={(post.content || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")} initialVisibility={post.visibility} />
+              setRewriteContent(null);
+            }} initialContent={rewriteContent ?? undefined} initialVisibility={post.visibility} />
           </div>
         </div>
       )}
