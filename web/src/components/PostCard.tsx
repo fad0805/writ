@@ -611,7 +611,6 @@ const localReactionEmojiMap = useMemo(() => {
             <Link href={`/@${post.author.username}`} className="post-username" onClick={(e) => e.stopPropagation()}>
               @{post.author.display_handle || post.author.username}
             </Link>
-            {post.author.is_locked && <Icon name="lock_filled" style={{ fontSize: "0.65em", verticalAlign: "middle", color: "var(--text-muted)", marginLeft: 2 }} />}
           </div>
           <span className="post-time">
             <span className={`vis-badge vis-${post.visibility}`}>
