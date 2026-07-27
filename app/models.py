@@ -349,6 +349,7 @@ class Episode(Base):
     audio_url = Column(String(512), default="")
     views = Column(Integer, default=0)
     is_published = Column(Boolean, default=True)
+    page_mode = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
 

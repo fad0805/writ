@@ -56,6 +56,7 @@ export default function NewEpisodePage() {
   const [showDraftList, setShowDraftList] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [pageMode, setPageMode] = useState(false);
   const novelId = Number(Array.isArray(params.id) ? params.id[0] : params.id);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedRef = useRef(false);
@@ -159,6 +160,7 @@ export default function NewEpisodePage() {
       form.append("summary", summary);
       form.append("comment", comment);
       form.append("is_published", isPublished ? "true" : "false");
+      form.append("page_mode", String(pageMode));
       if (audioFile) form.append("audio", audioFile);
       if (announce) {
         form.append("announce", "true");
@@ -190,7 +192,7 @@ export default function NewEpisodePage() {
         </div>
         <div className="form-group">
           <label>내용 *</label>
-          <EpisodeEditor value={content} onChange={(v) => setContent(v)} />
+          <EpisodeEditor value={content} onChange={(v) => setContent(v)} pageMode={pageMode} onPageModeChange={setPageMode} />
         </div>
         <div className="form-group">
           <label>작가 코멘트</label>

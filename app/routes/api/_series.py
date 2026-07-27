@@ -347,7 +347,8 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
 def api_create_episode(request: Request, novel_id: int, title: str = Form(...), content: str = Form(...),
                        summary: str = Form(""), comment: str = Form(""),
                        announce: bool = Form(False), announce_comment: str = Form(""),
-                       is_published: bool = Form(True), audio: UploadFile = File(None)):
+                       is_published: bool = Form(True), page_mode: bool = Form(False),
+                       audio: UploadFile = File(None)):
     user = require_active_auth(request)
     if getattr(user, 'is_deceased', False):
         raise HTTPException(status_code=403, detail="고인 계정은 에피소드를 생성할 수 없습니다.")
@@ -367,7 +368,7 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
             raise HTTPException(status_code=404, detail="Novel not found")
         max_ep = s.query(Episode).filter_by(novel_id=novel.id).order_by(desc(Episode.episode_number)).first()
         next_num = (max_ep.episode_number + 1) if max_ep else 1
-        episode = Episode(novel_id=novel.id, episode_number=next_num, title=title, content=content, summary=summary, comment=comment, audio_url=audio_url, is_published=is_published)
+        episode = Episode(novel_id=novel.id, episode_number=next_num, title=title, content=content, summary=summary, comment=comment, audio_url=audio_url, is_published=is_published, page_mode=page_mode)
         s.add(episode)
         s.flush()
         if announce:
@@ -494,6 +495,7 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
                      summary: str = Form(""), comment: str = Form(""),
                      is_published: bool = Form(True), announce: bool = Form(False),
                      visibility: str = Form("public"), announce_comment: str = Form(""),
+                     page_mode: bool = Form(False),
                      audio: UploadFile = File(None), remove_audio: bool = Form(False)):
     user = require_active_auth(request)
     audio_url = ""
@@ -513,6 +515,7 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
         episode.summary = summary
         episode.comment = comment
         episode.is_published = is_published
+        episode.page_mode = page_mode
         if remove_audio:
             old = episode.audio_url
             episode.audio_url = ""
@@ -612,6 +615,7 @@ def _episode_json(e, summary_only=False):
         "audio_url": e.audio_url or "",
         "views": e.views or 0,
         "is_published": e.is_published,
+        "page_mode": getattr(e, "page_mode", False),
         "created_at": _fmt_dt(e.created_at),
         "updated_at": _fmt_dt(e.updated_at),
     }

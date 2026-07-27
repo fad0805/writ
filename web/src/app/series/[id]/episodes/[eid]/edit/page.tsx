@@ -55,6 +55,7 @@ export default function EditEpisodePage() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioPreview, setAudioPreview] = useState("");
   const [dirty, setDirty] = useState(false);
+  const [pageMode, setPageMode] = useState(false);
   const [draftId, setDraftId] = useState(0);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<DraftData[]>([]);
@@ -82,6 +83,7 @@ export default function EditEpisodePage() {
       setIsPublished(ep.is_published);
       setNovelTitle(d.novel.title);
       setAudioUrl(ep.audio_url || "");
+      setPageMode(ep.page_mode || false);
       lastSavedContentRef.current = JSON.stringify({ title: ep.title, summary: ep.summary || "", content: ep.content || "", comment: ep.comment || "", isPublished: ep.is_published, announce: false, announceComment: "", visibility: "public" });
       setLoading(false);
     }).catch(() => router.push("/series"));
@@ -110,6 +112,7 @@ export default function EditEpisodePage() {
       form.append("content", content);
       form.append("comment", comment);
       form.append("is_published", String(isPublished));
+      form.append("page_mode", String(pageMode));
       form.append("announce", String(announce));
       form.append("announce_comment", announceComment);
       form.append("visibility", visibility);
@@ -208,7 +211,7 @@ export default function EditEpisodePage() {
         </div>
         <div className="form-group">
           <label>내용</label>
-          <EpisodeEditor value={content} onChange={(v) => setContent(v)} />
+          <EpisodeEditor value={content} onChange={(v) => setContent(v)} pageMode={pageMode} onPageModeChange={setPageMode} />
         </div>
         <div className="form-group">
           <label>작가 코멘트</label>

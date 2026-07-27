@@ -197,6 +197,7 @@ export interface EpisodeData {
   audio_url: string;
   views: number;
   is_published: boolean;
+  page_mode: boolean;
   created_at: string | null;
   updated_at: string | null;
 }

@@ -2,30 +2,22 @@
 
 import { useEditorActions, useEditorInit } from "@/hooks/useEditorAction";
 import { EditorContent } from "@tiptap/react";
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect } from "react";
 import ColorPicker from "./ColorPicker";
-import { PageBreakExtension } from "@/const/pageBreakExtension";
 
-export default function EpisodeEditor({ value, onChange }: { value: string; onChange: (html: string) => void }) {
+const LINES_PER_PAGE = 20;
+
+export default function EpisodeEditor({ value, onChange, pageMode, onPageModeChange }: { value: string; onChange: (html: string) => void; pageMode?: boolean; onPageModeChange?: (on: boolean) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const colorPickerRef = useRef<HTMLDivElement>(null);
-  const [pageMode, setPageMode] = useState(false);
 
   const editor = useEditorInit({ value: value || "", onChange });
   const editorFn = useEditorActions(editor);
 
   const togglePageMode = () => {
     const next = !pageMode;
-    setPageMode(next);
-    if (editor) {
-      const storage = editor.extensionStorage as Record<string, any>;
-      if (storage.pageBreaks) storage.pageBreaks.enabled = next;
-      editor.chain().command(({ tr }) => {
-        tr.setMeta("pageBreaksToggle", true);
-        return true;
-      }).run();
-    }
+    onPageModeChange?.(next);
   };
 
   return (
@@ -75,7 +67,9 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
         </div>
       </div>
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={editorFn?.handleImgUpload} />
-      <EditorContent editor={editor} className="episode-editor-content" />
+      <div className={`episode-editor-content${pageMode ? " page-mode" : ""}`} data-page-mode={pageMode || undefined}>
+        <EditorContent editor={editor} />
+      </div>
     </div>
   );
 }
