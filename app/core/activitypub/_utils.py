@@ -1,8 +1,5 @@
-import io
 import os
 import re
-import time
-import datetime
 import ipaddress
 import logging
 import socket
@@ -13,7 +10,7 @@ import httpx
 from app.config.settings import BASE_URL, DOMAIN
 from app.db.database import get_session
 from app.models import ServerSetting, FederationBlock, AllowedServer, User
-from app.utils.crypto import generate_keypair, sign_string, encrypt_key, get_private_key
+from app.utils.crypto import generate_keypair, encrypt_key
 
 logger = logging.getLogger("writ.activitypub")
 

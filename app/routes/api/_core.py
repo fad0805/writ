@@ -1,64 +1,35 @@
 """Core API endpoints — admin extracted to _admin.py."""
 import os
-import base64
-import csv
 import re
-import json
-import io
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import uuid
 import logging
-import secrets
 import time
 import httpx
-import threading
 import traceback
-from uuid import uuid4
-import zipfile
 
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.serialization import load_pem_public_key, Encoding, PublicFormat
-from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File, Depends, BackgroundTasks
-from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse, Response, FileResponse
-from PIL import Image
-from sqlalchemy import desc, or_, and_, func, String, text, select
-from sqlalchemy.orm import selectinload, Session, joinedload
-from sqlalchemy.dialects import postgresql
-from sqlalchemy.dialects.postgresql import JSONB
+from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, BackgroundTasks
+from fastapi.responses import StreamingResponse
+from sqlalchemy import desc, or_, and_, func
+from sqlalchemy.orm import selectinload
 from urllib.parse import urlparse
 
-from email.mime.text import MIMEText
-import smtplib
-
-from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PushSubscription, LoginSession, ServerSetting
-from app.utils.to_ap_serializer import to_ap_note, to_ap_create, to_ap_actor
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Novel, SeriesFollow, Tag, FederationBlock, AllowedServer, ServerSetting, ServerSetting
+from app.utils.to_ap_serializer import to_ap_actor
 from app.serializers import _post_json, _user_json
-from app.config.settings import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED, APP_ENV, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, INITIAL_OWNER_PASSWORD, SESSION_EXPIRE_DAYS
-from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _post_to_inbox, _federation_allowed, _build_reactions, _resolve_actor, _send_delete_post, _send_flag, _send_accept, _send_reject, _get_instance_actor, _validate_url, _fetch_remote_count
-from app.core.eventbus import broadcast
-from app.core.push import send_push_to_user, VAPID_PUBLIC_KEY
-from app.core.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, add_notif_stream, remove_notif_stream, broadcast_reaction_update, add_post_stream, remove_post_stream, broadcast_notif_sound, broadcast_delete
-from app.db.database import get_session, get_db
-from app.db.mention_resolver import resolve_handles_to_ids
-from app.routes.auth import require_auth, require_active_auth, get_current_user, hash_password, verify_password, create_session, get_session_key_from_cookie, delete_session_by_key
-from app.utils.content_parser import process_post_content, extract_mentions
-from app.utils.crypto import encrypt_key, get_private_key, generate_keypair, sign_string, generate_csrf_token
-from app.utils.datetime import _fmt_dt
-from app.utils.emoji import EMOJI_DIR, _refresh_emoji_cache_forcibly, _emoji_url, _load_emojis
+from app.config.settings import SECRET_KEY
+from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _resolve_actor, _validate_url
+from app.core.timeline_stream import add_stream, remove_stream
+from app.db.database import get_session
+from app.routes.auth import require_auth, get_current_user
+from app.utils.crypto import get_private_key, sign_string
 from app.utils.filter import _timeline_filter
-from app.utils.log import log_admin_action
-from app.utils.post import _get_descendant_ids
 from app.utils.storage import LocalStorage, get_storage
-
-
 
 logger = logging.getLogger("writ.api")
 
-
 router = APIRouter(prefix="/api")
-
 
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".ico"}
 ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".webm", ".ogg", ".mov"}
