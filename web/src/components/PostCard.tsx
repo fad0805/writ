@@ -83,6 +83,7 @@ export default function PostCard({ post, onUpdate, onDelete, onReply, onRewrite,
   const [bookmarked, setBookmarked] = useState(post.bookmarked);
   const [pinned, setPinned] = useState(false);
   const [showMoreActions, setShowMoreActions] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likes_count);
   const [boostsCount, setBoostsCount] = useState(post.boosts_count);
   const [seriesMatch, setSeriesMatch] = useState<RegExpMatchArray | null>(null);
@@ -669,9 +670,25 @@ const localReactionEmojiMap = useMemo(() => {
                 );
               })()}
           </details>
-        ) : (
-          <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
-        )}
+        ) : (() => {
+          const textOnly = (post.content || "").replace(/<[^>]+>/g, "").replace(/&[^;]+;/g, "x");
+          const lineCount = textOnly.split("\n").length;
+          const isLong = lineCount > 5 || textOnly.length > 500;
+          if (!isLong) {
+            return <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />;
+          }
+          return (
+            <div className={`post-content-wrap${expanded ? " expanded" : ""}`}>
+              <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
+              {!expanded && <div className="post-expand-overlay" onClick={(e) => { e.stopPropagation(); setExpanded(true); }}>
+                <button className="post-expand-btn" onClick={(e) => { e.stopPropagation(); setExpanded(true); }}>더 보기</button>
+              </div>}
+              {expanded && <div className="post-collapse-bar" onClick={(e) => { e.stopPropagation(); setExpanded(false); }}>
+                <button className="post-collapse-btn" onClick={(e) => { e.stopPropagation(); setExpanded(false); }}>접기</button>
+              </div>}
+            </div>
+          );
+        })()}
         {!post.summary && (post as any).media_attachments?.length > 0 && _renderMedia()}
         {post.poll_data && (
           (() => {
