@@ -1525,10 +1525,11 @@ input[type="checkbox"] {
 .episode-content h2 { margin-bottom: 10px; }
 .episode-content .episode-meta { margin-bottom: 20px; }
 .episode-audio {
-  margin-bottom: 20px;
-  padding: 12px;
-  background: var(--bg-tertiary);
-  border-radius: 8px;
+  margin: 24px 0;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  border: 1px solid var(--border);
 }
 .episode-audio audio {
   height: 40px;
