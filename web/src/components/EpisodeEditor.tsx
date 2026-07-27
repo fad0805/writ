@@ -5,8 +5,6 @@ import { EditorContent } from "@tiptap/react";
 import { useRef, useState, useEffect } from "react";
 import ColorPicker from "./ColorPicker";
 
-const LINES_PER_PAGE = 20;
-
 export default function EpisodeEditor({ value, onChange, pageMode, onPageModeChange }: { value: string; onChange: (html: string) => void; pageMode?: boolean; onPageModeChange?: (on: boolean) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -15,9 +13,15 @@ export default function EpisodeEditor({ value, onChange, pageMode, onPageModeCha
   const editor = useEditorInit({ value: value || "", onChange });
   const editorFn = useEditorActions(editor);
 
+  useEffect(() => {
+    if (!editor) return;
+    const storage = editor.extensionStorage as Record<string, any>;
+    if (storage.pageBreaks) storage.pageBreaks.enabled = !!pageMode;
+    editor.chain().command(({ tr }) => { tr.setMeta("pageBreaksToggle", true); return true; }).run();
+  }, [editor, pageMode]);
+
   const togglePageMode = () => {
-    const next = !pageMode;
-    onPageModeChange?.(next);
+    onPageModeChange?.(!pageMode);
   };
 
   return (
