@@ -6,15 +6,10 @@ from sqlalchemy.orm import relationship
 
 from app.config.settings import BASE_URL
 from app.db.database import Base
+from app.utils.datetime import now, get_24hours_later
 
 def generate_uuid():
     return str(uuid.uuid4())
-
-def now():
-    return datetime.datetime.now(datetime.timezone.utc)
-
-def get_24hours_later():
-    return datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
 
 
 class User(Base):

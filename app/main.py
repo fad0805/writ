@@ -73,6 +73,7 @@ async def lifespan(app: FastAPI):
     _cleanup_remote_data()
     yield
 
+
 app = FastAPI(title="WRIT, the sns for writers", version="1.0.0", lifespan=lifespan)
 
 
