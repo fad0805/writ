@@ -28,9 +28,9 @@ export default function ReplyModal({ post, onClose, onDone, initialContent }: { 
 
   const mentions = useMemo(() => {
     const set = new Set<string>();
+    set.add(`@${post.author.username}`);
     const matches = post.content.match(/@([a-zA-Z0-9_]+(?:@[a-zA-Z0-9.-]+)?)/g);
     if (matches) matches.forEach((m) => set.add(m));
-    set.add(`@${post.author.username}`);
     if (user) {
       const uname = user.username;
       for (const m of Array.from(set)) {
@@ -40,7 +40,13 @@ export default function ReplyModal({ post, onClose, onDone, initialContent }: { 
         if (mName === uname && !mDomain) set.delete(m);
       }
     }
-    return Array.from(set).join(" ") + (set.size > 0 ? " " : "");
+    const sorted = Array.from(set);
+    const parentIdx = sorted.indexOf(`@${post.author.username}`);
+    if (parentIdx > 0) {
+      sorted.splice(parentIdx, 1);
+      sorted.unshift(`@${post.author.username}`);
+    }
+    return sorted.join(" ") + (sorted.length > 0 ? " " : "");
   }, [post, user]);
 
   return (

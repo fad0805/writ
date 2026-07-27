@@ -255,14 +255,7 @@ def _do_create_post(
     mentioned_ids = resolve_handles_to_ids(mentioned_handles)
     if dm_target_id:
         mentioned_ids.append(dm_target_id)
-    if parent_id:
-        with get_session() as _s:
-            _parent = _s.query(Post.id, Post.author_id).filter_by(id=parent_id).first()
-            if _parent and _parent.author_id != user_id:
-                parent_author_id = _parent.author_id
-                mentioned_ids = [pid for pid in mentioned_ids if pid != parent_author_id]
-                mentioned_ids.insert(0, parent_author_id)
-    mentioned_ids = list(dict.fromkeys(mentioned_ids))
+    mentioned_ids = list(set(mentioned_ids))
 
     if not content_html.strip() and not poll_options:
         raise HTTPException(status_code=400, detail="Content cannot be empty")
