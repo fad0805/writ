@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useNavigationBlock } from "@/lib/useNavigationBlock";
 import Icon from "@/components/Icon";
 import EpisodeEditor from "@/components/EpisodeEditor";
+import AudioPlayer from "@/components/AudioPlayer";
 import Link from "next/link";
 
 const AUTO_SAVE_DELAY = 3000;
@@ -204,7 +205,7 @@ export default function NewEpisodePage() {
             {audioFile && <span className="profile-edit-file-name">{audioFile.name}</span>}
             {audioPreview && <button type="button" onClick={() => { setAudioFile(null); setAudioPreview(""); if (audioRef.current) audioRef.current.value = ""; }} style={{ color: "var(--danger)", background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>제거</button>}
           </div>
-          {audioPreview && <audio controls src={audioPreview} style={{ width: "100%", marginTop: 8 }} />}
+          {audioPreview && <AudioPlayer src={audioPreview} />}
           <p className="form-help">에피소드 본문 위에 음악 플레이어가 표시됩니다 (MP3, M4A, WAV, FLAC 등)</p>
         </div>
         <div className="form-group">

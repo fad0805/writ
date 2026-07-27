@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/lib/api";
 import { useNavigationBlock } from "@/lib/useNavigationBlock";
 import EpisodeEditor from "@/components/EpisodeEditor";
+import AudioPlayer from "@/components/AudioPlayer";
 import VisibilitySelector from "@/components/VisibilitySelector";
 import Icon from "@/components/Icon";
 
@@ -223,9 +224,9 @@ export default function EditEpisodePage() {
             {audioUrl && !audioFile && !removeAudio && <button type="button" onClick={() => setRemoveAudio(true)} style={{ color: "var(--danger)", background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>제거</button>}
           </div>
           {audioPreview ? (
-            <audio controls src={audioPreview} style={{ width: "100%", marginTop: 8 }} />
+            <AudioPlayer src={audioPreview} />
           ) : audioUrl && !removeAudio ? (
-            <audio controls src={audioUrl} style={{ width: "100%", marginTop: 8 }} />
+            <AudioPlayer src={audioUrl} />
           ) : null}
           <p className="form-help">에피소드 본문 위에 음악 플레이어가 표시됩니다 (MP3, M4A, WAV, FLAC 등)</p>
         </div>

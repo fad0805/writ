@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { installCodeCopyButtons } from "@/lib/codeCopy";
 import { sanitizeEpisode, sanitizeBasic } from "@/lib/sanitize";
+import AudioPlayer from "@/components/AudioPlayer";
 
 
 export default function EpisodeDetailPage() {
@@ -113,7 +114,7 @@ export default function EpisodeDetailPage() {
         ) : (
           <>
             {episode.summary && <blockquote className="episode-summary">{episode.summary}</blockquote>}
-            {episode.audio_url && <div className="episode-audio"><audio controls src={episode.audio_url} style={{ width: "100%" }} /></div>}
+            {episode.audio_url && <div className="episode-audio"><AudioPlayer src={episode.audio_url} /></div>}
             <div ref={bodyRef} className="episode-body" dangerouslySetInnerHTML={{ __html: sanitizeEpisode(renderEpisodeContent(episode.content)) }} />
             {episode.comment && <div className="episode-comment" dangerouslySetInnerHTML={{ __html: sanitizeBasic(episode.comment) }} />}
           </>
