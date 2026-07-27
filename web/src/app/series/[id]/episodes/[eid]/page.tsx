@@ -76,8 +76,9 @@ export default function EpisodeDetailPage() {
 
   const pages = useMemo(() => {
     if (!episode?.content) return [""];
+    if (!episode.page_mode) return [episode.content];
     return splitIntoPages(episode.content);
-  }, [episode?.content]);
+  }, [episode?.content, episode?.page_mode]);
 
   useEffect(() => {
     setCurrentPage(0);
