@@ -10,6 +10,7 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
   const fileRef = useRef<HTMLInputElement>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const colorPickerRef = useRef<HTMLDivElement>(null);
+  const [pageMode, setPageMode] = useState(false);
 
   const pages = useMemo(() => splitIntoPages(value || ""), [value]);
   const [currentPage, setCurrentPage] = useState(0);
@@ -29,20 +30,35 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
   }, [value, onChange]);
 
   const handlePageChange = useCallback((newHtml: string) => {
+    if (!pageMode) {
+      onChange(newHtml);
+      return;
+    }
     setPageContent(newHtml);
     emitChange(newHtml, currentPage);
-  }, [currentPage, emitChange]);
+  }, [currentPage, emitChange, pageMode, onChange]);
 
-  const editor = useEditorInit({ value: pageContent, onChange: handlePageChange });
+  const editorContent = pageMode ? (pages[currentPage] || "") : (value || "");
+  const editor = useEditorInit({ value: editorContent, onChange: handlePageChange });
   const editorFn = useEditorActions(editor);
 
   useEffect(() => {
     if (!editor) return;
-    const target = pages[currentPage] || "";
+    const target = pageMode ? (pages[currentPage] || "") : (value || "");
     if (editor.getHTML() !== target) {
       editor.commands.setContent(target, { emitUpdate: false });
     }
-  }, [currentPage, pages]);
+  }, [currentPage, pages, pageMode, value]);
+
+  const togglePageMode = () => {
+    const next = !pageMode;
+    setPageMode(next);
+    if (next) {
+      const newPages = splitIntoPages(value || "");
+      setCurrentPage(0);
+      setPageContent(newPages[0] || "");
+    }
+  };
 
   const goToPage = (idx: number) => {
     if (idx < 0 || idx >= pages.length) return;
@@ -97,10 +113,13 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
             <button type="button" onClick={editorFn?.toggleWrap} data-active={editorFn?.imgWrap === "true"} title="텍스트 줄바꿈">{editorFn?.imgWrap === "true" ? "↩" : "↪"}</button>
           )}
         </div>
+        <div className="episode-editor-toolbar-section">
+          <button type="button" onClick={togglePageMode} data-active={pageMode} title="페이지 모드">📖</button>
+        </div>
       </div>
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={editorFn?.handleImgUpload} />
       <EditorContent editor={editor} className="episode-editor-content" />
-      {pages.length > 1 && (
+      {pageMode && pages.length > 1 && (
         <div className="episode-page-nav">
           <button type="button" className="episode-page-arrow" disabled={currentPage === 0} onClick={() => goToPage(currentPage - 1)}>‹</button>
           {visiblePages[0] > 0 && <span className="episode-page-ellipsis">…</span>}
