@@ -34,8 +34,10 @@ export default function ReplyModal({ post, onClose, onDone, initialContent }: { 
     if (user) {
       const uname = user.username;
       for (const m of Array.from(set)) {
-        const namePart = m.startsWith("@") ? m.slice(1).split("@")[0] : m.split("@")[0];
-        if (namePart === uname) set.delete(m);
+        const parts = (m.startsWith("@") ? m.slice(1) : m).split("@");
+        const mName = parts[0];
+        const mDomain = parts[1] || "";
+        if (mName === uname && !mDomain) set.delete(m);
       }
     }
     return Array.from(set).join(" ") + (set.size > 0 ? " " : "");
