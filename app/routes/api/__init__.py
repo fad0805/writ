@@ -28,6 +28,8 @@ from app.routes.api._series import (
 from app.routes.api._posts import (
     posts_router,
     _sync_post_tags,
+    _do_edit_post,
+    _do_delete_post,
 )
 
 from app.routes.api._feed import (

@@ -405,132 +405,124 @@ def _do_create_post(
         return pj
 
 
+def _do_edit_post(s, post, user, content, summary, visibility=None, is_sensitive=None):
+    if not content.strip():
+        raise HTTPException(status_code=400, detail="Content cannot be empty")
+    if post.summary and post.summary.startswith("[관리자 강제] ") and not summary.startswith("[관리자 강제] "):
+        raise HTTPException(status_code=403, detail="관리자가 강제한 CW는 수정할 수 없습니다")
+    new_content = content.replace('\r\n', '\n').replace('\r', '\n')
+    post.content = process_post_content(new_content, post=post)
+    post.summary = summary
+    if visibility is not None:
+        post.visibility = visibility
+    if is_sensitive is not None:
+        post.is_sensitive = is_sensitive
+    _sync_post_tags(post, s)
+    s.commit()
+
+    try:
+        _ua = post.author
+        broadcast_post({
+            "id": post.id,
+            "number": post.number or "",
+            "content": post.content,
+            "summary": post.summary or "",
+            "visibility": post.visibility or "public",
+            "created_at": post.created_at.isoformat() if post.created_at else "",
+            "author": {
+                "id": _ua.id, "username": _ua.username,
+                "display_name": _ua.display_name or _ua.username,
+                "avatar": _ua.profile_image or "", "header": _ua.header_image or "",
+                "summary": _ua.summary or "", "is_admin": _ua.is_admin,
+                "is_locked": getattr(_ua, "is_locked", False),
+                "is_limited": getattr(_ua, "is_limited", False),
+                "is_remote": _ua.is_remote, "ap_id": _ua.remote_url or "",
+            },
+            "likes_count": s.query(Like).filter_by(post_id=post.id).count(),
+            "boosts_count": s.query(Boost).filter_by(post_id=post.id).count(),
+            "replies_count": s.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count(),
+            "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
+            "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
+            "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
+            "poll_data": post.poll_data, "my_vote": None,
+            "reactions": _build_reactions(s, post.id),
+            "my_reaction": None,
+            "type": "update",
+        }, post.author_id, post.visibility or "public", False)
+    except Exception:
+        pass
+
+    if post.ap_id and not post.author.is_remote:
+        try:
+            note_data = to_ap_note(post)
+            note_data.pop("@context", None)
+            note_data.pop("url", None)
+            note_data["atomUri"] = post.ap_id
+            note_data["updated"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            note_data.setdefault("summary", None)
+            note_data.setdefault("sensitive", False)
+            note_data.setdefault("attachment", [])
+            note_data.setdefault("tag", [])
+            note_data.setdefault("inReplyTo", None)
+            update_activity = {
+                "@context": [
+                    "https://www.w3.org/ns/activitystreams",
+                    "https://w3id.org/security/v1",
+                ],
+                "id": f"{BASE_URL}/activities/update/{post.id}",
+                "type": "Update",
+                "actor": user.actor_uri(),
+                "to": note_data.get("to", []),
+                "cc": note_data.get("cc", []),
+                "object": note_data,
+            }
+            def _send_update():
+                try:
+                    broadcast_to_followers(user, update_activity)
+                except Exception as e:
+                    logger.error("Update federation failed: %s", e, exc_info=True)
+            threading.Thread(target=_send_update, daemon=True).start()
+        except Exception as e:
+            logger.error("Update activity build failed: %s", e, exc_info=True)
+
+
 @posts_router.post("/posts/{post_id}/edit")
 def api_edit_post(request: Request, post_id: int, content: str = Form(...), summary: str = Form("")):
     user = require_active_auth(request)
-    if not content.strip():
-        raise HTTPException(status_code=400, detail="Content cannot be empty")
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id).first()
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
         if post.author_id != user.id:
             raise HTTPException(status_code=403, detail="Cannot edit this post")
-        if post.summary and post.summary.startswith("[관리자 강제] ") and not summary.startswith("[관리자 강제] "):
-            raise HTTPException(status_code=403, detail="관리자가 강제한 CW는 수정할 수 없습니다")
-        new_content = content.replace('\r\n', '\n').replace('\r', '\n')
-        # 본문 파싱 및 시리즈/에피소드 외래키 자동 추출 연동
-        post.content = process_post_content(new_content, post=post)
-        post.summary = summary
-        s.commit()
-
-        # Broadcast update to local timeline streams
-        try:
-            _ua = post.author
-            broadcast_post({
-                "id": post.id,
-                "number": post.number or "",
-                "content": post.content,
-                "summary": post.summary or "",
-                "visibility": post.visibility or "public",
-                "created_at": post.created_at.isoformat() if post.created_at else "",
-                "author": {
-                    "id": _ua.id, "username": _ua.username,
-                    "display_name": _ua.display_name or _ua.username,
-                    "avatar": _ua.profile_image or "", "header": _ua.header_image or "",
-                    "summary": _ua.summary or "", "is_admin": _ua.is_admin,
-                    "is_locked": getattr(_ua, "is_locked", False),
-                    "is_limited": getattr(_ua, "is_limited", False),
-                    "is_remote": _ua.is_remote, "ap_id": _ua.remote_url or "",
-                },
-                "likes_count": s.query(Like).filter_by(post_id=post.id).count(),
-                "boosts_count": s.query(Boost).filter_by(post_id=post.id).count(),
-                "replies_count": s.query(Post).filter_by(in_reply_to_id=post.id, is_deleted=False).count(),
-                "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
-                "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
-                "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
-                "poll_data": post.poll_data, "my_vote": None,
-                "reactions": _build_reactions(s, post.id),
-                "my_reaction": None,
-                "type": "update",
-                "_emojis": [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(s)],
-            }, post.author_id, post.visibility or "public", False)
-        except Exception:
-            pass
-
-        # Federation: send Update to remote followers
-        if post.ap_id:
-            try:
-                note_data = to_ap_note(post)
-                note_data.pop("@context", None)
-                note_data.pop("url", None)
-                note_data["atomUri"] = post.ap_id
-                note_data["updated"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-                note_data.setdefault("summary", None)
-                note_data.setdefault("sensitive", False)
-                note_data.setdefault("attachment", [])
-                note_data.setdefault("tag", [])
-                note_data.setdefault("inReplyTo", None)
-
-                update_activity = {
-                    "@context": [
-                        "https://www.w3.org/ns/activitystreams",
-                        "https://w3id.org/security/v1",
-                    ],
-                    "id": f"{BASE_URL}/activities/update/{post.id}",
-                    "type": "Update",
-                    "actor": user.actor_uri(),
-                    "to": note_data.get("to", []),
-                    "cc": note_data.get("cc", []),
-                    "object": note_data,
-                }
-                def _send_update():
-                    try:
-                        broadcast_to_followers(user, update_activity)
-                    except Exception as e:
-                        # 🌟 logger.warning 대신 즉시 출력되도록 print flush 적용
-                        logger.error("Update federation failed: %s", e, exc_info=True)
-                threading.Thread(target=_send_update, daemon=True).start()
-            except Exception as e:
-                # 🌟 에러 로그 즉시 출력
-                logger.error("Update activity build failed: %s", e, exc_info=True)
-
+        _do_edit_post(s, post, user, content, summary)
         return _post_json(post, s, user)
 
 
-@posts_router.post("/posts/{post_id}/delete")
-def api_delete_post(request: Request, post_id: int):
-    user = require_active_auth(request)
-    with get_session() as s:
-        post = s.query(Post).filter_by(id=post_id).first()
-        if not post:
-            raise HTTPException(status_code=404, detail="Post not found")
-        if post.author_id != user.id and not user.is_admin:
-            raise HTTPException(status_code=403, detail="Cannot delete this post")
-        media = list(post.media_attachments or [])
-        ap_id = post.ap_id or ""
-        is_remote_author = bool(post.author.is_remote)
-        post.content = ""
-        post.media_attachments = []
-        post.poll_data = None
-        post.link_preview = None
-        post.is_deleted = True
-        s.query(Notification).filter_by(post_id=post.id).delete()
-        broadcast_refresh_notifs(post.author_id)
-        s.flush()
+def _do_delete_post(s, post, user, cascade=True):
+    media = list(post.media_attachments or [])
+    ap_id = post.ap_id or ""
+    is_remote_author = bool(post.author.is_remote)
+    post.content = ""
+    post.media_attachments = []
+    post.poll_data = None
+    post.link_preview = None
+    post.is_deleted = True
+    s.query(Notification).filter_by(post_id=post.id).delete()
+    broadcast_refresh_notifs(post.author_id)
+    s.flush()
 
-        # Cascade purge: if parent shell's entire subtree is now all deleted, hard-delete it too
+    _cascade_authors = set()
+    if cascade:
         def _all_deleted(pid):
             return not s.query(Post).filter(
                 Post.in_reply_to_id == pid, Post.is_deleted == False
             ).first()
 
         _pid = post.id
-        _cascade_authors = set()
         while True:
             _parent = s.query(Post).filter(Post.in_reply_to_id == _pid).first()
             if not _parent:
-                # Check for the current post's parent
                 if _pid == post.id:
                     _parent = s.query(Post).get(post.in_reply_to_id) if post.in_reply_to_id else None
                 else:
@@ -539,7 +531,6 @@ def api_delete_post(request: Request, post_id: int):
                 break
             if not _all_deleted(_parent.id):
                 break
-            # All children of this parent are deleted → hard-delete the parent
             s.query(Like).filter(Like.post_id == _parent.id).delete()
             s.query(Boost).filter(Boost.post_id == _parent.id).delete()
             s.query(Bookmark).filter(Bookmark.post_id == _parent.id).delete()
@@ -548,17 +539,17 @@ def api_delete_post(request: Request, post_id: int):
             _cascade_authors.add(_parent.author_id)
             s.delete(_parent)
             _pid = _parent.in_reply_to_id
-        s.commit()
-    # Broadcast delete to all connected timeline streams
+    s.commit()
+
     try:
-        broadcast_delete(post_id)
+        broadcast_delete(post.id)
         for _aid in _cascade_authors:
             broadcast_refresh_notifs(_aid)
     except Exception:
         pass
-    # Media 삭제 & AP 브로드캐스트는 백그라운드에서
+
     if media or (ap_id and ap_id.startswith("http") and not is_remote_author):
-        def _background(_pid=post_id, _media=media, _ap_id=ap_id, _remote=is_remote_author, _user=user):
+        def _background(_pid=post.id, _media=media, _ap_id=ap_id, _remote=is_remote_author, _user=user):
             if _media:
                 storage = get_storage()
                 for m in _media:
@@ -574,10 +565,24 @@ def api_delete_post(request: Request, post_id: int):
                         if p:
                             _send_delete_post(p, _user)
                         else:
-                            print(f"DELETE_FAIL: post {_pid} not found in DB")
+                            logger.warning("DELETE_FAIL: post %s not found in DB", _pid)
                 except Exception as e:
                     logger.error("DELETE_FAIL: %s", e, exc_info=True)
         threading.Thread(target=_background, daemon=True).start()
+
+    return media, ap_id
+
+
+@posts_router.post("/posts/{post_id}/delete")
+def api_delete_post(request: Request, post_id: int):
+    user = require_active_auth(request)
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        if post.author_id != user.id and not user.is_admin:
+            raise HTTPException(status_code=403, detail="Cannot delete this post")
+        _do_delete_post(s, post, user, cascade=True)
     return {"ok": True}
 
 

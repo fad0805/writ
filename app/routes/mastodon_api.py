@@ -16,19 +16,10 @@ from sqlalchemy import func as sqlfunc, or_
 from sqlalchemy.orm import Session as SASession
 
 from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Tag, CustomEmoji, ServerSetting, MastodonApp, MastodonAccessToken, now
-from app.utils.to_ap_serializer import to_ap_note, to_ap_create, to_ap_actor
-from app.serializers import _post_json
 from app.db.database import get_db, get_session
-from app.db.mention_resolver import resolve_handles_to_ids
 from app.config.settings import BASE_URL, DOMAIN, MAX_POST_LENGTH
-from app.core.activitypub import broadcast_to_followers, _send_delete_post
-from app.core.eventbus import broadcast
-from app.core.push import send_push_to_user
-from app.core.timeline_stream import broadcast_refresh_notifs, broadcast_notif_sound, broadcast_post, broadcast_delete
-from app.routes.api import _sync_post_tags, _broadcast_update_actor, _broadcast_federation, _broadcast_timeline
-from app.utils.content_parser import process_post_content, extract_mentions
+from app.routes.api import _broadcast_update_actor, _do_edit_post, _do_delete_post
 from app.utils.emoji import _emoji_url, _load_emojis
-from app.utils.storage import get_storage
 
 logger = logging.getLogger("writ.mastodon_api")
 
@@ -1038,122 +1029,42 @@ async def create_status(request: Request, db: SASession = Depends(get_db)):
 
 def _run_create_status(db, user, text, in_reply_to_id, sensitive, spoiler_text,
                         visibility, language, media_ids, poll_options, poll_expires):
+    from app.routes.api._posts import _do_create_post
+
     if not text and not media_ids:
         raise HTTPException(status_code=422, detail="Validation failed: Text can't be blank")
 
     vis = _visibility_from_mastodon(visibility) if visibility in ("public", "unlisted", "private", "direct") else user.default_visibility
 
-    if vis in ("public", "home") and in_reply_to_id:
-        parent = db.query(Post).filter_by(id=int(in_reply_to_id)).first()
-        if parent:
-            vis_order = {"public": 0, "home": 1, "followers": 2, "mention": 3}
-            parent_vis = parent.visibility or "public"
-            if vis_order.get(parent_vis, 0) > vis_order.get(vis, 0):
-                vis = parent_vis
-
-    content_html = process_post_content(text, None)
-    mentions = extract_mentions(text, None)
-    mentioned_handles = [m["handle"] for m in mentions]
-    mentioned_ids = resolve_handles_to_ids(mentioned_handles)
-    mentioned_ids = list(set(mentioned_ids))
-
-    if not content_html.strip() and not poll_options:
-        raise HTTPException(status_code=400, detail="Content cannot be empty")
-    total_len = len(text) + len(spoiler_text or "")
-    if total_len > MAX_POST_LENGTH:
-        raise HTTPException(status_code=400, detail=f"Total length exceeds {MAX_POST_LENGTH}")
-
-    if user.is_limited and vis == "public":
-        vis = "home"
-
-    post_number = secrets.token_hex(4)
-    author_is_sensitive = getattr(user, 'is_sensitive', False) or False
-    post = Post(
-        author_id=user.id,
-        content=content_html,
-        summary=spoiler_text[:512] if spoiler_text else "",
-        visibility=vis,
-        is_sensitive=bool(sensitive) or author_is_sensitive,
-        mentioned_user_ids=mentioned_ids,
-        number=post_number,
-        ap_id="",
-    )
-
-    if in_reply_to_id:
-        parent = db.query(Post).filter_by(id=int(in_reply_to_id)).first()
-        if parent:
-            post.in_reply_to_id = parent.id
-            post.in_reply_to_ap_id = parent.ap_id or ""
-
-    db.add(post)
-    db.flush()
-
-    post.ap_id = f"{BASE_URL}/@{user.username}/{post.number}"
-
+    media_attachments_json = "[]"
     if media_ids:
-        post.media_attachments = [{"id": str(mid), "url": "", "type": "image", "alt": ""} for mid in media_ids[:4]]
+        media_attachments_json = json.dumps([
+            {"url": f"/uploads/media/{mid}", "type": "image", "alt": ""}
+            for mid in media_ids[:4]
+        ])
 
+    poll_options_json = ""
     if poll_options:
+        if isinstance(poll_options, list):
+            poll_options_json = json.dumps(poll_options)
+        elif isinstance(poll_options, str):
+            poll_options_json = poll_options
+
+    poll_expires_minutes = 60
+    if poll_expires:
         try:
-            opts = json.loads(poll_options) if isinstance(poll_options, str) else poll_options
-            if isinstance(opts, list) and 2 <= len(opts) <= 10 and all(isinstance(o, str) and o.strip() for o in opts):
-                expires_in = int(poll_expires) if poll_expires else 60
-                now_dt = datetime.now(timezone.utc)
-                expires_at = (now_dt + timedelta(minutes=expires_in)).isoformat() if expires_in > 0 else None
-                post.poll_data = {
-                    "options": [{"text": o.strip(), "votes_count": 0} for o in opts],
-                    "expires_at": expires_at,
-                }
-        except (json.JSONDecodeError, TypeError, ValueError):
+            poll_expires_minutes = max(1, int(poll_expires) // 60)
+        except (ValueError, TypeError):
             pass
 
-    _sync_post_tags(post, db)
-    db.commit()
-    db.refresh(post)
-
-    pj = _post_json(post, db, user)
-
-    def _create_notifications_and_broadcast():
-        try:
-            with get_session() as ns:
-                mentioned_notified = set()
-                for mu_id in mentioned_ids:
-                    if mu_id != user.id:
-                        notif = Notification(user_id=mu_id, from_user_id=user.id, notification_type="mention", post_id=post.id)
-                        ns.add(notif)
-                        mentioned_notified.add(mu_id)
-                if in_reply_to_id:
-                    parent = ns.query(Post).filter_by(id=in_reply_to_id).first()
-                    if parent and parent.author_id != user.id and parent.author_id not in mentioned_notified:
-                        notif = Notification(user_id=parent.author_id, from_user_id=user.id, notification_type="reply", post_id=post.id)
-                        ns.add(notif)
-                ns.commit()
-
-            for mu_id in mentioned_ids:
-                if mu_id != user.id:
-                    send_push_to_user(mu_id, "mention", user.username, post.id)
-                    broadcast_notif_sound(mu_id)
-                    broadcast_refresh_notifs(mu_id)
-            if in_reply_to_id:
-                with get_session() as ps:
-                    parent = ps.query(Post).filter_by(id=in_reply_to_id).first()
-                if parent and parent.author_id != user.id and parent.author_id not in [mid for mid in mentioned_ids if mid != user.id]:
-                    send_push_to_user(parent.author_id, "reply", user.username, post.id)
-                    broadcast_notif_sound(parent.author_id)
-                    broadcast_refresh_notifs(parent.author_id)
-        except Exception as e:
-            logger.error("Mastodon API: Failed to create notifications: %s", e, exc_info=True)
-
-    threading.Thread(target=_create_notifications_and_broadcast, daemon=True).start()
-    threading.Thread(target=_broadcast_federation, args=(user.id, post.id, vis, text), daemon=True).start()
-
-    try:
-        broadcast("new_post", {"post_id": post.id, "author_id": user.id})
-    except Exception as e:
-        logger.error("Mastodon API: Failed to broadcast new_post event: %s", e, exc_info=True)
-
-    pj = _post_json(post, db, user)
-    threading.Thread(target=_broadcast_timeline, args=(pj, user.id, vis, False), daemon=True).start()
+    pj = _do_create_post(
+        user.id, user.is_limited, getattr(user, 'is_sensitive', False),
+        text, spoiler_text or "", vis,
+        int(in_reply_to_id) if in_reply_to_id else None,
+        None, "", media_attachments_json, bool(sensitive),
+        poll_options_json, poll_expires_minutes, "",
+    )
+    post = db.query(Post).filter_by(id=pj["id"]).first()
     return _status_json(post, db, viewer=user)
 
 
@@ -1187,69 +1098,9 @@ async def update_status(status_id: str, request: Request, db: SASession = Depend
         spoiler_text = form.get("spoiler_text", "")
         visibility = form.get("visibility")
 
-    if post.summary and post.summary.startswith("[관리자 강제] ") and not (spoiler_text or "").startswith("[관리자 강제] "):
-        raise HTTPException(status_code=403, detail="관리자가 강제한 CW는 수정할 수 없습니다")
-
-    new_content = text.replace('\r\n', '\n').replace('\r', '\n') if text else post.content
-    post.content = process_post_content(new_content, post=post)
-    if spoiler_text is not None:
-        post.summary = spoiler_text[:512]
-    if visibility and visibility in ("public", "unlisted", "private", "direct"):
-        post.visibility = _visibility_from_mastodon(visibility)
-    post.is_sensitive = bool(sensitive)
-
-    _sync_post_tags(post, db)
-    db.commit()
+    vis = _visibility_from_mastodon(visibility) if visibility in ("public", "unlisted", "private", "direct") else None
+    _do_edit_post(db, post, user, text, spoiler_text or "", visibility=vis, is_sensitive=bool(sensitive))
     db.refresh(post)
-
-    try:
-        _ua = post.author
-        broadcast_post({
-            "id": post.id, "number": post.number or "",
-            "content": post.content, "summary": post.summary or "",
-            "visibility": post.visibility or "public",
-            "created_at": post.created_at.isoformat() if post.created_at else "",
-            "author": {
-                "id": _ua.id, "username": _ua.username,
-                "display_name": _ua.display_name or _ua.username,
-                "avatar": _ua.profile_image or "", "header": _ua.header_image or "",
-                "summary": _ua.summary or "", "is_admin": _ua.is_admin,
-                "is_remote": _ua.is_remote,
-            },
-        }, post.author_id, post.visibility or "public")
-    except Exception:
-        pass
-
-    if post.ap_id and not post.author.is_remote:
-        def _bg_federation():
-            try:
-                note_data = to_ap_note(post)
-                note_data.pop("@context", None)
-                note_data.pop("url", None)
-                note_data["atomUri"] = post.ap_id
-                note_data["updated"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-                note_data.setdefault("summary", None)
-                note_data.setdefault("sensitive", False)
-                note_data.setdefault("attachment", [])
-                note_data.setdefault("tag", [])
-                note_data.setdefault("inReplyTo", None)
-                update_activity = {
-                    "@context": [
-                        "https://www.w3.org/ns/activitystreams",
-                        "https://w3id.org/security/v1",
-                    ],
-                    "id": f"{BASE_URL}/activities/update/{post.id}",
-                    "type": "Update",
-                    "actor": user.actor_uri(),
-                    "to": note_data.get("to", []),
-                    "cc": note_data.get("cc", []),
-                    "object": note_data,
-                }
-                broadcast_to_followers(user, update_activity)
-            except Exception as e:
-                logger.error("Mastodon API: Update federation failed: %s", e, exc_info=True)
-        threading.Thread(target=_bg_federation, daemon=True).start()
-
     return _status_json(post, db, viewer=user)
 
 
@@ -1263,49 +1114,8 @@ def delete_status(status_id: str, request: Request, db: SASession = Depends(get_
     if not post or post.author_id != user.id:
         raise HTTPException(status_code=404, detail="Record not found")
 
-    media = list(post.media_attachments or [])
-    ap_id = post.ap_id or ""
-    is_remote_author = bool(post.author.is_remote)
     status_data = _status_json(post, db, viewer=user)
-    post.content = ""
-    post.media_attachments = []
-    post.poll_data = None
-    post.link_preview = None
-    post.is_deleted = True
-    db.query(Notification).filter_by(post_id=post.id).delete()
-    db.commit()
-
-    try:
-        broadcast_delete(post.id)
-        broadcast_refresh_notifs(post.author_id)
-    except Exception:
-        pass
-
-    if ap_id and ap_id.startswith("http") and not is_remote_author:
-        def _bg_delete():
-            try:
-                with get_session() as s:
-                    p = s.query(Post).filter_by(id=post.id).first()
-                    if p:
-                        _send_delete_post(p, user)
-            except Exception as e:
-                logger.error("Mastodon API: Failed to send delete activity: %s", e, exc_info=True)
-        threading.Thread(target=_bg_delete, daemon=True).start()
-
-    if media:
-        def _bg_media():
-            try:
-                storage = get_storage()
-                for m in media:
-                    if isinstance(m, dict) and m.get("url"):
-                        try:
-                            storage.delete(m["url"])
-                        except Exception:
-                            pass
-            except Exception:
-                pass
-        threading.Thread(target=_bg_media, daemon=True).start()
-
+    _do_delete_post(db, post, user, cascade=False)
     return status_data
 
 
