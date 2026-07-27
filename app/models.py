@@ -347,6 +347,8 @@ class Episode(Base):
     summary = Column(Text, default="")
     comment = Column(Text, default="")
     audio_url = Column(String(512), default="")
+    view_mode = Column(String(16), default="text")
+    image_urls = Column(JSON, default=list)
     views = Column(Integer, default=0)
     is_published = Column(Boolean, default=True)
     page_mode = Column(Boolean, default=False)

@@ -2030,6 +2030,122 @@ input[type="checkbox"] {
   .episode-view-page-side-arrow.right { right: -8px; }
 }
 
+/* ── Episode view mode toggle + comic uploader ── */
+.episode-view-mode-toggle {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.episode-view-mode-btn {
+  flex: 1;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+}
+.episode-view-mode-btn + .episode-view-mode-btn {
+  border-left: 1px solid var(--border);
+}
+.episode-view-mode-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+.episode-comic-uploader {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-height: 200px;
+}
+.episode-comic-img-item {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #000;
+}
+.episode-comic-img-item img {
+  width: 100%;
+  display: block;
+  object-fit: contain;
+  max-height: 600px;
+}
+.episode-comic-img-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border);
+}
+.episode-comic-img-actions button {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  font-size: 16px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.episode-comic-img-actions button:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.episode-comic-img-actions button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.episode-comic-img-actions span {
+  font-size: 13px;
+  color: var(--text-secondary);
+  min-width: 24px;
+  text-align: center;
+}
+.episode-comic-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 14px;
+}
+.episode-comic-add-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── Comic viewer ── */
+.episode-comic-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.episode-comic-viewer img {
+  width: 100%;
+  display: block;
+  object-fit: contain;
+  background: #000;
+}
+
 /* ── Pinned notices ── */
 .pinned-notices {
   margin-bottom: 16px;

@@ -344,16 +344,26 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
 
 
 @series_router.post("/series/{novel_id}/episodes/new")
-def api_create_episode(request: Request, novel_id: int, title: str = Form(...), content: str = Form(...),
+def api_create_episode(request: Request, novel_id: int, title: str = Form(...), content: str = Form(""),
                        summary: str = Form(""), comment: str = Form(""),
                        announce: bool = Form(False), announce_comment: str = Form(""),
                        is_published: bool = Form(True), page_mode: bool = Form(False),
+                       view_mode: str = Form("text"), image_urls: str = Form("[]"),
                        audio: UploadFile = File(None)):
     user = require_active_auth(request)
     if getattr(user, 'is_deceased', False):
         raise HTTPException(status_code=403, detail="고인 계정은 에피소드를 생성할 수 없습니다.")
-    if not title.strip() or not content.strip():
-        raise HTTPException(status_code=400, detail="Title and content are required")
+    if view_mode == "comic":
+        try:
+            image_list = json.loads(image_urls) if image_urls else []
+        except (json.JSONDecodeError, TypeError):
+            image_list = []
+        if not image_list:
+            raise HTTPException(status_code=400, detail="만화 모드에는 이미지가 필요합니다")
+    else:
+        image_list = []
+        if not title.strip() or not content.strip():
+            raise HTTPException(status_code=400, detail="Title and content are required")
     audio_url = ""
     if audio and audio.filename:
         _validate_upload(audio, allow_video=False, allow_audio=True, max_size=MAX_AUDIO_SIZE, label="음악 파일")
@@ -368,7 +378,7 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
             raise HTTPException(status_code=404, detail="Novel not found")
         max_ep = s.query(Episode).filter_by(novel_id=novel.id).order_by(desc(Episode.episode_number)).first()
         next_num = (max_ep.episode_number + 1) if max_ep else 1
-        episode = Episode(novel_id=novel.id, episode_number=next_num, title=title, content=content, summary=summary, comment=comment, audio_url=audio_url, is_published=is_published, page_mode=page_mode)
+        episode = Episode(novel_id=novel.id, episode_number=next_num, title=title, content=content, summary=summary, comment=comment, audio_url=audio_url, is_published=is_published, page_mode=page_mode, view_mode=view_mode, image_urls=image_list)
         s.add(episode)
         s.flush()
         if announce:
@@ -491,11 +501,12 @@ def api_get_episode(request: Request, novel_id: int, episode_id: int):
 
 @series_router.post("/series/{novel_id}/episodes/{episode_id}/edit")
 def api_edit_episode(request: Request, novel_id: int, episode_id: int,
-                     title: str = Form(...), content: str = Form(...),
+                     title: str = Form(...), content: str = Form(""),
                      summary: str = Form(""), comment: str = Form(""),
                      is_published: bool = Form(True), announce: bool = Form(False),
                      visibility: str = Form("public"), announce_comment: str = Form(""),
-                     page_mode: bool = Form(False),
+                     page_mode: bool = Form(False), view_mode: str = Form("text"),
+                     image_urls: str = Form("[]"),
                      audio: UploadFile = File(None), remove_audio: bool = Form(False)):
     user = require_active_auth(request)
     audio_url = ""
@@ -516,6 +527,11 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
         episode.comment = comment
         episode.is_published = is_published
         episode.page_mode = page_mode
+        episode.view_mode = view_mode
+        try:
+            episode.image_urls = json.loads(image_urls) if image_urls else []
+        except (json.JSONDecodeError, TypeError):
+            episode.image_urls = []
         if remove_audio:
             old = episode.audio_url
             episode.audio_url = ""
@@ -613,6 +629,8 @@ def _episode_json(e, summary_only=False):
         "summary": e.summary or "",
         "comment": e.comment or "",
         "audio_url": e.audio_url or "",
+        "view_mode": getattr(e, "view_mode", "text"),
+        "image_urls": getattr(e, "image_urls", []) or [],
         "views": e.views or 0,
         "is_published": e.is_published,
         "page_mode": getattr(e, "page_mode", False),

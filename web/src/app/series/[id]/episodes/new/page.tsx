@@ -57,6 +57,10 @@ export default function NewEpisodePage() {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [pageMode, setPageMode] = useState(false);
+  const [viewMode, setViewMode] = useState<"text" | "comic">("text");
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
   const novelId = Number(Array.isArray(params.id) ? params.id[0] : params.id);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedRef = useRef(false);
@@ -148,12 +152,48 @@ export default function NewEpisodePage() {
     setAudioPreview(URL.createObjectURL(f));
   };
 
+  const handleImageAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setImageFiles((prev) => [...prev, ...files]);
+    const newPreviews = files.map((f) => URL.createObjectURL(f));
+    setImageUrls((prev) => [...prev, ...newPreviews]);
+    e.target.value = "";
+  };
+
+  const handleImageRemove = (idx: number) => {
+    setImageUrls((prev) => prev.filter((_, i) => i !== idx));
+    setImageFiles((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleImageMove = (idx: number, dir: -1 | 1) => {
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= imageUrls.length) return;
+    setImageUrls((prev) => { const n = [...prev]; [n[idx], n[newIdx]] = [n[newIdx], n[idx]]; return n; });
+    setImageFiles((prev) => { const n = [...prev]; [n[idx], n[newIdx]] = [n[newIdx], n[idx]]; return n; });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanContent = (content || "").replace(/<[^>]*>/g, "").trim();
-    if (!title.trim() || !cleanContent || submitting) return;
+    if (!title.trim() || submitting) return;
+    if (viewMode === "text" && !cleanContent) return;
+    if (viewMode === "comic" && imageUrls.length === 0) return;
     setSubmitting(true);
     try {
+      let uploadedUrls: string[] = [];
+      if (viewMode === "comic" && imageFiles.length > 0) {
+        setUploadingImages(true);
+        for (const f of imageFiles) {
+          const fd = new FormData();
+          fd.append("file", f);
+          const r = await fetch("/api/media/upload", { method: "POST", credentials: "include", body: fd });
+          if (r.ok) { const d = await r.json(); uploadedUrls.push(d.url); }
+        }
+        setUploadingImages(false);
+      } else if (viewMode === "comic") {
+        uploadedUrls = imageUrls.filter((u) => !u.startsWith("blob:"));
+      }
       const form = new FormData();
       form.append("title", title);
       form.append("content", content);
@@ -161,6 +201,8 @@ export default function NewEpisodePage() {
       form.append("comment", comment);
       form.append("is_published", isPublished ? "true" : "false");
       form.append("page_mode", String(pageMode));
+      form.append("view_mode", viewMode);
+      form.append("image_urls", JSON.stringify(uploadedUrls));
       if (audioFile) form.append("audio", audioFile);
       if (announce) {
         form.append("announce", "true");
@@ -192,7 +234,32 @@ export default function NewEpisodePage() {
         </div>
         <div className="form-group">
           <label>내용 *</label>
-          <EpisodeEditor value={content} onChange={(v) => setContent(v)} pageMode={pageMode} onPageModeChange={setPageMode} />
+          <div className="episode-view-mode-toggle">
+            <button type="button" className={`episode-view-mode-btn ${viewMode === "text" ? "active" : ""}`} onClick={() => { if (viewMode === "comic" && imageUrls.length > 0 && !confirm("전환하면 이미지가 초기화됩니다. 계속하시겠습니까?")) return; setViewMode("text"); }}>글 모드</button>
+            <button type="button" className={`episode-view-mode-btn ${viewMode === "comic" ? "active" : ""}`} onClick={() => { if (viewMode === "text" && content.replace(/<[^>]*>/g, "").trim() && !confirm("전환하면 텍스트가 초기화됩니다. 계속하시겠습니까?")) return; setViewMode("comic"); setContent(""); }}>만화 모드</button>
+          </div>
+          {viewMode === "text" ? (
+            <EpisodeEditor value={content} onChange={(v) => setContent(v)} pageMode={pageMode} onPageModeChange={setPageMode} />
+          ) : (
+            <div className="episode-comic-uploader">
+              {imageUrls.map((url, i) => (
+                <div key={i} className="episode-comic-img-item">
+                  <img src={url} alt={`이미지 ${i + 1}`} />
+                  <div className="episode-comic-img-actions">
+                    <button type="button" onClick={() => handleImageMove(i, -1)} disabled={i === 0} title="앞으로">‹</button>
+                    <span>{i + 1}</span>
+                    <button type="button" onClick={() => handleImageMove(i, 1)} disabled={i === imageUrls.length - 1} title="뒤로">›</button>
+                    <button type="button" onClick={() => handleImageRemove(i)} title="제거" style={{ color: "var(--danger)" }}>×</button>
+                  </div>
+                </div>
+              ))}
+              <label className="episode-comic-add-btn">
+                <Icon name="image" /> 이미지 추가
+                <input type="file" accept="image/*" multiple onChange={handleImageAdd} style={{ display: "none" }} />
+              </label>
+              {uploadingImages && <p style={{ color: "var(--text-secondary)", fontSize: 13 }}>이미지 업로드 중...</p>}
+            </div>
+          )}
         </div>
         <div className="form-group">
           <label>작가 코멘트</label>
@@ -244,7 +311,7 @@ export default function NewEpisodePage() {
               </button>
             )}
           </div>
-          <button type="submit" disabled={submitting || !title.trim() || !(content || "").trim()} className="btn btn-primary">게시</button>
+          <button type="submit" disabled={submitting || !title.trim() || (viewMode === "text" && !(content || "").trim()) || (viewMode === "comic" && imageUrls.length === 0)} className="btn btn-primary">게시</button>
           <button type="button" onClick={() => router.back()} className="btn btn-outline">취소</button>
         </div>
         {showDraftList && (
