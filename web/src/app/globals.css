@@ -1605,7 +1605,7 @@ input[type="checkbox"] {
   margin-bottom: 50px;
   overflow: hidden;
 }
-.episode-body p { margin: 0; padding: 0 0 10px; white-space: pre-wrap; }
+.episode-body p { margin: 0; padding: 0 0 10px; white-space: pre-wrap; text-indent: 1em; }
 .episode-body h2 { font-size: 1.2em; margin: 20px 0 8px; }
 .episode-body h3 { font-size: 1.1em; margin: 16px 0 6px; }
 .episode-body blockquote {
@@ -1729,7 +1729,7 @@ input[type="checkbox"] {
   line-height: 1.4;
   overflow: hidden;
 }
-.episode-editor-content .ProseMirror p { margin: 0; padding: 0 0 8px; }
+.episode-editor-content .ProseMirror p { margin: 0; padding: 0 0 8px; text-indent: 1em; }
 .episode-editor-content .ProseMirror h2 { font-size: 1.3em; margin: 16px 0 8px; }
 .episode-editor-content .ProseMirror h3 { font-size: 1.1em; margin: 12px 0 6px; }
 .episode-editor-content .ProseMirror blockquote {
@@ -1762,6 +1762,7 @@ input[type="checkbox"] {
   font-size: 1em;
 }
 .episode-editor-content .ProseMirror hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+.episode-editor-content p.is-editor-empty:first-child { text-indent: 0; }
 .episode-editor-content p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   color: var(--text-dim);
