@@ -733,8 +733,8 @@ const localReactionEmojiMap = useMemo(() => {
                 );
               })}
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  총 {total}표
+                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    총 {typeof total === "number" ? total : 0}표
                   {!post.is_mine && post.ap_id && (
                     <button
                       type="button"
@@ -913,7 +913,7 @@ const localReactionEmojiMap = useMemo(() => {
                   ) : (
                     <span>{emoji}</span>
                   )}
-                  <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{count}</span>
+                  <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{typeof count === "number" ? count : 0}</span>
                 </span>
               );
             })}
@@ -921,11 +921,11 @@ const localReactionEmojiMap = useMemo(() => {
         )}
         {!readonly && <div className="post-actions" onClick={(e) => e.stopPropagation()}>
           <button onClick={() => { setShowReply(!showReply); }} className="action-btn">
-            <Icon name="reply" /> {post.replies_count}
+            <Icon name="reply" /> {typeof post.replies_count === "number" ? post.replies_count : 0}
           </button>
           <form className="inline-form" onSubmit={(e) => e.preventDefault()}>
             <button type="button" onClick={toggleBoost} disabled={!post.is_mine && (post.visibility === "followers" || post.visibility === "mention")} className={`action-btn ${boosted ? "boosted" : ""}`}>
-              <Icon name="refresh" /> {boostsCount}
+              <Icon name="refresh" /> {typeof boostsCount === "number" ? boostsCount : 0}
             </button>
           </form>
           {currentUser?.enable_reactions !== false ? (
@@ -950,7 +950,7 @@ const localReactionEmojiMap = useMemo(() => {
           ) : (
             <form className="inline-form" onSubmit={(e) => e.preventDefault()}>
               <button type="button" onClick={toggleLike} className={`action-btn ${liked ? "liked" : ""}`}>
-                <Icon name={myReaction && liked ? "star_filled" : liked ? "star_filled" : "star"} /> {likesCount}
+                <Icon name={myReaction && liked ? "star_filled" : liked ? "star_filled" : "star"} /> {typeof likesCount === "number" ? likesCount : 0}
               </button>
             </form>
           )}
