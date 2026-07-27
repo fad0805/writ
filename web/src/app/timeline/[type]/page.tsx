@@ -37,7 +37,7 @@ export default function TimelinePage() {
   const [showComposer, setShowComposer] = useState(false);
   const [rewriteContent, setRewriteContent] = useState<string | null>(null);
   const [rewriteVisibility, setRewriteVisibility] = useState<string | undefined>(undefined);
-  const [rewriteParent, setRewriteParent] = useState<{ id: number; summary: string | null } | null>(null);
+  const [rewriteInitialContent, setRewriteInitialContent] = useState<string | undefined>(undefined);
   
   // 💡 상태 변경 비동기 문제를 해결하기 위해 offset을 최신 ref로 관리합니다.
   const offsetRef = useRef(0);
@@ -297,9 +297,7 @@ export default function TimelinePage() {
             }
             setRewriteContent(null);
             setRewriteVisibility(undefined);
-            setRewriteParent(null);
-          }} initialContent={rewriteContent ?? undefined} initialVisibility={rewriteVisibility}
-            parentId={rewriteParent?.id} />
+          }} initialContent={rewriteContent ?? undefined} initialVisibility={rewriteVisibility} />
         </div>
       <div className="timeline-tabs">
         {TABS.map((t) => (
@@ -350,10 +348,27 @@ export default function TimelinePage() {
                       } 
                     }} 
                     onRewrite={(content, visibility, replyTo) => {
-                      setRewriteContent(content);
-                      setRewriteVisibility(visibility);
-                      setRewriteParent(replyTo ? { id: replyTo.id, summary: replyTo.content } : null);
-                      setShowComposer(true);
+                      if (replyTo) {
+                        setRewriteInitialContent(content);
+                        setReplyPost({
+                          id: replyTo.id,
+                          number: replyTo.number,
+                          content: replyTo.content,
+                          author: replyTo.author,
+                          visibility: replyTo.visibility,
+                          summary: null,
+                          created_at: null,
+                          ap_id: "",
+                          likes_count: 0, boosts_count: 0, replies_count: 0,
+                          liked: false, boosted: false, bookmarked: false, is_mine: false,
+                          reply_context: null, media_attachments: [],
+                          is_deleted: false,
+                        } as any);
+                      } else {
+                        setRewriteContent(content);
+                        setRewriteVisibility(visibility);
+                        setShowComposer(true);
+                      }
                     }}
                     selected={i === selectedIdx} 
                   />
@@ -363,16 +378,16 @@ export default function TimelinePage() {
           </InfiniteScroll>
         )}
       </div>
-      {replyPost && <ReplyModal post={replyPost} onClose={() => setReplyPost(null)} onDone={(newPost) => { setReplyPost(null); if (newPost) { setPosts((prev) => { if (prev.some((p) => p.id === newPost.id)) return prev; return [newPost, ...prev]; }); } }} />}
+      {replyPost && <ReplyModal post={replyPost} onClose={() => { setReplyPost(null); setRewriteInitialContent(undefined); }} initialContent={rewriteInitialContent} onDone={(newPost) => { setReplyPost(null); setRewriteInitialContent(undefined); if (newPost) { setPosts((prev) => { if (prev.some((p) => p.id === newPost.id)) return prev; return [newPost, ...prev]; }); } }} />}
       <button className="mobile-fab" onClick={() => setShowComposer(true)}>
         <Icon name="pen_solid" size={22} />
       </button>
       {showComposer && (
-        <div className="mobile-composer-overlay" onClick={() => { setShowComposer(false); setRewriteContent(null); setRewriteVisibility(undefined); setRewriteParent(null); }}>
+        <div className="mobile-composer-overlay" onClick={() => { setShowComposer(false); setRewriteContent(null); setRewriteVisibility(undefined); }}>
           <div className="mobile-composer-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="mobile-composer-header">
               <span>글쓰기</span>
-              <button className="mobile-composer-close" onClick={() => { setShowComposer(false); setRewriteContent(null); setRewriteVisibility(undefined); setRewriteParent(null); }}>
+              <button className="mobile-composer-close" onClick={() => { setShowComposer(false); setRewriteContent(null); setRewriteVisibility(undefined); }}>
                 <Icon name="x" size={18} />
               </button>
             </div>
@@ -386,9 +401,7 @@ export default function TimelinePage() {
               setShowComposer(false);
               setRewriteContent(null);
               setRewriteVisibility(undefined);
-              setRewriteParent(null);
-            }} initialContent={rewriteContent ?? undefined} initialVisibility={rewriteVisibility}
-              parentId={rewriteParent?.id} />
+            }} initialContent={rewriteContent ?? undefined} initialVisibility={rewriteVisibility} />
           </div>
         </div>
       )}
