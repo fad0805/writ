@@ -1,4 +1,4 @@
-const LINES_PER_PAGE = 20;
+const LINES_PER_PAGE = 35;
 
 export function splitIntoPages(html: string): string[] {
   if (!html) return [""];
