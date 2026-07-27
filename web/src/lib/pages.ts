@@ -2,22 +2,30 @@ const LINES_PER_PAGE = 20;
 
 export function splitIntoPages(html: string): string[] {
   if (!html) return [""];
-  const blocks = html.split(/(<br\s*\/?>|\n)/i);
+  const hasPTags = /<p[\s>]/i.test(html);
+  const hasBrTags = /<br\s*\/?>/i.test(html);
+
+  let lines: string[];
+  if (hasPTags) {
+    lines = html.split(/<\/p>/i).filter(s => s.trim());
+  } else if (hasBrTags) {
+    lines = html.split(/<br\s*\/?>/i);
+  } else {
+    lines = html.split("\n");
+  }
+
   const pages: string[] = [];
   let current: string[] = [];
   let lineCount = 0;
+  const closeTag = hasPTags ? "</p>" : "";
 
-  for (const block of blocks) {
-    if (/^<br\s*\/?>$/i.test(block) || block === "\n") {
-      lineCount++;
-      current.push("\n");
-      if (lineCount >= LINES_PER_PAGE) {
-        pages.push(current.join("").replace(/\n$/, ""));
-        current = [];
-        lineCount = 0;
-      }
-    } else {
-      current.push(block);
+  for (const line of lines) {
+    current.push(line + closeTag);
+    lineCount++;
+    if (lineCount >= LINES_PER_PAGE) {
+      pages.push(current.join(""));
+      current = [];
+      lineCount = 0;
     }
   }
 
@@ -28,5 +36,5 @@ export function splitIntoPages(html: string): string[] {
 }
 
 export function joinPages(pages: string[]): string {
-  return pages.join("\n");
+  return pages.join("");
 }
