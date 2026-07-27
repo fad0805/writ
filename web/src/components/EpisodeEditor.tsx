@@ -4,8 +4,7 @@ import { useEditorActions, useEditorInit } from "@/hooks/useEditorAction";
 import { EditorContent } from "@tiptap/react";
 import { useRef, useState, useEffect, useCallback } from "react";
 import ColorPicker from "./ColorPicker";
-
-const LINES_PER_PAGE = 20;
+import { PageBreakExtension } from "@/const/pageBreakExtension";
 
 export default function EpisodeEditor({ value, onChange }: { value: string; onChange: (html: string) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -16,31 +15,18 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
   const editor = useEditorInit({ value: value || "", onChange });
   const editorFn = useEditorActions(editor);
 
-  const pageBreaks = useCallback(() => {
-    if (!pageMode || !value) return [];
-    const blocks = value.split(/(<\/p>)/i);
-    const breaks: number[] = [];
-    let lineCount = 0;
-    let charPos = 0;
-    for (const block of blocks) {
-      if (/^<\/p>$/i.test(block)) {
-        lineCount++;
-        if (lineCount % LINES_PER_PAGE === 0) {
-          breaks.push(charPos);
-        }
-      }
-      charPos += block.length;
+  const togglePageMode = () => {
+    const next = !pageMode;
+    setPageMode(next);
+    if (editor) {
+      const storage = editor.extensionStorage as Record<string, any>;
+      if (storage.pageBreaks) storage.pageBreaks.enabled = next;
+      editor.chain().command(({ tr }) => {
+        tr.setMeta("pageBreaksToggle", true);
+        return true;
+      }).run();
     }
-    return breaks;
-  }, [value, pageMode]);
-
-  const [pageCount, setPageCount] = useState(1);
-
-  useEffect(() => {
-    if (!pageMode || !value) { setPageCount(1); return; }
-    const blocks = value.split(/<\/p>/i).filter(s => s.trim());
-    setPageCount(Math.max(1, Math.ceil(blocks.length / LINES_PER_PAGE)));
-  }, [value, pageMode]);
+  };
 
   return (
     <div className="episode-editor">
@@ -85,14 +71,11 @@ export default function EpisodeEditor({ value, onChange }: { value: string; onCh
           )}
         </div>
         <div className="episode-editor-toolbar-section">
-          <button type="button" onClick={() => setPageMode(!pageMode)} data-active={pageMode} title="페이지 모드">📖</button>
-          {pageMode && <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: 4 }}>{pageCount}페이지</span>}
+          <button type="button" onClick={togglePageMode} data-active={pageMode} title="페이지 모드">📖</button>
         </div>
       </div>
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={editorFn?.handleImgUpload} />
-      <div className={`episode-editor-content${pageMode ? " page-mode" : ""}`} data-page-mode={pageMode || undefined}>
-        <EditorContent editor={editor} />
-      </div>
+      <EditorContent editor={editor} className="episode-editor-content" />
     </div>
   );
 }

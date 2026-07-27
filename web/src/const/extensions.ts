@@ -5,6 +5,7 @@ import TextAlign from "@tiptap/extension-text-align";
 import { Color, TextStyle } from "@tiptap/extension-text-style";
 import Underline from "@tiptap/extension-underline";
 import StarterKit from "@tiptap/starter-kit";
+import { PageBreakExtension } from "./pageBreakExtension";
 
 const CustomStrike = Strike.extend({
   addInputRules() {
@@ -58,6 +59,7 @@ export const EDITOR_EXTENSIONS = [
     Placeholder.configure({ placeholder: "소설 내용을 입력하세요..." }),
     TextAlign.configure({ types: ["heading", "paragraph"] }),
     AlignableImage,
+    PageBreakExtension,
 ]
 
 export const COLOR_PICKER_PALLETE = [
