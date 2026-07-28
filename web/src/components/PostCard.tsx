@@ -266,9 +266,7 @@ const localReactionEmojiMap = useMemo(() => {
     );
 
     // Strip "RE: https://..." from quote posts
-    if ((post as any).quote_of_id || (post as any).quote_of_ap_id) {
-      html = html.replace(/(?:<span[^>]*>)?[\s\n]*RE:[\s\n]*(?:<a[^>]*>.*?<\/a>|https?:\/\/[^\s<>]+)[\s\n]*(?:<\/span>)?(?:[\s\n]*<br\s*\/?>)*/gi, '');
-    }
+    html = html.replace(/(?:<span[^>]*>)?[\s\n]*RE:[\s\n]*(?:<a[^>]*>.*?<\/a>|https?:\/\/[^\s<>]+)[\s\n]*(?:<\/span>)?(?:[\s\n]*<br\s*\/?>)*/gi, '');
 
     // 본문에서 series, episode 접두사 라인을 앞뒤 공백/줄바꿈 포함하여 완전히 삭제
     html = html.replace(/(?:<br\s*\/?>|\n|^)\s*(?:series|episode):\s*(?:<a[^>]*>.*?<\/a>|https?:\/\/[^\s<>]+)\s*(?:<br\s*\/?>|\n|$)/gi, '\n');
