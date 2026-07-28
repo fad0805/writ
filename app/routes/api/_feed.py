@@ -53,7 +53,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         }
 
     _visible_user_ids = {user.id} if user else set()
-    visibility = ['mention', 'follower', 'home', 'public']
+    visibility = ['mention', 'followers', 'home', 'public']
     if tl_type == 'home' and _following_ids:
         _visible_user_ids.update(_following_ids)
     elif tl_type == 'social':
