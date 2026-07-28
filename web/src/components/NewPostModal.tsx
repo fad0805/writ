@@ -8,23 +8,13 @@ export default function NewPostModal({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     if (loading) return;
-    const scrollY = window.scrollY;
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.width = "100%";
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
     setTimeout(() => {
       const ta = document.querySelector<HTMLTextAreaElement>(".reply-modal textarea, .reply-modal .textarea-ta, .post-form textarea");
       if (ta) { ta.focus(); ta.selectionStart = ta.selectionEnd = ta.value.length; }
     }, 100);
-    return () => {
-      window.removeEventListener("keydown", handler);
-      document.body.style.position = "";
-      document.body.style.top = "";
-      document.body.style.width = "";
-      window.scrollTo(0, scrollY);
-    };
+    return () => window.removeEventListener("keydown", handler);
   }, [onClose, loading]);
 
   return (
