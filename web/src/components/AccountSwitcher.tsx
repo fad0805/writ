@@ -121,6 +121,22 @@ export default function AccountSwitcher({ open, onClose }: { open: boolean; onCl
         )}
         {showAddForm ? (
           <div className="account-switcher-add-form">
+            {accounts.length > 0 && (
+              <div className="account-switcher-existing">
+                <span className="account-switcher-existing-label">저장된 계정</span>
+                {accounts.map((a) => (
+                  <div key={a.user_id} className="account-switcher-existing-item">
+                    <Avatar
+                      user={{ username: a.username, display_name: a.display_name, avatar: a.avatar } as any}
+                      className="account-switcher-avatar rounded-[8px] flex items-center justify-center text-white font-bold text-lg"
+                      style={{ width: 24, height: 24 }}
+                    />
+                    <span className="account-switcher-existing-name">{a.display_name}</span>
+                    <span className="account-switcher-existing-handle">@{a.username}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <form onSubmit={handleAddLogin}>
               <div className="form-group">
                 <label>사용자 이름 또는 이메일</label>
