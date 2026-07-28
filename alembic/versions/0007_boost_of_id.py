@@ -9,6 +9,8 @@ Create Date: 2026-07-14
 from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
+import os as _os, sys as _sys; _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+from helpers import add_column_safe
 
 
 revision: str = '0007'
@@ -18,16 +20,24 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    conn = op.get_bind()
-    inspector = sa.inspect(conn)
-    columns = [c["name"] for c in inspector.get_columns("posts")]
-    if "boost_of_id" not in columns:
-        op.add_column("posts", sa.Column("boost_of_id", sa.Integer(), nullable=True))
+    add_column_safe("posts", sa.Column("boost_of_id", sa.Integer(), nullable=True))
+    try:
         op.create_foreign_key("fk_posts_boost_of_id", "posts", "posts", ["boost_of_id"], ["id"])
+    except Exception:
+        pass
+    try:
         op.create_index("ix_posts_boost_of_id", "posts", ["boost_of_id"])
+    except Exception:
+        pass
 
 
 def downgrade() -> None:
-    op.drop_index("ix_posts_boost_of_id", "posts")
-    op.drop_constraint("fk_posts_boost_of_id", "posts", type_="foreignkey")
+    try:
+        op.drop_index("ix_posts_boost_of_id", "posts")
+    except Exception:
+        pass
+    try:
+        op.drop_constraint("fk_posts_boost_of_id", "posts", type_="foreignkey")
+    except Exception:
+        pass
     op.drop_column("posts", "boost_of_id")

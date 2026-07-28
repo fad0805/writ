@@ -30,7 +30,10 @@ def upgrade() -> None:
             sa.Column("auth", sa.Text, nullable=False),
             sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         )
-        op.create_index("ix_push_sub_user", "push_subscriptions", ["user_id"])
+        try:
+            op.create_index("ix_push_sub_user", "push_subscriptions", ["user_id"])
+        except Exception:
+            pass
 
 
 def downgrade() -> None:

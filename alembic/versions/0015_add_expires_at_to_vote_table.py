@@ -7,6 +7,8 @@ Create Date: 2026-07-21 19:49:12.000000
 """
 from alembic import op
 import sqlalchemy as sa
+import os as _os, sys as _sys; _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+from helpers import add_column_safe
 
 revision = "0015"
 down_revision = "0014"
@@ -15,7 +17,7 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column("votes", sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True))
+    add_column_safe("votes", sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True))
 
 
 def downgrade():

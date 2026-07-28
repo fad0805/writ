@@ -7,6 +7,8 @@ Create Date: 2026-07-19 02:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
+import os as _os, sys as _sys; _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+from helpers import add_column_safe
 
 revision = "0014"
 down_revision = "0013"
@@ -15,8 +17,8 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column("server_settings", sa.Column("vapid_private_key", sa.Text(), server_default=""))
-    op.add_column("server_settings", sa.Column("vapid_public_key", sa.Text(), server_default=""))
+    add_column_safe("server_settings", sa.Column("vapid_private_key", sa.Text(), server_default=""))
+    add_column_safe("server_settings", sa.Column("vapid_public_key", sa.Text(), server_default=""))
 
 
 def downgrade():

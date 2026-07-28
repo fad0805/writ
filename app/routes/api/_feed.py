@@ -1,8 +1,6 @@
 """Timeline/feed endpoints extracted from _posts.py."""
 import re
-import json
 import logging
-import threading
 import asyncio
 import httpx
 from datetime import datetime, timedelta, timezone
@@ -16,9 +14,8 @@ from sqlalchemy.orm import selectinload, Session
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark
 from app.utils.to_ap_serializer import to_ap_create
 from app.serializers import _post_json
-from app.config.settings import BASE_URL
 from app.core.activitypub import broadcast_to_followers, _post_to_inbox, _federation_allowed, _resolve_actor
-from app.core.timeline_stream import broadcast_post, add_post_stream, remove_post_stream, add_stream, remove_stream
+from app.core.timeline_stream import broadcast_post, add_post_stream, remove_post_stream
 from app.db.database import get_session, get_db
 from app.routes.auth import get_current_user
 from app.utils.emoji import _load_emojis
@@ -36,7 +33,7 @@ TIMELINE_LABELS = {
 
 
 def _get_feed(user, tl_type, session, limit=10, offset=0):
-    from app.routes.api.interactions import _json_array_has_user
+    from app.routes.api.interactions._common import _json_array_has_user
     print(f"[feed] _get_feed uid={user.id if user else None} tl={tl_type} limit={limit} offset={offset}", flush=True)
     _base_opts = [selectinload(Post.author), selectinload(Post.parent)]
     _following_ids = None
@@ -312,13 +309,6 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                             _post_to_inbox(inbox, create_activity, user)
             except Exception:
                 pass
-
-
-def _broadcast_timeline(post_json, author_id, visibility, is_dm):
-    try:
-        broadcast_post(post_json, author_id, visibility, is_dm)
-    except Exception as e:
-        logger.error("Failed to broadcast timeline: %s", e, exc_info=True)
 
 
 @feed_router.get("/posts/{post_id}/stream")

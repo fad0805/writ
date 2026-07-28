@@ -136,6 +136,14 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
     except Exception as e:
         logger.error("BROADCAST_POST ERROR", exc_info=True)
 
+
+def _broadcast_timeline(post_json, author_id, visibility, is_dm):
+    try:
+        broadcast_post(post_json, author_id, visibility, is_dm)
+    except Exception as e:
+        logger.error("Failed to broadcast timeline: %s", e, exc_info=True)
+
+
 _notif_streams: dict[int, dict] = {}
 _notif_counter = 0
 

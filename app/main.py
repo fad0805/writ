@@ -4,7 +4,6 @@ import traceback
 import threading
 import uvicorn
 
-import sqlalchemy
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, HTTPException
@@ -16,7 +15,6 @@ from app.config.settings import CORS_ORIGINS
 from app.core.activitypub import _cleanup_expired_media, _cleanup_remote_data
 from app.core.push import init_vapid_keys
 from app.core.workers import delivery_worker, refresh_remote_profiles, auto_delete_expired_posts
-from app.db.database import get_session, init_db
 from app.middleware import CSRFProtectionMiddleware, LogRequestsMiddleware
 from app.routes.api import router as api_router, _cleanup_avatars
 from app.routes.auth import router as auth_router
@@ -30,33 +28,8 @@ from app.routes.oauth import router as oauth_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
-    try:
-        with get_session() as s:
-            inspector = sqlalchemy.inspect(s.bind)
-            cols = [c["name"] for c in inspector.get_columns("posts")]
-            if "link_preview" not in cols:
-                s.execute(sqlalchemy.text("ALTER TABLE posts ADD COLUMN link_preview JSON"))
-                s.commit()
-            if "quote_of_id" not in cols:
-                s.execute(sqlalchemy.text("ALTER TABLE posts ADD COLUMN quote_of_id INTEGER"))
-                s.commit()
-            if "quote_of_ap_id" not in cols:
-                s.execute(sqlalchemy.text("ALTER TABLE posts ADD COLUMN quote_of_ap_id VARCHAR(1024) DEFAULT ''"))
-                s.commit()
-    except Exception:
-        pass
     try:
         _cleanup_avatars()
-    except Exception:
-        pass
-    try:
-        with get_session() as s:
-            inspector = sqlalchemy.inspect(s.bind)
-            cols = [c["name"] for c in inspector.get_columns("push_subscriptions")]
-            if "device_name" not in cols:
-                s.execute(sqlalchemy.text("ALTER TABLE push_subscriptions ADD COLUMN device_name VARCHAR(256) DEFAULT ''"))
-                s.commit()
     except Exception:
         pass
     try:

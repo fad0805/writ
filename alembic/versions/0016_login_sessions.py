@@ -31,8 +31,14 @@ def upgrade() -> None:
             sa.Column("last_active", sa.DateTime(timezone=True), server_default=sa.func.now()),
             sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         )
-        op.create_index("ix_login_session_key", "login_sessions", ["session_key"], unique=True)
-        op.create_index("ix_login_session_user", "login_sessions", ["user_id"])
+        try:
+            op.create_index("ix_login_session_key", "login_sessions", ["session_key"], unique=True)
+        except Exception:
+            pass
+        try:
+            op.create_index("ix_login_session_user", "login_sessions", ["user_id"])
+        except Exception:
+            pass
 
 
 def downgrade() -> None:

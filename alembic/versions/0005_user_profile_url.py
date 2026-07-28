@@ -9,6 +9,8 @@ Create Date: 2026-07-11
 from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
+import os as _os, sys as _sys; _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+from helpers import add_column_safe
 
 
 revision: str = '0005'
@@ -18,11 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    conn = op.get_bind()
-    inspector = sa.inspect(conn)
-    columns = [c["name"] for c in inspector.get_columns("users")]
-    if "profile_url" not in columns:
-        op.add_column("users", sa.Column("profile_url", sa.String(512), server_default=""))
+    add_column_safe("users", sa.Column("profile_url", sa.String(512), server_default=""))
 
 
 def downgrade() -> None:

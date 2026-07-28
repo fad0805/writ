@@ -33,12 +33,30 @@ def upgrade() -> None:
         ('ix_posts_author_deleted_created', 'posts'),
     ]:
         if _index_exists(table, name):
-            op.drop_index(name, table_name=table)
+            try:
+                op.drop_index(name, table_name=table)
+            except Exception:
+                pass
 
 
 def downgrade() -> None:
-    op.create_index('ix_posts_author_deleted_created', 'posts', ['author_id', 'is_deleted', 'created_at'], unique=False)
-    op.create_index('ix_posts_author_created', 'posts', ['author_id', 'created_at'], unique=False)
-    op.create_index('ix_notif_user_type', 'notifications', ['user_id', 'notification_type'], unique=False)
-    op.create_index('ix_notif_user_created', 'notifications', ['user_id', 'created_at'], unique=False)
-    op.create_index('ix_follows_follower_following', 'follows', ['follower_id', 'following_id'], unique=False)
+    try:
+        op.create_index('ix_posts_author_deleted_created', 'posts', ['author_id', 'is_deleted', 'created_at'], unique=False)
+    except Exception:
+        pass
+    try:
+        op.create_index('ix_posts_author_created', 'posts', ['author_id', 'created_at'], unique=False)
+    except Exception:
+        pass
+    try:
+        op.create_index('ix_notif_user_type', 'notifications', ['user_id', 'notification_type'], unique=False)
+    except Exception:
+        pass
+    try:
+        op.create_index('ix_notif_user_created', 'notifications', ['user_id', 'created_at'], unique=False)
+    except Exception:
+        pass
+    try:
+        op.create_index('ix_follows_follower_following', 'follows', ['follower_id', 'following_id'], unique=False)
+    except Exception:
+        pass

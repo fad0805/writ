@@ -6,6 +6,8 @@ Create Date: 2026-07-27
 """
 from alembic import op
 import sqlalchemy as sa
+import os as _os, sys as _sys; _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+from helpers import add_column_safe
 
 revision = "0025"
 down_revision = "0024"
@@ -14,7 +16,7 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column("episodes", sa.Column("page_mode", sa.Boolean(), server_default="false"))
+    add_column_safe("episodes", sa.Column("page_mode", sa.Boolean(), server_default="false"))
 
 
 def downgrade():

@@ -9,6 +9,8 @@ Create Date: 2026-07-11
 from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
+import os as _os, sys as _sys; _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+from helpers import add_column_safe
 
 
 revision: str = '0004'
@@ -18,7 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("follows", sa.Column("notify_on_post", sa.Boolean(), default=False))
+    add_column_safe("follows", sa.Column("notify_on_post", sa.Boolean(), default=False))
 
 
 def downgrade() -> None:
