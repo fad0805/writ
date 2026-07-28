@@ -655,14 +655,14 @@ const localReactionEmojiMap = useMemo(() => {
                 return `<span style="opacity:0.5;font-size:0.9em">${cwLabel}</span>`;
               }
               const rawText = (post.reply_context.content || "");
-              const text = rawText.slice(0, 90);
+              const text = rawText.slice(0, 200);
               let html = text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
               html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
               html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
               html = html.replace(/\n/g, '<br>');
               html = renderCustomEmojis(html, emojiList);
               html = rewriteLinks(html, validMentions);
-              if (rawText.length > 90) html += "...";
+              if (rawText.length > 200) html += "...";
               return sanitizePost(html);
             })() }} />
           </Link>
