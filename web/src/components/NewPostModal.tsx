@@ -10,11 +10,11 @@ export default function NewPostModal({ onClose }: { onClose: () => void }) {
     if (loading) return;
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
-    setTimeout(() => {
-      const ta = document.querySelector<HTMLTextAreaElement>(".reply-modal textarea, .reply-modal .textarea-ta, .post-form textarea");
-      if (ta) { ta.focus(); ta.selectionStart = ta.selectionEnd = ta.value.length; }
-    }, 100);
-    return () => window.removeEventListener("keydown", handler);
+    const id = setInterval(() => {
+      const ta = document.querySelector<HTMLTextAreaElement>(".reply-modal .textarea-ta");
+      if (ta) { ta.focus(); ta.selectionStart = ta.selectionEnd = ta.value.length; clearInterval(id); }
+    }, 50);
+    return () => { window.removeEventListener("keydown", handler); clearInterval(id); };
   }, [onClose, loading]);
 
   return (
