@@ -57,13 +57,7 @@ export default function KeyboardShortcuts() {
 
       if (e.key === "n" && !isEditing && user) {
         e.preventDefault();
-        const ta = document.querySelector<HTMLTextAreaElement>(".post-form textarea, .textarea-ta");
-        if (ta) {
-          const rect = ta.getBoundingClientRect();
-          const visible = rect.top >= 0 && rect.bottom <= window.innerHeight;
-          if (visible) { ta.focus(); }
-          else { setShowPostModal(true); }
-        } else { setShowPostModal(true); }
+        setShowPostModal(true);
         return;
       }
 
