@@ -1,7 +1,7 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { api, PostData } from "@/lib/api";
+import { api, PostData, accountSnapshot } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import PostCard from "@/components/PostCard";
 import PostForm from "@/components/PostForm";
@@ -53,12 +53,13 @@ export default function TimelinePage() {
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("writ:tl-cache");
+      const accountId = accountSnapshot();
+      const raw = localStorage.getItem(`writ:tl-cache:${accountId}`);
       if (raw) {
         const parsed = JSON.parse(raw);
         const ts = parsed._ts || 0;
         if (Date.now() - ts > 5 * 60 * 1000) {
-          localStorage.removeItem("writ:tl-cache");
+          localStorage.removeItem(`writ:tl-cache:${accountId}`);
         } else {
           delete parsed._ts;
           tabCache.current = parsed;
@@ -68,17 +69,19 @@ export default function TimelinePage() {
   }, []);
 
   const saveTabCache = () => {
-    try { localStorage.setItem("writ:tl-cache", JSON.stringify({ ...tabCache.current, _ts: Date.now() })); } catch {}
+    try { localStorage.setItem(`writ:tl-cache:${accountSnapshot()}`, JSON.stringify({ ...tabCache.current, _ts: Date.now() })); } catch {}
   };
 
   useEffect(() => {
     if (typeof localStorage !== "undefined") localStorage.setItem("lastTimelineTab", tlType);
+    const cacheKey = `${accountSnapshot()}:${tlType}`;
     if (prevTlRef.current !== tlType) {
-      tabCache.current[prevTlRef.current] = { posts, hasMore, offset: offsetRef.current };
+      const prevKey = `${accountSnapshot()}:${prevTlRef.current}`;
+      tabCache.current[prevKey] = { posts, hasMore, offset: offsetRef.current };
       saveTabCache();
       prevTlRef.current = tlType;
     }
-    const saved = tabCache.current[tlType];
+    const saved = tabCache.current[cacheKey];
     if (saved) {
       setPosts(saved.posts);
       setHasMore(saved.hasMore);
@@ -88,20 +91,24 @@ export default function TimelinePage() {
       return;
     }
     load();
-  }, [tlType]);
+  }, [tlType, user?.id]);
 
   const load = async (silent = false) => {
+    const snapshot = accountSnapshot();
     if (!silent) setLoading(true);
     setError("");
     try {
       const data = await api.timeline(tlType, LIMIT, 0);
+      if (accountSnapshot() !== snapshot) return;
       if (data._emojis) injectEmojis(data._emojis);
       setPosts(data.posts);
       setHasMore(data.has_more);
       offsetRef.current = LIMIT;
-      tabCache.current[tlType] = { posts: data.posts, hasMore: data.has_more, offset: LIMIT };
+      const cacheKey = `${snapshot}:${tlType}`;
+      tabCache.current[cacheKey] = { posts: data.posts, hasMore: data.has_more, offset: LIMIT };
       saveTabCache();
     } catch (e: any) {
+      if (accountSnapshot() !== snapshot) return;
       setError(e.message || "불러오기 실패");
     }
     setLoading(false);
@@ -111,15 +118,17 @@ export default function TimelinePage() {
     const handler = () => load();
     window.addEventListener("followchange", handler);
     return () => window.removeEventListener("followchange", handler);
-  }, [tlType]);
+  }, [tlType, user?.id]);
 
   // 💡 의존성 배열을 단순화하여 렉이 걸려도 항상 최신 정보로 백엔드에 페이징을 요청하도록 보장합니다.
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     try {
+      const snapshot = accountSnapshot();
       const currentOffset = offsetRef.current;
       const data = await api.timeline(tlType, LOAD_MORE, currentOffset);
+      if (accountSnapshot() !== snapshot) return;
       if (data._emojis) injectEmojis(data._emojis);
       
       setPosts((prev) => {
@@ -133,11 +142,11 @@ export default function TimelinePage() {
       setHasMore(data.has_more);
       offsetRef.current = currentOffset + LOAD_MORE;
       
-      // 캐시 업데이트
-      const cached = tabCache.current[tlType];
+      const cacheKey = `${snapshot}:${tlType}`;
+      const cached = tabCache.current[cacheKey];
       if (cached) {
-        tabCache.current[tlType].offset = currentOffset + LOAD_MORE;
-        tabCache.current[tlType].hasMore = data.has_more;
+        tabCache.current[cacheKey].offset = currentOffset + LOAD_MORE;
+        tabCache.current[cacheKey].hasMore = data.has_more;
         saveTabCache();
       }
     } catch {}
@@ -230,7 +239,7 @@ export default function TimelinePage() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [tlType]);
+  }, [tlType, user?.id]);
 
   useEffect(() => {
     let es: EventSource | null = null;
@@ -246,18 +255,20 @@ export default function TimelinePage() {
         if (deletedIds.current.has(newPost.id)) return;
         if (newPost.type === "delete") {
           setPosts((prev) => prev.filter((p) => p.id !== newPost.id));
-          const cached = tabCache.current[tlType];
+          const cacheKey = `${accountSnapshot()}:${tlType}`;
+          const cached = tabCache.current[cacheKey];
           if (cached) {
-            tabCache.current[tlType] = { ...cached, posts: cached.posts.filter((p: any) => p.id !== newPost.id) };
+            tabCache.current[cacheKey] = { ...cached, posts: cached.posts.filter((p: any) => p.id !== newPost.id) };
             saveTabCache();
           }
           return;
         }
         if (newPost.type === "update") {
           setPosts((prev) => prev.map((p) => p.id === newPost.id ? { ...p, ...newPost } : p));
-          const cached = tabCache.current[tlType];
+          const cacheKey = `${accountSnapshot()}:${tlType}`;
+          const cached = tabCache.current[cacheKey];
           if (cached) {
-            tabCache.current[tlType] = { ...cached, posts: cached.posts.map((p: any) => p.id === newPost.id ? { ...p, ...newPost } : p) };
+            tabCache.current[cacheKey] = { ...cached, posts: cached.posts.map((p: any) => p.id === newPost.id ? { ...p, ...newPost } : p) };
             saveTabCache();
           }
           return;
@@ -266,16 +277,17 @@ export default function TimelinePage() {
           if (prev.some((p) => p.id === newPost.id)) return prev;
           return [newPost, ...prev];
         });
-        const cached = tabCache.current[tlType];
+        const cacheKey = `${accountSnapshot()}:${tlType}`;
+        const cached = tabCache.current[cacheKey];
         if (cached && !cached.posts.some((p: any) => p.id === newPost.id)) {
-          tabCache.current[tlType] = { ...cached, posts: [newPost, ...cached.posts] };
+          tabCache.current[cacheKey] = { ...cached, posts: [newPost, ...cached.posts] };
           saveTabCache();
         }
       } catch {}
     };
     es.onerror = () => {};
     return () => { es?.close(); };
-  }, [tlType]);
+  }, [tlType, user?.id]);
 
   // 성능 최적화용 필터링 분리
   const filteredPosts = useMemo(() => {

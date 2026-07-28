@@ -35,8 +35,9 @@ from app.routes.api._posts import (
 from app.routes.api._feed import (
     feed_router,
     _broadcast_federation,
-    _broadcast_timeline,
 )
+
+from app.core.timeline_stream import _broadcast_timeline
 
 from app.routes.api.interactions import (
     interactions_router,

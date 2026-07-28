@@ -14,7 +14,9 @@ function ThreadNode({ post, depth = 0, onDelete }: { post: PostData; depth?: num
 }
 
 function ThreadList({ posts, parentId, depth = 0, onDelete }: { posts: PostData[]; parentId: number; depth?: number; onDelete?: (id: number) => void }) {
-  const children = posts.filter((p) => p.reply_context?.id === parentId && !p.is_deleted);
+  const children = posts
+    .filter((p) => p.reply_context?.id === parentId && !p.is_deleted)
+    .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
   if (children.length === 0) return null;
   return (
     <>
@@ -98,7 +100,10 @@ export default function PostByNumberPage() {
     offsetRef.current += 5;
     try {
       const data = await api.getPost(post.id, offsetRef.current, 5, ancOffsetRef.current);
-      setReplies((prev) => [...prev, ...(data.replies || [])]);
+      setReplies((prev) => {
+        const combined = [...prev, ...(data.replies || [])];
+        return combined.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+      });
       setHasMore(data.has_more_replies);
     } catch {}
     setLoadingMore(false);

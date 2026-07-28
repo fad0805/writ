@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
-import { api } from "@/lib/api";
-import { useRouter } from "next/navigation";
+import { api, storeAccount, setActiveAccountId } from "@/lib/api";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
 import Icon from "@/components/Icon";
@@ -13,20 +13,32 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isAddMode = searchParams.get("add") === "1";
   const { user, loading: authLoading, refresh } = useAuth();
 
   useEffect(() => {
-    if (!authLoading && user) router.replace("/timeline/home");
-  }, [user, authLoading, router]);
+    if (!authLoading && user && !isAddMode) router.replace("/timeline/home");
+  }, [user, authLoading, router, isAddMode]);
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
-  if (user) return null;
+  if (user && !isAddMode) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true); setError("");
     try {
-      await api.login(username, password);
+      const result = await api.login(username, password);
+      if (result.user && result.session_token) {
+        storeAccount({
+          user_id: result.user.id,
+          username: result.user.username,
+          display_name: result.user.display_name,
+          avatar: result.user.avatar || "",
+          session_token: result.session_token,
+        });
+        setActiveAccountId(result.user.id);
+      }
       await refresh();
       router.push("/timeline/home");
     } catch (err: unknown) { setError(err instanceof Error ? err.message : String(err)); }

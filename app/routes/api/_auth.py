@@ -12,7 +12,7 @@ from fastapi import APIRouter, Request, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.models import User, Notification, BlockedDomain, ServerSetting
+from app.models import User, Notification, BlockedDomain, ServerSetting, LoginSession
 from app.serializers import _user_json
 from app.config.settings import BASE_URL, SECRET_KEY, APP_ENV, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, INITIAL_OWNER_PASSWORD
 from app.db.database import get_session, get_db
@@ -160,7 +160,9 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
                 db_user.recent_ips = ips[:10]
                 s.commit()
             log_admin_action(db_user.id, db_user.username, "login", ip_address=client_ip)
-            resp = JSONResponse(_user_json(db_user))
+            user_json = _user_json(db_user)
+            user_json["session_token"] = token
+            resp = JSONResponse(user_json)
             secure = APP_ENV != "development"
             resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/", secure=secure)
             resp.set_cookie(key="csrf_token", value=generate_csrf_token(db_user.id), max_age=3600, httponly=False, samesite="lax", path="/", secure=secure)
@@ -341,4 +343,32 @@ def api_logout(request: Request):
     resp = JSONResponse({"ok": True})
     resp.delete_cookie("session")
     resp.delete_cookie("csrf_token")
+    return resp
+
+
+@auth_router.post("/auth/switch")
+def api_switch_account(request: Request, session_token: str = Form(...)):
+    """Accept a stored session token and set it as the active session cookie."""
+    from app.routes.auth import _decode_session_token
+    decoded = _decode_session_token(session_token)
+    if not decoded:
+        raise HTTPException(status_code=401, detail="Invalid session token")
+    session_key, _ = decoded
+    with get_session() as s:
+        ls = s.query(LoginSession).filter_by(session_key=session_key).first()
+        if not ls:
+            raise HTTPException(status_code=401, detail="Session not found")
+        user = s.query(User).filter_by(id=ls.user_id, is_remote=False).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        if getattr(user, 'is_frozen', False):
+            raise HTTPException(status_code=403, detail="계정이 동결되었습니다.")
+        if getattr(user, 'is_suspended', False):
+            raise HTTPException(status_code=403, detail="계정이 정지되었습니다.")
+    user_json = _user_json(user)
+    user_json["session_token"] = session_token
+    resp = JSONResponse(user_json)
+    secure = APP_ENV != "development"
+    resp.set_cookie(key="session", value=session_token, max_age=30*86400, httponly=True, samesite="lax", path="/", secure=secure)
+    resp.set_cookie(key="csrf_token", value=generate_csrf_token(user.id), max_age=3600, httponly=False, samesite="lax", path="/", secure=secure)
     return resp

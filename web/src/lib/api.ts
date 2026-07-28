@@ -1,3 +1,55 @@
+export interface StoredAccount {
+  user_id: number;
+  username: string;
+  display_name: string;
+  avatar: string;
+  session_token: string;
+}
+
+const ACCOUNTS_KEY = "writ_accounts";
+const ACTIVE_ACCOUNT_KEY = "writ_active_account";
+
+export function getStoredAccounts(): StoredAccount[] {
+  if (typeof localStorage === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+export function storeAccount(account: StoredAccount): void {
+  const accounts = getStoredAccounts();
+  const existing = accounts.findIndex(a => a.user_id === account.user_id);
+  if (existing >= 0) {
+    accounts[existing] = account;
+  } else {
+    accounts.push(account);
+  }
+  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+}
+
+export function removeStoredAccount(userId: number): void {
+  const accounts = getStoredAccounts().filter(a => a.user_id !== userId);
+  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+  if (getActiveAccountId() === userId) {
+    localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
+  }
+}
+
+export function getActiveAccountId(): number | null {
+  if (typeof localStorage === "undefined") return null;
+  return Number(localStorage.getItem(ACTIVE_ACCOUNT_KEY)) || null;
+}
+
+export function setActiveAccountId(userId: number): void {
+  localStorage.setItem(ACTIVE_ACCOUNT_KEY, String(userId));
+}
+
+export function accountSnapshot(): number | null {
+  return getActiveAccountId();
+}
+
 function getCsrfToken(): string {
   if (typeof document === "undefined") return "";
   const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
@@ -295,7 +347,7 @@ export const api = {
   autocomplete: (q: string) => request<{ users: User[] }>(`/api/search/users?q=${encodeURIComponent(q)}`),
 
   // Auth actions
-  login: async (username: string, password: string) => {
+  login: async (username: string, password: string): Promise<{ ok: boolean; user?: User; session_token?: string }> => {
     const params = new URLSearchParams();
     params.append("username", username);
     params.append("password", password);
@@ -309,7 +361,24 @@ export const api = {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.detail || body.error || "Login failed");
     }
-    return { ok: true };
+    const data = await res.json();
+    return { ok: true, user: data as User, session_token: data.session_token };
+  },
+  switchAccount: async (sessionToken: string): Promise<{ ok: boolean; user?: User }> => {
+    const params = new URLSearchParams();
+    params.append("session_token", sessionToken);
+    const res = await fetch("/api/auth/switch", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || body.error || "Account switch failed");
+    }
+    const data = await res.json();
+    return { ok: true, user: data as User };
   },
   register: async (username: string, password: string, email: string, display_name?: string) => {
     const form = new FormData();

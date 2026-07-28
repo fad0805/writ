@@ -129,15 +129,18 @@ export default function NotificationsPage() {
 
   const load = useCallback(async () => {
     if (!user) return;
+    const myUser = user.id;
     setLoading(true);
     try {
       if (filter === "direct") {
         const res = await fetch("/api/notifications/direct-threads", { credentials: "include" });
         const data = await res.json();
+        if (user.id !== myUser) return;
         setDirectGroups(data.users || []);
         setNotifs([]);
       } else {
         const data = await api.getNotifications(filter || undefined, 20, 0);
+        if (user.id !== myUser) return;
         setNotifs(data.notifications);
         setHasMore(data.has_more);
         offsetRef.current = 20;
@@ -148,16 +151,19 @@ export default function NotificationsPage() {
   }, [filter, user]);
 
   const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore) return;
+    if (loadingMore || !hasMore || !user) return;
     setLoadingMore(true);
     try {
-      const data = await api.getNotifications(filter || undefined, 5, offsetRef.current);
+      const myUser = user.id;
+      const currentOffset = offsetRef.current;
+      const data = await api.getNotifications(filter || undefined, 5, currentOffset);
+      if (user.id !== myUser) return;
       setNotifs((prev) => { const merged = [...prev, ...data.notifications]; if (merged.length >= 200) setHasMore(false); return merged; });
       setHasMore(data.has_more);
-      offsetRef.current += 5;
+      offsetRef.current = currentOffset + 5;
     } catch {}
     setLoadingMore(false);
-  }, [filter, hasMore, loadingMore]);
+  }, [filter, hasMore, loadingMore, user]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { window.dispatchEvent(new Event("notificationsread")); }, []);

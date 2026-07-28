@@ -29,6 +29,8 @@ export default function RightSidebar() {
     if (!user) return;
     let cancelled = false;
     let debounceTimer: ReturnType<typeof setTimeout>;
+    setNovels([]);
+    setNotifs([]);
     api.getMyNovels().then((d) => { if (!cancelled) setNovels(d.novels); }).catch(() => {});
     api.getNotifications(undefined, 10, 0).then((d) => { if (!cancelled) setNotifs(d.notifications); }).catch(() => {});
     const es = new EventSource("/api/notifications/stream");

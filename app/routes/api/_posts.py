@@ -19,7 +19,7 @@ from app.config.settings import BASE_URL, MAX_POST_LENGTH
 from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _build_reactions, _resolve_actor, _send_delete_post, _send_flag, _get_instance_actor
 from app.core.eventbus import broadcast
 from app.core.push import send_push_to_user
-from app.core.timeline_stream import broadcast_post, broadcast_refresh_notifs, broadcast_notif_sound, broadcast_delete
+from app.core.timeline_stream import broadcast_post, broadcast_refresh_notifs, broadcast_notif_sound, broadcast_delete, _broadcast_timeline
 from app.db.database import get_session
 from app.db.mention_resolver import resolve_handles_to_ids
 from app.routes.auth import require_auth, require_active_auth, get_current_user
@@ -30,7 +30,7 @@ from app.utils.storage import get_storage
 
 from app.routes.api._core import _can_view, _ap_fetch, _fetch_and_save_ap_object, _check_fetch_domain_allowed
 from app.routes.api._series import _novel_json, _episode_json
-from app.routes.api._feed import _broadcast_federation, _broadcast_timeline
+from app.routes.api._feed import _broadcast_federation
 
 logger = logging.getLogger("writ.api.posts")
 
@@ -120,15 +120,14 @@ def api_get_post(request: Request, post_id: int):
         descendant_ids = _get_descendant_ids(s, post_id, max_depth=5)
         result["total_descendants"] = len(descendant_ids)
 
-        reply_ids = sorted(descendant_ids)[offset:offset + limit]
-        if reply_ids:
+        if descendant_ids:
             descendants = s.query(Post).options(
                 selectinload(Post.author),
                 selectinload(Post.parent),
-            ).filter(Post.id.in_(reply_ids)).order_by(Post.created_at).all()
+            ).filter(Post.id.in_(descendant_ids)).order_by(Post.created_at).offset(offset).limit(limit).all()
         else:
             descendants = []
-        reply_id_set = set(reply_ids)
+        reply_id_set = {r.id for r in descendants}
         _reply_liked_ids = _reply_boosted_ids = _reply_bookmarked_ids = set()
         if user and reply_id_set:
             _reply_liked_ids = set(r[0] for r in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(reply_id_set)).all())
