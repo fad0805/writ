@@ -422,28 +422,29 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
         else:
             s.commit()
 
-        followers = s.query(SeriesFollow).filter_by(novel_id=novel.id).all()
-        for sf in followers:
-            if sf.user_id != user.id:
-                n = Notification(
-                    user_id=sf.user_id,
-                    from_user_id=user.id,
-                    notification_type="new_episode",
-                    metadata_json=json.dumps({
-                        "novel_id": novel.id,
-                        "novel_title": novel.title,
-                        "episode_id": episode.id,
-                        "episode_number": next_num,
-                        "episode_title": title,
-                    }, ensure_ascii=False),
-                )
-                s.add(n)
-        if followers:
-            s.commit()
+        if is_published:
+            followers = s.query(SeriesFollow).filter_by(novel_id=novel.id).all()
             for sf in followers:
                 if sf.user_id != user.id:
-                    send_push_to_user(sf.user_id, "new_episode", user.username, metadata={"novel_id": novel.id})
-                    broadcast_notif_sound(sf.user_id)
+                    n = Notification(
+                        user_id=sf.user_id,
+                        from_user_id=user.id,
+                        notification_type="new_episode",
+                        metadata_json=json.dumps({
+                            "novel_id": novel.id,
+                            "novel_title": novel.title,
+                            "episode_id": episode.id,
+                            "episode_number": next_num,
+                            "episode_title": title,
+                        }, ensure_ascii=False),
+                    )
+                    s.add(n)
+            if followers:
+                s.commit()
+                for sf in followers:
+                    if sf.user_id != user.id:
+                        send_push_to_user(sf.user_id, "new_episode", user.username, metadata={"novel_id": novel.id})
+                        broadcast_notif_sound(sf.user_id)
 
         eid = episode.id
     return {"ok": True, "episode_id": eid}
