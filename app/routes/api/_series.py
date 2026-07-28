@@ -636,7 +636,7 @@ def _episode_json(e, summary_only=False):
         "view_mode": getattr(e, "view_mode", "text"),
         "comic_view_mode": getattr(e, "comic_view_mode", "paged"),
         "image_urls": getattr(e, "image_urls", []) or [],
-        "reading_direction": getattr(e, "reading_direction", "ltr"),
+        "reading_direction": getattr(e, "reading_direction", None) or "ltr",
         "views": e.views or 0,
         "is_published": e.is_published,
         "page_mode": getattr(e, "page_mode", False),

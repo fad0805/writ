@@ -361,17 +361,35 @@ const localReactionEmojiMap = useMemo(() => {
   const swipeStartX = useRef(0);
   const cardRef = useRef<HTMLDivElement>(null);
   const [revealedSensitive, setRevealedSensitive] = useState(false);
+  const prevViewerIndex = useRef(viewerIndex);
+  const closingFromPop = useRef(false);
+  const closeViewer = useCallback(() => {
+    if (!closingFromPop.current) history.back();
+    closingFromPop.current = false;
+    setViewerIndex(-1); setViewerZoom(1); setViewerPan({ x: 0, y: 0 });
+  }, []);
   useEffect(() => {
-    if (viewerIndex < 0) return;
+    const wasOpen = prevViewerIndex.current >= 0;
+    const isOpen = viewerIndex >= 0;
+    prevViewerIndex.current = viewerIndex;
+    if (!wasOpen && isOpen) {
+      history.pushState({ viewer: true }, "");
+    }
+    if (!isOpen) return;
     setViewerZoom(1);
     setViewerPan({ x: 0, y: 0 });
+    const onPop = () => {
+      closingFromPop.current = true;
+      setViewerIndex(-1); setViewerZoom(1); setViewerPan({ x: 0, y: 0 });
+    };
+    window.addEventListener("popstate", onPop);
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setViewerIndex(-1);
+      if (e.key === "Escape") closeViewer();
       else if (e.key === "ArrowLeft" && viewerIndex > 0) setViewerIndex(viewerIndex - 1);
       else if (e.key === "ArrowRight" && viewerIndex < (post as any).media_attachments.length - 1) setViewerIndex(viewerIndex + 1);
     };
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    return () => { window.removeEventListener("keydown", handler); window.removeEventListener("popstate", onPop); };
   }, [viewerIndex]);
   const handleViewerWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
@@ -1051,7 +1069,7 @@ const localReactionEmojiMap = useMemo(() => {
         </div>
       )}
       {viewerIndex >= 0 && (post as any).media_attachments?.length > 0 && (
-        <div className="reply-modal-backdrop active" onClick={() => { setViewerZoom(1); setViewerPan({ x: 0, y: 0 }); setViewerIndex(-1); }}>
+        <div className="reply-modal-backdrop active" onClick={closeViewer} style={{ zIndex: 2000 }}>
           <div className="media-viewer" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "90vw", maxHeight: "90vh", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", cursor: viewerZoom > 1 ? "grab" : "default", touchAction: "none" }}
             onWheel={handleViewerWheel}
             onTouchStart={handleViewerTouchStart}
@@ -1068,7 +1086,7 @@ const localReactionEmojiMap = useMemo(() => {
             {(viewerIndex < (post as any).media_attachments.length - 1) && (
               <button onClick={(e) => { e.stopPropagation(); setViewerIndex(viewerIndex + 1); }} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 10, fontSize: 20, color: "#fff" }}>›</button>
             )}
-            <button onClick={(e) => { e.stopPropagation(); setViewerZoom(1); setViewerPan({ x: 0, y: 0 }); setViewerIndex(-1); }} style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 22, cursor: "pointer", zIndex: 10 }}>×</button>
+            <button onClick={(e) => { e.stopPropagation(); closeViewer(); }} style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 22, cursor: "pointer", zIndex: 10 }}>×</button>
             {viewerZoom > 1 && <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.5)", color: "#fff", borderRadius: 12, padding: "2px 10px", fontSize: 12, zIndex: 10, userSelect: "none" }}>{Math.round(viewerZoom * 100)}%</div>}
             {(() => {
               const m = (post as any).media_attachments[viewerIndex];

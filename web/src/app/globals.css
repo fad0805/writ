@@ -1927,6 +1927,9 @@ input[type="checkbox"] {
   margin-top: 12px;
   border-top: 1px solid var(--border);
 }
+.episode-view-page-nav.rtl {
+  direction: rtl;
+}
 .episode-view-page-arrow {
   background: none;
   border: 1px solid var(--border);

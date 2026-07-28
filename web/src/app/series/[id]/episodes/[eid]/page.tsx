@@ -278,7 +278,7 @@ export default function EpisodeDetailPage() {
                       </div>
                     )}
                     {comicViewMode === "paged" && (
-                      <div className="episode-view-page-nav">
+                      <div className={`episode-view-page-nav${isRtl ? " rtl" : ""}`}>
                         <button type="button" className="episode-view-page-arrow" disabled={isRtl ? comicPage === images.length - 1 : comicPage === 0} onClick={() => setComicPage(isRtl ? Math.min(images.length - 1, comicPage + 1) : Math.max(0, comicPage - 1))}>‹</button>
                         <div className="episode-view-page-slider-wrap">
                           <input type="range" min={0} max={images.length - 1} value={comicPage} onChange={(e) => setComicPage(Number(e.target.value))} className="episode-view-page-slider" />
@@ -302,7 +302,7 @@ export default function EpisodeDetailPage() {
                   )}
                 </div>
                 {pages.length > 1 && (
-                  <div className="episode-view-page-nav">
+                  <div className={`episode-view-page-nav${isRtl ? " rtl" : ""}`}>
                     <button type="button" className="episode-view-page-arrow" disabled={currentPage === 0} onClick={() => setCurrentPage(currentPage - 1)}>‹</button>
                     <div className="episode-view-page-slider-wrap">
                       <input type="range" min={0} max={pages.length - 1} value={currentPage} onChange={(e) => setCurrentPage(Number(e.target.value))} className="episode-view-page-slider" />
