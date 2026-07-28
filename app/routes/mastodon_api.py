@@ -245,7 +245,11 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         "application": None,
         "account": _account_json(author, db),
         "media_attachments": [],
-        "mentions": [],
+        "mentions": [
+            {"id": str(mid), "username": mu.username.split("@")[0], "url": f"{BASE_URL}/@{mu.username}", "acct": mu.username}
+            for mid in (post.mentioned_user_ids or [])
+            if (mu := db.query(User).filter_by(id=mid).first())
+        ],
         "tags": [],
         "emojis": [
             {"shortcode": e["keyword"], "url": e["url"], "static_url": e["url"], "visible_in_picker": True}
