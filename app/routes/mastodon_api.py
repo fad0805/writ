@@ -1637,7 +1637,6 @@ def search_v2(
     if not type or type == "accounts":
         users = db.query(User).filter(
             User.is_suspended == False,
-            User.is_remote == False,
             or_(
                 User.username.ilike(f"%{query_lower}%"),
                 User.display_name.ilike(f"%{query_lower}%"),
