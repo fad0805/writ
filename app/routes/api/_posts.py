@@ -3,42 +3,33 @@ import os
 import re
 import json
 import logging
-import time
 import threading
-import traceback
 import asyncio
 import secrets
-import uuid
-import httpx
-from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
-from fastapi import APIRouter, Request, Form, HTTPException, Query, Depends, BackgroundTasks
-from fastapi.responses import JSONResponse, StreamingResponse, Response
-from sqlalchemy import desc, or_, and_, func, String, text
-from sqlalchemy.orm import selectinload, Session
+from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, Tag, CustomEmoji, Report, ServerRule, ServerSetting
-from app.utils.to_ap_serializer import to_ap_note, to_ap_create
+from app.models import User, Post, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, Tag, Report, ServerRule
+from app.utils.to_ap_serializer import to_ap_note
 from app.serializers import _post_json, _user_json
-from app.config.settings import BASE_URL, MAX_POST_LENGTH, SECRET_KEY, S3_ENABLED, APP_ENV
-from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _post_to_inbox, _federation_allowed, _build_reactions, _resolve_actor, _send_delete_post, _send_flag, _get_instance_actor
+from app.config.settings import BASE_URL, MAX_POST_LENGTH
+from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _build_reactions, _resolve_actor, _send_delete_post, _send_flag, _get_instance_actor
 from app.core.eventbus import broadcast
 from app.core.push import send_push_to_user
-from app.core.timeline_stream import broadcast_post, add_stream, remove_stream, broadcast_refresh_notifs, broadcast_reaction_update, add_post_stream, remove_post_stream, broadcast_notif_sound, broadcast_delete
-from app.db.database import get_session, get_db
+from app.core.timeline_stream import broadcast_post, broadcast_refresh_notifs, broadcast_notif_sound, broadcast_delete
+from app.db.database import get_session
 from app.db.mention_resolver import resolve_handles_to_ids
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.utils.content_parser import process_post_content, extract_mentions
-from app.utils.datetime import _fmt_dt
-from app.utils.emoji import _emoji_url, _load_emojis
-from app.utils.filter import _timeline_filter
+from app.utils.emoji import _load_emojis
 from app.utils.post import _get_descendant_ids
 from app.utils.storage import get_storage
 
 from app.routes.api._core import _can_view, _ap_fetch, _fetch_and_save_ap_object, _check_fetch_domain_allowed
 from app.routes.api._series import _novel_json, _episode_json
-from app.routes.api.interactions import _json_array_has_user
 from app.routes.api._feed import _broadcast_federation, _broadcast_timeline
 
 logger = logging.getLogger("writ.api.posts")
