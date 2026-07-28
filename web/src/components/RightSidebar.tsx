@@ -64,13 +64,9 @@ export default function RightSidebar() {
     const handler = () => setRefreshKey((k) => k + 1);
     const serverHandler = () => setServerRefreshKey((k) => k + 1);
     window.addEventListener("novelchange", handler);
-    window.addEventListener("notificationsread", handler);
-    window.addEventListener("followchange", handler);
     window.addEventListener("serverchange", serverHandler);
     return () => {
       window.removeEventListener("novelchange", handler);
-      window.removeEventListener("notificationsread", handler);
-      window.removeEventListener("followchange", handler);
       window.removeEventListener("serverchange", serverHandler);
     };
   }, []);
