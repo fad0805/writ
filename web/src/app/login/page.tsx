@@ -1,12 +1,12 @@
 "use client";
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { api, storeAccount, setActiveAccountId } from "@/lib/api";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
 import Icon from "@/components/Icon";
 
-export default function LoginPage() {
+function LoginForm() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -75,5 +75,13 @@ export default function LoginPage() {
       <p className="auth-link"><Link href="/reset-password">비밀번호를 잊으셨나요?</Link></p>
       <p className="auth-link">계정이 없으신가요? <Link href="/register">가입하기</Link></p>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="empty-state">로딩 중...</div>}>
+      <LoginForm />
+    </Suspense>
   );
 }
