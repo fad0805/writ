@@ -4,24 +4,23 @@ import logging
 import asyncio
 import httpx
 from datetime import datetime, timedelta, timezone
+from typing import List
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request, Query, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import desc, or_, and_, func
-from sqlalchemy.orm import selectinload, Session
+from sqlalchemy.orm import selectinload, Session, Load
 
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark
 from app.utils.to_ap_serializer import to_ap_create
 from app.serializers import _post_json
 from app.core.activitypub import broadcast_to_followers, _post_to_inbox, _federation_allowed, _resolve_actor
-from app.core.timeline_stream import broadcast_post, add_post_stream, remove_post_stream
+from app.core.timeline_stream import add_post_stream, remove_post_stream
 from app.db.database import get_session, get_db
 from app.routes.auth import get_current_user
 from app.utils.emoji import _load_emojis
 from app.utils.filter import _timeline_filter
-
-
 
 logger = logging.getLogger("writ.api.feed")
 
@@ -33,128 +32,88 @@ TIMELINE_LABELS = {
 
 
 def _get_feed(user, tl_type, session, limit=10, offset=0):
-    from app.routes.api.interactions._common import _json_array_has_user
     print(f"[feed] _get_feed uid={user.id if user else None} tl={tl_type} limit={limit} offset={offset}", flush=True)
     _base_opts = [selectinload(Post.author), selectinload(Post.parent)]
+    user_id = user.id if user else None
+
     _following_ids = None
     if user and tl_type in ("home", "social"):
-        _following_ids = {row[0] for row in session.query(Follow.following_id).filter_by(
-            follower_id=user.id, accepted=True
-        ).all()}
+        _following_ids = {
+            row[0]
+            for row in session.query(Follow.following_id)
+            .filter_by(follower_id=user.id, accepted=True)
+        }
         _following_ids.add(user.id)
+
     _local_ids = None
     if tl_type in ("social", "local"):
-        _local_ids = session.query(User.id).filter_by(is_remote=False).subquery()
-    _all_boosted_ids = set()
-    if tl_type == "home":
-        following_ids = list(_following_ids) if _following_ids else [user.id]
-        all_boost_user_ids = list(set(following_ids) | {user.id})
-        boosted_ids = list({row[0] for row in session.query(Boost.post_id).filter(
-            Boost.user_id.in_(all_boost_user_ids),
-        ).all()})
-        _all_boosted_ids = set(boosted_ids)
-        final = following_ids[:]
-        _mentioned_self = _json_array_has_user(Post.mentioned_user_ids, user.id)
-        posts = session.query(Post).options(*_base_opts).filter(
-            or_(
-                Post.author_id.in_(final),
-                Post.id.in_(boosted_ids),
-                and_(_mentioned_self, Post.visibility.in_(("followers", "mention", "home"))),
-            ),
-            Post.is_deleted == False,
-            or_(Post.visibility != "home", Post.author_id.in_(final), _mentioned_self),
-        ).order_by(desc(Post.created_at)).offset(offset).limit(limit + 1).all()
-    elif tl_type == "social":
-        following_ids = list(_following_ids) if _following_ids else [user.id]
-        all_boost_user_ids = list(set(following_ids) | {user.id})
-        boosted_ids = list({row[0] for row in session.query(Boost.post_id).filter(
-            Boost.user_id.in_(all_boost_user_ids),
-        ).all()})
-        _all_boosted_ids = set(boosted_ids)
-        posts = session.query(Post).options(*_base_opts).filter(
-            or_(
-                and_(
-                    or_(Post.author_id.in_(following_ids), Post.id.in_(boosted_ids)),
-                    Post.is_deleted == False,
-                    or_(Post.visibility != "home", Post.author_id.in_(following_ids)),
-                ),
-                and_(Post.author_id.in_(_local_ids), Post.visibility == "public", Post.is_deleted == False),
-            ),
-        ).order_by(desc(Post.created_at)).offset(offset).limit(limit + 1).all()
-    elif tl_type == "local":
-        _local_user_ids = [row[0] for row in session.query(User.id).filter_by(is_remote=False).all()]
-        boosted_ids = list({row[0] for row in session.query(Boost.post_id).join(Post, Boost.post_id == Post.id).filter(
-            Boost.user_id.in_(_local_user_ids),
-            Post.visibility == "public",
-            Post.is_deleted == False
-        ).all()})
-        _all_boosted_ids = set(boosted_ids)
+        _local_ids = {
+            row[0]
+            for row in session.query(User.id).filter_by(is_remote=False)
+        }
 
-        posts = session.query(Post).options(*_base_opts).filter(
-            or_(
-                Post.author_id.in_(_local_ids),
-                Post.id.in_(boosted_ids),
-            ),
-            Post.visibility == "public",
-            Post.is_deleted == False,
-        ).order_by(desc(Post.created_at)).offset(offset).limit(limit + 1).all()
-    else:
-        posts = session.query(Post).options(*_base_opts).filter(
-            Post.visibility == "public",
-            Post.is_deleted == False,
-        ).order_by(desc(Post.created_at)).offset(offset).limit(limit + 1).all()
-    raw_total = len(posts)
-    print(f"[feed] raw query: {raw_total} posts for tl={tl_type}", flush=True)
-    posts = [p for p in posts if not (p.visibility == "mention" and p.is_dm and p.author_id != user.id and user.id not in (p.mentioned_user_ids or []))]
-    print(f"[feed] after DM filter: {len(posts)} posts", flush=True)
-    boost_pointer_ids = {p.boost_of_id for p in posts if p.boost_of_id}
-    boost_originals = {}
-    if boost_pointer_ids:
-        for orig in session.query(Post).options(selectinload(Post.author)).filter(Post.id.in_(boost_pointer_ids), Post.is_deleted == False).all():
-            boost_originals[orig.id] = orig
-    _boosted_originals_in_feed = set()
+    _visible_user_ids = {user.id} if user else set()
+    visibility = ['mention', 'follower', 'home', 'public']
+    if tl_type == 'home' and _following_ids:
+        _visible_user_ids.update(_following_ids)
+    elif tl_type == 'social':
+        if _following_ids:
+            _visible_user_ids.update(_following_ids)
+        if _local_ids:
+            _visible_user_ids.update(_local_ids)
+    elif tl_type == 'local' and _local_ids:
+        _visible_user_ids.update(_local_ids)
+        visibility = ['public']
+    elif tl_type == 'federated':
+        _visible_user_ids = None
+        visibility = ['public']
 
-    deduped = []
-    for p in posts:
-        if p.boost_of_id:
-            if p.boost_of_id not in boost_originals:
-                continue
-            if tl_type == "local" and (boost_originals[p.boost_of_id].visibility or "public") != "public":
-                continue
-            _boosted_originals_in_feed.add(p.boost_of_id)
-            deduped.append(p)
-        elif p.id not in _boosted_originals_in_feed:
-            deduped.append(p)
-    posts = deduped
-    print(f"[feed] after dedup: {len(posts)} posts", flush=True)
-    if _following_ids:
-        try:
-            posts = _timeline_filter(posts, session, user, tl_type, _following_ids, boosted_ids=_all_boosted_ids, boost_originals=boost_originals)
-            print(f"[feed] after mention filter: {len(posts)} posts", flush=True)
-        except Exception as e:
-            logger.error("feed mention filter error: %s", e, exc_info=True)
-    has_more = raw_total > limit
-    print(f"[feed] has_more={has_more} (raw_total={raw_total}, after_filter={len(posts)}, limit={limit})", flush=True)
+    posts = []
+    page_offset = offset
+    fetch_size = limit + 20
+    while len(posts) < limit + 1:
+        batch = query_feed_posts(
+            _visible_user_ids, _local_ids, user_id, visibility,
+            session, _base_opts, fetch_size, offset=page_offset
+        )
+        if not batch:
+            break
+        batch_size = len(batch)
+        if user:
+            batch = _timeline_filter(batch, session, user, tl_type, _following_ids)
+        needed = limit + 1 - len(posts)
+        posts.extend(batch[:needed])
+        if batch_size < fetch_size:
+            break
+        page_offset += fetch_size
+
+    has_more = len(posts) > limit
     posts = posts[:limit]
+
     post_ids = [p.id for p in posts]
     for _p in posts:
         if _p.boost_of_id and _p.boost_of_id not in post_ids:
             post_ids.append(_p.boost_of_id)
+
     if user and post_ids:
         _all_likes = session.query(Like).filter(
             Like.user_id == user.id, Like.post_id.in_(post_ids)
         ).all()
         _liked_ids = {l.post_id for l in _all_likes}
         _my_reaction_map = {l.post_id: l.reaction for l in _all_likes if l.reaction}
+
         _boosted_ids = {b.post_id for b in session.query(Boost.post_id).filter(
             Boost.user_id == user.id, Boost.post_id.in_(post_ids)
         ).all()}
+
         _bookmarked_ids = {bm.post_id for bm in session.query(Bookmark.post_id).filter(
             Bookmark.user_id == user.id, Bookmark.post_id.in_(post_ids)
         ).all()}
+
         _vote_map = {v.post_id: v.option_index for v in session.query(Vote).filter(
             Vote.user_id == user.id, Vote.post_id.in_(post_ids)
         ).all()}
+
         _booster_map = {}
         _cutoff = datetime.now(timezone.utc) - timedelta(hours=3)
         for b in session.query(Boost).filter(
@@ -167,6 +126,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 User.id.in_(set(_booster_map.values()))
             ).all()}
             _booster_map = {pid: _booster_users.get(uid) for pid, uid in _booster_map.items()}
+
         _reactions_map = {}
         _default_react = "★"
         _reaction_rows = session.query(
@@ -177,6 +137,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                 _reactions_map[pid] = {}
             _reactions_map[pid][react] = cnt
         all_mentioned_ids = set()
+
         for p in posts:
             if p.mentioned_user_ids:
                 all_mentioned_ids.update(p.mentioned_user_ids)
@@ -195,18 +156,61 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                     _mentioned_users_map[p.id] = [_mentioned_users.get(mid, "?") for mid in p.mentioned_user_ids if mid in _mentioned_users]
                 else:
                     _mentioned_users_map[p.id] = []
+
     else:
         _liked_ids = _boosted_ids = _bookmarked_ids = set()
         _vote_map = _my_reaction_map = _reactions_map = _booster_map = _mentioned_users_map = {}
-    print(f"[feed] final: {len(posts)} posts returned, has_more={has_more}", flush=True)
+
     _timeline_emojis = [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)]
+
     return [_post_json(p, session, user, tl_type,
                        _liked_ids=_liked_ids, _boosted_ids=_boosted_ids,
                        _bookmarked_ids=_bookmarked_ids, _vote_map=_vote_map,
                        _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map,
                        _booster_map=_booster_map, _mentioned_users_map=_mentioned_users_map,
-                       _boost_originals=boost_originals, _skip_emojis=True)
+                       _skip_emojis=True)
             for p in posts], has_more, _timeline_emojis
+
+
+def query_feed_posts(
+        visible_user_ids: set,
+        local_ids: set,
+        user_id: int,
+        visibility: list,
+        session: Session,
+        base_opts: List[Load],
+        fetch_size: int,
+        offset: int):
+
+    if visible_user_ids is not None:
+        visible_posts = session.query(Post).options(*base_opts).filter(
+            Post.is_deleted == False,
+            Post.visibility.in_(visibility),
+            Post.author_id.in_(visible_user_ids),
+            or_(
+                Post.parent == None,
+                Post.parent.has(Post.author_id.in_(visible_user_ids))
+            ),
+        ).order_by(desc(Post.created_at)).offset(offset).limit(fetch_size).all()
+    else:
+        visible_posts = session.query(Post).options(*base_opts).filter(
+            Post.is_deleted == False,
+            Post.visibility.in_(visibility),
+        ).order_by(desc(Post.created_at)).offset(offset).limit(fetch_size).all()
+
+    posts = [
+        p for p in visible_posts
+        if not (
+            p.visibility == "mention"
+            and p.is_dm
+            and p.author_id != user_id
+            and local_ids
+            and p.author_id in local_ids
+            and user_id not in (p.mentioned_user_ids or [])
+        )
+    ]
+
+    return posts
 
 
 def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
