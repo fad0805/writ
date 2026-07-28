@@ -150,6 +150,8 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                 seen_ids.add(p.id)
                 deduped.append(p)
         for boost_of_id, bp in pending_boosts.items():
+            if bp.author_id == profile.id:
+                continue
             inserted = False
             for i, d in enumerate(deduped):
                 if d.id == boost_of_id:
