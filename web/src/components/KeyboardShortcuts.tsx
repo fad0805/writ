@@ -55,11 +55,14 @@ export default function KeyboardShortcuts() {
       return;
     }
 
-      if (e.key === "n" && !isEditing && user) {
+    if (e.key === "n" && user) {
+      const inPostForm = document.activeElement?.closest(".post-form") != null;
+      if (!inPostForm) {
         e.preventDefault();
         setShowPostModal(true);
         return;
       }
+    }
 
     if (e.key === "s" && !isEditing) {
       e.preventDefault();
