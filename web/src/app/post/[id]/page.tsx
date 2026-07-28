@@ -47,8 +47,14 @@ export default function PostDetailPage() {
   const topSentinelRef = useRef<HTMLDivElement>(null);
   const currentRef = useRef<HTMLDivElement>(null);
 
+  const initialLoadDone = useRef(false);
   useEffect(() => {
-    if (post) currentRef.current?.scrollIntoView({ behavior: "auto", block: "center" });
+    if (post) {
+      if (initialLoadDone.current) {
+        currentRef.current?.scrollIntoView({ behavior: "auto", block: "center" });
+      }
+      initialLoadDone.current = true;
+    }
   }, [post]);
 
   const load = useCallback(async () => {
