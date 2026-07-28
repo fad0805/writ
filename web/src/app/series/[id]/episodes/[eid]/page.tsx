@@ -279,11 +279,23 @@ export default function EpisodeDetailPage() {
                     )}
                     {comicViewMode === "paged" && (
                       <div className={`episode-view-page-nav${isRtl ? " rtl" : ""}`}>
-                        <button type="button" className="episode-view-page-arrow" disabled={isRtl ? comicPage === images.length - 1 : comicPage === 0} onClick={() => setComicPage(isRtl ? Math.min(images.length - 1, comicPage + 1) : Math.max(0, comicPage - 1))}>‹</button>
-                        <div className="episode-view-page-slider-wrap">
-                          <input type="range" min={0} max={images.length - 1} value={comicPage} onChange={(e) => setComicPage(Number(e.target.value))} className="episode-view-page-slider" />
-                        </div>
-                        <button type="button" className="episode-view-page-arrow" disabled={isRtl ? comicPage === 0 : comicPage === images.length - 1} onClick={() => setComicPage(isRtl ? Math.max(0, comicPage - 1) : Math.min(images.length - 1, comicPage + 1))}>›</button>
+                        {isRtl ? (
+                          <>
+                            <button type="button" className="episode-view-page-arrow" disabled={comicPage === images.length - 1} onClick={() => setComicPage(Math.min(images.length - 1, comicPage + 1))}>›</button>
+                            <div className="episode-view-page-slider-wrap">
+                              <input type="range" min={0} max={images.length - 1} value={comicPage} onChange={(e) => setComicPage(Number(e.target.value))} className="episode-view-page-slider" />
+                            </div>
+                            <button type="button" className="episode-view-page-arrow" disabled={comicPage === 0} onClick={() => setComicPage(Math.max(0, comicPage - 1))}>‹</button>
+                          </>
+                        ) : (
+                          <>
+                            <button type="button" className="episode-view-page-arrow" disabled={comicPage === 0} onClick={() => setComicPage(Math.max(0, comicPage - 1))}>‹</button>
+                            <div className="episode-view-page-slider-wrap">
+                              <input type="range" min={0} max={images.length - 1} value={comicPage} onChange={(e) => setComicPage(Number(e.target.value))} className="episode-view-page-slider" />
+                            </div>
+                            <button type="button" className="episode-view-page-arrow" disabled={comicPage === images.length - 1} onClick={() => setComicPage(Math.min(images.length - 1, comicPage + 1))}>›</button>
+                          </>
+                        )}
                         <span className="episode-view-page-info">{comicPage + 1} / {images.length}</span>
                       </div>
                     )}
@@ -303,11 +315,23 @@ export default function EpisodeDetailPage() {
                 </div>
                 {pages.length > 1 && (
                   <div className={`episode-view-page-nav${isRtl ? " rtl" : ""}`}>
-                    <button type="button" className="episode-view-page-arrow" disabled={currentPage === 0} onClick={() => setCurrentPage(currentPage - 1)}>‹</button>
-                    <div className="episode-view-page-slider-wrap">
-                      <input type="range" min={0} max={pages.length - 1} value={currentPage} onChange={(e) => setCurrentPage(Number(e.target.value))} className="episode-view-page-slider" />
-                    </div>
-                    <button type="button" className="episode-view-page-arrow" disabled={currentPage === pages.length - 1} onClick={() => setCurrentPage(currentPage + 1)}>›</button>
+                    {isRtl ? (
+                      <>
+                        <button type="button" className="episode-view-page-arrow" disabled={currentPage === pages.length - 1} onClick={() => setCurrentPage(currentPage + 1)}>›</button>
+                        <div className="episode-view-page-slider-wrap">
+                          <input type="range" min={0} max={pages.length - 1} value={currentPage} onChange={(e) => setCurrentPage(Number(e.target.value))} className="episode-view-page-slider" />
+                        </div>
+                        <button type="button" className="episode-view-page-arrow" disabled={currentPage === 0} onClick={() => setCurrentPage(currentPage - 1)}>‹</button>
+                      </>
+                    ) : (
+                      <>
+                        <button type="button" className="episode-view-page-arrow" disabled={currentPage === 0} onClick={() => setCurrentPage(currentPage - 1)}>‹</button>
+                        <div className="episode-view-page-slider-wrap">
+                          <input type="range" min={0} max={pages.length - 1} value={currentPage} onChange={(e) => setCurrentPage(Number(e.target.value))} className="episode-view-page-slider" />
+                        </div>
+                        <button type="button" className="episode-view-page-arrow" disabled={currentPage === pages.length - 1} onClick={() => setCurrentPage(currentPage + 1)}>›</button>
+                      </>
+                    )}
                     <span className="episode-view-page-info">{currentPage + 1} / {pages.length}</span>
                   </div>
                 )}

@@ -1927,11 +1927,8 @@ input[type="checkbox"] {
   margin-top: 12px;
   border-top: 1px solid var(--border);
 }
-.episode-view-page-nav.rtl {
+.episode-view-page-nav.rtl .episode-view-page-slider-wrap {
   direction: rtl;
-}
-.episode-view-page-nav.rtl .episode-view-page-info {
-  direction: ltr;
 }
 .episode-view-page-arrow {
   background: none;
