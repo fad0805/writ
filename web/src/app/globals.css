@@ -1930,6 +1930,9 @@ input[type="checkbox"] {
 .episode-view-page-nav.rtl {
   direction: rtl;
 }
+.episode-view-page-nav.rtl .episode-view-page-info {
+  direction: ltr;
+}
 .episode-view-page-arrow {
   background: none;
   border: 1px solid var(--border);
