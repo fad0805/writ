@@ -670,6 +670,14 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     r'^[\s\n]*RE:\s*https?://\S+\s*[\n\s]*',
                     '', post.content, count=1, flags=re.I
                 )
+                post.content = re.sub(
+                    r'\s*RE:\s*https?://\S+\s*$',
+                    '', post.content, count=1, flags=re.I
+                )
+                post.content = re.sub(
+                    r'\s*RE:\s*<a[^>]*>[^<]*</a>\s*$',
+                    '', post.content, count=1, flags=re.I
+                )
             if link_preview:
                 post.link_preview = link_preview
             session.add(post)
