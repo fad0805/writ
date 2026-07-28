@@ -62,6 +62,7 @@ export default function NewEpisodePage() {
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [readingDirection, setReadingDirection] = useState<"ltr" | "rtl">("ltr");
   const novelId = Number(Array.isArray(params.id) ? params.id[0] : params.id);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedRef = useRef(false);
@@ -210,6 +211,7 @@ export default function NewEpisodePage() {
       form.append("view_mode", viewMode);
       form.append("comic_view_mode", comicViewMode);
       form.append("image_urls", JSON.stringify(uploadedUrls));
+      form.append("reading_direction", readingDirection);
       if (audioFile) form.append("audio", audioFile);
       if (announce) {
         form.append("announce", "true");
@@ -271,10 +273,17 @@ export default function NewEpisodePage() {
                 <input type="file" accept="image/*" multiple onChange={handleImageAdd} style={{ display: "none" }} />
               </label>
               {uploadingImages && <p style={{ color: "var(--text-secondary)", fontSize: 13 }}>이미지 업로드 중...</p>}
-              <div className="episode-comic-mode-select" style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center" }}>
+              <div className="episode-comic-mode-select" style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>보기 방식:</span>
-                <button type="button" className={`episode-view-mode-btn ${comicViewMode === "paged" ? "active" : ""}`} onClick={() => setComicViewMode("paged")}>좌우 넘김</button>
+                <button type="button" className={`episode-view-mode-btn ${comicViewMode === "paged" ? "active" : ""}`} onClick={() => setComicViewMode("paged")}>페이지</button>
                 <button type="button" className={`episode-view-mode-btn ${comicViewMode === "scroll" ? "active" : ""}`} onClick={() => setComicViewMode("scroll")}>스크롤</button>
+                {comicViewMode === "paged" && (
+                  <>
+                    <span style={{ fontSize: 13, color: "var(--text-secondary)", marginLeft: 8 }}>넘김 방향:</span>
+                    <button type="button" className={`episode-view-mode-btn ${readingDirection === "ltr" ? "active" : ""}`} onClick={() => setReadingDirection("ltr")}>좌철</button>
+                    <button type="button" className={`episode-view-mode-btn ${readingDirection === "rtl" ? "active" : ""}`} onClick={() => setReadingDirection("rtl")}>우철</button>
+                  </>
+                )}
               </div>
             </div>
           )}

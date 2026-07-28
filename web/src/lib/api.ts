@@ -198,6 +198,7 @@ export interface EpisodeData {
   view_mode: string;
   comic_view_mode: string;
   image_urls: string[];
+  reading_direction: string;
   views: number;
   is_published: boolean;
   page_mode: boolean;

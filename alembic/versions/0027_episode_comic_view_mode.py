@@ -1,4 +1,4 @@
-"""Add comic_view_mode to episodes
+"""Add comic_view_mode and reading_direction to episodes
 
 Revision ID: 0027
 Revises: 0026
@@ -15,7 +15,9 @@ depends_on = None
 
 def upgrade():
     op.add_column("episodes", sa.Column("comic_view_mode", sa.String(16), server_default="paged"))
+    op.add_column("episodes", sa.Column("reading_direction", sa.String(8), server_default="ltr"))
 
 
 def downgrade():
+    op.drop_column("episodes", "reading_direction")
     op.drop_column("episodes", "comic_view_mode")

@@ -83,9 +83,11 @@ export default function EpisodeDetailPage() {
 
   useEffect(() => {
     setCurrentPage(0);
+    setComicPage(0);
   }, [episode?.id]);
 
   const totalPages = pages.length;
+  const isRtl = episode?.reading_direction === "rtl";
   useEffect(() => {
     if (totalPages <= 1 && episode?.view_mode !== "comic") return;
     const onKey = (e: KeyboardEvent) => {
@@ -94,8 +96,8 @@ export default function EpisodeDetailPage() {
         if (cm !== "paged") return;
         const imgs = episode.image_urls || [];
         if (imgs.length <= 1) return;
-        if (e.key === "ArrowLeft") setComicPage((p) => Math.max(0, p - 1));
-        else if (e.key === "ArrowRight") setComicPage((p) => Math.min(imgs.length - 1, p + 1));
+        if (e.key === "ArrowLeft") setComicPage((p) => isRtl ? Math.min(imgs.length - 1, p + 1) : Math.max(0, p - 1));
+        else if (e.key === "ArrowRight") setComicPage((p) => isRtl ? Math.max(0, p - 1) : Math.min(imgs.length - 1, p + 1));
       } else {
         if (e.key === "ArrowLeft") setCurrentPage((p) => Math.max(0, p - 1));
         else if (e.key === "ArrowRight") setCurrentPage((p) => Math.min(totalPages - 1, p + 1));
@@ -103,7 +105,7 @@ export default function EpisodeDetailPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [totalPages, episode?.view_mode, episode?.comic_view_mode, episode?.id]);
+  }, [totalPages, episode?.view_mode, episode?.comic_view_mode, episode?.reading_direction, episode?.id, isRtl]);
 
   const touchStartX = useRef(0);
   useEffect(() => {
@@ -118,8 +120,13 @@ export default function EpisodeDetailPage() {
       const onEnd = (e: Event) => {
         const dx = (e as any).changedTouches[0].clientX - touchStartX.current;
         if (Math.abs(dx) > 50) {
-          if (dx > 0) setComicPage((p) => Math.max(0, p - 1));
-          else setComicPage((p) => Math.min(images.length - 1, p + 1));
+          if (isRtl) {
+            if (dx > 0) setComicPage((p) => Math.min(images.length - 1, p + 1));
+            else setComicPage((p) => Math.max(0, p - 1));
+          } else {
+            if (dx > 0) setComicPage((p) => Math.max(0, p - 1));
+            else setComicPage((p) => Math.min(images.length - 1, p + 1));
+          }
         }
       };
       el.addEventListener("touchstart", onStart, { passive: true });
@@ -146,7 +153,7 @@ export default function EpisodeDetailPage() {
       el.removeEventListener("touchstart", onStart);
       el.removeEventListener("touchend", onEnd);
     };
-  }, [totalPages, episode?.view_mode, episode?.comic_view_mode, episode?.id]);
+  }, [totalPages, episode?.view_mode, episode?.comic_view_mode, episode?.reading_direction, episode?.id, isRtl]);
 
   const handleDelete = async () => {
     if (!confirm("정말 삭제하시겠습니까?")) return;
@@ -202,12 +209,17 @@ export default function EpisodeDetailPage() {
                       <div className="episode-comic-viewer-paged" onClick={(e) => {
                         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                         const x = e.clientX - rect.left;
-                        if (x < rect.width / 3 && comicPage > 0) setComicPage(comicPage - 1);
-                        else if (x > (rect.width / 3) * 2 && comicPage < images.length - 1) setComicPage(comicPage + 1);
+                        if (isRtl) {
+                          if (x < rect.width / 3 && comicPage < images.length - 1) setComicPage(comicPage + 1);
+                          else if (x > (rect.width / 3) * 2 && comicPage > 0) setComicPage(comicPage - 1);
+                        } else {
+                          if (x < rect.width / 3 && comicPage > 0) setComicPage(comicPage - 1);
+                          else if (x > (rect.width / 3) * 2 && comicPage < images.length - 1) setComicPage(comicPage + 1);
+                        }
                       }}>
                         <img src={images[comicPage]} alt={`만화 ${comicPage + 1}페이지`} />
-                        <button type="button" className="episode-comic-paged-arrow left" disabled={comicPage === 0} onClick={(e) => { e.stopPropagation(); setComicPage(Math.max(0, comicPage - 1)); }}>‹</button>
-                        <button type="button" className="episode-comic-paged-arrow right" disabled={comicPage === images.length - 1} onClick={(e) => { e.stopPropagation(); setComicPage(Math.min(images.length - 1, comicPage + 1)); }}>›</button>
+                        <button type="button" className="episode-comic-paged-arrow left" disabled={isRtl ? comicPage === images.length - 1 : comicPage === 0} onClick={(e) => { e.stopPropagation(); setComicPage(isRtl ? Math.min(images.length - 1, comicPage + 1) : Math.max(0, comicPage - 1)); }}>‹</button>
+                        <button type="button" className="episode-comic-paged-arrow right" disabled={isRtl ? comicPage === 0 : comicPage === images.length - 1} onClick={(e) => { e.stopPropagation(); setComicPage(isRtl ? Math.max(0, comicPage - 1) : Math.min(images.length - 1, comicPage + 1)); }}>›</button>
                       </div>
                     ) : (
                       <div className="episode-comic-viewer-scroll">
@@ -218,11 +230,11 @@ export default function EpisodeDetailPage() {
                     )}
                     {comicViewMode === "paged" && (
                       <div className="episode-view-page-nav">
-                        <button type="button" className="episode-view-page-arrow" disabled={comicPage === 0} onClick={() => setComicPage(comicPage - 1)}>‹</button>
+                        <button type="button" className="episode-view-page-arrow" disabled={isRtl ? comicPage === images.length - 1 : comicPage === 0} onClick={() => setComicPage(isRtl ? Math.min(images.length - 1, comicPage + 1) : Math.max(0, comicPage - 1))}>‹</button>
                         <div className="episode-view-page-slider-wrap">
                           <input type="range" min={0} max={images.length - 1} value={comicPage} onChange={(e) => setComicPage(Number(e.target.value))} className="episode-view-page-slider" />
                         </div>
-                        <button type="button" className="episode-view-page-arrow" disabled={comicPage === images.length - 1} onClick={() => setComicPage(comicPage + 1)}>›</button>
+                        <button type="button" className="episode-view-page-arrow" disabled={isRtl ? comicPage === 0 : comicPage === images.length - 1} onClick={() => setComicPage(isRtl ? Math.max(0, comicPage - 1) : Math.min(images.length - 1, comicPage + 1))}>›</button>
                         <span className="episode-view-page-info">{comicPage + 1} / {images.length}</span>
                       </div>
                     )}

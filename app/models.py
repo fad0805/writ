@@ -345,6 +345,7 @@ class Episode(Base):
     view_mode = Column(String(16), default="text")
     comic_view_mode = Column(String(16), default="paged")
     image_urls = Column(JSON, default=list)
+    reading_direction = Column(String(8), default="ltr")
     views = Column(Integer, default=0)
     is_published = Column(Boolean, default=True)
     page_mode = Column(Boolean, default=False)
