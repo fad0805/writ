@@ -114,11 +114,9 @@ def api_get_post(request: Request, post_id: int):
         anc_limit = min(int(request.query_params.get("ancestor_limit", 5)), 50)
         anc_offset = int(request.query_params.get("ancestor_offset", 0))
 
-        direct_count = s.query(Post).filter_by(in_reply_to_id=post_id, is_deleted=False).count()
-        result["total_replies"] = direct_count
-
-        descendant_ids = _get_descendant_ids(s, post_id, max_depth=5)
+        descendant_ids = _get_descendant_ids(s, post_id, max_depth=20)
         result["total_descendants"] = len(descendant_ids)
+        result["total_replies"] = result["total_descendants"]
 
         if descendant_ids:
             descendants = s.query(Post).options(

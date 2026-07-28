@@ -66,13 +66,14 @@ export default function PostDetailPage() {
     try {
       const id = Number(params.id);
       if (isNaN(id)) return;
-      const data = await api.getPost(id, 0, 5, 0);
+      const data = await api.getPost(id, 0, 50, 0);
       setPost(data);
       setAncestors(data.ancestors || []);
       setHasMoreAncestors(data.has_more_ancestors || false);
       setReplies(data.replies || []);
       setTotalReplies(data.total_replies);
       setHasMore(data.has_more_replies);
+      offsetRef.current = 50;
       if (data.author?.is_limited && !data.is_mine && !data.is_following_author) {
         setShowRestrictedWarning(true);
       }
@@ -104,13 +105,15 @@ export default function PostDetailPage() {
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
-    offsetRef.current += 5;
+    offsetRef.current += 20;
     try {
       const id = Number(params.id);
       if (isNaN(id)) return;
-      const data = await api.getPost(id, offsetRef.current, 5, ancOffsetRef.current);
+      const data = await api.getPost(id, offsetRef.current, 20, ancOffsetRef.current);
       setReplies((prev) => {
-        const combined = [...prev, ...(data.replies || [])];
+        const seen = new Set(prev.map((r) => r.id));
+        const fresh = (data.replies || []).filter((r) => !seen.has(r.id));
+        const combined = [...prev, ...fresh];
         return combined.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
       });
       setHasMore(data.has_more_replies);
@@ -121,9 +124,9 @@ export default function PostDetailPage() {
   const loadMoreAncestors = useCallback(async () => {
     if (loadingAncestors || !hasMoreAncestors || !post) return;
     setLoadingAncestors(true);
-    ancOffsetRef.current += 5;
+    ancOffsetRef.current += 20;
     try {
-      const data = await api.getPost(post.id, offsetRef.current, 5, ancOffsetRef.current);
+      const data = await api.getPost(post.id, offsetRef.current, 20, ancOffsetRef.current);
       setAncestors((prev) => [...(data.ancestors || []), ...prev]);
       setHasMoreAncestors(data.has_more_ancestors || false);
     } catch {}

@@ -62,13 +62,14 @@ export default function PostByNumberPage() {
       if (!username || !number) return;
       const data = await fetch(`/api/by-number/${username}/${number}`, { credentials: "include" });
       const p = await data.json();
-      const full = await api.getPost(p.id, 0, 5, 0);
+      const full = await api.getPost(p.id, 0, 50, 0);
       setPost(full);
       setAncestors(full.ancestors || []);
       setHasMoreAncestors(full.has_more_ancestors || false);
       setReplies(full.replies || []);
       setTotalReplies(full.total_replies);
       setHasMore(full.has_more_replies);
+      offsetRef.current = 50;
     } catch { setPost(null); }
     setLoading(false);
   };
@@ -97,11 +98,13 @@ export default function PostByNumberPage() {
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || !post) return;
     setLoadingMore(true);
-    offsetRef.current += 5;
+    offsetRef.current += 20;
     try {
-      const data = await api.getPost(post.id, offsetRef.current, 5, ancOffsetRef.current);
+      const data = await api.getPost(post.id, offsetRef.current, 20, ancOffsetRef.current);
       setReplies((prev) => {
-        const combined = [...prev, ...(data.replies || [])];
+        const seen = new Set(prev.map((r) => r.id));
+        const fresh = (data.replies || []).filter((r) => !seen.has(r.id));
+        const combined = [...prev, ...fresh];
         return combined.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
       });
       setHasMore(data.has_more_replies);
@@ -112,9 +115,9 @@ export default function PostByNumberPage() {
   const loadMoreAncestors = useCallback(async () => {
     if (loadingAncestors || !hasMoreAncestors || !post) return;
     setLoadingAncestors(true);
-    ancOffsetRef.current += 5;
+    ancOffsetRef.current += 20;
     try {
-      const data = await api.getPost(post.id, offsetRef.current, 5, ancOffsetRef.current);
+      const data = await api.getPost(post.id, offsetRef.current, 20, ancOffsetRef.current);
       setAncestors((prev) => [...(data.ancestors || []), ...prev]);
       setHasMoreAncestors(data.has_more_ancestors || false);
     } catch {}

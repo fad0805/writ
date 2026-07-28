@@ -1,6 +1,6 @@
 from app.models import Post
 
-def _get_descendant_ids(session, current_id, current_depth=0, max_depth=5, collected=None):
+def _get_descendant_ids(session, current_id, current_depth=0, max_depth=20, collected=None):
     if collected is None:
         collected = set()
     if current_depth >= max_depth:
