@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { useRouter, usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Icon from "./Icon";
 import Avatar from "./Avatar";
 
@@ -29,6 +29,7 @@ export default function Sidebar() {
   const [isDark, setIsDark] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
+  const originalFaviconRef = useRef<string>("");
   const [sidebarQ, setSidebarQ] = useState("");
   const [sidebarServerName, setSidebarServerName] = useState("WRIT");
   const [sidebarLogo, setSidebarLogo] = useState("");
@@ -72,6 +73,7 @@ export default function Sidebar() {
   useEffect(() => {
     const link = document.querySelector<HTMLLinkElement>("link[rel~=icon]");
     if (!link) return;
+    if (!originalFaviconRef.current) originalFaviconRef.current = link.href;
     const canvas = document.createElement("canvas");
     canvas.width = 32;
     canvas.height = 32;
@@ -79,7 +81,7 @@ export default function Sidebar() {
     if (!ctx) return;
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.src = link.href;
+    img.src = originalFaviconRef.current;
     img.onload = () => {
       ctx.drawImage(img, 0, 0, 32, 32);
       if (unreadNotifs > 0) {
