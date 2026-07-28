@@ -23,4 +23,5 @@ USER writ
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "alembic upgrade head && logfile=/app/logs/$(date +%Y-%m-%d).log && touch $logfile 2>/dev/null && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 2>&1 | tee -a $logfile || exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+RUN chmod +x start.sh
+CMD ["./start.sh"]

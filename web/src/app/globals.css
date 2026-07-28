@@ -2181,11 +2181,112 @@ input[type="checkbox"] {
   background: #000;
   border-radius: 8px;
   overflow: hidden;
+  position: relative;
+}
+.episode-comic-viewer-scroll.rtl {
+  direction: rtl;
 }
 .episode-comic-viewer-scroll img {
   width: 100%;
   display: block;
   object-fit: contain;
+}
+.episode-comic-dir-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  padding: 12px 20px;
+  border-radius: 12px;
+  font-size: 15px;
+  z-index: 10;
+  animation: dirHintFade 1.5s ease-in-out forwards;
+  pointer-events: none;
+}
+.episode-comic-dir-hint-arrow {
+  font-size: 20px;
+}
+@keyframes dirHintFade {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── Comic fullscreen overlay ── */
+.comic-fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.comic-fullscreen-overlay img {
+  max-width: 100vw;
+  max-height: 100vh;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.comic-fullscreen-close {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  background: rgba(0,0,0,0.5);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+  color: #fff;
+  cursor: pointer;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.comic-fullscreen-close:hover { background: rgba(0,0,0,0.8); }
+.comic-fullscreen-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0,0,0,0.4);
+  border: none;
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  font-size: 26px;
+  color: #fff;
+  cursor: pointer;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.comic-fullscreen-arrow:hover:not(:disabled) { background: rgba(0,0,0,0.7); }
+.comic-fullscreen-arrow:disabled { opacity: 0; cursor: default; }
+.comic-fullscreen-arrow.left { left: 12px; }
+.comic-fullscreen-arrow.right { right: 12px; }
+.comic-fullscreen-info {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  z-index: 10;
 }
 
 /* ── Pinned notices ── */

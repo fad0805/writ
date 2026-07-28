@@ -34,6 +34,9 @@ export default function EpisodeDetailPage() {
   const bodyRef = useRef<HTMLDivElement>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [comicPage, setComicPage] = useState(0);
+  const [showDirHint, setShowDirHint] = useState(false);
+  const [fullscreenIdx, setFullscreenIdx] = useState<number | null>(null);
+  const fsTouchStartX = useRef(0);
 
   function renderEpisodeContent(html: string): string {
     let content = html;
@@ -88,6 +91,17 @@ export default function EpisodeDetailPage() {
 
   const totalPages = pages.length;
   const isRtl = episode?.reading_direction === "rtl";
+
+  useEffect(() => {
+    if (isRtl && episode?.view_mode === "comic" && (episode.comic_view_mode || "paged") !== "paged") {
+      setShowDirHint(true);
+      const t = setTimeout(() => setShowDirHint(false), 1500);
+      return () => clearTimeout(t);
+    } else {
+      setShowDirHint(false);
+    }
+  }, [episode?.id, episode?.view_mode, episode?.comic_view_mode, episode?.reading_direction, isRtl]);
+
   useEffect(() => {
     if (totalPages <= 1 && episode?.view_mode !== "comic") return;
     const onKey = (e: KeyboardEvent) => {
@@ -155,6 +169,41 @@ export default function EpisodeDetailPage() {
     };
   }, [totalPages, episode?.view_mode, episode?.comic_view_mode, episode?.reading_direction, episode?.id, isRtl]);
 
+  const fullscreenImages = episode?.image_urls || [];
+  useEffect(() => {
+    if (fullscreenIdx === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setFullscreenIdx(null); return; }
+      if (e.key === "ArrowLeft") setFullscreenIdx((p) => p === null ? p : isRtl ? Math.min(fullscreenImages.length - 1, p + 1) : Math.max(0, p - 1));
+      else if (e.key === "ArrowRight") setFullscreenIdx((p) => p === null ? p : isRtl ? Math.max(0, p - 1) : Math.min(fullscreenImages.length - 1, p + 1));
+    };
+    window.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
+  }, [fullscreenIdx, fullscreenImages.length, isRtl]);
+
+  useEffect(() => {
+    if (fullscreenIdx === null) return;
+    const el = document.querySelector(".comic-fullscreen-overlay");
+    if (!el) return;
+    const onStart = (e: Event) => { fsTouchStartX.current = (e as any).touches[0].clientX; };
+    const onEnd = (e: Event) => {
+      const dx = (e as any).changedTouches[0].clientX - fsTouchStartX.current;
+      if (Math.abs(dx) > 50) {
+        if (isRtl) {
+          if (dx > 0) setFullscreenIdx((p) => p === null ? p : Math.min(fullscreenImages.length - 1, p + 1));
+          else setFullscreenIdx((p) => p === null ? p : Math.max(0, p - 1));
+        } else {
+          if (dx > 0) setFullscreenIdx((p) => p === null ? p : Math.max(0, p - 1));
+          else setFullscreenIdx((p) => p === null ? p : Math.min(fullscreenImages.length - 1, p + 1));
+        }
+      }
+    };
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchend", onEnd, { passive: true });
+    return () => { el.removeEventListener("touchstart", onStart); el.removeEventListener("touchend", onEnd); };
+  }, [fullscreenIdx, fullscreenImages.length, isRtl]);
+
   const handleDelete = async () => {
     if (!confirm("정말 삭제하시겠습니까?")) return;
     try {
@@ -207,22 +256,22 @@ export default function EpisodeDetailPage() {
                   <>
                     {comicViewMode === "paged" ? (
                       <div className="episode-comic-viewer-paged" onClick={(e) => {
-                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                        const x = e.clientX - rect.left;
-                        if (isRtl) {
-                          if (x < rect.width / 3 && comicPage < images.length - 1) setComicPage(comicPage + 1);
-                          else if (x > (rect.width / 3) * 2 && comicPage > 0) setComicPage(comicPage - 1);
-                        } else {
-                          if (x < rect.width / 3 && comicPage > 0) setComicPage(comicPage - 1);
-                          else if (x > (rect.width / 3) * 2 && comicPage < images.length - 1) setComicPage(comicPage + 1);
-                        }
+                        const target = e.target as HTMLElement;
+                        if (target.tagName === "BUTTON") return;
+                        setFullscreenIdx(comicPage);
                       }}>
                         <img src={images[comicPage]} alt={`만화 ${comicPage + 1}페이지`} />
                         <button type="button" className="episode-comic-paged-arrow left" disabled={isRtl ? comicPage === images.length - 1 : comicPage === 0} onClick={(e) => { e.stopPropagation(); setComicPage(isRtl ? Math.min(images.length - 1, comicPage + 1) : Math.max(0, comicPage - 1)); }}>‹</button>
                         <button type="button" className="episode-comic-paged-arrow right" disabled={isRtl ? comicPage === 0 : comicPage === images.length - 1} onClick={(e) => { e.stopPropagation(); setComicPage(isRtl ? Math.max(0, comicPage - 1) : Math.min(images.length - 1, comicPage + 1)); }}>›</button>
                       </div>
                     ) : (
-                      <div className="episode-comic-viewer-scroll">
+                      <div className={`episode-comic-viewer-scroll${isRtl ? " rtl" : ""}`}>
+                        {showDirHint && (
+                          <div className="episode-comic-dir-hint">
+                            <span className="episode-comic-dir-hint-arrow">←</span>
+                            <span className="episode-comic-dir-hint-text">우측에서 좌측으로</span>
+                          </div>
+                        )}
                         {images.map((url, i) => (
                           <img key={i} src={url} alt={`만화 ${i + 1}페이지`} />
                         ))}
@@ -337,6 +386,15 @@ export default function EpisodeDetailPage() {
               </>
             )}
           </div>
+        </div>
+      )}
+      {fullscreenIdx !== null && (
+        <div className="comic-fullscreen-overlay" onClick={() => setFullscreenIdx(null)}>
+          <button type="button" className="comic-fullscreen-close" onClick={() => setFullscreenIdx(null)}>✕</button>
+          <button type="button" className={`comic-fullscreen-arrow left`} disabled={isRtl ? fullscreenIdx === fullscreenImages.length - 1 : fullscreenIdx === 0} onClick={(e) => { e.stopPropagation(); setFullscreenIdx((p) => p === null ? p : isRtl ? Math.min(fullscreenImages.length - 1, p + 1) : Math.max(0, p - 1)); }}>‹</button>
+          <img src={fullscreenImages[fullscreenIdx]} alt={`만화 ${fullscreenIdx + 1}페이지`} onClick={(e) => e.stopPropagation()} />
+          <button type="button" className={`comic-fullscreen-arrow right`} disabled={isRtl ? fullscreenIdx === 0 : fullscreenIdx === fullscreenImages.length - 1} onClick={(e) => { e.stopPropagation(); setFullscreenIdx((p) => p === null ? p : isRtl ? Math.max(0, p - 1) : Math.min(fullscreenImages.length - 1, p + 1)); }}>›</button>
+          <div className="comic-fullscreen-info">{fullscreenIdx + 1} / {fullscreenImages.length}</div>
         </div>
       )}
     </>
