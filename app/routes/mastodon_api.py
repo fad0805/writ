@@ -1733,12 +1733,11 @@ def mastodon_instance(db: SASession = Depends(get_db)):
     user_count = db.query(sqlfunc.count(User.id)).filter(User.is_remote == False).scalar() or 0
     status_count = db.query(sqlfunc.count(Post.id)).filter(Post.is_deleted == False).scalar() or 0
     admin_email = settings.admin_email or ""
-    if not admin_email:
-        admin_ids = [int(i) for i in (settings.admin_ids or "").split(",") if i.strip().isdigit()]
-        if admin_ids:
-            admin_user = db.query(User).filter(User.id.in_(admin_ids), User.is_remote == False).first()
-            if admin_user:
-                admin_email = admin_user.email or ""
+    admin_ids = [int(i) for i in (settings.admin_ids or "").split(",") if i.strip().isdigit()]
+    if not admin_email and admin_ids:
+        admin_user = db.query(User).filter(User.id.in_(admin_ids), User.is_remote == False).first()
+        if admin_user:
+            admin_email = admin_user.email or ""
     contact_account = None
     contact_user = None
     if admin_ids:
