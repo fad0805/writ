@@ -20,7 +20,7 @@ from app.core.timeline_stream import add_post_stream, remove_post_stream
 from app.db.database import get_session, get_db
 from app.routes.auth import get_current_user
 from app.utils.emoji import _load_emojis
-from app.utils.filter import _timeline_filter
+from app.utils.filter import _load_user_filters, _timeline_filter
 
 logger = logging.getLogger("writ.api.feed")
 
@@ -71,6 +71,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     posts = []
     page_offset = offset
     fetch_size = limit + 20
+    filter_ctx = _load_user_filters(session, user) if user else None
     while len(posts) < limit + 1:
         batch = query_feed_posts(
             _visible_user_ids, _local_ids, user_id, visibility,
@@ -80,7 +81,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             break
         batch_size = len(batch)
         if user:
-            batch = _timeline_filter(batch, session, user, tl_type, _following_ids)
+            batch = _timeline_filter(batch, session, user, tl_type, _following_ids, filter_ctx=filter_ctx)
         needed = limit + 1 - len(posts)
         posts.extend(batch[:needed])
         if batch_size < fetch_size:

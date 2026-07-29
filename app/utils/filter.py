@@ -132,21 +132,22 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
     return True
 
 
-def _timeline_filter(posts, session: Session, user, tl_type, following_ids, boosted_ids: set | None = None, boost_originals: dict | None = None):
+def _timeline_filter(posts, session: Session, user, tl_type, following_ids, boosted_ids: set | None = None, boost_originals: dict | None = None, filter_ctx: dict | None = None):
     """Filter a batch of posts for timeline display."""
     if not user:
         return posts
 
     following_set = set(following_ids) if following_ids else set()
-    filter_ctx = _load_user_filters(session, user)
+    if filter_ctx is None:
+        filter_ctx = _load_user_filters(session, user)
 
     # Pre-load parent authors for reply filtering (batch optimization)
-    parent_authors = {}
+    filter_ctx["parent_authors"] = {}
     if tl_type in ("home", "social"):
         parent_ids = {p.in_reply_to_id for p in posts if p.author_id != user.id and p.in_reply_to_id}
         if parent_ids:
             for pp in session.query(Post).filter(Post.id.in_(parent_ids)).all():
-                parent_authors[pp.id] = pp.author_id
+                filter_ctx["parent_authors"][pp.id] = pp.author_id
 
     filtered = []
     for p in posts:
