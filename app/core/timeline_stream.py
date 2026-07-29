@@ -98,16 +98,10 @@ def broadcast_post(
                         pass
 
         with get_session() as s:
-            post_id_for_boost = post_json.get("id")
             follower_ids = {f.follower_id for f in s.query(Follow).filter_by(
                 following_id=post_author_id, accepted=True
             ).all()}
-            booster_ids = {b.user_id for b in s.query(Boost).filter_by(post_id=post_id_for_boost).all()}
-            if booster_ids and post_visibility != "followers":
-                for bf in s.query(Follow).filter(
-                    Follow.following_id.in_(booster_ids), Follow.accepted == True
-                ).all():
-                    follower_ids.add(bf.follower_id)
+
             author = s.query(User).get(post_author_id)
             author_is_local = author.is_remote == False if author else False
 
@@ -138,7 +132,7 @@ def broadcast_post(
             for _, info in list(_streams.items()):
                 uid = info["user_id"]
                 tl = info["tl_type"]
-                if post_json.get("type") != "update" and not _should_deliver_fast(uid, tl, post_author_id, post_visibility, follower_ids, booster_ids, author_is_local, mentioned_ids):
+                if post_json.get("type") != "update" and not _should_deliver_fast(uid, tl, post_author_id, post_visibility, follower_ids, author_is_local, mentioned_ids):
                     continue
 
                 # Home/social: use unified filter (mention, reply, mute/block, keyword)
@@ -241,7 +235,7 @@ def broadcast_reaction_update(post_id: int, reactions: dict):
 
 
 def _should_deliver_fast(user_id: int, tl_type: str, author_id: int, visibility: str,
-                         follower_ids: set[int], booster_ids: set[int], author_is_local: bool,
+                         follower_ids: set[int], author_is_local: bool,
                          mentioned_ids: list[int] | None = None) -> bool:
     mentioned_set = set(mentioned_ids) if mentioned_ids else set()
     if tl_type == "home":
@@ -250,7 +244,7 @@ def _should_deliver_fast(user_id: int, tl_type: str, author_id: int, visibility:
         if user_id in mentioned_set:
             return True
         if visibility in ("public", "home", "followers"):
-            return user_id in follower_ids or user_id in booster_ids
+            return user_id in follower_ids
         return False
     elif tl_type == "social":
         if user_id == author_id:
