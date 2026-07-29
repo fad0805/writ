@@ -49,7 +49,12 @@ def remove_stream(sid: int):
     _streams.pop(sid, None)
 
 
-def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, mentioned_ids = None):
+def broadcast_post(
+        post_json: dict,
+        post_author_id: int,
+        post_visibility: str,
+        mentioned_ids = None):
+
     if post_visibility not in (
         "public", "home", "followers", "mention") or not _streams:
         return
@@ -66,6 +71,7 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, m
 
         payload = json.dumps(post_json, default=str)
         mentioned_ids = post_json.get("mentioned_user_ids") or []
+
         # Extract parent author ID from reply_context
         parent_author_id = None
         reply_ctx = post_json.get("reply_context")
@@ -74,50 +80,53 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, m
             if parent_author:
                 parent_author_id = parent_author.get("id")
 
-        with get_session() as s:
-            # If not in JSON, look up from DB
-            _pid = post_json.get("id")
-            _is_reply = bool(post_json.get("in_reply_to_id") or post_json.get("in_reply_to_ap_id") or reply_ctx)
-            if not _is_reply and _pid:
-                try:
-                    _db_post = s.query(Post).filter_by(id=_pid).first()
-                    if _db_post and _db_post.in_reply_to_id:
-                        _is_reply = True
-                        _parent = s.query(Post).filter_by(id=_db_post.in_reply_to_id).first()
-                        if _parent:
-                            parent_author_id = _parent.author_id
-                except Exception:
-                    pass
+        post_id = post_json.get('id')
 
+        # If not in JSON, look up from DB
+        if parent_author_id is None:
+            with get_session() as s:
+                _is_reply = bool(post_json.get("in_reply_to_id") or post_json.get("in_reply_to_ap_id") or reply_ctx)
+                if not _is_reply and post_id:
+                    try:
+                        _db_post = s.query(Post).filter_by(id=post_id).first()
+                        if _db_post and _db_post.in_reply_to_id:
+                            _is_reply = True
+                            _parent = s.query(Post).filter_by(id=_db_post.in_reply_to_id).first()
+                            if _parent:
+                                parent_author_id = _parent.author_id
+                    except Exception:
+                        pass
+
+        with get_session() as s:
             post_id_for_boost = post_json.get("id")
             follower_ids = {f.follower_id for f in s.query(Follow).filter_by(
                 following_id=post_author_id, accepted=True
             ).all()}
             booster_ids = {b.user_id for b in s.query(Boost).filter_by(post_id=post_id_for_boost).all()}
-            # 팔로워 공개 글은 부스트한 사람의 팔로워에게 전파하지 않음
             if booster_ids and post_visibility != "followers":
                 for bf in s.query(Follow).filter(
                     Follow.following_id.in_(booster_ids), Follow.accepted == True
                 ).all():
                     follower_ids.add(bf.follower_id)
-
             author = s.query(User).get(post_author_id)
             author_is_local = author.is_remote == False if author else False
 
             # Pre-load following lists for home/social timeline streams
             home_uids = {info["user_id"] for info in _streams.values() if info.get("tl_type") in ("home", "social")}
             all_stream_uids = {info["user_id"] for info in _streams.values()}
+
             stream_users = {}
             if all_stream_uids:
                 for u in s.query(User).filter(User.id.in_(all_stream_uids)).all():
                     stream_users[u.id] = u
+
             home_follows = {}
             if home_uids:
                 for f in s.query(Follow).filter(Follow.follower_id.in_(home_uids), Follow.accepted == True).all():
                     home_follows.setdefault(f.follower_id, set()).add(f.following_id)
 
             # Pre-load Post ORM object and per-user filter context for home/social
-            _db_post = s.query(Post).filter_by(id=post_json.get("id")).first()
+            _db_post = s.query(Post).filter_by(id=post_id).first()
             # Boost pointer: use actual boost pointer Post for author-based filtering (block/mute against booster)
             _boost_pointer_id = post_json.get("_boost_pointer_id")
             if _boost_pointer_id:
@@ -138,8 +147,7 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, m
                         _filter_cache[uid] = _load_user_filters(s, stream_users.get(uid))
                     viewer = stream_users.get(uid)
                     following_set = home_follows.get(uid, set()) | {uid}
-                    _is_boosted = bool(booster_ids)
-                    if _db_post and not should_deliver_post(_db_post, s, viewer, tl, following_set, _filter_cache[uid], is_boosted=_is_boosted):
+                    if _db_post and not should_deliver_post(_db_post, s, viewer, tl, following_set, _filter_cache[uid]):
                         continue
                 _enqueue(info["queue"], payload)
     except Exception as e:

@@ -58,18 +58,16 @@ def _match_keyword_mute(content_lower: str, parsed_kw: list) -> bool:
 
 def should_deliver_post(post, session: Session, user, tl_type: str,
                          following_ids: set | list = [],
-                         filter_ctx: dict | None = None,
-                         is_boosted: bool = False) -> bool:
+                         filter_ctx: dict | None = None) -> bool:
     """Decide whether a single post should be shown to the given user.
 
     Args:
-        post: Post ORM object
+        post: Post ORM object (boost pointer if boosted)
         session: DB session
         user: The viewer (User ORM object)
         tl_type: "home", "social", "local", or "federated"
         following_ids: Set of user IDs that `user` follows
         filter_ctx: Pre-loaded filter data from _load_user_filters() (optional)
-        is_boosted: If True, skip reply filtering
 
     Returns True if the post should be delivered, False to hide it.
     """
@@ -78,6 +76,7 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
 
     following_set = set(following_ids) if following_ids else set()
     is_self = post.author_id == user.id
+    is_boosted = bool(post.boost_of_id)
 
     # --- Boost visibility check (boost pointer가 가리키는 원글이 followers-only면 팔로워만 통과) ---
     if post.boost_of_id and tl_type in ("home", "social"):
