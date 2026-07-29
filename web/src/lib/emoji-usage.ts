@@ -10,7 +10,7 @@ export function recordEmojiUsage(emoji: string) {
   } catch {}
 }
 
-export function getFrequentEmojis(limit = 5): string[] {
+export function getFrequentEmojis(limit = 14): string[] {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return [];

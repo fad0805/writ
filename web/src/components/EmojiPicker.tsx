@@ -24,7 +24,7 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
   useEffect(() => {
     if (open) {
       setSearch("");
-      setFrequent(getFrequentEmojis(5));
+      setFrequent(getFrequentEmojis(14));
     }
   }, [open]);
 
