@@ -29,6 +29,7 @@ export default function TimelinePage() {
   const [posts, setPosts] = useState<PostData[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState("");
 
@@ -97,7 +98,8 @@ export default function TimelinePage() {
       setHasMore(saved.hasMore);
       offsetRef.current = saved.offset;
       setLoading(false);
-      load(true);
+      setRefreshing(true);
+      load(true).finally(() => setRefreshing(false));
       return;
     }
     load();
@@ -340,7 +342,7 @@ export default function TimelinePage() {
             loadMore={loadMore}
           >
             {/* 실제 데이터가 로드되었고 포스트가 있을 때만 카드들을 그립니다. */}
-            {!loading && filteredPosts.length === 0 ? (
+            {!loading && !refreshing && filteredPosts.length === 0 ? (
               <p className="empty-state">표시할 글이 없습니다.</p>
             ) : (
               filteredPosts.map((p, i) => (
