@@ -282,7 +282,17 @@ export default function TimelinePage() {
           return;
         }
         setPosts((prev) => {
-          if ((newPost as any).boost_of_id) return [newPost, ...prev];
+          if ((newPost as any).boost_of_id) {
+            const idx = prev.findIndex(
+              (p) => p.id === newPost.id && (p as any).boosted_by?.id === (newPost as any).boosted_by?.id
+            );
+            if (idx >= 0) {
+              const next = [...prev];
+              next.splice(idx, 1);
+              return [newPost, ...next];
+            }
+            return [newPost, ...prev];
+          }
           const idx = prev.findIndex((p) => p.id === newPost.id);
           if (idx >= 0) {
             const next = [...prev];
@@ -292,7 +302,17 @@ export default function TimelinePage() {
           return [newPost, ...prev];
         });
         updateCached(tlType, (cached) => {
-          if ((newPost as any).boost_of_id) return { ...cached, posts: [newPost, ...cached.posts] };
+          if ((newPost as any).boost_of_id) {
+            const idx = cached.posts.findIndex(
+              (p: any) => p.id === newPost.id && p.boosted_by?.id === (newPost as any).boosted_by?.id
+            );
+            if (idx >= 0) {
+              const next = [...cached.posts];
+              next.splice(idx, 1);
+              return { ...cached, posts: [newPost, ...next] };
+            }
+            return { ...cached, posts: [newPost, ...cached.posts] };
+          }
           const idx = cached.posts.findIndex((p: any) => p.id === newPost.id);
           if (idx >= 0) {
             const next = [...cached.posts];
