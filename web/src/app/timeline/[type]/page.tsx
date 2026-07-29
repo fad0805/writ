@@ -29,6 +29,9 @@ interface StreamPostData extends PostData {
   _boost_pointer_id?: number;
 }
 
+const postKey = (p: { id: number; boosted_by?: { id: number } | null }) =>
+  `${p.id}-${p.boosted_by?.id ?? ""}`;
+
 export default function TimelinePage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -51,7 +54,7 @@ export default function TimelinePage() {
   const totalLoadedRef = useRef(0);
   const loadIdRef = useRef(0);
   const deletedIds = useRef<Set<number>>(new Set());
-  const cardRefs = useRef(new Map<number, HTMLDivElement>());
+  const cardRefs = useRef(new Map<string, HTMLDivElement>());
   const selectedIdxRef = useRef(selectedIdx);
   useEffect(() => { selectedIdxRef.current = selectedIdx; }, [selectedIdx]);
   const touchStartX = useRef(0);
@@ -184,7 +187,7 @@ export default function TimelinePage() {
         setSelectedIdx((prev) => {
           const next = prev < 0 ? 0 : Math.min(prev + 1, currentPosts.length - 1);
           const post = currentPosts[next];
-          if (post) cardRefs.current.get(post.id)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          if (post) cardRefs.current.get(postKey(post))?.scrollIntoView({ behavior: "smooth", block: "nearest" });
           return next;
         });
         return;
@@ -194,7 +197,7 @@ export default function TimelinePage() {
         setSelectedIdx((prev) => {
           const next = Math.max(prev - 1, 0);
           const post = currentPosts[next];
-          if (post) cardRefs.current.get(post.id)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          if (post) cardRefs.current.get(postKey(post))?.scrollIntoView({ behavior: "smooth", block: "nearest" });
           return next;
         });
         return;
@@ -302,10 +305,10 @@ export default function TimelinePage() {
             ) : (
               filteredPosts.map((p, i) => (
                 <div
-                  key={p.id}
+                  key={postKey(p)}
                   ref={(el) => {
-                    if (el) cardRefs.current.set(p.id, el);
-                    else cardRefs.current.delete(p.id);
+                    if (el) cardRefs.current.set(postKey(p), el);
+                    else cardRefs.current.delete(postKey(p));
                   }}
                 >
                   <PostCard
