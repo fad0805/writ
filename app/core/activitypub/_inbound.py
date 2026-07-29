@@ -1179,28 +1179,6 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                 _a = session.query(User).get(post.author_id)
                 _author_data = _safe_user_json(_a)
             _broadcast_emojis = _broadcast_emoji_list(session)
-            broadcast_post({
-                "id": post.id,
-                "number": post.number or "",
-                "content": post.content,
-                "summary": post.summary or "",
-                "visibility": post.visibility or "public",
-                "created_at": post.created_at.isoformat() if post.created_at else "",
-                "author": _author_data,
-                "likes_count": likes_cnt,
-                "boosts_count": boosts_cnt,
-                "replies_count": replies_cnt,
-                "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
-                "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
-                "ap_id": post.ap_id or "", "media_attachments": post.media_attachments or [],
-                "poll_data": post.poll_data, "my_vote": None,
-                "reactions": reactions_data,
-                "my_reaction": None,
-                "boosted_by": _safe_user_json(_actor),
-                "mentioned_user_ids": [],
-                "quote_of_id": post.quote_of_id or None, "quote_of_ap_id": post.quote_of_ap_id or "",
-                "_emojis": _broadcast_emojis,
-            }, post.author_id, post.visibility or "public", False)
 
             # Broadcast boost pointer to followers of the booster (remote boost)
             try:
