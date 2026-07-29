@@ -156,20 +156,16 @@ export default function TimelinePage() {
       if (data._emojis) injectEmojis(data._emojis);
       
       setPosts((prev) => {
-        const ids = new Set(prev.map((p) => p.id));
-        const newPosts = data.posts.filter((p: any) => !ids.has(p.id));
-        const total = prev.length + newPosts.length;
+        const total = prev.length + data.posts.length;
         if (total >= 500) setHasMore(false);
-        return [...prev, ...newPosts];
+        return [...prev, ...data.posts];
       });
       
       setHasMore(data.has_more);
       offsetRef.current = currentOffset + LOAD_MORE;
       
       updateCached(tlType, (cached) => {
-        const ids = new Set(cached.posts.map((p: any) => p.id));
-        const more = data.posts.filter((p: any) => !ids.has(p.id));
-        return { ...cached, posts: [...cached.posts, ...more], offset: currentOffset + LOAD_MORE, hasMore: data.has_more };
+        return { ...cached, posts: [...cached.posts, ...data.posts], offset: currentOffset + LOAD_MORE, hasMore: data.has_more };
       });
     } catch {}
     setLoadingMore(false);
