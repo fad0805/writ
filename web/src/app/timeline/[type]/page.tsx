@@ -1,7 +1,7 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { api, PostData, accountSnapshot } from "@/lib/api";
+import { api, PostData, accountSnapshot, User } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import PostCard from "@/components/PostCard";
 import PostForm from "@/components/PostForm";
@@ -21,6 +21,14 @@ const TABS = [
   { key: "federated", label: "연합", icon: "globe" },
 ];
 
+const TAB_KEYS = ["home", "social", "local", "federated"];
+
+interface StreamPostData extends PostData {
+  type?: "delete" | "update";
+  boost_of_id?: number;
+  _boost_pointer_id?: number;
+}
+
 export default function TimelinePage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -38,42 +46,58 @@ export default function TimelinePage() {
   const [rewriteContent, setRewriteContent] = useState<string | null>(null);
   const [rewriteVisibility, setRewriteVisibility] = useState<string | undefined>(undefined);
   const [rewriteInitialContent, setRewriteInitialContent] = useState<string | undefined>(undefined);
-  
+
   const offsetRef = useRef(0);
+  const totalLoadedRef = useRef(0);
+  const loadIdRef = useRef(0);
   const deletedIds = useRef<Set<number>>(new Set());
-  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const postsRef = useRef(posts);
-  postsRef.current = posts;
+  const cardRefs = useRef(new Map<number, HTMLDivElement>());
   const selectedIdxRef = useRef(selectedIdx);
-  selectedIdxRef.current = selectedIdx;
+  useEffect(() => { selectedIdxRef.current = selectedIdx; }, [selectedIdx]);
+  const touchStartX = useRef(0);
+  const tlTypeRef = useRef(tlType);
+  useEffect(() => { tlTypeRef.current = tlType; }, [tlType]);
 
-  useEffect(() => {
-    load();
-  }, [tlType, user?.id]);
+  const filteredPosts = useMemo(
+    // eslint-disable-next-line react-hooks/refs -- deletedIds is mutation-only, safe during render
+    () => posts.filter((p) => !deletedIds.current.has(p.id)),
+    [posts]
+  );
+  const filteredPostsRef = useRef(filteredPosts);
+  // eslint-disable-next-line react-hooks/refs -- sync ref with render output for keyboard handler
+  filteredPostsRef.current = filteredPosts;
 
-  const load = async () => {
-    const snapshot = accountSnapshot();
+  const load = useCallback(async () => {
+    const loadId = ++loadIdRef.current;
     setLoading(true);
     setError("");
+    const snapshot = accountSnapshot();
     try {
       const data = await api.timeline(tlType, LIMIT, 0);
-      if (accountSnapshot() !== snapshot) return;
+      if (loadId !== loadIdRef.current || accountSnapshot() !== snapshot) return;
       if (data._emojis) injectEmojis(data._emojis);
       setPosts(data.posts);
       setHasMore(data.has_more);
       offsetRef.current = LIMIT;
-    } catch (e: any) {
-      if (accountSnapshot() !== snapshot) return;
-      setError(e.message || "불러오기 실패");
+      totalLoadedRef.current = data.posts.length;
+    } catch (e: unknown) {
+      if (loadId !== loadIdRef.current || accountSnapshot() !== snapshot) return;
+      setError(e instanceof Error ? e.message : "불러오기 실패");
     }
     setLoading(false);
-  };
+  }, [tlType]);
 
-  useEffect(() => {
-    const handler = () => load();
-    window.addEventListener("followchange", handler);
-    return () => window.removeEventListener("followchange", handler);
-  }, [tlType, user?.id]);
+  const addOrUpdatePost = useCallback((newPost: PostData) => {
+    setPosts((prev) => {
+      const idx = prev.findIndex((p) => p.id === newPost.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next.splice(idx, 1);
+        return [newPost, ...next];
+      }
+      return [newPost, ...prev];
+    });
+  }, []);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
@@ -84,20 +108,22 @@ export default function TimelinePage() {
       const data = await api.timeline(tlType, LOAD_MORE, currentOffset);
       if (accountSnapshot() !== snapshot) return;
       if (data._emojis) injectEmojis(data._emojis);
-      
-      setPosts((prev) => {
-        const total = prev.length + data.posts.length;
-        if (total >= 500) setHasMore(false);
-        return [...prev, ...data.posts];
-      });
-      
-      setHasMore(data.has_more);
+      setPosts((prev) => [...prev, ...data.posts]);
+      totalLoadedRef.current += data.posts.length;
+      setHasMore(data.has_more && totalLoadedRef.current < 500);
       offsetRef.current = currentOffset + LOAD_MORE;
-    } catch {}
+    } catch (e) {
+      console.error("Failed to load more posts:", e);
+    }
     setLoadingMore(false);
   }, [tlType, hasMore, loadingMore]);
 
-  const touchStartX = useRef(0);
+  useEffect(() => { load(); }, [load, user?.id]);
+
+  useEffect(() => {
+    window.addEventListener("followchange", load);
+    return () => window.removeEventListener("followchange", load);
+  }, [load, user?.id]);
 
   useEffect(() => {
     const handler = (e: TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
@@ -106,24 +132,24 @@ export default function TimelinePage() {
   }, []);
 
   useEffect(() => {
-    const tabs = ["home", "social", "local", "federated"];
-    const currentIdx = tabs.indexOf(tlType);
     const handler = (e: TouchEvent) => {
       if ((e.target as HTMLElement).closest(".reply-modal-backdrop")) return;
+      const currentIdx = TAB_KEYS.indexOf(tlTypeRef.current);
       const dx = e.changedTouches[0].clientX - touchStartX.current;
       if (Math.abs(dx) < 120) return;
-      if (dx > 0 && currentIdx > 0) router.push(`/timeline/${tabs[currentIdx - 1]}`);
-      else if (dx < 0 && currentIdx < tabs.length - 1) router.push(`/timeline/${tabs[currentIdx + 1]}`);
+      if (dx > 0 && currentIdx > 0) router.push(`/timeline/${TAB_KEYS[currentIdx - 1]}`);
+      else if (dx < 0 && currentIdx < TAB_KEYS.length - 1) router.push(`/timeline/${TAB_KEYS[currentIdx + 1]}`);
     };
     document.addEventListener("touchend", handler, { passive: true });
     return () => document.removeEventListener("touchend", handler);
-  }, [tlType, router]);
+  }, [router]);
 
   useEffect(() => { if (!authLoading && !user) router.replace("/login"); }, [authLoading, user, router]);
 
   useEffect(() => {
     const handler = (e: FocusEvent) => {
-      if ((e.target as HTMLElement).tagName === "TEXTAREA") setSelectedIdx(-1);
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT") setSelectedIdx(-1);
     };
     document.addEventListener("focusin", handler);
     return () => document.removeEventListener("focusin", handler);
@@ -134,31 +160,31 @@ export default function TimelinePage() {
       const tag = (document.activeElement?.tagName || "").toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select") return;
       const selIdx = selectedIdxRef.current;
-      const currentPosts = postsRef.current;
+      const currentPosts = filteredPostsRef.current;
       if (e.key === "Escape" && selIdx >= 0) {
         e.preventDefault();
         setSelectedIdx(-1);
         return;
       }
-      const t = ["home", "social", "local", "federated"];
-      const currentTabIdx = t.indexOf(tlType);
+      const currentTabIdx = TAB_KEYS.indexOf(tlType);
       if (e.key === "h" && currentTabIdx > 0) {
         e.preventDefault();
         setSelectedIdx(-1);
-        router.push(`/timeline/${t[currentTabIdx - 1]}`);
+        router.push(`/timeline/${TAB_KEYS[currentTabIdx - 1]}`);
         return;
       }
-      if (e.key === "l" && currentTabIdx < t.length - 1) {
+      if (e.key === "l" && currentTabIdx < TAB_KEYS.length - 1) {
         e.preventDefault();
         setSelectedIdx(-1);
-        router.push(`/timeline/${t[currentTabIdx + 1]}`);
+        router.push(`/timeline/${TAB_KEYS[currentTabIdx + 1]}`);
         return;
       }
       if (e.key === "j") {
         e.preventDefault();
         setSelectedIdx((prev) => {
           const next = prev < 0 ? 0 : Math.min(prev + 1, currentPosts.length - 1);
-          cardRefs.current[next]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          const post = currentPosts[next];
+          if (post) cardRefs.current.get(post.id)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
           return next;
         });
         return;
@@ -167,23 +193,24 @@ export default function TimelinePage() {
         e.preventDefault();
         setSelectedIdx((prev) => {
           const next = Math.max(prev - 1, 0);
-          cardRefs.current[next]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          const post = currentPosts[next];
+          if (post) cardRefs.current.get(post.id)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
           return next;
         });
         return;
       }
       if (selIdx >= 0 && currentPosts[selIdx]) {
         const sp = currentPosts[selIdx];
-        if (e.key === "f") { e.preventDefault(); (sp.liked ? api.unlike(sp.id) : api.like(sp.id)).then(() => load()).catch(() => {}); return; }
-        if (e.key === "d") { e.preventDefault(); (sp.bookmarked ? api.unbookmark(sp.id) : api.bookmark(sp.id)).then(() => load()).catch(() => {}); return; }
-        if (e.key === "b") { e.preventDefault(); (sp.boosted ? api.unboost(sp.id) : api.boost(sp.id)).then(() => load()).catch(() => {}); return; }
-        if (e.key === "r") { e.preventDefault(); api.getPost(sp.id).then((d) => setReplyPost(d)).catch(() => {}); return; }
+        if (e.key === "f") { e.preventDefault(); (sp.liked ? api.unlike(sp.id) : api.like(sp.id)).then(() => load()).catch(console.error); return; }
+        if (e.key === "d") { e.preventDefault(); (sp.bookmarked ? api.unbookmark(sp.id) : api.bookmark(sp.id)).then(() => load()).catch(console.error); return; }
+        if (e.key === "b") { e.preventDefault(); (sp.boosted ? api.unboost(sp.id) : api.boost(sp.id)).then(() => load()).catch(console.error); return; }
+        if (e.key === "r") { e.preventDefault(); api.getPost(sp.id).then((d) => setReplyPost(d)).catch(console.error); return; }
         if (e.key === "Enter") { e.preventDefault(); router.push(sp.number ? `/@${sp.author.username}/${sp.number}` : `/post/${sp.id}`); return; }
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [tlType, user?.id]);
+  }, [tlType, load, router, user?.id]);
 
   useEffect(() => {
     let es: EventSource | null = null;
@@ -192,13 +219,13 @@ export default function TimelinePage() {
     } catch { return; }
     es.onmessage = (event) => {
       try {
-        const newPost = JSON.parse(event.data);
-        if (newPost._emojis) {
-          injectEmojis(newPost._emojis);
-        }
+        const newPost: StreamPostData = JSON.parse(event.data);
+        if (newPost._emojis) injectEmojis(newPost._emojis);
         if (deletedIds.current.has(newPost.id)) return;
         if (newPost.type === "delete") {
-          setPosts((prev) => prev.filter((p) => p.id !== newPost.id && (p as any)._boost_pointer_id !== newPost.id));
+          setPosts((prev) => prev.filter(
+            (p) => p.id !== newPost.id && (p as StreamPostData)._boost_pointer_id !== newPost.id
+          ));
           return;
         }
         if (newPost.type === "update") {
@@ -206,9 +233,9 @@ export default function TimelinePage() {
           return;
         }
         setPosts((prev) => {
-          if ((newPost as any).boost_of_id) {
+          if (newPost.boost_of_id) {
             const idx = prev.findIndex(
-              (p) => p.id === newPost.id && (p as any).boosted_by?.id === (newPost as any).boosted_by?.id
+              (p) => p.id === newPost.id && p.boosted_by?.id === newPost.boosted_by?.id
             );
             if (idx >= 0) {
               const next = [...prev];
@@ -225,39 +252,31 @@ export default function TimelinePage() {
           }
           return [newPost, ...prev];
         });
-      } catch {}
+      } catch (e) {
+        console.error("Failed to parse SSE message:", e);
+      }
     };
     es.onerror = () => {};
     return () => { es?.close(); };
   }, [tlType, user?.id]);
-
-  // 성능 최적화용 필터링 분리
-  const filteredPosts = useMemo(() => {
-    return posts.filter((p) => !deletedIds.current.has(p.id));
-  }, [posts]);
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
   if (!user) return <div className="empty-state">로그인이 필요합니다</div>;
 
   return (
     <>
-        <div className="post-form post-form-desktop">
-          <PostForm key={rewriteContent ? `rewrite-${Date.now()}` : "main"} onDone={(newPost) => {
-            if (newPost) {
-              setPosts((prev) => {
-                const idx = prev.findIndex((p) => p.id === newPost.id);
-                if (idx >= 0) {
-                  const next = [...prev];
-                  next.splice(idx, 1);
-                  return [newPost, ...next];
-                }
-                return [newPost, ...prev];
-              });
-            }
+      <div className="post-form post-form-desktop">
+        <PostForm
+          key={rewriteContent !== null ? rewriteContent : "main"}
+          onDone={(newPost) => {
+            if (newPost) addOrUpdatePost(newPost);
             setRewriteContent(null);
             setRewriteVisibility(undefined);
-          }} initialContent={rewriteContent ?? undefined} initialVisibility={rewriteVisibility} />
-        </div>
+          }}
+          initialContent={rewriteContent ?? undefined}
+          initialVisibility={rewriteVisibility}
+        />
+      </div>
       <div className="timeline-tabs">
         {TABS.map((t) => (
           <Link
@@ -273,46 +292,38 @@ export default function TimelinePage() {
         {error ? (
           <p className="empty-state">오류: {error}</p>
         ) : (
-          /* 💡 loading 상태와 관계없이 InfiniteScroll은 항상 렌더링 상태를 유지합니다. */
-          <InfiniteScroll 
-            hasMore={hasMore} 
-            loadingMore={loadingMore || loading} 
+          <InfiniteScroll
+            hasMore={hasMore}
+            loadingMore={loadingMore || loading}
             loadMore={loadMore}
           >
-            {/* 실제 데이터가 로드되었고 포스트가 있을 때만 카드들을 그립니다. */}
             {!loading && !hasMore && filteredPosts.length === 0 ? (
               <p className="empty-state">표시할 글이 없습니다.</p>
             ) : (
               filteredPosts.map((p, i) => (
-                <div key={p.id} ref={(el) => { if (el) cardRefs.current[i] = el; }}>
-                  <PostCard 
-                    post={p} 
-                    onDelete={() => { 
-                      deletedIds.current.add(p.id); 
-                      setPosts((prev) => prev.filter((x) => x.id !== p.id)); 
-                    }} 
-                    onUpdate={(updated) => { 
-                      if (updated) { 
-                        setPosts((prev) => prev.map((x) => x.id === p.id ? updated : x)); 
-                      } else { 
-                        api.getPost(p.id).then((u) => {
-                          setPosts((prev) => prev.map((x) => x.id === p.id ? u : x));
-                        }).catch(() => {}); 
-                      } 
-                    }} 
-                    onReply={(newPost) => { 
-                      if (newPost) { 
-                        setPosts((prev) => { 
-                          const idx = prev.findIndex((x) => x.id === newPost.id);
-                          if (idx >= 0) {
-                            const next = [...prev];
-                            next.splice(idx, 1);
-                            return [newPost, ...next];
-                          }
-                          return [newPost, ...prev]; 
-                        }); 
-                      } 
-                    }} 
+                <div
+                  key={p.id}
+                  ref={(el) => {
+                    if (el) cardRefs.current.set(p.id, el);
+                    else cardRefs.current.delete(p.id);
+                  }}
+                >
+                  <PostCard
+                    post={p}
+                    onDelete={() => {
+                      deletedIds.current.add(p.id);
+                      setPosts((prev) => prev.filter((x) => x.id !== p.id));
+                    }}
+                    onUpdate={(updated) => {
+                      if (updated) {
+                        addOrUpdatePost(updated);
+                      } else {
+                        api.getPost(p.id).then(addOrUpdatePost).catch(console.error);
+                      }
+                    }}
+                    onReply={(newPost) => {
+                      if (newPost) addOrUpdatePost(newPost);
+                    }}
                     onRewrite={(content, visibility, replyTo) => {
                       if (replyTo) {
                         setRewriteInitialContent(content);
@@ -320,23 +331,23 @@ export default function TimelinePage() {
                           id: replyTo.id,
                           number: replyTo.number,
                           content: replyTo.content,
-                          author: replyTo.author,
+                          author: replyTo.author as User,
                           visibility: replyTo.visibility,
-                          summary: null,
+                          summary: "",
                           created_at: null,
                           ap_id: "",
                           likes_count: 0, boosts_count: 0, replies_count: 0,
                           liked: false, boosted: false, bookmarked: false, is_mine: false,
-                          reply_context: null, media_attachments: [],
+                          reply_context: null,
                           is_deleted: false,
-                        } as any);
+                        });
                       } else {
                         setRewriteContent(content);
                         setRewriteVisibility(visibility);
                         setShowComposer(true);
                       }
                     }}
-                    selected={i === selectedIdx} 
+                    selected={i === selectedIdx}
                   />
                 </div>
               ))
@@ -344,7 +355,18 @@ export default function TimelinePage() {
           </InfiniteScroll>
         )}
       </div>
-      {replyPost && <ReplyModal post={replyPost} onClose={() => { setReplyPost(null); setRewriteInitialContent(undefined); }} initialContent={rewriteInitialContent} onDone={(newPost) => { setReplyPost(null); setRewriteInitialContent(undefined); if (newPost) { setPosts((prev) => { const idx = prev.findIndex((p) => p.id === newPost.id); if (idx >= 0) { const next = [...prev]; next.splice(idx, 1); return [newPost, ...next]; } return [newPost, ...prev]; }); } }} />}
+      {replyPost && (
+        <ReplyModal
+          post={replyPost}
+          onClose={() => { setReplyPost(null); setRewriteInitialContent(undefined); }}
+          initialContent={rewriteInitialContent}
+          onDone={(newPost) => {
+            setReplyPost(null);
+            setRewriteInitialContent(undefined);
+            if (newPost) addOrUpdatePost(newPost);
+          }}
+        />
+      )}
       <button className="mobile-fab" onClick={() => setShowComposer(true)}>
         <Icon name="pen_solid" size={22} />
       </button>
@@ -357,22 +379,17 @@ export default function TimelinePage() {
                 <Icon name="x" size={18} />
               </button>
             </div>
-            <PostForm key={rewriteContent ? `rewrite-${Date.now()}` : "mobile"} onDone={(newPost) => {
-              if (newPost) {
-                setPosts((prev) => {
-                  const idx = prev.findIndex((p) => p.id === newPost.id);
-                  if (idx >= 0) {
-                    const next = [...prev];
-                    next.splice(idx, 1);
-                    return [newPost, ...next];
-                  }
-                  return [newPost, ...prev];
-                });
-              }
-              setShowComposer(false);
-              setRewriteContent(null);
-              setRewriteVisibility(undefined);
-            }} initialContent={rewriteContent ?? undefined} initialVisibility={rewriteVisibility} />
+            <PostForm
+              key={rewriteContent !== null ? rewriteContent : "mobile"}
+              onDone={(newPost) => {
+                if (newPost) addOrUpdatePost(newPost);
+                setShowComposer(false);
+                setRewriteContent(null);
+                setRewriteVisibility(undefined);
+              }}
+              initialContent={rewriteContent ?? undefined}
+              initialVisibility={rewriteVisibility}
+            />
           </div>
         </div>
       )}
