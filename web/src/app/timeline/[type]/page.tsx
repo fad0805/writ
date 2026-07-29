@@ -113,11 +113,7 @@ export default function TimelinePage() {
     load();
   }, [tlType, user?.id]);
 
-  useEffect(() => {
-    return () => {
-      setCached(tlType, { posts: postsRef.current, hasMore, offset: offsetRef.current });
-    };
-  }, [tlType]);
+  // 캐시는 load()와 updateCached()에서만 갱신 — cleanup에서 덮어쓰지 않음
 
   const load = async (silent = false) => {
     const snapshot = accountSnapshot();
@@ -308,8 +304,8 @@ export default function TimelinePage() {
             );
             if (idx >= 0) {
               const next = [...cached.posts];
-              next.splice(idx, 1);
-              return { ...cached, posts: [newPost, ...next] };
+              next.splice(idx, 1, newPost);
+              return { ...cached, posts: next };
             }
             return { ...cached, posts: [newPost, ...cached.posts] };
           }
