@@ -116,6 +116,12 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
 
             # Pre-load Post ORM object and per-user filter context for home/social
             _db_post = s.query(Post).filter_by(id=post_json.get("id")).first()
+            # Boost pointer: use actual boost pointer Post for author-based filtering (block/mute against booster)
+            _boost_pointer_id = post_json.get("_boost_pointer_id")
+            if _boost_pointer_id:
+                _bp = s.query(Post).filter_by(id=_boost_pointer_id).first()
+                if _bp and not _bp.is_deleted:
+                    _db_post = _bp
             _filter_cache: dict[int, dict | None] = {}
 
             for _, info in list(_streams.items()):
@@ -241,7 +247,7 @@ def _should_deliver_fast(user_id: int, tl_type: str, author_id: int, visibility:
         if user_id in mentioned_set:
             return True
         if visibility == "public":
-            return True
+            return user_id in follower_ids or user_id == author_id or author_is_local
         if visibility in ("home", "followers"):
             return user_id in follower_ids
         return False

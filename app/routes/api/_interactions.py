@@ -978,6 +978,7 @@ def api_boost_post(request: Request, post_id: int):
                     "reply_context": None,
                     "boosted_by": _boosted_json,
                     "boost_of_id": post.id,
+                    "_boost_pointer_id": boost_post.id,
                     "media_attachments": (post.media_attachments or []) if hasattr(post, 'media_attachments') else [],
                     "poll_data": None, "my_vote": None,
                     "reactions": {}, "my_reaction": None,
