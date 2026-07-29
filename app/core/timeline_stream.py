@@ -100,6 +100,7 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, m
                     Follow.following_id.in_(booster_ids), Follow.accepted == True
                 ).all():
                     follower_ids.add(bf.follower_id)
+
             author = s.query(User).get(post_author_id)
             author_is_local = author.is_remote == False if author else False
 
@@ -130,6 +131,7 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, m
                 tl = info["tl_type"]
                 if post_json.get("type") != "update" and not _should_deliver_fast(uid, tl, post_author_id, post_visibility, follower_ids, booster_ids, author_is_local, mentioned_ids):
                     continue
+
                 # Home/social: use unified filter (mention, reply, mute/block, keyword)
                 if tl in ("home", "social") and post_visibility != "mention":
                     if uid not in _filter_cache:
@@ -141,7 +143,7 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, m
                         continue
                 _enqueue(info["queue"], payload)
     except Exception as e:
-        logger.error("BROADCAST_POST ERROR", exc_info=True)
+        logger.error(f"BROADCAST_POST ERROR: {e}", exc_info=True)
 
 
 def _broadcast_timeline(post_json, author_id, visibility):

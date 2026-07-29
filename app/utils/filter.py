@@ -79,6 +79,12 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
     following_set = set(following_ids) if following_ids else set()
     is_self = post.author_id == user.id
 
+    # --- Boost visibility check (boost pointer가 가리키는 원글이 followers-only면 팔로워만 통과) ---
+    if post.boost_of_id and tl_type in ("home", "social"):
+        _orig = session.query(Post).filter_by(id=post.boost_of_id).first()
+        if _orig and _orig.visibility == "followers" and _orig.author_id not in following_set:
+            return False
+
     # --- 1. 블록/뮤트/키워드 (최우선 — 멘션보다 우선) ---
     if filter_ctx:
         if post.author_id in filter_ctx["hidden_ids"]:
@@ -140,12 +146,11 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
     return True
 
 
-def _timeline_filter(posts, session: Session, user, tl_type, following_ids, boosted_ids: set | None = None, boost_originals: dict | None = None, filter_ctx: dict | None = None):
+def _timeline_filter(posts, session: Session, user, tl_type, following_ids, filter_ctx: dict | None = None):
     """Filter a batch of posts for timeline display."""
     if not user:
         return posts
 
-    following_set = set(following_ids) if following_ids else set()
     if filter_ctx is None:
         filter_ctx = _load_user_filters(session, user)
 
@@ -159,13 +164,7 @@ def _timeline_filter(posts, session: Session, user, tl_type, following_ids, boos
 
     filtered = []
     for p in posts:
-        # 부스트 포인터이고 원본이 팔로워 공개면 원작자 팔로우 여부 확인
-        if p.boost_of_id and tl_type in ("home", "social"):
-            _orig = (boost_originals or {}).get(p.boost_of_id) or session.query(Post).filter_by(id=p.boost_of_id).first()
-            if _orig and _orig.visibility == "followers" and _orig.author_id not in following_set:
-                continue
-        is_boosted = bool(boosted_ids and p.id in boosted_ids)
-        if should_deliver_post(p, session, user, tl_type, following_set, filter_ctx, is_boosted=is_boosted):
+        if should_deliver_post(p, session, user, tl_type, following_ids, filter_ctx):
             filtered.append(p)
 
     print(f"[feed] after _timeline_filter: {len(filtered)}/{len(posts)} posts", flush=True)
