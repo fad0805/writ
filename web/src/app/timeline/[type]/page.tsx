@@ -283,12 +283,22 @@ export default function TimelinePage() {
         }
         setPosts((prev) => {
           if ((newPost as any).boost_of_id) return [newPost, ...prev];
-          if (prev.some((p) => p.id === newPost.id)) return prev;
+          const idx = prev.findIndex((p) => p.id === newPost.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next.splice(idx, 1);
+            return [newPost, ...next];
+          }
           return [newPost, ...prev];
         });
         updateCached(tlType, (cached) => {
           if ((newPost as any).boost_of_id) return { ...cached, posts: [newPost, ...cached.posts] };
-          if (cached.posts.some((p: any) => p.id === newPost.id)) return cached;
+          const idx = cached.posts.findIndex((p: any) => p.id === newPost.id);
+          if (idx >= 0) {
+            const next = [...cached.posts];
+            next.splice(idx, 1);
+            return { ...cached, posts: [newPost, ...next] };
+          }
           return { ...cached, posts: [newPost, ...cached.posts] };
         });
       } catch {}
@@ -311,11 +321,21 @@ export default function TimelinePage() {
           <PostForm key={rewriteContent ? `rewrite-${Date.now()}` : "main"} onDone={(newPost) => {
             if (newPost) {
               setPosts((prev) => {
-                if (prev.some((p) => p.id === newPost.id)) return prev;
+                const idx = prev.findIndex((p) => p.id === newPost.id);
+                if (idx >= 0) {
+                  const next = [...prev];
+                  next.splice(idx, 1);
+                  return [newPost, ...next];
+                }
                 return [newPost, ...prev];
               });
               updateCached(tlType, (cached) => {
-                if (cached.posts.some((p: any) => p.id === newPost.id)) return cached;
+                const idx = cached.posts.findIndex((p: any) => p.id === newPost.id);
+                if (idx >= 0) {
+                  const next = [...cached.posts];
+                  next.splice(idx, 1);
+                  return { ...cached, posts: [newPost, ...next] };
+                }
                 return { ...cached, posts: [newPost, ...cached.posts] };
               });
             }
@@ -371,11 +391,21 @@ export default function TimelinePage() {
                     onReply={(newPost) => { 
                       if (newPost) { 
                         setPosts((prev) => { 
-                          if (prev.some((x) => x.id === newPost.id)) return prev; 
+                          const idx = prev.findIndex((x) => x.id === newPost.id);
+                          if (idx >= 0) {
+                            const next = [...prev];
+                            next.splice(idx, 1);
+                            return [newPost, ...next];
+                          }
                           return [newPost, ...prev]; 
                         }); 
       updateCached(tlType, (cached) => {
-                          if (cached.posts.some((x: any) => x.id === newPost.id)) return cached;
+                          const idx = cached.posts.findIndex((x: any) => x.id === newPost.id);
+                          if (idx >= 0) {
+                            const next = [...cached.posts];
+                            next.splice(idx, 1);
+                            return { ...cached, posts: [newPost, ...next] };
+                          }
                           return { ...cached, posts: [newPost, ...cached.posts] };
                         });
                       } 
@@ -411,7 +441,7 @@ export default function TimelinePage() {
           </InfiniteScroll>
         )}
       </div>
-      {replyPost && <ReplyModal post={replyPost} onClose={() => { setReplyPost(null); setRewriteInitialContent(undefined); }} initialContent={rewriteInitialContent} onDone={(newPost) => { setReplyPost(null); setRewriteInitialContent(undefined); if (newPost) { setPosts((prev) => { if (prev.some((p) => p.id === newPost.id)) return prev; return [newPost, ...prev]; }); updateCached(tlType, (cached) => { if (cached.posts.some((p: any) => p.id === newPost.id)) return cached; return { ...cached, posts: [newPost, ...cached.posts] }; }); } }} />}
+      {replyPost && <ReplyModal post={replyPost} onClose={() => { setReplyPost(null); setRewriteInitialContent(undefined); }} initialContent={rewriteInitialContent} onDone={(newPost) => { setReplyPost(null); setRewriteInitialContent(undefined); if (newPost) { setPosts((prev) => { const idx = prev.findIndex((p) => p.id === newPost.id); if (idx >= 0) { const next = [...prev]; next.splice(idx, 1); return [newPost, ...next]; } return [newPost, ...prev]; }); updateCached(tlType, (cached) => { const idx = cached.posts.findIndex((p: any) => p.id === newPost.id); if (idx >= 0) { const next = [...cached.posts]; next.splice(idx, 1); return { ...cached, posts: [newPost, ...next] }; } return { ...cached, posts: [newPost, ...cached.posts] }; }); } }} />}
       <button className="mobile-fab" onClick={() => setShowComposer(true)}>
         <Icon name="pen_solid" size={22} />
       </button>
@@ -427,11 +457,21 @@ export default function TimelinePage() {
             <PostForm key={rewriteContent ? `rewrite-${Date.now()}` : "mobile"} onDone={(newPost) => {
               if (newPost) {
                 setPosts((prev) => {
-                  if (prev.some((p) => p.id === newPost.id)) return prev;
+                  const idx = prev.findIndex((p) => p.id === newPost.id);
+                  if (idx >= 0) {
+                    const next = [...prev];
+                    next.splice(idx, 1);
+                    return [newPost, ...next];
+                  }
                   return [newPost, ...prev];
                 });
                 updateCached(tlType, (cached) => {
-                  if (cached.posts.some((p: any) => p.id === newPost.id)) return cached;
+                  const idx = cached.posts.findIndex((p: any) => p.id === newPost.id);
+                  if (idx >= 0) {
+                    const next = [...cached.posts];
+                    next.splice(idx, 1);
+                    return { ...cached, posts: [newPost, ...next] };
+                  }
                   return { ...cached, posts: [newPost, ...cached.posts] };
                 });
               }
