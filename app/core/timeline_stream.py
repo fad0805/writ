@@ -60,7 +60,7 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
             content_dict = post_json["content"]
             post_json["content"] = content_dict.get("html") or content_dict.get("text") or str(content_dict)
 
-        if not post_json.get("author"):
+        if not post_json.get("author") and post_json.get("type") != "update":
             return
 
         payload = json.dumps(post_json, default=str)
@@ -127,7 +127,7 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
             for _, info in list(_streams.items()):
                 uid = info["user_id"]
                 tl = info["tl_type"]
-                if not _should_deliver_fast(uid, tl, post_author_id, post_visibility, follower_ids, booster_ids, author_is_local, mentioned_ids):
+                if post_json.get("type") != "update" and not _should_deliver_fast(uid, tl, post_author_id, post_visibility, follower_ids, booster_ids, author_is_local, mentioned_ids):
                     continue
                 # Home/social: use unified filter (mention, reply, mute/block, keyword)
                 if tl in ("home", "social") and post_visibility != "mention":
