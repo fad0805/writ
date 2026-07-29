@@ -116,10 +116,7 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
     elif tl_type == "social":
         allowed_authors = following_set | {user.id}
         if post.author_id not in allowed_authors and post.visibility != "public":
-            if not is_boosted:
-                return False
-            if post.visibility == "followers":
-                return False
+            return False
 
         # --- 3. 답글 필터: 캐시 데이터 기반으로 N+1 없이 칼같이 검사 ---
         if not is_boosted and (post.in_reply_to_id or post.in_reply_to_ap_id):
