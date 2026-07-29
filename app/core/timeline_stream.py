@@ -55,6 +55,9 @@ def broadcast_post(
         post_visibility: str,
         mentioned_ids = None):
 
+    if post_visibility in ("unlisted",):
+        post_visibility = "home"
+
     if post_visibility not in (
         "public", "home", "followers", "mention") or not _streams:
         return
@@ -106,7 +109,11 @@ def broadcast_post(
             author_is_local = author.is_remote == False if author else False
 
             # Pre-load following lists for home/social timeline streams
-            home_uids = {info["user_id"] for info in _streams.values() if info.get("tl_type") in ("home", "social")}
+            home_uids = {
+                info["user_id"]
+                for info in _streams.values()
+                if info.get("tl_type") in ("home", "social")
+            }
             all_stream_uids = {info["user_id"] for info in _streams.values()}
 
             stream_users = {}
