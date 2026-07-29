@@ -33,6 +33,7 @@ def _post_json(p, session, user, tl_type=None,
             "mentioned_user_ids": [], "mentioned_handles": [],
             "link_preview": None, "is_deleted": True,
             "quote_of_id": None, "quote_of_ap_id": "",
+            "boost_of_id": p.boost_of_id,
         }
 
     # If this is a boost pointer post, resolve to the original
@@ -45,11 +46,12 @@ def _post_json(p, session, user, tl_type=None,
                                 _booster_map, _mentioned_users_map, _boost_originals)
             result["boosted_by"] = _user_json(p.author)
             result["created_at"] = _fmt_dt(p.created_at)
+            result["boost_of_id"] = p.boost_of_id
             if user and _boosted_ids is not None:
                 result["i_boosted"] = original.id in _boosted_ids
             return result
         else:
-            return {"id": p.id, "is_deleted": True, "boosted_by": _user_json(p.author)}
+            return {"id": p.id, "is_deleted": True, "boosted_by": _user_json(p.author), "boost_of_id": p.boost_of_id}
     if user:
         if _liked_ids is not None:
             liked = p.id in _liked_ids
@@ -148,6 +150,7 @@ def _post_json(p, session, user, tl_type=None,
         "link_preview": p.link_preview or None,
         "quote_of_id": p.quote_of_id or None,
         "quote_of_ap_id": p.quote_of_ap_id or "",
+        "boost_of_id": p.boost_of_id,
         **(({}) if _skip_emojis else {"_emojis": [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)]}),
     }
 

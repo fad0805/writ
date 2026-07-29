@@ -686,6 +686,20 @@ input:focus {
   background: rgba(230, 126, 34, 0.12);
 }
 
+.boost-badge {
+  font-size: 0.78em;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+  margin-left: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.boost-badge.boost-self {
+  color: #16a34a;
+}
+.boost-badge a { color: inherit; }
+
 .post-header {
   display: flex;
   align-items: center;
