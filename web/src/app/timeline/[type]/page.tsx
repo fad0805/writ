@@ -29,7 +29,6 @@ export default function TimelinePage() {
   const [posts, setPosts] = useState<PostData[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState("");
 
@@ -40,7 +39,6 @@ export default function TimelinePage() {
   const [rewriteVisibility, setRewriteVisibility] = useState<string | undefined>(undefined);
   const [rewriteInitialContent, setRewriteInitialContent] = useState<string | undefined>(undefined);
   
-  // 💡 상태 변경 비동기 문제를 해결하기 위해 offset을 최신 ref로 관리합니다.
   const offsetRef = useRef(0);
   const deletedIds = useRef<Set<number>>(new Set());
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -48,76 +46,14 @@ export default function TimelinePage() {
   postsRef.current = posts;
   const selectedIdxRef = useRef(selectedIdx);
   selectedIdxRef.current = selectedIdx;
-  
-  const prevTlRef = useRef(tlType);
-
-  const cacheKeyFor = (t: string) => `${accountSnapshot()}:${t}`;
-
-  const readCache = (): Record<string, { posts: PostData[]; hasMore: boolean; offset: number }> | null => {
-    try {
-      const raw = localStorage.getItem(`writ:tl-cache:${accountSnapshot()}`);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (Date.now() - (parsed._ts || 0) > 5 * 60 * 1000) {
-        localStorage.removeItem(`writ:tl-cache:${accountSnapshot()}`);
-        return null;
-      }
-      delete parsed._ts;
-      return parsed;
-    } catch { return null; }
-  };
-
-  const writeCache = (data: Record<string, { posts: PostData[]; hasMore: boolean; offset: number }>) => {
-    try {
-      localStorage.setItem(`writ:tl-cache:${accountSnapshot()}`, JSON.stringify({ ...data, _ts: Date.now() }));
-    } catch {}
-  };
-
-  const getCached = (t: string) => {
-    const all = readCache();
-    return all?.[cacheKeyFor(t)] || null;
-  };
-
-  const setCached = (t: string, data: { posts: PostData[]; hasMore: boolean; offset: number }) => {
-    const all = readCache() || {};
-    all[cacheKeyFor(t)] = data;
-    writeCache(all);
-  };
-
-  const updateCached = (t: string, updater: (cached: { posts: PostData[]; hasMore: boolean; offset: number }) => { posts: PostData[]; hasMore: boolean; offset: number }) => {
-    const all = readCache();
-    if (!all) return;
-    const ck = cacheKeyFor(t);
-    if (all[ck]) {
-      all[ck] = updater(all[ck]);
-      writeCache(all);
-    }
-  };
 
   useEffect(() => {
-    if (typeof localStorage !== "undefined") localStorage.setItem("lastTimelineTab", tlType);
-    if (prevTlRef.current !== tlType) {
-      setCached(prevTlRef.current, { posts, hasMore, offset: offsetRef.current });
-      prevTlRef.current = tlType;
-    }
-    const saved = getCached(tlType);
-    if (saved) {
-      setPosts(saved.posts);
-      setHasMore(saved.hasMore);
-      offsetRef.current = saved.offset;
-      setLoading(false);
-      setRefreshing(true);
-      load(true).finally(() => setRefreshing(false));
-      return;
-    }
     load();
   }, [tlType, user?.id]);
 
-  // 캐시는 load()와 updateCached()에서만 갱신 — cleanup에서 덮어쓰지 않음
-
-  const load = async (silent = false) => {
+  const load = async () => {
     const snapshot = accountSnapshot();
-    if (!silent) setLoading(true);
+    setLoading(true);
     setError("");
     try {
       const data = await api.timeline(tlType, LIMIT, 0);
@@ -126,7 +62,6 @@ export default function TimelinePage() {
       setPosts(data.posts);
       setHasMore(data.has_more);
       offsetRef.current = LIMIT;
-      setCached(tlType, { posts: data.posts, hasMore: data.has_more, offset: LIMIT });
     } catch (e: any) {
       if (accountSnapshot() !== snapshot) return;
       setError(e.message || "불러오기 실패");
@@ -140,7 +75,6 @@ export default function TimelinePage() {
     return () => window.removeEventListener("followchange", handler);
   }, [tlType, user?.id]);
 
-  // 💡 의존성 배열을 단순화하여 렉이 걸려도 항상 최신 정보로 백엔드에 페이징을 요청하도록 보장합니다.
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
@@ -159,10 +93,6 @@ export default function TimelinePage() {
       
       setHasMore(data.has_more);
       offsetRef.current = currentOffset + LOAD_MORE;
-      
-      updateCached(tlType, (cached) => {
-        return { ...cached, posts: [...cached.posts, ...data.posts], offset: currentOffset + LOAD_MORE, hasMore: data.has_more };
-      });
     } catch {}
     setLoadingMore(false);
   }, [tlType, hasMore, loadingMore]);
@@ -269,12 +199,10 @@ export default function TimelinePage() {
         if (deletedIds.current.has(newPost.id)) return;
         if (newPost.type === "delete") {
           setPosts((prev) => prev.filter((p) => p.id !== newPost.id && (p as any)._boost_pointer_id !== newPost.id));
-          updateCached(tlType, (cached) => ({ ...cached, posts: cached.posts.filter((p: any) => p.id !== newPost.id && p._boost_pointer_id !== newPost.id) }));
           return;
         }
         if (newPost.type === "update") {
           setPosts((prev) => prev.map((p) => p.id === newPost.id ? { ...p, ...newPost } : p));
-          updateCached(tlType, (cached) => ({ ...cached, posts: cached.posts.map((p: any) => p.id === newPost.id ? { ...p, ...newPost } : p) }));
           return;
         }
         setPosts((prev) => {
@@ -296,26 +224,6 @@ export default function TimelinePage() {
             return [newPost, ...next];
           }
           return [newPost, ...prev];
-        });
-        updateCached(tlType, (cached) => {
-          if ((newPost as any).boost_of_id) {
-            const idx = cached.posts.findIndex(
-              (p: any) => p.id === newPost.id && p.boosted_by?.id === (newPost as any).boosted_by?.id
-            );
-            if (idx >= 0) {
-              const next = [...cached.posts];
-              next.splice(idx, 1, newPost);
-              return { ...cached, posts: next };
-            }
-            return { ...cached, posts: [newPost, ...cached.posts] };
-          }
-          const idx = cached.posts.findIndex((p: any) => p.id === newPost.id);
-          if (idx >= 0) {
-            const next = [...cached.posts];
-            next.splice(idx, 1);
-            return { ...cached, posts: [newPost, ...next] };
-          }
-          return { ...cached, posts: [newPost, ...cached.posts] };
         });
       } catch {}
     };
@@ -345,15 +253,6 @@ export default function TimelinePage() {
                 }
                 return [newPost, ...prev];
               });
-              updateCached(tlType, (cached) => {
-                const idx = cached.posts.findIndex((p: any) => p.id === newPost.id);
-                if (idx >= 0) {
-                  const next = [...cached.posts];
-                  next.splice(idx, 1);
-                  return { ...cached, posts: [newPost, ...next] };
-                }
-                return { ...cached, posts: [newPost, ...cached.posts] };
-              });
             }
             setRewriteContent(null);
             setRewriteVisibility(undefined);
@@ -381,7 +280,7 @@ export default function TimelinePage() {
             loadMore={loadMore}
           >
             {/* 실제 데이터가 로드되었고 포스트가 있을 때만 카드들을 그립니다. */}
-            {!loading && !refreshing && !hasMore && filteredPosts.length === 0 ? (
+            {!loading && !hasMore && filteredPosts.length === 0 ? (
               <p className="empty-state">표시할 글이 없습니다.</p>
             ) : (
               filteredPosts.map((p, i) => (
@@ -391,16 +290,13 @@ export default function TimelinePage() {
                     onDelete={() => { 
                       deletedIds.current.add(p.id); 
                       setPosts((prev) => prev.filter((x) => x.id !== p.id)); 
-                      updateCached(tlType, (cached) => ({ ...cached, posts: cached.posts.filter((x: any) => x.id !== p.id) }));
                     }} 
                     onUpdate={(updated) => { 
                       if (updated) { 
                         setPosts((prev) => prev.map((x) => x.id === p.id ? updated : x)); 
-                        updateCached(tlType, (cached) => ({ ...cached, posts: cached.posts.map((x: any) => x.id === p.id ? updated : x) }));
                       } else { 
                         api.getPost(p.id).then((u) => {
                           setPosts((prev) => prev.map((x) => x.id === p.id ? u : x));
-                          updateCached(tlType, (cached) => ({ ...cached, posts: cached.posts.map((x: any) => x.id === p.id ? u : x) }));
                         }).catch(() => {}); 
                       } 
                     }} 
@@ -415,15 +311,6 @@ export default function TimelinePage() {
                           }
                           return [newPost, ...prev]; 
                         }); 
-      updateCached(tlType, (cached) => {
-                          const idx = cached.posts.findIndex((x: any) => x.id === newPost.id);
-                          if (idx >= 0) {
-                            const next = [...cached.posts];
-                            next.splice(idx, 1);
-                            return { ...cached, posts: [newPost, ...next] };
-                          }
-                          return { ...cached, posts: [newPost, ...cached.posts] };
-                        });
                       } 
                     }} 
                     onRewrite={(content, visibility, replyTo) => {
@@ -457,7 +344,7 @@ export default function TimelinePage() {
           </InfiniteScroll>
         )}
       </div>
-      {replyPost && <ReplyModal post={replyPost} onClose={() => { setReplyPost(null); setRewriteInitialContent(undefined); }} initialContent={rewriteInitialContent} onDone={(newPost) => { setReplyPost(null); setRewriteInitialContent(undefined); if (newPost) { setPosts((prev) => { const idx = prev.findIndex((p) => p.id === newPost.id); if (idx >= 0) { const next = [...prev]; next.splice(idx, 1); return [newPost, ...next]; } return [newPost, ...prev]; }); updateCached(tlType, (cached) => { const idx = cached.posts.findIndex((p: any) => p.id === newPost.id); if (idx >= 0) { const next = [...cached.posts]; next.splice(idx, 1); return { ...cached, posts: [newPost, ...next] }; } return { ...cached, posts: [newPost, ...cached.posts] }; }); } }} />}
+      {replyPost && <ReplyModal post={replyPost} onClose={() => { setReplyPost(null); setRewriteInitialContent(undefined); }} initialContent={rewriteInitialContent} onDone={(newPost) => { setReplyPost(null); setRewriteInitialContent(undefined); if (newPost) { setPosts((prev) => { const idx = prev.findIndex((p) => p.id === newPost.id); if (idx >= 0) { const next = [...prev]; next.splice(idx, 1); return [newPost, ...next]; } return [newPost, ...prev]; }); } }} />}
       <button className="mobile-fab" onClick={() => setShowComposer(true)}>
         <Icon name="pen_solid" size={22} />
       </button>
@@ -480,15 +367,6 @@ export default function TimelinePage() {
                     return [newPost, ...next];
                   }
                   return [newPost, ...prev];
-                });
-                updateCached(tlType, (cached) => {
-                  const idx = cached.posts.findIndex((p: any) => p.id === newPost.id);
-                  if (idx >= 0) {
-                    const next = [...cached.posts];
-                    next.splice(idx, 1);
-                    return { ...cached, posts: [newPost, ...next] };
-                  }
-                  return { ...cached, posts: [newPost, ...cached.posts] };
                 });
               }
               setShowComposer(false);
