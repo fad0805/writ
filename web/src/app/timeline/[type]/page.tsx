@@ -286,11 +286,13 @@ export default function TimelinePage() {
           return;
         }
         setPosts((prev) => {
-          if (prev.some((p) => p.id === newPost.id)) return prev;
+          const key = (newPost as any)._boost_pointer_id || newPost.id;
+          if (prev.some((p) => ((p as any)._boost_pointer_id || p.id) === key)) return prev;
           return [newPost, ...prev];
         });
         updateCached(tlType, (cached) => {
-          if (cached.posts.some((p: any) => p.id === newPost.id)) return cached;
+          const key = (newPost as any)._boost_pointer_id || newPost.id;
+          if (cached.posts.some((p: any) => (p._boost_pointer_id || p.id) === key)) return cached;
           return { ...cached, posts: [newPost, ...cached.posts] };
         });
       } catch {}
