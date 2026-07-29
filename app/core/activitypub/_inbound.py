@@ -1193,7 +1193,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                     "likes_count": likes_cnt,
                     "boosts_count": boosts_cnt,
                     "replies_count": replies_cnt,
-                    "liked": False, "boosted": True, "bookmarked": False, "is_mine": False,
+                    "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
                     "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
                     "ap_id": post.ap_id or "",
                     "reply_context": None,
