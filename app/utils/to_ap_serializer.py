@@ -138,6 +138,8 @@ def to_ap_note(post, session=None) -> dict:
         "id": post.ap_id,
         "type": "Question" if post.poll_data else "Note",
         "attributedTo": post.author.actor_uri().strip(),
+        "summary": post.summary or "",
+        "sensitive": post.is_sensitive or False,
         "content": f"<p>{content}</p>" if not content.strip().startswith("<p>") else content,
         "mediaType": "text/html",
         "tag": tags,
