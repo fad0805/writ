@@ -389,7 +389,7 @@ def _do_create_post(
             logger.error("Failed to broadcast new_post event: %s", e, exc_info=True)
 
         pj = _post_json(post, s, _author)
-        threading.Thread(target=_broadcast_timeline, args=(pj, user_id, visibility, bool(dm_target_id)), daemon=True).start()
+        threading.Thread(target=_broadcast_timeline, args=(pj, user_id, visibility), daemon=True).start()
         return pj
 
 

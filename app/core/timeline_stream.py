@@ -49,11 +49,12 @@ def remove_stream(sid: int):
     _streams.pop(sid, None)
 
 
-def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, post_is_dm: bool, mentioned_ids = None):
-    try:
-        if post_visibility not in ("public", "home", "followers", "mention") or not _streams:
-            return
+def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, mentioned_ids = None):
+    if post_visibility not in (
+        "public", "home", "followers", "mention") or not _streams:
+        return
 
+    try:
         # content가 dict 타입으로 잘못 유입되었는지 방어 코드 추가
         if isinstance(post_json.get("content"), dict):
             # dict 형태라면 특정 언어 코드를 가져오거나 문자열로 강제 치환
@@ -143,9 +144,9 @@ def broadcast_post(post_json: dict, post_author_id: int, post_visibility: str, p
         logger.error("BROADCAST_POST ERROR", exc_info=True)
 
 
-def _broadcast_timeline(post_json, author_id, visibility, is_dm):
+def _broadcast_timeline(post_json, author_id, visibility):
     try:
-        broadcast_post(post_json, author_id, visibility, is_dm)
+        broadcast_post(post_json, author_id, visibility)
     except Exception as e:
         logger.error("Failed to broadcast timeline: %s", e, exc_info=True)
 

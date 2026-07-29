@@ -824,7 +824,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     "quote_of_ap_id": post.quote_of_ap_id or "",
                     "_emojis": _broadcast_emojis,
                 }
-                broadcast_post(post_json, actor_id, visibility, is_incoming_dm)
+                broadcast_post(post_json, actor_id, visibility)
             except Exception as e:
                 logger.error("timeline broadcast failed: %s", e, exc_info=True)
 

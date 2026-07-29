@@ -991,7 +991,7 @@ def api_boost_post(request: Request, post_id: int):
                 def _safe_broadcast_boost_pointer():
                     with get_session() as _s:
                         if _s.query(Boost).filter_by(user_id=_boost_user_id, post_id=_boost_post_id).first():
-                            _broadcast_timeline(_og, _boost_user_id, post.visibility or "public", False)
+                            _broadcast_timeline(_og, _boost_user_id, post.visibility or "public")
                 threading.Thread(target=_safe_broadcast_boost_pointer, daemon=True).start()
             except Exception as e:
                 logger.error("Failed to broadcast boost stream: %s", e, exc_info=True)
@@ -1001,7 +1001,7 @@ def api_boost_post(request: Request, post_id: int):
                     "boosts_count": s.query(Boost).filter_by(post_id=post_id).count(),
                     "boosted_by": _user_json(user),
                     "boost_of_id": post_id,
-                }, post.author_id, post.visibility or "public", False)
+                }, post.author_id, post.visibility or "public")
             except Exception as e:
                 logger.error("Failed to broadcast boost update: %s", e, exc_info=True)
             if post.author_id != user.id:
@@ -1129,7 +1129,7 @@ def api_unboost_post(request: Request, post_id: int):
                     "id": post_id, "type": "update",
                     "boosts_count": remaining,
                     "boosted_by": None,
-                }, post.author_id, post.visibility or "public", False)
+                }, post.author_id, post.visibility or "public")
             except Exception as e:
                 logger.error("Failed to broadcast unboost update: %s", e, exc_info=True)
 
