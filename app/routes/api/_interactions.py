@@ -21,7 +21,7 @@ from app.serializers import _user_json, _post_json
 from app.config.settings import BASE_URL
 from app.core.activitypub import _post_to_inbox, _resolve_actor, _send_accept, _send_reject
 from app.core.push import send_push_to_user
-from app.core.timeline_stream import broadcast_refresh_notifs, add_notif_stream, remove_notif_stream, broadcast_notif_sound, broadcast_reaction_update, broadcast_post, _broadcast_timeline
+from app.core.timeline_stream import broadcast_refresh_notifs, add_notif_stream, remove_notif_stream, broadcast_notif_sound, broadcast_reaction_update, broadcast_post, broadcast_delete, _broadcast_timeline
 from app.db.database import get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.utils.datetime import _fmt_dt
@@ -1113,6 +1113,8 @@ def api_unboost_post(request: Request, post_id: int):
         existing = s.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
         announce_id = existing.ap_id if existing and existing.ap_id else ""
         if existing:
+            _bp = s.query(Post.id).filter_by(author_id=user.id, boost_of_id=post_id).first()
+            _bp_id = _bp[0] if _bp else None
             s.delete(existing)
             s.query(Post).filter_by(author_id=user.id, boost_of_id=post_id).delete()
             s.query(Notification).filter_by(
@@ -1120,6 +1122,11 @@ def api_unboost_post(request: Request, post_id: int):
             ).delete()
             remaining = s.query(Boost).filter_by(post_id=post_id).count()
             s.commit()
+            if _bp_id:
+                try:
+                    broadcast_delete(_bp_id)
+                except Exception as e:
+                    logger.error("Failed to broadcast boost pointer delete: %s", e, exc_info=True)
             if post.author_id != user.id:
                 broadcast_refresh_notifs(post.author_id)
             try:

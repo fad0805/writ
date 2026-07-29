@@ -272,8 +272,8 @@ export default function TimelinePage() {
         }
         if (deletedIds.current.has(newPost.id)) return;
         if (newPost.type === "delete") {
-          setPosts((prev) => prev.filter((p) => p.id !== newPost.id));
-          updateCached(tlType, (cached) => ({ ...cached, posts: cached.posts.filter((p: any) => p.id !== newPost.id) }));
+          setPosts((prev) => prev.filter((p) => p.id !== newPost.id && (p as any)._boost_pointer_id !== newPost.id));
+          updateCached(tlType, (cached) => ({ ...cached, posts: cached.posts.filter((p: any) => p.id !== newPost.id && p._boost_pointer_id !== newPost.id) }));
           return;
         }
         if (newPost.type === "update") {
