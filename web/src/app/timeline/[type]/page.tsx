@@ -286,11 +286,23 @@ export default function TimelinePage() {
           return;
         }
         setPosts((prev) => {
-          if (prev.some((p) => p.id === newPost.id)) return prev;
+          const idx = prev.findIndex((p) => p.id === newPost.id);
+          if (idx !== -1) {
+            if (!newPost.boost_of_id) return prev;
+            const updated = [...prev];
+            updated[idx] = { ...updated[idx], ...newPost };
+            return updated;
+          }
           return [newPost, ...prev];
         });
         updateCached(tlType, (cached) => {
-          if (cached.posts.some((p: any) => p.id === newPost.id)) return cached;
+          const idx = cached.posts.findIndex((p: any) => p.id === newPost.id);
+          if (idx !== -1) {
+            if (!newPost.boost_of_id) return cached;
+            const updated = [...cached.posts];
+            updated[idx] = { ...updated[idx], ...newPost };
+            return { ...cached, posts: updated };
+          }
           return { ...cached, posts: [newPost, ...cached.posts] };
         });
       } catch {}
