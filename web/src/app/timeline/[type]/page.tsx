@@ -342,7 +342,7 @@ export default function TimelinePage() {
             loadMore={loadMore}
           >
             {/* 실제 데이터가 로드되었고 포스트가 있을 때만 카드들을 그립니다. */}
-            {!loading && !refreshing && filteredPosts.length === 0 ? (
+            {!loading && !refreshing && !hasMore && filteredPosts.length === 0 ? (
               <p className="empty-state">표시할 글이 없습니다.</p>
             ) : (
               filteredPosts.map((p, i) => (
