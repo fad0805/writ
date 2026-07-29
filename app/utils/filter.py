@@ -97,12 +97,20 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
         return True
 
     # --- 3. home/social 전용 필터 ---
-    if tl_type in ("home", "social"):
+    if tl_type == "home":
         allowed_authors = following_set | {user.id}
 
         # 작성자가 팔로우 대상이 아니면 드롭
         # (부스트된 글은 예외 — 단, 팔로워 공개 글은 부스트여도 원작자 팔로우 필수)
         if post.author_id not in allowed_authors:
+            if not is_boosted:
+                return False
+            if post.visibility == "followers":
+                return False
+
+    elif tl_type == "social":
+        allowed_authors = following_set | {user.id}
+        if post.author_id not in allowed_authors and post.visibility != "public":
             if not is_boosted:
                 return False
             if post.visibility == "followers":
