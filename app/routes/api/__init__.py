@@ -32,9 +32,10 @@ from app.routes.api._posts import (
     _do_delete_post,
 )
 
+from app.core.feed import _broadcast_federation
+
 from app.routes.api._feed import (
     feed_router,
-    _broadcast_federation,
 )
 
 from app.core.timeline_stream import _broadcast_timeline
