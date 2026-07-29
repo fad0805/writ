@@ -165,11 +165,13 @@ const localReactionEmojiMap = useMemo(() => {
     return () => clearInterval(id);
   }, [post.poll_data]);
 
+  const targetId = post.boost_of_id || post.id;
+
   const toggleLike = () => {
     const next = !liked;
     setLiked(next);
     setLikesCount(Math.max(0, likesCount + (next ? 1 : -1)));
-    (next ? api.like(post.id) : api.unlike(post.id)).catch(() => {
+    (next ? api.like(targetId) : api.unlike(targetId)).catch(() => {
       setLiked(!next);
       setLikesCount(Math.max(0, likesCount + (next ? -1 : 1)));
     });
@@ -178,7 +180,7 @@ const localReactionEmojiMap = useMemo(() => {
   const toggleBookmark = () => {
     const next = !bookmarked;
     setBookmarked(next);
-    (next ? api.bookmark(post.id) : api.unbookmark(post.id)).catch(() => {
+    (next ? api.bookmark(targetId) : api.unbookmark(targetId)).catch(() => {
       setBookmarked(!next);
     });
   };
@@ -189,12 +191,12 @@ const localReactionEmojiMap = useMemo(() => {
       if (boosted) {
         setBoosted(false);
         setBoostsCount(Math.max(0, boostsCount - 1));
-        await api.unboost(post.id);
+        await api.unboost(targetId);
       }
       else {
         setBoosted(true);
         setBoostsCount(boostsCount + 1);
-        await api.boost(post.id);
+        await api.boost(targetId);
       }
     } catch {
       setBoosted(false);
@@ -738,7 +740,7 @@ const localReactionEmojiMap = useMemo(() => {
                       e.stopPropagation();
                       if (!canVote) return;
                       try {
-                        const result = await api.vote(post.id, i);
+                        const result = await api.vote(targetId, i);
                         if (result?.post) {
                           Object.assign(post, result.post);
                         }
@@ -773,7 +775,7 @@ const localReactionEmojiMap = useMemo(() => {
                         if (pollRefreshing) return;
                         setPollRefreshing(true);
                         try {
-                          const result = await api.refreshPoll(post.id);
+                          const result = await api.refreshPoll(targetId);
                           if (result?.post) Object.assign(post, result.post);
                           if (onUpdate) onUpdate();
                           else window.dispatchEvent(new Event("postchange"));
@@ -889,7 +891,7 @@ const localReactionEmojiMap = useMemo(() => {
                       setLiked(false);
                       setLikesCount(Math.max(0, likesCount - 1));
                       try {
-                        await api.unreact(post.id);
+                        await api.unreact(targetId);
                       } catch {}
                     } else {
                       const next = { ...reactions };
@@ -904,7 +906,7 @@ const localReactionEmojiMap = useMemo(() => {
                       setLikesCount(myReaction ? likesCount : likesCount + 1);
                       recordEmojiUsage(emoji);
                       try {
-                        await api.react(post.id, emoji);
+                        await api.react(targetId, emoji);
                       } catch {}
                     }
                   }}
@@ -912,7 +914,7 @@ const localReactionEmojiMap = useMemo(() => {
                     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                     if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current);
                     tooltipTimerRef.current = setTimeout(() => {
-                      api.reactionUsers(post.id, emoji).then((d) => {
+                      api.reactionUsers(targetId, emoji).then((d) => {
                         if (d.users.length > 0) {
                           setReactionTooltip({ emoji, users: d.users, x: rect.left + rect.width / 2, y: rect.top - 6 });
                         }
@@ -973,7 +975,7 @@ const localReactionEmojiMap = useMemo(() => {
                 setLikesCount(myReaction ? likesCount : likesCount + 1);
                 recordEmojiUsage(emoji);
                 try {
-                  await api.react(post.id, emoji);
+                  await api.react(targetId, emoji);
                 } catch {}
               }} />
             </span>
@@ -999,7 +1001,7 @@ const localReactionEmojiMap = useMemo(() => {
                     <button onClick={() => { setShowMoreActions(false); (async () => {
                       const newPinned = !pinned;
                       setPinned(newPinned);
-                      const res = await fetch(`/api/${newPinned ? "pin" : "unpin"}/post/${post.id}`, { method: "POST", credentials: "include" });
+                      const res = await fetch(`/api/${newPinned ? "pin" : "unpin"}/post/${targetId}`, { method: "POST", credentials: "include" });
                       if (!res.ok) { setPinned(!newPinned); const d = await res.json().catch(() => ({})); if (d.detail) alert(d.detail); }
                       else { window.dispatchEvent(new Event("pinchange")); window.dispatchEvent(new Event("profilechange")); }
                     })(); }} className="post-actions-dropdown-item">
@@ -1182,5 +1184,6 @@ const localReactionEmojiMap = useMemo(() => {
       )}
     </>
   );
-}); export default PostCard;
+});
+export default PostCard;
 

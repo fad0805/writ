@@ -44,6 +44,7 @@ def _post_json(p, session, user, tl_type=None,
                                 _liked_ids, _boosted_ids, _bookmarked_ids,
                                 _vote_map, _my_reaction_map, _reactions_map,
                                 _booster_map, _mentioned_users_map, _boost_originals)
+            result["id"] = p.id
             result["boosted_by"] = _user_json(p.author)
             result["created_at"] = _fmt_dt(p.created_at)
             result["boost_of_id"] = p.boost_of_id

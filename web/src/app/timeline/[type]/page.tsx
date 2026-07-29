@@ -204,11 +204,12 @@ export default function TimelinePage() {
       }
       if (selIdx >= 0 && currentPosts[selIdx]) {
         const sp = currentPosts[selIdx];
-        if (e.key === "f") { e.preventDefault(); (sp.liked ? api.unlike(sp.id) : api.like(sp.id)).then(() => load()).catch(console.error); return; }
-        if (e.key === "d") { e.preventDefault(); (sp.bookmarked ? api.unbookmark(sp.id) : api.bookmark(sp.id)).then(() => load()).catch(console.error); return; }
-        if (e.key === "b") { e.preventDefault(); (sp.boosted ? api.unboost(sp.id) : api.boost(sp.id)).then(() => load()).catch(console.error); return; }
-        if (e.key === "r") { e.preventDefault(); api.getPost(sp.id).then((d) => setReplyPost(d)).catch(console.error); return; }
-        if (e.key === "Enter") { e.preventDefault(); router.push(sp.number ? `/@${sp.author.username}/${sp.number}` : `/post/${sp.id}`); return; }
+        const targetId = sp.boost_of_id || sp.id;
+        if (e.key === "f") { e.preventDefault(); (sp.liked ? api.unlike(targetId) : api.like(targetId)).then(() => load()).catch(console.error); return; }
+        if (e.key === "d") { e.preventDefault(); (sp.bookmarked ? api.unbookmark(targetId) : api.bookmark(targetId)).then(() => load()).catch(console.error); return; }
+        if (e.key === "b") { e.preventDefault(); (sp.boosted ? api.unboost(targetId) : api.boost(targetId)).then(() => load()).catch(console.error); return; }
+        if (e.key === "r") { e.preventDefault(); api.getPost(targetId).then((d) => setReplyPost(d)).catch(console.error); return; }
+        if (e.key === "Enter") { e.preventDefault(); router.push(sp.boost_of_id ? `/post/${sp.boost_of_id}` : sp.number ? `/@${sp.author.username}/${sp.number}` : `/post/${sp.id}`); return; }
       }
     };
     window.addEventListener("keydown", handler);

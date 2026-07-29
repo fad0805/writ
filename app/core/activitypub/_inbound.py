@@ -1192,7 +1192,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
             # Broadcast boost pointer to followers of the booster (remote boost)
             try:
                 broadcast_post({
-                    "id": post.id,
+                    "id": boost_post.id,
                     "number": post.number or "",
                     "content": post.content,
                     "summary": post.summary or "",
