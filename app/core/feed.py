@@ -65,24 +65,48 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     posts = []
 
     if tl_type == 'social' and _local_public_ids:
-        batch1 = query_feed_posts(
-            _visible_user_ids, _local_ids, user_id, visibility,
-            session, _base_opts, fetch_size, offset=0
-        )
-        batch2 = query_feed_posts(
-            _local_public_ids, _local_ids, user_id, ['public'],
-            session, _base_opts, fetch_size, offset=0
-        )
-        combined = sorted(batch1 + batch2, key=lambda p: p.created_at, reverse=True)
-        seen = set()
-        batch = []
-        for p in combined:
-            if p.id not in seen:
-                seen.add(p.id)
-                batch.append(p)
-        if user:
-            batch = _timeline_filter(batch, session, user, tl_type, _following_ids, filter_ctx=filter_ctx)
-        posts = batch[offset:offset + limit + 1]
+        page_offset = offset
+        while len(posts) < limit + 1:
+            q = session.query(Post).options(*_base_opts).filter(
+                Post.is_deleted == False,
+            )
+            conditions = []
+            if _visible_user_ids:
+                conditions.append(
+                    and_(Post.author_id.in_(_visible_user_ids), Post.visibility.in_(visibility))
+                )
+            if _local_public_ids:
+                conditions.append(
+                    and_(Post.author_id.in_(_local_public_ids), Post.visibility == 'public')
+                )
+            if not conditions:
+                break
+            q = q.filter(or_(*conditions)).filter(
+                or_(
+                    Post.parent == None,
+                    Post.parent.has(Post.author_id.in_(_visible_user_ids | _local_public_ids))
+                )
+            ).order_by(desc(Post.created_at)).offset(page_offset).limit(fetch_size)
+            batch = q.all()
+            batch = [
+                p for p in batch
+                if not (
+                    p.visibility == "mention" and p.is_dm
+                    and p.author_id != user_id and _local_ids
+                    and p.author_id in _local_ids
+                    and user_id not in (p.mentioned_user_ids or [])
+                )
+            ]
+            if not batch:
+                break
+            batch_size = len(batch)
+            if user:
+                batch = _timeline_filter(batch, session, user, tl_type, _following_ids, filter_ctx=filter_ctx)
+            needed = limit + 1 - len(posts)
+            posts.extend(batch[:needed])
+            if batch_size < fetch_size:
+                break
+            page_offset += fetch_size
         has_more = len(posts) > limit
         posts = posts[:limit]
 
