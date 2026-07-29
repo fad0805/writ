@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
-from PIL import Image
+from PIL import Image, ImageOps
 from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.orm import selectinload
 
@@ -125,6 +125,7 @@ def api_upload_media(request: Request, file: UploadFile = File(...)):
     key = f"media/{name}"
     if is_image:
         img = Image.open(io.BytesIO(file.file.read()))
+        img = ImageOps.exif_transpose(img)
         buf = io.BytesIO()
         img.save(buf, "WEBP", quality=85, lossless=(img.mode == "RGBA"))
         storage.save(key, buf.getvalue())

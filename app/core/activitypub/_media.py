@@ -5,7 +5,7 @@ import datetime
 import logging
 from urllib.parse import urlparse
 
-from PIL import Image, ImageSequence
+from PIL import Image, ImageOps, ImageSequence
 
 from app.db.database import get_session
 from app.models import RemoteMedia
@@ -46,6 +46,7 @@ def _cache_remote_media(remote_url: str) -> str:
             else:
                 try:
                     img = Image.open(io.BytesIO(data))
+                    img = ImageOps.exif_transpose(img)
                     is_animated = getattr(img, "is_animated", False) or (img.format == "GIF")
                     max_dim = 2048
                     out = io.BytesIO()
@@ -121,6 +122,7 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
         else:
             try:
                 img = Image.open(io.BytesIO(data))
+                img = ImageOps.exif_transpose(img)
                 is_animated = getattr(img, "is_animated", False)
                 real_format = (img.format or "").lower()
                 if is_animated or real_format in ("gif", "png"):

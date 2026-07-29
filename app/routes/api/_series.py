@@ -7,7 +7,7 @@ import logging
 from uuid import uuid4
 from datetime import datetime
 from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File
-from PIL import Image
+from PIL import Image, ImageOps
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
@@ -193,6 +193,7 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
             ext = "gif"
         key = f"series/covers/{uuid4().hex[:16]}.{ext}"
         img = Image.open(cover_image.file)
+        img = ImageOps.exif_transpose(img)
         target_w, target_h = 120, 160
         img_w, img_h = img.size
         ratio = max(target_w / img_w, target_h / img_h)
@@ -298,6 +299,7 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
             ext = "gif"
         key = f"series/covers/{uuid4().hex[:16]}.{ext}"
         img = Image.open(cover_image.file)
+        img = ImageOps.exif_transpose(img)
         target_w, target_h = 120, 160
         img_w, img_h = img.size
         ratio = max(target_w / img_w, target_h / img_h)

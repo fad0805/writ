@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File
-from PIL import Image
+from PIL import Image, ImageOps
 from sqlalchemy import desc, or_, and_, func, select, text
 from sqlalchemy.orm import selectinload
 
@@ -314,6 +314,7 @@ def _save_profile_image(user_id: int, file: UploadFile, prefix: str, max_size: t
     _validate_upload(file, allow_video=False, max_size=MAX_AVATAR_SIZE, label="프로필 이미지")
     key = f"{prefix}/local/u{user_id}_{uuid4().hex[:8]}.webp"
     img = Image.open(file.file)
+    img = ImageOps.exif_transpose(img)
     img.thumbnail(max_size, Image.Resampling.LANCZOS)
     if img.mode in ("RGBA", "P"):
         bg = Image.new("RGB", img.size, (255, 255, 255))
