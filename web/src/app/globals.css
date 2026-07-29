@@ -2817,29 +2817,6 @@ input[type="checkbox"] {
   margin-left: 0;
 }
 
-/* ── Boost badge ── */
-.boost-badge {
-  font-size: 0.78em;
-  color: var(--text-dim);
-  margin-bottom: 8px;
-  margin-left: 20px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.boost-badge.boost-self {
-  color: #16a34a;
-}
-.boost-badge-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  background: var(--bg-tertiary);
-  border-radius: 6px;
-  color: var(--text-muted);
-}
 
 /* ── Delete button ── */
 .action-btn-danger { color: var(--danger); }
