@@ -228,8 +228,6 @@ def api_boost_post(request: Request, post_id: int):
                 broadcast_post({
                     "id": post.id, "type": "update",
                     "boosts_count": s.query(Boost).filter_by(post_id=post_id).count(),
-                    "boosted_by": _user_json(user),
-                    "boost_of_id": post_id,
                 }, post.author_id, post.visibility or "public")
             except Exception as e:
                 logger.error("Failed to broadcast boost update: %s", e, exc_info=True)

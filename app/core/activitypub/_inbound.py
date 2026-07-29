@@ -1,35 +1,34 @@
 import re
 import copy
 import sys
-import time
 import datetime
 import json
 import logging
 import uuid
-import threading
 from urllib.parse import urlparse
 
 import httpx
 import html
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 
 from app.core.eventbus import broadcast
 from app.core.push import send_push_to_user
 from app.core.timeline_stream import broadcast_notif_sound, broadcast_refresh_notifs, broadcast_refresh_notifs, broadcast_post, broadcast_reaction_update, broadcast_delete
-from app.config.settings import BASE_URL, SECRET_KEY
+from app.config.settings import BASE_URL
 from app.db.database import get_session
 from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, MutedServer, UserBlock, Tag
 from app.utils.emoji import _refresh_emoji_cache_forcibly, _load_emojis
 from app.utils.crypto import generate_keypair
 from app.utils.content_parser import _sanitize_html, process_post_content
 from app.core.activitypub._utils import (
-    _validate_url, _safe_fetch, _validated_get, _federation_allowed,
-    _html_to_newlines, _parse_username_from_url, _get_instance_actor, WRIT_USER_AGENT,
+    _validated_get, _federation_allowed, _html_to_newlines,
+    _parse_username_from_url, _get_instance_actor, WRIT_USER_AGENT,
 )
 from app.core.activitypub._media import _cache_remote_media
 from app.core.activitypub._emoji import _process_emoji_tags, _background_import_emoji
 from app.core.activitypub._fetch import _fetch_remote_post, _resolve_actor, _retry_fetch_reply
-from app.core.activitypub._outbound import _post_to_inbox, _send_accept, broadcast_to_followers
+from app.core.activitypub._outbound import _send_accept
 
 logger = logging.getLogger("writ.activitypub")
 
@@ -1030,13 +1029,23 @@ def _handle_vote(activity: dict) -> tuple[int, str]:
 
 
 def _handle_announce(activity: dict) -> tuple[int, str]:
+    activity_id = activity.get("id", "")
+    if activity_id:
+        try:
+            with get_session() as _pa_s:
+                _pa_s.add(ProcessedActivity(id=activity_id))
+                _pa_s.commit()
+        except IntegrityError:
+            return (200, "Already processed")
+        except Exception:
+            pass
+
     raw_actor = activity.get("actor")
     if not raw_actor:
         return (400, "Missing actor")
     actor_url = raw_actor if isinstance(raw_actor, str) else raw_actor[0]
     raw_object = activity.get("object")
     object_url = raw_object if isinstance(raw_object, str) else ""
-    activity_id = activity.get("id", "")
     print(f"[ANNOUNCE] actor={actor_url} object_type={type(raw_object).__name__} object_url={object_url[:120]}", flush=True)
 
     if not object_url and isinstance(raw_object, dict):
