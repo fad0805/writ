@@ -2,7 +2,7 @@
 import { PostData, NovelData, User, EpisodeData, api } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { recordEmojiUsage } from "@/lib/emoji-usage";
 import EditModal from "./EditModal";
 import ReplyModal from "./ReplyModal";
@@ -61,7 +61,7 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
   return text;
 }
 
-export default function PostCard({ post, onUpdate, onDelete, onReply, onRewrite, current, hideContext, selected, readonly }: { post: PostData; onUpdate?: (updated?: PostData) => void; onDelete?: () => void; onReply?: (newPost?: PostData) => void; onRewrite?: (content: string, visibility: string, replyTo?: { id: number; number: string; content: string; author: any; visibility: string } | null) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean }) {
+const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onReply, onRewrite, current, hideContext, selected, readonly }: { post: PostData; onUpdate?: (updated?: PostData) => void; onDelete?: () => void; onReply?: (newPost?: PostData) => void; onRewrite?: (content: string, visibility: string, replyTo?: { id: number; number: string; content: string; author: any; visibility: string } | null) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean }) {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const [showReply, setShowReply] = useState(false);
@@ -256,13 +256,8 @@ const localReactionEmojiMap = useMemo(() => {
   const buildContentHtml = () => {
     let html = post.content || "";
 
-    // 🌟 [핵심 개선] 컴포넌트 state뿐만 아니라 window 전역 캐시 및 로컬 맵을 무조건 총동원합니다.
-    const globalCache = (typeof window !== "undefined" && (window as any).__emojiCache) || [];
-    const activeEmojis = [...emojiList, ...globalCache];
-
-    // 중복 제거 (keyword 기준)
     const uniqueEmojis = Array.from(
-      new Map(activeEmojis.map(e => [e.keyword, e])).values()
+      new Map(emojiList.map(e => [e.keyword, e])).values()
     );
 
     // Strip "RE: https://..." from quote posts
@@ -1187,5 +1182,5 @@ const localReactionEmojiMap = useMemo(() => {
       )}
     </>
   );
-}
+}); export default PostCard;
 
