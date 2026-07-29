@@ -49,50 +49,58 @@ export default function TimelinePage() {
   const selectedIdxRef = useRef(selectedIdx);
   selectedIdxRef.current = selectedIdx;
   
-  const tabCache = useRef<Record<string, { posts: PostData[]; hasMore: boolean; offset: number }>>({});
   const prevTlRef = useRef(tlType);
-
-  useEffect(() => {
-    try {
-      const accountId = accountSnapshot();
-      const raw = localStorage.getItem(`writ:tl-cache:${accountId}`);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        const ts = parsed._ts || 0;
-        if (Date.now() - ts > 5 * 60 * 1000) {
-          localStorage.removeItem(`writ:tl-cache:${accountId}`);
-        } else {
-          delete parsed._ts;
-          tabCache.current = parsed;
-        }
-      }
-    } catch {}
-  }, []);
 
   const cacheKeyFor = (t: string) => `${accountSnapshot()}:${t}`;
 
-  const saveTabCache = () => {
-    try { localStorage.setItem(`writ:tl-cache:${accountSnapshot()}`, JSON.stringify({ ...tabCache.current, _ts: Date.now() })); } catch {}
+  const readCache = (): Record<string, { posts: PostData[]; hasMore: boolean; offset: number }> | null => {
+    try {
+      const raw = localStorage.getItem(`writ:tl-cache:${accountSnapshot()}`);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (Date.now() - (parsed._ts || 0) > 5 * 60 * 1000) {
+        localStorage.removeItem(`writ:tl-cache:${accountSnapshot()}`);
+        return null;
+      }
+      delete parsed._ts;
+      return parsed;
+    } catch { return null; }
   };
 
-  const updateTabCache = (t: string, updater: (cached: { posts: PostData[]; hasMore: boolean; offset: number }) => { posts: PostData[]; hasMore: boolean; offset: number }) => {
+  const writeCache = (data: Record<string, { posts: PostData[]; hasMore: boolean; offset: number }>) => {
+    try {
+      localStorage.setItem(`writ:tl-cache:${accountSnapshot()}`, JSON.stringify({ ...data, _ts: Date.now() }));
+    } catch {}
+  };
+
+  const getCached = (t: string) => {
+    const all = readCache();
+    return all?.[cacheKeyFor(t)] || null;
+  };
+
+  const setCached = (t: string, data: { posts: PostData[]; hasMore: boolean; offset: number }) => {
+    const all = readCache() || {};
+    all[cacheKeyFor(t)] = data;
+    writeCache(all);
+  };
+
+  const updateCached = (t: string, updater: (cached: { posts: PostData[]; hasMore: boolean; offset: number }) => { posts: PostData[]; hasMore: boolean; offset: number }) => {
+    const all = readCache();
+    if (!all) return;
     const ck = cacheKeyFor(t);
-    if (tabCache.current[ck]) {
-      tabCache.current[ck] = updater(tabCache.current[ck]);
-      saveTabCache();
+    if (all[ck]) {
+      all[ck] = updater(all[ck]);
+      writeCache(all);
     }
   };
 
   useEffect(() => {
     if (typeof localStorage !== "undefined") localStorage.setItem("lastTimelineTab", tlType);
-    const ck = cacheKeyFor(tlType);
     if (prevTlRef.current !== tlType) {
-      const prevKey = cacheKeyFor(prevTlRef.current);
-      tabCache.current[prevKey] = { posts, hasMore, offset: offsetRef.current };
-      saveTabCache();
+      setCached(prevTlRef.current, { posts, hasMore, offset: offsetRef.current });
       prevTlRef.current = tlType;
     }
-    const saved = tabCache.current[ck];
+    const saved = getCached(tlType);
     if (saved) {
       setPosts(saved.posts);
       setHasMore(saved.hasMore);
@@ -107,9 +115,7 @@ export default function TimelinePage() {
 
   useEffect(() => {
     return () => {
-      const ck = cacheKeyFor(tlType);
-      tabCache.current[ck] = { posts: postsRef.current, hasMore, offset: offsetRef.current };
-      saveTabCache();
+      setCached(tlType, { posts: postsRef.current, hasMore, offset: offsetRef.current });
     };
   }, [tlType]);
 
@@ -124,8 +130,7 @@ export default function TimelinePage() {
       setPosts(data.posts);
       setHasMore(data.has_more);
       offsetRef.current = LIMIT;
-      tabCache.current[cacheKeyFor(tlType)] = { posts: data.posts, hasMore: data.has_more, offset: LIMIT };
-      saveTabCache();
+      setCached(tlType, { posts: data.posts, hasMore: data.has_more, offset: LIMIT });
     } catch (e: any) {
       if (accountSnapshot() !== snapshot) return;
       setError(e.message || "불러오기 실패");
@@ -161,7 +166,7 @@ export default function TimelinePage() {
       setHasMore(data.has_more);
       offsetRef.current = currentOffset + LOAD_MORE;
       
-      updateTabCache(tlType, (cached) => {
+      updateCached(tlType, (cached) => {
         const ids = new Set(cached.posts.map((p: any) => p.id));
         const more = data.posts.filter((p: any) => !ids.has(p.id));
         return { ...cached, posts: [...cached.posts, ...more], offset: currentOffset + LOAD_MORE, hasMore: data.has_more };
@@ -272,19 +277,19 @@ export default function TimelinePage() {
         if (deletedIds.current.has(newPost.id)) return;
         if (newPost.type === "delete") {
           setPosts((prev) => prev.filter((p) => p.id !== newPost.id));
-          updateTabCache(tlType, (cached) => ({ ...cached, posts: cached.posts.filter((p: any) => p.id !== newPost.id) }));
+          updateCached(tlType, (cached) => ({ ...cached, posts: cached.posts.filter((p: any) => p.id !== newPost.id) }));
           return;
         }
         if (newPost.type === "update") {
           setPosts((prev) => prev.map((p) => p.id === newPost.id ? { ...p, ...newPost } : p));
-          updateTabCache(tlType, (cached) => ({ ...cached, posts: cached.posts.map((p: any) => p.id === newPost.id ? { ...p, ...newPost } : p) }));
+          updateCached(tlType, (cached) => ({ ...cached, posts: cached.posts.map((p: any) => p.id === newPost.id ? { ...p, ...newPost } : p) }));
           return;
         }
         setPosts((prev) => {
           if (prev.some((p) => p.id === newPost.id)) return prev;
           return [newPost, ...prev];
         });
-        updateTabCache(tlType, (cached) => {
+        updateCached(tlType, (cached) => {
           if (cached.posts.some((p: any) => p.id === newPost.id)) return cached;
           return { ...cached, posts: [newPost, ...cached.posts] };
         });
@@ -311,7 +316,7 @@ export default function TimelinePage() {
                 if (prev.some((p) => p.id === newPost.id)) return prev;
                 return [newPost, ...prev];
               });
-              updateTabCache(tlType, (cached) => {
+              updateCached(tlType, (cached) => {
                 if (cached.posts.some((p: any) => p.id === newPost.id)) return cached;
                 return { ...cached, posts: [newPost, ...cached.posts] };
               });
@@ -352,16 +357,16 @@ export default function TimelinePage() {
                     onDelete={() => { 
                       deletedIds.current.add(p.id); 
                       setPosts((prev) => prev.filter((x) => x.id !== p.id)); 
-                      updateTabCache(tlType, (cached) => ({ ...cached, posts: cached.posts.filter((x: any) => x.id !== p.id) }));
+                      updateCached(tlType, (cached) => ({ ...cached, posts: cached.posts.filter((x: any) => x.id !== p.id) }));
                     }} 
                     onUpdate={(updated) => { 
                       if (updated) { 
                         setPosts((prev) => prev.map((x) => x.id === p.id ? updated : x)); 
-                        updateTabCache(tlType, (cached) => ({ ...cached, posts: cached.posts.map((x: any) => x.id === p.id ? updated : x) }));
+                        updateCached(tlType, (cached) => ({ ...cached, posts: cached.posts.map((x: any) => x.id === p.id ? updated : x) }));
                       } else { 
                         api.getPost(p.id).then((u) => {
                           setPosts((prev) => prev.map((x) => x.id === p.id ? u : x));
-                          updateTabCache(tlType, (cached) => ({ ...cached, posts: cached.posts.map((x: any) => x.id === p.id ? u : x) }));
+                          updateCached(tlType, (cached) => ({ ...cached, posts: cached.posts.map((x: any) => x.id === p.id ? u : x) }));
                         }).catch(() => {}); 
                       } 
                     }} 
@@ -371,7 +376,7 @@ export default function TimelinePage() {
                           if (prev.some((x) => x.id === newPost.id)) return prev; 
                           return [newPost, ...prev]; 
                         }); 
-                        updateTabCache(tlType, (cached) => {
+      updateCached(tlType, (cached) => {
                           if (cached.posts.some((x: any) => x.id === newPost.id)) return cached;
                           return { ...cached, posts: [newPost, ...cached.posts] };
                         });
@@ -408,7 +413,7 @@ export default function TimelinePage() {
           </InfiniteScroll>
         )}
       </div>
-      {replyPost && <ReplyModal post={replyPost} onClose={() => { setReplyPost(null); setRewriteInitialContent(undefined); }} initialContent={rewriteInitialContent} onDone={(newPost) => { setReplyPost(null); setRewriteInitialContent(undefined); if (newPost) { setPosts((prev) => { if (prev.some((p) => p.id === newPost.id)) return prev; return [newPost, ...prev]; }); updateTabCache(tlType, (cached) => { if (cached.posts.some((p: any) => p.id === newPost.id)) return cached; return { ...cached, posts: [newPost, ...cached.posts] }; }); } }} />}
+      {replyPost && <ReplyModal post={replyPost} onClose={() => { setReplyPost(null); setRewriteInitialContent(undefined); }} initialContent={rewriteInitialContent} onDone={(newPost) => { setReplyPost(null); setRewriteInitialContent(undefined); if (newPost) { setPosts((prev) => { if (prev.some((p) => p.id === newPost.id)) return prev; return [newPost, ...prev]; }); updateCached(tlType, (cached) => { if (cached.posts.some((p: any) => p.id === newPost.id)) return cached; return { ...cached, posts: [newPost, ...cached.posts] }; }); } }} />}
       <button className="mobile-fab" onClick={() => setShowComposer(true)}>
         <Icon name="pen_solid" size={22} />
       </button>
@@ -427,7 +432,7 @@ export default function TimelinePage() {
                   if (prev.some((p) => p.id === newPost.id)) return prev;
                   return [newPost, ...prev];
                 });
-                updateTabCache(tlType, (cached) => {
+                updateCached(tlType, (cached) => {
                   if (cached.posts.some((p: any) => p.id === newPost.id)) return cached;
                   return { ...cached, posts: [newPost, ...cached.posts] };
                 });
