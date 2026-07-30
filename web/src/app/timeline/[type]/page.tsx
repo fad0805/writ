@@ -32,6 +32,27 @@ interface StreamPostData extends PostData {
 const postKey = (p: { id: number; boosted_by?: { id: number } | null }) =>
   `${p.id}-${p.boosted_by?.id ?? ""}`;
 
+function dedupPosts(posts: PostData[]): PostData[] {
+  const boostIds = new Set<number>();
+  const seen = new Map<number, PostData>();
+  for (const p of posts) {
+    if ((p as any).boost_of_id) boostIds.add(p.id);
+    const key = (p as any).boost_of_id || p.id;
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, p);
+    } else if ((existing as any).boost_of_id && !(p as any).boost_of_id) {
+      seen.set(key, p);
+    }
+  }
+  for (const [key, post] of seen) {
+    if ((post as any).boost_of_id && boostIds.has((post as any).boost_of_id)) {
+      seen.delete(key);
+    }
+  }
+  return Array.from(seen.values());
+}
+
 export default function TimelinePage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -65,27 +86,7 @@ export default function TimelinePage() {
 
   const filteredPosts = useMemo(
     // eslint-disable-next-line react-hooks/refs -- deletedIds is mutation-only, safe during render
-    () => {
-      const seen = new Map<number, PostData>();
-      const boostIds = new Set<number>();
-      for (const p of posts) {
-        if (deletedIds.current.has(p.id)) continue;
-        if ((p as any).boost_of_id) boostIds.add(p.id);
-        const key = (p as any).boost_of_id || p.id;
-        const existing = seen.get(key);
-        if (!existing) {
-          seen.set(key, p);
-        } else if ((existing as any).boost_of_id && !(p as any).boost_of_id) {
-          seen.set(key, p);
-        }
-      }
-      for (const [key, post] of seen) {
-        if ((post as any).boost_of_id && boostIds.has((post as any).boost_of_id)) {
-          seen.delete(key);
-        }
-      }
-      return Array.from(seen.values());
-    },
+    () => dedupPosts(posts.filter((p) => !deletedIds.current.has(p.id))),
     [posts]
   );
   const filteredPostsRef = useRef(filteredPosts);
@@ -111,11 +112,12 @@ export default function TimelinePage() {
       const data = await api.timeline(tlType, LIMIT, 0);
       if (loadId !== loadIdRef.current || accountSnapshot() !== snapshot) return;
       if (data._emojis) injectEmojis(data._emojis);
-      setPosts(data.posts);
+      const processed = dedupPosts(data.posts);
+      setPosts(processed);
       setHasMore(data.has_more);
       offsetRef.current = LIMIT;
-      totalLoadedRef.current = data.posts.length;
-      timelineCache.current[tlType] = { posts: data.posts, hasMore: data.has_more, offset: LIMIT, totalLoaded: data.posts.length };
+      totalLoadedRef.current = processed.length;
+      timelineCache.current[tlType] = { posts: processed, hasMore: data.has_more, offset: LIMIT, totalLoaded: processed.length };
     } catch (e: unknown) {
       if (loadId !== loadIdRef.current || accountSnapshot() !== snapshot) return;
       setError(e instanceof Error ? e.message : "불러오기 실패");
@@ -149,7 +151,7 @@ export default function TimelinePage() {
       if (accountSnapshot() !== snapshot) return;
       if (data._emojis) injectEmojis(data._emojis);
       setPosts((prev) => {
-        const next = [...prev, ...data.posts];
+        const next = dedupPosts([...prev, ...data.posts]);
         timelineCache.current[tlType] = { posts: next, hasMore: data.has_more && totalLoadedRef.current + data.posts.length < 500, offset: currentOffset + LOAD_MORE, totalLoaded: totalLoadedRef.current + data.posts.length };
         return next;
       });
