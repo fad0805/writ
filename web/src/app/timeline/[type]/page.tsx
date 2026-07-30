@@ -129,8 +129,7 @@ export default function TimelinePage() {
       let next: PostData[];
       if (idx >= 0) {
         next = [...prev];
-        next.splice(idx, 1);
-        next = [newPost, ...next];
+        next[idx] = newPost;
       } else {
         next = [newPost, ...prev];
       }
@@ -291,22 +290,35 @@ export default function TimelinePage() {
         setPosts((prev) => {
           let next: PostData[];
           if (newPost.boost_of_id) {
-            const idx = prev.findIndex(
-              (p) => p.id === newPost.id && p.boosted_by?.id === newPost.boosted_by?.id
-            );
-            if (idx >= 0) {
+            const origIdx = prev.findIndex((p) => p.id === newPost.boost_of_id);
+            if (origIdx >= 0) {
+              if (prev[origIdx].boosted === newPost.boosted && prev[origIdx].boosts_count === newPost.boosts_count) {
+                return prev;
+              }
               next = [...prev];
-              next.splice(idx, 1);
-              next = [newPost, ...next];
+              next[origIdx] = {
+                ...prev[origIdx],
+                boosted: newPost.boosted ?? prev[origIdx].boosted,
+                boosts_count: newPost.boosts_count ?? prev[origIdx].boosts_count,
+                boosted_by: newPost.boosted_by ?? prev[origIdx].boosted_by,
+              };
             } else {
-              next = [newPost, ...prev];
+              const idx = prev.findIndex(
+                (p) => p.id === newPost.id && p.boosted_by?.id === newPost.boosted_by?.id
+              );
+              if (idx >= 0) {
+                next = [...prev];
+                next.splice(idx, 1);
+                next = [newPost, ...next];
+              } else {
+                next = [newPost, ...prev];
+              }
             }
           } else {
             const idx = prev.findIndex((p) => p.id === newPost.id);
             if (idx >= 0) {
               next = [...prev];
-              next.splice(idx, 1);
-              next = [newPost, ...next];
+              next[idx] = newPost;
             } else {
               next = [newPost, ...prev];
             }
