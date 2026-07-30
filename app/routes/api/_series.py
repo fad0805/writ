@@ -3,6 +3,7 @@ import os
 import json
 import io
 import secrets
+import threading
 import logging
 from uuid import uuid4
 from datetime import datetime
@@ -423,7 +424,7 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
                     "object": to_ap_note(post),
                 }
                 s.commit()
-                broadcast_to_followers(user, create_activity)
+                threading.Thread(target=broadcast_to_followers, args=(user, create_activity), daemon=True).start()
             except Exception as e:
                 logger.warning("Failed to broadcast episode federation: %s", e)
                 s.commit()
@@ -597,7 +598,7 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
                     "object": to_ap_note(post),
                 }
                 s.commit()
-                broadcast_to_followers(user, create_activity)
+                threading.Thread(target=broadcast_to_followers, args=(user, create_activity), daemon=True).start()
             except Exception as e:
                 logger.warning("Failed to broadcast episode edit federation: %s", e)
                 s.commit()
