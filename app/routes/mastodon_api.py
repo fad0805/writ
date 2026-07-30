@@ -27,8 +27,9 @@ from app.utils.emoji import _emoji_url, _load_emojis
 from app.core.push import get_vapid_keys
 
 logger = logging.getLogger("writ.mastodon_api")
-
 router = APIRouter()
+_v2_router = APIRouter()
+
 
 VISIBILITY_MAP = {
     "public": "public",
@@ -1841,14 +1842,6 @@ def mastodon_instance(db: SASession = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v2/instance
-# ---------------------------------------------------------------------------
-@router.get("/v2/instance")
-def mastodon_instance_v2(db: SASession = Depends(get_db)):
-    return mastodon_instance(db)
-
-
-# ---------------------------------------------------------------------------
 # GET /api/v1/instance/peers (stub)
 # ---------------------------------------------------------------------------
 @router.get("/instance/peers")
@@ -2237,13 +2230,22 @@ def list_conversations(
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v2/search (alias for v2 above — already defined)
-# ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
 # GET /api/v1/scheduled_statuses (stub)
 # ---------------------------------------------------------------------------
 @router.get("/scheduled_statuses")
 def list_scheduled(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return []
+
+
+# ---------------------------------------------------------------------------
+# v2 alias router — mounted at /api/v2 in main.py
+# ---------------------------------------------------------------------------
+@_v2_router.get("/instance")
+def v2_instance(db: SASession = Depends(get_db)):
+    return mastodon_instance(db)
+
+
+@_v2_router.get("/search")
+def v2_search(request: Request, db: SASession = Depends(get_db), q: str = "", type: str = "", limit: int = 20, offset: int = 0, resolve: bool = False):
+    return search_v2(request, db, q=q, type=type, limit=min(limit, 80), offset=offset)
