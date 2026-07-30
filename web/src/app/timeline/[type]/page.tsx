@@ -66,17 +66,25 @@ export default function TimelinePage() {
   const filteredPosts = useMemo(
     // eslint-disable-next-line react-hooks/refs -- deletedIds is mutation-only, safe during render
     () => {
-      const seen = new Set<number>();
-      const deduped: PostData[] = [];
+      const seen = new Map<number, PostData>();
+      const boostIds = new Set<number>();
       for (const p of posts) {
         if (deletedIds.current.has(p.id)) continue;
+        if ((p as any).boost_of_id) boostIds.add(p.id);
         const key = (p as any).boost_of_id || p.id;
-        if (!seen.has(key)) {
-          seen.add(key);
-          deduped.push(p);
+        const existing = seen.get(key);
+        if (!existing) {
+          seen.set(key, p);
+        } else if ((existing as any).boost_of_id && !(p as any).boost_of_id) {
+          seen.set(key, p);
         }
       }
-      return deduped;
+      for (const [key, post] of seen) {
+        if ((post as any).boost_of_id && boostIds.has((post as any).boost_of_id)) {
+          seen.delete(key);
+        }
+      }
+      return Array.from(seen.values());
     },
     [posts]
   );
