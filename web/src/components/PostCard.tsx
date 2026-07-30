@@ -702,7 +702,7 @@ const localReactionEmojiMap = useMemo(() => {
         ) : (() => {
           const textOnly = (post.content || "").replace(/<[^>]+>/g, "").replace(/&[^;]+;/g, "x");
           const lineCount = textOnly.split("\n").length;
-          const isLong = lineCount > 5 || textOnly.length > 500;
+          const isLong = lineCount > 10 || textOnly.length > 1000;
           if (!isLong) {
             return <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />;
           }
