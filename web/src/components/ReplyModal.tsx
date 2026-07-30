@@ -58,7 +58,7 @@ export default function ReplyModal({ post, onClose, onDone, initialContent }: { 
           <strong>{post.author.display_name} <span className="reply-modal-handle">@{post.author.username}</span></strong>
           <p className="reply-modal-content" dangerouslySetInnerHTML={{ __html: sanitizePost(post.content.replace(/\n/g, '<br>')) }} />
         </div>
-        <PostForm key={post.id} parentId={post.id} initialVisibility={replyVis} placeholder="답글을 입력하세요..." onDone={onDone} initialContent={initialContent || mentions} parentSummary={post.summary} />
+        <PostForm key={post.boost_of_id || post.id} parentId={post.boost_of_id || post.id} initialVisibility={replyVis} placeholder="답글을 입력하세요..." onDone={onDone} initialContent={initialContent || mentions} parentSummary={post.summary} />
       </div>
     </div>
   );
