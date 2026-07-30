@@ -315,10 +315,14 @@ def _save_profile_image(user_id: int, file: UploadFile, prefix: str, max_size: t
     key = f"{prefix}/local/u{user_id}_{uuid4().hex[:8]}.webp"
     img = Image.open(file.file)
     img = ImageOps.exif_transpose(img)
+    if max_size[0] == max_size[1]:
+        size = min(img.size)
+        left = (img.width - size) // 2
+        top = (img.height - size) // 2
+        img = img.crop((left, top, left + size, top + size))
     img.thumbnail(max_size, Image.Resampling.LANCZOS)
     if img.mode in ("RGBA", "P"):
         bg = Image.new("RGB", img.size, (255, 255, 255))
-
         bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
         img = bg
     out = io.BytesIO()
