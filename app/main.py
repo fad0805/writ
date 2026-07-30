@@ -19,7 +19,7 @@ from app.middleware import CSRFProtectionMiddleware, LogRequestsMiddleware
 from app.routes.api import router as api_router, _cleanup_avatars
 from app.routes.auth import router as auth_router
 from app.routes.admin import router as admin_router
-from app.routes.mastodon_api import router as mastodon_api_router
+from app.routes.mastodon_api import router as mastodon_api_router, MastodonAPIError
 from app.routes.ap import router as ap_router
 from app.routes.nodeinfo import router as nodeinfo_router
 from app.routes.streaming import router as streaming_router
@@ -50,6 +50,18 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="WRIT, the sns for writers", version="1.0.0", lifespan=lifespan)
 
 
+@app.exception_handler(MastodonAPIError)
+async def mastodon_api_error_handler(request: Request, exc: MastodonAPIError):
+    print(f"[ERROR] {request.method} {request.url.path} MastodonAPIError {exc.status_code}: {exc.detail}", flush=True)
+    return JSONResponse({"error": exc.detail}, status_code=exc.status_code)
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    print(f"[ERROR] {request.method} {request.url.path} HTTPException {exc.status_code}: {exc.detail}", flush=True)
+    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+
+
 @app.exception_handler(Exception)
 async def debug_exception_handler(request: Request, exc: Exception):
     print(f"[ERROR] {request.method} {request.url.path} raised {type(exc).__name__}: {exc}", flush=True)
@@ -58,8 +70,6 @@ async def debug_exception_handler(request: Request, exc: Exception):
     print(f"[ERROR] {'='*60}", flush=True)
     sys.stdout.flush()
     sys.stderr.flush()
-    if isinstance(exc, HTTPException):
-        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
     return JSONResponse({"detail": "Internal server error"}, status_code=500)
 
 

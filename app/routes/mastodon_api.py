@@ -12,6 +12,10 @@ import threading
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Request, HTTPException, Depends, Query, UploadFile, File, Form
+
+
+class MastodonAPIError(HTTPException):
+    pass
 from sqlalchemy import func as sqlfunc, or_
 from sqlalchemy.orm import Session as SASession
 
@@ -47,7 +51,7 @@ def _get_bearer_user(request: Request, db: SASession) -> User | None:
         return None
     token = auth[7:]
     mat = db.query(MastodonAccessToken).filter_by(access_token=token).first()
-    if not mat:
+    if not mat or mat.user_id is None:
         return None
     return db.query(User).filter_by(id=mat.user_id, is_remote=False).first()
 
@@ -55,11 +59,11 @@ def _get_bearer_user(request: Request, db: SASession) -> User | None:
 def _require_bearer(request: Request, db: SASession) -> User:
     user = _get_bearer_user(request, db)
     if not user:
-        raise HTTPException(status_code=401, detail="The access token is invalid")
+        raise MastodonAPIError(status_code=401, detail="The access token is invalid")
     if user.is_suspended:
-        raise HTTPException(status_code=403, detail="Account suspended")
+        raise MastodonAPIError(status_code=403, detail="Account suspended")
     if user.is_frozen:
-        raise HTTPException(status_code=403, detail="Account frozen")
+        raise MastodonAPIError(status_code=403, detail="Account frozen")
     return user
 
 
@@ -412,14 +416,14 @@ async def create_app(request: Request, db: SASession = Depends(get_db)):
 def verify_app_credentials(request: Request, db: SASession = Depends(get_db)):
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="The access token is invalid")
+        raise MastodonAPIError(status_code=401, detail="The access token is invalid")
     token = auth[7:]
     mat = db.query(MastodonAccessToken).filter_by(access_token=token).first()
     if not mat:
-        raise HTTPException(status_code=401, detail="The access token is invalid")
+        raise MastodonAPIError(status_code=401, detail="The access token is invalid")
     app = db.query(MastodonApp).filter_by(id=mat.app_id).first()
     if not app:
-        raise HTTPException(status_code=401, detail="The access token is invalid")
+        raise MastodonAPIError(status_code=401, detail="The access token is invalid")
     return {
         "id": str(app.id),
         "name": app.client_name,
@@ -534,7 +538,7 @@ def get_relationships(
 def get_account(account_id: str, request: Request, db: SASession = Depends(get_db)):
     user = db.query(User).filter_by(id=int(account_id)).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
     viewer = _maybe_bearer(request, db)
     return _account_json(user, db, viewer=viewer)
 
@@ -556,7 +560,7 @@ def get_account_statuses(
 ):
     user = db.query(User).filter_by(id=int(account_id)).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     viewer = _maybe_bearer(request, db)
 
@@ -617,7 +621,7 @@ def get_account_followers(
 ):
     user = db.query(User).filter_by(id=int(account_id)).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     q = db.query(Follow).filter(Follow.following_id == user.id, Follow.accepted == True)
     if max_id:
@@ -641,7 +645,7 @@ def get_account_following(
 ):
     user = db.query(User).filter_by(id=int(account_id)).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     q = db.query(Follow).filter(Follow.follower_id == user.id, Follow.accepted == True)
     if max_id:
@@ -660,9 +664,9 @@ async def follow_account(account_id: str, request: Request, db: SASession = Depe
     user = _require_bearer(request, db)
     target = db.query(User).filter_by(id=int(account_id)).first()
     if not target:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
     if target.id == user.id:
-        raise HTTPException(status_code=422, detail="Cannot follow self")
+        raise MastodonAPIError(status_code=422, detail="Cannot follow self")
 
     existing = db.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
     if existing:
@@ -686,7 +690,7 @@ async def unfollow_account(account_id: str, request: Request, db: SASession = De
     user = _require_bearer(request, db)
     target = db.query(User).filter_by(id=int(account_id)).first()
     if not target:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     follow = db.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
     if follow:
@@ -865,7 +869,7 @@ def hashtag_timeline(
     viewer = _maybe_bearer(request, db)
     tag_obj = db.query(Tag).filter(Tag.name == tag.lower()).first()
     if not tag_obj:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     q = db.query(Post).filter(
         Post.tag_list.any(Tag.id == tag_obj.id),
@@ -920,7 +924,7 @@ def hashtag_timeline(
 def get_status(status_id: str, request: Request, db: SASession = Depends(get_db)):
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
     viewer = _maybe_bearer(request, db)
     if not viewer:
         s = _status_json(post, db, None)
@@ -930,7 +934,7 @@ def get_status(status_id: str, request: Request, db: SASession = Depends(get_db)
         _bookmarked_ids = {post.id} if db.query(Bookmark).filter_by(user_id=viewer.id, post_id=post.id).first() else set()
         s = _status_json(post, db, viewer, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids)
     if s is None:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
     return s
 
 
@@ -942,7 +946,7 @@ def get_status_source(status_id: str, request: Request, db: SASession = Depends(
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted or post.author_id != user.id:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
     return {
         "id": str(post.id),
         "text": post.content or "",
@@ -1037,7 +1041,7 @@ def _run_create_status(db, user, text, in_reply_to_id, sensitive, spoiler_text,
     from app.routes.api._posts import _do_create_post
 
     if not text and not media_ids:
-        raise HTTPException(status_code=422, detail="Validation failed: Text can't be blank")
+        raise MastodonAPIError(status_code=422, detail="Validation failed: Text can't be blank")
 
     vis = _visibility_from_mastodon(visibility) if visibility in ("public", "unlisted", "private", "direct") else user.default_visibility
 
@@ -1081,7 +1085,7 @@ async def update_status(status_id: str, request: Request, db: SASession = Depend
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.author_id != user.id:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     ct = request.headers.get("content-type", "")
     if "multipart" in ct:
@@ -1117,7 +1121,7 @@ def delete_status(status_id: str, request: Request, db: SASession = Depends(get_
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.author_id != user.id:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     status_data = _status_json(post, db, viewer=user)
     _do_delete_post(db, post, user, cascade=False)
@@ -1131,7 +1135,7 @@ def delete_status(status_id: str, request: Request, db: SASession = Depends(get_
 def get_status_context(status_id: str, request: Request, db: SASession = Depends(get_db)):
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     viewer = _maybe_bearer(request, db)
 
@@ -1170,7 +1174,7 @@ def favourite_status(status_id: str, request: Request, db: SASession = Depends(g
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     existing = db.query(Like).filter_by(user_id=user.id, post_id=post.id).first()
     if not existing:
@@ -1190,7 +1194,7 @@ def unfavourite_status(status_id: str, request: Request, db: SASession = Depends
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     existing = db.query(Like).filter_by(user_id=user.id, post_id=post.id).first()
     if existing:
@@ -1209,7 +1213,7 @@ def reblog_status(status_id: str, request: Request, db: SASession = Depends(get_
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     existing = db.query(Boost).filter_by(user_id=user.id, post_id=post.id).first()
     if existing:
@@ -1240,7 +1244,7 @@ def unreblog_status(status_id: str, request: Request, db: SASession = Depends(ge
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     existing = db.query(Boost).filter_by(user_id=user.id, post_id=post.id).first()
     if existing:
@@ -1262,7 +1266,7 @@ def bookmark_status(status_id: str, request: Request, db: SASession = Depends(ge
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     existing = db.query(Bookmark).filter_by(user_id=user.id, post_id=post.id).first()
     if not existing:
@@ -1282,7 +1286,7 @@ def unbookmark_status(status_id: str, request: Request, db: SASession = Depends(
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     existing = db.query(Bookmark).filter_by(user_id=user.id, post_id=post.id).first()
     if existing:
@@ -1301,7 +1305,7 @@ def react_to_status(status_id: str, name: str, request: Request, db: SASession =
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     if not name.startswith(":"):
         name = f":{name}"
@@ -1313,7 +1317,7 @@ def react_to_status(status_id: str, name: str, request: Request, db: SASession =
     if not emoji_row:
         emoji_row = db.query(CustomEmoji).filter_by(keyword=keyword).first()
     if not emoji_row or (emoji_row.domain and emoji_row.domain.strip()):
-        raise HTTPException(status_code=400, detail="Remote emojis cannot be used as reactions")
+        raise MastodonAPIError(status_code=400, detail="Remote emojis cannot be used as reactions")
 
     existing = db.query(Like).filter_by(user_id=user.id, post_id=post.id).first()
     if existing:
@@ -1341,7 +1345,7 @@ def unreact_to_status(status_id: str, name: str, request: Request, db: SASession
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     if not name.startswith(":"):
         name = f":{name}"
@@ -1368,7 +1372,7 @@ def list_reactions(status_id: str, request: Request, db: SASession = Depends(get
     user = _maybe_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     reaction_rows = db.query(
         Like.reaction, sqlfunc.count(Like.id), sqlfunc.min(Like.user_id)
@@ -1395,7 +1399,7 @@ def mute_status(status_id: str, request: Request, db: SASession = Depends(get_db
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
     return _status_json(post, db, viewer=user)
 
 
@@ -1407,7 +1411,7 @@ def unmute_status(status_id: str, request: Request, db: SASession = Depends(get_
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
     return _status_json(post, db, viewer=user)
 
 
@@ -1419,11 +1423,11 @@ def pin_status(status_id: str, request: Request, db: SASession = Depends(get_db)
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.author_id != user.id:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
     pinned = list(user.pinned_posts or [])
     if post.id not in pinned:
         if len(pinned) >= 5:
-            raise HTTPException(status_code=422, detail="Maximum of 5 pinned posts")
+            raise MastodonAPIError(status_code=422, detail="Maximum of 5 pinned posts")
         pinned.append(post.id)
         db.query(User).filter_by(id=user.id).update({"pinned_posts": pinned})
     post.is_pinned = True
@@ -1440,7 +1444,7 @@ def unpin_status(status_id: str, request: Request, db: SASession = Depends(get_d
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.author_id != user.id:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
     pinned = list(user.pinned_posts or [])
     if post.id in pinned:
         pinned.remove(post.id)
@@ -1464,7 +1468,7 @@ def reblogged_by(
 ):
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     q = db.query(Boost).filter(Boost.post_id == post.id)
     if max_id:
@@ -1488,7 +1492,7 @@ def favourited_by(
 ):
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise MastodonAPIError(status_code=404, detail="Record not found")
 
     q = db.query(Like).filter(Like.post_id == post.id)
     if max_id:

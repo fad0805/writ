@@ -11,37 +11,30 @@ from app.routes.auth import verify_password
 router = APIRouter()
 
 
-@router.post("/api/oauth/authorize")
-async def api_oauth_authorize(request: Request):
-    body = await request.json()
-    client_id = body.get("client_id", "")
-    redirect_uri = body.get("redirect_uri", "urn:ietf:wg:oauth:2.0:oob")
-    response_type = body.get("response_type", "code")
-    scope = body.get("scope", "read write push")
-    state = body.get("state", "")
-    username = body.get("username", "")
-    password = body.get("password", "")
+def _do_authorize(client_id: str, redirect_uri: str, response_type: str, scope: str, state: str, username: str, password: str):
+    if response_type != "code":
+        return JSONResponse({"error": "unsupported_response_type"}, status_code=400)
 
     with get_session() as db:
         app_obj = db.query(MastodonApp).filter_by(client_id=client_id).first()
         if not app_obj:
-            return JSONResponse({"error": "client_id가 유효하지 않습니다."}, status_code=400)
+            return JSONResponse({"error": "Invalid client_id"}, status_code=400)
 
         user = db.query(User).filter(
             User.is_remote == False,
             ((User.username == username) | (User.email == username))
         ).first()
         if not user or not user.password_hash:
-            return JSONResponse({"error": "이메일/사용자 이름 또는 비밀번호가 틀렸습니다."}, status_code=401)
+            return JSONResponse({"error": "Invalid username or password"}, status_code=401)
 
         if getattr(user, "is_frozen", False):
-            return JSONResponse({"error": "계정이 동결되었습니다."}, status_code=403)
+            return JSONResponse({"error": "Account frozen"}, status_code=403)
         if getattr(user, "is_suspended", False):
-            return JSONResponse({"error": "계정이 정지되었습니다."}, status_code=403)
+            return JSONResponse({"error": "Account suspended"}, status_code=403)
 
         salt, hval = user.password_hash.split(":", 1)
         if not verify_password(password, salt, hval):
-            return JSONResponse({"error": "이메일/사용자 이름 또는 비밀번호가 틀렸습니다."}, status_code=401)
+            return JSONResponse({"error": "Invalid username or password"}, status_code=401)
 
         code = secrets.token_urlsafe(32)
         auth_code = MastodonAuthorizationCode(
@@ -64,6 +57,40 @@ async def api_oauth_authorize(request: Request):
     return JSONResponse({"redirect": url})
 
 
+@router.post("/api/oauth/authorize")
+async def api_oauth_authorize(request: Request):
+    ct = request.headers.get("content-type", "")
+    if "application/json" in ct:
+        body = await request.json()
+    else:
+        form = await request.form()
+        body = dict(form)
+    return _do_authorize(
+        client_id=body.get("client_id", ""),
+        redirect_uri=body.get("redirect_uri", "urn:ietf:wg:oauth:2.0:oob"),
+        response_type=body.get("response_type", "code"),
+        scope=body.get("scope", "read write push"),
+        state=body.get("state", ""),
+        username=body.get("username", ""),
+        password=body.get("password", ""),
+    )
+
+
+@router.post("/oauth/authorize")
+async def oauth_authorize_form(request: Request):
+    form = await request.form()
+    body = dict(form)
+    return _do_authorize(
+        client_id=body.get("client_id", ""),
+        redirect_uri=body.get("redirect_uri", "urn:ietf:wg:oauth:2.0:oob"),
+        response_type=body.get("response_type", "code"),
+        scope=body.get("scope", "read write push"),
+        state=body.get("state", ""),
+        username=body.get("username", ""),
+        password=body.get("password", ""),
+    )
+
+
 @router.post("/oauth/token")
 async def oauth_token(request: Request):
     ct = request.headers.get("content-type", "")
@@ -84,7 +111,7 @@ async def oauth_token(request: Request):
 
         if grant_type == "client_credentials":
             token = secrets.token_urlsafe(48)
-            mat = MastodonAccessToken(app_id=app_obj.id, user_id=1, access_token=token, scopes="read")
+            mat = MastodonAccessToken(app_id=app_obj.id, user_id=None, access_token=token, scopes="read")
             db.add(mat)
             db.commit()
             return {"access_token": token, "token_type": "bearer", "scope": "read", "created_at": int(time.time())}

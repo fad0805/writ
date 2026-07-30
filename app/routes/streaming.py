@@ -7,6 +7,8 @@ from typing import AsyncGenerator
 from fastapi import APIRouter, Request, WebSocket
 from fastapi.responses import StreamingResponse, JSONResponse
 
+from app.db.database import get_session
+from app.models import MastodonAccessToken
 from app.core.eventbus import add_queue, remove_queue, add_ws, remove_ws
 
 router = APIRouter()
@@ -55,18 +57,26 @@ async def sse_stream(request: Request):
 @router.websocket("/api/v1/streaming")
 async def websocket_stream(websocket: WebSocket):
     token = websocket.cookies.get("session")
-    if not token:
+    access_token = websocket.query_params.get("access_token", "")
+    if not token and not access_token:
         await websocket.close(code=4001, reason="Unauthorized")
         return
-    try:
-        decoded = base64.urlsafe_b64decode(token.encode()).decode()
-        parts = decoded.split(":")
-        if len(parts) != 3 or int(parts[2]) <= 0:
+    if not token and access_token:
+        with get_session() as db:
+            mat = db.query(MastodonAccessToken).filter_by(access_token=access_token).first()
+            if not mat or mat.user_id is None:
+                await websocket.close(code=4001, reason="Unauthorized")
+                return
+    if token:
+        try:
+            decoded = base64.urlsafe_b64decode(token.encode()).decode()
+            parts = decoded.split(":")
+            if len(parts) != 3 or int(parts[2]) <= 0:
+                await websocket.close(code=4001, reason="Unauthorized")
+                return
+        except Exception:
             await websocket.close(code=4001, reason="Unauthorized")
             return
-    except Exception:
-        await websocket.close(code=4001, reason="Unauthorized")
-        return
     await websocket.accept()
     ws_id, ws_q = add_ws()
     try:

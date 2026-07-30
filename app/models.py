@@ -662,7 +662,7 @@ class MastodonAccessToken(Base):
 
     id = Column(Integer, primary_key=True)
     app_id = Column(Integer, ForeignKey("mastodon_apps.id"), nullable=False, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     access_token = Column(String(256), unique=True, nullable=False, index=True)
     scopes = Column(String(256), default="read write push")
     created_at = Column(DateTime(timezone=True), default=now)
