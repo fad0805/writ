@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy import desc
 
-from app.models import User, Follow
+from app.models import User, Follow, Notification
 from app.serializers import _user_json
 from app.config.settings import BASE_URL
 from app.core.activitypub import _resolve_actor, _send_accept, _send_reject
