@@ -57,7 +57,8 @@ export default function KeyboardShortcuts() {
 
     if (e.key === "n" && user) {
       const inPostForm = document.activeElement?.closest(".post-form") != null;
-      if (!inPostForm) {
+      const inModal = document.querySelector(".reply-modal-backdrop.active") != null;
+      if (!inPostForm && !inModal) {
         e.preventDefault();
         setShowPostModal(true);
         return;
