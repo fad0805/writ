@@ -250,7 +250,7 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         "account": _account_json(author, db),
         "media_attachments": [],
         "mentions": [
-            {"id": str(mid), "username": mu.username.split("@")[0], "url": f"{BASE_URL}/@{mu.username}", "acct": mu.username}
+            {"id": str(mid), "username": mu.username.split("@")[0], "url": mu.profile_url or (mu.remote_url if mu.is_remote else f"{BASE_URL}/@{mu.username.split('@')[0]}"), "acct": mu.username}
             for mid in (post.mentioned_user_ids or [])
             if (mu := db.query(User).filter_by(id=mid).first())
         ],
@@ -441,6 +441,24 @@ def verify_app_credentials(request: Request, db: SASession = Depends(get_db)):
         "redirect_uris": app.redirect_uris.split("\n"),
         "vapid_key": "",
     }
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/accounts/lookup?acct=user@domain
+# ---------------------------------------------------------------------------
+@router.get("/v1/accounts/lookup")
+def lookup_account(acct: str = "", db: SASession = Depends(get_db)):
+    if not acct:
+        raise MastodonAPIError(status_code=400, detail="Missing acct parameter")
+    local_part = acct.split("@")[0].strip() if "@" in acct else acct.strip()
+    full_acct = acct.strip()
+    user = db.query(User).filter(
+        User.is_suspended == False,
+        ((User.username == full_acct) | (User.username == local_part) | (User.display_handle == full_acct) | (User.display_handle == local_part))
+    ).first()
+    if not user:
+        raise MastodonAPIError(status_code=404, detail="Record not found")
+    return _account_json(user, db, None)
 
 
 # ---------------------------------------------------------------------------
