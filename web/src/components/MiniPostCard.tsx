@@ -72,7 +72,6 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
 
   if (!post || !post.author) return null;
   return (
-    <>
     <Link
       href={makeUrl(post)}
       className="mini-post-link"
@@ -105,21 +104,20 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
           </div>
         )}
         {!post.summary && <div className="mini-post-body" dangerouslySetInnerHTML={{ __html: contentHtml }} />}
+        {(post as any).media_attachments?.length > 0 && (
+          <div onClick={(e) => e.stopPropagation()} style={{ display: "grid", gridTemplateColumns: (post as any).media_attachments.length <= 2 ? "1fr" : "1fr 1fr", gridAutoRows: "120px", gap: 2, marginTop: 6, borderRadius: 4, overflow: "hidden" }}>
+            {(post as any).media_attachments.slice(0, 4).map((m: any, i: number) => (
+              m.type === "video" ? (
+                <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", background: "#000", borderRadius: 4 }}>
+                  <video src={m.url} controls style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000" }} onClick={(e) => e.stopPropagation()} />
+                </div>
+              ) : (
+                <img key={i} src={m.url} alt={m.alt || ""} style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000", borderRadius: 4, cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); window.open(m.url, '_blank'); }} />
+              )
+            ))}
+          </div>
+        )}
       </div>
     </Link>
-    {(post as any).media_attachments?.length > 0 && (
-      <div onClick={(e) => e.stopPropagation()} style={{ display: "grid", gridTemplateColumns: (post as any).media_attachments.length <= 2 ? "1fr" : "1fr 1fr", gridAutoRows: "120px", gap: 2, marginTop: 6, borderRadius: 6, overflow: "hidden" }}>
-        {(post as any).media_attachments.slice(0, 4).map((m: any, i: number) => (
-          m.type === "video" ? (
-            <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", background: "#000", borderRadius: 4 }}>
-              <video src={m.url} controls style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000" }} onClick={(e) => e.stopPropagation()} />
-            </div>
-          ) : (
-            <img key={i} src={m.url} alt={m.alt || ""} style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000", borderRadius: 4, cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); window.open(m.url, '_blank'); }} />
-          )
-        ))}
-      </div>
-    )}
-  </>
   );
 }

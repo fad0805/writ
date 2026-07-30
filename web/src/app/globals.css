@@ -3518,6 +3518,7 @@ input[type="checkbox"] {
   font-size: 0.85em;
   line-height: 1.5;
   text-decoration: none;
+  overflow: hidden;
 }
 .mini-post-avatar-box {
   width: 28px;
@@ -3541,6 +3542,7 @@ input[type="checkbox"] {
 .mini-post-content {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 .mini-post-author {
   font-weight: 600;
