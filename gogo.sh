@@ -1330,6 +1330,53 @@ with get_session() as s:
     print(f'Body: {resp.text[:500]}')
 "
 
+elif [ "$1" = "reprocess-avatars" ]; then
+  # 저장된 아바타 이미지들을 정사각형으로 센터크롭
+  docker compose exec api python3 -c "
+import os
+from PIL import Image, ImageOps
+
+def process_avatar(path):
+    img = Image.open(path)
+    if img.size[0] == img.size[1]:
+        print(f'  ✔ 이미 정사각형: {path}')
+        return
+    w, h = img.size
+    img = ImageOps.exif_transpose(img)
+    sz = min(img.size)
+    img = img.crop(((img.width - sz) // 2, (img.height - sz) // 2, (img.width + sz) // 2, (img.height + sz) // 2))
+    img = img.resize((400, 400), Image.LANCZOS)
+    if img.mode in ('RGBA', 'P'):
+        bg = Image.new('RGB', img.size, (255, 255, 255))
+        bg.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+        img = bg
+    img.save(path, quality=100)
+    print(f'  ▶ {w}x{h} → 400x400: {path}')
+
+count = 0
+for root, dirs, files in os.walk('uploads/avatars'):
+    for f in sorted(files):
+        path = os.path.join(root, f)
+        try:
+            process_avatar(path)
+            count += 1
+        except Exception as e:
+            print(f'  ✗ {path}: {e}')
+# Also check static/uploads/avatars (legacy path)
+for root, dirs, files in os.walk('static/uploads/avatars'):
+    for f in sorted(files):
+        path = os.path.join(root, f)
+        try:
+            process_avatar(path)
+            count += 1
+        except Exception as e:
+            print(f'  ✗ {path}: {e}')
+if count == 0:
+    print('처리할 아바타 파일이 없습니다.')
+else:
+    print(f'\\n{count}개 파일 처리 완료')
+"
+
 else
   echo "사용법: ./gogo.sh [명령어]"
   echo ""
@@ -1350,4 +1397,5 @@ else
   echo "  check-create    - 포스트의 AP Create JSON 출력 (예: ./gogo.sh check-create 5371)"
   echo "  replay-mastodon - 받은 Create를 Mastodon 포맷으로 재전송 (예: ./gogo.sh replay-mastodon 5371 https://qdon.space/inbox)"
   echo "  fix-usernames   - 리모트 유저 username 중복 도메인(user@dom@dom → user@dom) 정리"
+  echo "  reprocess-avatars - 기존 아바타 이미지 정사각형 센터크롭 다시 처리"
 fi

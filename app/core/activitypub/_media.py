@@ -114,15 +114,31 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
         content_type_header = r.headers.get("Content-Type", "").lower()
         new_url = None
 
+        is_avatar = prefix == "avatars"
+        raw_ext = ext
         if ext in ("gif", "png") or "gif" in content_type_header or "png" in content_type_header:
-            final_ext = "gif" if ("gif" in ext or "gif" in content_type_header) else "png"
-            filename = f"{uuid.uuid4().hex}.{final_ext}"
-            key = f"{prefix}/remote/{filename}"
-            new_url = storage.save(key, data, f"image/{final_ext}")
+            if is_avatar and ext != "gif" and "gif" not in content_type_header:
+                img = Image.open(io.BytesIO(data))
+                img = ImageOps.exif_transpose(img)
+                sz = min(img.size)
+                img = img.crop(((img.width - sz) // 2, (img.height - sz) // 2, (img.width + sz) // 2, (img.height + sz) // 2))
+                out = io.BytesIO()
+                img.save(out, format="PNG", quality=85)
+                filename = f"{uuid.uuid4().hex}.png"
+                key = f"{prefix}/remote/{filename}"
+                new_url = storage.save(key, out.getvalue(), "image/png")
+            else:
+                final_ext = "gif" if ("gif" in ext or "gif" in content_type_header) else "png"
+                filename = f"{uuid.uuid4().hex}.{final_ext}"
+                key = f"{prefix}/remote/{filename}"
+                new_url = storage.save(key, data, f"image/{final_ext}")
         else:
             try:
                 img = Image.open(io.BytesIO(data))
                 img = ImageOps.exif_transpose(img)
+                if is_avatar:
+                    sz = min(img.size)
+                    img = img.crop(((img.width - sz) // 2, (img.height - sz) // 2, (img.width + sz) // 2, (img.height + sz) // 2))
                 is_animated = getattr(img, "is_animated", False)
                 real_format = (img.format or "").lower()
                 if is_animated or real_format in ("gif", "png"):

@@ -685,7 +685,7 @@ const localReactionEmojiMap = useMemo(() => {
         )}
         {post.summary ? (
           <details className="cw-box">
-            <summary onClick={(e) => e.stopPropagation()}>⚠️ {post.summary}</summary>
+            <summary onClick={(e) => e.stopPropagation()} dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.summary, mergedEmojiList)) }} />
             <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
             {(post as any).media_attachments?.length > 0 && _renderMedia()}
             {post.link_preview && !(post as any).quote_of_id && !(post as any).quote_of_ap_id && !seriesMatch && !episodeMatch && (() => {
