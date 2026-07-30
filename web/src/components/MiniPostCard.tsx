@@ -33,6 +33,7 @@ const TYPE_COLORS: Record<string, string> = {
 export default function MiniPostCard({ post, notifType, notifLabel }: { post: PostData; notifType?: string; notifLabel?: React.ReactNode }) {
   const [isDark, setIsDark] = useState(false);
   const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
+  const [viewerUrl, setViewerUrl] = useState("");
 
   useEffect(() => { setIsDark(document.body.classList.contains("dark-theme")); }, []);
   useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
@@ -71,7 +72,7 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
   });
 
   if (!post || !post.author) return null;
-  return (
+  return (<>
     <Link
       href={makeUrl(post)}
       className="mini-post-link"
@@ -112,12 +113,17 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
                   <video src={m.url} controls style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000" }} onClick={(e) => e.stopPropagation()} />
                 </div>
               ) : (
-                <img key={i} src={m.url} alt={m.alt || ""} style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000", borderRadius: 4, cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); window.open(m.url, '_blank'); }} />
+                <img key={i} src={m.url} alt={m.alt || ""} style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000", borderRadius: 4, cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setViewerUrl(m.url); }} />
               )
             ))}
           </div>
         )}
       </div>
     </Link>
-  );
+    {viewerUrl && (
+      <div className="reply-modal-backdrop active" style={{ zIndex: 9999, cursor: "zoom-out" }} onClick={() => setViewerUrl("")}>
+        <img src={viewerUrl} alt="" style={{ maxWidth: "90vw", maxHeight: "90vh", objectFit: "contain", borderRadius: 8 }} onClick={(e) => e.stopPropagation()} />
+      </div>
+    )}
+  </>);
 }
