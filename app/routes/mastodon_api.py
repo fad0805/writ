@@ -146,7 +146,7 @@ def _account_json(user: User, db: SASession, viewer: User | None = None) -> dict
         "statuses_count": statuses_count,
         "last_status_at": _ap_datetime(user.updated_at) if user.updated_at else None,
         "emojis": [
-            {"shortcode": e["keyword"], "url": e["url"], "static_url": e["url"], "visible_in_picker": True}
+            {"shortcode": e["keyword"], "url": e["url"], "static_url": e["url"], "visible_in_picker": True, "category": e.get("category", "")}
             for e in emojis_in_account
         ],
         "fields": [],
@@ -256,7 +256,7 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         ],
         "tags": [],
         "emojis": [
-            {"shortcode": e["keyword"], "url": e["url"], "static_url": e["url"], "visible_in_picker": True}
+            {"shortcode": e["keyword"], "url": e["url"], "static_url": e["url"], "visible_in_picker": True, "category": e.get("category", "")}
             for e in post_emojis
         ],
         "card": None,
@@ -308,6 +308,7 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
             "url": e["url"],
             "static_url": e["url"],
             "visible_in_picker": True,
+            "category": e.get("category", ""),
         } for e in post_emojis],
         }
 
@@ -345,6 +346,7 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
                         "url": emoji_row["url"],
                         "static_url": emoji_row["url"],
                         "visible_in_picker": True,
+                        "category": emoji_row.get("category", ""),
                     })
         status["reactions"].append({
             "name": name,
@@ -1698,6 +1700,7 @@ def custom_emojis(db: SASession = Depends(get_db)):
             "url": e.source_url or _emoji_url(e.file_name, e.domain or "", e.category or ""),
             "static_url": e.source_url or _emoji_url(e.file_name, e.domain or "", e.category or ""),
             "visible_in_picker": True,
+            "category": e.category or "",
             "aliases": e.aliases or [],
         }
         for e in emojis
