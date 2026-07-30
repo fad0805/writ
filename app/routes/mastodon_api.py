@@ -451,8 +451,9 @@ def verify_app_credentials(request: Request, db: SASession = Depends(get_db)):
 def lookup_account(acct: str = "", db: SASession = Depends(get_db)):
     if not acct:
         raise MastodonAPIError(status_code=400, detail="Missing acct parameter")
-    local_part = acct.split("@")[0].strip() if "@" in acct else acct.strip()
-    full_acct = acct.strip()
+    raw = acct.strip().lstrip("/@")
+    local_part = raw.split("@")[0].strip() if "@" in raw else raw.strip()
+    full_acct = raw.strip()
     user = db.query(User).filter(
         User.is_suspended == False,
         ((User.username == full_acct) | (User.username == local_part) | (User.display_handle == full_acct) | (User.display_handle == local_part))
