@@ -19,7 +19,7 @@ from app.middleware import CSRFProtectionMiddleware, LogRequestsMiddleware
 from app.routes.api import router as api_router, _cleanup_avatars
 from app.routes.auth import router as auth_router
 from app.routes.admin import router as admin_router
-from app.routes.mastodon_api import router as mastodon_api_router, _v2_router as mastodon_v2_router, MastodonAPIError
+from app.routes.mastodon_api import router as mastodon_api_router, MastodonAPIError
 from app.routes.ap import router as ap_router
 from app.routes.nodeinfo import router as nodeinfo_router
 from app.routes.streaming import router as streaming_router
@@ -107,8 +107,7 @@ app.include_router(oauth_router)
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(api_router)
-app.include_router(mastodon_api_router, prefix="/api/v1")
-app.include_router(mastodon_v2_router, prefix="/api/v2")
+app.include_router(mastodon_api_router, prefix="/api")
 
 
 # Run

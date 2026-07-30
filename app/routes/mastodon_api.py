@@ -28,7 +28,6 @@ from app.core.push import get_vapid_keys
 
 logger = logging.getLogger("writ.mastodon_api")
 router = APIRouter()
-_v2_router = APIRouter()
 
 
 VISIBILITY_MAP = {
@@ -366,7 +365,7 @@ def _boost_status_json(boost_post: Post, original: Post, db: SASession,
 # ---------------------------------------------------------------------------
 # POST /api/v1/apps — Register client application
 # ---------------------------------------------------------------------------
-@router.post("/apps")
+@router.post("/v1/apps")
 async def create_app(request: Request, db: SASession = Depends(get_db)):
     ct = request.headers.get("content-type", "")
     if "application/json" in ct:
@@ -413,7 +412,7 @@ async def create_app(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/apps/verify_credentials
 # ---------------------------------------------------------------------------
-@router.get("/apps/verify_credentials")
+@router.get("/v1/apps/verify_credentials")
 def verify_app_credentials(request: Request, db: SASession = Depends(get_db)):
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
@@ -438,7 +437,7 @@ def verify_app_credentials(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/accounts/verify_credentials
 # ---------------------------------------------------------------------------
-@router.get("/accounts/verify_credentials")
+@router.get("/v1/accounts/verify_credentials")
 def verify_account_credentials(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return _account_json(user, db, viewer=user)
@@ -447,7 +446,7 @@ def verify_account_credentials(request: Request, db: SASession = Depends(get_db)
 # ---------------------------------------------------------------------------
 # PATCH /api/v1/accounts/update_credentials
 # ---------------------------------------------------------------------------
-@router.patch("/accounts/update_credentials")
+@router.patch("/v1/accounts/update_credentials")
 async def update_credentials(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     ct = request.headers.get("content-type", "")
@@ -503,7 +502,7 @@ async def update_credentials(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/accounts/relationships
 # ---------------------------------------------------------------------------
-@router.get("/accounts/relationships")
+@router.get("/v1/accounts/relationships")
 def get_relationships(
     request: Request,
     db: SASession = Depends(get_db),
@@ -535,7 +534,7 @@ def get_relationships(
 # ---------------------------------------------------------------------------
 # GET /api/v1/accounts/:id
 # ---------------------------------------------------------------------------
-@router.get("/accounts/{account_id}")
+@router.get("/v1/accounts/{account_id}")
 def get_account(account_id: str, request: Request, db: SASession = Depends(get_db)):
     user = db.query(User).filter_by(id=int(account_id)).first()
     if not user:
@@ -547,7 +546,7 @@ def get_account(account_id: str, request: Request, db: SASession = Depends(get_d
 # ---------------------------------------------------------------------------
 # GET /api/v1/accounts/:id/statuses
 # ---------------------------------------------------------------------------
-@router.get("/accounts/{account_id}/statuses")
+@router.get("/v1/accounts/{account_id}/statuses")
 def get_account_statuses(
     account_id: str,
     request: Request,
@@ -612,7 +611,7 @@ def get_account_statuses(
 # ---------------------------------------------------------------------------
 # GET /api/v1/accounts/:id/followers
 # ---------------------------------------------------------------------------
-@router.get("/accounts/{account_id}/followers")
+@router.get("/v1/accounts/{account_id}/followers")
 def get_account_followers(
     account_id: str,
     request: Request,
@@ -636,7 +635,7 @@ def get_account_followers(
 # ---------------------------------------------------------------------------
 # GET /api/v1/accounts/:id/following
 # ---------------------------------------------------------------------------
-@router.get("/accounts/{account_id}/following")
+@router.get("/v1/accounts/{account_id}/following")
 def get_account_following(
     account_id: str,
     request: Request,
@@ -660,7 +659,7 @@ def get_account_following(
 # ---------------------------------------------------------------------------
 # POST /api/v1/accounts/:id/follow
 # ---------------------------------------------------------------------------
-@router.post("/accounts/{account_id}/follow")
+@router.post("/v1/accounts/{account_id}/follow")
 async def follow_account(account_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     target = db.query(User).filter_by(id=int(account_id)).first()
@@ -686,7 +685,7 @@ async def follow_account(account_id: str, request: Request, db: SASession = Depe
 # ---------------------------------------------------------------------------
 # POST /api/v1/accounts/:id/unfollow
 # ---------------------------------------------------------------------------
-@router.post("/accounts/{account_id}/unfollow")
+@router.post("/v1/accounts/{account_id}/unfollow")
 async def unfollow_account(account_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     target = db.query(User).filter_by(id=int(account_id)).first()
@@ -705,7 +704,7 @@ async def unfollow_account(account_id: str, request: Request, db: SASession = De
 # ---------------------------------------------------------------------------
 # GET /api/v1/timelines/home
 # ---------------------------------------------------------------------------
-@router.get("/timelines/home")
+@router.get("/v1/timelines/home")
 def home_timeline(
     request: Request,
     db: SASession = Depends(get_db),
@@ -779,7 +778,7 @@ def home_timeline(
 # ---------------------------------------------------------------------------
 # GET /api/v1/timelines/public
 # ---------------------------------------------------------------------------
-@router.get("/timelines/public")
+@router.get("/v1/timelines/public")
 def public_timeline(
     request: Request,
     db: SASession = Depends(get_db),
@@ -851,7 +850,7 @@ def public_timeline(
 # ---------------------------------------------------------------------------
 # GET /api/v1/timelines/tag/:tag
 # ---------------------------------------------------------------------------
-@router.get("/timelines/tag/{tag}")
+@router.get("/v1/timelines/tag/{tag}")
 def hashtag_timeline(
     tag: str,
     request: Request,
@@ -921,7 +920,7 @@ def hashtag_timeline(
 # ---------------------------------------------------------------------------
 # GET /api/v1/statuses/:id
 # ---------------------------------------------------------------------------
-@router.get("/statuses/{status_id}")
+@router.get("/v1/statuses/{status_id}")
 def get_status(status_id: str, request: Request, db: SASession = Depends(get_db)):
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
@@ -942,7 +941,7 @@ def get_status(status_id: str, request: Request, db: SASession = Depends(get_db)
 # ---------------------------------------------------------------------------
 # GET /api/v1/statuses/:id/source
 # ---------------------------------------------------------------------------
-@router.get("/statuses/{status_id}/source")
+@router.get("/v1/statuses/{status_id}/source")
 def get_status_source(status_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
@@ -958,7 +957,7 @@ def get_status_source(status_id: str, request: Request, db: SASession = Depends(
 # ---------------------------------------------------------------------------
 # GET /api/v1/statuses (batch)
 # ---------------------------------------------------------------------------
-@router.get("/statuses")
+@router.get("/v1/statuses")
 def get_statuses(
     request: Request,
     db: SASession = Depends(get_db),
@@ -1002,7 +1001,7 @@ def get_statuses(
 # ---------------------------------------------------------------------------
 # POST /api/v1/statuses
 # ---------------------------------------------------------------------------
-@router.post("/statuses")
+@router.post("/v1/statuses")
 async def create_status(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
 
@@ -1081,7 +1080,7 @@ def _run_create_status(db, user, text, in_reply_to_id, sensitive, spoiler_text,
 # ---------------------------------------------------------------------------
 # PUT /api/v1/statuses/:id
 # ---------------------------------------------------------------------------
-@router.put("/statuses/{status_id}")
+@router.put("/v1/statuses/{status_id}")
 async def update_status(status_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
@@ -1117,7 +1116,7 @@ async def update_status(status_id: str, request: Request, db: SASession = Depend
 # ---------------------------------------------------------------------------
 # DELETE /api/v1/statuses/:id
 # ---------------------------------------------------------------------------
-@router.delete("/statuses/{status_id}")
+@router.delete("/v1/statuses/{status_id}")
 def delete_status(status_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
@@ -1132,7 +1131,7 @@ def delete_status(status_id: str, request: Request, db: SASession = Depends(get_
 # ---------------------------------------------------------------------------
 # GET /api/v1/statuses/:id/context
 # ---------------------------------------------------------------------------
-@router.get("/statuses/{status_id}/context")
+@router.get("/v1/statuses/{status_id}/context")
 def get_status_context(status_id: str, request: Request, db: SASession = Depends(get_db)):
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
@@ -1170,7 +1169,7 @@ def get_status_context(status_id: str, request: Request, db: SASession = Depends
 # ---------------------------------------------------------------------------
 # POST /api/v1/statuses/:id/favourite
 # ---------------------------------------------------------------------------
-@router.post("/statuses/{status_id}/favourite")
+@router.post("/v1/statuses/{status_id}/favourite")
 def favourite_status(status_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
@@ -1190,7 +1189,7 @@ def favourite_status(status_id: str, request: Request, db: SASession = Depends(g
 # ---------------------------------------------------------------------------
 # POST /api/v1/statuses/:id/unfavourite
 # ---------------------------------------------------------------------------
-@router.post("/statuses/{status_id}/unfavourite")
+@router.post("/v1/statuses/{status_id}/unfavourite")
 def unfavourite_status(status_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
@@ -1209,7 +1208,7 @@ def unfavourite_status(status_id: str, request: Request, db: SASession = Depends
 # ---------------------------------------------------------------------------
 # POST /api/v1/statuses/:id/reblog
 # ---------------------------------------------------------------------------
-@router.post("/statuses/{status_id}/reblog")
+@router.post("/v1/statuses/{status_id}/reblog")
 def reblog_status(status_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
@@ -1240,7 +1239,7 @@ def reblog_status(status_id: str, request: Request, db: SASession = Depends(get_
 # ---------------------------------------------------------------------------
 # POST /api/v1/statuses/:id/unreblog
 # ---------------------------------------------------------------------------
-@router.post("/statuses/{status_id}/unreblog")
+@router.post("/v1/statuses/{status_id}/unreblog")
 def unreblog_status(status_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
@@ -1262,7 +1261,7 @@ def unreblog_status(status_id: str, request: Request, db: SASession = Depends(ge
 # ---------------------------------------------------------------------------
 # POST /api/v1/statuses/:id/bookmark
 # ---------------------------------------------------------------------------
-@router.post("/statuses/{status_id}/bookmark")
+@router.post("/v1/statuses/{status_id}/bookmark")
 def bookmark_status(status_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
@@ -1282,7 +1281,7 @@ def bookmark_status(status_id: str, request: Request, db: SASession = Depends(ge
 # ---------------------------------------------------------------------------
 # POST /api/v1/statuses/:id/unbookmark
 # ---------------------------------------------------------------------------
-@router.post("/statuses/{status_id}/unbookmark")
+@router.post("/v1/statuses/{status_id}/unbookmark")
 def unbookmark_status(status_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
@@ -1301,7 +1300,7 @@ def unbookmark_status(status_id: str, request: Request, db: SASession = Depends(
 # ---------------------------------------------------------------------------
 # POST /api/v1/statuses/:id/react/:name  (Glitch-soc)
 # ---------------------------------------------------------------------------
-@router.post("/statuses/{status_id}/react/{name}")
+@router.post("/v1/statuses/{status_id}/react/{name}")
 def react_to_status(status_id: str, name: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
@@ -1341,7 +1340,7 @@ def react_to_status(status_id: str, name: str, request: Request, db: SASession =
 # ---------------------------------------------------------------------------
 # POST /api/v1/statuses/:id/unreact/:name  (Glitch-soc)
 # ---------------------------------------------------------------------------
-@router.post("/statuses/{status_id}/unreact/{name}")
+@router.post("/v1/statuses/{status_id}/unreact/{name}")
 def unreact_to_status(status_id: str, name: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
@@ -1368,7 +1367,7 @@ def unreact_to_status(status_id: str, name: str, request: Request, db: SASession
 # ---------------------------------------------------------------------------
 # GET /api/v1/statuses/:id/reactions  (Glitch-soc)
 # ---------------------------------------------------------------------------
-@router.get("/statuses/{status_id}/reactions")
+@router.get("/v1/statuses/{status_id}/reactions")
 def list_reactions(status_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _maybe_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
@@ -1395,7 +1394,7 @@ def list_reactions(status_id: str, request: Request, db: SASession = Depends(get
 # ---------------------------------------------------------------------------
 # POST /api/v1/statuses/:id/mute
 # ---------------------------------------------------------------------------
-@router.post("/statuses/{status_id}/mute")
+@router.post("/v1/statuses/{status_id}/mute")
 def mute_status(status_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
@@ -1407,7 +1406,7 @@ def mute_status(status_id: str, request: Request, db: SASession = Depends(get_db
 # ---------------------------------------------------------------------------
 # POST /api/v1/statuses/:id/unmute
 # ---------------------------------------------------------------------------
-@router.post("/statuses/{status_id}/unmute")
+@router.post("/v1/statuses/{status_id}/unmute")
 def unmute_status(status_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
@@ -1419,7 +1418,7 @@ def unmute_status(status_id: str, request: Request, db: SASession = Depends(get_
 # ---------------------------------------------------------------------------
 # POST /api/v1/statuses/:id/pin
 # ---------------------------------------------------------------------------
-@router.post("/statuses/{status_id}/pin")
+@router.post("/v1/statuses/{status_id}/pin")
 def pin_status(status_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
@@ -1440,7 +1439,7 @@ def pin_status(status_id: str, request: Request, db: SASession = Depends(get_db)
 # ---------------------------------------------------------------------------
 # POST /api/v1/statuses/:id/unpin
 # ---------------------------------------------------------------------------
-@router.post("/statuses/{status_id}/unpin")
+@router.post("/v1/statuses/{status_id}/unpin")
 def unpin_status(status_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
@@ -1459,7 +1458,7 @@ def unpin_status(status_id: str, request: Request, db: SASession = Depends(get_d
 # ---------------------------------------------------------------------------
 # GET /api/v1/statuses/:id/reblogged_by
 # ---------------------------------------------------------------------------
-@router.get("/statuses/{status_id}/reblogged_by")
+@router.get("/v1/statuses/{status_id}/reblogged_by")
 def reblogged_by(
     status_id: str,
     request: Request,
@@ -1483,7 +1482,7 @@ def reblogged_by(
 # ---------------------------------------------------------------------------
 # GET /api/v1/statuses/:id/favourited_by
 # ---------------------------------------------------------------------------
-@router.get("/statuses/{status_id}/favourited_by")
+@router.get("/v1/statuses/{status_id}/favourited_by")
 def favourited_by(
     status_id: str,
     request: Request,
@@ -1507,7 +1506,7 @@ def favourited_by(
 # ---------------------------------------------------------------------------
 # GET /api/v1/notifications
 # ---------------------------------------------------------------------------
-@router.get("/notifications")
+@router.get("/v1/notifications")
 def list_notifications(
     request: Request,
     db: SASession = Depends(get_db),
@@ -1577,7 +1576,7 @@ def list_notifications(
 # ---------------------------------------------------------------------------
 # POST /api/v1/notifications/:id/dismiss
 # ---------------------------------------------------------------------------
-@router.post("/notifications/{notification_id}/dismiss")
+@router.post("/v1/notifications/{notification_id}/dismiss")
 def dismiss_notification(notification_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     n = db.query(Notification).filter_by(id=int(notification_id), user_id=user.id).first()
@@ -1590,7 +1589,7 @@ def dismiss_notification(notification_id: str, request: Request, db: SASession =
 # ---------------------------------------------------------------------------
 # POST /api/v1/notifications/clear
 # ---------------------------------------------------------------------------
-@router.post("/notifications/clear")
+@router.post("/v1/notifications/clear")
 def clear_notifications(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     db.query(Notification).filter(Notification.user_id == user.id).update({"is_read": True})
@@ -1601,7 +1600,7 @@ def clear_notifications(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/notifications/types
 # ---------------------------------------------------------------------------
-@router.get("/notifications/types")
+@router.get("/v1/notifications/types")
 def notification_types():
     return {
         "follow": "follow",
@@ -1619,7 +1618,7 @@ def notification_types():
 # ---------------------------------------------------------------------------
 # GET /api/v2/search
 # ---------------------------------------------------------------------------
-@router.get("/search")
+@router.get("/v1/search")
 def search_v2(
     request: Request,
     db: SASession = Depends(get_db),
@@ -1672,7 +1671,7 @@ def search_v2(
 # ---------------------------------------------------------------------------
 # GET /api/v1/custom_emojis
 # ---------------------------------------------------------------------------
-@router.get("/custom_emojis")
+@router.get("/v1/custom_emojis")
 def custom_emojis(db: SASession = Depends(get_db)):
     emojis = db.query(CustomEmoji).filter(
         (CustomEmoji.domain == "") | (CustomEmoji.domain.is_(None))
@@ -1692,7 +1691,7 @@ def custom_emojis(db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # POST /api/v1/media
 # ---------------------------------------------------------------------------
-@router.post("/media")
+@router.post("/v1/media")
 async def upload_media(
     request: Request,
     db: SASession = Depends(get_db),
@@ -1735,7 +1734,7 @@ async def upload_media(
 # ---------------------------------------------------------------------------
 # GET /api/v1/instance
 # ---------------------------------------------------------------------------
-@router.get("/instance")
+@router.get("/v1/instance")
 def mastodon_instance(db: SASession = Depends(get_db)):
     settings = ServerSetting.get(db)
     user_count = db.query(sqlfunc.count(User.id)).filter(User.is_remote == False).scalar() or 0
@@ -1844,7 +1843,7 @@ def mastodon_instance(db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/instance/peers (stub)
 # ---------------------------------------------------------------------------
-@router.get("/instance/peers")
+@router.get("/v1/instance/peers")
 def instance_peers():
     return []
 
@@ -1852,7 +1851,7 @@ def instance_peers():
 # ---------------------------------------------------------------------------
 # GET /api/v1/instance/trends (stub)
 # ---------------------------------------------------------------------------
-@router.get("/instance/trends")
+@router.get("/v1/instance/trends")
 def instance_trends(db: SASession = Depends(get_db)):
     tags = db.query(Tag).order_by(Tag.id.desc()).limit(10).all()
     return [
@@ -1864,7 +1863,7 @@ def instance_trends(db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/instance/rules
 # ---------------------------------------------------------------------------
-@router.get("/instance/rules")
+@router.get("/v1/instance/rules")
 def instance_rules():
     return []
 
@@ -1872,7 +1871,7 @@ def instance_rules():
 # ---------------------------------------------------------------------------
 # GET /api/v1/followed_tags
 # ---------------------------------------------------------------------------
-@router.get("/followed_tags")
+@router.get("/v1/followed_tags")
 def list_followed_tags(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return []
@@ -1881,7 +1880,7 @@ def list_followed_tags(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/filters (stub)
 # ---------------------------------------------------------------------------
-@router.get("/filters")
+@router.get("/v1/filters")
 def list_filters(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return []
@@ -1890,7 +1889,7 @@ def list_filters(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # POST /api/v1/filters (stub)
 # ---------------------------------------------------------------------------
-@router.post("/filters")
+@router.post("/v1/filters")
 async def create_filter(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     body = await request.json()
@@ -1908,7 +1907,7 @@ async def create_filter(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/preferences
 # ---------------------------------------------------------------------------
-@router.get("/preferences")
+@router.get("/v1/preferences")
 def get_preferences(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return {
@@ -1923,7 +1922,7 @@ def get_preferences(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/follow_requests
 # ---------------------------------------------------------------------------
-@router.get("/follow_requests")
+@router.get("/v1/follow_requests")
 def list_follow_requests(
     request: Request,
     db: SASession = Depends(get_db),
@@ -1937,7 +1936,7 @@ def list_follow_requests(
 # ---------------------------------------------------------------------------
 # GET /api/v1/blocks (stub)
 # ---------------------------------------------------------------------------
-@router.get("/blocks")
+@router.get("/v1/blocks")
 def list_blocks(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return []
@@ -1946,7 +1945,7 @@ def list_blocks(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/mutes (stub)
 # ---------------------------------------------------------------------------
-@router.get("/mutes")
+@router.get("/v1/mutes")
 def list_mutes(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return []
@@ -1955,7 +1954,7 @@ def list_mutes(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/bookmarks
 # ---------------------------------------------------------------------------
-@router.get("/bookmarks")
+@router.get("/v1/bookmarks")
 def list_bookmarks(
     request: Request,
     db: SASession = Depends(get_db),
@@ -1998,7 +1997,7 @@ def list_bookmarks(
 # ---------------------------------------------------------------------------
 # GET /api/v1/favourites
 # ---------------------------------------------------------------------------
-@router.get("/favourites")
+@router.get("/v1/favourites")
 def list_favourites(
     request: Request,
     db: SASession = Depends(get_db),
@@ -2037,7 +2036,7 @@ def list_favourites(
 # ---------------------------------------------------------------------------
 # GET /api/v1/lists (stub)
 # ---------------------------------------------------------------------------
-@router.get("/lists")
+@router.get("/v1/lists")
 def list_lists(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return []
@@ -2046,7 +2045,7 @@ def list_lists(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/suggestions (stub)
 # ---------------------------------------------------------------------------
-@router.get("/suggestions")
+@router.get("/v1/suggestions")
 def list_suggestions(
     request: Request,
     db: SASession = Depends(get_db),
@@ -2059,7 +2058,7 @@ def list_suggestions(
 # ---------------------------------------------------------------------------
 # GET /api/v1/tags
 # ---------------------------------------------------------------------------
-@router.get("/tags")
+@router.get("/v1/tags")
 def list_tags(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return []
@@ -2068,7 +2067,7 @@ def list_tags(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/featured_tags (stub)
 # ---------------------------------------------------------------------------
-@router.get("/featured_tags")
+@router.get("/v1/featured_tags")
 def featured_tags(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return []
@@ -2077,7 +2076,7 @@ def featured_tags(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/domain_blocks (stub)
 # ---------------------------------------------------------------------------
-@router.get("/domain_blocks")
+@router.get("/v1/domain_blocks")
 def domain_blocks(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return []
@@ -2086,7 +2085,7 @@ def domain_blocks(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/endorsements (stub)
 # ---------------------------------------------------------------------------
-@router.get("/endorsements")
+@router.get("/v1/endorsements")
 def endorsements(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return []
@@ -2095,7 +2094,7 @@ def endorsements(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/markers (stub)
 # ---------------------------------------------------------------------------
-@router.get("/markers")
+@router.get("/v1/markers")
 def get_markers(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return {}
@@ -2104,7 +2103,7 @@ def get_markers(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # POST /api/v1/markers (stub)
 # ---------------------------------------------------------------------------
-@router.post("/markers")
+@router.post("/v1/markers")
 async def save_markers(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return {}
@@ -2113,7 +2112,7 @@ async def save_markers(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # POST /api/v1/push/subscription (stub)
 # ---------------------------------------------------------------------------
-@router.post("/push/subscription")
+@router.post("/v1/push/subscription")
 async def create_push_subscription(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     body = await request.json()
@@ -2128,7 +2127,7 @@ async def create_push_subscription(request: Request, db: SASession = Depends(get
 # ---------------------------------------------------------------------------
 # GET /api/v1/push/subscription (stub)
 # ---------------------------------------------------------------------------
-@router.get("/push/subscription")
+@router.get("/v1/push/subscription")
 def get_push_subscription(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return {}
@@ -2137,7 +2136,7 @@ def get_push_subscription(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # DELETE /api/v1/push/subscription (stub)
 # ---------------------------------------------------------------------------
-@router.delete("/push/subscription")
+@router.delete("/v1/push/subscription")
 def delete_push_subscription(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return {}
@@ -2146,7 +2145,7 @@ def delete_push_subscription(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # PUT /api/v1/push/subscription (stub)
 # ---------------------------------------------------------------------------
-@router.put("/push/subscription")
+@router.put("/v1/push/subscription")
 async def update_push_subscription(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return {}
@@ -2155,7 +2154,7 @@ async def update_push_subscription(request: Request, db: SASession = Depends(get
 # ---------------------------------------------------------------------------
 # GET /api/v1/announcements (stub)
 # ---------------------------------------------------------------------------
-@router.get("/announcements")
+@router.get("/v1/announcements")
 def list_announcements(request: Request, db: SASession = Depends(get_db)):
     return []
 
@@ -2163,7 +2162,7 @@ def list_announcements(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/trends (stub)
 # ---------------------------------------------------------------------------
-@router.get("/trends")
+@router.get("/v1/trends")
 def get_trends(db: SASession = Depends(get_db)):
     tags = db.query(Tag).order_by(Tag.id.desc()).limit(10).all()
     return [
@@ -2175,7 +2174,7 @@ def get_trends(db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/trends/tags (stub)
 # ---------------------------------------------------------------------------
-@router.get("/trends/tags")
+@router.get("/v1/trends/tags")
 def get_trending_tags(db: SASession = Depends(get_db)):
     tags = db.query(Tag).order_by(Tag.id.desc()).limit(10).all()
     return [
@@ -2187,7 +2186,7 @@ def get_trending_tags(db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /api/v1/trends/statuses (stub)
 # ---------------------------------------------------------------------------
-@router.get("/trends/statuses")
+@router.get("/v1/trends/statuses")
 def get_trending_statuses(
     request: Request,
     db: SASession = Depends(get_db),
@@ -2199,7 +2198,7 @@ def get_trending_statuses(
 # ---------------------------------------------------------------------------
 # GET /api/v1/directory
 # ---------------------------------------------------------------------------
-@router.get("/directory")
+@router.get("/v1/directory")
 def get_directory(
     request: Request,
     db: SASession = Depends(get_db),
@@ -2218,7 +2217,7 @@ def get_directory(
 # ---------------------------------------------------------------------------
 # GET /api/v1/conversations (stub)
 # ---------------------------------------------------------------------------
-@router.get("/conversations")
+@router.get("/v1/conversations")
 def list_conversations(
     request: Request,
     db: SASession = Depends(get_db),
@@ -2232,20 +2231,23 @@ def list_conversations(
 # ---------------------------------------------------------------------------
 # GET /api/v1/scheduled_statuses (stub)
 # ---------------------------------------------------------------------------
-@router.get("/scheduled_statuses")
+@router.get("/v1/scheduled_statuses")
 def list_scheduled(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return []
 
 
 # ---------------------------------------------------------------------------
-# v2 alias router — mounted at /api/v2 in main.py
+# GET /api/v2/instance
 # ---------------------------------------------------------------------------
-@_v2_router.get("/instance")
+@router.get("/v2/instance")
 def v2_instance(db: SASession = Depends(get_db)):
     return mastodon_instance(db)
 
 
-@_v2_router.get("/search")
+# ---------------------------------------------------------------------------
+# GET /api/v2/search
+# ---------------------------------------------------------------------------
+@router.get("/v2/search")
 def v2_search(request: Request, db: SASession = Depends(get_db), q: str = "", type: str = "", limit: int = 20, offset: int = 0, resolve: bool = False):
     return search_v2(request, db, q=q, type=type, limit=min(limit, 80), offset=offset)
