@@ -61,7 +61,7 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
   return text;
 }
 
-const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onReply, onRewrite, current, hideContext, selected, readonly }: { post: PostData; onUpdate?: (updated?: PostData) => void; onDelete?: () => void; onReply?: (newPost?: PostData) => void; onRewrite?: (content: string, visibility: string, replyTo?: { id: number; number: string; content: string; author: any; visibility: string } | null) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean }) {
+const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onReply, onRewrite, current, hideContext, selected, readonly, mentionBy }: { post: PostData; onUpdate?: (updated?: PostData) => void; onDelete?: () => void; onReply?: (newPost?: PostData) => void; onRewrite?: (content: string, visibility: string, replyTo?: { id: number; number: string; content: string; author: any; visibility: string } | null) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean; mentionBy?: User | null }) {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const [showReply, setShowReply] = useState(false);
@@ -629,6 +629,11 @@ const localReactionEmojiMap = useMemo(() => {
         {(post as any).boost_of_id && post.boosted_by && (
           <div className={`boost-badge${(currentUser?.id === post.boosted_by.id || (post as any).i_boosted) ? " boost-self" : ""}`}>
             <Icon name="refresh" size={12} /> <Link href={`/@${post.boosted_by.username}`}><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.boosted_by.display_name || post.boosted_by.username, mergedEmojiList, 14)) }} /></Link>님이 부스트
+          </div>
+        )}
+        {mentionBy && (
+          <div className="boost-badge">
+            <Icon name="mention" size={12} /> <Link href={`/@${mentionBy.username}`}><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(mentionBy.display_name || mentionBy.username, mergedEmojiList, 14)) }} /></Link>님이 멘션
           </div>
         )}
         <div className="post-header">

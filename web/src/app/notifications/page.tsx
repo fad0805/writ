@@ -327,6 +327,8 @@ export default function NotificationsPage() {
                 <><span className="font-bold" style={{ color: "var(--danger)" }}>{ACTION_NAMES[n.metadata?.action] || n.metadata?.action || "중재"}</span> 조치가 적용되었습니다.</>
               ) : n.type === "poll_ended" ? (
                 <>회원님이 참여한 투표가 끝났습니다</>
+              ) : (n.type === "mention" || n.type === "reply") && n.post && n.from_user ? (
+                <><PostCard post={n.post} readonly mentionBy={n.from_user} /></>
               ) : (
                 <>{n.from_user && (
                   <Link href={`/@${n.from_user.username}`} className="notif-from-link">
@@ -345,7 +347,7 @@ export default function NotificationsPage() {
                   <button onClick={() => handleReject(n.from_user!.username)} className="btn btn-small btn-follow text-muted">거절</button>
                 </div>
               )}
-              {n.post && <PostCard post={n.post} readonly />}
+              {n.post && n.type !== "mention" && n.type !== "reply" && <PostCard post={n.post} readonly />}
             </div>
           </div>
         ))}
