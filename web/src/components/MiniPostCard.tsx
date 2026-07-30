@@ -121,7 +121,7 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
       </div>
     </Link>
     {viewerUrl && (
-      <div className="reply-modal-backdrop active" style={{ zIndex: 9999, cursor: "zoom-out" }} onClick={() => setViewerUrl("")}>
+      <div className="reply-modal-backdrop active" style={{ zIndex: 9999, cursor: "zoom-out" }} onClick={(e) => { e.stopPropagation(); e.preventDefault(); setViewerUrl(""); }}>
         <img src={viewerUrl} alt="" style={{ maxWidth: "90vw", maxHeight: "90vh", objectFit: "contain", borderRadius: 8 }} onClick={(e) => e.stopPropagation()} />
       </div>
     )}
