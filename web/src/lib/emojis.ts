@@ -1,4 +1,5 @@
 "use client";
+import { useState, useEffect } from "react";
 
 export interface CustomEmojiRaw {
   keyword: string;
@@ -47,9 +48,9 @@ export function injectEmojis(list: CustomEmojiRaw[]) {
   if (changed && typeof window !== "undefined") {
     cache = [...cache];
     (window as any).__emojiCache = cache;
-    // 💡 핵심: 조각난 list가 아니라 전체 최신 cache를 이벤트와 구독자에 전달!
     window.dispatchEvent(new CustomEvent("emojichange", { detail: cache }));
     _emojiSubscribers.forEach(fn => fn(cache as CustomEmoji[]));
+    _versionListeners.forEach(fn => fn());
   }
 }
 
@@ -102,6 +103,7 @@ export function invalidateEmojiCache() {
   }
   getCustomEmojis().then(list => {
     _emojiSubscribers.forEach(fn => fn(list));
+    _versionListeners.forEach(fn => fn());
   });
 }
 
@@ -117,11 +119,28 @@ export function subscribeEmojis(cb: (emojis: CustomEmoji[]) => void): () => void
   if (!cache) {
     getCustomEmojis().then(list => {
       const freshList = [...list];
-      // ★ 이 부분이 핵심입니다. 로딩이 끝났을 때 모든 구독자에게 새 데이터를 쏴줍니다.
       _emojiSubscribers.forEach(fn => fn(freshList));
+      _versionListeners.forEach(fn => fn());
     });
   }
   return () => { _emojiSubscribers.delete(cb); };
+}
+
+const _versionListeners = new Set<() => void>();
+
+export function useEmojiList(): CustomEmoji[] {
+  const [, setVer] = useState(0);
+
+  useEffect(() => {
+    const handler = () => setVer((v) => v + 1);
+    _versionListeners.add(handler);
+    return () => { _versionListeners.delete(handler); };
+  }, []);
+
+  if (typeof window !== "undefined" && (window as any).__emojiCache) {
+    return (window as any).__emojiCache as CustomEmoji[];
+  }
+  return cache || [];
 }
 
 export function renderCustomEmojis(html: string, emojis: CustomEmoji[], size?: number): string {

@@ -15,7 +15,7 @@ import EmojiPicker from "./EmojiPicker";
 import { useAuth } from "@/lib/auth";
 import ShareButton from "@/components/ShareButton";
 import { hashColor } from "@/lib/avatar";
-import { renderCustomEmojis, injectEmojis, CustomEmoji, subscribeEmojis } from "@/lib/emojis";
+import { renderCustomEmojis, injectEmojis, CustomEmoji, useEmojiList } from "@/lib/emojis";
 import { sanitizePost, sanitizeName } from "@/lib/sanitize";
 import { installCodeCopyButtons } from "@/lib/codeCopy";
 
@@ -89,21 +89,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
   const [seriesMatch, setSeriesMatch] = useState<RegExpMatchArray | null>(null);
   const [episodeMatch, setEpisodeMatch] = useState<RegExpMatchArray | null>(null);
 
-  const [emojiList, setEmojiList] = useState<CustomEmoji[]>(() => {
-    if (typeof window !== "undefined" && (window as any).__emojiCache)
-      return (window as any).__emojiCache as CustomEmoji[];
-    return [];
-  });
-  useEffect(() => {
-    const unsubscribe = subscribeEmojis((list) => {
-      setEmojiList((prev) => {
-        if (prev === list) return prev;
-        if (prev.length === list.length && prev.every((e, i) => e.keyword === list[i]?.keyword && e.url === list[i]?.url)) return prev;
-        return [...list];
-      });
-    });
-    return () => unsubscribe();
-  }, []);
+  const emojiList = useEmojiList();
   const [reactions, setReactions] = useState(post.reactions || {});
   const [myReactionOverride, setMyReactionOverride] = useState<string | null | undefined>(undefined);
   const myReaction = myReactionOverride !== undefined ? myReactionOverride : (post.my_reaction || null);

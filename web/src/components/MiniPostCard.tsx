@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { PostData } from "@/lib/api";
 import Link from "next/link";
 import Icon from "./Icon";
-import { injectEmojis, renderCustomEmojis, subscribeEmojis, CustomEmoji } from "@/lib/emojis";
+import { injectEmojis, renderCustomEmojis, CustomEmoji, useEmojiList } from "@/lib/emojis";
 import { sanitizePost, sanitizeName } from "@/lib/sanitize";
 import { rewriteLinks } from "./PostCard";
 
@@ -32,24 +32,10 @@ const TYPE_COLORS: Record<string, string> = {
 
 export default function MiniPostCard({ post, notifType, notifLabel }: { post: PostData; notifType?: string; notifLabel?: React.ReactNode }) {
   const [isDark, setIsDark] = useState(false);
-  const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>(() => {
-    if (typeof window !== "undefined" && (window as any).__emojiCache)
-      return (window as any).__emojiCache as CustomEmoji[];
-    return [];
-  });
+  const emojiList = useEmojiList();
   const [viewerUrl, setViewerUrl] = useState("");
 
   useEffect(() => { setIsDark(document.body.classList.contains("dark-theme")); }, []);
-  useEffect(() => {
-    const unsubscribe = subscribeEmojis((list) => {
-      setEmojiMap((prev) => {
-        if (prev === list) return prev;
-        if (prev.length === list.length && prev.every((e, i) => e.keyword === list[i]?.keyword && e.url === list[i]?.url)) return prev;
-        return [...list];
-      });
-    });
-    return () => unsubscribe();
-  }, []);
   useEffect(() => {
     if ((post as any)._emojis) injectEmojis((post as any)._emojis);
   }, [(post as any)._emojis]);
@@ -58,17 +44,17 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
     ? (isDark ? DARK_BG[notifType] : LIGHT_BG[notifType]) || "var(--bg-tertiary)"
     : "var(--bg-tertiary)";
   const iconColor = notifType ? TYPE_COLORS[notifType] || "var(--text-muted)" : "var(--text-muted)";
-  const mergedEmojiMap = useMemo(() => {
+  const mergedEmojiList = useMemo(() => {
     const postEmojis = (post as any)._emojis as CustomEmoji[] | undefined;
-    if (!postEmojis || postEmojis.length === 0) return emojiMap;
-    const seen = new Map(emojiMap.map(e => [e.keyword, e]));
+    if (!postEmojis || postEmojis.length === 0) return emojiList;
+    const seen = new Map(emojiList.map(e => [e.keyword, e]));
     for (const e of postEmojis) {
       if (e.keyword && e.url && !seen.has(e.keyword)) {
         seen.set(e.keyword, { ...e, category: "remote" });
       }
     }
     return Array.from(seen.values());
-  }, [emojiMap, (post as any)._emojis]);
+  }, [emojiList, (post as any)._emojis]);
   const contentHtml = useMemo(() => {
     let html = post.content || "";
     if (/<\/?[a-zA-Z]+[\s\/>]/.test(html) || /&[a-z]+;/.test(html)) {
@@ -79,9 +65,9 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     html = html.replace(/\n/g, '<br>');
-    html = renderCustomEmojis(html, mergedEmojiMap);
+    html = renderCustomEmojis(html, mergedEmojiList);
     return sanitizePost(rewriteLinks(html, validMentions));
-  }, [post.content, mergedEmojiMap, validMentions]);
+  }, [post.content, mergedEmojiList, validMentions]);
   const makeUrl = ((post: any): string => {
     if (post.type === 'series' && post.author?.username && post.novel?.number) {
       return `/series/@${post.author.username}/${post.novel.number}`;
@@ -120,7 +106,7 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
         {notifLabel && <div style={{ fontSize: "0.82em", color: "var(--text-muted)", marginBottom: 6, lineHeight: 1.4 }}>{notifLabel}</div>}
         {!notifType && (
           <div className="mini-post-author">
-            <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.author.display_name || post.author.username, mergedEmojiMap, 14)) }} />
+            <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.author.display_name || post.author.username, mergedEmojiList, 14)) }} />
             <span className="mini-post-handle">
               @{post.author.display_handle || post.author.username}
             </span>
