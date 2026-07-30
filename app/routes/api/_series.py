@@ -388,11 +388,17 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
             parts = []
             if announce_comment:
                 parts.append(announce_comment)
-            link = f'📖 <a href="/series/{novel.id}/episodes/{episode.id}">[{novel.title}] {next_num}화: {title}</a>'
-            parts.append(link)
+            parts.append(f'「{novel.title}」')
+            parts.append(f'by {novel.author.display_name or novel.author.username}')
             if summary:
                 parts.append(summary)
-            post_content = "\n\n".join(parts)
+            if novel.tags:
+                _tags = ' '.join(f'#{t.strip()}' for t in novel.tags.replace(',', ' ').split() if t.strip())
+                if _tags:
+                    parts.append(_tags)
+            parts.append(f'「{next_num}화: {title}」')
+            parts.append(f'episode : {BASE_URL}/series/{novel.id}/episodes/{episode.id}')
+            post_content = "\n".join(parts)
             ep_post_number = secrets.token_hex(4)
             post = Post(
                 author_id=user.id,
@@ -556,11 +562,17 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
             parts = []
             if announce_comment:
                 parts.append(announce_comment)
-            link = f'📖 <a href="/series/{novel_id}/episodes/{episode_id}">[{episode.novel.title}] {episode.episode_number}화: {title}</a>'
-            parts.append(link)
+            parts.append(f'「{episode.novel.title}」')
+            parts.append(f'by {episode.novel.author.display_name or episode.novel.author.username}')
             if summary:
                 parts.append(summary)
-            post_content = "\n\n".join(parts)
+            if episode.novel.tags:
+                _tags = ' '.join(f'#{t.strip()}' for t in episode.novel.tags.replace(',', ' ').split() if t.strip())
+                if _tags:
+                    parts.append(_tags)
+            parts.append(f'「{episode.episode_number}화: {title}」')
+            parts.append(f'episode : {BASE_URL}/series/{novel_id}/episodes/{episode_id}')
+            post_content = "\n".join(parts)
             ep_post_number = secrets.token_hex(4)
             post = Post(
                 author_id=user.id,
