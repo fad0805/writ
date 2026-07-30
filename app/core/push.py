@@ -120,18 +120,32 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
                 return
 
             title, body = NOTIF_LABELS.get(notification_type, ("알림", "새 알림이 있습니다"))
-            if from_username:
-                body = f"@{from_username} — {body}"
-            if post_id and notification_type in ("reply", "mention"):
-                try:
-                    _p = s.query(Post).get(post_id)
-                    if _p and _p.content:
-                        _preview = re.sub(r'<[^>]+>', ' ', _p.content).replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
-                        _preview = re.sub(r'\s+', ' ', _preview).strip()[:80]
-                        if _preview:
-                            body += f"\n{_preview}"
-                except Exception:
-                    pass
+            if notification_type == "mention":
+                if from_username:
+                    body = f"@{from_username}"
+                if post_id:
+                    try:
+                        _p = s.query(Post).get(post_id)
+                        if _p and _p.content:
+                            _preview = re.sub(r'<[^>]+>', ' ', _p.content).replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+                            _preview = re.sub(r'\s+', ' ', _preview).strip()[:80]
+                            if _preview:
+                                body += f": {_preview}"
+                    except Exception:
+                        pass
+            else:
+                if from_username:
+                    body = f"@{from_username} — {body}"
+                if post_id and notification_type == "reply":
+                    try:
+                        _p = s.query(Post).get(post_id)
+                        if _p and _p.content:
+                            _preview = re.sub(r'<[^>]+>', ' ', _p.content).replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+                            _preview = re.sub(r'\s+', ' ', _preview).strip()[:80]
+                            if _preview:
+                                body += f"\n{_preview}"
+                    except Exception:
+                        pass
 
             url = "/notifications"
             if notification_type in ("reply", "mention", "post") and post_id:
