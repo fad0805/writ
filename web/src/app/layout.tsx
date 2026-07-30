@@ -115,6 +115,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               var pullEl = document.querySelector('.main-content');
               document.addEventListener('touchstart', function(e) {
                 if (!pullEl || pullEl.scrollTop > 0) return;
+                if (e.target.closest('.emoji-picker-dropdown, .reply-modal-backdrop, .mobile-composer-overlay, .mobile-more-overlay')) return;
                 startY = e.touches[0].clientY;
                 pulling = true;
               }, { passive: true });
