@@ -232,6 +232,17 @@ const localReactionEmojiMap = useMemo(() => {
     }
   };
 
+  const mergedEmojiList = useMemo(() => {
+    if (!post._emojis || post._emojis.length === 0) return emojiList;
+    const map = new Map(emojiList.map(e => [e.keyword, e]));
+    for (const e of post._emojis) {
+      if (e.keyword && e.url && !map.has(e.keyword)) {
+        map.set(e.keyword, { ...e, category: "remote" });
+      }
+    }
+    return Array.from(map.values());
+  }, [emojiList, post._emojis]);
+
   useEffect(() => {
     if (post._emojis) injectEmojis(post._emojis);
   }, [post._emojis]);
@@ -259,7 +270,7 @@ const localReactionEmojiMap = useMemo(() => {
     let html = post.content || "";
 
     const uniqueEmojis = Array.from(
-      new Map(emojiList.map(e => [e.keyword, e])).values()
+      new Map(mergedEmojiList.map(e => [e.keyword, e])).values()
     );
 
     // Strip "RE: https://..." from quote posts
@@ -330,7 +341,7 @@ const localReactionEmojiMap = useMemo(() => {
   }, [post.id, post.content, post.summary]);
 
   // contentHtml: emojiList 변경 시 즉시 재계산하여 이모지 렌더링 깜빡임 방지
-  const contentHtml = useMemo(() => sanitizePost(buildContentHtml()), [post.id, post.content, post.summary, emojiList]);
+  const contentHtml = useMemo(() => sanitizePost(buildContentHtml()), [post.id, post.content, post.summary, mergedEmojiList]);
 
   // 4. 코드 복사 버튼 플러그인 Effect (기존 코드 그대로 유지)
   useEffect(() => {
@@ -631,7 +642,7 @@ const localReactionEmojiMap = useMemo(() => {
       <div ref={cardRef} className={`post-card${current ? " current" : ""}${selected ? " selected" : ""}${post.visibility === "mention" ? " mention-card" : ""}`} onClick={(e) => { if (current || (e.target as HTMLElement).closest('a')) return; router.push(post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`); }}>
         {(post as any).boost_of_id && post.boosted_by && (
           <div className={`boost-badge${(currentUser?.id === post.boosted_by.id || (post as any).i_boosted) ? " boost-self" : ""}`}>
-            <Icon name="refresh" size={12} /> <Link href={`/@${post.boosted_by.username}`}><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.boosted_by.display_name || post.boosted_by.username, emojiList, 14)) }} /></Link>님이 부스트
+            <Icon name="refresh" size={12} /> <Link href={`/@${post.boosted_by.username}`}><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.boosted_by.display_name || post.boosted_by.username, mergedEmojiList, 14)) }} /></Link>님이 부스트
           </div>
         )}
         <div className="post-header">
@@ -640,7 +651,7 @@ const localReactionEmojiMap = useMemo(() => {
           </Link>
           <div className="post-name-wrap">
             <Link href={`/@${post.author.username}`} className="post-author" onClick={(e) => e.stopPropagation()}>
-              <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.author.display_name, emojiList, 14)) }} /> {(post.author.role === "admin" || post.author.role === "moderator" || post.author.role === "owner") && (post.author as any).show_badge && <Icon name={post.author.role === "owner" ? "books_solid" : "shield_filled"} style={{ color: post.author.role === "owner" ? "var(--accent)" : post.author.role === "admin" ? "#27ae60" : "#cc8800", fontSize: "0.65em", verticalAlign: "middle", marginLeft: 2 }} title={post.author.role === "owner" ? "오너" : post.author.role === "admin" ? "관리자" : "조율자"} />}
+              <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.author.display_name, mergedEmojiList, 14)) }} /> {(post.author.role === "admin" || post.author.role === "moderator" || post.author.role === "owner") && (post.author as any).show_badge && <Icon name={post.author.role === "owner" ? "books_solid" : "shield_filled"} style={{ color: post.author.role === "owner" ? "var(--accent)" : post.author.role === "admin" ? "#27ae60" : "#cc8800", fontSize: "0.65em", verticalAlign: "middle", marginLeft: 2 }} title={post.author.role === "owner" ? "오너" : post.author.role === "admin" ? "관리자" : "조율자"} />}
             </Link>
             <Link href={`/@${post.author.username}`} className="post-username" onClick={(e) => e.stopPropagation()}>
               @{post.author.display_handle || post.author.username}
@@ -660,7 +671,7 @@ const localReactionEmojiMap = useMemo(() => {
         {!hideContext && post.reply_context && (
           <Link href={post.reply_context.number ? `/@${post.reply_context.author.username}/${post.reply_context.number}` : `/post/${post.reply_context.id}`} className={`reply-context${post.reply_context.visibility === "mention" ? " mention-context" : ""}`} onClick={(e) => e.stopPropagation()}>
             <span className="reply-context-label">답글 대상</span>
-            <strong dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.reply_context.author.display_name || post.reply_context.author.username, emojiList, 14)) }} />
+            <strong dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.reply_context.author.display_name || post.reply_context.author.username, mergedEmojiList, 14)) }} />
             <span>@{post.reply_context.author.username}</span>
             <p dangerouslySetInnerHTML={{ __html: (() => {
               const hasCw = !!(post.reply_context as any).summary || !!(post.reply_context as any).is_sensitive;
@@ -674,7 +685,7 @@ const localReactionEmojiMap = useMemo(() => {
               html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
               html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
               html = html.replace(/\n/g, '<br>');
-              html = renderCustomEmojis(html, emojiList);
+              html = renderCustomEmojis(html, mergedEmojiList);
               html = rewriteLinks(html, validMentions);
               if (rawText.length > 200) html += "...";
               return sanitizePost(html);
