@@ -1841,6 +1841,14 @@ def mastodon_instance(db: SASession = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
+# GET /api/v2/instance
+# ---------------------------------------------------------------------------
+@router.get("/v2/instance")
+def mastodon_instance_v2(db: SASession = Depends(get_db)):
+    return mastodon_instance(db)
+
+
+# ---------------------------------------------------------------------------
 # GET /api/v1/instance/peers (stub)
 # ---------------------------------------------------------------------------
 @router.get("/instance/peers")
@@ -1865,6 +1873,15 @@ def instance_trends(db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 @router.get("/instance/rules")
 def instance_rules():
+    return []
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/followed_tags
+# ---------------------------------------------------------------------------
+@router.get("/followed_tags")
+def list_followed_tags(request: Request, db: SASession = Depends(get_db)):
+    user = _require_bearer(request, db)
     return []
 
 
