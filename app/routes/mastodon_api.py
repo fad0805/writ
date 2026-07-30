@@ -332,20 +332,27 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
             my_reaction = my_like.reaction or "★"
     for react, cnt in reaction_rows:
         name = (react or "★").strip(":")
+        emoji_url = ""
+        emoji_static_url = ""
+        if name != "★":
+            emoji_row = next((e for e in all_emojis if e["keyword"] == name), None)
+            if emoji_row:
+                emoji_url = emoji_row["url"]
+                emoji_static_url = emoji_row["url"]
+                if not any(e["shortcode"] == name for e in status["emojis"]):
+                    status["emojis"].append({
+                        "shortcode": emoji_row["keyword"],
+                        "url": emoji_row["url"],
+                        "static_url": emoji_row["url"],
+                        "visible_in_picker": True,
+                    })
         status["reactions"].append({
             "name": name,
             "count": cnt,
             "me": name == (my_reaction or "").strip(":"),
+            "url": emoji_url,
+            "static_url": emoji_static_url,
         })
-        if name != "★" and not any(e["shortcode"] == name for e in status["emojis"]):
-            emoji_row = next((e for e in all_emojis if e["keyword"] == name), None)
-            if emoji_row:
-                status["emojis"].append({
-                    "shortcode": emoji_row["keyword"],
-                    "url": emoji_row["url"],
-                    "static_url": emoji_row["url"],
-                    "visible_in_picker": True,
-                })
 
     return status
 
@@ -1381,11 +1388,20 @@ def list_reactions(status_id: str, request: Request, db: SASession = Depends(get
     result = []
     for react, cnt, first_user_id in reaction_rows:
         name = react or "★"
+        emoji_url = ""
+        emoji_static_url = ""
+        if name != "★":
+            emoji_row = next((e for e in _load_emojis(db) if e["keyword"] == name.strip(":")), None)
+            if emoji_row:
+                emoji_url = emoji_row["url"]
+                emoji_static_url = emoji_row["url"]
         first_user = db.query(User).filter_by(id=first_user_id).first()
         result.append({
             "name": name,
             "count": cnt,
             "me": user is not None and db.query(Like).filter_by(user_id=user.id, post_id=post.id, reaction=react).first() is not None,
+            "url": emoji_url,
+            "static_url": emoji_static_url,
             "account": _account_json(first_user, db, viewer=user) if first_user else None,
         })
     return result
