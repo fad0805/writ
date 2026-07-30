@@ -6,12 +6,11 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy import desc
 
-from app.models import User, Follow, Notification
+from app.models import User, Follow
 from app.serializers import _user_json
 from app.config.settings import BASE_URL
-from app.core.activitypub import _post_to_inbox, _resolve_actor, _send_accept, _send_reject
-from app.core.push import send_push_to_user
-from app.core.timeline_stream import broadcast_refresh_notifs, broadcast_notif_sound
+from app.core.activitypub import _resolve_actor, _send_accept, _send_reject
+from app.core.interactions import follow_user, unfollow_user
 from app.db.database import get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 
@@ -35,22 +34,7 @@ def api_follow(request: Request, username: str):
                     target = _resolve_actor(actor_url)
             if not target or not target.is_remote:
                 raise HTTPException(status_code=404, detail="Remote user not found")
-            existing = s.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
-            if not existing:
-                remote_obj = target.actor_uri()
-                follow_activity = {
-                    "@context": ["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"],
-                    "id": f"{BASE_URL}/activities/follow/{uuid4()}",
-                    "type": "Follow",
-                    "actor": user.actor_uri(),
-                    "object": remote_obj,
-                    "to": [remote_obj],
-                }
-                s.add(Follow(follower_id=user.id, following_id=target.id, accepted=False, activity_id=follow_activity["id"]))
-                s.commit()
-                inbox = target.inbox_url
-                if inbox:
-                    _post_to_inbox(inbox, follow_activity, user)
+            follow_user(s, user, target)
         return {"ok": True}
 
     with get_session() as s:
@@ -59,19 +43,7 @@ def api_follow(request: Request, username: str):
             raise HTTPException(status_code=404, detail="User not found")
         if target.id == user.id:
             raise HTTPException(status_code=400, detail="Cannot follow yourself")
-        existing = s.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
-        if not existing:
-            accepted = not target.is_locked
-            s.add(Follow(follower_id=user.id, following_id=target.id, accepted=accepted))
-            existing_notif = s.query(Notification).filter_by(
-                from_user_id=user.id, user_id=target.id
-            ).filter(Notification.notification_type.in_(["follow", "follow_request"])).first()
-            if not existing_notif:
-                s.add(Notification(user_id=target.id, from_user_id=user.id, notification_type="follow_request" if not accepted else "follow"))
-            s.commit()
-            broadcast_refresh_notifs(target.id)
-            send_push_to_user(target.id, "follow" if accepted else "follow_request", user.username)
-            broadcast_notif_sound(target.id)
+        follow_user(s, user, target)
     return {"ok": True}
 
 
@@ -169,37 +141,7 @@ def api_unfollow(request: Request, username: str):
         target = s.query(User).filter_by(username=username).first()
         if not target:
             raise HTTPException(status_code=404, detail="User not found")
-        existing = s.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
-        if existing:
-            s.delete(existing)
-            s.query(Notification).filter(
-                Notification.from_user_id == user.id,
-                Notification.user_id == target.id,
-                Notification.notification_type.in_(["follow", "follow_request"])
-            ).delete(synchronize_session=False)
-            s.commit()
-            try:
-                broadcast_refresh_notifs(target.id)
-            except Exception:
-                pass
-            if target.is_remote and target.inbox_url:
-                follow_activity_id = f"{user.actor_uri()}#follows/{target.id}"
-                undo = {
-                    "@context": "https://www.w3.org/ns/activitystreams",
-                    "id": f"{user.actor_uri()}#follows/{target.id}/undo",
-                    "type": "Undo",
-                    "actor": user.actor_uri(),
-                    "object": {
-                        "id": follow_activity_id,
-                        "type": "Follow",
-                        "actor": user.actor_uri(),
-                        "object": target.actor_uri(),
-                    },
-                }
-                try:
-                    _post_to_inbox(target.inbox_url, undo, user)
-                except Exception as e:
-                    logger.error("Failed to send Undo Follow: %s", e, exc_info=True)
+        unfollow_user(s, user, target)
     return {"ok": True}
 
 

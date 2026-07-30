@@ -23,6 +23,7 @@ from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, 
 from app.db.database import get_db, get_session
 from app.config.settings import BASE_URL, DOMAIN, MAX_POST_LENGTH
 from app.routes.api import _broadcast_update_actor, _do_edit_post, _do_delete_post
+from app.core.interactions import follow_user, unfollow_user, like_post, unlike_post, boost_post, unboost_post, react_post, unreact_post
 from app.utils.emoji import _emoji_url, _load_emojis
 from app.core.push import get_vapid_keys
 
@@ -695,15 +696,7 @@ async def follow_account(account_id: str, request: Request, db: SASession = Depe
     if target.id == user.id:
         raise MastodonAPIError(status_code=422, detail="Cannot follow self")
 
-    existing = db.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
-    if existing:
-        if not existing.accepted:
-            existing.accepted = True
-            db.commit()
-    else:
-        follow = Follow(follower_id=user.id, following_id=target.id, accepted=True)
-        db.add(follow)
-        db.commit()
+    follow_user(db, user, target)
 
     viewer = _maybe_bearer(request, db)
     return _account_json(target, db, viewer)
@@ -719,10 +712,7 @@ async def unfollow_account(account_id: str, request: Request, db: SASession = De
     if not target:
         raise MastodonAPIError(status_code=404, detail="Record not found")
 
-    follow = db.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
-    if follow:
-        db.delete(follow)
-        db.commit()
+    unfollow_user(db, user, target)
 
     viewer = _maybe_bearer(request, db)
     return _account_json(target, db, viewer)
@@ -1203,13 +1193,8 @@ def favourite_status(status_id: str, request: Request, db: SASession = Depends(g
     if not post or post.is_deleted:
         raise MastodonAPIError(status_code=404, detail="Record not found")
 
-    existing = db.query(Like).filter_by(user_id=user.id, post_id=post.id).first()
-    if not existing:
-        like = Like(user_id=user.id, post_id=post.id)
-        db.add(like)
-        db.commit()
+    like_post(db, user, post.id)
 
-    post = db.query(Post).filter_by(id=int(status_id)).first()
     return _status_json(post, db, viewer=user, _liked_ids={post.id})
 
 
@@ -1223,12 +1208,8 @@ def unfavourite_status(status_id: str, request: Request, db: SASession = Depends
     if not post or post.is_deleted:
         raise MastodonAPIError(status_code=404, detail="Record not found")
 
-    existing = db.query(Like).filter_by(user_id=user.id, post_id=post.id).first()
-    if existing:
-        db.delete(existing)
-        db.commit()
+    unlike_post(db, user, post.id)
 
-    post = db.query(Post).filter_by(id=int(status_id)).first()
     return _status_json(post, db, viewer=user, _liked_ids=set())
 
 
@@ -1242,23 +1223,7 @@ def reblog_status(status_id: str, request: Request, db: SASession = Depends(get_
     if not post or post.is_deleted:
         raise MastodonAPIError(status_code=404, detail="Record not found")
 
-    existing = db.query(Boost).filter_by(user_id=user.id, post_id=post.id).first()
-    if existing:
-        return _status_json(post, db, viewer=user, _boosted_ids={post.id})
-
-    boost = Boost(user_id=user.id, post_id=post.id)
-    db.add(boost)
-    db.flush()
-
-    boost_post = Post(
-        author_id=user.id,
-        content="",
-        visibility="public",
-        boost_of_id=post.id,
-    )
-    db.add(boost_post)
-    db.commit()
-    db.refresh(post)
+    boost_post(db, user, post.id)
 
     return _status_json(post, db, viewer=user, _boosted_ids={post.id})
 
@@ -1273,15 +1238,8 @@ def unreblog_status(status_id: str, request: Request, db: SASession = Depends(ge
     if not post or post.is_deleted:
         raise MastodonAPIError(status_code=404, detail="Record not found")
 
-    existing = db.query(Boost).filter_by(user_id=user.id, post_id=post.id).first()
-    if existing:
-        db.delete(existing)
-        db.query(Post).filter(
-            Post.author_id == user.id, Post.boost_of_id == post.id
-        ).delete(synchronize_session=False)
-        db.commit()
+    unboost_post(db, user, post.id)
 
-    post = db.query(Post).filter_by(id=int(status_id)).first()
     return _status_json(post, db, viewer=user, _boosted_ids=set())
 
 
@@ -1346,18 +1304,8 @@ def react_to_status(status_id: str, name: str, request: Request, db: SASession =
     if not emoji_row or (emoji_row.domain and emoji_row.domain.strip()):
         raise MastodonAPIError(status_code=400, detail="Remote emojis cannot be used as reactions")
 
-    existing = db.query(Like).filter_by(user_id=user.id, post_id=post.id).first()
-    if existing:
-        if existing.reaction == name:
-            return _status_json(post, db, viewer=user)
-        existing.reaction = name
-        db.commit()
-    else:
-        like = Like(user_id=user.id, post_id=post.id, reaction=name)
-        db.add(like)
-        db.commit()
+    react_post(db, user, post.id, name)
 
-    post = db.query(Post).filter_by(id=int(status_id)).first()
     _liked_ids = {post.id}
     _boosted_ids = {post.id} if db.query(Boost).filter_by(user_id=user.id, post_id=post.id).first() else set()
     _bookmarked_ids = {post.id} if db.query(Bookmark).filter_by(user_id=user.id, post_id=post.id).first() else set()
@@ -1379,12 +1327,8 @@ def unreact_to_status(status_id: str, name: str, request: Request, db: SASession
     if not name.endswith(":"):
         name = f"{name}:"
 
-    existing = db.query(Like).filter_by(user_id=user.id, post_id=post.id).first()
-    if existing and existing.reaction == name:
-        db.delete(existing)
-        db.commit()
+    unreact_post(db, user, post.id, name)
 
-    post = db.query(Post).filter_by(id=int(status_id)).first()
     _liked_ids = {post.id} if db.query(Like).filter_by(user_id=user.id, post_id=post.id).first() else set()
     _boosted_ids = {post.id} if db.query(Boost).filter_by(user_id=user.id, post_id=post.id).first() else set()
     _bookmarked_ids = {post.id} if db.query(Bookmark).filter_by(user_id=user.id, post_id=post.id).first() else set()

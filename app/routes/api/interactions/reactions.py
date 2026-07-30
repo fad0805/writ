@@ -1,18 +1,13 @@
-"""Interaction endpoints — follow, DM, notification, mute/block, like, boost, bookmark, vote, react, pin."""
-import json
+"""Interaction endpoints — react/unreact for posts."""
 import logging
-import uuid
 
 from fastapi import APIRouter, Request, Form, HTTPException, BackgroundTasks
 from sqlalchemy import func
 
-from app.models import Post, Like, Notification, CustomEmoji, ServerSetting
-from app.config.settings import BASE_URL
-from app.core.activitypub import _post_to_inbox
-from app.core.timeline_stream import broadcast_refresh_notifs, broadcast_reaction_update
+from app.models import Post, Like, CustomEmoji
+from app.core.interactions import react_post, unreact_post
 from app.db.database import get_session
 from app.routes.auth import require_active_auth
-from app.utils.emoji import _emoji_url
 
 from app.routes.api._core import _can_view
 
@@ -24,96 +19,27 @@ reactions_router = APIRouter()
 @reactions_router.post("/posts/{post_id}/react")
 def api_react_post(request: Request, background_tasks: BackgroundTasks, post_id: int, emoji: str = Form(...)):
     user = require_active_auth(request)
-    with get_session() as s:
-        settings = ServerSetting.get(s)
-        if not emoji or len(emoji) > 50:
-            raise HTTPException(status_code=400, detail="Invalid emoji")
-        if emoji.startswith(":") and emoji.endswith(":"):
-            _kw = emoji[1:-1]
+    if not emoji or len(emoji) > 50:
+        raise HTTPException(status_code=400, detail="Invalid emoji")
+    if emoji.startswith(":") and emoji.endswith(":"):
+        _kw = emoji[1:-1]
+        with get_session() as s:
             _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw, domain="").first()
             if not _emoji_row:
                 _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw).first()
             if not _emoji_row or (_emoji_row.domain and _emoji_row.domain.strip()):
                 raise HTTPException(status_code=400, detail="Remote emojis cannot be used as reactions")
+    with get_session() as s:
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
         if not _can_view(post, user, s):
             raise HTTPException(status_code=404, detail="Post not found")
-        reactions_disabled = not settings.enable_reactions or not getattr(post.author, 'enable_reactions', True)
-        final_emoji = emoji if not reactions_disabled else None
-        existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
-        old_reaction = existing.reaction if existing else None
-        is_new = existing is None
-        post_author_id = post.author_id
-        post_ap_id = post.ap_id
-        post_author_is_remote = post.author.is_remote
-        post_author_shared_inbox = post.author.shared_inbox_url if post_author_is_remote else None
-        post_author_actor = post.author.actor_uri() if post_author_is_remote else None
-        post_author_enable_reactions = getattr(post.author, 'enable_reactions', True)
 
     def _do_react():
         try:
             with get_session() as s:
-                post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
-                if not post:
-                    return
-                existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
-                existing_notif = s.query(Notification).filter_by(
-                    user_id=post_author_id, from_user_id=user.id, notification_type="like", post_id=post_id
-                ).first() if post_author_id != user.id else None
-                if existing:
-                    existing.reaction = final_emoji
-                    if post_author_id != user.id and existing_notif:
-                        _notif_meta = {"reaction": final_emoji} if final_emoji and post_author_enable_reactions else {}
-                        existing_notif.metadata_json = json.dumps(_notif_meta) if _notif_meta else ""
-                else:
-                    s.add(Like(user_id=user.id, post_id=post_id, reaction=final_emoji))
-                    if post_author_id != user.id and not existing_notif:
-                        _notif_meta = {"reaction": final_emoji} if final_emoji and post_author_enable_reactions else {}
-                        s.add(Notification(user_id=post_author_id, from_user_id=user.id, notification_type="like", post_id=post_id, metadata_json=json.dumps(_notif_meta) if _notif_meta else ""))
-                s.flush()
-                keep_id = s.query(Like.id).filter_by(user_id=user.id, post_id=post_id).order_by(Like.id.desc()).first()
-                if keep_id:
-                    s.query(Like).filter(Like.user_id == user.id, Like.post_id == post_id, Like.id != keep_id[0]).delete(synchronize_session=False)
-                s.commit()
-                _reactions = {}
-                for _react, _cnt in s.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
-                    _reactions[_react or "★"] = _cnt
-                broadcast_reaction_update(post_id, _reactions)
-                if post_author_id != user.id:
-                    broadcast_refresh_notifs(post_author_id)
-                if post_author_is_remote and post_author_shared_inbox:
-                    _tag = []
-                    if emoji.startswith(":") and emoji.endswith(":"):
-                        _kw = emoji[1:-1]
-                        _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw, domain="").first()
-                        if not _emoji_row:
-                            _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw).first()
-                        if _emoji_row and _emoji_row.file_name:
-                            _emoji_img = _emoji_url(_emoji_row.file_name, _emoji_row.domain or "", _emoji_row.category or "")
-                            if not _emoji_img.startswith("http"):
-                                _emoji_img = f"{BASE_URL}{_emoji_img}"
-                        else:
-                            _emoji_img = ""
-                        if _emoji_img:
-                            _tag = [{"type": "Emoji", "id": f"{BASE_URL}/emojis/{_kw}", "name": emoji, "icon": {"type": "Image", "mediaType": "image/png", "url": _emoji_img}}]
-                    like_activity = {
-                        "@context": "https://www.w3.org/ns/activitystreams",
-                        "id": f"{BASE_URL}/likes/{uuid.uuid4()}",
-                        "type": "Like",
-                        "actor": user.actor_uri(),
-                        "object": post_ap_id,
-                        "content": emoji,
-                        "_misskey_reaction": emoji,
-                    }
-                    if _tag:
-                        like_activity["tag"] = _tag
-                    if is_new or old_reaction != emoji:
-                        try:
-                            _post_to_inbox(post_author_shared_inbox, like_activity, user)
-                        except Exception:
-                            pass
+                react_post(s, user, post_id, emoji)
         except Exception:
             pass
 
@@ -124,57 +50,15 @@ def api_react_post(request: Request, background_tasks: BackgroundTasks, post_id:
 @reactions_router.post("/posts/{post_id}/unreact")
 def api_unreact_post(request: Request, background_tasks: BackgroundTasks, post_id: int):
     user = require_active_auth(request)
-    existing_reaction = None
-    post_ap_id = ""
-    post_author_is_remote = False
-    post_author_shared_inbox = None
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
-        existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
-        existing_reaction = existing.reaction if existing else None
-        post_ap_id = post.ap_id
-        post_author_is_remote = post.author.is_remote
-        post_author_shared_inbox = post.author.shared_inbox_url if post_author_is_remote else None
 
     def _do_unreact():
         try:
             with get_session() as s:
-                post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
-                if not post:
-                    return
-                existing = s.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
-                if existing:
-                    s.delete(existing)
-                    s.query(Notification).filter_by(
-                        from_user_id=user.id, notification_type="like", post_id=post_id
-                    ).delete()
-                    s.commit()
-                    _reactions = {}
-                    for _react, _cnt in s.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
-                        _reactions[_react or "★"] = _cnt
-                    broadcast_reaction_update(post_id, _reactions)
-                    broadcast_refresh_notifs(post.author_id)
-                    if post_author_is_remote and post_author_shared_inbox:
-                        undo = {
-                            "@context": "https://www.w3.org/ns/activitystreams",
-                            "id": f"{BASE_URL}/likes/{uuid.uuid4()}#undo",
-                            "type": "Undo",
-                            "actor": user.actor_uri(),
-                            "object": {
-                                "id": f"{BASE_URL}/likes/{uuid.uuid4()}",
-                                "type": "Like",
-                                "actor": user.actor_uri(),
-                                "object": post_ap_id,
-                                "content": existing_reaction or "★",
-                                "_misskey_reaction": existing_reaction or "★",
-                            },
-                        }
-                        try:
-                            _post_to_inbox(post_author_shared_inbox, undo, user)
-                        except Exception:
-                            pass
+                unreact_post(s, user, post_id)
         except Exception:
             pass
 
@@ -200,3 +84,7 @@ def api_reaction_users(request: Request, post_id: int, emoji: str = ""):
             q = q.filter(Like.reaction.is_(None))
         like_rows = q.order_by(Like.id.desc()).limit(20).all()
         user_ids = list(dict.fromkeys(l.user_id for l in like_rows))
+        from app.models import User
+        users = s.query(User).filter(User.id.in_(user_ids)).all()
+        from app.serializers import _user_json
+        return {"users": [_user_json(u) for u in users]}
