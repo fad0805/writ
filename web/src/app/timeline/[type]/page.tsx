@@ -43,6 +43,8 @@ export default function TimelinePage() {
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState("");
 
+  const timelineCache = useRef<Record<string, { posts: PostData[]; hasMore: boolean; offset: number; totalLoaded: number }>>({});
+
   const [selectedIdx, setSelectedIdx] = useState(-1);
   const [replyPost, setReplyPost] = useState<PostData | null>(null);
   const [showComposer, setShowComposer] = useState(false);
@@ -71,6 +73,16 @@ export default function TimelinePage() {
   filteredPostsRef.current = filteredPosts;
 
   const load = useCallback(async () => {
+    const cached = timelineCache.current[tlType];
+    if (cached) {
+      setPosts(cached.posts);
+      setHasMore(cached.hasMore);
+      offsetRef.current = cached.offset;
+      totalLoadedRef.current = cached.totalLoaded;
+      setLoading(false);
+      setError("");
+      return;
+    }
     const loadId = ++loadIdRef.current;
     setLoading(true);
     setError("");
@@ -83,6 +95,7 @@ export default function TimelinePage() {
       setHasMore(data.has_more);
       offsetRef.current = LIMIT;
       totalLoadedRef.current = data.posts.length;
+      timelineCache.current[tlType] = { posts: data.posts, hasMore: data.has_more, offset: LIMIT, totalLoaded: data.posts.length };
     } catch (e: unknown) {
       if (loadId !== loadIdRef.current || accountSnapshot() !== snapshot) return;
       setError(e instanceof Error ? e.message : "불러오기 실패");
@@ -93,14 +106,19 @@ export default function TimelinePage() {
   const addOrUpdatePost = useCallback((newPost: PostData) => {
     setPosts((prev) => {
       const idx = prev.findIndex((p) => p.id === newPost.id);
+      let next: PostData[];
       if (idx >= 0) {
-        const next = [...prev];
+        next = [...prev];
         next.splice(idx, 1);
-        return [newPost, ...next];
+        next = [newPost, ...next];
+      } else {
+        next = [newPost, ...prev];
       }
-      return [newPost, ...prev];
+      const c = timelineCache.current[tlType];
+      if (c) timelineCache.current[tlType] = { ...c, posts: next };
+      return next;
     });
-  }, []);
+  }, [tlType]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
@@ -111,7 +129,11 @@ export default function TimelinePage() {
       const data = await api.timeline(tlType, LOAD_MORE, currentOffset);
       if (accountSnapshot() !== snapshot) return;
       if (data._emojis) injectEmojis(data._emojis);
-      setPosts((prev) => [...prev, ...data.posts]);
+      setPosts((prev) => {
+        const next = [...prev, ...data.posts];
+        timelineCache.current[tlType] = { posts: next, hasMore: data.has_more && totalLoadedRef.current + data.posts.length < 500, offset: currentOffset + LOAD_MORE, totalLoaded: totalLoadedRef.current + data.posts.length };
+        return next;
+      });
       totalLoadedRef.current += data.posts.length;
       setHasMore(data.has_more && totalLoadedRef.current < 500);
       offsetRef.current = currentOffset + LOAD_MORE;
@@ -227,34 +249,51 @@ export default function TimelinePage() {
         if (newPost._emojis) injectEmojis(newPost._emojis);
         if (deletedIds.current.has(newPost.id)) return;
         if (newPost.type === "delete") {
-          setPosts((prev) => prev.filter(
-            (p) => p.id !== newPost.id && (p as StreamPostData)._boost_pointer_id !== newPost.id
-          ));
+          setPosts((prev) => {
+            const next = prev.filter(
+              (p) => p.id !== newPost.id && (p as StreamPostData)._boost_pointer_id !== newPost.id
+            );
+            const c = timelineCache.current[tlType];
+            if (c) timelineCache.current[tlType] = { ...c, posts: next };
+            return next;
+          });
           return;
         }
         if (newPost.type === "update") {
-          setPosts((prev) => prev.map((p) => p.id === newPost.id ? { ...p, ...newPost } : p));
+          setPosts((prev) => {
+            const next = prev.map((p) => p.id === newPost.id ? { ...p, ...newPost } : p);
+            const c = timelineCache.current[tlType];
+            if (c) timelineCache.current[tlType] = { ...c, posts: next };
+            return next;
+          });
           return;
         }
         setPosts((prev) => {
+          let next: PostData[];
           if (newPost.boost_of_id) {
             const idx = prev.findIndex(
               (p) => p.id === newPost.id && p.boosted_by?.id === newPost.boosted_by?.id
             );
             if (idx >= 0) {
-              const next = [...prev];
+              next = [...prev];
               next.splice(idx, 1);
-              return [newPost, ...next];
+              next = [newPost, ...next];
+            } else {
+              next = [newPost, ...prev];
             }
-            return [newPost, ...prev];
+          } else {
+            const idx = prev.findIndex((p) => p.id === newPost.id);
+            if (idx >= 0) {
+              next = [...prev];
+              next.splice(idx, 1);
+              next = [newPost, ...next];
+            } else {
+              next = [newPost, ...prev];
+            }
           }
-          const idx = prev.findIndex((p) => p.id === newPost.id);
-          if (idx >= 0) {
-            const next = [...prev];
-            next.splice(idx, 1);
-            return [newPost, ...next];
-          }
-          return [newPost, ...prev];
+          const c = timelineCache.current[tlType];
+          if (c) timelineCache.current[tlType] = { ...c, posts: next };
+          return next;
         });
       } catch (e) {
         console.error("Failed to parse SSE message:", e);
@@ -316,7 +355,12 @@ export default function TimelinePage() {
                     post={p}
                     onDelete={() => {
                       deletedIds.current.add(p.id);
-                      setPosts((prev) => prev.filter((x) => x.id !== p.id));
+                      setPosts((prev) => {
+                        const next = prev.filter((x) => x.id !== p.id);
+                        const c = timelineCache.current[tlType];
+                        if (c) timelineCache.current[tlType] = { ...c, posts: next };
+                        return next;
+                      });
                     }}
                     onUpdate={(updated) => {
                       if (updated) {
