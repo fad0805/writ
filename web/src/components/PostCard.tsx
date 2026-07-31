@@ -626,6 +626,11 @@ const localReactionEmojiMap = useMemo(() => {
   return (
     <>
       <div ref={cardRef} className={`post-card${current ? " current" : ""}${selected ? " selected" : ""}${post.visibility === "mention" ? " mention-card" : ""}`} onClick={(e) => { if (current || (e.target as HTMLElement).closest('a')) return; router.push(post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`); }}>
+        {post.boosted_by && post.boosted_by.length > 0 && (
+          <div className="boost-badge">
+            <Icon name="refresh" size={12} /> <Link href={`/@${post.boosted_by[0].username}`}><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.boosted_by[0].display_name || post.boosted_by[0].username, mergedEmojiList, 14)) }} /></Link>님이 부스트
+          </div>
+        )}
         {mentionBy && (
           <div className="boost-badge">
             <Icon name="mention" size={12} /> <Link href={`/@${mentionBy.username}`}><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(mentionBy.display_name || mentionBy.username, mergedEmojiList, 14)) }} /></Link>님이 멘션
