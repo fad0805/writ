@@ -1,7 +1,6 @@
 import re
 import datetime
 
-from sqlalchemy import desc
 from urllib.parse import urlparse
 
 from app.models import Like, Boost, Bookmark, User, Vote, Post, Follow
@@ -11,7 +10,7 @@ from app.utils.emoji import _load_emojis
 def _post_json(p, session, user, tl_type=None,
                _liked_ids=None, _boosted_ids=None, _bookmarked_ids=None,
                _vote_map=None, _my_reaction_map=None, _reactions_map=None,
-               _booster_map=None, _mentioned_users_map=None, _boost_originals=None, _skip_emojis=False):
+               _mentioned_users_map=None, _boost_originals=None, _skip_emojis=False):
     if not p:
         return None
     if p.is_deleted:
@@ -43,7 +42,7 @@ def _post_json(p, session, user, tl_type=None,
             result = _post_json(original, session, user, tl_type,
                                 _liked_ids, _boosted_ids, _bookmarked_ids,
                                 _vote_map, _my_reaction_map, _reactions_map,
-                                _booster_map, _mentioned_users_map, _boost_originals)
+                                _mentioned_users_map, _boost_originals)
             result["id"] = p.id
             existing_boosted_by = result.get("boosted_by") or []
             booster_json = _user_json(p.author)
@@ -72,17 +71,6 @@ def _post_json(p, session, user, tl_type=None,
             bookmarked = session.query(Bookmark).filter_by(user_id=user.id, post_id=p.id).first() is not None
     else:
         liked = boosted = bookmarked = False
-    boosters = []
-    if user and p.author_id != user.id:
-        if _booster_map is not None:
-            bs = _booster_map.get(p.id, [])
-        else:
-            bs = []
-            for b in session.query(Boost).filter_by(post_id=p.id).order_by(desc(Boost.created_at)).all():
-                u = session.query(User).get(b.user_id)
-                if u and u.id != p.author_id:
-                    bs.append(u)
-        boosters = bs
     my_vote = None
     if user and p.poll_data:
         if _vote_map is not None:
@@ -143,7 +131,7 @@ def _post_json(p, session, user, tl_type=None,
         "is_sensitive": getattr(p, 'is_sensitive', False) or False,
         "ap_id": p.ap_id or "",
         "reply_context": _reply_context(p, session, user, tl_type),
-        "boosted_by": [_user_json(b) for b in boosters] if boosters else [],
+        "boosted_by": [],
         "media_attachments": (p.media_attachments or []) if hasattr(p, 'media_attachments') else [],
         "poll_data": p.poll_data,
         "my_vote": my_vote,

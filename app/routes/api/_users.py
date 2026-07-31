@@ -219,19 +219,6 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                 if pid not in _reactions_map:
                     _reactions_map[pid] = {}
                 _reactions_map[pid][react] = cnt
-            _booster_map = {}
-            _three_hours_ago = datetime.now(timezone.utc) - timedelta(seconds=10800)
-            _boost_rows = s.query(Boost).filter(
-                Boost.post_id.in_(_all_post_ids),
-                Boost.user_id == profile.id,
-                Boost.created_at > _three_hours_ago,
-            ).order_by(desc(Boost.created_at)).all()
-            _booster_user_ids = {b.user_id for b in _boost_rows}
-            _booster_users = {u.id: u for u in s.query(User).filter(User.id.in_(_booster_user_ids)).all()} if _booster_user_ids else {}
-            for b in _boost_rows:
-                _bu = _booster_users.get(b.user_id)
-                if _bu:
-                    _booster_map.setdefault(b.post_id, []).append(_bu)
             all_mentioned_ids = set()
             _posts_for_mentions = s.query(Post).filter(Post.id.in_(_all_post_ids)).all()
             for pp in _posts_for_mentions:
@@ -254,10 +241,10 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                         _mentioned_users_map[pp.id] = []
         else:
             _liked_ids = _boosted_ids = _bookmarked_ids = set()
-            _vote_map = _my_reaction_map = _reactions_map = _mentioned_users_map = _booster_map = {}
+            _vote_map = _my_reaction_map = _reactions_map = _mentioned_users_map = {}
         _pj_kwargs = dict(_liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids,
                           _vote_map=_vote_map, _my_reaction_map=_my_reaction_map,
-                          _reactions_map=_reactions_map, _booster_map=_booster_map,
+                          _reactions_map=_reactions_map,
                           _mentioned_users_map=_mentioned_users_map)
         return {
             "profile": _user_json(profile),

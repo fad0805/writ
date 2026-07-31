@@ -196,7 +196,6 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
         _liked_ids = _boosted_ids = _bookmarked_ids = set()
         _my_reaction_map = {}
         _reactions_map = {}
-        _booster_map = {}
         _mentioned_users_map = {}
         _boost_originals = {}
         if post_ids:
@@ -210,12 +209,6 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
             _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(post_ids)).all()}
             for l in s.query(Like.post_id, Like.reaction).filter(Like.user_id == user.id, Like.post_id.in_(post_ids), Like.reaction.isnot(None)).all():
                 _my_reaction_map[l.post_id] = l.reaction
-            for bid, buid in s.query(Boost.post_id, Boost.user_id).filter(Boost.post_id.in_(post_ids)).order_by(desc(Boost.created_at)).all():
-                _booster_map.setdefault(bid, []).append(buid)
-            if _booster_map:
-                _all_uids = {uid for uids in _booster_map.values() for uid in uids}
-                _booster_users = {u.id: u for u in s.query(User).filter(User.id.in_(_all_uids)).all()}
-                _booster_map = {pid: [_booster_users.get(uid) for uid in uids if _booster_users.get(uid)] for pid, uids in _booster_map.items()}
             for pid, react, cnt in s.query(Like.post_id, func.coalesce(Like.reaction, "★"), func.count(Like.id)).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all():
                 if pid not in _reactions_map:
                     _reactions_map[pid] = {}
@@ -256,7 +249,7 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
                     _followers_map[nid] = cnt
 
         return {
-            "posts": [_post_json(p, s, user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids, _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map, _booster_map=_booster_map, _mentioned_users_map=_mentioned_users_map, _boost_originals=_boost_originals, _skip_emojis=True) for p in posts],
+            "posts": [_post_json(p, s, user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids, _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map, _mentioned_users_map=_mentioned_users_map, _boost_originals=_boost_originals, _skip_emojis=True) for p in posts],
             "has_more": has_more,
             "novels": [_novel_json(n, s, _followers_map=_followers_map) for n in novels],
         }

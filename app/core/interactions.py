@@ -186,15 +186,10 @@ def boost_post(db: Session, user: User, post_id: int):
 
         try:
             _boosts_count = db.query(Boost).filter_by(post_id=post_id).count()
-            _all_boosters = []
-            for b in db.query(Boost).filter(Boost.post_id == post_id).order_by(Boost.created_at.desc()).all():
-                bu = db.query(User).get(b.user_id)
-                if bu:
-                    _all_boosters.append(_user_json(bu))
             broadcast_post({
                 "id": post.id, "type": "update",
                 "boosts_count": _boosts_count,
-                "boosted_by": _all_boosters,
+                "boosted_by": [_user_json(user)],
             }, post.author_id, post.visibility or "public")
         except Exception as e:
             logger.error("Failed to broadcast boost update: %s", e, exc_info=True)
@@ -273,15 +268,10 @@ def unboost_post(db: Session, user: User, post_id: int):
         if post.author_id != user.id:
             broadcast_refresh_notifs(post.author_id)
         try:
-            _updated_boosters = []
-            for b in db.query(Boost).filter(Boost.post_id == post_id).order_by(Boost.created_at.desc()).all():
-                bu = db.query(User).get(b.user_id)
-                if bu:
-                    _updated_boosters.append(_user_json(bu))
             broadcast_post({
                 "id": post_id, "type": "update",
                 "boosts_count": remaining,
-                "boosted_by": _updated_boosters,
+                "boosted_by": [],
             }, post.author_id, post.visibility or "public")
         except Exception as e:
             logger.error("Failed to broadcast unboost update: %s", e, exc_info=True)

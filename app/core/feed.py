@@ -2,7 +2,6 @@
 import re
 import logging
 import httpx
-from datetime import datetime, timedelta, timezone
 from typing import List
 from urllib.parse import urlparse
 
@@ -155,19 +154,6 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             Vote.user_id == user.id, Vote.post_id.in_(post_ids)
         ).all()}
 
-        _booster_map = {}
-        _cutoff = datetime.now(timezone.utc) - timedelta(hours=3)
-        for b in session.query(Boost).filter(
-            Boost.post_id.in_(post_ids), Boost.created_at > _cutoff
-        ).order_by(Boost.created_at.desc()).all():
-            _booster_map.setdefault(b.post_id, []).append(b.user_id)
-        if _booster_map:
-            _all_uids = {uid for uids in _booster_map.values() for uid in uids}
-            _booster_users = {u.id: u for u in session.query(User).filter(
-                User.id.in_(_all_uids)
-            ).all()}
-            _booster_map = {pid: [_booster_users.get(uid) for uid in uids if _booster_users.get(uid)] for pid, uids in _booster_map.items()}
-
         _reactions_map = {}
         _default_react = "★"
         _reaction_rows = session.query(
@@ -200,7 +186,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
 
     else:
         _liked_ids = _boosted_ids = _bookmarked_ids = set()
-        _vote_map = _my_reaction_map = _reactions_map = _booster_map = _mentioned_users_map = {}
+        _vote_map = _my_reaction_map = _reactions_map = _mentioned_users_map = {}
 
     _timeline_emojis = [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)]
 
@@ -208,7 +194,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                              _liked_ids=_liked_ids, _boosted_ids=_boosted_ids,
                              _bookmarked_ids=_bookmarked_ids, _vote_map=_vote_map,
                              _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map,
-                             _booster_map=_booster_map, _mentioned_users_map=_mentioned_users_map,
+                             _mentioned_users_map=_mentioned_users_map,
                              _skip_emojis=True)
                  for p in posts]
 

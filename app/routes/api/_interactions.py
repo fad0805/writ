@@ -452,7 +452,6 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
         _my_reaction_map = {}
         _reactions_map = {}
         _mentioned_users_map = {}
-        _booster_map = {}
 
         if user and notif_post_ids:
             _liked_ids = {l.post_id for l in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids)).all()}
@@ -464,13 +463,6 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
 
             for l in s.query(Like.post_id, Like.reaction).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids), Like.reaction.isnot(None)).all():
                 _my_reaction_map[l.post_id] = l.reaction
-
-            for bid, buid in s.query(Boost.post_id, Boost.user_id).filter(Boost.post_id.in_(notif_post_ids)).order_by(desc(Boost.created_at)).all():
-                _booster_map.setdefault(bid, []).append(buid)
-            if _booster_map:
-                _all_uids = {uid for uids in _booster_map.values() for uid in uids}
-                _booster_users = {u.id: u for u in s.query(User).filter(User.id.in_(_all_uids)).all()}
-                _booster_map = {pid: [_booster_users.get(uid) for uid in uids if _booster_users.get(uid)] for pid, uids in _booster_map.items()}
 
             for pid, react, cnt in s.query(Like.post_id, func.coalesce(Like.reaction, "★"), func.count(Like.id)).filter(Like.post_id.in_(notif_post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all():
                 if pid not in _reactions_map:
@@ -526,7 +518,7 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
                     _liked_ids=_liked_ids, _boosted_ids=_boosted_ids,
                     _bookmarked_ids=_bookmarked_ids, _vote_map=_vote_map,
                     _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map,
-                    _booster_map=_booster_map, _mentioned_users_map=_mentioned_users_map,
+                    _mentioned_users_map=_mentioned_users_map,
                     _skip_emojis=True,
                 ) if post and not post.is_deleted and _can_view(post, user, s) else None,
                 "metadata": meta,
@@ -959,15 +951,10 @@ def api_boost_post(request: Request, post_id: int):
             try:
                 _boosted_json = _user_json(user)
                 _boosts_count = s.query(Boost).filter_by(post_id=post_id).count()
-                _all_boosters = []
-                for b in s.query(Boost).filter(Boost.post_id == post_id).order_by(Boost.created_at.desc()).all():
-                    bu = s.query(User).get(b.user_id)
-                    if bu:
-                        _all_boosters.append(_user_json(bu))
                 broadcast_post({
                     "id": post.id, "type": "update",
                     "boosts_count": _boosts_count,
-                    "boosted_by": _all_boosters,
+                    "boosted_by": [_boosted_json],
                 }, post.author_id, post.visibility or "public")
             except Exception as e:
                 logger.error("Failed to broadcast boost update: %s", e, exc_info=True)
@@ -1099,15 +1086,10 @@ def api_unboost_post(request: Request, post_id: int):
             if post.author_id != user.id:
                 broadcast_refresh_notifs(post.author_id)
             try:
-                _updated_boosters = []
-                for b in s.query(Boost).filter(Boost.post_id == post_id).order_by(Boost.created_at.desc()).all():
-                    bu = s.query(User).get(b.user_id)
-                    if bu:
-                        _updated_boosters.append(_user_json(bu))
                 broadcast_post({
                     "id": post_id, "type": "update",
                     "boosts_count": remaining,
-                    "boosted_by": _updated_boosters,
+                    "boosted_by": [],
                 }, post.author_id, post.visibility or "public")
             except Exception as e:
                 logger.error("Failed to broadcast unboost update: %s", e, exc_info=True)
