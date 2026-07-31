@@ -5,7 +5,7 @@ import httpx
 from typing import List
 from urllib.parse import urlparse
 
-from sqlalchemy import desc, or_, and_, func
+from sqlalchemy import desc, except_, or_, and_, func
 from sqlalchemy.orm import selectinload, Session, Load
 
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark
@@ -42,16 +42,11 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
 
     _visible_user_ids = {user.id} if user else set()
     visibility = ['mention', 'followers', 'home', 'public']
-    _local_public_ids = None
     if tl_type == 'home' and _following_ids:
         _visible_user_ids.update(_following_ids)
     elif tl_type == 'social':
         if _following_ids:
             _visible_user_ids.update(_following_ids)
-        if _local_ids:
-            _local_public_ids = _local_ids - _visible_user_ids
-            if not _local_public_ids:
-                _local_public_ids = None
     elif tl_type == 'local' and _local_ids:
         _visible_user_ids.update(_local_ids)
         visibility = ['public']
@@ -63,72 +58,26 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     fetch_size = limit + 20
     posts = []
 
-    if tl_type == 'social' and _local_public_ids:
-        page_offset = offset
-        while len(posts) < limit + 1:
-            q = session.query(Post).options(*_base_opts).filter(
-                Post.is_deleted == False,
-            )
-            conditions = []
-            if _visible_user_ids:
-                conditions.append(
-                    and_(Post.author_id.in_(_visible_user_ids), Post.visibility.in_(visibility))
-                )
-            if _local_public_ids:
-                conditions.append(
-                    and_(Post.author_id.in_(_local_public_ids), Post.visibility == 'public')
-                )
-            if not conditions:
-                break
-            q = q.filter(or_(*conditions)).filter(
-                or_(
-                    Post.parent == None,
-                    Post.parent.has(Post.author_id.in_(_visible_user_ids | _local_public_ids))
-                )
-            ).order_by(desc(Post.created_at)).offset(page_offset).limit(fetch_size)
-            batch = q.all()
-            batch = [
-                p for p in batch
-                if not (
-                    p.visibility == "mention" and p.is_dm
-                    and p.author_id != user_id and _local_ids
-                    and p.author_id in _local_ids
-                    and user_id not in (p.mentioned_user_ids or [])
-                )
-            ]
-            if not batch:
-                break
-            batch_size = len(batch)
-            if user:
-                batch = _timeline_filter(batch, session, user, tl_type, _following_ids, filter_ctx=filter_ctx)
-            needed = limit + 1 - len(posts)
-            posts.extend(batch[:needed])
-            if batch_size < fetch_size:
-                break
-            page_offset += fetch_size
-        has_more = len(posts) > limit
-        posts = posts[:limit]
+    page_offset = offset
+    while len(posts) < limit + 1:
+        batch = query_feed_posts(
+            tl_type,
+            _visible_user_ids, _local_ids, user_id, visibility,
+            session, _base_opts, fetch_size, offset=page_offset
+        )
+        if not batch:
+            break
+        batch_size = len(batch)
+        if user:
+            batch = _timeline_filter(batch, session, user, tl_type, _following_ids, filter_ctx=filter_ctx)
+        needed = limit + 1 - len(posts)
+        posts.extend(batch[:needed])
+        if batch_size < fetch_size:
+            break
+        page_offset += fetch_size
 
-    else:
-        page_offset = offset
-        while len(posts) < limit + 1:
-            batch = query_feed_posts(
-                _visible_user_ids, _local_ids, user_id, visibility,
-                session, _base_opts, fetch_size, offset=page_offset
-            )
-            if not batch:
-                break
-            batch_size = len(batch)
-            if user:
-                batch = _timeline_filter(batch, session, user, tl_type, _following_ids, filter_ctx=filter_ctx)
-            needed = limit + 1 - len(posts)
-            posts.extend(batch[:needed])
-            if batch_size < fetch_size:
-                break
-            page_offset += fetch_size
-
-        has_more = len(posts) > limit
-        posts = posts[:limit]
+    has_more = len(posts) > limit
+    posts = posts[:limit]
 
     post_ids = [p.id for p in posts]
     for _p in posts:
@@ -231,6 +180,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
 
 
 def query_feed_posts(
+        tl_type: str,
         visible_user_ids: set,
         local_ids: set,
         user_id: int,
@@ -240,33 +190,73 @@ def query_feed_posts(
         fetch_size: int,
         offset: int):
 
-    if visible_user_ids is not None:
-        visible_posts = session.query(Post).options(*base_opts).filter(
-            Post.is_deleted == False,
-            Post.visibility.in_(visibility),
-            Post.author_id.in_(visible_user_ids),
-            or_(
-                Post.parent == None,
-                Post.parent.has(Post.author_id.in_(visible_user_ids))
-            ),
-        ).order_by(desc(Post.created_at)).offset(offset).limit(fetch_size).all()
-    else:
-        visible_posts = session.query(Post).options(*base_opts).filter(
-            Post.is_deleted == False,
-            Post.visibility.in_(visibility),
-        ).order_by(desc(Post.created_at)).offset(offset).limit(fetch_size).all()
+    posts = []
+    if tl_type != 'social':
+        if visible_user_ids is not None:
+            visible_posts = session.query(Post).options(*base_opts).filter(
+                Post.is_deleted == False,
+                Post.visibility.in_(visibility),
+                Post.author_id.in_(visible_user_ids),
+                or_(
+                    Post.parent == None,
+                    Post.parent.has(Post.author_id.in_(visible_user_ids))
+                ),
+            ).order_by(desc(Post.created_at)).offset(offset).limit(fetch_size).all()
+        else:
+            visible_posts = session.query(Post).options(*base_opts).filter(
+                Post.is_deleted == False,
+                Post.visibility.in_(visibility),
+            ).order_by(desc(Post.created_at)).offset(offset).limit(fetch_size).all()
 
-    posts = [
-        p for p in visible_posts
-        if not (
-            p.visibility == "mention"
-            and p.is_dm
-            and p.author_id != user_id
-            and local_ids
-            and p.author_id in local_ids
-            and user_id not in (p.mentioned_user_ids or [])
+        posts = [
+            p for p in visible_posts
+            if not (
+                p.visibility == "mention"
+                and p.is_dm
+                and p.author_id != user_id
+                and local_ids
+                and p.author_id in local_ids
+                and user_id not in (p.mentioned_user_ids or [])
+            )
+        ]
+    else:
+        local_public_ids = (local_ids or set()) - (visible_user_ids or set())
+        q = session.query(Post).options(*base_opts).filter(
+            Post.is_deleted == False,
         )
-    ]
+        conditions = []
+        if visible_user_ids:
+            conditions.append(
+                and_(Post.author_id.in_(visible_user_ids), Post.visibility.in_(visibility))
+            )
+        if local_public_ids:
+            conditions.append(
+                and_(Post.author_id.in_(local_public_ids), Post.visibility == 'public')
+            )
+        if not conditions:
+            return []
+
+        allowed_ids = visible_user_ids | local_public_ids
+        try:
+            q = q.filter(or_(*conditions)).filter(
+                or_(
+                    Post.parent == None,
+                    Post.parent.has(Post.author_id.in_(allowed_ids))
+                )
+            ).order_by(desc(Post.created_at)).offset(offset).limit(fetch_size)
+            posts = q.all()
+        except Exception as e:
+            logging.error(f'No post in social feed: {e}')
+
+        posts = [
+            p for p in posts
+            if not (
+                p.visibility == "mention" and p.is_dm
+                and p.author_id != user_id and local_ids
+                and p.author_id in local_ids
+                and user_id not in (p.mentioned_user_ids or [])
+            )
+        ]
 
     return posts
 
