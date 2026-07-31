@@ -212,8 +212,13 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         content
     )
 
-    # 상대 경로를 절대 URL로 변환 (Mastodon 앱 호환)
-    content = re.sub(r'href="/', f'href="{BASE_URL}/', content)
+    # Mastodon 포맷으로 멘션 변환
+    def _fmt_mention(m):
+        tag = m.group(0)
+        tag = re.sub(r'href="/@', f'href="{BASE_URL}/@', tag)
+        tag = re.sub(r'>@([^<]+)</a>', r'>@<span>\1</span></a>', tag)
+        return f'<span class="h-card" translate="no">{tag}</span>'
+    content = re.sub(r'<a\b[^>]*?\bclass="[^"]*\bmention\b[^"]*"[^>]*?>@[^<]+?</a>', _fmt_mention, content)
 
     shortcode_pattern = re.compile(r':(\w+):')
     used_shortcodes = set(shortcode_pattern.findall(content))
