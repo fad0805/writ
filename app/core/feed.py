@@ -1,11 +1,12 @@
 """Feed/timeline query and federation broadcast logic."""
+import copy
 import re
 import logging
 import httpx
-from typing import List
+from typing import List, TypedDict
 from urllib.parse import urlparse
 
-from sqlalchemy import desc, except_, or_, and_, func
+from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.orm import selectinload, Session, Load
 
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark
@@ -17,6 +18,27 @@ from app.utils.emoji import _load_emojis
 from app.utils.filter import _load_user_filters, _timeline_filter
 
 logger = logging.getLogger(__name__)
+
+
+class PostMetadata(TypedDict):
+    liked_ids: set[int]
+    my_reaction_map: dict[int, str]
+    boosted_ids: set[int]
+    bookmarked_ids: set[int]
+    vote_map: dict[int, int]
+    reactions_map: dict[int, dict[str, int]]
+    mentioned_users_map: dict[int, list[str]]
+
+
+_EMPTY_POST_METADATA: PostMetadata = {
+    "liked_ids": set(),
+    "my_reaction_map": {},
+    "boosted_ids": set(),
+    "bookmarked_ids": set(),
+    "vote_map": {},
+    "reactions_map": {},
+    "mentioned_users_map": {},
+}
 
 
 def _get_feed(user, tl_type, session, limit=10, offset=0):
@@ -84,68 +106,22 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         if _p.boost_of_id and _p.boost_of_id not in post_ids:
             post_ids.append(_p.boost_of_id)
 
-    if user and post_ids:
-        _all_likes = session.query(Like).filter(
-            Like.user_id == user.id, Like.post_id.in_(post_ids)
-        ).all()
-        _liked_ids = {l.post_id for l in _all_likes}
-        _my_reaction_map = {l.post_id: l.reaction for l in _all_likes if l.reaction}
-
-        _boosted_ids = {b.post_id for b in session.query(Boost.post_id).filter(
-            Boost.user_id == user.id, Boost.post_id.in_(post_ids)
-        ).all()}
-
-        _bookmarked_ids = {bm.post_id for bm in session.query(Bookmark.post_id).filter(
-            Bookmark.user_id == user.id, Bookmark.post_id.in_(post_ids)
-        ).all()}
-
-        _vote_map = {v.post_id: v.option_index for v in session.query(Vote).filter(
-            Vote.user_id == user.id, Vote.post_id.in_(post_ids)
-        ).all()}
-
-        _reactions_map = {}
-        _default_react = "★"
-        _reaction_rows = session.query(
-            Like.post_id, func.coalesce(Like.reaction, _default_react), func.count(Like.id)
-        ).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all()
-        for pid, react, cnt in _reaction_rows:
-            if pid not in _reactions_map:
-                _reactions_map[pid] = {}
-            _reactions_map[pid][react] = cnt
-        all_mentioned_ids = set()
-
-        for p in posts:
-            if p.mentioned_user_ids:
-                all_mentioned_ids.update(p.mentioned_user_ids)
-        _mentioned_users_map = {}
-        if all_mentioned_ids:
-            _mentioned_users = {}
-            for _mu in session.query(User).filter(User.id.in_(all_mentioned_ids)).all():
-                if _mu.is_remote and _mu.remote_url:
-                    _name = _mu.username.split("@")[0]
-                    _domain = urlparse(_mu.remote_url).hostname or ""
-                    _mentioned_users[_mu.id] = f"{_name}@{_domain}"
-                else:
-                    _mentioned_users[_mu.id] = _mu.username
-            for p in posts:
-                if p.mentioned_user_ids:
-                    _mentioned_users_map[p.id] = [_mentioned_users.get(mid, "?") for mid in p.mentioned_user_ids if mid in _mentioned_users]
-                else:
-                    _mentioned_users_map[p.id] = []
-
-    else:
-        _liked_ids = _boosted_ids = _bookmarked_ids = set()
-        _vote_map = _my_reaction_map = _reactions_map = _mentioned_users_map = {}
+    posts_metadata = _load_post_metadata(session, user, posts)
 
     _timeline_emojis = [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)]
 
-    feed_dicts = [_post_json(p, session, user, tl_type,
-                             _liked_ids=_liked_ids, _boosted_ids=_boosted_ids,
-                             _bookmarked_ids=_bookmarked_ids, _vote_map=_vote_map,
-                             _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map,
-                             _mentioned_users_map=_mentioned_users_map,
-                             _skip_emojis=True)
-                 for p in posts]
+    feed_dicts = [
+        _post_json(p, session, user, tl_type,
+             _liked_ids= posts_metadata.get("liked_ids"),
+             _boosted_ids= posts_metadata.get("boosted_ids"),
+             _bookmarked_ids= posts_metadata.get("bookmarked_ids"),
+             _vote_map= posts_metadata.get("vote_map"),
+             _my_reaction_map= posts_metadata.get("my_reaction_map"),
+             _reactions_map= posts_metadata.get("reactions_map"),
+             _mentioned_users_map= posts_metadata.get("mentioned_users_map"),
+             _skip_emojis=True)
+         for p in posts
+    ]
 
     # Aggregate boost pointers: group by canonical post ID, merge boosters
     groups: dict[int, dict] = {}
@@ -259,6 +235,89 @@ def query_feed_posts(
         ]
 
     return posts
+
+
+def _load_post_metadata(
+        session: Session, user: User, posts: list[Post]) -> PostMetadata:
+    if not posts or user is None:
+        return copy.deepcopy(_EMPTY_POST_METADATA)
+
+    post_ids = {p.id for p in posts}
+    post_ids.update(
+        p.boost_of_id
+        for p in posts
+        if p.boost_of_id
+    )
+
+    _all_likes = session.query(Like).filter(
+        Like.user_id == user.id, Like.post_id.in_(post_ids)
+    ).all()
+
+    _liked_ids = {l.post_id for l in _all_likes}
+    _my_reaction_map = {l.post_id: l.reaction for l in _all_likes if l.reaction}
+
+    _boosted_ids = {b.post_id for b in session.query(Boost.post_id).filter(
+        Boost.user_id == user.id, Boost.post_id.in_(post_ids)
+    ).all()}
+
+    _bookmarked_ids = {bm.post_id for bm in session.query(Bookmark.post_id).filter(
+        Bookmark.user_id == user.id, Bookmark.post_id.in_(post_ids)
+    ).all()}
+
+    _vote_map = {v.post_id: v.option_index for v in session.query(Vote).filter(
+        Vote.user_id == user.id, Vote.post_id.in_(post_ids)
+    ).all()}
+
+    _reactions_map: dict[int, dict[str, int]] = {}
+    _default_react = "★"
+
+    reaction_expr = func.coalesce(Like.reaction, _default_react)
+    _reaction_rows = (
+        session.query(
+            Like.post_id,
+            reaction_expr,
+            func.count(Like.id)
+        )
+        .filter(Like.post_id.in_(post_ids))
+        .group_by(Like.post_id, reaction_expr)
+        .order_by(Like.post_id, func.min(Like.id)).all()
+    )
+    for pid, react, cnt in _reaction_rows:
+        _reactions_map.setdefault(pid, {})[react] = cnt
+
+    all_mentioned_ids = {
+        uid
+        for p in posts
+        for uid in (p.mentioned_user_ids or [])
+    }
+
+    _mentioned_users_map: dict[int, list[str]] = {}
+    if all_mentioned_ids:
+        users = session.query(User).filter(User.id.in_(all_mentioned_ids)).all()
+        _mentioned_users = {
+            u.id: (
+                f"{u.username.split('@')[0]}@{urlparse(u.remote_url).hostname}"
+                if u.is_remote and u.remote_url
+                else u.username
+            )
+            for u in users
+        }
+        for p in posts:
+            _mentioned_users_map[p.id] = [
+                _mentioned_users[mid]
+                for mid in (p.mentioned_user_ids or [])
+                if mid in _mentioned_users
+            ]
+
+    return {
+        "liked_ids": _liked_ids,
+        "my_reaction_map": _my_reaction_map,
+        "boosted_ids": _boosted_ids,
+        "bookmarked_ids": _bookmarked_ids,
+        "vote_map": _vote_map,
+        "reactions_map": _reactions_map,
+        "mentioned_users_map": _mentioned_users_map
+    }
 
 
 def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
