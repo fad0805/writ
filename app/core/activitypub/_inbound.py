@@ -1206,7 +1206,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                     "is_dm": False, "is_sensitive": getattr(post, "is_sensitive", False) or False,
                     "ap_id": post.ap_id or "",
                     "reply_context": None,
-                    "boosted_by": _safe_user_json(_actor),
+                    "boosted_by": [_safe_user_json(_actor)] if _safe_user_json(_actor) else [],
                     "boost_of_id": post.id,
                     "_boost_pointer_id": boost_post.id,
                     "media_attachments": (post.media_attachments or []) if hasattr(post, 'media_attachments') else [],
