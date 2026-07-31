@@ -229,8 +229,9 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             _booster_user_ids = {b.user_id for b in _boost_rows}
             _booster_users = {u.id: u for u in s.query(User).filter(User.id.in_(_booster_user_ids)).all()} if _booster_user_ids else {}
             for b in _boost_rows:
-                if b.post_id not in _booster_map:
-                    _booster_map[b.post_id] = _booster_users.get(b.user_id)
+                _bu = _booster_users.get(b.user_id)
+                if _bu:
+                    _booster_map.setdefault(b.post_id, []).append(_bu)
             all_mentioned_ids = set()
             _posts_for_mentions = s.query(Post).filter(Post.id.in_(_all_post_ids)).all()
             for pp in _posts_for_mentions:

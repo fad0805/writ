@@ -164,11 +164,11 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
                 _my_reaction_map[l.post_id] = l.reaction
 
             for bid, buid in s.query(Boost.post_id, Boost.user_id).filter(Boost.post_id.in_(notif_post_ids)).order_by(desc(Boost.created_at)).all():
-                if bid not in _booster_map:
-                    _booster_map[bid] = buid
+                _booster_map.setdefault(bid, []).append(buid)
             if _booster_map:
-                _booster_users = {u.id: u for u in s.query(User).filter(User.id.in_(set(_booster_map.values()))).all()}
-                _booster_map = {pid: _booster_users.get(uid) for pid, uid in _booster_map.items()}
+                _all_uids = {uid for uids in _booster_map.values() for uid in uids}
+                _booster_users = {u.id: u for u in s.query(User).filter(User.id.in_(_all_uids)).all()}
+                _booster_map = {pid: [_booster_users.get(uid) for uid in uids if _booster_users.get(uid)] for pid, uids in _booster_map.items()}
 
             for pid, react, cnt in s.query(Like.post_id, func.coalesce(Like.reaction, "★"), func.count(Like.id)).filter(Like.post_id.in_(notif_post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all():
                 if pid not in _reactions_map:
