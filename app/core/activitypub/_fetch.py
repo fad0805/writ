@@ -108,6 +108,91 @@ def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> 
     return 0
 
 
+def _fetch_remote_featured(actor_data: dict, sign_as: Optional[User] = None):
+    """Fetch a remote user's featured (pinned) collection.
+
+    Returns a list of pinned post AP IDs, or None if the actor exposes no
+    featured collection or it could not be fetched.
+    """
+    featured_url = ""
+    feat = actor_data.get("featured")
+    if isinstance(feat, str):
+        featured_url = feat
+    elif isinstance(feat, dict):
+        featured_url = feat.get("id", "")
+    if not featured_url:
+        feat = actor_data.get("featuredCollection")
+        if isinstance(feat, str):
+            featured_url = feat
+        elif isinstance(feat, dict):
+            featured_url = feat.get("id", "")
+    if not featured_url:
+        return None
+    try:
+        headers = {"Accept": "application/activity+json, application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"", "User-Agent": WRIT_USER_AGENT}
+        if sign_as:
+            parsed = urlparse(featured_url)
+            date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+            created = int(time.time())
+            ss = f"(request-target): get {parsed.path}\nhost: {parsed.netloc}\ndate: {date}\n(created): {created}"
+            priv = get_private_key(sign_as, SECRET_KEY)
+            sig = sign_string(ss, priv)
+            headers["Signature"] = f'keyId="{sign_as.actor_uri()}#main-key",algorithm="hs2019",created="{created}",headers="(request-target) host date (created)",signature="{sig}"'
+            headers["Date"] = date
+            headers["Host"] = parsed.netloc
+        resp = _validated_get(featured_url, headers=headers, timeout=10)
+        if resp is None or resp.status_code != 200:
+            return None
+        data = resp.json()
+    except Exception:
+        return None
+    items = data.get("orderedItems") or data.get("items") or []
+    if isinstance(items, dict):
+        items = [items]
+    if not isinstance(items, list):
+        return None
+    pinned = []
+    for item in items:
+        if isinstance(item, str):
+            if item:
+                pinned.append(item)
+        elif isinstance(item, dict):
+            itype = item.get("type", "")
+            if itype in ("OrderedCollection", "Collection"):
+                continue
+            pid = item.get("id", "")
+            if pid:
+                pinned.append(pid)
+    return pinned
+
+
+def _sync_remote_pinned_posts(user_id: int, pinned_ap_ids: list, sign_as: Optional[User] = None):
+    """Resolve remote featured (pinned) AP IDs to local Post IDs and store on the user.
+
+    Empty pinned_ap_ids clears existing pins (the remote user unpinned everything).
+    """
+    with get_session() as session:
+        user = session.query(User).get(user_id)
+        if not user or not user.is_remote:
+            return
+        signer = sign_as or _get_instance_actor(session)
+        new_pinned = []
+        for ap_id in pinned_ap_ids:
+            post = session.query(Post).filter_by(ap_id=ap_id).first()
+            if post and not post.is_deleted:
+                new_pinned.append(post.id)
+                continue
+            if signer:
+                try:
+                    fetched = _fetch_remote_post(ap_id, signer, session)
+                    if fetched:
+                        new_pinned.append(fetched.id)
+                except Exception as e:
+                    logger.warning("[PINNED] failed to fetch %s: %s", ap_id, e)
+        user.pinned_posts = new_pinned
+        session.commit()
+
+
 def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optional[User] = None) -> Optional[User]:
     _actor_domain = urlparse(actor_url).hostname or ""
     _own_domain = urlparse(BASE_URL).hostname or ""
@@ -232,6 +317,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
     _dl_header = _save_remote_image(header_url, "headers", base_username_clean) if header_url else ""
     _dl_followers = _fetch_remote_count(data.get("followers", ""), sign_as)
     _dl_following = _fetch_remote_count(data.get("following", ""), sign_as)
+    _pinned_ap_ids = _fetch_remote_featured(data, sign_as)
 
     with get_session() as session:
         existing = session.query(User).filter_by(remote_url=actor_url).first()
@@ -251,6 +337,8 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
                 existing.header_image = _dl_header
             existing.custom_fields = _extract_custom_fields(data.get("attachment", []))
             session.commit()
+            if _pinned_ap_ids is not None:
+                _sync_remote_pinned_posts(existing.id, _pinned_ap_ids, sign_as)
             # Process emoji tags AFTER session closes to avoid holding connection during HTTP
             with get_session() as emoji_s:
                 _process_emoji_tags(data.get("tag", []), emoji_s)
@@ -271,6 +359,8 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
                 by_username.header_image = _dl_header
             by_username.custom_fields = _extract_custom_fields(data.get("attachment", []))
             session.commit()
+            if _pinned_ap_ids is not None:
+                _sync_remote_pinned_posts(by_username.id, _pinned_ap_ids, sign_as)
             with get_session() as emoji_s:
                 _process_emoji_tags(data.get("tag", []), emoji_s)
                 emoji_s.commit()
@@ -311,6 +401,8 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             _process_emoji_tags(data.get("tag", []), emoji_s)
             emoji_s.commit()
         session.commit()
+        if _pinned_ap_ids is not None:
+            _sync_remote_pinned_posts(user.id, _pinned_ap_ids, sign_as)
         return user
 
 

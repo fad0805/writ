@@ -7,7 +7,7 @@ from urllib.parse import urlparse, urljoin
 
 import httpx
 
-from app.config.settings import BASE_URL, DOMAIN
+from app.config.settings import BASE_URL, DOMAIN, SECRET_KEY
 from app.db.database import get_session
 from app.models import ServerSetting, FederationBlock, AllowedServer, User
 from app.utils.crypto import generate_keypair, encrypt_key
