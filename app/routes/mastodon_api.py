@@ -215,8 +215,16 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
     # Mastodon 포맷으로 멘션 변환
     def _fmt_mention(m):
         tag = m.group(0)
-        # 1. BASE_URL 주소로 변환
-        tag = re.sub(r'href="/@', f'href="{BASE_URL}/@', tag)
+        # 0. 멘션 대상 핸들 추출 (@username 또는 @username@domain)
+        _inner = re.search(r'href="[^"]*?/@([^/"]+)', tag)
+        _uname = _inner.group(1) if _inner else None
+        _mu = db.query(User).filter_by(username=_uname).first() if _uname else None
+        # 1. 원격 유저는 원격 웹 프로필 주소로, 로컬 유저는 BASE_URL 주소로 변환
+        if _mu and _mu.is_remote:
+            _profile = _mu.profile_url or _mu.remote_url or f"{BASE_URL}/@{_uname}"
+            tag = re.sub(r'href="[^"]*"', f'href="{_profile}"', tag, count=1)
+        else:
+            tag = re.sub(r'href="/@', f'href="{BASE_URL}/@', tag)
         # 2. 멘션 태그 내부 구조 정리
         tag = re.sub(r'>@([^<]+)</a>', r'>@<span>\1</span></a>', tag)
         # 3. 여기서 닫히는 괄호(>) 바로 앞에 rel 속성을 안전하게 추가!
