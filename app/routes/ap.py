@@ -98,7 +98,7 @@ def user_actor(request: Request, username: str):
             return JSONResponse(content=to_ap_actor(user),
                                 media_type="application/activity+json")
 
-        return RedirectResponse(url=f"{BASE_URL}/users/{username}")
+        return RedirectResponse(url=f"{BASE_URL}/@{username}")
     finally:
         session.close()
 
