@@ -215,12 +215,18 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
     # Mastodon 포맷으로 멘션 변환
     def _fmt_mention(m):
         tag = m.group(0)
+        # 1. BASE_URL 주소로 변환
         tag = re.sub(r'href="/@', f'href="{BASE_URL}/@', tag)
+        # 2. 멘션 태그 내부 구조 정리
         tag = re.sub(r'>@([^<]+)</a>', r'>@<span>\1</span></a>', tag)
+        # 3. 여기서 닫히는 괄호(>) 바로 앞에 rel 속성을 안전하게 추가!
+        tag = re.sub(r'(\s*?)>', r' rel="nofollow noopener">', tag, count=1)
         return f'<span class="h-card" translate="no">{tag}</span>'
+
+    # 메인 실행부는 깔끔하게 이거 하나만 호출하면 끝!
     content = re.sub(
-        r'(<a\b[^>]*?\bclass="[^"]*\bmention\b[^"]*"[^>]*?)>',
-        r'\1 rel="nofollow noopener">',
+        r'<a\b[^>]*?\bclass="[^"]*\bmention\b[^"]*"[^>]*?>',
+        _fmt_mention,
         content
     )
 
