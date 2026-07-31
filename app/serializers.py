@@ -49,7 +49,6 @@ def _post_json(p, session, user, tl_type=None,
             if not any(b.get("id") == booster_json["id"] for b in existing_boosted_by if b):
                 existing_boosted_by = list(existing_boosted_by) + [booster_json]
             result["boosted_by"] = existing_boosted_by
-            result["created_at"] = _fmt_dt(p.created_at)
             result["boost_of_id"] = p.boost_of_id
             if user and _boosted_ids is not None:
                 result["i_boosted"] = original.id in _boosted_ids
