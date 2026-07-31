@@ -75,8 +75,6 @@ def _sanitize_html(html: str) -> str:
 
 
 def _finalize_html(soup):
-    for br in list(soup.find_all("br")):
-        br.replace_with("\n")
     for tag in list(soup.find_all(["p", "div"])):
         tag.insert_before("\n")
         tag.insert_after("\n")
@@ -98,6 +96,8 @@ def _serialize_html(soup):
             attrs_str = f" {' '.join(attrs_list)}" if attrs_list else ""
             children_str = "".join(_to_html(c) for c in list(node.children))
             return f"<a{attrs_str}>{children_str}</a>"
+        if node.name == "br":
+            return "<br>"
         if node.name in ("blockquote", "strong", "em", "b", "i", "code", "pre", "del", "span"):
             children_str = "".join(_to_html(c) for c in list(node.children))
             return f"<{node.name}>{children_str}</{node.name}>"
