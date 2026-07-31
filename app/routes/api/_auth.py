@@ -16,7 +16,7 @@ from app.models import User, Notification, BlockedDomain, ServerSetting, LoginSe
 from app.serializers import _user_json
 from app.config.settings import BASE_URL, SECRET_KEY, APP_ENV, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, INITIAL_OWNER_PASSWORD
 from app.db.database import get_session, get_db
-from app.routes.auth import require_auth, require_active_auth, get_current_user, hash_password, verify_password, create_session, get_session_key_from_cookie, delete_session_by_key
+from app.routes.auth import get_current_user, hash_password, verify_password, create_session, get_session_key_from_cookie, delete_session_by_key, _decode_session_token
 from app.utils.crypto import encrypt_key, generate_keypair, generate_csrf_token
 from app.utils.log import log_admin_action
 
@@ -349,7 +349,6 @@ def api_logout(request: Request):
 @auth_router.post("/auth/switch")
 def api_switch_account(request: Request, session_token: str = Form(...)):
     """Accept a stored session token and set it as the active session cookie."""
-    from app.routes.auth import _decode_session_token
     decoded = _decode_session_token(session_token)
     if not decoded:
         raise HTTPException(status_code=401, detail="Invalid session token")

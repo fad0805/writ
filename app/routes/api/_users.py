@@ -1,29 +1,26 @@
 """User profile, search, and media endpoints extracted from _core.py."""
-import os
 import json
 import io
-import re
 import threading
 import logging
 from uuid import uuid4
-from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File
 from PIL import Image, ImageOps
-from sqlalchemy import desc, or_, and_, func, select, text
+from sqlalchemy import desc, or_, func, select, text
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, Tag, CustomEmoji, Report, ServerRule, ServerSetting, UserMute, UserBlock
+from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Novel, UserMute, UserBlock
 from app.serializers import _user_json
-from app.config.settings import BASE_URL
 from app.core.activitypub import _resolve_actor
 from app.db.database import get_session
-from app.routes.auth import require_auth, require_active_auth, get_current_user
-from app.utils.datetime import _fmt_dt
+from app.routes.auth import require_active_auth, get_current_user
 from app.utils.storage import get_storage
 
-from app.routes.api._core import _validate_upload, _can_view, _post_json, _cleanup_avatars, _broadcast_update_actor, MAX_AVATAR_SIZE
+from app.routes.api._core import _post_json, _cleanup_avatars, _broadcast_update_actor
+from app.core.interactions import _can_view
+from app.utils.upload import _validate_upload, MAX_AVATAR_SIZE
 from app.routes.api._series import _novel_json, _apply_latest_activity_order
 
 logger = logging.getLogger("writ.api.users")

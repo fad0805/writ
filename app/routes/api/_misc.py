@@ -11,17 +11,16 @@ from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
-from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import load_pem_public_key, Encoding, PublicFormat
 from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File
 from fastapi.responses import JSONResponse, Response, FileResponse
 from PIL import Image
-from sqlalchemy import desc, or_, func
+from sqlalchemy import desc, or_
 
 from app.models import User, CustomEmoji, ServerSetting, PushSubscription, LoginSession
-from app.config.settings import BASE_URL, S3_ENABLED, APP_ENV, SESSION_EXPIRE_DAYS
-from app.core.push import get_vapid_keys, _get_vapid_key
+from app.config.settings import BASE_URL, S3_ENABLED, SESSION_EXPIRE_DAYS
+from app.core.push import _get_vapid_key
 from app.db.database import get_session
 from app.routes.auth import require_auth, require_active_auth, get_session_key_from_cookie
 from app.utils.emoji import EMOJI_DIR, _refresh_emoji_cache_forcibly, _emoji_url

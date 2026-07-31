@@ -10,22 +10,20 @@ from datetime import datetime
 from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File
 from PIL import Image, ImageOps
 from sqlalchemy import desc, func
-from sqlalchemy.orm import Session
 
 from app.models import User, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Post, Tag, Notification, EpisodeView
 from app.serializers import _user_json
 from app.config.settings import BASE_URL
-from app.core.activitypub import broadcast_to_followers, _post_to_inbox
+from app.core.activitypub import broadcast_to_followers
 from app.utils.to_ap_serializer import to_ap_note
 from app.core.push import send_push_to_user
 from app.core.timeline_stream import broadcast_notif_sound
 from app.db.database import get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
+from app.utils.upload import _validate_upload, MAX_AUDIO_SIZE
 from app.utils.datetime import _fmt_dt
 from app.utils.log import log_admin_action
 from app.utils.storage import get_storage
-
-from app.routes.api._core import _validate_upload, MAX_AUDIO_SIZE
 
 logger = logging.getLogger("writ.api.series")
 

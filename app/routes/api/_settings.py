@@ -1,35 +1,29 @@
 """Settings, account migration, import/export, and media upload endpoints extracted from _core.py."""
-import os
 import re
 import csv
 import json
 import io
-import secrets
 import logging
 import threading
 import zipfile
 from uuid import uuid4
-from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Request, Form, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from PIL import Image, ImageOps
-from sqlalchemy import desc, or_, and_, func
-from sqlalchemy.orm import selectinload
+from sqlalchemy import or_
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, EpisodeDraft, SeriesFollow, SeriesNotice, Tag, CustomEmoji, ProfileNote, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PushSubscription, LoginSession
-from app.serializers import _user_json
-from app.config.settings import BASE_URL, SECRET_KEY
+from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, SeriesFollow, SeriesNotice, BlockedDomain, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PushSubscription
+from app.config.settings import BASE_URL
 from app.core.activitypub import _post_to_inbox
 from app.core.timeline_stream import broadcast_refresh_notifs
 from app.db.database import get_session
 from app.routes.auth import require_auth, require_active_auth, hash_password, verify_password
-from app.utils.datetime import _fmt_dt
 from app.utils.log import log_admin_action
 from app.utils.storage import get_storage
 
-from app.routes.api._core import _validate_upload, MAX_IMAGE_SIZE, MAX_VIDEO_SIZE
+from app.utils.upload import _validate_upload, MAX_IMAGE_SIZE
 from app.routes.api._auth import _send_verification_email
 
 logger = logging.getLogger("writ.api.settings")
