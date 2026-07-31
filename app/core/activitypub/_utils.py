@@ -55,13 +55,6 @@ def _federation_allowed(domain: str) -> bool:
             return False
 
 
-def _html_to_newlines(raw_html: str) -> str:
-    """Convert HTML line breaks/paragraphs to \\n for consistent storage."""
-    new_html = re.sub(r'<br\s*/?>', '\n', raw_html, flags=re.I)
-    new_html = re.sub(r'</?p>', '\n', new_html, flags=re.I)
-    return new_html.strip('\n')
-
-
 def _validate_url(url: str) -> bool:
     """Reject URLs pointing to private/internal IPs (SSRF protection)."""
     parsed = urlparse(url)

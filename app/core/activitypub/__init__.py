@@ -8,7 +8,6 @@ from app.core.activitypub._utils import (
     _safe_fetch,
     _validated_get,
     _federation_allowed,
-    _html_to_newlines,
     _parse_username_from_url,
     _get_instance_actor,
 )

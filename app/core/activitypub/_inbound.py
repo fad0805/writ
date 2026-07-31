@@ -22,7 +22,7 @@ from app.utils.emoji import _refresh_emoji_cache_forcibly, _load_emojis
 from app.utils.crypto import generate_keypair
 from app.utils.content_parser import _sanitize_html, process_post_content
 from app.core.activitypub._utils import (
-    _validated_get, _federation_allowed, _html_to_newlines,
+    _validated_get, _federation_allowed,
     _parse_username_from_url, _get_instance_actor, WRIT_USER_AGENT,
 )
 from app.core.activitypub._media import _cache_remote_media
@@ -268,7 +268,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if len(raw_content) > 65536:
             raw_content = raw_content[:65536]
         post_id = obj.get("id", "")
-        content = _html_to_newlines(process_post_content(_sanitize_html(raw_content), obj))
+        content = process_post_content(_sanitize_html(raw_content), obj)
         summary = obj.get("summary", "")
         in_reply_to = obj.get("inReplyTo", "")
 
@@ -1501,7 +1501,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                         if isinstance(cm, dict) and cm:
                             new_content = next(iter(cm.values()), "")
                     if new_content:
-                        post.content = _html_to_newlines(process_post_content(_sanitize_html(new_content), post))
+                        post.content = process_post_content(_sanitize_html(new_content), post)
                     if "summary" in object_data:
                         post.summary = object_data.get("summary", "")
                     # Update poll data

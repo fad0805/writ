@@ -21,7 +21,7 @@ from app.utils.crypto import generate_keypair, sign_string, encrypt_key, get_pri
 from app.utils.content_parser import _sanitize_html, process_post_content
 from app.core.activitypub._utils import (
     _validate_url, _safe_fetch, _validated_get, _federation_allowed,
-    _get_instance_actor, _parse_username_from_url, _html_to_newlines,
+    _get_instance_actor, _parse_username_from_url,
     WRIT_USER_AGENT,
 )
 from app.core.activitypub._media import _save_remote_image, _save_remote_avatar, _cache_remote_media
@@ -453,7 +453,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
             raw_content = next(iter(cm.values()), "")
     if len(raw_content) > 65536:
         raw_content = raw_content[:65536]
-    content = _html_to_newlines(process_post_content(_sanitize_html(raw_content), obj))
+    content = process_post_content(_sanitize_html(raw_content), obj)
     summary = obj.get("summary", "")
 
     to = obj.get("to", [])
