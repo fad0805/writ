@@ -55,14 +55,10 @@ export default function KeyboardShortcuts() {
       return;
     }
 
-    if (e.key === "n" && user) {
-      const inPostForm = document.activeElement?.closest(".post-form") != null;
-      const inModal = document.querySelector(".reply-modal-backdrop.active") != null;
-      if (!inPostForm && !inModal) {
-        e.preventDefault();
-        setShowPostModal(true);
-        return;
-      }
+    if (e.key === "n" && user && !isEditing) {
+      e.preventDefault();
+      setShowPostModal(true);
+      return;
     }
 
     if (e.key === "s" && !isEditing) {
