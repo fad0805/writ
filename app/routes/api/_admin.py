@@ -2,7 +2,6 @@
 
 import os
 import re
-import io
 import json
 import logging
 import secrets
@@ -12,14 +11,13 @@ from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import APIRouter, Request, Form, HTTPException, Query, Depends
-from PIL import Image
-from sqlalchemy import desc, or_, and_, func, String
+from fastapi import APIRouter, Request, Form, HTTPException, Query
+from sqlalchemy import desc, or_, func, String
 from sqlalchemy.orm import joinedload, selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, Tag, CustomEmoji, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog
+from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog
 from app.serializers import _user_json
-from app.config.settings import BASE_URL, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
+from app.config.settings import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
 from app.core.activitypub import _resolve_actor, _send_flag, _fetch_remote_count
 from app.core.timeline_stream import broadcast_refresh_notifs
 from app.db.database import get_session
@@ -28,7 +26,7 @@ from app.utils.datetime import _fmt_dt
 from app.utils.log import log_admin_action
 from app.utils.storage import get_storage
 
-from app.routes.api._misc import _read_storage_file, _save_pwa_icons, _save_favicon, _delete_favicon, _delete_pwa_icons
+from app.routes.api._misc import _save_pwa_icons, _save_favicon, _delete_favicon, _delete_pwa_icons
 from app.routes.api._series import _novel_json, _apply_latest_activity_order
 
 logger = logging.getLogger(__name__)
