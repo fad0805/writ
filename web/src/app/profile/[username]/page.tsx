@@ -210,7 +210,7 @@ export default function ProfilePage() {
                   </>
                 )}
                 {!isMine && (
-                  <div className="profile-corner-mute-block" style={{ display: "flex", gap: 4, marginTop: 6 }}>
+                  <div className="profile-corner-mute-block" style={{ display: "flex", gap: 4 }}>
                     {isMutedUser ? (
                       <button className="action-btn btn-action-sm" style={{ color: "var(--danger)", fontSize: "0.75em" }}
                         onClick={async (e) => {
