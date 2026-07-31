@@ -61,7 +61,9 @@ export default function PostByNumberPage() {
       const number = Array.isArray(params.number) ? params.number[0] : params.number;
       if (!username || !number) return;
       const data = await fetch(`/api/by-number/${username}/${number}`, { credentials: "include" });
+      if (!data.ok) { setPost(null); return; }
       const p = await data.json();
+      if (!p?.id) { setPost(null); return; }
       const full = await api.getPost(p.id, 0, 50, 0);
       setPost(full);
       setAncestors(full.ancestors || []);

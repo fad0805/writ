@@ -96,8 +96,6 @@ def api_get_post(request: Request, post_id: int):
     # --- [추가 끝] ---
 
     user = get_current_user(request)
-    if not user:
-        return JSONResponse({"error": "Not authenticated"}, status_code=401)
     fetch_remote_url = None
     with get_session() as s:
         post = s.query(Post).options(
@@ -783,10 +781,8 @@ def api_by_number(request: Request, username: str, number: str):
             if post.visibility not in ("public", "unlisted", "home"):
                 raise HTTPException(status_code=403, detail="Not authorized")
             return JSONResponse(content=to_ap_note(post), media_type="application/activity+json")
-        # 일반 요청 → 로그인 필요
+        # 일반 요청 → 로그인 없이도 공개 게시글 조회 가능
         user = get_current_user(request)
-        if not user:
-            return JSONResponse({"error": "Not authenticated"}, status_code=401)
         if not _can_view(post, user, s):
             raise HTTPException(status_code=404, detail="Post not found")
         return _post_json(post, s, user)
