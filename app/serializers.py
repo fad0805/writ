@@ -27,7 +27,7 @@ def _post_json(p, session, user, tl_type=None,
             "liked": False, "boosted": False, "bookmarked": False,
             "is_mine": False, "is_dm": False, "is_sensitive": False,
             "ap_id": p.ap_id or "",
-            "reply_context": None, "boosted_by": None,
+            "reply_context": None, "boosted_by": [],
             "media_attachments": [], "poll_data": None, "my_vote": None,
             "reactions": {}, "my_reaction": None,
             "mentioned_user_ids": [], "mentioned_handles": [],
@@ -45,14 +45,18 @@ def _post_json(p, session, user, tl_type=None,
                                 _vote_map, _my_reaction_map, _reactions_map,
                                 _booster_map, _mentioned_users_map, _boost_originals)
             result["id"] = p.id
-            result["boosted_by"] = _user_json(p.author)
+            existing_boosted_by = result.get("boosted_by") or []
+            booster_json = _user_json(p.author)
+            if not any(b.get("id") == booster_json["id"] for b in existing_boosted_by if b):
+                existing_boosted_by = list(existing_boosted_by) + [booster_json]
+            result["boosted_by"] = existing_boosted_by
             result["created_at"] = _fmt_dt(p.created_at)
             result["boost_of_id"] = p.boost_of_id
             if user and _boosted_ids is not None:
                 result["i_boosted"] = original.id in _boosted_ids
             return result
         else:
-            return {"id": p.id, "is_deleted": True, "boosted_by": _user_json(p.author), "boost_of_id": p.boost_of_id}
+            return {"id": p.id, "is_deleted": True, "boosted_by": [_user_json(p.author)], "boost_of_id": p.boost_of_id}
     if user:
         if _liked_ids is not None:
             liked = p.id in _liked_ids
@@ -68,18 +72,17 @@ def _post_json(p, session, user, tl_type=None,
             bookmarked = session.query(Bookmark).filter_by(user_id=user.id, post_id=p.id).first() is not None
     else:
         liked = boosted = bookmarked = False
-    booster = None
+    boosters = []
     if user and p.author_id != user.id:
         if _booster_map is not None:
-            b = _booster_map.get(p.id)
+            bs = _booster_map.get(p.id, [])
         else:
-            latest_boost = session.query(Boost).filter_by(post_id=p.id).order_by(desc(Boost.created_at)).first()
-            b = None
-            if latest_boost:
-                if (datetime.datetime.now(datetime.timezone.utc) - latest_boost.created_at).total_seconds() > 10800:
-                    b = session.query(User).get(latest_boost.user_id)
-        if b and b.id != p.author_id:
-            booster = b
+            bs = []
+            for b in session.query(Boost).filter_by(post_id=p.id).order_by(desc(Boost.created_at)).all():
+                u = session.query(User).get(b.user_id)
+                if u and u.id != p.author_id:
+                    bs.append(u)
+        boosters = bs
     my_vote = None
     if user and p.poll_data:
         if _vote_map is not None:
@@ -140,7 +143,7 @@ def _post_json(p, session, user, tl_type=None,
         "is_sensitive": getattr(p, 'is_sensitive', False) or False,
         "ap_id": p.ap_id or "",
         "reply_context": _reply_context(p, session, user, tl_type),
-        "boosted_by": _user_json(booster) if booster else None,
+        "boosted_by": [_user_json(b) for b in boosters] if boosters else [],
         "media_attachments": (p.media_attachments or []) if hasattr(p, 'media_attachments') else [],
         "poll_data": p.poll_data,
         "my_vote": my_vote,

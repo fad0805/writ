@@ -15,11 +15,9 @@ from app.core.push import send_push_to_user
 from app.core.timeline_stream import (
     broadcast_refresh_notifs, broadcast_notif_sound,
     broadcast_reaction_update, broadcast_post, broadcast_delete,
-    _broadcast_timeline,
 )
 from app.serializers import _user_json
-from app.utils.datetime import _fmt_dt
-from app.utils.emoji import _load_emojis, _emoji_url
+from app.utils.emoji import _emoji_url
 
 logger = logging.getLogger("writ.interactions")
 
@@ -187,50 +185,16 @@ def boost_post(db: Session, user: User, post_id: int):
         db.commit()
 
         try:
-            _a = post.author
-            _author_json = _user_json(_a)
-            _boosted_json = _user_json(user)
-            _og = {
-                "id": boost_post.id,
-                "number": post.number or "",
-                "content": post.content,
-                "summary": post.summary or "",
-                "visibility": post.visibility or "public",
-                "created_at": _fmt_dt(post.created_at),
-                "author": _author_json,
-                "likes_count": 0,
-                "boosts_count": db.query(Boost).filter_by(post_id=post_id).count(),
-                "replies_count": post.replies_count or 0,
-                "liked": False, "boosted": True, "bookmarked": False,
-                "is_mine": True, "is_dm": False,
-                "is_sensitive": getattr(post, "is_sensitive", False) or False,
-                "ap_id": post.ap_id or "",
-                "reply_context": None,
-                "boosted_by": _boosted_json,
-                "boost_of_id": post.id,
-                "_boost_pointer_id": boost_post.id,
-                "media_attachments": (post.media_attachments or []) if hasattr(post, 'media_attachments') else [],
-                "poll_data": None, "my_vote": None,
-                "reactions": {}, "my_reaction": None,
-                "mentioned_user_ids": [], "mentioned_handles": [],
-                "link_preview": None,
-                "_emojis": [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(db)],
-            }
-            _boost_user_id = user.id
-            _boost_post_id = post_id
-            def _safe_broadcast_boost_pointer():
-                from app.db.database import get_session
-                with get_session() as _s:
-                    if _s.query(Boost).filter_by(user_id=_boost_user_id, post_id=_boost_post_id).first():
-                        _broadcast_timeline(_og, _boost_user_id, post.visibility or "public")
-            threading.Thread(target=_safe_broadcast_boost_pointer, daemon=True).start()
-        except Exception as e:
-            logger.error("Failed to broadcast boost stream: %s", e, exc_info=True)
-
-        try:
+            _boosts_count = db.query(Boost).filter_by(post_id=post_id).count()
+            _all_boosters = []
+            for b in db.query(Boost).filter(Boost.post_id == post_id).order_by(Boost.created_at.desc()).all():
+                bu = db.query(User).get(b.user_id)
+                if bu:
+                    _all_boosters.append(_user_json(bu))
             broadcast_post({
                 "id": post.id, "type": "update",
-                "boosts_count": db.query(Boost).filter_by(post_id=post_id).count(),
+                "boosts_count": _boosts_count,
+                "boosted_by": _all_boosters,
             }, post.author_id, post.visibility or "public")
         except Exception as e:
             logger.error("Failed to broadcast boost update: %s", e, exc_info=True)
@@ -309,10 +273,15 @@ def unboost_post(db: Session, user: User, post_id: int):
         if post.author_id != user.id:
             broadcast_refresh_notifs(post.author_id)
         try:
+            _updated_boosters = []
+            for b in db.query(Boost).filter(Boost.post_id == post_id).order_by(Boost.created_at.desc()).all():
+                bu = db.query(User).get(b.user_id)
+                if bu:
+                    _updated_boosters.append(_user_json(bu))
             broadcast_post({
                 "id": post_id, "type": "update",
                 "boosts_count": remaining,
-                "boosted_by": None,
+                "boosted_by": _updated_boosters,
             }, post.author_id, post.visibility or "public")
         except Exception as e:
             logger.error("Failed to broadcast unboost update: %s", e, exc_info=True)

@@ -171,7 +171,7 @@ export interface PostData {
   reply_context: ReplyContext | null;
   replies?: PostData[];
   ancestors?: PostData[];
-  boosted_by?: User | null;
+  boosted_by?: User[];
   poll_data?: PollData | null;
   my_vote?: number | null;
   reactions?: Record<string, number>;

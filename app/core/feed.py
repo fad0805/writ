@@ -160,13 +160,13 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         for b in session.query(Boost).filter(
             Boost.post_id.in_(post_ids), Boost.created_at > _cutoff
         ).order_by(Boost.created_at.desc()).all():
-            if b.post_id not in _booster_map:
-                _booster_map[b.post_id] = b.user_id
+            _booster_map.setdefault(b.post_id, []).append(b.user_id)
         if _booster_map:
+            _all_uids = {uid for uids in _booster_map.values() for uid in uids}
             _booster_users = {u.id: u for u in session.query(User).filter(
-                User.id.in_(set(_booster_map.values()))
+                User.id.in_(_all_uids)
             ).all()}
-            _booster_map = {pid: _booster_users.get(uid) for pid, uid in _booster_map.items()}
+            _booster_map = {pid: [_booster_users.get(uid) for uid in uids if _booster_users.get(uid)] for pid, uids in _booster_map.items()}
 
         _reactions_map = {}
         _default_react = "★"
@@ -204,13 +204,44 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
 
     _timeline_emojis = [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)]
 
-    return [_post_json(p, session, user, tl_type,
-                       _liked_ids=_liked_ids, _boosted_ids=_boosted_ids,
-                       _bookmarked_ids=_bookmarked_ids, _vote_map=_vote_map,
-                       _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map,
-                       _booster_map=_booster_map, _mentioned_users_map=_mentioned_users_map,
-                       _skip_emojis=True)
-            for p in posts], has_more, _timeline_emojis
+    feed_dicts = [_post_json(p, session, user, tl_type,
+                             _liked_ids=_liked_ids, _boosted_ids=_boosted_ids,
+                             _bookmarked_ids=_bookmarked_ids, _vote_map=_vote_map,
+                             _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map,
+                             _booster_map=_booster_map, _mentioned_users_map=_mentioned_users_map,
+                             _skip_emojis=True)
+                 for p in posts]
+
+    # Aggregate boost pointers: group by canonical post ID, merge boosters
+    groups: dict[int, dict] = {}
+    order: list[int] = []
+    for d in feed_dicts:
+        if not d:
+            continue
+        key = d.get("boost_of_id") or d["id"]
+        if key not in groups:
+            groups[key] = d
+            order.append(key)
+        else:
+            existing = groups[key]
+            # Keep the entry with the latest created_at
+            if (d.get("created_at") or "") > (existing.get("created_at") or ""):
+                groups[key] = d
+                existing = d
+            # Update order: move to the position of the latest entry
+            existing_boosted_by = existing.get("boosted_by") or []
+            d_boosted_by = d.get("boosted_by") or []
+            seen_ids = {b["id"] for b in existing_boosted_by if b}
+            merged = list(existing_boosted_by)
+            for b in d_boosted_by:
+                if b and b["id"] not in seen_ids:
+                    seen_ids.add(b["id"])
+                    merged.append(b)
+            existing["boosted_by"] = merged
+
+    feed_dicts = [groups[k] for k in order]
+
+    return feed_dicts, has_more, _timeline_emojis
 
 
 def query_feed_posts(

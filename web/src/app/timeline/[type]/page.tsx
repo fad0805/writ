@@ -25,32 +25,6 @@ const TAB_KEYS = ["home", "social", "local", "federated"];
 
 interface StreamPostData extends PostData {
   type?: "delete" | "update";
-  boost_of_id?: number;
-  _boost_pointer_id?: number;
-}
-
-const postKey = (p: { id: number; boosted_by?: { id: number } | null }) =>
-  `${p.id}-${p.boosted_by?.id ?? ""}`;
-
-function dedupPosts(posts: PostData[]): PostData[] {
-  const boostIds = new Set<number>();
-  const seen = new Map<number, PostData>();
-  for (const p of posts) {
-    if ((p as any).boost_of_id) boostIds.add(p.id);
-    const key = (p as any).boost_of_id || p.id;
-    const existing = seen.get(key);
-    if (!existing) {
-      seen.set(key, p);
-    } else if ((existing as any).boost_of_id && !(p as any).boost_of_id) {
-      seen.set(key, p);
-    }
-  }
-  for (const [key, post] of seen) {
-    if ((post as any).boost_of_id && boostIds.has((post as any).boost_of_id)) {
-      seen.delete(key);
-    }
-  }
-  return Array.from(seen.values());
 }
 
 export default function TimelinePage() {
@@ -86,7 +60,7 @@ export default function TimelinePage() {
 
   const filteredPosts = useMemo(
     // eslint-disable-next-line react-hooks/refs -- deletedIds is mutation-only, safe during render
-    () => dedupPosts(posts.filter((p) => !deletedIds.current.has(p.id))),
+    () => posts.filter((p) => !deletedIds.current.has(p.id)),
     [posts]
   );
   const filteredPostsRef = useRef(filteredPosts);
@@ -112,12 +86,11 @@ export default function TimelinePage() {
       const data = await api.timeline(tlType, LIMIT, 0);
       if (loadId !== loadIdRef.current || accountSnapshot() !== snapshot) return;
       if (data._emojis) injectEmojis(data._emojis);
-      const processed = dedupPosts(data.posts);
-      setPosts(processed);
+      setPosts(data.posts);
       setHasMore(data.has_more);
       offsetRef.current = LIMIT;
-      totalLoadedRef.current = processed.length;
-      timelineCache.current[tlType] = { posts: processed, hasMore: data.has_more, offset: LIMIT, totalLoaded: processed.length };
+      totalLoadedRef.current = data.posts.length;
+      timelineCache.current[tlType] = { posts: data.posts, hasMore: data.has_more, offset: LIMIT, totalLoaded: data.posts.length };
     } catch (e: unknown) {
       if (loadId !== loadIdRef.current || accountSnapshot() !== snapshot) return;
       setError(e instanceof Error ? e.message : "불러오기 실패");
@@ -151,7 +124,7 @@ export default function TimelinePage() {
       if (accountSnapshot() !== snapshot) return;
       if (data._emojis) injectEmojis(data._emojis);
       setPosts((prev) => {
-        const next = dedupPosts([...prev, ...data.posts]);
+        const next = [...prev, ...data.posts];
         timelineCache.current[tlType] = { posts: next, hasMore: data.has_more && totalLoadedRef.current + data.posts.length < 500, offset: currentOffset + LOAD_MORE, totalLoaded: totalLoadedRef.current + data.posts.length };
         return next;
       });
@@ -230,7 +203,7 @@ export default function TimelinePage() {
         setSelectedIdx((prev) => {
           const next = prev < 0 ? 0 : Math.min(prev + 1, currentPosts.length - 1);
           const post = currentPosts[next];
-          if (post) cardRefs.current.get(postKey(post))?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          if (post) cardRefs.current.get(String(post.id))?.scrollIntoView({ behavior: "smooth", block: "nearest" });
           return next;
         });
         return;
@@ -240,7 +213,7 @@ export default function TimelinePage() {
         setSelectedIdx((prev) => {
           const next = Math.max(prev - 1, 0);
           const post = currentPosts[next];
-          if (post) cardRefs.current.get(postKey(post))?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          if (post) cardRefs.current.get(String(post.id))?.scrollIntoView({ behavior: "smooth", block: "nearest" });
           return next;
         });
         return;
@@ -271,9 +244,7 @@ export default function TimelinePage() {
         if (deletedIds.current.has(newPost.id)) return;
         if (newPost.type === "delete") {
           setPosts((prev) => {
-            const next = prev.filter(
-              (p) => p.id !== newPost.id && (p as StreamPostData)._boost_pointer_id !== newPost.id
-            );
+            const next = prev.filter((p) => p.id !== newPost.id);
             const c = timelineCache.current[tlType];
             if (c) timelineCache.current[tlType] = { ...c, posts: next };
             return next;
@@ -290,41 +261,10 @@ export default function TimelinePage() {
           return;
         }
         setPosts((prev) => {
-          let next: PostData[];
-          if (newPost.boost_of_id) {
-            const origIdx = prev.findIndex((p) => p.id === newPost.boost_of_id);
-            if (origIdx >= 0) {
-              if (prev[origIdx].boosted === newPost.boosted && prev[origIdx].boosts_count === newPost.boosts_count) {
-                return prev;
-              }
-              next = [...prev];
-              next[origIdx] = {
-                ...prev[origIdx],
-                boosted: newPost.boosted ?? prev[origIdx].boosted,
-                boosts_count: newPost.boosts_count ?? prev[origIdx].boosts_count,
-                boosted_by: newPost.boosted_by ?? prev[origIdx].boosted_by,
-              };
-            } else {
-              const idx = prev.findIndex(
-                (p) => p.id === newPost.id && p.boosted_by?.id === newPost.boosted_by?.id
-              );
-              if (idx >= 0) {
-                next = [...prev];
-                next.splice(idx, 1);
-                next = [newPost, ...next];
-              } else {
-                next = [newPost, ...prev];
-              }
-            }
-          } else {
-            const idx = prev.findIndex((p) => p.id === newPost.id);
-            if (idx >= 0) {
-              next = [...prev];
-              next[idx] = newPost;
-            } else {
-              next = [newPost, ...prev];
-            }
-          }
+          const idx = prev.findIndex((p) => p.id === newPost.id);
+          const next: PostData[] = idx >= 0
+            ? [...prev.slice(0, idx), newPost, ...prev.slice(idx + 1)]
+            : [newPost, ...prev];
           const c = timelineCache.current[tlType];
           if (c) timelineCache.current[tlType] = { ...c, posts: next };
           return next;
@@ -379,10 +319,10 @@ export default function TimelinePage() {
             ) : (
               filteredPosts.map((p, i) => (
                 <div
-                  key={postKey(p)}
+                  key={p.id}
                   ref={(el) => {
-                    if (el) cardRefs.current.set(postKey(p), el);
-                    else cardRefs.current.delete(postKey(p));
+                    if (el) cardRefs.current.set(String(p.id), el);
+                    else cardRefs.current.delete(String(p.id));
                   }}
                 >
                   <PostCard
