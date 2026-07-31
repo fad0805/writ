@@ -218,7 +218,11 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         tag = re.sub(r'href="/@', f'href="{BASE_URL}/@', tag)
         tag = re.sub(r'>@([^<]+)</a>', r'>@<span>\1</span></a>', tag)
         return f'<span class="h-card" translate="no">{tag}</span>'
-    content = re.sub(r'<a\b[^>]*?\bclass="[^"]*\bmention\b[^"]*"[^>]*?>@[^<]+?</a>', _fmt_mention, content)
+    content = re.sub(
+        r'\1 rel="nofollow noopener">',
+        r'(<a\b[^>]*?\bclass="[^"]*\bmention\b[^"]*"[^>]*?)>',
+        content
+    )
 
     shortcode_pattern = re.compile(r':(\w+):')
     used_shortcodes = set(shortcode_pattern.findall(content))
