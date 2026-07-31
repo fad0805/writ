@@ -249,6 +249,13 @@ const localReactionEmojiMap = useMemo(() => {
     }).replace(/\. /g, "-").replace(/\.$/, "");
   })() : "";
 
+  const remoteUrl = (() => {
+    const u = post.url || post.ap_id || "";
+    if (!u) return "";
+    const m = u.match(/^(https?:\/\/[^/]+)\/users\/([^/]+)\/statuses\/(\d+)$/);
+    return m ? `${m[1]}/@${m[2]}/${m[3]}` : u;
+  })();
+
   const validMentions = useMemo(() => new Set(post.mentioned_handles || []), [post.mentioned_handles]);
 
   // 2. 순수한 HTML 변환 함수 (Setter 함수들 완전 제거)
@@ -652,8 +659,8 @@ const localReactionEmojiMap = useMemo(() => {
             <span className={`vis-badge vis-${post.visibility}`}>
               <Icon name={VIS_ICONS[post.visibility] || "globe"} />
             </span>
-            {post.ap_id && post.ap_id.startsWith("http") && post.author?.username?.includes("@") ? (
-              <a href={post.ap_id} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="no-underline" style={{ color: "inherit" }}>{timeStr}</a>
+            {remoteUrl && post.author?.username?.includes("@") ? (
+              <a href={remoteUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="no-underline" style={{ color: "inherit" }}>{timeStr}</a>
             ) : (
               timeStr
             )}
@@ -998,7 +1005,7 @@ const localReactionEmojiMap = useMemo(() => {
               </button>
               {showMoreActions && (
                 <div className="post-actions-dropdown">
-                  <ShareButton url={(() => { if (!post.author?.username?.includes('@') || !post.ap_id) return post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`; const m = post.ap_id.match(/^(https?:\/\/[^/]+)\/users\/([^/]+)\/statuses\/(\d+)$/); return m ? `${m[1]}/@${m[2]}/${m[3]}` : post.ap_id; })()} className="post-actions-dropdown-item" />
+                  <ShareButton url={post.author?.username?.includes('@') && remoteUrl ? remoteUrl : (post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`)} className="post-actions-dropdown-item" />
                   {post.is_mine && (
                     <button onClick={() => { setShowMoreActions(false); (async () => {
                       const newPinned = !pinned;

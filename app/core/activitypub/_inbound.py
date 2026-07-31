@@ -23,7 +23,8 @@ from app.utils.crypto import generate_keypair
 from app.utils.content_parser import _sanitize_html, process_post_content
 from app.core.activitypub._utils import (
     _validated_get, _federation_allowed,
-    _parse_username_from_url, _get_instance_actor, WRIT_USER_AGENT,
+    _parse_username_from_url, _get_instance_actor, _extract_remote_url,
+    WRIT_USER_AGENT,
 )
 from app.core.activitypub._media import _cache_remote_media
 from app.core.activitypub._emoji import _process_emoji_tags, _background_import_emoji
@@ -268,6 +269,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if len(raw_content) > 65536:
             raw_content = raw_content[:65536]
         post_id = obj.get("id", "")
+        remote_url = _extract_remote_url(obj, post_id)
         content = process_post_content(_sanitize_html(raw_content), obj)
         summary = obj.get("summary", "")
         in_reply_to = obj.get("inReplyTo", "")
@@ -651,6 +653,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 visibility=visibility,
                 mentioned_user_ids=mentioned_ids,
                 ap_id=post_id,
+                remote_url=remote_url,
                 in_reply_to_ap_id=in_reply_to,
                 in_reply_to_id=reply_to_post_id,
                 media_attachments=media_list if media_list else None,

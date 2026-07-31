@@ -21,7 +21,7 @@ from app.utils.crypto import generate_keypair, sign_string, encrypt_key, get_pri
 from app.utils.content_parser import _sanitize_html, process_post_content
 from app.core.activitypub._utils import (
     _validate_url, _safe_fetch, _validated_get, _federation_allowed,
-    _get_instance_actor, _parse_username_from_url,
+    _get_instance_actor, _parse_username_from_url, _extract_remote_url,
     WRIT_USER_AGENT,
 )
 from app.core.activitypub._media import _save_remote_image, _save_remote_avatar, _cache_remote_media
@@ -518,6 +518,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         return None
 
     ap_id = obj.get("id", url)
+    remote_url = _extract_remote_url(obj, ap_id)
     existing = session.query(Post).filter_by(ap_id=ap_id).first()
     if existing and not existing.is_deleted:
         print(f"[FETCH-POST] existing post id={existing.id} ap_id={ap_id}", flush=True)
@@ -677,6 +678,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         summary=summary,
         visibility=vis,
         ap_id=ap_id,
+        remote_url=remote_url,
         in_reply_to_ap_id=in_reply_to_ap,
         in_reply_to_id=in_reply_to_id,
         quote_of_id=quote_id,

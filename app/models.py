@@ -149,6 +149,8 @@ class Post(Base):
 
     # ActivityPub IDs
     ap_id = Column(String(1024), unique=True)
+    # Human-facing web URL for remote posts (AP object's "url" field)
+    remote_url = Column(String(1024), default="")
     in_reply_to_id = Column(Integer, ForeignKey("posts.id"), index=True)
     in_reply_to_ap_id = Column(String(1024), default="")
 

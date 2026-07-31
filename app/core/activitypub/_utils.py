@@ -148,6 +148,31 @@ def _validated_get(url: str, headers: dict = None, timeout: int = 15, max_redire
         client.close()
 
 
+def _extract_remote_url(obj: dict, fallback: str = "") -> str:
+    """Extract the human-facing web URL from a remote AP object.
+
+    Mastodon: url="https://host/@user/123" vs id=".../users/user/statuses/123"
+    Misskey:  url == id (".../notes/xxx")
+    kos.moe:  url="https://host/@user/xxx" vs id=".../ap/note/uuid"
+    """
+    raw = obj.get("url", "")
+    if isinstance(raw, str) and raw.startswith("http"):
+        return raw
+    if isinstance(raw, dict):
+        href = raw.get("href", "") or raw.get("url", "")
+        if href.startswith("http"):
+            return href
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, str) and item.startswith("http"):
+                return item
+            if isinstance(item, dict):
+                href = item.get("href", "") or item.get("url", "")
+                if href.startswith("http"):
+                    return href
+    return fallback
+
+
 def _get_instance_actor(session) -> User:
     """Get or create the instance actor (system account for server-level requests)."""
     actor = session.query(User).filter_by(username="actor", is_remote=False).first()

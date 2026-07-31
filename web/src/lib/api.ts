@@ -154,6 +154,7 @@ export interface PostData {
   id: number;
   number: string;
   ap_id: string;
+  url?: string;
   content: string;
   summary: string;
   visibility: string;
