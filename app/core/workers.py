@@ -6,8 +6,10 @@ import logging
 import time
 from urllib.parse import urlparse
 
+from sqlalchemy import or_
+
 from app.config.settings import SECRET_KEY, BASE_URL
-from app.core.activitypub import _deliver_sync, _send_delete_post
+from app.core.activitypub import _deliver_sync, _send_delete_post, _resolve_actor, _get_instance_actor
 from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs
 from app.db.database import get_session, engine
 from app.models import User, PendingDelivery, Post, Like, Boost, Bookmark, Vote, Notification
@@ -69,17 +71,92 @@ def delivery_worker():
             logger.error("Delivery worker error: %s", e, exc_info=True)
 
 
+def _get_cpu_percent():
+    try:
+        with open("/proc/stat") as f:
+            parts = f.readline().split()
+        idle1 = int(parts[4])
+        total1 = sum(int(x) for x in parts[1:])
+        time.sleep(1)
+        with open("/proc/stat") as f:
+            parts = f.readline().split()
+        idle2 = int(parts[4])
+        total2 = sum(int(x) for x in parts[1:])
+        idle_d = idle2 - idle1
+        total_d = total2 - total1
+        if total_d == 0:
+            return 0
+        return (1 - idle_d / total_d) * 100
+    except Exception:
+        return 0
+
+
+def _server_busy():
+    if _get_cpu_percent() > 70:
+        return True
+    try:
+        pool = engine.pool
+        checkedout = pool.checkedout()
+        size = pool.size()
+        if size > 0 and checkedout / size > 0.8:
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def refresh_remote_profiles():
-    """Cycle updated_at so oldest-refreshed users get picked eventually (HTTP refresh is manual)."""
+    """Periodically refresh remote user profiles (avatar, bio, pinned posts).
+
+    Refreshes a small batch of the least-recently-refreshed remote users, but
+    only when the server is idle. Each user is re-attempted at most once every
+    ~3 days, so remote profile changes get picked up over time without load."""
+    REFRESH_STALE_SECONDS = 3 * 24 * 3600
+    CHECK_INTERVAL_SECONDS = 3600
+    BATCH_SIZE = 5
+
+    time.sleep(300)  # give the server time to boot
     while True:
-        time.sleep(600)
         try:
-            with get_session() as _s:
-                for ru in _s.query(User).filter(User.is_remote == True).order_by(User.updated_at.asc()).limit(5).all():
-                    ru.updated_at = datetime.datetime.now(datetime.timezone.utc)
-                _s.commit()
-        except Exception:
-            pass
+            if _server_busy():
+                logger.info("refresh_remote_profiles: server busy, skipping")
+                time.sleep(1800)
+                continue
+
+            cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=REFRESH_STALE_SECONDS)
+            with get_session() as s:
+                signer = _get_instance_actor(s)
+                candidates = [
+                    (u.id, u.username, u.remote_url)
+                    for u in s.query(User).filter(
+                        User.is_remote == True,
+                        or_(User.updated_at == None, User.updated_at < cutoff),
+                    ).order_by(User.updated_at.asc().nullsfirst()).limit(BATCH_SIZE).all()
+                    if u.remote_url
+                ]
+
+            for uid, uname, remote_url in candidates:
+                if _server_busy():
+                    logger.info("refresh_remote_profiles: busy mid-batch, stopping")
+                    break
+                try:
+                    refreshed = _resolve_actor(remote_url, force_refresh=True, sign_as=signer)
+                    logger.info("refresh_remote_profiles: refreshed %s -> %s", uname, "ok" if refreshed else "failed")
+                except Exception as e:
+                    logger.warning("refresh_remote_profiles: failed %s: %s", uname, e)
+                # Mark as attempted so unreachable servers aren't retried too often
+                try:
+                    with get_session() as s2:
+                        u = s2.query(User).get(uid)
+                        if u:
+                            u.updated_at = datetime.datetime.now(datetime.timezone.utc)
+                            s2.commit()
+                except Exception:
+                    pass
+                time.sleep(5)
+        except Exception as e:
+            logger.error("refresh_remote_profiles error: %s", e, exc_info=True)
+        time.sleep(CHECK_INTERVAL_SECONDS)
 
 
 def auto_delete_expired_posts():
@@ -93,38 +170,6 @@ def auto_delete_expired_posts():
         if target <= now:
             target += datetime.timedelta(days=1)
         return (target - now).total_seconds()
-
-    def _get_cpu_percent():
-        try:
-            with open("/proc/stat") as f:
-                parts = f.readline().split()
-            idle1 = int(parts[4])
-            total1 = sum(int(x) for x in parts[1:])
-            time.sleep(1)
-            with open("/proc/stat") as f:
-                parts = f.readline().split()
-            idle2 = int(parts[4])
-            total2 = sum(int(x) for x in parts[1:])
-            idle_d = idle2 - idle1
-            total_d = total2 - total1
-            if total_d == 0:
-                return 0
-            return (1 - idle_d / total_d) * 100
-        except Exception:
-            return 0
-
-    def _server_busy():
-        if _get_cpu_percent() > 70:
-            return True
-        try:
-            pool = engine.pool
-            checkedout = pool.checkedout()
-            size = pool.size()
-            if size > 0 and checkedout / size > 0.8:
-                return True
-        except Exception:
-            pass
-        return False
 
     time.sleep(min(_next_3am(), 300))
     while True:
