@@ -212,6 +212,9 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         content
     )
 
+    # 상대 경로를 절대 URL로 변환 (Mastodon 앱 호환)
+    content = re.sub(r'href="/', f'href="{BASE_URL}/', content)
+
     shortcode_pattern = re.compile(r':(\w+):')
     used_shortcodes = set(shortcode_pattern.findall(content))
     post_emojis = [e for e in all_emojis if e["keyword"] in used_shortcodes]
