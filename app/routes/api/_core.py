@@ -243,7 +243,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
 
             if tag:
                 # 1. 포스트 쿼리
-                q_posts = s.query(Post).options(selectinload(Post.author)).filter(
+                q_posts = s.query(Post).options(selectinload(Post.author), selectinload(Post.parent)).filter(
                     and_(
                         Post.tag_list.any(name=tag.name),
                         Post.is_deleted == False,
@@ -260,7 +260,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 ).order_by(desc(Novel.updated_at)).limit(20).all()
 
         else:
-            q_posts = s.query(Post).options(selectinload(Post.author)).filter(
+            q_posts = s.query(Post).options(selectinload(Post.author), selectinload(Post.parent)).filter(
                 and_(
                     Post.content.ilike(pattern),
                     Post.is_deleted == False,

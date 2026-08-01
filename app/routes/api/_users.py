@@ -123,7 +123,8 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             Boost.user_id == profile.id, Boost.post_id == Post.id
         ).correlate(Post).scalar_subquery()
         posts = s.query(Post).options(
-            selectinload(Post.author)
+            selectinload(Post.author),
+            selectinload(Post.parent),
         ).filter(
             or_(
                 Post.author_id == profile.id,
@@ -239,10 +240,16 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         else:
             _liked_ids = _boosted_ids = _bookmarked_ids = set()
             _vote_map = _my_reaction_map = _reactions_map = _mentioned_users_map = {}
+        _boost_originals = {}
+        _boost_pointer_ids = {p.boost_of_id for p in posts if p.boost_of_id}
+        if _boost_pointer_ids:
+            for _orig in s.query(Post).options(selectinload(Post.author)).filter(Post.id.in_(_boost_pointer_ids), Post.is_deleted == False).all():
+                _boost_originals[_orig.id] = _orig
         _pj_kwargs = dict(_liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids,
                           _vote_map=_vote_map, _my_reaction_map=_my_reaction_map,
                           _reactions_map=_reactions_map,
-                          _mentioned_users_map=_mentioned_users_map)
+                          _mentioned_users_map=_mentioned_users_map,
+                          _boost_originals=_boost_originals)
         _novel_meta = _load_novel_meta(s, novels)
         _pinned_novels = s.query(Novel).filter(Novel.id.in_(profile.pinned_series or [])).all() if profile.pinned_series else []
         _pinned_series_meta = _load_novel_meta(s, _pinned_novels)
