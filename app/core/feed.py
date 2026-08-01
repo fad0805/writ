@@ -188,10 +188,7 @@ def query_feed_posts(
             p for p in visible_posts
             if not (
                 p.visibility == "mention"
-                and p.is_dm
                 and p.author_id != user_id
-                and local_ids
-                and p.author_id in local_ids
                 and user_id not in (p.mentioned_user_ids or [])
             )
         ]
@@ -227,9 +224,8 @@ def query_feed_posts(
         posts = [
             p for p in posts
             if not (
-                p.visibility == "mention" and p.is_dm
-                and p.author_id != user_id and local_ids
-                and p.author_id in local_ids
+                p.visibility == "mention"
+                and p.author_id != user_id
                 and user_id not in (p.mentioned_user_ids or [])
             )
         ]

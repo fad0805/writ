@@ -101,6 +101,10 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
     if is_mentioned_to_me:
         return True
 
+    # --- 2.5. 멘션 공개 글: 본인 글 또는 나에게 온 멘션이 아니면 드롭 ---
+    if post.visibility == "mention" and not is_self and not is_mentioned_to_me:
+        return False
+
     # --- 3. home/social 전용 필터 ---
     if tl_type == "home":
         allowed_authors = following_set | {user.id}
