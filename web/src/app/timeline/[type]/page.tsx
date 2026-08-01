@@ -226,6 +226,27 @@ export default function TimelinePage() {
         if (e.key === "b") { e.preventDefault(); (sp.boosted ? api.unboost(targetId) : api.boost(targetId)).then(() => load()).catch(console.error); return; }
         if (e.key === "r") { e.preventDefault(); api.getPost(targetId).then((d) => setReplyPost(d)).catch(console.error); return; }
         if (e.key === "Enter") { e.preventDefault(); router.push(sp.boost_of_id ? `/post/${sp.boost_of_id}` : sp.number ? `/@${sp.author.username}/${sp.number}` : `/post/${sp.id}`); return; }
+        if (e.key === ".") {
+          e.preventDefault();
+          const el = cardRefs.current.get(String(sp.id));
+          if (el) {
+            const scroller = el.closest(".main-content") || document.querySelector(".main-content");
+            if (scroller) {
+              const tabs = document.querySelector<HTMLElement>(".timeline-tabs");
+              let offset = 0;
+              if (tabs && getComputedStyle(tabs).position === "sticky") {
+                const sr = scroller.getBoundingClientRect();
+                const tr = tabs.getBoundingClientRect();
+                if (tr.top - sr.top < 2) offset = tr.height;
+              }
+              const top = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - offset;
+              scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+            } else {
+              el.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+          }
+          return;
+        }
       }
     };
     window.addEventListener("keydown", handler);
