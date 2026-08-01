@@ -19,11 +19,11 @@ class MastodonAPIError(HTTPException):
 from sqlalchemy import func as sqlfunc, or_
 from sqlalchemy.orm import Session as SASession
 
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Tag, CustomEmoji, ServerSetting, MastodonApp, MastodonAccessToken, now
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, Tag, CustomEmoji, ServerSetting, MastodonApp, MastodonAccessToken, UserMute, UserBlock, now
 from app.db.database import get_db, get_session
 from app.config.settings import BASE_URL, DOMAIN, MAX_POST_LENGTH
 from app.routes.api import _broadcast_update_actor, _do_edit_post, _do_delete_post
-from app.core.interactions import follow_user, unfollow_user, like_post, unlike_post, boost_post, unboost_post, react_post, unreact_post
+from app.core.interactions import follow_user, unfollow_user, like_post, unlike_post, boost_post, unboost_post, react_post, unreact_post, mute_user, unmute_user, block_user, unblock_user
 from app.utils.emoji import _emoji_url, _load_emojis
 from app.core.push import get_vapid_keys
 
@@ -196,10 +196,10 @@ def _relationship_json(user: User, target: User, db: SASession) -> dict:
         "showing_reblogs": True,
         "notifying": bool(relationship and relationship.notify_on_post),
         "followed_by": bool(db.query(Follow).filter_by(follower_id=target.id, following_id=user.id).first()),
-        "blocking": False,
-        "blocked_by": False,
-        "muting": False,
-        "muting_notifications": False,
+        "blocking": bool(db.query(UserBlock).filter_by(user_id=user.id, target_user_id=target.id).first()),
+        "blocked_by": bool(db.query(UserBlock).filter_by(user_id=target.id, target_user_id=user.id).first()),
+        "muting": bool(db.query(UserMute).filter_by(user_id=user.id, target_user_id=target.id).first()),
+        "muting_notifications": bool(db.query(UserMute).filter_by(user_id=user.id, target_user_id=target.id, hide_notifications=True).first()),
         "requested": False,
         "domain_blocking": False,
         "endorsed": False,
@@ -751,6 +751,71 @@ async def unfollow_account(account_id: str, request: Request, db: SASession = De
         raise MastodonAPIError(status_code=404, detail="Record not found")
 
     unfollow_user(db, user, target)
+
+    return _relationship_json(user, target, db)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/accounts/:id/mute
+# ---------------------------------------------------------------------------
+@router.post("/v1/accounts/{account_id}/mute")
+async def mute_account(account_id: str, request: Request, db: SASession = Depends(get_db),
+                       notifications: bool = False):
+    user = _require_bearer(request, db)
+    target = db.query(User).filter_by(id=int(account_id)).first()
+    if not target:
+        raise MastodonAPIError(status_code=404, detail="Record not found")
+    if target.id == user.id:
+        raise MastodonAPIError(status_code=422, detail="Cannot mute self")
+
+    mute_user(db, user, target, hide_notifications=notifications)
+
+    return _relationship_json(user, target, db)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/accounts/:id/unmute
+# ---------------------------------------------------------------------------
+@router.post("/v1/accounts/{account_id}/unmute")
+async def unmute_account(account_id: str, request: Request, db: SASession = Depends(get_db)):
+    user = _require_bearer(request, db)
+    target = db.query(User).filter_by(id=int(account_id)).first()
+    if not target:
+        raise MastodonAPIError(status_code=404, detail="Record not found")
+
+    unmute_user(db, user, target)
+
+    return _relationship_json(user, target, db)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/accounts/:id/block
+# ---------------------------------------------------------------------------
+@router.post("/v1/accounts/{account_id}/block")
+async def block_account(account_id: str, request: Request, db: SASession = Depends(get_db)):
+    user = _require_bearer(request, db)
+    target = db.query(User).filter_by(id=int(account_id)).first()
+    if not target:
+        raise MastodonAPIError(status_code=404, detail="Record not found")
+    if target.id == user.id:
+        raise MastodonAPIError(status_code=422, detail="Cannot block self")
+
+    block_user(db, user, target)
+
+    return _relationship_json(user, target, db)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/accounts/:id/unblock
+# ---------------------------------------------------------------------------
+@router.post("/v1/accounts/{account_id}/unblock")
+async def unblock_account(account_id: str, request: Request, db: SASession = Depends(get_db)):
+    user = _require_bearer(request, db)
+    target = db.query(User).filter_by(id=int(account_id)).first()
+    if not target:
+        raise MastodonAPIError(status_code=404, detail="Record not found")
+
+    unblock_user(db, user, target)
 
     return _relationship_json(user, target, db)
 
@@ -1988,16 +2053,18 @@ def list_follow_requests(
 @router.get("/v1/blocks")
 def list_blocks(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
-    return []
+    rows = db.query(UserBlock).filter(UserBlock.user_id == user.id).order_by(UserBlock.created_at.desc()).all()
+    return [_account_json(m.target_user, db, viewer=user) for m in rows]
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v1/mutes (stub)
+# GET /api/v1/mutes
 # ---------------------------------------------------------------------------
 @router.get("/v1/mutes")
 def list_mutes(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
-    return []
+    rows = db.query(UserMute).filter(UserMute.user_id == user.id).order_by(UserMute.created_at.desc()).all()
+    return [_account_json(m.target_user, db, viewer=user) for m in rows]
 
 
 # ---------------------------------------------------------------------------

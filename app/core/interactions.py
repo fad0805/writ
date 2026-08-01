@@ -8,7 +8,7 @@ import uuid
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, CustomEmoji, ServerSetting
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, CustomEmoji, ServerSetting, UserMute, UserBlock
 from app.config.settings import BASE_URL
 from app.core.activitypub import _post_to_inbox
 from app.core.push import send_push_to_user
@@ -514,3 +514,70 @@ def unfollow_user(db: Session, user: User, target: User):
                 _post_to_inbox(target.inbox_url, undo, user)
             except Exception as e:
                 logger.error("Failed to send Undo Follow: %s", e, exc_info=True)
+
+
+def mute_user(db: Session, user: User, target: User, duration: int = 0, hide_notifications: bool = False):
+    if target.id == user.id:
+        return
+    existing = db.query(UserMute).filter_by(user_id=user.id, target_user_id=target.id).first()
+    if existing:
+        existing.duration = duration
+        existing.hide_notifications = hide_notifications
+    else:
+        db.add(UserMute(user_id=user.id, target_user_id=target.id, duration=duration, hide_notifications=hide_notifications))
+    db.commit()
+
+
+def unmute_user(db: Session, user: User, target: User):
+    db.query(UserMute).filter_by(user_id=user.id, target_user_id=target.id).delete()
+    db.commit()
+
+
+def block_user(db: Session, user: User, target: User):
+    if target.id == user.id:
+        return
+    existing = db.query(UserBlock).filter_by(user_id=user.id, target_user_id=target.id).first()
+    if existing:
+        return
+    db.add(UserBlock(user_id=user.id, target_user_id=target.id))
+    db.query(Follow).filter_by(follower_id=user.id, following_id=target.id).delete()
+    db.query(Follow).filter_by(follower_id=target.id, following_id=user.id).delete()
+    db.commit()
+    if target.is_remote and (target.shared_inbox_url or target.inbox_url):
+        block_id = f"{BASE_URL}/users/{user.username}/status/activities/block/{target.id}"
+        block_activity = {
+            "@context": ["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"],
+            "type": "Block",
+            "id": block_id,
+            "actor": user.actor_uri(),
+            "to": [target.remote_url],
+            "object": target.remote_url,
+        }
+        try:
+            _post_to_inbox(target.shared_inbox_url or target.inbox_url, block_activity, user)
+        except Exception as e:
+            logger.error("Failed to send Block: %s", e, exc_info=True)
+
+
+def unblock_user(db: Session, user: User, target: User):
+    db.query(UserBlock).filter_by(user_id=user.id, target_user_id=target.id).delete()
+    db.commit()
+    if target.is_remote and target.remote_url and (target.shared_inbox_url or target.inbox_url):
+        block_id = f"{BASE_URL}/users/{user.username}/status/activities/block/{target.id}"
+        undo_activity = {
+            "@context": ["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"],
+            "type": "Undo",
+            "id": f"{BASE_URL}/users/{user.username}/status/activities/undo/{target.id}",
+            "actor": user.actor_uri(),
+            "to": [target.remote_url],
+            "object": {
+                "id": block_id,
+                "type": "Block",
+                "actor": user.actor_uri(),
+                "object": target.remote_url,
+            },
+        }
+        try:
+            _post_to_inbox(target.shared_inbox_url or target.inbox_url, undo_activity, user)
+        except Exception as e:
+            logger.error("Failed to send Undo Block: %s", e, exc_info=True)

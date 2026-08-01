@@ -5,8 +5,7 @@ import logging
 from fastapi import APIRouter, Request, Form, HTTPException
 
 from app.models import User, Follow, UserMute, UserBlock, SeriesMute, KeywordMute
-from app.config.settings import BASE_URL
-from app.core.activitypub import _post_to_inbox
+from app.core.interactions import mute_user, unmute_user, block_user, unblock_user
 from app.db.database import get_session
 from app.routes.auth import require_auth, require_active_auth
 from app.utils.datetime import _fmt_dt
@@ -31,14 +30,10 @@ def api_mute_user(request: Request, target_user_id: int, duration: int = Form(0)
     if user.id == target_user_id:
         raise HTTPException(status_code=400, detail="Cannot mute yourself")
     with get_session() as s:
-        existing = s.query(UserMute).filter_by(user_id=user.id, target_user_id=target_user_id).first()
-        if existing:
-            existing.duration = duration
-            existing.hide_notifications = hide_notifications
-            s.commit()
-            return {"ok": True}
-        s.add(UserMute(user_id=user.id, target_user_id=target_user_id, duration=duration, hide_notifications=hide_notifications))
-        s.commit()
+        target = s.query(User).get(target_user_id)
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found")
+        mute_user(s, user, target, duration=duration, hide_notifications=hide_notifications)
     return {"ok": True}
 
 
@@ -46,8 +41,9 @@ def api_mute_user(request: Request, target_user_id: int, duration: int = Form(0)
 def api_unmute_user(request: Request, target_user_id: int):
     user = require_active_auth(request)
     with get_session() as s:
-        s.query(UserMute).filter_by(user_id=user.id, target_user_id=target_user_id).delete()
-        s.commit()
+        target = s.query(User).get(target_user_id)
+        if target:
+            unmute_user(s, user, target)
     return {"ok": True}
 
 
@@ -64,75 +60,21 @@ def api_block_user(request: Request, target_user_id: int):
     user = require_active_auth(request)
     if user.id == target_user_id:
         raise HTTPException(status_code=400, detail="Cannot block yourself")
-    target_remote_url = None
-    target_shared_inbox = None
-    target_id = None
     with get_session() as s:
-        existing = s.query(UserBlock).filter_by(user_id=user.id, target_user_id=target_user_id).first()
-        if existing:
-            return {"ok": True}
-        s.add(UserBlock(user_id=user.id, target_user_id=target_user_id))
-        # Remove follows both ways
-        s.query(Follow).filter_by(follower_id=user.id, following_id=target_user_id).delete()
-        s.query(Follow).filter_by(follower_id=target_user_id, following_id=user.id).delete()
-        s.commit()
         target = s.query(User).get(target_user_id)
-        if target:
-            target_remote_url = target.remote_url
-            target_shared_inbox = target.shared_inbox_url or target.inbox_url
-            target_id = target.id
-    if target_remote_url and target_shared_inbox:
-        try:
-            block_id = f"{BASE_URL}/users/{user.username}/status/activities/block/{target_id}"
-            actor_uri = f"{BASE_URL}/users/{user.username}"
-            block_activity = {
-                "@context": ["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"],
-                "type": "Block",
-                "id": block_id,
-                "actor": actor_uri,
-                "to": [target_remote_url],
-                "object": target_remote_url,
-            }
-            _post_to_inbox(target_shared_inbox, block_activity, user)
-        except Exception:
-            pass
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found")
+        block_user(s, user, target)
     return {"ok": True}
 
 
 @mutes_router.delete("/blocks/users/{target_user_id}")
 def api_unblock_user(request: Request, target_user_id: int):
     user = require_active_auth(request)
-    target_remote_url = None
-    target_shared_inbox = None
-    target_id = None
     with get_session() as s:
         target = s.query(User).get(target_user_id)
         if target:
-            target_remote_url = target.remote_url
-            target_shared_inbox = target.shared_inbox_url or target.inbox_url
-            target_id = target.id
-        s.query(UserBlock).filter_by(user_id=user.id, target_user_id=target_user_id).delete()
-        s.commit()
-    if target_remote_url:
-        try:
-            block_id = f"{BASE_URL}/users/{user.username}/status/activities/block/{target_id}"
-            actor_uri = f"{BASE_URL}/users/{user.username}"
-            undo_activity = {
-                "@context": ["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"],
-                "type": "Undo",
-                "id": f"{BASE_URL}/users/{user.username}/status/activities/undo/{target_id}",
-                "actor": actor_uri,
-                "to": [target_remote_url],
-                "object": {
-                    "id": block_id,
-                    "type": "Block",
-                    "actor": actor_uri,
-                    "object": target_remote_url,
-                },
-            }
-            _post_to_inbox(target_shared_inbox, undo_activity, user)
-        except Exception:
-            pass
+            unblock_user(s, user, target)
     return {"ok": True}
 
 
