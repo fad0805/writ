@@ -474,7 +474,7 @@ def verify_app_credentials(request: Request, db: SASession = Depends(get_db)):
 # GET /api/v1/accounts/lookup?acct=user@domain
 # ---------------------------------------------------------------------------
 @router.get("/v1/accounts/lookup")
-def lookup_account(acct: str = "", db: SASession = Depends(get_db)):
+def lookup_account(acct: str = "", request: Request = None, db: SASession = Depends(get_db)):
     if not acct:
         raise MastodonAPIError(status_code=400, detail="Missing acct parameter")
     raw = acct.strip().lstrip("/@")
@@ -486,7 +486,8 @@ def lookup_account(acct: str = "", db: SASession = Depends(get_db)):
     ).first()
     if not user:
         raise MastodonAPIError(status_code=404, detail="Record not found")
-    return _account_json(user, db, None)
+    viewer = _maybe_bearer(request, db) if request is not None else None
+    return _account_json(user, db, viewer=viewer)
 
 
 # ---------------------------------------------------------------------------
