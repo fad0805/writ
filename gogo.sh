@@ -1481,8 +1481,19 @@ for sid, info in list(ts._post_streams.items())[:30]:
 "
   echo ""
   echo "== web → api 내부 왕복 시간 (5회) =="
-  for i in 1 2 3 4 5; do
-    docker compose exec -T web curl -s -o /dev/null -w "  web→api: %{time_total}s\n" http://api:8000/api/server-info
+  docker compose exec -T web node -e "
+const t0 = Date.now();
+fetch('http://api:8000/api/server-info').then(r => {
+  console.log('  web→api: ' + (Date.now()-t0) + 'ms (status ' + r.status + ')');
+}).catch(e => { console.log('  web→api 실패: ' + e.message); });
+" || echo "  (web 컨테이너에서 node 실행 실패)"
+  for i in 2 3 4 5; do
+    docker compose exec -T web node -e "
+const t0 = Date.now();
+fetch('http://api:8000/api/server-info').then(r => {
+  console.log('  web→api: ' + (Date.now()-t0) + 'ms (status ' + r.status + ')');
+}).catch(e => { console.log('  web→api 실패: ' + e.message); });
+"
   done
   echo ""
   echo "== 서버 부하 =="
