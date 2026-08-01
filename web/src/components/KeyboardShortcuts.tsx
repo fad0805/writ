@@ -87,15 +87,33 @@ export default function KeyboardShortcuts() {
         <div className="shortcut-help" onClick={(e) => e.stopPropagation()}>
           <button className="shortcut-help-close" onClick={() => setShowHelp(false)}>×</button>
           <h3>키보드 단축키</h3>
+          <h4>일반</h4>
           <dl>
             <dt>g h</dt><dd>홈 타임라인</dd>
+            <dt>g s</dt><dd>소셜 타임라인</dd>
+            <dt>g l</dt><dd>로컬 타임라인</dd>
             <dt>g t</dt><dd>연합 타임라인</dd>
             <dt>g n</dt><dd>알림</dd>
             <dt>n</dt><dd>새 글 작성</dd>
             <dt>s</dt><dd>검색창</dd>
             <dt>d</dt><dd>테마 전환</dd>
-            <dt>?</dt><dd>도움말</dd>
-            <dt>Esc</dt><dd>입력 포커스 해제</dd>
+            <dt>?</dt><dd>단축키 도움말</dd>
+            <dt>Esc</dt><dd>입력 포커스 해제 / 닫기</dd>
+            <dt>Backspace</dt><dd>뒤로 가기</dd>
+          </dl>
+          <h4>타임라인 (포스트 선택 중)</h4>
+          <dl>
+            <dt>j / k</dt><dd>다음 / 이전 포스트 선택</dd>
+            <dt>Enter</dt><dd>포스트 열기</dd>
+            <dt>f</dt><dd>좋아요</dd>
+            <dt>b</dt><dd>부스트</dd>
+            <dt>d</dt><dd>북마크</dd>
+            <dt>r</dt><dd>답글</dd>
+            <dt>x</dt><dd>CW 펼치기</dd>
+            <dt>e</dt><dd>미디어 확대</dd>
+            <dt>.</dt><dd>선택 포스트를 최상단으로</dd>
+            <dt>h / l</dt><dd>이전 / 다음 타임라인 탭</dd>
+            <dt>Esc</dt><dd>선택 해제</dd>
           </dl>
         </div>
       </div>
