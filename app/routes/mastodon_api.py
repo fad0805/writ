@@ -963,6 +963,24 @@ def hashtag_timeline(
 
 
 # ---------------------------------------------------------------------------
+# GET /api/v1/tags/:tag
+# ---------------------------------------------------------------------------
+@router.get("/v1/tags/{tag}")
+def get_tag(tag: str, request: Request, db: SASession = Depends(get_db)):
+    viewer = _maybe_bearer(request, db)
+    tag_obj = db.query(Tag).filter(Tag.name == tag.lower()).first()
+    if not tag_obj:
+        raise MastodonAPIError(status_code=404, detail="Record not found")
+    name = tag_obj.display_name or tag_obj.name
+    return {
+        "name": name,
+        "url": f"{BASE_URL}/tags/{name}",
+        "following": False,
+        "history": [],
+    }
+
+
+# ---------------------------------------------------------------------------
 # GET /api/v1/statuses/:id
 # ---------------------------------------------------------------------------
 @router.get("/v1/statuses/{status_id}")
@@ -1914,6 +1932,15 @@ async def create_filter(request: Request, db: SASession = Depends(get_db)):
         "keywords": [],
         "statuses": [],
     }
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v2/filters (stub)
+# ---------------------------------------------------------------------------
+@router.get("/v2/filters")
+def list_filters_v2(request: Request, db: SASession = Depends(get_db)):
+    user = _require_bearer(request, db)
+    return []
 
 
 # ---------------------------------------------------------------------------
