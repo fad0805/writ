@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import Icon from "./Icon";
 import { getCustomEmojis, CustomEmoji } from "@/lib/emojis";
@@ -53,24 +53,40 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
   }, [open]);
 
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const lastHeightRef = useRef(0);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [flipUp, setFlipUp] = useState(false);
 
   const updatePos = useCallback(() => {
     if (!triggerRef.current) return;
     const r = triggerRef.current.getBoundingClientRect();
+    const h = dropdownRef.current ? dropdownRef.current.getBoundingClientRect().height : 0;
+    const estH = h > 0 ? h : 420;
+    const flip = dropUp || r.bottom + estH + 8 > window.innerHeight;
+    setFlipUp(flip);
     setPos({
-      top: dropUp ? r.top - 4 : r.bottom + 4,
+      top: flip ? r.top - 4 : r.bottom + 4,
       left: r.left + r.width / 2,
     });
   }, [dropUp]);
 
   useEffect(() => {
-    if (!open) { setPos(null); return; }
+    if (!open) { setPos(null); setFlipUp(false); return; }
     updatePos();
     window.addEventListener("scroll", updatePos, true);
     window.addEventListener("resize", updatePos);
     return () => { window.removeEventListener("scroll", updatePos, true); window.removeEventListener("resize", updatePos); };
   }, [open, updatePos]);
+
+  useLayoutEffect(() => {
+    if (!open || !dropdownRef.current) return;
+    const h = dropdownRef.current.getBoundingClientRect().height;
+    if (h !== lastHeightRef.current) {
+      lastHeightRef.current = h;
+      updatePos();
+    }
+  }, [open, updatePos, customEmojis, search]);
 
   return (
     <div ref={pickerRef} className="relative-wrap">
@@ -78,11 +94,11 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
         <Icon name="smile" size={18} />
       </button>
       {open && pos && createPortal(
-        <div className="emoji-picker-dropdown" style={{
+        <div ref={dropdownRef} className="emoji-picker-dropdown" style={{
           position: "fixed",
           top: pos.top,
           left: pos.left,
-          transform: dropUp ? "translate(-50%, -100%)" : "translateX(-50%)",
+          transform: (dropUp || flipUp) ? "translate(-50%, -100%)" : "translateX(-50%)",
         }}>
           <input ref={searchRef} type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="이모지 검색..." className="cw-input emoji-picker-search" />
           {search && searchResults.length > 0 && (
