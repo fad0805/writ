@@ -155,6 +155,14 @@ def _account_json(user: User, db: SASession, viewer: User | None = None) -> dict
         "display_name": display_name,
         "locked": bool(user.is_locked),
         "bot": bool(user.is_bot),
+        "discoverable": True,
+        "indexable": False,
+        "group": False,
+        "roles": [],
+        "noindex": False,
+        "hide_collections": False,
+        "suspended": bool(user.is_suspended),
+        "limited": bool(user.is_limited),
         "created_at": _ap_datetime(user.created_at),
         "note": note_html,
         "url": user.profile_url or (user.remote_url if user.is_remote else f"{BASE_URL}/@{username}"),
@@ -174,7 +182,9 @@ def _account_json(user: User, db: SASession, viewer: User | None = None) -> dict
         "source": {
             "note": source_note,
             "privacy": _visibility_to_mastodon(user.default_visibility),
+            "sensitive": bool(user.is_sensitive),
             "language": "ko",
+            "fields": [],
             "follow_requests_count": 0,
         },
     }
@@ -189,6 +199,7 @@ def _account_json(user: User, db: SASession, viewer: User | None = None) -> dict
                 "value": value,
                 "verified_at": None,
             })
+    account["source"]["fields"] = account["fields"]
 
     if viewer:
         account["relationship"] = _relationship_json(viewer, user, db)
