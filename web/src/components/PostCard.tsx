@@ -257,6 +257,10 @@ const localReactionEmojiMap = useMemo(() => {
     return m ? `${m[1]}/@${m[2]}/${m[3]}` : u;
   })();
 
+  const postHref = post.boost_of_id
+    ? (post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.boost_of_id}`)
+    : (post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`);
+
   const validMentions = useMemo(() => new Set(post.mentioned_handles || []), [post.mentioned_handles]);
 
   // 2. 순수한 HTML 변환 함수 (Setter 함수들 완전 제거)
@@ -682,7 +686,7 @@ const localReactionEmojiMap = useMemo(() => {
             <span className={`vis-badge vis-${post.visibility}`}>
               <Icon name={VIS_ICONS[post.visibility] || "globe"} />
             </span>
-            {timeStr ? <Link href={post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`} className="no-underline" style={{ color: "inherit" }}>{timeStr}</Link> : null}
+            {timeStr ? <Link href={postHref} className="no-underline" style={{ color: "inherit" }}>{timeStr}</Link> : null}
           </span>
         </div>
         {!hideContext && post.reply_context && (
