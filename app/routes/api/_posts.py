@@ -121,8 +121,6 @@ def api_get_post(request: Request, post_id: int):
                 depth += 1
             cur = cur.parent
 
-        ancestor_ids.reverse()
-
         total_ancestors = len(ancestor_ids)
         has_more_ancestors = anc_offset + anc_limit < total_ancestors
         sliced_ids = ancestor_ids[anc_offset:anc_offset + anc_limit]

@@ -64,9 +64,9 @@ export default function PostByNumberPage() {
       if (!data.ok) { setPost(null); return; }
       const p = await data.json();
       if (!p?.id) { setPost(null); return; }
-      const full = await api.getPost(p.id, 0, 50, 0);
+      const full = await api.getPost(p.id, 0, 50, 0, 20);
       setPost(full);
-      setAncestors(full.ancestors || []);
+      setAncestors([...(full.ancestors || [])].reverse());
       setHasMoreAncestors(full.has_more_ancestors || false);
       setReplies(full.replies || []);
       setTotalReplies(full.total_replies);
@@ -119,8 +119,8 @@ export default function PostByNumberPage() {
     setLoadingAncestors(true);
     ancOffsetRef.current += 20;
     try {
-      const data = await api.getPost(post.id, offsetRef.current, 20, ancOffsetRef.current);
-      setAncestors((prev) => [...(data.ancestors || []), ...prev]);
+      const data = await api.getPost(post.id, offsetRef.current, 20, ancOffsetRef.current, 20);
+      setAncestors((prev) => [...([...(data.ancestors || [])].reverse()), ...prev]);
       setHasMoreAncestors(data.has_more_ancestors || false);
     } catch {}
     setLoadingAncestors(false);

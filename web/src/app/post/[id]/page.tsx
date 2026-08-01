@@ -66,9 +66,9 @@ export default function PostDetailPage() {
     try {
       const id = Number(params.id);
       if (isNaN(id)) return;
-      const data = await api.getPost(id, 0, 50, 0);
+      const data = await api.getPost(id, 0, 50, 0, 20);
       setPost(data);
-      setAncestors(data.ancestors || []);
+      setAncestors([...(data.ancestors || [])].reverse());
       setHasMoreAncestors(data.has_more_ancestors || false);
       setReplies(data.replies || []);
       setTotalReplies(data.total_replies);
@@ -126,8 +126,8 @@ export default function PostDetailPage() {
     setLoadingAncestors(true);
     ancOffsetRef.current += 20;
     try {
-      const data = await api.getPost(post.id, offsetRef.current, 20, ancOffsetRef.current);
-      setAncestors((prev) => [...(data.ancestors || []), ...prev]);
+      const data = await api.getPost(post.id, offsetRef.current, 20, ancOffsetRef.current, 20);
+      setAncestors((prev) => [...([...(data.ancestors || [])].reverse()), ...prev]);
       setHasMoreAncestors(data.has_more_ancestors || false);
     } catch {}
     setLoadingAncestors(false);
