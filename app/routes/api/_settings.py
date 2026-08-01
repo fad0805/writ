@@ -16,7 +16,7 @@ from sqlalchemy import or_
 
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, SeriesFollow, SeriesNotice, BlockedDomain, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PushSubscription
 from app.config.settings import BASE_URL, DOMAIN
-from app.core.activitypub import _post_to_inbox, broadcast_to_followers, _fetch_ap_json
+from app.core.activitypub import _post_to_inbox, broadcast_to_followers, _fetch_actor_json_signed
 from app.core.timeline_stream import broadcast_refresh_notifs
 from app.db.database import get_session
 from app.db.mention_resolver import _resolve_remote_user
@@ -222,7 +222,7 @@ def _migrate_out_to_remote(request: Request, user, target_handle: str):
         raise HTTPException(status_code=404, detail="대상 계정을 찾을 수 없습니다.")
     new_actor_url = remote.remote_url or ""
 
-    actor_data = _fetch_ap_json(new_actor_url)
+    actor_data = _fetch_actor_json_signed(new_actor_url, user)
     known_as = actor_data.get("alsoKnownAs", []) if isinstance(actor_data, dict) else []
     if not isinstance(known_as, list):
         known_as = []

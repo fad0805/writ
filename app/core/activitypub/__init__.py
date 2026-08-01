@@ -42,6 +42,7 @@ from app.core.activitypub._fetch import (
     _resolve_actor,
     _retry_fetch_reply,
     _fetch_remote_post,
+    _fetch_actor_json_signed,
 )
 
 from app.core.activitypub._outbound import (

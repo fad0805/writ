@@ -55,6 +55,38 @@ def _fetch_ap_json(url, headers=None, timeout=10, _depth=0):
         return None
 
 
+def _fetch_actor_json_signed(actor_url: str, sign_as=None) -> dict:
+    """Fetch a remote actor document with an HTTP signature.
+
+    Some servers (e.g. Mastodon) return 401 for unsigned actor requests, so we
+    sign the request as `sign_as` when available.
+    """
+    if not actor_url:
+        return None
+    try:
+        parsed = urlparse(actor_url)
+        headers = {
+            "Accept": "application/activity+json",
+            "User-Agent": WRIT_USER_AGENT,
+        }
+        if sign_as is not None:
+            date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+            created = int(time.time())
+            ss = f"(request-target): get {parsed.path}\nhost: {parsed.netloc}\ndate: {date}\n(created): {created}"
+            priv = get_private_key(sign_as, SECRET_KEY)
+            sig = sign_string(ss, priv)
+            headers["Signature"] = (
+                f'keyId="{sign_as.actor_uri()}#main-key",algorithm="hs2019",'
+                f'created="{created}",headers="(request-target) host date (created)",signature="{sig}"'
+            )
+            headers["Date"] = date
+            headers["Host"] = parsed.netloc
+        data = _fetch_ap_json(actor_url, headers=headers)
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
 def _parse_username_from_url(url: str) -> str:
     url = url.rstrip("/")
     # Handle /users/{username} or /@{username}
