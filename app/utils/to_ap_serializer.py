@@ -4,6 +4,7 @@ from urllib.parse import quote, urlparse
 
 from app.config.settings import BASE_URL
 from app.db.database import get_session
+from app.utils.alias import alias_to_actor_urls
 
 
 def _ap_datetime(dt):
@@ -47,6 +48,16 @@ def to_ap_actor(user) -> dict:
     }
     if tags:
         result["tag"] = tags
+    if not user.is_remote:
+        known_as = []
+        for a in (getattr(user, 'aliases', None) or []):
+            for u in alias_to_actor_urls(a):
+                if u and u not in known_as:
+                    known_as.append(u)
+        if known_as:
+            result["alsoKnownAs"] = known_as
+    if getattr(user, 'moved_to', ''):
+        result["movedTo"] = user.moved_to
     if user.profile_image:
         result["icon"] = {"type": "Image", "url": user.profile_image}
     if user.header_image:

@@ -15,10 +15,11 @@ from PIL import Image, ImageOps
 from sqlalchemy import or_
 
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, SeriesFollow, SeriesNotice, BlockedDomain, UserMute, UserBlock, SeriesMute, KeywordMute, EpisodeView, PushSubscription
-from app.config.settings import BASE_URL
-from app.core.activitypub import _post_to_inbox
+from app.config.settings import BASE_URL, DOMAIN
+from app.core.activitypub import _post_to_inbox, broadcast_to_followers, _fetch_ap_json
 from app.core.timeline_stream import broadcast_refresh_notifs
 from app.db.database import get_session
+from app.db.mention_resolver import _resolve_remote_user
 from app.routes.auth import require_auth, require_active_auth, hash_password, verify_password
 from app.utils.log import log_admin_action
 from app.utils.storage import get_storage
@@ -157,8 +158,25 @@ def api_migrate_account(request: Request, target_username: str = Form(...), seri
     user = require_auth(request)
     if user.is_frozen:
         raise HTTPException(status_code=400, detail="이미 동결된 계정입니다.")
+    if getattr(user, 'moved_to', ''):
+        raise HTTPException(status_code=400, detail="이미 이전된 계정입니다.")
+    target_username = target_username.strip().lstrip("@")
+    if not target_username:
+        raise HTTPException(status_code=400, detail="대상 계정을 입력하세요.")
+
+    local_name = None
+    if "@" not in target_username:
+        local_name = target_username
+    else:
+        _name, _domain = target_username.rsplit("@", 1)
+        if _domain.strip().lower().rstrip("/") == DOMAIN.lower():
+            local_name = _name
+
+    if local_name is None:
+        return _migrate_out_to_remote(request, user, target_username)
+
     with get_session() as s:
-        target = s.query(User).filter_by(username=target_username.strip(), is_remote=False).first()
+        target = s.query(User).filter_by(username=local_name, is_remote=False).first()
         if not target:
             raise HTTPException(status_code=404, detail="대상 계정을 찾을 수 없습니다.")
         if target.id == user.id:
@@ -190,6 +208,68 @@ def api_migrate_account(request: Request, target_username: str = Form(...), seri
         s.commit()
 
     return {"ok": True, "message": f"{target_username}님에게 이전 요청을 보냈습니다. 상대방이 수락하면 이전이 완료됩니다."}
+
+
+def _migrate_out_to_remote(request: Request, user, target_handle: str):
+    """Move the local account out to a remote account (ActivityPub Move).
+
+    Verifies the remote account lists this account in `alsoKnownAs`, then
+    sends a Move activity to the local account's remote followers and freezes
+    the local account.
+    """
+    remote = _resolve_remote_user(target_handle)
+    if not remote:
+        raise HTTPException(status_code=404, detail="대상 계정을 찾을 수 없습니다.")
+    new_actor_url = remote.remote_url or ""
+
+    actor_data = _fetch_ap_json(new_actor_url)
+    known_as = actor_data.get("alsoKnownAs", []) if isinstance(actor_data, dict) else []
+    if not isinstance(known_as, list):
+        known_as = []
+    own_url = user.actor_uri().rstrip("/").lower()
+    if not any((str(k) or "").rstrip("/").lower() == own_url for k in known_as):
+        raise HTTPException(
+            status_code=400,
+            detail="새 계정에 현재 계정이 별칭(alsoKnownAs)으로 등록되어 있지 않습니다. "
+                   "새 계정(마스토돈 등)에서 먼저 이 계정을 별칭으로 추가한 후 다시 시도하세요.",
+        )
+
+    activity = {
+        "@context": "https://www.w3.org/ns/activitystreams",
+        "id": f"{BASE_URL}/activities/move/{uuid4().hex}",
+        "type": "Move",
+        "actor": user.actor_uri(),
+        "object": user.actor_uri(),
+        "target": new_actor_url,
+        "to": [f"{BASE_URL}/users/{user.username}/followers"],
+    }
+    try:
+        broadcast_to_followers(user, activity)
+    except Exception:
+        logger.exception("Move: failed to broadcast Move to followers")
+
+    with get_session() as s:
+        db = s.query(User).filter_by(id=user.id).first()
+        followers = s.query(Follow).filter_by(following_id=db.id, accepted=True).all()
+        moved_local = 0
+        for f in followers:
+            existing = s.query(Follow).filter_by(follower_id=f.follower_id, following_id=remote.id).first()
+            if not existing:
+                f.following_id = remote.id
+                moved_local += 1
+        db.is_frozen = True
+        db.moved_to = new_actor_url
+        db.session_token = ""
+        db.aliases = []
+        s.commit()
+
+    log_admin_action(
+        user.id, user.username, "account_migrated_remote",
+        target_username=remote.username if remote.username else target_handle,
+        ip_address=request.client.host if request.client else "",
+    )
+    logger.info("Move: local %s moved out to %s (%d local followers repointed)", user.username, new_actor_url, moved_local)
+    return {"ok": True, "message": "계정 이전(Move)이 팔로워에게 전송되었습니다."}
 
 
 @settings_router.post("/settings/migrate/approve")

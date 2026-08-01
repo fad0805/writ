@@ -19,6 +19,7 @@ from app.config.settings import BASE_URL
 from app.db.database import get_session
 from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, MutedServer, UserBlock, Tag
 from app.utils.emoji import _refresh_emoji_cache_forcibly, _load_emojis
+from app.utils.alias import actor_urls_include
 from app.utils.crypto import generate_keypair
 from app.utils.content_parser import _sanitize_html, process_post_content
 from app.core.activitypub._utils import (
@@ -1771,14 +1772,14 @@ def _handle_move(activity: dict) -> tuple[int, str]:
         new_actor_local = session.query(User).filter_by(id=new_actor_id, is_remote=False).first()
         if new_actor_local:
             aliases = new_actor_local.aliases or []
-            if old_actor_url not in aliases and local_user.actor_uri() not in aliases:
+            if not actor_urls_include(aliases, old_actor_url) and not actor_urls_include(aliases, local_user.actor_uri()):
                 return (403, "New account has not aliased the old account")
         else:
             # new_actor is detached; query fresh from session for alias check
             new_actor_in_session = session.query(User).filter_by(id=new_actor_id).first()
             if new_actor_in_session and new_actor_in_session.is_remote:
                 aliases = new_actor_in_session.aliases or []
-                if old_actor_url not in aliases and local_user.remote_url not in aliases:
+                if not actor_urls_include(aliases, old_actor_url) and not actor_urls_include(aliases, local_user.remote_url):
                     return (403, "New account has not aliased the old account")
 
         followers = session.query(Follow).filter_by(following_id=local_user.id, accepted=True).all()
