@@ -171,21 +171,30 @@ def _account_json(user: User, db: SASession, viewer: User | None = None) -> dict
             })
 
     if viewer:
-        relationship = db.query(Follow).filter_by(
-            follower_id=viewer.id, following_id=user.id
-        ).first()
-        account["relationship"] = {
-            "id": str(user.id),
-            "following": bool(relationship),
-            "showing_reblogs": True,
-            "notifying": bool(relationship and relationship.notify_on_post),
-            "blocking": False,
-            "muting": False,
-            "domain_blocking": False,
-            "endorsed": False,
-        }
+        account["relationship"] = _relationship_json(viewer, user, db)
 
     return account
+
+
+def _relationship_json(user: User, target: User, db: SASession) -> dict:
+    relationship = db.query(Follow).filter_by(
+        follower_id=user.id, following_id=target.id
+    ).first()
+    return {
+        "id": str(target.id),
+        "following": bool(relationship),
+        "showing_reblogs": True,
+        "notifying": bool(relationship and relationship.notify_on_post),
+        "followed_by": bool(db.query(Follow).filter_by(follower_id=target.id, following_id=user.id).first()),
+        "blocking": False,
+        "blocked_by": False,
+        "muting": False,
+        "muting_notifications": False,
+        "requested": False,
+        "domain_blocking": False,
+        "endorsed": False,
+        "note": "",
+    }
 
 
 def _status_json(post: Post, db: SASession, viewer: User | None = None,
@@ -571,19 +580,10 @@ def get_relationships(
             uid_int = int(uid)
         except ValueError:
             continue
-        follow = db.query(Follow).filter_by(follower_id=user.id, following_id=uid_int).first()
-        result.append({
-            "id": uid,
-            "following": bool(follow),
-            "showing_reblogs": True,
-            "notifying": bool(follow and follow.notify_on_post),
-            "blocking": False,
-            "muting": False,
-            "domain_blocking": False,
-            "endorsed": False,
-            "followed_by": bool(db.query(Follow).filter_by(follower_id=uid_int, following_id=user.id).first()),
-            "note": "",
-        })
+        target = db.query(User).filter_by(id=uid_int).first()
+        if not target:
+            continue
+        result.append(_relationship_json(user, target, db))
     return result
 
 
@@ -726,8 +726,7 @@ async def follow_account(account_id: str, request: Request, db: SASession = Depe
 
     follow_user(db, user, target)
 
-    viewer = _maybe_bearer(request, db)
-    return _account_json(target, db, viewer)
+    return _relationship_json(user, target, db)
 
 
 # ---------------------------------------------------------------------------
@@ -742,8 +741,7 @@ async def unfollow_account(account_id: str, request: Request, db: SASession = De
 
     unfollow_user(db, user, target)
 
-    viewer = _maybe_bearer(request, db)
-    return _account_json(target, db, viewer)
+    return _relationship_json(user, target, db)
 
 
 # ---------------------------------------------------------------------------
