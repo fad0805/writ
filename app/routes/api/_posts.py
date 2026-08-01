@@ -12,7 +12,7 @@ from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, Tag, Report, ServerRule
+from app.models import User, Post, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, Report, ServerRule
 from app.utils.to_ap_serializer import to_ap_note
 from app.serializers import _post_json, _user_json
 from app.config.settings import BASE_URL, MAX_POST_LENGTH
@@ -24,7 +24,7 @@ from app.db.database import get_session
 from app.db.mention_resolver import resolve_handles_to_ids
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.utils.content_parser import process_post_content, extract_mentions
-from app.utils.post import _get_descendant_ids
+from app.utils.post import _get_descendant_ids, _sync_post_tags
 from app.utils.storage import get_storage
 
 from app.routes.api._core import _ap_fetch, _fetch_and_save_ap_object, _check_fetch_domain_allowed
@@ -53,29 +53,6 @@ def _validate_media_url(url: str) -> bool:
     ext = os.path.splitext(path)[1]
     return ext in allowed_ext
 
-
-def _sync_post_tags(post, s):
-    """Parse #hashtags from post content and sync with Tag model."""
-    tags = set(re.findall(r'(?<!\w)#([\w_가-힣]+)', post.content))
-    desired = {t.lower(): t for t in tags}
-    current = {t.name: t for t in (post.tag_list or [])}
-    for lower_name, display in desired.items():
-        if lower_name in current:
-            tag = current[lower_name]
-            if tag.display_name != display:
-                tag.display_name = display
-        else:
-            tag = s.query(Tag).filter_by(name=lower_name).first()
-            if not tag:
-                tag = Tag(name=lower_name, display_name=display)
-                s.add(tag)
-                s.flush()
-            else:
-                tag.display_name = display
-            post.tag_list.append(tag)
-    for name in set(current.keys()) - set(desired.keys()):
-        tag = current[name]
-        post.tag_list.remove(tag)
 
 
 

@@ -22,6 +22,8 @@ from app.db.database import get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.utils.upload import _validate_upload, MAX_AUDIO_SIZE
 from app.utils.datetime import _fmt_dt
+from app.utils.content_parser import process_post_content
+from app.utils.post import _sync_post_tags
 from app.utils.log import log_admin_action
 from app.utils.storage import get_storage
 
@@ -421,6 +423,7 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
             parts.append(f'「{next_num}화: {title}」')
             parts.append(f'episode : {BASE_URL}/series/{novel.id}/episodes/{episode.id}')
             post_content = "\n".join(parts)
+            post_content = process_post_content(post_content, None)
             ep_post_number = secrets.token_hex(4)
             post = Post(
                 author_id=user.id,
@@ -434,6 +437,7 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
             s.add(post)
             s.flush()
             post.ap_id = f"{BASE_URL}/@{user.username}/{ep_post_number}"
+            _sync_post_tags(post, s)
             s.flush()
             try:
                 s.refresh(post)
@@ -595,6 +599,7 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
             parts.append(f'「{episode.episode_number}화: {title}」')
             parts.append(f'episode : {BASE_URL}/series/{novel_id}/episodes/{episode_id}')
             post_content = "\n".join(parts)
+            post_content = process_post_content(post_content, None)
             ep_post_number = secrets.token_hex(4)
             post = Post(
                 author_id=user.id,
@@ -608,6 +613,7 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
             s.add(post)
             s.flush()
             post.ap_id = f"{BASE_URL}/@{user.username}/{ep_post_number}"
+            _sync_post_tags(post, s)
             s.flush()
             try:
                 s.refresh(post)
