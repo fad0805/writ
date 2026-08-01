@@ -636,7 +636,6 @@ input:focus {
   padding: 16px;
   margin-bottom: 12px;
   transition: border-color 0.2s, background 0.3s;
-  cursor: pointer;
   max-width: 100%;
   word-break: break-word;
   position: relative;
