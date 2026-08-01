@@ -82,6 +82,16 @@ def _query_id_list(request: Request) -> list[str]:
     return result
 
 
+def _query_param_list(request: Request, name: str) -> list[str]:
+    """Parse `name` / `name[]` query params (Mastodon apps use the `[]` suffix)."""
+    result = []
+    for key in (name, f"{name}[]"):
+        for v in request.query_params.getlist(key):
+            if v:
+                result.append(v)
+    return result
+
+
 def _visibility_to_mastodon(vis: str) -> str:
     return VISIBILITY_MAP.get(vis, "public")
 
@@ -1621,10 +1631,11 @@ def list_notifications(
     since_id: str | None = None,
     min_id: str | None = None,
     limit: int = Query(default=20, le=100),
-    types: list[str] = Query(default=[]),
-    exclude_types: list[str] = Query(default=[]),
 ):
     user = _require_bearer(request, db)
+
+    types = _query_param_list(request, "types")
+    exclude_types = _query_param_list(request, "exclude_types")
 
     q = db.query(Notification).filter(Notification.user_id == user.id)
 
