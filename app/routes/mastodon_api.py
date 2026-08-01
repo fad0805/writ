@@ -621,9 +621,10 @@ def get_account_statuses(
     max_id: str | None = None,
     since_id: str | None = None,
     min_id: str | None = None,
-    limit: int = Query(default=20, le=80),
+    limit: int = Query(default=20, le=100),
     pinned: bool | None = None,
     exclude_reblogs: bool = False,
+    exclude_replies: bool = False,
 ):
     user = db.query(User).filter_by(id=int(account_id)).first()
     if not user:
@@ -650,6 +651,9 @@ def get_account_statuses(
             Post.author_id == user.id,
             Post.is_deleted == False,
         )
+
+    if exclude_replies:
+        q = q.filter(Post.in_reply_to_id.is_(None))
 
     if max_id:
         q = q.filter(Post.id < int(max_id))
