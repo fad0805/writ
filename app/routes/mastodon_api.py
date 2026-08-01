@@ -43,6 +43,14 @@ VISIBILITY_MAP_REVERSE = {v: k for k, v in VISIBILITY_MAP.items()}
 VISIBILITY_MAP_REVERSE["unlisted"] = "home"
 
 
+STAR_REACTION = "★"
+
+
+def _is_favourite_reaction(reaction):
+    """Mastodon 'favourite' maps to writ's default ★ like, not custom reactions."""
+    return not reaction or reaction == STAR_REACTION
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -252,7 +260,8 @@ def _build_status_maps(posts: list, db: SASession, viewer: User | None = None) -
         Boost.post_id.in_(post_ids)
     ).group_by(Boost.post_id).all())
     maps["_favs_map"] = dict(db.query(Like.post_id, sqlfunc.count(Like.id)).filter(
-        Like.post_id.in_(post_ids)
+        Like.post_id.in_(post_ids),
+        or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
     ).group_by(Like.post_id).all())
 
     rows = db.query(Like.post_id, sqlfunc.coalesce(Like.reaction, "★"), sqlfunc.count(Like.id), sqlfunc.min(Like.id)).filter(
@@ -376,7 +385,8 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         favourites_count = _favs_map.get(post.id, 0)
     else:
         favourites_count = db.query(sqlfunc.count(Like.id)).filter(
-            Like.post_id == post.id
+            Like.post_id == post.id,
+            or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
         ).scalar() or 0
 
     status = {
@@ -980,7 +990,9 @@ def home_timeline(
     posts = _timeline_filter(posts, db, user, "home", following_ids, filter_ctx)
 
     _liked_ids = set(r[0] for r in db.query(Like.post_id).filter(
-        Like.user_id == user.id, Like.post_id.in_([p.id for p in posts])
+        Like.user_id == user.id,
+        or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
+        Like.post_id.in_([p.id for p in posts])
     ).all()) if posts else set()
     _boosted_ids = set(r[0] for r in db.query(Boost.post_id).filter(
         Boost.user_id == user.id, Boost.post_id.in_([p.id for p in posts])
@@ -1069,7 +1081,9 @@ def public_timeline(
     if viewer:
         post_ids = [p.id for p in posts]
         _liked_ids = set(r[0] for r in db.query(Like.post_id).filter(
-            Like.user_id == viewer.id, Like.post_id.in_(post_ids)
+            Like.user_id == viewer.id,
+            or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
+            Like.post_id.in_(post_ids)
         ).all()) if post_ids else set()
         _boosted_ids = set(r[0] for r in db.query(Boost.post_id).filter(
             Boost.user_id == viewer.id, Boost.post_id.in_(post_ids)
@@ -1153,7 +1167,9 @@ def hashtag_timeline(
         post_ids = [p.id for p in posts]
         if post_ids:
             _liked_ids = set(r[0] for r in db.query(Like.post_id).filter(
-                Like.user_id == viewer.id, Like.post_id.in_(post_ids)
+                Like.user_id == viewer.id,
+                or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
+                Like.post_id.in_(post_ids)
             ).all())
             _boosted_ids = set(r[0] for r in db.query(Boost.post_id).filter(
                 Boost.user_id == viewer.id, Boost.post_id.in_(post_ids)
@@ -1202,7 +1218,10 @@ def get_status(status_id: str, request: Request, db: SASession = Depends(get_db)
     if not viewer:
         s = _status_json(post, db, None)
     else:
-        _liked_ids = {post.id} if db.query(Like).filter_by(user_id=viewer.id, post_id=post.id).first() else set()
+        _liked_ids = {post.id} if db.query(Like).filter(
+            Like.user_id == viewer.id, Like.post_id == post.id,
+            or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
+        ).first() else set()
         _boosted_ids = {post.id} if db.query(Boost).filter_by(user_id=viewer.id, post_id=post.id).first() else set()
         _bookmarked_ids = {post.id} if db.query(Bookmark).filter_by(user_id=viewer.id, post_id=post.id).first() else set()
         s = _status_json(post, db, viewer, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids)
@@ -1249,7 +1268,9 @@ def get_statuses(
         except ValueError:
             continue
     _liked_ids = set(r[0] for r in db.query(Like.post_id).filter(
-        Like.user_id == viewer.id, Like.post_id.in_(post_ids)
+        Like.user_id == viewer.id,
+        or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
+        Like.post_id.in_(post_ids)
     ).all()) if viewer and post_ids else set()
     _boosted_ids = set(r[0] for r in db.query(Boost.post_id).filter(
         Boost.user_id == viewer.id, Boost.post_id.in_(post_ids)
@@ -1572,7 +1593,7 @@ def react_to_status(status_id: str, name: str, request: Request, db: SASession =
 
     react_post(db, user, post.id, name)
 
-    _liked_ids = {post.id}
+    _liked_ids = {post.id} if name.strip(":") == STAR_REACTION else set()
     _boosted_ids = {post.id} if db.query(Boost).filter_by(user_id=user.id, post_id=post.id).first() else set()
     _bookmarked_ids = {post.id} if db.query(Bookmark).filter_by(user_id=user.id, post_id=post.id).first() else set()
     return _status_json(post, db, viewer=user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids)
@@ -1595,7 +1616,10 @@ def unreact_to_status(status_id: str, name: str, request: Request, db: SASession
 
     unreact_post(db, user, post.id, name)
 
-    _liked_ids = {post.id} if db.query(Like).filter_by(user_id=user.id, post_id=post.id).first() else set()
+    _liked_ids = {post.id} if db.query(Like).filter(
+        Like.user_id == user.id, Like.post_id == post.id,
+        or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
+    ).first() else set()
     _boosted_ids = {post.id} if db.query(Boost).filter_by(user_id=user.id, post_id=post.id).first() else set()
     _bookmarked_ids = {post.id} if db.query(Bookmark).filter_by(user_id=user.id, post_id=post.id).first() else set()
     return _status_json(post, db, viewer=user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids)
@@ -1743,7 +1767,10 @@ def favourited_by(
     if not post or post.is_deleted:
         raise MastodonAPIError(status_code=404, detail="Record not found")
 
-    q = db.query(Like).filter(Like.post_id == post.id)
+    q = db.query(Like).filter(
+        Like.post_id == post.id,
+        or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
+    )
     if max_id:
         q = q.filter(Like.id < int(max_id))
     likes = q.order_by(Like.id.desc()).limit(limit).all()
@@ -2251,6 +2278,7 @@ def list_bookmarks(
 
     _liked_ids = set(r[0] for r in db.query(Like.post_id).filter(
         Like.user_id == user.id,
+        or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
         Like.post_id.in_([b.post_id for b in bookmarks])
     ).all()) if bookmarks else set()
     _boosted_ids = set(r[0] for r in db.query(Boost.post_id).filter(
@@ -2282,7 +2310,10 @@ def list_favourites(
     limit: int = Query(default=20, le=80),
 ):
     user = _require_bearer(request, db)
-    q = db.query(Like).filter(Like.user_id == user.id)
+    q = db.query(Like).filter(
+        Like.user_id == user.id,
+        or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
+    )
 
     if max_id:
         q = q.filter(Like.id < int(max_id))
