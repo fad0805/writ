@@ -391,6 +391,28 @@ const localReactionEmojiMap = useMemo(() => {
     window.addEventListener("keydown", handler);
     return () => { window.removeEventListener("keydown", handler); window.removeEventListener("popstate", onPop); };
   }, [viewerIndex]);
+  useEffect(() => {
+    const onOpenMedia = (e: Event) => {
+      const d = (e as CustomEvent).detail;
+      if (d && d.postId && d.postId !== post.id) return;
+      const media = (post as any).media_attachments || [];
+      if (!media.length) return;
+      setRevealedSensitive(true);
+      setViewerIndex(d && typeof d.index === "number" ? d.index : 0);
+    };
+    const onReveal = (e: Event) => {
+      const d = (e as CustomEvent).detail;
+      if (d && d.postId && d.postId !== post.id) return;
+      setRevealedSensitive(true);
+    };
+    window.addEventListener("writ:open-media", onOpenMedia);
+    window.addEventListener("writ:reveal-post", onReveal);
+    return () => {
+      window.removeEventListener("writ:open-media", onOpenMedia);
+      window.removeEventListener("writ:reveal-post", onReveal);
+    };
+  }, [post]);
+
   const handleViewerWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     e.stopPropagation();

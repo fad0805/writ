@@ -226,6 +226,18 @@ export default function TimelinePage() {
         if (e.key === "b") { e.preventDefault(); (sp.boosted ? api.unboost(targetId) : api.boost(targetId)).then(() => load()).catch(console.error); return; }
         if (e.key === "r") { e.preventDefault(); api.getPost(targetId).then((d) => setReplyPost(d)).catch(console.error); return; }
         if (e.key === "Enter") { e.preventDefault(); router.push(sp.boost_of_id ? `/post/${sp.boost_of_id}` : sp.number ? `/@${sp.author.username}/${sp.number}` : `/post/${sp.id}`); return; }
+        if (e.key === "x") {
+          e.preventDefault();
+          const el = cardRefs.current.get(String(sp.id));
+          if (el) el.querySelectorAll("details.cw-box").forEach((d) => { (d as HTMLDetailsElement).open = true; });
+          window.dispatchEvent(new CustomEvent("writ:reveal-post", { detail: { postId: sp.id } }));
+          return;
+        }
+        if (e.key === "e") {
+          e.preventDefault();
+          window.dispatchEvent(new CustomEvent("writ:open-media", { detail: { postId: sp.id } }));
+          return;
+        }
         if (e.key === ".") {
           e.preventDefault();
           const el = cardRefs.current.get(String(sp.id));
