@@ -3762,6 +3762,8 @@ input[type="checkbox"] {
 .shortcut-help-backdrop.active { display: flex; }
 .shortcut-help {
   width: min(360px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -3771,6 +3773,30 @@ input[type="checkbox"] {
   margin: auto;
 }
 .shortcut-help h3 { margin-bottom: 14px; }
+.shortcut-help-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  background: var(--bg-tertiary);
+  border-radius: 10px;
+  padding: 4px;
+}
+.shortcut-help-tabs button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.85em;
+  font-weight: 600;
+  padding: 8px 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.shortcut-help-tabs button.active {
+  background: var(--accent);
+  color: #fff;
+}
 .shortcut-help h4 { margin: 16px 0 8px; font-size: 0.8em; color: var(--text-muted); font-weight: 600; }
 .shortcut-help h4:first-of-type { margin-top: 0; }
 .shortcut-help dl { margin-bottom: 4px; }
@@ -3785,7 +3811,7 @@ input[type="checkbox"] {
 }
 .shortcut-help dl {
   display: grid;
-  grid-template-columns: 52px 1fr;
+  grid-template-columns: minmax(52px, max-content) 1fr;
   gap: 10px 12px;
   align-items: center;
 }
@@ -3795,8 +3821,10 @@ input[type="checkbox"] {
   border-radius: 6px;
   color: var(--text-white);
   font-weight: 700;
+  font-size: 0.8em;
+  white-space: nowrap;
   text-align: center;
-  padding: 4px 0;
+  padding: 4px 6px;
 }
 .shortcut-help dd {
   color: var(--text-secondary);

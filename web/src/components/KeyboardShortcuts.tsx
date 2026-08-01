@@ -8,6 +8,7 @@ export default function KeyboardShortcuts() {
   const router = useRouter();
   const { user } = useAuth();
   const [showHelp, setShowHelp] = useState(false);
+  const [helpTab, setHelpTab] = useState<"general" | "timeline">("general");
   const [showPostModal, setShowPostModal] = useState(false);
   const gPendingRef = useRef(false);
   const gTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -32,7 +33,15 @@ export default function KeyboardShortcuts() {
 
     if (e.key === "?" && !isEditing) {
       e.preventDefault();
-      setShowHelp((v) => !v);
+      const next = !showHelp;
+      setShowHelp(next);
+      if (next) setHelpTab("general");
+      return;
+    }
+
+    if (showHelp && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+      e.preventDefault();
+      setHelpTab(e.key === "ArrowRight" ? "timeline" : "general");
       return;
     }
 
@@ -74,7 +83,7 @@ export default function KeyboardShortcuts() {
       window.dispatchEvent(new Event("themechange"));
       return;
     }
-  }, [router, user]);
+  }, [router, user, showHelp]);
 
   useEffect(() => {
     document.addEventListener("keydown", handleKey);
@@ -87,7 +96,11 @@ export default function KeyboardShortcuts() {
         <div className="shortcut-help" onClick={(e) => e.stopPropagation()}>
           <button className="shortcut-help-close" onClick={() => setShowHelp(false)}>×</button>
           <h3>키보드 단축키</h3>
-          <h4>일반</h4>
+          <div className="shortcut-help-tabs">
+            <button type="button" className={helpTab === "general" ? "active" : ""} onClick={() => setHelpTab("general")}>일반</button>
+            <button type="button" className={helpTab === "timeline" ? "active" : ""} onClick={() => setHelpTab("timeline")}>타임라인</button>
+          </div>
+          {helpTab === "general" ? (
           <dl>
             <dt>g h</dt><dd>홈 타임라인</dd>
             <dt>g s</dt><dd>소셜 타임라인</dd>
@@ -101,7 +114,7 @@ export default function KeyboardShortcuts() {
             <dt>Esc</dt><dd>입력 포커스 해제 / 닫기</dd>
             <dt>Backspace</dt><dd>뒤로 가기</dd>
           </dl>
-          <h4>타임라인 (포스트 선택 중)</h4>
+          ) : (
           <dl>
             <dt>j / k</dt><dd>다음 / 이전 포스트 선택</dd>
             <dt>Enter</dt><dd>포스트 열기</dd>
@@ -115,6 +128,7 @@ export default function KeyboardShortcuts() {
             <dt>h / l</dt><dd>이전 / 다음 타임라인 탭</dd>
             <dt>Esc</dt><dd>선택 해제</dd>
           </dl>
+          )}
         </div>
       </div>
 
