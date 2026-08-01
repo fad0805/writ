@@ -1667,11 +1667,12 @@ def search_v2(
         result["statuses"] = [_status_json(p, db, viewer) for p in posts if _status_json(p, db, viewer)]
 
     if not type or type == "hashtags":
+        tag_query = query_lower.lstrip("#")
         tags = db.query(Tag).filter(
-            Tag.name.ilike(f"%{query_lower}%")
+            Tag.name.ilike(f"%{tag_query}%")
         ).limit(limit).all()
         result["hashtags"] = [
-            {"name": t.display_name or t.name, "url": f"{BASE_URL}/explore?q=%23{t.display_name or t.name}"}
+            {"name": t.display_name or t.name, "url": f"{BASE_URL}/tags/{t.display_name or t.name}"}
             for t in tags
         ]
 
