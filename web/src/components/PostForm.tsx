@@ -914,7 +914,20 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           <button type="button" className={`action-btn${showPoll ? " active" : ""}`} onClick={() => setShowPoll(!showPoll)} title="투표 추가" style={showPoll ? { color: "var(--accent)" } : undefined}>
             <Icon name="chart" />
           </button>
-          <EmojiPicker onEmoji={(e) => setContent(content + e + " ")} />
+          <EmojiPicker onEmoji={(e) => {
+            const ta = taRef.current;
+            const pos = ta && ta.selectionStart != null ? ta.selectionStart : content.length;
+            const end = ta && ta.selectionEnd != null ? ta.selectionEnd : content.length;
+            const inserted = e + " ";
+            setContent(content.slice(0, pos) + inserted + content.slice(end));
+            requestAnimationFrame(() => {
+              if (ta) {
+                const p = pos + inserted.length;
+                ta.setSelectionRange(p, p);
+                ta.focus();
+              }
+            });
+          }} />
           <span className="char-count char-count-inline">{totalLen}/{MAX_LENGTH}</span>
           <button type="submit" disabled={submitting || !content.trim() || showSeriesSearch} className="btn btn-primary">
             {submitting ? "..." : parentId ? "답글" : "게시"}
