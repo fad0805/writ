@@ -1,7 +1,7 @@
 import datetime
 import uuid
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, JSON, Table
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, JSON, Table, Index
 from sqlalchemy.orm import relationship
 
 from app.config.settings import BASE_URL
@@ -319,6 +319,9 @@ class Novel(Base):
 
 class SeriesNotice(Base):
     __tablename__ = "series_notices"
+    __table_args__ = (
+        Index("ix_series_notices_novel_created", "novel_id", "created_at"),
+    )
 
     id = Column(Integer, primary_key=True)
     uuid = Column(String(36), default=generate_uuid, unique=True, nullable=False)
@@ -334,6 +337,9 @@ class SeriesNotice(Base):
 
 class Episode(Base):
     __tablename__ = "episodes"
+    __table_args__ = (
+        Index("ix_episodes_novel_created", "novel_id", "created_at"),
+    )
 
     id = Column(Integer, primary_key=True)
     uuid = Column(String(36), default=generate_uuid, unique=True, nullable=False)

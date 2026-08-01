@@ -1,6 +1,7 @@
 """Core API endpoints — admin extracted to _admin.py."""
 import re
 import asyncio
+import threading
 from datetime import datetime, timezone
 import uuid
 import logging
@@ -23,7 +24,7 @@ from app.core.timeline_stream import add_stream, remove_stream
 from app.db.database import get_session
 from app.db.mention_resolver import _federation_allowed, _resolve_remote_user
 from app.routes.auth import require_auth, get_current_user
-from app.routes.api._series import _apply_latest_activity_order, _novel_json
+from app.routes.api._series import _apply_latest_activity_order, _novel_json, _load_novel_meta
 from app.utils.crypto import get_private_key, sign_string
 from app.utils.filter import _timeline_filter
 from app.utils.storage import LocalStorage, get_storage
@@ -88,7 +89,8 @@ def api_search_series(request: Request, q: str = Query("")):
         if query:
             qb = qb.filter(Novel.title.ilike(f"%{query}%"))
         novels = qb.limit(5).all()
-        return {"series": [_novel_json(n, s) for n in novels]}
+        _novel_meta = _load_novel_meta(s, novels)
+        return {"series": [_novel_json(n, s, _episode_meta=_novel_meta) for n in novels]}
 
 
 @router.get("/search/tags")
@@ -193,6 +195,7 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
         # 3. 첫 페이지에서만 소설 목록 조회
         novels = []
         _followers_map = {}
+        _novel_meta = {}
         if offset == 0:
             novels = _apply_latest_activity_order(s.query(Novel).options(
                 selectinload(Novel.author),
@@ -205,11 +208,12 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
                 novel_ids = [n.id for n in novels]
                 for nid, cnt in s.query(SeriesFollow.novel_id, func.count(SeriesFollow.id)).filter(SeriesFollow.novel_id.in_(novel_ids)).group_by(SeriesFollow.novel_id).all():
                     _followers_map[nid] = cnt
+            _novel_meta = _load_novel_meta(s, novels)
 
         return {
             "posts": [_post_json(p, s, user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids, _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map, _mentioned_users_map=_mentioned_users_map, _boost_originals=_boost_originals, _skip_emojis=True) for p in posts],
             "has_more": has_more,
-            "novels": [_novel_json(n, s, _followers_map=_followers_map) for n in novels],
+            "novels": [_novel_json(n, s, _followers_map=_followers_map, _episode_meta=_novel_meta) for n in novels],
         }
 
 
@@ -226,7 +230,8 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
         if user:
             following_ids = [f.following_id for f in s.query(Follow).filter_by(follower_id=user.id, accepted=True).all()]
         visible_author_ids = set(following_ids)
-        visible_author_ids.add(user.id)
+        if user:
+            visible_author_ids.add(user.id)
 
         is_hashtag_search = q.strip().startswith("#")
 
@@ -326,15 +331,59 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
             )
 
             if not already_found:
-                resolved = _resolve_remote_user(query)
-                if resolved:
-                    refreshed = s.query(User).get(resolved.id)
-                    if refreshed:
-                        all_users.append(refreshed)
+                try:
+                    threading.Thread(target=_resolve_remote_user, args=(query,), daemon=True).start()
+                except Exception:
+                    pass
+
+        post_ids = [p.id for p in posts]
+        _liked_ids = _boosted_ids = _bookmarked_ids = set()
+        _my_reaction_map = {}
+        _reactions_map = {}
+        _mentioned_users_map = {}
+        _boost_originals = {}
+        if post_ids:
+            boost_pointer_ids = {p.boost_of_id for p in posts if p.boost_of_id}
+            if boost_pointer_ids:
+                for orig in s.query(Post).options(selectinload(Post.author)).filter(Post.id.in_(boost_pointer_ids), Post.is_deleted == False).all():
+                    _boost_originals[orig.id] = orig
+            all_mentioned_ids = set()
+            for p in posts:
+                if p.mentioned_user_ids:
+                    all_mentioned_ids.update(p.mentioned_user_ids)
+            if all_mentioned_ids:
+                _mu = {}
+                for _um in s.query(User).filter(User.id.in_(all_mentioned_ids)).all():
+                    if _um.is_remote and _um.remote_url:
+                        _name = _um.username.split("@")[0]
+                        _domain = urlparse(_um.remote_url).hostname or ""
+                        _mu[_um.id] = f"{_name}@{_domain}"
+                    else:
+                        _mu[_um.id] = _um.username
+                for p in posts:
+                    if p.mentioned_user_ids:
+                        _mentioned_users_map[p.id] = [_mu.get(mid, "?") for mid in p.mentioned_user_ids if mid in _mu]
+                    else:
+                        _mentioned_users_map[p.id] = []
+            else:
+                for p in posts:
+                    _mentioned_users_map[p.id] = []
+        if user and post_ids:
+            _liked_ids = {l.post_id for l in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(post_ids)).all()}
+            _boosted_ids = {b.post_id for b in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(post_ids)).all()}
+            _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(post_ids)).all()}
+            for l in s.query(Like.post_id, Like.reaction).filter(Like.user_id == user.id, Like.post_id.in_(post_ids), Like.reaction.isnot(None)).all():
+                _my_reaction_map[l.post_id] = l.reaction
+            for pid, react, cnt in s.query(Like.post_id, func.coalesce(Like.reaction, "★"), func.count(Like.id)).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all():
+                if pid not in _reactions_map:
+                    _reactions_map[pid] = {}
+                _reactions_map[pid][react] = cnt
+
+        _novel_meta = _load_novel_meta(s, novels)
 
         result = {
-            "posts": [_post_json(p, s, user) for p in posts],
-            "novels": [_novel_json(n, s) for n in novels],
+            "posts": [_post_json(p, s, user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids, _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map, _mentioned_users_map=_mentioned_users_map, _boost_originals=_boost_originals) for p in posts],
+            "novels": [_novel_json(n, s, _episode_meta=_novel_meta) for n in novels],
             "users": [_user_json(u) for u in all_users],
         }
         if blocked_domain:

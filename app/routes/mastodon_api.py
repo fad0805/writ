@@ -108,16 +108,20 @@ def _ap_datetime(dt) -> str:
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
-def _account_json(user: User, db: SASession, viewer: User | None = None) -> dict:
-    follower_count = db.query(sqlfunc.count(Follow.id)).filter(
-        Follow.following_id == user.id, Follow.accepted == True
-    ).scalar() or 0
-    following_count = db.query(sqlfunc.count(Follow.id)).filter(
-        Follow.follower_id == user.id, Follow.accepted == True
-    ).scalar() or 0
-    statuses_count = db.query(sqlfunc.count(Post.id)).filter(
-        Post.author_id == user.id, Post.is_deleted == False
-    ).scalar() or 0
+def _account_json(user: User, db: SASession, viewer: User | None = None,
+                  _counts: tuple | None = None) -> dict:
+    if _counts is not None:
+        follower_count, following_count, statuses_count = _counts
+    else:
+        follower_count = db.query(sqlfunc.count(Follow.id)).filter(
+            Follow.following_id == user.id, Follow.accepted == True
+        ).scalar() or 0
+        following_count = db.query(sqlfunc.count(Follow.id)).filter(
+            Follow.follower_id == user.id, Follow.accepted == True
+        ).scalar() or 0
+        statuses_count = db.query(sqlfunc.count(Post.id)).filter(
+            Post.author_id == user.id, Post.is_deleted == False
+        ).scalar() or 0
 
     acct = user.display_handle or user.username
     if acct.count('@') > 1:
@@ -207,6 +211,71 @@ def _account_json(user: User, db: SASession, viewer: User | None = None) -> dict
     return account
 
 
+def _build_account_counts_map(user_ids: set, db: SASession) -> dict:
+    """Precompute (followers, following, statuses) counts for a set of user ids in 3 queries."""
+    user_ids = list(user_ids)
+    if not user_ids:
+        return {}
+    fw = dict(db.query(Follow.following_id, sqlfunc.count(Follow.id)).filter(
+        Follow.following_id.in_(user_ids), Follow.accepted == True
+    ).group_by(Follow.following_id).all())
+    fg = dict(db.query(Follow.follower_id, sqlfunc.count(Follow.id)).filter(
+        Follow.follower_id.in_(user_ids), Follow.accepted == True
+    ).group_by(Follow.follower_id).all())
+    st = dict(db.query(Post.author_id, sqlfunc.count(Post.id)).filter(
+        Post.author_id.in_(user_ids), Post.is_deleted == False
+    ).group_by(Post.author_id).all())
+    return {uid: (fw.get(uid, 0), fg.get(uid, 0), st.get(uid, 0)) for uid in user_ids}
+
+
+def _build_status_maps(posts: list, db: SASession, viewer: User | None = None) -> dict:
+    """Precompute all per-post / per-author counts and lookups for a status list (~7 queries total)."""
+    maps = {
+        "_replies_map": {}, "_reblogs_map": {}, "_favs_map": {},
+        "_reactions_map": {}, "_my_reactions_map": {},
+        "_users_map": {}, "_username_map": {}, "_author_counts": {},
+    }
+    post_ids = [p.id for p in posts]
+    if not post_ids:
+        return maps
+
+    author_ids = {p.author_id for p in posts}
+    mention_ids = set()
+    for p in posts:
+        mention_ids.update(p.mentioned_user_ids or [])
+
+    maps["_replies_map"] = dict(db.query(Post.in_reply_to_id, sqlfunc.count(Post.id)).filter(
+        Post.in_reply_to_id.in_(post_ids), Post.is_deleted == False
+    ).group_by(Post.in_reply_to_id).all())
+    maps["_reblogs_map"] = dict(db.query(Boost.post_id, sqlfunc.count(Boost.id)).filter(
+        Boost.post_id.in_(post_ids)
+    ).group_by(Boost.post_id).all())
+    maps["_favs_map"] = dict(db.query(Like.post_id, sqlfunc.count(Like.id)).filter(
+        Like.post_id.in_(post_ids)
+    ).group_by(Like.post_id).all())
+
+    rows = db.query(Like.post_id, sqlfunc.coalesce(Like.reaction, "★"), sqlfunc.count(Like.id), sqlfunc.min(Like.id)).filter(
+        Like.post_id.in_(post_ids)
+    ).group_by(Like.post_id, Like.reaction).all()
+    for pid, react, cnt, min_id in rows:
+        maps["_reactions_map"].setdefault(pid, []).append((react, cnt, min_id))
+
+    if viewer:
+        my_rows = db.query(Like.post_id, sqlfunc.coalesce(Like.reaction, "★")).filter(
+            Like.post_id.in_(post_ids), Like.user_id == viewer.id
+        ).order_by(Like.id.asc()).all()
+        for pid, react in my_rows:
+            maps["_my_reactions_map"].setdefault(pid, react)
+
+    user_ids = set(author_ids) | set(mention_ids)
+    if user_ids:
+        users = db.query(User).filter(User.id.in_(user_ids)).all()
+        maps["_users_map"] = {u.id: u for u in users}
+        maps["_username_map"] = {u.username: u for u in users}
+    maps["_author_counts"] = _build_account_counts_map(author_ids, db)
+    return maps
+
+
 def _relationship_json(user: User, target: User, db: SASession) -> dict:
     relationship = db.query(Follow).filter_by(
         follower_id=user.id, following_id=target.id
@@ -230,7 +299,11 @@ def _relationship_json(user: User, target: User, db: SASession) -> dict:
 
 def _status_json(post: Post, db: SASession, viewer: User | None = None,
                  _boosted_ids: set = None, _liked_ids: set = None,
-                 _bookmarked_ids: set = None) -> dict:
+                 _bookmarked_ids: set = None, _replies_map: dict = None,
+                 _reblogs_map: dict = None, _favs_map: dict = None,
+                 _reactions_map: dict = None, _my_reactions_map: dict = None,
+                 _users_map: dict = None, _username_map: dict = None,
+                 _author_counts: dict = None) -> dict:
     if post.is_deleted:
         return None
 
@@ -258,7 +331,11 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         # 0. 멘션 대상 핸들 추출 (@username 또는 @username@domain)
         _inner = re.search(r'href="[^"]*?/@([^/"]+)', tag)
         _uname = _inner.group(1) if _inner else None
-        _mu = db.query(User).filter_by(username=_uname).first() if _uname else None
+        _mu = None
+        if _username_map is not None and _uname:
+            _mu = _username_map.get(_uname)
+        if _mu is None and _uname:
+            _mu = db.query(User).filter_by(username=_uname).first()
         # 1. 원격 유저는 원격 웹 프로필 주소로, 로컬 유저는 BASE_URL 주소로 변환
         if _mu and _mu.is_remote:
             _profile = _mu.profile_url or _mu.remote_url or f"{BASE_URL}/@{_uname}"
@@ -282,15 +359,24 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
     used_shortcodes = set(shortcode_pattern.findall(content))
     post_emojis = [e for e in all_emojis if e["keyword"] in used_shortcodes]
 
-    replies_count = db.query(sqlfunc.count(Post.id)).filter(
-        Post.in_reply_to_id == post.id, Post.is_deleted == False
-    ).scalar() or 0
-    reblogs_count = db.query(sqlfunc.count(Boost.id)).filter(
-        Boost.post_id == post.id
-    ).scalar() or 0
-    favourites_count = db.query(sqlfunc.count(Like.id)).filter(
-        Like.post_id == post.id
-    ).scalar() or 0
+    if _replies_map is not None:
+        replies_count = _replies_map.get(post.id, 0)
+    else:
+        replies_count = db.query(sqlfunc.count(Post.id)).filter(
+            Post.in_reply_to_id == post.id, Post.is_deleted == False
+        ).scalar() or 0
+    if _reblogs_map is not None:
+        reblogs_count = _reblogs_map.get(post.id, 0)
+    else:
+        reblogs_count = db.query(sqlfunc.count(Boost.id)).filter(
+            Boost.post_id == post.id
+        ).scalar() or 0
+    if _favs_map is not None:
+        favourites_count = _favs_map.get(post.id, 0)
+    else:
+        favourites_count = db.query(sqlfunc.count(Like.id)).filter(
+            Like.post_id == post.id
+        ).scalar() or 0
 
     status = {
         "id": str(post.id),
@@ -314,12 +400,13 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         "content": content if content.strip().startswith("<") else f"<p>{content}</p>",
         "reblog": None,
         "application": None,
-        "account": _account_json(author, db, viewer),
+        "account": _account_json(author, db, viewer,
+                                 _counts=(_author_counts or {}).get(author.id) if _author_counts is not None else None),
         "media_attachments": [],
         "mentions": [
             {"id": str(mid), "username": mu.username.split("@")[0], "url": mu.profile_url or (mu.remote_url if mu.is_remote else f"{BASE_URL}/@{mu.username.split('@')[0]}"), "acct": mu.username}
             for mid in (post.mentioned_user_ids or [])
-            if (mu := db.query(User).filter_by(id=mid).first())
+            if (mu := (_users_map.get(mid) if _users_map is not None else db.query(User).filter_by(id=mid).first()))
         ],
         "tags": [],
         "emojis": [
@@ -390,14 +477,20 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         status["reblogged"] = post.id in _boosted_ids
         status["bookmarked"] = post.id in _bookmarked_ids
 
-    reaction_rows = db.query(
-        sqlfunc.coalesce(Like.reaction, "★"), sqlfunc.count(Like.id)
-    ).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(sqlfunc.min(Like.id)).all()
+    if _reactions_map is not None:
+        reaction_rows = [(r[0], r[1]) for r in sorted(_reactions_map.get(post.id, []), key=lambda r: r[2])]
+    else:
+        reaction_rows = db.query(
+            sqlfunc.coalesce(Like.reaction, "★"), sqlfunc.count(Like.id)
+        ).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(sqlfunc.min(Like.id)).all()
     my_reaction = None
     if viewer:
-        my_like = db.query(Like).filter_by(user_id=viewer.id, post_id=post.id).first()
-        if my_like:
-            my_reaction = my_like.reaction or "★"
+        if _my_reactions_map is not None:
+            my_reaction = _my_reactions_map.get(post.id)
+        else:
+            my_like = db.query(Like).filter_by(user_id=viewer.id, post_id=post.id).first()
+            if my_like:
+                my_reaction = my_like.reaction or "★"
     for react, cnt in reaction_rows:
         name = (react or "★").strip(":")
         emoji_url = ""
@@ -685,16 +778,17 @@ def get_account_statuses(
 
     posts = q.order_by(Post.id.desc()).limit(limit).all()
 
+    maps = _build_status_maps(posts, db, viewer)
     result = []
     for p in posts:
         if p.boost_of_id:
             original = db.query(Post).filter_by(id=p.boost_of_id).first()
             if original and not original.is_deleted and original.author_id != user.id:
-                s = _boost_status_json(p, original, db, viewer=viewer)
+                s = _boost_status_json(p, original, db, viewer=viewer, **maps)
                 if s:
                     result.append(s)
         else:
-            s = _status_json(p, db, viewer=viewer)
+            s = _status_json(p, db, viewer=viewer, **maps)
             if s:
                 result.append(s)
     return result
@@ -721,7 +815,8 @@ def get_account_followers(
 
     follows = q.order_by(Follow.id.desc()).limit(limit).all()
     viewer = _maybe_bearer(request, db)
-    return [_account_json(f.follower, db, viewer) for f in follows]
+    counts = _build_account_counts_map({f.follower_id for f in follows}, db)
+    return [_account_json(f.follower, db, viewer, _counts=counts.get(f.follower_id)) for f in follows]
 
 
 # ---------------------------------------------------------------------------
@@ -745,7 +840,8 @@ def get_account_following(
 
     follows = q.order_by(Follow.id.desc()).limit(limit).all()
     viewer = _maybe_bearer(request, db)
-    return [_account_json(f.following, db, viewer) for f in follows]
+    counts = _build_account_counts_map({f.following_id for f in follows}, db)
+    return [_account_json(f.following, db, viewer, _counts=counts.get(f.following_id)) for f in follows]
 
 
 # ---------------------------------------------------------------------------
@@ -891,6 +987,7 @@ def home_timeline(
 
     following_set = set(following_ids)
 
+    maps = _build_status_maps(posts, db, user)
     result = []
     for p in posts:
         if p.boost_of_id:
@@ -903,7 +1000,7 @@ def home_timeline(
                         continue
                 s = _boost_status_json(p, original, db, viewer=user,
                                        _boosted_ids=_boosted_ids, _liked_ids=_liked_ids,
-                                       _bookmarked_ids=_bookmarked_ids)
+                                       _bookmarked_ids=_bookmarked_ids, **maps)
                 if s:
                     result.append(s)
         else:
@@ -913,7 +1010,7 @@ def home_timeline(
                 if parent and parent.author_id not in following_set and parent.author_id != user.id:
                     continue
             s = _status_json(p, db, viewer=user, _boosted_ids=_boosted_ids,
-                             _liked_ids=_liked_ids, _bookmarked_ids=_bookmarked_ids)
+                             _liked_ids=_liked_ids, _bookmarked_ids=_bookmarked_ids, **maps)
             if s:
                 result.append(s)
     return result
@@ -973,6 +1070,7 @@ def public_timeline(
             Bookmark.user_id == viewer.id, Bookmark.post_id.in_(post_ids)
         ).all()) if post_ids else set()
 
+    maps = _build_status_maps(posts, db, viewer)
     result = []
     for p in posts:
         if p.boost_of_id:
@@ -980,12 +1078,12 @@ def public_timeline(
             if original and not original.is_deleted:
                 s = _boost_status_json(p, original, db, viewer=viewer,
                                        _boosted_ids=_boosted_ids, _liked_ids=_liked_ids,
-                                       _bookmarked_ids=_bookmarked_ids)
+                                       _bookmarked_ids=_bookmarked_ids, **maps)
                 if s:
                     result.append(s)
         else:
             s = _status_json(p, db, viewer=viewer, _boosted_ids=_boosted_ids,
-                             _liked_ids=_liked_ids, _bookmarked_ids=_bookmarked_ids)
+                             _liked_ids=_liked_ids, _bookmarked_ids=_bookmarked_ids, **maps)
             if s:
                 result.append(s)
     return result
@@ -1052,10 +1150,11 @@ def hashtag_timeline(
                 Bookmark.user_id == viewer.id, Bookmark.post_id.in_(post_ids)
             ).all())
 
+    maps = _build_status_maps(posts, db, viewer)
     result = []
     for p in posts:
         s = _status_json(p, db, viewer=viewer, _boosted_ids=_boosted_ids,
-                         _liked_ids=_liked_ids, _bookmarked_ids=_bookmarked_ids)
+                         _liked_ids=_liked_ids, _bookmarked_ids=_bookmarked_ids, **maps)
         if s:
             result.append(s)
     return result
@@ -1146,6 +1245,7 @@ def get_statuses(
     _bookmarked_ids = set(r[0] for r in db.query(Bookmark.post_id).filter(
         Bookmark.user_id == viewer.id, Bookmark.post_id.in_(post_ids)
     ).all()) if viewer and post_ids else set()
+    maps = _build_status_maps(list(posts_map.values()), db, viewer)
     result = []
     for sid in ids:
         try:
@@ -1153,7 +1253,7 @@ def get_statuses(
             post = posts_map.get(pid)
             if post:
                 s = _status_json(post, db, viewer, _liked_ids=_liked_ids,
-                                 _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids)
+                                 _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids, **maps)
                 if s:
                     result.append(s)
         except ValueError:
@@ -1304,11 +1404,15 @@ def get_status_context(status_id: str, request: Request, db: SASession = Depends
 
     ancestors = []
     current = post.parent
-    while current and not current.is_deleted and len(ancestors) < 40:
-        s = _status_json(current, db, viewer)
+    ancestor_posts = []
+    while current and not current.is_deleted and len(ancestor_posts) < 40:
+        ancestor_posts.append(current)
+        current = current.parent
+    maps = _build_status_maps(ancestor_posts, db, viewer)
+    for cur in ancestor_posts:
+        s = _status_json(cur, db, viewer, **maps)
         if s:
             ancestors.append(s)
-        current = current.parent
     ancestors.reverse()
 
     descendants = []
@@ -1316,15 +1420,19 @@ def get_status_context(status_id: str, request: Request, db: SASession = Depends
         Post.in_reply_to_id == post.id, Post.is_deleted == False
     ).order_by(Post.id.asc()).limit(60).all()
     queue = list(child_posts)
+    all_descendants = []
     while queue:
         child = queue.pop(0)
-        s = _status_json(child, db, viewer)
-        if s:
-            descendants.append(s)
+        all_descendants.append(child)
         grandchild = db.query(Post).filter(
             Post.in_reply_to_id == child.id, Post.is_deleted == False
         ).order_by(Post.id.asc()).limit(10).all()
         queue.extend(grandchild)
+    maps2 = _build_status_maps(all_descendants, db, viewer)
+    for child in all_descendants:
+        s = _status_json(child, db, viewer, **maps2)
+        if s:
+            descendants.append(s)
 
     return {"ancestors": ancestors, "descendants": descendants}
 
@@ -1604,7 +1712,8 @@ def reblogged_by(
     boosts = q.order_by(Boost.id.desc()).limit(limit).all()
 
     viewer = _maybe_bearer(request, db)
-    return [_account_json(b.user, db, viewer) for b in boosts]
+    counts = _build_account_counts_map({b.user_id for b in boosts}, db)
+    return [_account_json(b.user, db, viewer, _counts=counts.get(b.user_id)) for b in boosts]
 
 
 # ---------------------------------------------------------------------------
@@ -1628,7 +1737,8 @@ def favourited_by(
     likes = q.order_by(Like.id.desc()).limit(limit).all()
 
     viewer = _maybe_bearer(request, db)
-    return [_account_json(l.user, db, viewer) for l in likes]
+    counts = _build_account_counts_map({l.user_id for l in likes}, db)
+    return [_account_json(l.user, db, viewer, _counts=counts.get(l.user_id)) for l in likes]
 
 
 # ---------------------------------------------------------------------------
@@ -1686,16 +1796,22 @@ def list_notifications(
         "mention": "mention",
     }
 
+    notif_posts = [n.post for n in notifs if n.post and not n.post.is_deleted]
+    maps = _build_status_maps(notif_posts, db, user)
+    from_ids = {n.from_user_id for n in notifs if n.from_user_id}
+    from_counts = _build_account_counts_map(from_ids, db)
+
     result = []
     for n in notifs:
         item = {
             "id": str(n.id),
             "type": _NOTIF_TYPE_MAP_RESPONSE.get(n.notification_type, n.notification_type),
             "created_at": _ap_datetime(n.created_at),
-            "account": _account_json(n.from_user, db, viewer=user) if n.from_user else _account_json(user, db),
+            "account": _account_json(n.from_user, db, viewer=user,
+                                     _counts=from_counts.get(n.from_user_id)) if n.from_user else _account_json(user, db),
         }
         if n.post and not n.post.is_deleted:
-            item["status"] = _status_json(n.post, db, viewer=user)
+            item["status"] = _status_json(n.post, db, viewer=user, **maps)
         else:
             item["status"] = None
         result.append(item)
@@ -1775,7 +1891,8 @@ def search_v2(
                 User.display_name.ilike(f"%{query_lower}%"),
             )
         ).limit(limit).all()
-        result["accounts"] = [_account_json(u, db, viewer) for u in users]
+        counts = _build_account_counts_map({u.id for u in users}, db)
+        result["accounts"] = [_account_json(u, db, viewer, _counts=counts.get(u.id)) for u in users]
 
     if not type or type == "statuses":
         posts = db.query(Post).filter(
@@ -1783,7 +1900,8 @@ def search_v2(
             Post.visibility.in_(["public", "home"]),
             Post.content.ilike(f"%{query_lower}%"),
         ).order_by(Post.id.desc()).limit(limit).all()
-        result["statuses"] = [_status_json(p, db, viewer) for p in posts if _status_json(p, db, viewer)]
+        maps = _build_status_maps(posts, db, viewer)
+        result["statuses"] = [s for p in posts if (s := _status_json(p, db, viewer, **maps))]
 
     if not type or type == "hashtags":
         tag_query = query_lower.lstrip("#")
@@ -2080,7 +2198,8 @@ def list_follow_requests(
 def list_blocks(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     rows = db.query(UserBlock).filter(UserBlock.user_id == user.id).order_by(UserBlock.created_at.desc()).all()
-    return [_account_json(m.target_user, db, viewer=user) for m in rows]
+    counts = _build_account_counts_map({m.target_user_id for m in rows}, db)
+    return [_account_json(m.target_user, db, viewer=user, _counts=counts.get(m.target_user_id)) for m in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -2090,7 +2209,8 @@ def list_blocks(request: Request, db: SASession = Depends(get_db)):
 def list_mutes(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     rows = db.query(UserMute).filter(UserMute.user_id == user.id).order_by(UserMute.created_at.desc()).all()
-    return [_account_json(m.target_user, db, viewer=user) for m in rows]
+    counts = _build_account_counts_map({m.target_user_id for m in rows}, db)
+    return [_account_json(m.target_user, db, viewer=user, _counts=counts.get(m.target_user_id)) for m in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -2126,11 +2246,12 @@ def list_bookmarks(
         Boost.post_id.in_([b.post_id for b in bookmarks])
     ).all()) if bookmarks else set()
 
+    maps = _build_status_maps([bm.post for bm in bookmarks if bm.post], db, user)
     result = []
     for bm in bookmarks:
         if bm.post and not bm.post.is_deleted:
             s = _status_json(bm.post, db, viewer=user, _liked_ids=_liked_ids,
-                             _boosted_ids=_boosted_ids, _bookmarked_ids={bm.post_id})
+                             _boosted_ids=_boosted_ids, _bookmarked_ids={bm.post_id}, **maps)
             if s:
                 result.append(s)
     return result
@@ -2165,11 +2286,12 @@ def list_favourites(
         Boost.post_id.in_([l.post_id for l in likes])
     ).all()) if likes else set()
 
+    maps = _build_status_maps([l.post for l in likes if l.post], db, user)
     result = []
     for like in likes:
         if like.post and not like.post.is_deleted:
             s = _status_json(like.post, db, viewer=user, _liked_ids={like.post_id},
-                             _boosted_ids=_boosted_ids)
+                             _boosted_ids=_boosted_ids, **maps)
             if s:
                 result.append(s)
     return result
@@ -2353,7 +2475,8 @@ def get_directory(
     if local:
         q = q.filter(User.is_remote == False)
     users = q.order_by(User.updated_at.desc()).limit(limit).all()
-    return [_account_json(u, db, viewer) for u in users]
+    counts = _build_account_counts_map({u.id for u in users}, db)
+    return [_account_json(u, db, viewer, _counts=counts.get(u.id)) for u in users]
 
 
 # ---------------------------------------------------------------------------

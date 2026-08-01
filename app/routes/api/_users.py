@@ -21,7 +21,7 @@ from app.utils.storage import get_storage
 from app.routes.api._core import _post_json, _cleanup_avatars, _broadcast_update_actor
 from app.core.interactions import _can_view
 from app.utils.upload import _validate_upload, MAX_AVATAR_SIZE
-from app.routes.api._series import _novel_json, _apply_latest_activity_order
+from app.routes.api._series import _novel_json, _apply_latest_activity_order, _load_novel_meta
 
 logger = logging.getLogger("writ.api.users")
 
@@ -243,10 +243,14 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                           _vote_map=_vote_map, _my_reaction_map=_my_reaction_map,
                           _reactions_map=_reactions_map,
                           _mentioned_users_map=_mentioned_users_map)
+        _novel_meta = _load_novel_meta(s, novels)
+        _pinned_novels = s.query(Novel).filter(Novel.id.in_(profile.pinned_series or [])).all() if profile.pinned_series else []
+        _pinned_series_meta = _load_novel_meta(s, _pinned_novels)
+        _pinned_posts = s.query(Post).filter(Post.id.in_(profile.pinned_posts or []), Post.is_deleted == False).all() if profile.pinned_posts else []
         return {
             "profile": _user_json(profile),
             "posts": [_post_json(p, s, user, **_pj_kwargs) for p in posts],
-            "novels": [_novel_json(n, s) for n in novels],
+            "novels": [_novel_json(n, s, _episode_meta=_novel_meta) for n in novels],
             "followers": [{"user": _user_json(f.follower)} for f in (followers if show_follows else [])],
             "following": [{"user": _user_json(f.following)} for f in (following if show_follows else [])],
             "total_posts": total_posts,
@@ -263,8 +267,8 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             "am_i_blocked": am_i_blocked,
             "has_more": has_more,
             "offset": offset,
-            "pinned_posts_data": [_post_json(p, s, user, **_pj_kwargs) for p in (s.query(Post).filter(Post.id.in_(profile.pinned_posts or []), Post.is_deleted == False).all() if profile.pinned_posts else []) if _can_view(p, user, s)],
-            "pinned_series_data": [_novel_json(n, s) for n in (s.query(Novel).filter(Novel.id.in_(profile.pinned_series or [])).all() if profile.pinned_series else [])],
+            "pinned_posts_data": [_post_json(p, s, user, **_pj_kwargs) for p in _pinned_posts if _can_view(p, user, s)],
+            "pinned_series_data": [_novel_json(n, s, _episode_meta=_pinned_series_meta) for n in _pinned_novels],
         }
 
 

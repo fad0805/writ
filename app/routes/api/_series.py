@@ -73,14 +73,28 @@ def _apply_latest_activity_order(q, s):
     return q
 
 
+def _load_novel_meta(s, novels):
+    """novel_id -> [episode_count, total_views] 일괄 조회 (episode content 로드 방지)."""
+    if not novels:
+        return {}
+    ids = [n.id for n in novels]
+    meta = {nid: [0, 0] for nid in ids}
+    for nid, cnt, views in s.query(
+        Episode.novel_id, func.count(Episode.id), func.sum(func.coalesce(Episode.views, 0))
+    ).filter(Episode.novel_id.in_(ids)).group_by(Episode.novel_id).all():
+        meta[nid] = [cnt, views or 0]
+    return meta
+
+
 @series_router.get("/series")
 def api_novels(request: Request, limit: int = Query(12), offset: int = Query(0)):
     with get_session() as s:
         q = _apply_latest_activity_order(s.query(Novel).filter_by(is_published=True, visibility="public"), s)
         raw = q.offset(offset).limit(limit + 1).all()
         has_more = len(raw) > limit
-        novels = [_novel_json(n, s) for n in raw[:limit]]
-        return {"novels": novels, "has_more": has_more}
+        novels = raw[:limit]
+        _episode_meta = _load_novel_meta(s, novels)
+        return {"novels": [_novel_json(n, s, _episode_meta=_episode_meta) for n in novels], "has_more": has_more}
 
 
 @series_router.get("/series/my")
@@ -90,7 +104,8 @@ def api_my_novels(request: Request, limit: int = Query(12), offset: int = Query(
         q = _apply_latest_activity_order(s.query(Novel).filter_by(author_id=user.id), s)
         total = q.count()
         raw = q.offset(offset).limit(limit).all()
-        novels = [_novel_json(n, s) for n in raw]
+        _episode_meta = _load_novel_meta(s, raw)
+        novels = [_novel_json(n, s, _episode_meta=_episode_meta) for n in raw]
         return {"novels": novels, "total": total, "page": offset // limit + 1, "pages": max(1, (total + limit - 1) // limit)}
 
 
@@ -106,7 +121,8 @@ def api_followed_novels(request: Request, limit: int = Query(12), offset: int = 
         )
         total = q.count()
         raw = q.offset(offset).limit(limit).all()
-        novels = [_novel_json(n, s) for n in raw]
+        _episode_meta = _load_novel_meta(s, raw)
+        novels = [_novel_json(n, s, _episode_meta=_episode_meta) for n in raw]
         return {"novels": novels, "total": total, "page": offset // limit + 1, "pages": max(1, (total + limit - 1) // limit)}
 
 
@@ -136,11 +152,18 @@ def _sync_tags(n, s):
         n.tag_list.remove(tag)
 
 
-def _novel_json(n, s=None, _followers_map=None):
+def _novel_json(n, s=None, _followers_map=None, _episode_meta=None):
     author = None
     if hasattr(n, 'author') and n.author:
         author = _user_json(n.author)
     tag_names = " ".join(t.display_name or t.name for t in (n.tag_list or [])) or (n.tags or "")
+    if _episode_meta is not None:
+        _ec, _tv = _episode_meta.get(n.id, (0, 0))
+        episode_count = _ec or 0
+        total_views = _tv or 0
+    else:
+        episode_count = n.episode_count or 0
+        total_views = n.total_views or 0
     result = {
         "id": n.id,
         "number": n.number or "",
@@ -151,8 +174,8 @@ def _novel_json(n, s=None, _followers_map=None):
         "status": n.status or "ongoing",
         "is_published": n.is_published,
         "is_sensitive": getattr(n, 'is_sensitive', False) or False,
-        "episode_count": n.episode_count or 0,
-        "total_views": n.total_views or 0,
+        "episode_count": episode_count,
+        "total_views": total_views,
         "visibility": n.visibility or "public",
         "created_at": _fmt_dt(n.created_at),
         "updated_at": _fmt_dt(n.updated_at),

@@ -66,6 +66,8 @@ def init_db():
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_follows_follower_accepted ON follows(follower_id, following_id, accepted)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_is_remote ON users(is_remote)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_posts_visibility_deleted ON posts(visibility, is_deleted)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_episodes_novel_created ON episodes(novel_id, created_at)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_series_notices_novel_created ON series_notices(novel_id, created_at)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_posts_in_reply_to_deleted ON posts(in_reply_to_id, is_deleted)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_likes_user_post ON likes(user_id, post_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_boosts_user_post ON boosts(user_id, post_id)"))
