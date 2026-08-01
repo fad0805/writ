@@ -25,6 +25,7 @@ from app.config.settings import BASE_URL, DOMAIN, MAX_POST_LENGTH
 from app.routes.api import _broadcast_update_actor, _do_edit_post, _do_delete_post
 from app.core.interactions import follow_user, unfollow_user, like_post, unlike_post, boost_post, unboost_post, react_post, unreact_post, mute_user, unmute_user, block_user, unblock_user
 from app.utils.emoji import _emoji_url, _load_emojis
+from app.utils.filter import _load_user_filters, _timeline_filter
 from app.core.push import get_vapid_keys
 
 logger = logging.getLogger("writ.mastodon_api")
@@ -975,6 +976,9 @@ def home_timeline(
 
     posts = q.order_by(Post.id.desc()).limit(limit).all()
 
+    filter_ctx = _load_user_filters(db, user)
+    posts = _timeline_filter(posts, db, user, "home", following_ids, filter_ctx)
+
     _liked_ids = set(r[0] for r in db.query(Like.post_id).filter(
         Like.user_id == user.id, Like.post_id.in_([p.id for p in posts])
     ).all()) if posts else set()
@@ -1055,6 +1059,10 @@ def public_timeline(
 
     posts = q.order_by(Post.id.desc()).limit(limit).all()
 
+    if viewer:
+        filter_ctx = _load_user_filters(db, viewer)
+        posts = _timeline_filter(posts, db, viewer, "local" if local else "federated", [], filter_ctx)
+
     _liked_ids = set()
     _boosted_ids = set()
     _bookmarked_ids = set()
@@ -1133,6 +1141,10 @@ def hashtag_timeline(
         q = q.filter(Post.id > int(min_id))
 
     posts = q.order_by(Post.id.desc()).limit(limit).all()
+
+    if viewer:
+        filter_ctx = _load_user_filters(db, viewer)
+        posts = _timeline_filter(posts, db, viewer, "federated", [], filter_ctx)
 
     _liked_ids = set()
     _boosted_ids = set()
