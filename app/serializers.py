@@ -43,7 +43,8 @@ def _post_json(p, session, user, tl_type=None,
             result = _post_json(original, session, user, tl_type,
                                 _liked_ids, _boosted_ids, _bookmarked_ids,
                                 _vote_map, _my_reaction_map, _reactions_map,
-                                _mentioned_users_map, _boost_originals)
+                                _mentioned_users_map, _boost_originals,
+                                _skip_emojis=_skip_emojis)
             result["id"] = p.id
             existing_boosted_by = result.get("boosted_by") or []
             booster_json = _user_json(p.author)
@@ -53,6 +54,8 @@ def _post_json(p, session, user, tl_type=None,
             result["boost_of_id"] = p.boost_of_id
             if user and _boosted_ids is not None:
                 result["i_boosted"] = original.id in _boosted_ids
+            if not _skip_emojis:
+                result["_emojis"] = _merge_boost_emojis(result.get("_emojis") or [], session, existing_boosted_by)
             return result
         else:
             return {"id": p.id, "is_deleted": True, "boosted_by": [_user_json(p.author)], "boost_of_id": p.boost_of_id}
@@ -144,8 +147,58 @@ def _post_json(p, session, user, tl_type=None,
         "quote_of_id": p.quote_of_id or None,
         "quote_of_ap_id": p.quote_of_ap_id or "",
         "boost_of_id": p.boost_of_id,
-        **(({}) if _skip_emojis else {"_emojis": [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)]}),
+        **(({}) if _skip_emojis else {"_emojis": _post_used_emojis(p, session, reactions)}),
     }
+
+
+def _post_used_emojis(p, session, reactions=None):
+    """Post에 실제로 쓰인 커스텀 이모지만 골라서 반환 (전체 카탈로그 전송 방지)."""
+    all_emojis = _load_emojis(session)
+    if not all_emojis:
+        return []
+    texts = [p.content or "", p.summary or ""]
+    if p.author:
+        texts.append(p.author.display_name or "")
+    if reactions:
+        texts.append(" ".join(reactions.keys()))
+    parent = getattr(p, "parent", None)
+    if parent is not None and not parent.is_deleted:
+        texts.append(parent.content or "")
+        texts.append(parent.summary or "")
+        if parent.author:
+            texts.append(parent.author.display_name or "")
+    needle = " ".join(texts).lower()
+    if not needle:
+        return []
+    used = []
+    seen = set()
+    for e in all_emojis:
+        kw = e["keyword"]
+        if kw in seen:
+            continue
+        seen.add(kw)
+        if f":{kw.lower()}:" in needle:
+            used.append({"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]})
+    return used
+
+
+def _merge_boost_emojis(base_emojis, session, boosters):
+    """부스트한 사람의 표시 이름에 쓰인 이모지를 추가로 포함시킨다."""
+    booster_names = " ".join(
+        b.get("display_name") or "" for b in (boosters or []) if b
+    ).lower()
+    if not booster_names:
+        return base_emojis
+    result = list(base_emojis)
+    existing = {e["keyword"] for e in result}
+    for e in _load_emojis(session):
+        kw = e["keyword"]
+        if kw in existing:
+            continue
+        if f":{kw.lower()}:" in booster_names:
+            result.append({"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]})
+            existing.add(kw)
+    return result
 
 
 def _clean_username(username: str) -> str:

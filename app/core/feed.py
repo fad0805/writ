@@ -108,7 +108,13 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
 
     posts_metadata = _load_post_metadata(session, user, posts)
 
-    _timeline_emojis = [{"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]} for e in _load_emojis(session)]
+    _boost_originals = {}
+    _boost_pointer_ids = {p.boost_of_id for p in posts if p.boost_of_id}
+    if _boost_pointer_ids:
+        for _orig in session.query(Post).options(selectinload(Post.author)).filter(Post.id.in_(_boost_pointer_ids), Post.is_deleted == False).all():
+            _boost_originals[_orig.id] = _orig
+
+    _timeline_emojis = _feed_used_emojis(session, posts, _boost_originals)
 
     feed_dicts = [
         _post_json(p, session, user, tl_type,
@@ -119,6 +125,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
              _my_reaction_map= posts_metadata.get("my_reaction_map"),
              _reactions_map= posts_metadata.get("reactions_map"),
              _mentioned_users_map= posts_metadata.get("mentioned_users_map"),
+             _boost_originals=_boost_originals,
              _skip_emojis=True)
          for p in posts
     ]
@@ -231,6 +238,48 @@ def query_feed_posts(
         ]
 
     return posts
+
+
+def _feed_used_emojis(session, posts, boost_originals=None):
+    """Return only the custom emojis actually referenced by the feed posts."""
+    all_emojis = _load_emojis(session)
+    if not all_emojis or not posts:
+        return []
+    texts = []
+    for p in posts:
+        texts.append(p.content or "")
+        texts.append(p.summary or "")
+        if p.author:
+            texts.append(p.author.display_name or "")
+        parent = getattr(p, "parent", None)
+        if parent is not None and not parent.is_deleted:
+            texts.append(parent.content or "")
+            texts.append(parent.summary or "")
+            if parent.author:
+                texts.append(parent.author.display_name or "")
+        if p.boost_of_id:
+            orig = (boost_originals or {}).get(p.boost_of_id)
+            if orig is None:
+                try:
+                    orig = session.query(Post).filter_by(id=p.boost_of_id).first()
+                except Exception:
+                    orig = None
+            if orig is not None and not orig.is_deleted:
+                texts.append(orig.content or "")
+                texts.append(orig.summary or "")
+                if orig.author:
+                    texts.append(orig.author.display_name or "")
+    needle = " ".join(texts).lower()
+    used = []
+    seen = set()
+    for e in all_emojis:
+        kw = e["keyword"]
+        if kw in seen:
+            continue
+        seen.add(kw)
+        if f":{kw.lower()}:" in needle:
+            used.append({"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]})
+    return used
 
 
 def _load_post_metadata(

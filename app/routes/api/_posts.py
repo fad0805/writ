@@ -24,7 +24,6 @@ from app.db.database import get_session
 from app.db.mention_resolver import resolve_handles_to_ids
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.utils.content_parser import process_post_content, extract_mentions
-from app.utils.emoji import _load_emojis
 from app.utils.post import _get_descendant_ids
 from app.utils.storage import get_storage
 
@@ -821,12 +820,6 @@ def api_fetch_post(request: Request, url: str = Form(...)):
     result = _fetch_and_save_ap_object(obj, user)
     if not result:
         raise HTTPException(status_code=400, detail="Failed to save post")
-    # Include emoji data so frontend can render immediately
-    with get_session() as es:
-        result["_emojis"] = [
-            {"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]}
-            for e in _load_emojis(es)
-        ]
     return result
 
 
