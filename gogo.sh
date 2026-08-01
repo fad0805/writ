@@ -1456,10 +1456,45 @@ with get_session() as s:
     print(f'주의: 단건 직렬화의 쿼리수가 20+ 이면 N+1 의심')
 "
 
+elif [ "$1" = "check-streams" ]; then
+  # SSE 스트림 누적/연결 상태 + web→api 왕복 시간 진단
+  docker compose exec api python3 -c "
+from app.core import timeline_stream as ts
+import time, socket
+print(f'타임라인 SSE 스트림 수: {len(ts._streams)}')
+print(f'알림 SSE 스트림 수: {len(ts._notif_streams)}')
+print(f'포스트 SSE 스트림 수: {len(ts._post_streams)}')
+print(f'전체 활성 스트림: {len(ts._streams) + len(ts._notif_streams) + len(ts._post_streams)}')
+# 스트림별 상세 (최대 30개)
+print()
+print('== 타임라인 스트림 상세 (uid/tl) ==')
+for sid, info in list(ts._streams.items())[:30]:
+    print(f'  sid={sid} uid={info.get("user_id")} tl={info.get("tl_type")}')
+print()
+print('== 알림 스트림 상세 (uid) ==')
+for sid, info in list(ts._notif_streams.items())[:30]:
+    print(f'  sid={sid} uid={info.get("user_id")}')
+print()
+print('== 포스트 스트림 상세 (post_id) ==')
+for sid, info in list(ts._post_streams.items())[:30]:
+    print(f'  sid={sid} post_id={info.get("post_id")}')
+"
+  echo ""
+  echo "== web → api 내부 왕복 시간 (5회) =="
+  for i in 1 2 3 4 5; do
+    docker compose exec -T web curl -s -o /dev/null -w "  web→api: %{time_total}s\n" http://api:8000/api/server-info
+  done
+  echo ""
+  echo "== 서버 부하 =="
+  uptime
+  free -m | head -2
+  docker stats --no-stream --format "  {{.Name}}: CPU {{.CPUPerc}} MEM {{.MemUsage}}" 2>/dev/null
+
 else
   echo "사용법: ./gogo.sh [명령어]"
   echo ""
   echo "명령어:"
+  echo "  check-streams   - SSE 스트림 누적/연결 상태 + web→api 왕복 + 서버 부하 진단"
   echo "  profile-timeline - 타임라인/알림/단건 직렬화 병목 프로파일링 (예: ./gogo.sh profile-timeline siarte home)"
   echo "  fetch-log       - API 로그 확인"
   echo "  rebuild         - 코드 풀 + api 빌드 + 재시작"
