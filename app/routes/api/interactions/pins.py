@@ -19,6 +19,8 @@ def api_pin_post(request: Request, post_id: int):
         post = s.query(Post).filter_by(id=post_id).first()
         if not post or post.author_id != user.id:
             raise HTTPException(status_code=404, detail="Post not found")
+        if post.visibility == "mention":
+            raise HTTPException(status_code=400, detail="멘션 공개 글은 고정할 수 없습니다.")
         pinned = list(user.pinned_posts or [])
         if post_id in pinned:
             return {"ok": True}

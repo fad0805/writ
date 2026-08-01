@@ -1431,6 +1431,8 @@ def pin_status(status_id: str, request: Request, db: SASession = Depends(get_db)
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.author_id != user.id:
         raise MastodonAPIError(status_code=404, detail="Record not found")
+    if post.visibility == "mention":
+        raise MastodonAPIError(status_code=422, detail="Mention posts cannot be pinned")
     pinned = list(user.pinned_posts or [])
     if post.id not in pinned:
         if len(pinned) >= 5:

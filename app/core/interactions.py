@@ -161,7 +161,7 @@ def boost_post(db: Session, user: User, post_id: int):
     if post.boost_of_id:
         post = db.query(Post).get(post.boost_of_id)
         post_id = post.id
-    if post.author_id != user.id and post.visibility in ("followers", "mention"):
+    if post.visibility == "mention" or (post.author_id != user.id and post.visibility == "followers"):
         return
 
     existing = db.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()

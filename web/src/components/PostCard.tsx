@@ -172,6 +172,7 @@ const localReactionEmojiMap = useMemo(() => {
   };
 
   const toggleBoost = async () => {
+    if (!boosted && (post.visibility === "mention" || (!post.is_mine && post.visibility === "followers"))) return;
     const prevCount = boostsCount;
     try {
       if (boosted) {
@@ -632,7 +633,7 @@ const localReactionEmojiMap = useMemo(() => {
 
   return (
     <>
-      <div ref={cardRef} className={`post-card${current ? " current" : ""}${selected ? " selected" : ""}${post.visibility === "mention" ? " mention-card" : ""}`} onClick={(e) => { if (current || (e.target as HTMLElement).closest('a')) return; router.push(post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`); }}>
+      <div ref={cardRef} className={`post-card${current ? " current" : ""}${selected ? " selected" : ""}${post.visibility === "mention" ? " mention-card" : ""}`}>
         {post.boosted_by && post.boosted_by.length > 0 && (
           <div className="boost-badge">
             <Icon name="refresh" size={12} /> <Link href={`/@${post.boosted_by[0].username}`}><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.boosted_by[0].display_name || post.boosted_by[0].username, mergedEmojiList, 14)) }} /></Link>님이 부스트
@@ -659,11 +660,7 @@ const localReactionEmojiMap = useMemo(() => {
             <span className={`vis-badge vis-${post.visibility}`}>
               <Icon name={VIS_ICONS[post.visibility] || "globe"} />
             </span>
-            {remoteUrl && post.author?.username?.includes("@") ? (
-              <a href={remoteUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="no-underline" style={{ color: "inherit" }}>{timeStr}</a>
-            ) : (
-              timeStr
-            )}
+            {timeStr ? <Link href={post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`} className="no-underline" style={{ color: "inherit" }}>{timeStr}</Link> : null}
           </span>
         </div>
         {!hideContext && post.reply_context && (
@@ -965,7 +962,7 @@ const localReactionEmojiMap = useMemo(() => {
             <Icon name="reply" /> {typeof post.replies_count === "number" ? post.replies_count : 0}
           </button>
           <form className="inline-form" onSubmit={(e) => e.preventDefault()}>
-            <button type="button" onClick={toggleBoost} disabled={!post.is_mine && (post.visibility === "followers" || post.visibility === "mention")} className={`action-btn ${boosted ? "boosted" : ""}`}>
+            <button type="button" onClick={toggleBoost} disabled={!boosted && (post.visibility === "mention" || (!post.is_mine && post.visibility === "followers"))} className={`action-btn ${boosted ? "boosted" : ""}`}>
               <Icon name="refresh" /> {typeof boostsCount === "number" ? boostsCount : 0}
             </button>
           </form>
@@ -1006,7 +1003,7 @@ const localReactionEmojiMap = useMemo(() => {
               {showMoreActions && (
                 <div className="post-actions-dropdown">
                   <ShareButton url={post.author?.username?.includes('@') && remoteUrl ? remoteUrl : (post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`)} className="post-actions-dropdown-item" />
-                  {post.is_mine && (
+                  {post.is_mine && post.visibility !== "mention" && (
                     <button onClick={() => { setShowMoreActions(false); (async () => {
                       const newPinned = !pinned;
                       setPinned(newPinned);
