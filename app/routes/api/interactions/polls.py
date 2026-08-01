@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Request, Form, HTTPException, BackgroundTasks
 from sqlalchemy import func
 
 from app.models import Post, Vote
@@ -22,7 +22,7 @@ polls_router = APIRouter()
 
 
 @polls_router.post("/posts/{post_id}/vote")
-def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
+def api_vote_post(request: Request, background_tasks: BackgroundTasks, post_id: int, option: int = Form(...)):
     user = require_active_auth(request)
     remote_vote_data = None
     with get_session() as s:
@@ -72,25 +72,29 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
         s.commit()
     if remote_vote_data:
         ap_id, author_uri, inbox, option_text = remote_vote_data
-        vote_activity = {
-            "@context": "https://www.w3.org/ns/activitystreams",
-            "id": f"{BASE_URL}/votes/{uuid4()}/activity",
-            "type": "Create",
-            "actor": user.actor_uri(),
-            "object": {
-                "id": f"{BASE_URL}/votes/{uuid4()}",
-                "type": "Note",
-                "name": option_text,
-                "attributedTo": user.actor_uri(),
+
+        def _deliver_remote_vote():
+            vote_activity = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": f"{BASE_URL}/votes/{uuid4()}/activity",
+                "type": "Create",
+                "actor": user.actor_uri(),
+                "object": {
+                    "id": f"{BASE_URL}/votes/{uuid4()}",
+                    "type": "Note",
+                    "name": option_text,
+                    "attributedTo": user.actor_uri(),
+                    "to": [author_uri],
+                    "inReplyTo": ap_id,
+                },
                 "to": [author_uri],
-                "inReplyTo": ap_id,
-            },
-            "to": [author_uri],
-        }
-        try:
-            _post_to_inbox(inbox, vote_activity, user)
-        except Exception:
-            pass
+            }
+            try:
+                _post_to_inbox(inbox, vote_activity, user)
+            except Exception:
+                pass
+
+        background_tasks.add_task(_deliver_remote_vote)
     return {"ok": True, "post": post_json}
 
 
