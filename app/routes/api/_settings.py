@@ -257,7 +257,9 @@ def _migrate_out_to_remote(request: Request, user, target_handle: str):
             if not existing:
                 f.following_id = remote.id
                 moved_local += 1
-        db.is_frozen = True
+        db.is_deactivated = True
+        db.is_frozen = False
+        db.is_suspended = False
         db.moved_to = new_actor_url
         db.session_token = ""
         db.aliases = []
