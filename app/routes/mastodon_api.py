@@ -72,6 +72,16 @@ def _maybe_bearer(request: Request, db: SASession) -> User | None:
     return _get_bearer_user(request, db)
 
 
+def _query_id_list(request: Request) -> list[str]:
+    """Parse `id` / `id[]` query params (Mastodon apps send `id[]=1&id[]=2`)."""
+    result = []
+    for key in ("id", "id[]"):
+        for v in request.query_params.getlist(key):
+            if v:
+                result.append(v)
+    return result
+
+
 def _visibility_to_mastodon(vis: str) -> str:
     return VISIBILITY_MAP.get(vis, "public")
 
@@ -574,8 +584,9 @@ def get_relationships(
     id: list[str] = Query(default=[]),
 ):
     user = _require_bearer(request, db)
+    ids = id or _query_id_list(request)
     result = []
-    for uid in id:
+    for uid in ids:
         try:
             uid_int = int(uid)
         except ValueError:
@@ -1025,9 +1036,10 @@ def get_statuses(
     id: list[str] = Query(default=[]),
 ):
     viewer = _maybe_bearer(request, db)
+    ids = id or _query_id_list(request)
     post_ids = []
     posts_map = {}
-    for sid in id:
+    for sid in ids:
         try:
             post = db.query(Post).filter_by(id=int(sid), is_deleted=False).first()
             if post:
@@ -1045,7 +1057,7 @@ def get_statuses(
         Bookmark.user_id == viewer.id, Bookmark.post_id.in_(post_ids)
     ).all()) if viewer and post_ids else set()
     result = []
-    for sid in id:
+    for sid in ids:
         try:
             pid = int(sid)
             post = posts_map.get(pid)
