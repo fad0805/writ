@@ -15,14 +15,18 @@ export default function SharePostModal({ url, title, authorName, description, ta
   const initialContent = (() => {
     const seriesRegex = /^\/series\//;
     const episodeRegex = /\/episodes\//;
-    const parts = [`「${title || url}」`];
-    if (authorName) parts.push(`by ${authorName}`);
-    if (description) parts.push(`\n${description}`);
-    if (tags) parts.push(`\n${tags.split(/[ ,]+/).filter(Boolean).map(tag => tag.startsWith('#') ? tag : `#${tag}`).join(' ')}`);
-    if (content) parts.push(`\n${content}`)
-    if (episodeRegex.test(url)) parts.push(`episode : ${fullUrl}`)
-    else if (seriesRegex.test(url)) parts.push(`series : ${fullUrl}`)
-    return parts.join("\n");
+    const chunks: string[] = [];
+    const seriesLines = [`「${title || url}」`];
+    if (authorName) seriesLines.push(`by ${authorName}`);
+    chunks.push(seriesLines.join("\n"));
+    if (tags) chunks.push(tags.split(/[ ,]+/).filter(Boolean).map(tag => tag.startsWith('#') ? tag : `#${tag}`).join(' '));
+    const tailLines: string[] = [];
+    if (content) tailLines.push(content);
+    if (description) tailLines.push(description);
+    if (episodeRegex.test(url)) tailLines.push(`episode : ${fullUrl}`)
+    else if (seriesRegex.test(url)) tailLines.push(`series : ${fullUrl}`)
+    chunks.push(tailLines.join("\n"));
+    return chunks.join("\n\n");
   })();
 
   const handleDone = async () => {

@@ -369,6 +369,28 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
     return {"ok": True}
 
 
+def _build_announce_post_content(novel, episode_number, episode_title, episode_id, summary="", announce_comment=""):
+    """에피소드 홍보글 본문을 생성한다. // 구분 = <br> 2개, / 구분 = <br> 1개."""
+    chunks = []
+    if announce_comment:
+        chunks.append([announce_comment])
+    chunks.append([
+        f'「{novel.title}」',
+        f'by {novel.author.display_name or novel.author.username}',
+    ])
+    if novel.tags:
+        _tags = ' '.join(f'#{t.strip()}' for t in novel.tags.replace(',', ' ').split() if t.strip())
+        if _tags:
+            chunks.append([_tags])
+    ep_lines = [f'「{episode_number}화: {episode_title}」']
+    if summary:
+        ep_lines.append(summary)
+    ep_lines.append(f'episode : {BASE_URL}/series/{novel.id}/episodes/{episode_id}')
+    chunks.append(ep_lines)
+    post_content = "\n\n".join("\n".join(c) for c in chunks)
+    return process_post_content(post_content, None)
+
+
 @series_router.post("/series/{novel_id}/episodes/new")
 def api_create_episode(request: Request, novel_id: int, title: str = Form(...), content: str = Form(""),
                        summary: str = Form(""), comment: str = Form(""),
@@ -409,21 +431,7 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
         s.add(episode)
         s.flush()
         if announce:
-            parts = []
-            if announce_comment:
-                parts.append(announce_comment)
-            parts.append(f'「{novel.title}」')
-            parts.append(f'by {novel.author.display_name or novel.author.username}')
-            if summary:
-                parts.append(summary)
-            if novel.tags:
-                _tags = ' '.join(f'#{t.strip()}' for t in novel.tags.replace(',', ' ').split() if t.strip())
-                if _tags:
-                    parts.append(_tags)
-            parts.append(f'「{next_num}화: {title}」')
-            parts.append(f'episode : {BASE_URL}/series/{novel.id}/episodes/{episode.id}')
-            post_content = "\n".join(parts)
-            post_content = process_post_content(post_content, None)
+            post_content = _build_announce_post_content(novel, next_num, title, episode.id, summary, announce_comment)
             ep_post_number = secrets.token_hex(4)
             post = Post(
                 author_id=user.id,
@@ -585,21 +593,7 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
                 get_storage().delete(old)
 
         if announce:
-            parts = []
-            if announce_comment:
-                parts.append(announce_comment)
-            parts.append(f'「{episode.novel.title}」')
-            parts.append(f'by {episode.novel.author.display_name or episode.novel.author.username}')
-            if summary:
-                parts.append(summary)
-            if episode.novel.tags:
-                _tags = ' '.join(f'#{t.strip()}' for t in episode.novel.tags.replace(',', ' ').split() if t.strip())
-                if _tags:
-                    parts.append(_tags)
-            parts.append(f'「{episode.episode_number}화: {title}」')
-            parts.append(f'episode : {BASE_URL}/series/{novel_id}/episodes/{episode_id}')
-            post_content = "\n".join(parts)
-            post_content = process_post_content(post_content, None)
+            post_content = _build_announce_post_content(episode.novel, episode.episode_number, title, episode_id, summary, announce_comment)
             ep_post_number = secrets.token_hex(4)
             post = Post(
                 author_id=user.id,
