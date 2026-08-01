@@ -1377,10 +1377,90 @@ else:
     print(f'\\n{count}개 파일 처리 완료')
 "
 
+elif [ "$1" = "profile-timeline" ]; then
+  # 타임라인/알림 응답 병목 프로파일링: 각 단계별 시간 + 쿼리 개수 측정
+  # 사용법: ./gogo.sh profile-timeline [username] [tl_type]
+  USERNAME="${2:-siarte}"
+  TL_TYPE="${3:-home}"
+  docker compose exec api python3 -c "
+import time, sys
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
+from app.db.database import get_session, engine
+from app.models import User, Post, Notification
+from app.core.feed import _get_feed
+from app.serializers import _post_json
+from app.routes.api.interactions._common import _generate_poll_end_notifications
+from app.core.interactions import _can_view
+from sqlalchemy.orm import selectinload
+
+query_log = []
+@event.listens_for(Engine, 'before_cursor_execute')
+def _log_sql(conn, cursor, statement, parameters, context, executemany):
+    query_log.append(statement.split(' FROM ')[-1].split(' WHERE ')[0].strip()[:60] if ' FROM ' in statement else statement[:60])
+
+def t(label, start):
+    print(f'  {label}: {time.time()-start:.3f}s')
+
+username = '$USERNAME'
+tl = '$TL_TYPE'
+with get_session() as s:
+    user = s.query(User).filter_by(username=username).first()
+    if not user:
+        print(f'유저를 찾을 수 없습니다: {username}'); sys.exit(1)
+    print(f'프로파일 대상: @{username} (id={user.id}), tl={tl}')
+
+    # ── 1. 타임라인 _get_feed ──
+    print(f'\\n== _get_feed({tl}) ================')
+    t0 = time.time()
+    feed, has_more, emojis = _get_feed(user, tl, s, limit=20, offset=0)
+    t('total _get_feed', t0)
+    print(f'  posts: {len(feed)}, emojis: {len(emojis)}, 쿼리수: {len(query_log)}')
+
+    # ── 2. 알림 엔드포인트 핵심 경로 ──
+    print(f'\\n== notifications ================')
+    q0 = len(query_log); t0 = time.time()
+    _generate_poll_end_notifications(user.id, s)
+    t('_generate_poll_end_notifications', t0)
+    q = s.query(Notification).options(
+        selectinload(Notification.from_user),
+        selectinload(Notification.post).selectinload(Post.author),
+    ).filter_by(user_id=user.id).order_by(Notification.created_at.desc()).limit(21).all()
+    t('notif query', t0)
+    notifs = q[:20]
+    print(f'  알림 개수: {len(notifs)}, 쿼리수: {len(query_log)-q0}')
+
+    # 알림 직렬화 (like 리액션 재조회 + _can_view 포함)
+    q0 = len(query_log); t0 = time.time()
+    n = 0
+    for notif in notifs:
+        post = notif.post
+        if post and not post.is_deleted and _can_view(post, user, s):
+            _post_json(post, s, user, _skip_emojis=True)
+            n += 1
+    t('notif serialize (like-row + can_view 포함)', t0)
+    print(f'  직렬화한 포스트: {n}, 쿼리수: {len(query_log)-q0}')
+
+    # ── 3. 단건 포스트 직렬화 성능 (boost 포함) ──
+    print(f'\\n== 단건 _post_json ================')
+    latest = s.query(Post).filter(Post.is_deleted == False).order_by(Post.created_at.desc()).limit(3).all()
+    for p in latest:
+        q0 = len(query_log); t0 = time.time()
+        _post_json(p, s, user)
+        t(f'post #{p.id} (boost_of={p.boost_of_id})', t0)
+        print(f'    쿼리수: {len(query_log)-q0}')
+
+    # ── 4. 전체 요약 ──
+    print(f'\\n== 총계 ================')
+    print(f'누적 SQL 실행 수: {len(query_log)}')
+    print(f'주의: 단건 직렬화의 쿼리수가 20+ 이면 N+1 의심')
+"
+
 else
   echo "사용법: ./gogo.sh [명령어]"
   echo ""
   echo "명령어:"
+  echo "  profile-timeline - 타임라인/알림/단건 직렬화 병목 프로파일링 (예: ./gogo.sh profile-timeline siarte home)"
   echo "  fetch-log       - API 로그 확인"
   echo "  rebuild         - 코드 풀 + api 빌드 + 재시작"
   echo "  exec            - 외부 URL 요청 테스트 (path 확인)"
