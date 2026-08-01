@@ -283,7 +283,7 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         "content": content if content.strip().startswith("<") else f"<p>{content}</p>",
         "reblog": None,
         "application": None,
-        "account": _account_json(author, db),
+        "account": _account_json(author, db, viewer),
         "media_attachments": [],
         "mentions": [
             {"id": str(mid), "username": mu.username.split("@")[0], "url": mu.profile_url or (mu.remote_url if mu.is_remote else f"{BASE_URL}/@{mu.username.split('@')[0]}"), "acct": mu.username}
@@ -916,7 +916,7 @@ def hashtag_timeline(
 
     q = db.query(Post).filter(
         Post.tag_list.any(Tag.id == tag_obj.id),
-        Post.visibility == "public",
+        Post.visibility.in_(["public", "home"]),
         Post.is_deleted == False,
         Post.boost_of_id.is_(None),
     )
@@ -1677,7 +1677,7 @@ def search_v2(
     if not type or type == "statuses":
         posts = db.query(Post).filter(
             Post.is_deleted == False,
-            Post.visibility == "public",
+            Post.visibility.in_(["public", "home"]),
             Post.content.ilike(f"%{query_lower}%"),
         ).order_by(Post.id.desc()).limit(limit).all()
         result["statuses"] = [_status_json(p, db, viewer) for p in posts if _status_json(p, db, viewer)]
