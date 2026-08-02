@@ -19,7 +19,8 @@ from app.config.settings import BASE_URL, MAX_POST_LENGTH
 from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _build_reactions, _resolve_actor, _send_delete_post, _send_flag, _get_instance_actor
 from app.core.eventbus import broadcast
 from app.core.push import send_push_to_user
-from app.core.timeline_stream import broadcast_post, broadcast_refresh_notifs, broadcast_notif_sound, broadcast_delete, _broadcast_timeline
+from app.core.broadcast import broadcast_post, _broadcast_timeline
+from app.core.timeline_stream import broadcast_refresh_notifs, broadcast_notif_sound, broadcast_delete
 from app.db.database import get_session
 from app.db.mention_resolver import resolve_handles_to_ids
 from app.routes.auth import require_auth, require_active_auth, get_current_user

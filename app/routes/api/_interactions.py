@@ -21,7 +21,8 @@ from app.serializers import _user_json, _post_json
 from app.config.settings import BASE_URL
 from app.core.activitypub import _post_to_inbox, _resolve_actor, _send_accept, _send_reject
 from app.core.push import send_push_to_user
-from app.core.timeline_stream import broadcast_refresh_notifs, add_notif_stream, remove_notif_stream, broadcast_notif_sound, broadcast_reaction_update, broadcast_post, broadcast_delete
+from app.core.broadcast import broadcast_post
+from app.core.timeline_stream import broadcast_refresh_notifs, add_notif_stream, remove_notif_stream, broadcast_notif_sound, broadcast_reaction_update, broadcast_delete
 from app.db.database import get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.routes.api._core import _ap_fetch

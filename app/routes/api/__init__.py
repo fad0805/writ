@@ -38,7 +38,7 @@ from app.routes.api._feed import (
     feed_router,
 )
 
-from app.core.timeline_stream import _broadcast_timeline
+from app.core.broadcast import _broadcast_timeline
 
 from app.routes.api.interactions import (
     interactions_router,
