@@ -1,9 +1,20 @@
+export interface AnnouncementPollOption {
+  text: string;
+  votes_count: number;
+}
+
+export interface AnnouncementPollData {
+  options: AnnouncementPollOption[];
+}
+
 export interface Announcement {
   id: number;
   title: string;
   content: string;
   starts_at: string | null;
   ends_at: string | null;
+  poll_data?: AnnouncementPollData | null;
+  my_vote?: number | null;
   created_by: string;
   created_at: string | null;
   updated_at: string | null;

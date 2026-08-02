@@ -460,6 +460,7 @@ class Announcement(Base):
     content = Column(Text, nullable=False)
     starts_at = Column(DateTime(timezone=True), nullable=True)
     ends_at = Column(DateTime(timezone=True), nullable=True)
+    poll_data = Column(JSON, nullable=True)
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
@@ -479,6 +480,19 @@ class AnnouncementRead(Base):
     is_read = Column(Boolean, default=False)
     notified_at = Column(DateTime(timezone=True), nullable=True)
     read_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+
+class AnnouncementVote(Base):
+    __tablename__ = "announcement_votes"
+    __table_args__ = (
+        Index("ix_announcement_votes_announcement_user", "announcement_id", "user_id", unique=True),
+    )
+
+    id = Column(Integer, primary_key=True)
+    announcement_id = Column(Integer, ForeignKey("announcements.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    option_index = Column(Integer, nullable=False)
     created_at = Column(DateTime(timezone=True), default=now)
 
 

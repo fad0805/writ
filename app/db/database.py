@@ -47,7 +47,7 @@ _SAFE_TABLE_NAMES = {"users", "posts", "novels", "episodes", "follows", "likes",
                       "federation_blocks", "federation_modes", "allowed_servers", "custom_fields",
                       "episode_comments", "series_notices", "remote_followers",
                       "mastodon_apps", "mastodon_access_tokens",
-                      "announcements", "announcement_reads"}
+                      "announcements", "announcement_reads", "announcement_votes"}
 
 
 def init_db():

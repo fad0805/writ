@@ -15,7 +15,7 @@ from fastapi import APIRouter, Request, Form, HTTPException, Query
 from sqlalchemy import desc, or_, func, String
 from sqlalchemy.orm import joinedload, selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, Announcement, AnnouncementRead
+from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, Announcement, AnnouncementRead, AnnouncementVote
 from app.serializers import _user_json
 from app.config.settings import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
 from app.core.activitypub import _resolve_actor, _send_flag, _fetch_remote_count
@@ -838,9 +838,25 @@ def api_admin_list_announcements(request: Request):
         return [dict(_announcement_json(a), active=_is_announcement_active(a)) for a in items]
 
 
+def _build_announcement_poll(poll_options: str):
+    """Parse poll_options JSON array of strings. Returns poll_data dict or None."""
+    if not poll_options or not poll_options.strip():
+        return None
+    try:
+        opts = json.loads(poll_options)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid poll_options")
+    if not isinstance(opts, list):
+        raise HTTPException(status_code=400, detail="Invalid poll_options")
+    texts = [str(o).strip() for o in opts if str(o).strip()]
+    if len(texts) < 2:
+        return None
+    return {"options": [{"text": t, "votes_count": 0} for t in texts]}
+
+
 @admin_router.post("/admin/announcements/new")
 def api_admin_create_announcement(request: Request, title: str = Form(...), content: str = Form(...),
-                                  starts_at: str = Form(""), ends_at: str = Form("")):
+                                  starts_at: str = Form(""), ends_at: str = Form(""), poll_options: str = Form("")):
     user = require_auth(request)
     if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -852,6 +868,7 @@ def api_admin_create_announcement(request: Request, title: str = Form(...), cont
             content=content,
             starts_at=_parse_dt_field(starts_at),
             ends_at=_parse_dt_field(ends_at),
+            poll_data=_build_announcement_poll(poll_options),
             created_by_id=user.id,
         )
         s.add(a)
@@ -864,7 +881,7 @@ def api_admin_create_announcement(request: Request, title: str = Form(...), cont
 
 @admin_router.post("/admin/announcements/{announcement_id}/edit")
 def api_admin_edit_announcement(request: Request, announcement_id: int, title: str = Form(...), content: str = Form(...),
-                                starts_at: str = Form(""), ends_at: str = Form("")):
+                                starts_at: str = Form(""), ends_at: str = Form(""), poll_options: str = Form("")):
     user = require_auth(request)
     if user.role not in ("admin", "moderator", "owner"):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -876,6 +893,21 @@ def api_admin_edit_announcement(request: Request, announcement_id: int, title: s
         a.content = content
         a.starts_at = _parse_dt_field(starts_at)
         a.ends_at = _parse_dt_field(ends_at)
+        new_poll = _build_announcement_poll(poll_options)
+        old_options = (a.poll_data or {}).get("options", []) if a.poll_data else []
+        if new_poll is None:
+            if a.poll_data is not None:
+                s.query(AnnouncementVote).filter_by(announcement_id=a.id).delete()
+            a.poll_data = None
+        elif len(old_options) == len(new_poll["options"]) and [o.get("text") for o in old_options] == [o.get("text") for o in new_poll["options"]]:
+            new_poll["options"] = [
+                {"text": o.get("text", ""), "votes_count": old.get("votes_count", 0)}
+                for o, old in zip(new_poll["options"], old_options)
+            ]
+            a.poll_data = new_poll
+        else:
+            s.query(AnnouncementVote).filter_by(announcement_id=a.id).delete()
+            a.poll_data = new_poll
         s.commit()
         s.refresh(a)
         result = dict(_announcement_json(a), active=_is_announcement_active(a))
@@ -893,6 +925,7 @@ def api_admin_delete_announcement(request: Request, announcement_id: int):
         if not a:
             raise HTTPException(status_code=404, detail="Announcement not found")
         s.query(AnnouncementRead).filter_by(announcement_id=a.id).delete()
+        s.query(AnnouncementVote).filter_by(announcement_id=a.id).delete()
         s.delete(a)
         s.commit()
     log_admin_action(user.id, user.username, "delete_announcement", target_type="announcement", target_id=announcement_id, ip_address=request.client.host if request.client else "")

@@ -53,6 +53,7 @@ export default function AnnouncementsPage() {
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Icon name="star_filled" size={14} style={{ color: a.is_read ? "var(--text-muted)" : "#f1c40f" }} />
                 <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</strong>
+                {a.poll_data?.options?.length ? <span title="투표 포함"><Icon name="chart" size={14} /></span> : null}
                 {!a.is_read && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#f1c40f", flexShrink: 0 }} />}
                 <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-muted)", flexShrink: 0 }}>{fmtAnnouncementTime(a.created_at)}</span>
               </div>
