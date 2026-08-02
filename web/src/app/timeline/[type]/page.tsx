@@ -78,6 +78,7 @@ export default function TimelinePage() {
 
   const timelineCache = useRef<Record<string, TimelineCacheEntry>>({});
   const cacheLoadedRef = useRef<number | null>(null);
+  const isReloadRef = useRef<boolean | null>(null);
   const saveTimer = useRef<number | null>(null);
 
   const [selectedIdx, setSelectedIdx] = useState(-1);
@@ -142,10 +143,22 @@ export default function TimelinePage() {
   const load = useCallback(async (force = false) => {
     const uid = accountSnapshot();
     if (uid && cacheLoadedRef.current !== uid) {
-      timelineCache.current = loadTimelineCache(uid);
+      if (isReloadRef.current === null) {
+        let reload = false;
+        try {
+          if (typeof window !== "undefined") {
+            const nav = performance.getEntriesByType("navigation")[0] as { type?: string } | undefined;
+            reload = nav?.type === "reload";
+          }
+        } catch {}
+        isReloadRef.current = reload;
+      }
+      timelineCache.current = isReloadRef.current ? {} : loadTimelineCache(uid);
+      isReloadRef.current = false;
       cacheLoadedRef.current = uid;
     }
-    const cached = !force ? timelineCache.current[tlType] : null;
+    const entry = timelineCache.current[tlType];
+    const cached = !force && entry && Date.now() - entry.ts < CACHE_TTL_MS ? entry : null;
     if (cached) {
       setPosts(cached.posts);
       setHasMore(cached.hasMore);
