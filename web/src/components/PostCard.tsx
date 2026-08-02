@@ -94,27 +94,27 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
   const [myReactionOverride, setMyReactionOverride] = useState<string | null | undefined>(undefined);
   const myReaction = myReactionOverride !== undefined ? myReactionOverride : (post.my_reaction || null);
   const reactionEmojiMap = useMemo(() => {
-    const m = (window as any).__emojiMap as Record<string, string> | undefined;
-    if (m && Object.keys(m).length > 0) return m;
     const map: Record<string, string> = {};
     for (const e of emojiList) if (e.keyword && e.url) map[e.keyword] = e.url;
-    if (Object.keys(map).length > 0) {
-      (window as any).__emojiMap = map;
+    const cached = (window as any).__emojiMap as Record<string, string> | undefined;
+    if (cached) {
+      for (const [k, v] of Object.entries(cached)) if (!map[k] && v) map[k] = v;
     }
+    (window as any).__emojiMap = map;
     return map;
   }, [emojiList]);
 const localReactionEmojiMap = useMemo(() => {
-  const m = (window as any).__localEmojiMap as Record<string, string> | undefined;
-  if (m && Object.keys(m).length > 0) return m;
   const map: Record<string, string> = {};
   for (const e of emojiList) {
     if (e.keyword && e.url && e.url.includes('/emojis/local/')) {
       map[e.keyword] = e.url;
     }
   }
-  if (Object.keys(map).length > 0) {
-    (window as any).__localEmojiMap = map;
+  const cached = (window as any).__localEmojiMap as Record<string, string> | undefined;
+  if (cached) {
+    for (const [k, v] of Object.entries(cached)) if (!map[k] && v) map[k] = v;
   }
+  (window as any).__localEmojiMap = map;
   return map;
 }, [emojiList]);
 
