@@ -41,11 +41,8 @@ _EMPTY_POST_METADATA: PostMetadata = {
 }
 
 
-def _get_feed(user, tl_type, session, limit=10, offset=0):
-    print(f"[feed] _get_feed uid={user.id if user else None} tl={tl_type} limit={limit} offset={offset}", flush=True)
-    _base_opts = [selectinload(Post.author), selectinload(Post.parent)]
-    user_id = user.id if user else None
-
+def _build_feed_criteria(user, session, tl_type):
+    """1. 타임라인 종류에 따른 팔로잉, 로컬, 가시성 조건 생성"""
     _following_ids = None
     if user and tl_type in ("home", "social"):
         _following_ids = {
@@ -66,9 +63,8 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     visibility = ['mention', 'followers', 'home', 'public']
     if tl_type == 'home' and _following_ids:
         _visible_user_ids.update(_following_ids)
-    elif tl_type == 'social':
-        if _following_ids:
-            _visible_user_ids.update(_following_ids)
+    elif tl_type == 'social' and _following_ids:
+        _visible_user_ids.update(_following_ids)
     elif tl_type == 'local' and _local_ids:
         _visible_user_ids.update(_local_ids)
         visibility = ['public']
@@ -76,11 +72,17 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         _visible_user_ids = None
         visibility = ['public']
 
-    filter_ctx = _load_user_filters(session, user) if user else None
+    return _following_ids, _local_ids, _visible_user_ids, visibility
+
+
+def _fetch_filtered_posts(session, tl_type, user, limit, offset,
+                          _visible_user_ids, _local_ids, user_id, visibility,
+                          _base_opts, _following_ids, filter_ctx):
+    """2. 필요한 수량(limit + 1)이 채워질 때까지 반복 조회 및 필터링 수행"""
     fetch_size = limit + 20
     posts = []
-
     page_offset = offset
+
     while len(posts) < limit + 1:
         batch = query_feed_posts(
             tl_type,
@@ -98,41 +100,24 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             break
         page_offset += fetch_size
 
-    has_more = len(posts) > limit
-    posts = posts[:limit]
+    return posts
 
-    post_ids = [p.id for p in posts]
-    for _p in posts:
-        if _p.boost_of_id and _p.boost_of_id not in post_ids:
-            post_ids.append(_p.boost_of_id)
 
-    posts_metadata = _load_post_metadata(session, user, posts)
-
+def _load_boost_originals(session, posts):
+    """3. 부스트된 원본 포스트들을 일괄 조회"""
     _boost_originals = {}
     _boost_pointer_ids = {p.boost_of_id for p in posts if p.boost_of_id}
     if _boost_pointer_ids:
         for _orig in session.query(Post).options(selectinload(Post.author)).filter(Post.id.in_(_boost_pointer_ids), Post.is_deleted == False).all():
             _boost_originals[_orig.id] = _orig
+    return _boost_originals
 
-    _timeline_emojis = _feed_used_emojis(session, posts, _boost_originals)
 
-    feed_dicts = [
-        _post_json(p, session, user, tl_type,
-             _liked_ids= posts_metadata.get("liked_ids"),
-             _boosted_ids= posts_metadata.get("boosted_ids"),
-             _bookmarked_ids= posts_metadata.get("bookmarked_ids"),
-             _vote_map= posts_metadata.get("vote_map"),
-             _my_reaction_map= posts_metadata.get("my_reaction_map"),
-             _reactions_map= posts_metadata.get("reactions_map"),
-             _mentioned_users_map= posts_metadata.get("mentioned_users_map"),
-             _boost_originals=_boost_originals,
-             _skip_emojis=True)
-         for p in posts
-    ]
-
-    # Aggregate boost pointers: group by canonical post ID, merge boosters
+def _aggregate_boost_groups(feed_dicts):
+    """4. 중복된 부스트 포인터들을 그룹화하고 부스터 목록 병합"""
     groups: dict[int, dict] = {}
     order: list[int] = []
+
     for d in feed_dicts:
         if not d:
             continue
@@ -142,11 +127,10 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
             order.append(key)
         else:
             existing = groups[key]
-            # Keep the entry with the latest created_at
             if (d.get("created_at") or "") > (existing.get("created_at") or ""):
                 groups[key] = d
                 existing = d
-            # Update order: move to the position of the latest entry
+
             existing_boosted_by = existing.get("boosted_by") or []
             d_boosted_by = d.get("boosted_by") or []
             seen_ids = {b["id"] for b in existing_boosted_by if b}
@@ -157,7 +141,50 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                     merged.append(b)
             existing["boosted_by"] = merged
 
-    feed_dicts = [groups[k] for k in order]
+    return [groups[k] for k in order]
+
+
+def _get_feed(user, tl_type, session, limit=10, offset=0):
+    print(f"[feed] _get_feed uid={user.id if user else None} tl={tl_type} limit={limit} offset={offset}", flush=True)
+    _base_opts = [selectinload(Post.author), selectinload(Post.parent)]
+    user_id = user.id if user else None
+
+    # 1. 권한 및 가시성 조건 계산
+    _following_ids, _local_ids, _visible_user_ids, visibility = _build_feed_criteria(user, session, tl_type)
+
+    # 2. 피드 포스트 수집 및 필터링
+    filter_ctx = _load_user_filters(session, user) if user else None
+    posts = _fetch_filtered_posts(
+        session, tl_type, user, limit, offset,
+        _visible_user_ids, _local_ids, user_id, visibility,
+        _base_opts, _following_ids, filter_ctx,
+    )
+
+    has_more = len(posts) > limit
+    posts = posts[:limit]
+
+    # 3. 메타데이터 및 부스트 원본 로드
+    posts_metadata = _load_post_metadata(session, user, posts)
+    _boost_originals = _load_boost_originals(session, posts)
+    _timeline_emojis = _feed_used_emojis(session, posts, _boost_originals)
+
+    # 4. JSON 변환
+    feed_dicts = [
+        _post_json(p, session, user, tl_type,
+                   _liked_ids=posts_metadata.get("liked_ids"),
+                   _boosted_ids=posts_metadata.get("boosted_ids"),
+                   _bookmarked_ids=posts_metadata.get("bookmarked_ids"),
+                   _vote_map=posts_metadata.get("vote_map"),
+                   _my_reaction_map=posts_metadata.get("my_reaction_map"),
+                   _reactions_map=posts_metadata.get("reactions_map"),
+                   _mentioned_users_map=posts_metadata.get("mentioned_users_map"),
+                   _boost_originals=_boost_originals,
+                   _skip_emojis=True)
+        for p in posts
+    ]
+
+    # 5. 부스트 그룹 병합 및 정렬 후 반환
+    feed_dicts = _aggregate_boost_groups(feed_dicts)
 
     return feed_dicts, has_more, _timeline_emojis
 
