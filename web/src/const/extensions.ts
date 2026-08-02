@@ -63,12 +63,16 @@ const SpoilerMark = Mark.create({
 const SpoilerBlockNode = Node.create({
   name: "spoilerBlock",
   group: "block",
-  content: "inline*",
+  content: "block+",
+  defining: true,
   parseHTML() {
-    return [{ tag: "p[data-spoiler]" }];
+    return [
+      { tag: "div[data-spoiler]" },
+      { tag: "p[data-spoiler]" },
+    ];
   },
   renderHTML({ HTMLAttributes }) {
-    return ["p", { ...HTMLAttributes, class: "spoiler spoiler-block", "data-spoiler": "block" }, 0];
+    return ["div", { ...HTMLAttributes, class: "spoiler spoiler-block", "data-spoiler": "block" }, 0];
   },
 });
 

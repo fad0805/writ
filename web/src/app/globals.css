@@ -1760,7 +1760,6 @@ input[type="checkbox"] {
 .episode-body u { text-decoration: underline; }
 .episode-body .spoiler {
   background: var(--bg-tertiary);
-  color: transparent !important;
   text-shadow: none;
   border-radius: 4px;
   cursor: pointer;
@@ -1769,22 +1768,25 @@ input[type="checkbox"] {
   box-decoration-break: clone;
   transition: background 0.15s ease;
 }
+.episode-body .spoiler,
+.episode-body .spoiler * {
+  color: transparent !important;
+}
 .episode-body .spoiler:hover {
   background: var(--bg-secondary);
 }
 .episode-body .spoiler.revealed {
-  color: inherit !important;
   background: transparent;
   cursor: default;
   user-select: text;
 }
-.episode-body p.spoiler-block {
-  display: block;
-  filter: blur(8px);
-  padding: 2px 4px;
+.episode-body .spoiler.revealed,
+.episode-body .spoiler.revealed *:not(.spoiler) {
+  color: inherit !important;
 }
-.episode-body p.spoiler-block.revealed {
-  filter: none;
+.episode-body .spoiler-block {
+  display: block;
+  padding: 2px 4px;
 }
 .episode-comment {
   background: var(--bg-tertiary);
@@ -1934,7 +1936,7 @@ input[type="checkbox"] {
   border-radius: 4px;
   padding: 0 2px;
 }
-.episode-editor-content .ProseMirror p.spoiler-block {
+.episode-editor-content .ProseMirror .spoiler-block {
   background: color-mix(in srgb, var(--accent) 20%, transparent);
   border-radius: 4px;
   padding: 2px 4px;

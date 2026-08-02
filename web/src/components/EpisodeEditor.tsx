@@ -57,7 +57,7 @@ export default function EpisodeEditor({ value, onChange, pageMode, onPageModeCha
         {enableSpoiler && (
           <div className="episode-editor-toolbar-section">
             <button type="button" onClick={() => editor?.chain().focus().toggleMark("spoiler").run()} data-active={editor?.isActive("spoiler")} title="스포일러: 선택한 단어/문장을 테마 색으로 덮습니다 (클릭 시 공개)">🕶</button>
-            <button type="button" onClick={() => editor?.chain().focus().toggleNode("spoilerBlock", "paragraph").run()} data-active={editor?.isActive("spoilerBlock")} title="스포일러 문단: 커서가 있는 문단 전체를 블러 처리합니다 (클릭 시 공개)">🕶¶</button>
+            <button type="button" onClick={() => editor?.chain().focus().toggleWrap("spoilerBlock").run()} data-active={editor?.isActive("spoilerBlock")} title="스포일러 문단: 선택한 문단들을 하나의 박스로 묶어 테마 색으로 덮습니다 (클릭 시 공개)">🕶¶</button>
           </div>
         )}
         <div className="episode-editor-toolbar-section">
