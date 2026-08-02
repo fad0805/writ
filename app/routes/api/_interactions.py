@@ -949,12 +949,10 @@ def api_boost_post(request: Request, post_id: int):
                 s.add(Notification(user_id=post.author_id, from_user_id=user.id, notification_type="boost", post_id=post_id))
             s.commit()
             try:
-                _boosted_json = _user_json(user)
                 _boosts_count = s.query(Boost).filter_by(post_id=post_id).count()
                 broadcast_post({
                     "id": post.id, "type": "update",
                     "boosts_count": _boosts_count,
-                    "boosted_by": [_boosted_json],
                 }, post.author_id, post.visibility or "public")
             except Exception as e:
                 logger.error("Failed to broadcast boost update: %s", e, exc_info=True)

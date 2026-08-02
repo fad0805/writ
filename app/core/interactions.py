@@ -188,7 +188,6 @@ def boost_post(db: Session, user: User, post_id: int):
             broadcast_post({
                 "id": post.id, "type": "update",
                 "boosts_count": _boosts_count,
-                "boosted_by": [_user_json(user)],
             }, post.author_id, post.visibility or "public")
         except Exception as e:
             logger.error("Failed to broadcast boost update: %s", e, exc_info=True)
