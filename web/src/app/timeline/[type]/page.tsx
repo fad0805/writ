@@ -38,7 +38,7 @@ export default function TimelinePage() {
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState("");
 
-  const timelineCache = useRef<Record<string, { posts: PostData[]; hasMore: boolean; offset: number; totalLoaded: number }>>({});
+  const timelineCache = useRef<Record<string, { posts: PostData[]; hasMore: boolean; totalLoaded: number }>>({});
 
   const [selectedIdx, setSelectedIdx] = useState(-1);
   const [replyPost, setReplyPost] = useState<PostData | null>(null);
@@ -47,7 +47,6 @@ export default function TimelinePage() {
   const [rewriteVisibility, setRewriteVisibility] = useState<string | undefined>(undefined);
   const [rewriteInitialContent, setRewriteInitialContent] = useState<string | undefined>(undefined);
 
-  const offsetRef = useRef(0);
   const totalLoadedRef = useRef(0);
   const loadIdRef = useRef(0);
   const deletedIds = useRef<Set<number>>(new Set());
@@ -72,7 +71,6 @@ export default function TimelinePage() {
     if (cached) {
       setPosts(cached.posts);
       setHasMore(cached.hasMore);
-      offsetRef.current = cached.offset;
       totalLoadedRef.current = cached.totalLoaded;
       setLoading(false);
       setError("");
@@ -88,9 +86,8 @@ export default function TimelinePage() {
       if (data._emojis) injectEmojis(data._emojis);
       setPosts(data.posts);
       setHasMore(data.has_more);
-      offsetRef.current = LIMIT;
       totalLoadedRef.current = data.posts.length;
-      timelineCache.current[tlType] = { posts: data.posts, hasMore: data.has_more, offset: LIMIT, totalLoaded: data.posts.length };
+      timelineCache.current[tlType] = { posts: data.posts, hasMore: data.has_more, totalLoaded: data.posts.length };
     } catch (e: unknown) {
       if (loadId !== loadIdRef.current || accountSnapshot() !== snapshot) return;
       setError(e instanceof Error ? e.message : "불러오기 실패");
@@ -119,18 +116,17 @@ export default function TimelinePage() {
     setLoadingMore(true);
     try {
       const snapshot = accountSnapshot();
-      const currentOffset = offsetRef.current;
+      const currentOffset = totalLoadedRef.current;
       const data = await api.timeline(tlType, LOAD_MORE, currentOffset);
       if (accountSnapshot() !== snapshot) return;
       if (data._emojis) injectEmojis(data._emojis);
       setPosts((prev) => {
         const next = [...prev, ...data.posts];
-        timelineCache.current[tlType] = { posts: next, hasMore: data.has_more && totalLoadedRef.current + data.posts.length < 500, offset: currentOffset + LOAD_MORE, totalLoaded: totalLoadedRef.current + data.posts.length };
+        timelineCache.current[tlType] = { posts: next, hasMore: data.has_more && totalLoadedRef.current + data.posts.length < 500, totalLoaded: totalLoadedRef.current + data.posts.length };
         return next;
       });
       totalLoadedRef.current += data.posts.length;
       setHasMore(data.has_more && totalLoadedRef.current < 500);
-      offsetRef.current = currentOffset + LOAD_MORE;
     } catch (e) {
       console.error("Failed to load more posts:", e);
     }

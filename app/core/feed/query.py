@@ -92,12 +92,18 @@ def query_feed_posts(
 def _fetch_filtered_posts(session, tl_type, user, limit, offset,
                           _visible_user_ids, _local_ids, user_id, visibility,
                           _base_opts, _following_ids, filter_ctx):
-    """2. 필요한 수량(limit + 1)이 채워질 때까지 반복 조회 및 필터링 수행"""
-    fetch_size = limit + 20
-    posts = []
-    page_offset = offset
+    """2. 필요한 수량(offset + limit + 1)이 채워질 때까지 반복 조회 및 필터링 수행.
 
-    while len(posts) < limit + 1:
+    offset은 필터링 *이후* 결과 기준이다. 원본 DB row에 offset을 적용하면
+    _timeline_filter로 걸러진 글만큼 페이지 간 오프셋이 어긋나 중복/누락이 생기므로,
+    필터된 결과를 누적한 뒤 offset부터 슬라이스한다.
+    """
+    fetch_size = limit + 20
+    filtered = []
+    page_offset = 0
+    target = offset + limit + 1
+
+    while len(filtered) < target:
         batch = query_feed_posts(
             tl_type,
             _visible_user_ids, _local_ids, user_id, visibility,
@@ -108,10 +114,9 @@ def _fetch_filtered_posts(session, tl_type, user, limit, offset,
         batch_size = len(batch)
         if user:
             batch = _timeline_filter(batch, session, user, tl_type, _following_ids, filter_ctx=filter_ctx)
-        needed = limit + 1 - len(posts)
-        posts.extend(batch[:needed])
+        filtered.extend(batch)
         if batch_size < fetch_size:
             break
         page_offset += fetch_size
 
-    return posts
+    return filtered[offset:target]
