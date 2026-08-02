@@ -161,7 +161,7 @@ export function renderCustomEmojis(html: string, emojis: CustomEmoji[], size?: n
     if (!safeUrl.startsWith("https:") && !safeUrl.startsWith("/")) continue;
     const kw = emoji.keyword;
     const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`:${escaped}:`, "g");
+    const re = new RegExp(`:${escaped}:`, "gi");
     html = html.replace(re, `<img src="${safeUrl}" alt=":${kw}:" title=":${kw}:" class="custom-emoji" width="${sz}" height="${sz}" style="width:${sz}px;height:${sz}px;vertical-align:middle;display:inline-block;object-fit:contain">`);
   }
   return html;

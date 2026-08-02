@@ -108,12 +108,13 @@ def to_ap_note(post, session=None) -> dict:
 
     # 2. 이모지 구축
     from app.utils.emoji import _emoji_url
-    _emoji_pattern = re.compile(r':([a-z0-9_]{2,}):')
+    from sqlalchemy import func
+    _emoji_pattern = re.compile(r':([a-zA-Z0-9_]{2,}):')
     _emoji_keywords = set(_emoji_pattern.findall(content))
     if _emoji_keywords:
         with get_session() as _es:
             for kw in _emoji_keywords:
-                emoji = _es.query(CustomEmoji).filter_by(keyword=kw).first()
+                emoji = _es.query(CustomEmoji).filter(func.lower(CustomEmoji.keyword) == kw.lower()).first()
                 if emoji:
                     url = emoji.source_url or _emoji_url(emoji.file_name, emoji.domain or "", emoji.category or "")
                     ext = os.path.splitext(emoji.file_name or "")[-1].lower()

@@ -150,11 +150,12 @@ def _account_json(user: User, db: SASession, viewer: User | None = None,
     all_emojis = _load_emojis(db)
     shortcode_re = re.compile(r':(\w+):')
     used = set(shortcode_re.findall(display_name)) | set(shortcode_re.findall(source_note))
-    emojis_in_account = [e for e in all_emojis if e["keyword"] in used]
+    used_lower = {u.lower() for u in used}
+    emojis_in_account = [e for e in all_emojis if e["keyword"].lower() in used_lower]
 
     def _emoji_to_img(m):
         kw = m.group(1)
-        emoji = next((e for e in emojis_in_account if e["keyword"] == kw), None)
+        emoji = next((e for e in emojis_in_account if e["keyword"].lower() == kw.lower()), None)
         if emoji and emoji.get("url"):
             safe_url = emoji["url"].replace('"', "%22")
             return f'<img src="{safe_url}" alt=":{kw}:" title=":{kw}:" class="custom-emoji" style="display:inline-block;width:1.2em;height:1.2em;vertical-align:-0.2em;">'
@@ -366,8 +367,8 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
     )
 
     shortcode_pattern = re.compile(r':(\w+):')
-    used_shortcodes = set(shortcode_pattern.findall(content))
-    post_emojis = [e for e in all_emojis if e["keyword"] in used_shortcodes]
+    used_shortcodes = {sc.lower() for sc in shortcode_pattern.findall(content)}
+    post_emojis = [e for e in all_emojis if e["keyword"].lower() in used_shortcodes]
 
     if _replies_map is not None:
         replies_count = _replies_map.get(post.id, 0)
