@@ -129,18 +129,24 @@ export function subscribeEmojis(cb: (emojis: CustomEmoji[]) => void): () => void
 const _versionListeners = new Set<() => void>();
 
 export function useEmojiList(): CustomEmoji[] {
-  const [, setVer] = useState(0);
+  const [emojis, setEmojis] = useState<CustomEmoji[]>(() =>
+    typeof window !== "undefined" && (window as any).__emojiCache
+      ? (window as any).__emojiCache as CustomEmoji[]
+      : (cache || [])
+  );
 
   useEffect(() => {
-    const handler = () => setVer((v) => v + 1);
+    const handler = () => setEmojis((window as any).__emojiCache || cache || []);
     _versionListeners.add(handler);
+
+    getCustomEmojis().then(list => {
+      setEmojis(list);
+    });
+
     return () => { _versionListeners.delete(handler); };
   }, []);
 
-  if (typeof window !== "undefined" && (window as any).__emojiCache) {
-    return (window as any).__emojiCache as CustomEmoji[];
-  }
-  return cache || [];
+  return emojis;
 }
 
 export function renderCustomEmojis(html: string, emojis: CustomEmoji[], size?: number): string {
