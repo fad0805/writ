@@ -18,7 +18,7 @@ export interface CustomEmoji {
 }
 
 export function injectEmojis(list: CustomEmojiRaw[]) {
-  if (!cache) cache = [];
+  if (!cache) cache = (window as any).__emojiCache ? [...(window as any).__emojiCache] : [];
   let changed = false;
   if (!(window as any).__emojiMap) {
     (window as any).__emojiMap = {};
