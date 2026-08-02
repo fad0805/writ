@@ -85,7 +85,7 @@ export const EDITOR_EXTENSIONS = [
     Underline,
     TextStyle,
     Color,
-    Placeholder.configure({ placeholder: "소설 내용을 입력하세요..." }),
+    Placeholder.configure({ placeholder: "내용을 입력하세요..." }),
     TextAlign.configure({ types: ["heading", "paragraph"] }),
     AlignableImage,
     PageBreakExtension,
