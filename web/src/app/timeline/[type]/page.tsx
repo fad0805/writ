@@ -106,26 +106,38 @@ export default function TimelinePage() {
   // eslint-disable-next-line react-hooks/refs -- sync ref with render output for keyboard handler
   filteredPostsRef.current = filteredPosts;
 
+  const flushCache = useCallback(() => {
+    if (saveTimer.current) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    const uid = accountSnapshot();
+    if (uid) saveTimelineCache(uid, timelineCache.current);
+  }, []);
+
   const setCache = useCallback((type: string, entry: TimelineCacheEntry) => {
     timelineCache.current = { ...timelineCache.current, [type]: entry };
-    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    if (saveTimer.current) return;
     saveTimer.current = window.setTimeout(() => {
       saveTimer.current = null;
       const uid = accountSnapshot();
       if (uid) saveTimelineCache(uid, timelineCache.current);
-    }, 1500);
+    }, 2000);
   }, []);
 
   useEffect(() => {
+    const flush = () => flushCache();
+    const onVisibility = () => { if (document.visibilityState === "hidden") flushCache(); };
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      if (saveTimer.current) {
-        window.clearTimeout(saveTimer.current);
-        saveTimer.current = null;
-        const uid = accountSnapshot();
-        if (uid) saveTimelineCache(uid, timelineCache.current);
-      }
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
+      flushCache();
     };
-  }, []);
+  }, [flushCache]);
 
   const load = useCallback(async (force = false) => {
     const uid = accountSnapshot();
@@ -162,6 +174,9 @@ export default function TimelinePage() {
   }, [tlType, setCache]);
 
   const addOrUpdatePost = useCallback((newPost: PostData) => {
+    const c = timelineCache.current[tlType];
+    const cachedIdx = c ? c.posts.findIndex((p) => p.id === newPost.id) : -1;
+    if (cachedIdx < 0) totalLoadedRef.current += 1;
     setPosts((prev) => {
       const idx = prev.findIndex((p) => p.id === newPost.id);
       let next: PostData[];
@@ -171,8 +186,7 @@ export default function TimelinePage() {
       } else {
         next = [newPost, ...prev];
       }
-    const c = timelineCache.current[tlType];
-    if (c) setCache(tlType, { ...c, posts: next, ts: Date.now() });
+    if (c) setCache(tlType, { ...c, posts: next, totalLoaded: totalLoadedRef.current, ts: Date.now() });
     return next;
   });
 }, [tlType, setCache]);
@@ -362,13 +376,15 @@ export default function TimelinePage() {
           });
           return;
         }
+        const c = timelineCache.current[tlType];
+        const cachedIdx = c ? c.posts.findIndex((p) => p.id === newPost.id) : -1;
+        if (cachedIdx < 0) totalLoadedRef.current += 1;
         setPosts((prev) => {
           const idx = prev.findIndex((p) => p.id === newPost.id);
           const next: PostData[] = idx >= 0
             ? [...prev.slice(0, idx), newPost, ...prev.slice(idx + 1)]
             : [newPost, ...prev];
-          const c = timelineCache.current[tlType];
-          if (c) setCache(tlType, { ...c, posts: next, ts: Date.now() });
+          if (c) setCache(tlType, { ...c, posts: next, totalLoaded: totalLoadedRef.current, ts: Date.now() });
           return next;
         });
       } catch (e) {
