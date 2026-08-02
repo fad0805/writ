@@ -92,6 +92,14 @@ export default function RightSidebar() {
     return <span dangerouslySetInnerHTML={{ __html: sanitizeName(html) }} />;
   };
 
+  const emojisFor = useCallback((post: PostData | null | undefined): CustomEmoji[] => {
+    const map = new Map(emojiMap.map((e) => [e.keyword, e]));
+    for (const e of ((post as any)?._emojis) || []) {
+      if (e && e.keyword && e.url && !map.has(e.keyword)) map.set(e.keyword, e);
+    }
+    return Array.from(map.values());
+  }, [emojiMap]);
+
   const visibleNovels = novels.slice(0, 3);
   const extraCount = novels.length - 3;
   return (
@@ -162,7 +170,7 @@ export default function RightSidebar() {
                   <span style={{ display: "inline" }}>
                     <Avatar user={n.from_user} style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: "text-bottom", marginRight: 4 }} />
                     <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120, display: "inline-block", verticalAlign: "text-bottom" }}>{renderName(n.from_user.display_name || n.from_user.username)}</strong>{" "}
-                    {n.type === "like" ? (n.metadata?.reaction ? <span dangerouslySetInnerHTML={{ __html: `님이 ${renderCustomEmojis(n.metadata.reaction, emojiMap, 14)} 리액션했습니다` }} /> : "님이 즐겨찾기했습니다") : n.type === "boost" ? "님이 부스트했습니다" : "님이 회원님을 언급했습니다"}
+                    {n.type === "like" ? (n.metadata?.reaction ? <span dangerouslySetInnerHTML={{ __html: `님이 ${renderCustomEmojis(n.metadata.reaction, emojisFor(n.post), 14)} 리액션했습니다` }} /> : "님이 즐겨찾기했습니다") : n.type === "boost" ? "님이 부스트했습니다" : "님이 회원님을 언급했습니다"}
                   </span>
                 ) : undefined
               } />

@@ -43,6 +43,14 @@ const NOTIF_ICONS: Record<string, string> = {
 const TYPE_NAMES: Record<string, string> = { post: "게시글", novel: "시리즈", episode: "에피소드" };
 const ACTION_NAMES: Record<string, string> = { warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지", unsuspend: "정지 해제" };
 
+const mergeEmojis = (base: CustomEmoji[], extra?: CustomEmoji[]): CustomEmoji[] => {
+  const map = new Map((base || []).map((e) => [e.keyword, e]));
+  for (const e of extra || []) {
+    if (e && e.keyword && e.url && !map.has(e.keyword)) map.set(e.keyword, e);
+  }
+  return Array.from(map.values());
+};
+
 const typeText = (t: string, meta?: any, emojiMap?: CustomEmoji[]) => {
   if (t === "follow") return "님이 회원님을 팔로우했습니다";
   if (t === "follow_request") return "님이 회원님을 팔로우 요청했습니다";
@@ -337,7 +345,7 @@ export default function NotificationsPage() {
                     <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user.display_name, emojiMap)) }} />
                   </Link>
                 )}{" "}
-                {typeText(n.type, n.metadata, emojiMap)}</>
+                {typeText(n.type, n.metadata, mergeEmojis(emojiMap, (n.post as any)?._emojis))}</>
               )}
               <span className="notif-time">{fmtTime(n.created_at)}</span>
               {n.type === "moderation" && n.metadata?.message && n.metadata?.type !== "report" && n.metadata?.type !== "new_user" && (
