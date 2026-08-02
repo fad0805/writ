@@ -7,7 +7,7 @@ import Link from "next/link";
 import MiniPostCard from "./MiniPostCard";
 import Avatar from "./Avatar";
 import { useRouter } from "next/navigation";
-import { getCustomEmojis, renderCustomEmojis, CustomEmoji, invalidateEmojiCache } from "@/lib/emojis";
+import { renderCustomEmojis, useEmojiList, CustomEmoji, invalidateEmojiCache } from "@/lib/emojis";
 import { sanitizeName } from "@/lib/sanitize";
 
 const MODAL_ACTION_NAMES: Record<string, string> = {
@@ -21,8 +21,7 @@ export default function RightSidebar() {
   const [notifs, setNotifs] = useState<NotificationData[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [serverInfo, setServerInfo] = useState<{ name: string; description?: string; admins: { username: string; email: string }[] } | null>(null);
-  const [emojiMap, setEmojiMap] = useState<CustomEmoji[]>([]);
-  useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
+  const emojiMap = useEmojiList();
 
 
   useEffect(() => {
@@ -87,11 +86,6 @@ export default function RightSidebar() {
     } catch {}
   }, []);
 
-  const renderName = (name: string) => {
-    const html = renderCustomEmojis(name, emojiMap, 14);
-    return <span dangerouslySetInnerHTML={{ __html: sanitizeName(html) }} />;
-  };
-
   const emojisFor = useCallback((post: PostData | null | undefined): CustomEmoji[] => {
     const map = new Map(emojiMap.map((e) => [e.keyword, e]));
     for (const e of ((post as any)?._emojis) || []) {
@@ -99,6 +93,11 @@ export default function RightSidebar() {
     }
     return Array.from(map.values());
   }, [emojiMap]);
+
+  const renderName = (name: string, post?: PostData | null | undefined) => {
+    const html = renderCustomEmojis(name, emojisFor(post), 14);
+    return <span dangerouslySetInnerHTML={{ __html: sanitizeName(html) }} />;
+  };
 
   const visibleNovels = novels.slice(0, 3);
   const extraCount = novels.length - 3;
@@ -139,7 +138,7 @@ export default function RightSidebar() {
                   n.from_user ? (
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                       <Avatar user={n.from_user} style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: "middle" }} />
-                      <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{renderName(n.from_user.display_name || n.from_user.username)}</strong> 님이 투표에 참여했습니다
+                      <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{renderName(n.from_user.display_name || n.from_user.username, n.post)}</strong> 님이 투표에 참여했습니다
                     </span>
                   ) : <><strong>{renderName("알 수 없음")}</strong> 님이 투표에 참여했습니다</>
                 } /> : <div key={n.id} />
@@ -156,7 +155,7 @@ export default function RightSidebar() {
                     {n.from_user && (
                       <Link href={`/@${n.from_user.username}`} style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text-primary)", fontWeight: 600, overflow: "hidden", minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
                         <Avatar user={n.from_user} style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0 }} />
-                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.9em" }}>{renderName(n.from_user.display_name || n.from_user.username)}</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.9em" }}>{renderName(n.from_user.display_name || n.from_user.username, pollPost)}</span>
                       </Link>
                     )}
                   </div>
@@ -169,7 +168,7 @@ export default function RightSidebar() {
                 (n.type === "like" || n.type === "boost" || n.type === "mention" || n.type === "reply") && n.from_user ? (
                   <span style={{ display: "inline" }}>
                     <Avatar user={n.from_user} style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: "text-bottom", marginRight: 4 }} />
-                    <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120, display: "inline-block", verticalAlign: "text-bottom" }}>{renderName(n.from_user.display_name || n.from_user.username)}</strong>{" "}
+                    <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120, display: "inline-block", verticalAlign: "text-bottom" }}>{renderName(n.from_user.display_name || n.from_user.username, n.post)}</strong>{" "}
                     {n.type === "like" ? (n.metadata?.reaction ? <span dangerouslySetInnerHTML={{ __html: `님이 ${renderCustomEmojis(n.metadata.reaction, emojisFor(n.post), 14)} 리액션했습니다` }} /> : "님이 즐겨찾기했습니다") : n.type === "boost" ? "님이 부스트했습니다" : "님이 회원님을 언급했습니다"}
                   </span>
                 ) : undefined
