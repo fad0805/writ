@@ -64,4 +64,6 @@ LOGFILE="/app/logs/$(date +%Y-%m-%d).log"
 touch "$LOGFILE" 2>/dev/null || true
 
 echo "[start] Starting uvicorn..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 2>&1 | tee -a "$LOGFILE"
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 2>&1 \
+  | while IFS= read -r line; do printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"; done \
+  | tee -a "$LOGFILE"
