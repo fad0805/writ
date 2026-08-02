@@ -8,18 +8,6 @@ from app.utils.datetime import _fmt_dt
 from app.utils.emoji import _load_emojis
 
 
-def _author_reactions_off(author) -> bool:
-    """True only when the author explicitly disabled reactions (NULL means enabled)."""
-    return getattr(author, 'enable_reactions', True) is False
-
-
-def _reactions_for_display(reactions, author) -> dict:
-    """Merge a post's reaction counts into a single ★ when its author disabled reactions (display only)."""
-    if reactions and _author_reactions_off(author):
-        return {"★": sum(reactions.values())}
-    return reactions
-
-
 def _post_json(p, session, user, tl_type=None,
                _liked_ids=None, _boosted_ids=None, _bookmarked_ids=None,
                _vote_map=None, _my_reaction_map=None, _reactions_map=None,
@@ -112,11 +100,6 @@ def _post_json(p, session, user, tl_type=None,
                     reactions[like.reaction] = reactions.get(like.reaction, 0) + 1
                 else:
                     reactions[_default_react] = reactions.get(_default_react, 0) + 1
-    if _author_reactions_off(p.author):
-        if reactions:
-            reactions = {"★": sum(reactions.values())}
-        if my_reaction:
-            my_reaction = "★"
     if _mentioned_users_map is not None and p.id in _mentioned_users_map:
         mentioned_handles = _mentioned_users_map[p.id]
     elif p.mentioned_user_ids:

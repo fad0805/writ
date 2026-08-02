@@ -195,16 +195,12 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
                 try: meta = json.loads(n.metadata_json)
                 except: pass
             if n.notification_type == "like":
-                _post_author = n.post.author if n.post else None
-                _reactions_on = _post_author and getattr(_post_author, 'enable_reactions', True) is not False
-                if _reactions_on and not meta.get("reaction") and n.post and n.from_user_id:
+                if not meta.get("reaction") and n.post and n.from_user_id:
                     _like_row = s.query(Like.reaction).filter(Like.user_id == n.from_user_id, Like.post_id == n.post_id).first()
                     if _like_row and _like_row[0]:
                         meta = {"reaction": _like_row[0]}
                     else:
                         meta = {"reaction": "★"}
-                elif not _reactions_on and meta.get("reaction"):
-                    meta = {}
             post = n.post
             item = {
                 "id": n.id,
