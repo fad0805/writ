@@ -11,7 +11,7 @@ const NAME_CONFIG: DOMPurify.Config = {
 };
 
 const EPISODE_CONFIG: DOMPurify.Config = {
-  ALLOWED_TAGS: ["p", "br", "strong", "em", "a", "span", "img", "h2", "h3", "h4", "blockquote", "ul", "ol", "li", "hr", "figure", "figcaption", "pre", "code", "del", "u", "sub", "sup"],
+  ALLOWED_TAGS: ["p", "br", "strong", "em", "a", "span", "img", "h2", "h3", "h4", "blockquote", "ul", "ol", "li", "hr", "figure", "figcaption", "pre", "code", "del", "u", "sub", "sup", "div"],
   ALLOWED_ATTR: ["href", "src", "alt", "class", "style", "title", "target", "rel", "data-align", "data-width", "data-wrap", "data-spoiler"],
 };
 
