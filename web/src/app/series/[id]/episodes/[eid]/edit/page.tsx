@@ -278,7 +278,7 @@ export default function EditEpisodePage() {
             <button type="button" className={`episode-view-mode-btn ${viewMode === "comic" ? "active" : ""}`} onClick={() => { if (viewMode === "text" && content.replace(/<[^>]*>/g, "").trim() && !confirm("전환하면 텍스트가 초기화됩니다. 계속하시겠습니까?")) return; setViewMode("comic"); setContent(""); }}>만화 모드</button>
           </div>
           {viewMode === "text" ? (
-            <EpisodeEditor value={content} onChange={(v) => setContent(v)} pageMode={pageMode} onPageModeChange={setPageMode} />
+            <EpisodeEditor value={content} onChange={(v) => setContent(v)} pageMode={pageMode} onPageModeChange={setPageMode} enableSpoiler />
           ) : (
             <div className="episode-comic-uploader">
               {imageUrls.map((url, i) => (

@@ -1758,6 +1758,34 @@ input[type="checkbox"] {
 .episode-body img { max-width: 100%; height: auto; }
 .episode-body s, .episode-body strike { text-decoration: line-through; }
 .episode-body u { text-decoration: underline; }
+.episode-body .spoiler {
+  background: var(--bg-tertiary);
+  color: transparent !important;
+  text-shadow: none;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: background 0.15s ease;
+}
+.episode-body .spoiler:hover {
+  background: var(--bg-secondary);
+}
+.episode-body .spoiler.revealed {
+  color: inherit !important;
+  background: transparent;
+  cursor: default;
+  user-select: text;
+}
+.episode-body p.spoiler-block {
+  display: block;
+  filter: blur(8px);
+  padding: 2px 4px;
+}
+.episode-body p.spoiler-block.revealed {
+  filter: none;
+}
 .episode-comment {
   background: var(--bg-tertiary);
   border-radius: 8px;
@@ -1901,6 +1929,16 @@ input[type="checkbox"] {
   font-size: 1em;
 }
 .episode-editor-content .ProseMirror hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+.episode-editor-content .ProseMirror .spoiler {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-radius: 4px;
+  padding: 0 2px;
+}
+.episode-editor-content .ProseMirror p.spoiler-block {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-radius: 4px;
+  padding: 2px 4px;
+}
 .episode-editor-content p.is-editor-empty:first-child { text-indent: 0; }
 .episode-editor-content p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);

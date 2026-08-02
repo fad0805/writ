@@ -5,7 +5,7 @@ import { EditorContent } from "@tiptap/react";
 import { useRef, useState, useEffect } from "react";
 import ColorPicker from "./ColorPicker";
 
-export default function EpisodeEditor({ value, onChange, pageMode, onPageModeChange }: { value: string; onChange: (html: string) => void; pageMode?: boolean; onPageModeChange?: (on: boolean) => void }) {
+export default function EpisodeEditor({ value, onChange, pageMode, onPageModeChange, enableSpoiler }: { value: string; onChange: (html: string) => void; pageMode?: boolean; onPageModeChange?: (on: boolean) => void; enableSpoiler?: boolean }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const colorPickerRef = useRef<HTMLDivElement>(null);
@@ -54,6 +54,12 @@ export default function EpisodeEditor({ value, onChange, pageMode, onPageModeCha
           <button type="button" onClick={() => editor?.chain().focus().toggleCodeBlock().run()} data-active={editor?.isActive("codeBlock")} title="코드 블록"><span style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 700 }}>{'</>'}</span></button>
           <button type="button" onClick={() => editor?.chain().focus().toggleCode().run()} data-active={editor?.isActive("code")} title="인라인 코드"><code style={{ fontSize: 12 }}>{'<>'}</code></button>
         </div>
+        {enableSpoiler && (
+          <div className="episode-editor-toolbar-section">
+            <button type="button" onClick={() => editor?.chain().focus().toggleMark("spoiler").run()} data-active={editor?.isActive("spoiler")} title="스포일러: 선택한 단어/문장을 테마 색으로 덮습니다 (클릭 시 공개)">🕶</button>
+            <button type="button" onClick={() => editor?.chain().focus().toggleNode("spoilerBlock", "paragraph").run()} data-active={editor?.isActive("spoilerBlock")} title="스포일러 문단: 커서가 있는 문단 전체를 블러 처리합니다 (클릭 시 공개)">🕶¶</button>
+          </div>
+        )}
         <div className="episode-editor-toolbar-section">
           <button type="button" onClick={() => editorFn?.align("left")} data-active={editorFn?.isAlign("left")}>←</button>
           <button type="button" onClick={() => editorFn?.align("center")} data-active={editorFn?.isAlign("center")}>↔</button>

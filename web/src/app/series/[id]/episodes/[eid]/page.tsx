@@ -78,6 +78,17 @@ export default function EpisodeDetailPage() {
     if (bodyRef.current) installCodeCopyButtons(bodyRef.current);
   }, [episode]);
 
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const onClick = (e: MouseEvent) => {
+      const t = (e.target as HTMLElement).closest(".spoiler") as HTMLElement | null;
+      if (t) t.classList.toggle("revealed");
+    };
+    el.addEventListener("click", onClick);
+    return () => el.removeEventListener("click", onClick);
+  }, [episode]);
+
   const pages = useMemo(() => {
     if (!episode?.content) return [""];
     if (!episode.page_mode) return [episode.content];

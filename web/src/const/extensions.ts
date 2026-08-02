@@ -4,6 +4,7 @@ import Strike from "@tiptap/extension-strike";
 import TextAlign from "@tiptap/extension-text-align";
 import { Color, TextStyle } from "@tiptap/extension-text-style";
 import Underline from "@tiptap/extension-underline";
+import { Mark, Node } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { PageBreakExtension } from "./pageBreakExtension";
 
@@ -47,6 +48,30 @@ const AlignableImage = Image.extend({
   },
 });
 
+const SpoilerMark = Mark.create({
+  name: "spoiler",
+  inclusive: true,
+  excludes: "",
+  parseHTML() {
+    return [{ tag: "span[data-spoiler]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["span", { ...HTMLAttributes, class: "spoiler", "data-spoiler": "inline" }, 0];
+  },
+});
+
+const SpoilerBlockNode = Node.create({
+  name: "spoilerBlock",
+  group: "block",
+  content: "inline*",
+  parseHTML() {
+    return [{ tag: "p[data-spoiler]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["p", { ...HTMLAttributes, class: "spoiler spoiler-block", "data-spoiler": "block" }, 0];
+  },
+});
+
 export const EDITOR_EXTENSIONS = [
     StarterKit.configure({
       heading: { levels: [2, 3] },
@@ -60,6 +85,8 @@ export const EDITOR_EXTENSIONS = [
     TextAlign.configure({ types: ["heading", "paragraph"] }),
     AlignableImage,
     PageBreakExtension,
+    SpoilerMark,
+    SpoilerBlockNode,
 ]
 
 export const COLOR_PICKER_PALLETE = [
