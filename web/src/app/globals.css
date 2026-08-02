@@ -1773,7 +1773,7 @@ input[type="checkbox"] {
   color: transparent !important;
 }
 .episode-body .spoiler:hover {
-  background: var(--bg-secondary);
+  background: color-mix(in srgb, var(--accent) 15%, var(--bg-tertiary));
 }
 .episode-body .spoiler.revealed {
   background: transparent;
