@@ -23,6 +23,44 @@ const TABS = [
 
 const TAB_KEYS = ["home", "social", "local", "federated"];
 
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_STORAGE_KEY = "writ:tl-cache";
+
+interface TimelineCacheEntry {
+  posts: PostData[];
+  hasMore: boolean;
+  totalLoaded: number;
+  ts: number;
+}
+
+function timelineCacheKey(userId: number) {
+  return `${CACHE_STORAGE_KEY}:${userId}`;
+}
+
+function loadTimelineCache(userId: number): Record<string, TimelineCacheEntry> {
+  if (typeof localStorage === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(timelineCacheKey(userId));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, TimelineCacheEntry>;
+    const now = Date.now();
+    const out: Record<string, TimelineCacheEntry> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (v && Array.isArray(v.posts) && now - (v.ts || 0) < CACHE_TTL_MS) out[k] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function saveTimelineCache(userId: number, cache: Record<string, TimelineCacheEntry>) {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(timelineCacheKey(userId), JSON.stringify(cache));
+  } catch {}
+}
+
 interface StreamPostData extends PostData {
   type?: "delete" | "update";
 }
@@ -38,7 +76,9 @@ export default function TimelinePage() {
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState("");
 
-  const timelineCache = useRef<Record<string, { posts: PostData[]; hasMore: boolean; totalLoaded: number }>>({});
+  const timelineCache = useRef<Record<string, TimelineCacheEntry>>({});
+  const cacheLoadedRef = useRef<number | null>(null);
+  const saveTimer = useRef<number | null>(null);
 
   const [selectedIdx, setSelectedIdx] = useState(-1);
   const [replyPost, setReplyPost] = useState<PostData | null>(null);
@@ -66,8 +106,34 @@ export default function TimelinePage() {
   // eslint-disable-next-line react-hooks/refs -- sync ref with render output for keyboard handler
   filteredPostsRef.current = filteredPosts;
 
-  const load = useCallback(async () => {
-    const cached = timelineCache.current[tlType];
+  const setCache = useCallback((type: string, entry: TimelineCacheEntry) => {
+    timelineCache.current = { ...timelineCache.current, [type]: entry };
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => {
+      saveTimer.current = null;
+      const uid = accountSnapshot();
+      if (uid) saveTimelineCache(uid, timelineCache.current);
+    }, 1500);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) {
+        window.clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+        const uid = accountSnapshot();
+        if (uid) saveTimelineCache(uid, timelineCache.current);
+      }
+    };
+  }, []);
+
+  const load = useCallback(async (force = false) => {
+    const uid = accountSnapshot();
+    if (uid && cacheLoadedRef.current !== uid) {
+      timelineCache.current = loadTimelineCache(uid);
+      cacheLoadedRef.current = uid;
+    }
+    const cached = !force ? timelineCache.current[tlType] : null;
     if (cached) {
       setPosts(cached.posts);
       setHasMore(cached.hasMore);
@@ -87,13 +153,13 @@ export default function TimelinePage() {
       setPosts(data.posts);
       setHasMore(data.has_more);
       totalLoadedRef.current = data.posts.length;
-      timelineCache.current[tlType] = { posts: data.posts, hasMore: data.has_more, totalLoaded: data.posts.length };
+      setCache(tlType, { posts: data.posts, hasMore: data.has_more, totalLoaded: data.posts.length, ts: Date.now() });
     } catch (e: unknown) {
       if (loadId !== loadIdRef.current || accountSnapshot() !== snapshot) return;
       setError(e instanceof Error ? e.message : "불러오기 실패");
     }
     setLoading(false);
-  }, [tlType]);
+  }, [tlType, setCache]);
 
   const addOrUpdatePost = useCallback((newPost: PostData) => {
     setPosts((prev) => {
@@ -105,11 +171,11 @@ export default function TimelinePage() {
       } else {
         next = [newPost, ...prev];
       }
-      const c = timelineCache.current[tlType];
-      if (c) timelineCache.current[tlType] = { ...c, posts: next };
-      return next;
-    });
-  }, [tlType]);
+    const c = timelineCache.current[tlType];
+    if (c) setCache(tlType, { ...c, posts: next, ts: Date.now() });
+    return next;
+  });
+}, [tlType, setCache]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
@@ -120,24 +186,31 @@ export default function TimelinePage() {
       const data = await api.timeline(tlType, LOAD_MORE, currentOffset);
       if (accountSnapshot() !== snapshot) return;
       if (data._emojis) injectEmojis(data._emojis);
+      const newTotal = totalLoadedRef.current + data.posts.length;
+      const newHasMore = data.has_more && newTotal < 500;
+      totalLoadedRef.current = newTotal;
+      setHasMore(newHasMore);
       setPosts((prev) => {
         const next = [...prev, ...data.posts];
-        timelineCache.current[tlType] = { posts: next, hasMore: data.has_more && totalLoadedRef.current + data.posts.length < 500, totalLoaded: totalLoadedRef.current + data.posts.length };
+        setCache(tlType, { posts: next, hasMore: newHasMore, totalLoaded: newTotal, ts: Date.now() });
         return next;
       });
-      totalLoadedRef.current += data.posts.length;
-      setHasMore(data.has_more && totalLoadedRef.current < 500);
     } catch (e) {
       console.error("Failed to load more posts:", e);
     }
     setLoadingMore(false);
-  }, [tlType, hasMore, loadingMore]);
+  }, [tlType, hasMore, loadingMore, setCache]);
 
   useEffect(() => { load(); }, [load, user?.id]);
 
   useEffect(() => {
-    window.addEventListener("followchange", load);
-    return () => window.removeEventListener("followchange", load);
+    if (typeof localStorage !== "undefined") localStorage.setItem("lastTimelineTab", tlType);
+  }, [tlType]);
+
+  useEffect(() => {
+    const handler = () => load(true);
+    window.addEventListener("followchange", handler);
+    return () => window.removeEventListener("followchange", handler);
   }, [load, user?.id]);
 
   useEffect(() => {
@@ -275,7 +348,7 @@ export default function TimelinePage() {
           setPosts((prev) => {
             const next = prev.filter((p) => p.id !== newPost.id);
             const c = timelineCache.current[tlType];
-            if (c) timelineCache.current[tlType] = { ...c, posts: next };
+            if (c) setCache(tlType, { ...c, posts: next, ts: Date.now() });
             return next;
           });
           return;
@@ -284,7 +357,7 @@ export default function TimelinePage() {
           setPosts((prev) => {
             const next = prev.map((p) => p.id === newPost.id ? { ...p, ...newPost } : p);
             const c = timelineCache.current[tlType];
-            if (c) timelineCache.current[tlType] = { ...c, posts: next };
+            if (c) setCache(tlType, { ...c, posts: next, ts: Date.now() });
             return next;
           });
           return;
@@ -295,7 +368,7 @@ export default function TimelinePage() {
             ? [...prev.slice(0, idx), newPost, ...prev.slice(idx + 1)]
             : [newPost, ...prev];
           const c = timelineCache.current[tlType];
-          if (c) timelineCache.current[tlType] = { ...c, posts: next };
+          if (c) setCache(tlType, { ...c, posts: next, ts: Date.now() });
           return next;
         });
       } catch (e) {
@@ -304,7 +377,7 @@ export default function TimelinePage() {
     };
     es.onerror = () => {};
     return () => { es?.close(); };
-  }, [tlType, user?.id]);
+  }, [tlType, user?.id, setCache]);
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
   if (!user) return <div className="empty-state">로그인이 필요합니다</div>;
@@ -361,7 +434,7 @@ export default function TimelinePage() {
                       setPosts((prev) => {
                         const next = prev.filter((x) => x.id !== p.id);
                         const c = timelineCache.current[tlType];
-                        if (c) timelineCache.current[tlType] = { ...c, posts: next };
+                        if (c) setCache(tlType, { ...c, posts: next, ts: Date.now() });
                         return next;
                       });
                     }}

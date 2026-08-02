@@ -40,7 +40,7 @@ export default function ScrollRestoration() {
     const key = prevPath.current;
     const saved = getPositions()[key];
     if (saved) {
-      requestAnimationFrame(() => container.scrollTo(0, saved));
+      restoreScroll(container as HTMLElement, saved);
     }
 
     const onScroll = () => {
