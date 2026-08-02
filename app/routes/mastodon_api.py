@@ -41,6 +41,9 @@ VISIBILITY_MAP = {
 }
 VISIBILITY_MAP_REVERSE = {v: k for k, v in VISIBILITY_MAP.items()}
 VISIBILITY_MAP_REVERSE["unlisted"] = "home"
+# Mastodon의 "direct"는 WRIT의 DM 가시성 "mention"으로 저장해야 한다.
+# dict comprehension에서 "dm"이 "mention"을 덮어써 버리므로 여기서 명시적으로 복원한다.
+VISIBILITY_MAP_REVERSE["direct"] = "mention"
 
 
 STAR_REACTION = "★"
