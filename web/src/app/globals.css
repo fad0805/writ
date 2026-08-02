@@ -1776,7 +1776,7 @@ input[type="checkbox"] {
   background: color-mix(in srgb, var(--accent) 15%, var(--bg-tertiary));
 }
 .episode-body .spoiler.revealed {
-  background: transparent;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
   cursor: default;
   user-select: text;
 }
