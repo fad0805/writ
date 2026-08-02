@@ -8,7 +8,7 @@ import uuid
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, CustomEmoji, ServerSetting, UserMute, UserBlock
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, CustomEmoji, UserMute, UserBlock
 from app.config.settings import BASE_URL
 from app.core.activitypub import _post_to_inbox
 from app.core.push import send_push_to_user
@@ -16,7 +16,7 @@ from app.core.timeline_stream import (
     broadcast_refresh_notifs, broadcast_notif_sound,
     broadcast_reaction_update, broadcast_post, broadcast_delete,
 )
-from app.serializers import _user_json
+from app.serializers import _user_json, _reactions_for_display
 from app.utils.emoji import _emoji_url
 
 logger = logging.getLogger("writ.interactions")
@@ -62,7 +62,7 @@ def like_post(db: Session, user: User, post_id: int, reaction: str = "★"):
     if not existing:
         db.add(Like(user_id=user.id, post_id=post_id, reaction=reaction))
         if post.author_id != user.id and not existing_notif:
-            _author_reactions = getattr(post.author, 'enable_reactions', True)
+            _author_reactions = getattr(post.author, 'enable_reactions', True) is not False
             _notif_meta = {"reaction": reaction} if reaction and _author_reactions else {}
             db.add(Notification(
                 user_id=post.author_id, from_user_id=user.id,
@@ -77,7 +77,7 @@ def like_post(db: Session, user: User, post_id: int, reaction: str = "★"):
         _reactions = {}
         for _react, _cnt in db.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
             _reactions[_react or "★"] = _cnt
-        broadcast_reaction_update(post_id, _reactions)
+        broadcast_reaction_update(post_id, _reactions_for_display(_reactions, post.author))
         if post.author_id != user.id:
             broadcast_refresh_notifs(post.author_id)
             send_push_to_user(post.author_id, "like", user.username, post_id)
@@ -129,7 +129,7 @@ def unlike_post(db: Session, user: User, post_id: int):
         _reactions = {}
         for _react, _cnt in db.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
             _reactions[_react or "★"] = _cnt
-        broadcast_reaction_update(post_id, _reactions)
+        broadcast_reaction_update(post_id, _reactions_for_display(_reactions, post.author))
         broadcast_refresh_notifs(post.author_id)
 
     inbox = post.author.shared_inbox_url or post.author.inbox_url
@@ -319,36 +319,32 @@ def react_post(db: Session, user: User, post_id: int, emoji: str):
     if not post or not _can_view(post, user, db):
         return
 
-    settings = ServerSetting.get(db)
-    reactions_disabled = not settings.enable_reactions or not getattr(post.author, 'enable_reactions', True)
-    final_emoji = emoji if not reactions_disabled else None
-
     post_author_id = post.author_id
     post_ap_id = post.ap_id
     post_author_is_remote = post.author.is_remote
     post_author_shared_inbox = post.author.shared_inbox_url if post_author_is_remote else None
-    post_author_enable_reactions = getattr(post.author, 'enable_reactions', True)
+    post_author_enable_reactions = getattr(post.author, 'enable_reactions', True) is not False
 
     existing = db.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
     old_reaction = existing.reaction if existing else None
     is_new = existing is None
 
     if existing:
-        existing.reaction = final_emoji
+        existing.reaction = emoji
         existing_notif = db.query(Notification).filter_by(
             user_id=post_author_id, from_user_id=user.id, notification_type="like", post_id=post_id
         ).first() if post_author_id != user.id else None
         if existing_notif:
-            _notif_meta = {"reaction": final_emoji} if final_emoji and post_author_enable_reactions else {}
+            _notif_meta = {"reaction": emoji} if emoji and post_author_enable_reactions else {}
             existing_notif.metadata_json = json.dumps(_notif_meta) if _notif_meta else ""
     else:
-        db.add(Like(user_id=user.id, post_id=post_id, reaction=final_emoji))
+        db.add(Like(user_id=user.id, post_id=post_id, reaction=emoji))
         if post_author_id != user.id:
             existing_notif = db.query(Notification).filter_by(
                 user_id=post_author_id, from_user_id=user.id, notification_type="like", post_id=post_id
             ).first()
             if not existing_notif:
-                _notif_meta = {"reaction": final_emoji} if final_emoji and post_author_enable_reactions else {}
+                _notif_meta = {"reaction": emoji} if emoji and post_author_enable_reactions else {}
                 db.add(Notification(
                     user_id=post_author_id, from_user_id=user.id,
                     notification_type="like", post_id=post_id,
@@ -363,7 +359,7 @@ def react_post(db: Session, user: User, post_id: int, emoji: str):
     _reactions = {}
     for _react, _cnt in db.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
         _reactions[_react or "★"] = _cnt
-    broadcast_reaction_update(post_id, _reactions)
+    broadcast_reaction_update(post_id, _reactions_for_display(_reactions, post.author))
     if post_author_id != user.id:
         broadcast_refresh_notifs(post_author_id)
 
@@ -418,7 +414,7 @@ def unreact_post(db: Session, user: User, post_id: int, emoji: str | None = None
         _reactions = {}
         for _react, _cnt in db.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post_id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
             _reactions[_react or "★"] = _cnt
-        broadcast_reaction_update(post_id, _reactions)
+        broadcast_reaction_update(post_id, _reactions_for_display(_reactions, post.author))
         broadcast_refresh_notifs(post.author_id)
         if post_author_is_remote and post_author_shared_inbox:
             undo = {

@@ -22,6 +22,7 @@ from app.utils.emoji import _refresh_emoji_cache_forcibly, _load_emojis
 from app.utils.alias import actor_urls_include
 from app.utils.crypto import generate_keypair
 from app.utils.content_parser import _sanitize_html, process_post_content
+from app.serializers import _reactions_for_display
 from app.core.activitypub._utils import (
     _validated_get, _federation_allowed,
     _parse_username_from_url, _get_instance_actor, _extract_remote_url,
@@ -905,7 +906,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                     user_id=post.author_id, from_user_id=actor_id, notification_type="like", post_id=post.id
                 ).first()
                 if _existing_n:
-                    _author_reactions = getattr(post.author, 'enable_reactions', True)
+                    _author_reactions = getattr(post.author, 'enable_reactions', True) is not False
                     if _author_reactions:
                         _r = reaction or "★"
                         _existing_n.metadata_json = json.dumps({"reaction": _r})
@@ -915,7 +916,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                 _reactions = {}
                 for _react, _cnt in session.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
                     _reactions[_react or "★"] = _cnt
-                broadcast_reaction_update(post.id, _reactions)
+                broadcast_reaction_update(post.id, _reactions_for_display(_reactions, post.author))
             return (200, "Already liked")
 
         like_ap_id = activity_id
@@ -934,7 +935,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             user_id=post.author_id, from_user_id=actor_id, notification_type="like", post_id=post.id
         ).first()
         if not existing_n:
-            _author_reactions = getattr(post.author, 'enable_reactions', True)
+            _author_reactions = getattr(post.author, 'enable_reactions', True) is not False
             _notif_meta = json.dumps({"reaction": reaction or "★"}) if _author_reactions else ""
             n = Notification(
                 user_id=post.author_id,
@@ -951,13 +952,13 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             _reactions = {}
             for _react, _cnt in session.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
                 _reactions[_react or "★"] = _cnt
-            broadcast_reaction_update(post.id, _reactions)
+            broadcast_reaction_update(post.id, _reactions_for_display(_reactions, post.author))
         else:
             session.commit()
             _reactions = {}
             for _react, _cnt in session.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
                 _reactions[_react or "★"] = _cnt
-            broadcast_reaction_update(post.id, _reactions)
+            broadcast_reaction_update(post.id, _reactions_for_display(_reactions, post.author))
 
     return (200, "Liked")
 
@@ -1183,7 +1184,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                     "follow_list_visibility": getattr(u, "follow_list_visibility", "public") or "public",
                     "custom_fields": (u.custom_fields or []) if hasattr(u, 'custom_fields') else [],
                     "profile_hashtags": (u.profile_hashtags or []) if hasattr(u, 'profile_hashtags') else [],
-                    "enable_reactions": getattr(u, "enable_reactions", True),
+                    "enable_reactions": getattr(u, "enable_reactions", True) is not False,
                     "aliases": (u.aliases or []) if hasattr(u, 'aliases') else [],
                     "moved_to": getattr(u, "moved_to", "") or "",
                 }

@@ -304,7 +304,7 @@ def api_server_info():
             "logo": settings.logo,
             "favicon": settings.favicon,
             "app_icon": settings.app_icon,
-            "enable_reactions": bool(settings.enable_reactions),
+            "enable_reactions": settings.enable_reactions is not False,
         }
 
 

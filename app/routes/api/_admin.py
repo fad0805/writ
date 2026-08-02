@@ -1446,7 +1446,7 @@ def api_admin_get_settings(request: Request):
             "app_icon": settings.app_icon,
             "admin_ids": settings.admin_ids or "",
             "admin_email": settings.admin_email or "",
-            "enable_reactions": bool(settings.enable_reactions),
+            "enable_reactions": settings.enable_reactions is not False,
         }
 
 

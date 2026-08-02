@@ -107,7 +107,7 @@ def api_me(request: Request, s: Session = Depends(get_db)):
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
     result = _user_json(user)
     _settings = ServerSetting.get(s)
-    if not _settings.enable_reactions:
+    if _settings.enable_reactions is False:
         result["enable_reactions"] = False
     resp = JSONResponse(result)
     secure = APP_ENV != "development"
