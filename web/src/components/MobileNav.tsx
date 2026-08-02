@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth";
 import { useRouter, usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import Icon from "./Icon";
+import { fetchAnnouncementStatus } from "@/lib/announcements";
 
 export default function MobileNav() {
   const { user, loading, refresh } = useAuth();
@@ -12,6 +13,8 @@ export default function MobileNav() {
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [isDark, setIsDark] = useState(false);
+  const [hasAnnouncement, setHasAnnouncement] = useState(false);
+  const [unreadAnnouncement, setUnreadAnnouncement] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -46,6 +49,28 @@ export default function MobileNav() {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [menuOpen]);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const update = (status?: { has_active: boolean; unread_count: number }) => {
+      if (cancelled) return;
+      if (status) {
+        setHasAnnouncement(status.has_active);
+        setUnreadAnnouncement(status.unread_count > 0);
+        if (typeof window !== "undefined") (window as any).__announcementStatus = status;
+      }
+    };
+    fetchAnnouncementStatus().then(update);
+    const handler = () => {
+      const cached = (window as any).__announcementStatus;
+      if (cached) { update(cached); return; }
+      fetchAnnouncementStatus().then(update);
+    };
+    window.addEventListener("announcementchange", handler);
+    const interval = setInterval(() => fetchAnnouncementStatus().then(update), 30000);
+    return () => { cancelled = true; window.removeEventListener("announcementchange", handler); clearInterval(interval); };
+  }, [user]);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -129,6 +154,11 @@ export default function MobileNav() {
             <Link href={`/@${user.username}`} className="mobile-more-item">
               <Icon name="user" /> <span>내 프로필</span>
             </Link>
+            {hasAnnouncement && (
+              <Link href="/announcements" className="mobile-more-item">
+                <Icon name="star_filled" style={{ color: unreadAnnouncement ? "#f1c40f" : undefined }} /> <span>공지사항</span>
+              </Link>
+            )}
             <Link href="/my" className="mobile-more-item">
               <Icon name="archive" /> <span>내 보관함</span>
             </Link>

@@ -7,7 +7,7 @@ import logging
 import secrets
 import smtplib
 from email.mime.text import MIMEText
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 import httpx
@@ -15,18 +15,18 @@ from fastapi import APIRouter, Request, Form, HTTPException, Query
 from sqlalchemy import desc, or_, func, String
 from sqlalchemy.orm import joinedload, selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog
+from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, Report, ServerRule, BlockedDomain, FederationBlock, AllowedServer, MutedServer, ServerSetting, AdminLog, Announcement, AnnouncementRead
 from app.serializers import _user_json
 from app.config.settings import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
 from app.core.activitypub import _resolve_actor, _send_flag, _fetch_remote_count
 from app.core.timeline_stream import broadcast_refresh_notifs
 from app.db.database import get_session
 from app.routes.auth import require_auth, hash_password
-from app.utils.datetime import _fmt_dt
+from app.utils.datetime import _fmt_dt, KST
 from app.utils.log import log_admin_action
 from app.utils.storage import get_storage
 
-from app.routes.api._misc import _save_pwa_icons, _save_favicon, _delete_favicon, _delete_pwa_icons
+from app.routes.api._misc import _save_pwa_icons, _save_favicon, _delete_favicon, _delete_pwa_icons, _parse_dt_field, _is_announcement_active, _announcement_json
 from app.routes.api._series import _novel_json, _apply_latest_activity_order
 
 logger = logging.getLogger(__name__)
@@ -825,6 +825,77 @@ def api_admin_reorder_rules(request: Request, rule_ids: str = Form(...)):
         for i, rid in enumerate(ids):
             s.query(ServerRule).filter_by(id=rid).update({"sort_order": i})
         s.commit()
+    return {"ok": True}
+
+
+@admin_router.get("/admin/announcements")
+def api_admin_list_announcements(request: Request):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        items = s.query(Announcement).options(joinedload(Announcement.created_by)).order_by(desc(Announcement.created_at)).all()
+        return [dict(_announcement_json(a), active=_is_announcement_active(a)) for a in items]
+
+
+@admin_router.post("/admin/announcements/new")
+def api_admin_create_announcement(request: Request, title: str = Form(...), content: str = Form(...),
+                                  starts_at: str = Form(""), ends_at: str = Form("")):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not title.strip():
+        raise HTTPException(status_code=400, detail="Title is required")
+    with get_session() as s:
+        a = Announcement(
+            title=title.strip(),
+            content=content,
+            starts_at=_parse_dt_field(starts_at),
+            ends_at=_parse_dt_field(ends_at),
+            created_by_id=user.id,
+        )
+        s.add(a)
+        s.commit()
+        s.refresh(a)
+        result = dict(_announcement_json(a), active=_is_announcement_active(a))
+    log_admin_action(user.id, user.username, "create_announcement", target_type="announcement", target_id=a.id, details=a.title, ip_address=request.client.host if request.client else "")
+    return result
+
+
+@admin_router.post("/admin/announcements/{announcement_id}/edit")
+def api_admin_edit_announcement(request: Request, announcement_id: int, title: str = Form(...), content: str = Form(...),
+                                starts_at: str = Form(""), ends_at: str = Form("")):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        a = s.query(Announcement).get(announcement_id)
+        if not a:
+            raise HTTPException(status_code=404, detail="Announcement not found")
+        a.title = title.strip()
+        a.content = content
+        a.starts_at = _parse_dt_field(starts_at)
+        a.ends_at = _parse_dt_field(ends_at)
+        s.commit()
+        s.refresh(a)
+        result = dict(_announcement_json(a), active=_is_announcement_active(a))
+    log_admin_action(user.id, user.username, "edit_announcement", target_type="announcement", target_id=a.id, details=a.title, ip_address=request.client.host if request.client else "")
+    return result
+
+
+@admin_router.post("/admin/announcements/{announcement_id}/delete")
+def api_admin_delete_announcement(request: Request, announcement_id: int):
+    user = require_auth(request)
+    if user.role not in ("admin", "moderator", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    with get_session() as s:
+        a = s.query(Announcement).get(announcement_id)
+        if not a:
+            raise HTTPException(status_code=404, detail="Announcement not found")
+        s.query(AnnouncementRead).filter_by(announcement_id=a.id).delete()
+        s.delete(a)
+        s.commit()
+    log_admin_action(user.id, user.username, "delete_announcement", target_type="announcement", target_id=announcement_id, ip_address=request.client.host if request.client else "")
     return {"ok": True}
 
 

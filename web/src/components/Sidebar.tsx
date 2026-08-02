@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from "react";
 import Icon from "./Icon";
 import Avatar from "./Avatar";
 import AccountSwitcher from "./AccountSwitcher";
+import { fetchAnnouncementStatus } from "@/lib/announcements";
 
 function NavItem({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
   const handleClick = (e: React.MouseEvent) => {
@@ -37,6 +38,8 @@ export default function Sidebar() {
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
   const [timelineTab, setTimelineTab] = useState("home");
   const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
+  const [hasAnnouncement, setHasAnnouncement] = useState(false);
+  const [unreadAnnouncement, setUnreadAnnouncement] = useState(false);
 
   useEffect(() => {
     fetch("/api/server-info")
@@ -72,6 +75,30 @@ export default function Sidebar() {
     window.addEventListener("serverchange", serverHandler);
     return () => { window.removeEventListener("notificationsread", handler); window.removeEventListener("profilechange", profileHandler); window.removeEventListener("notifchange", update); window.removeEventListener("serverchange", serverHandler); };
   }, [user, refresh]);
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const update = (status?: { has_active: boolean; unread_count: number }) => {
+      if (cancelled) return;
+      if (status) {
+        setHasAnnouncement(status.has_active);
+        setUnreadAnnouncement(status.unread_count > 0);
+        if (typeof window !== "undefined") (window as any).__announcementStatus = status;
+      }
+    };
+    fetchAnnouncementStatus().then(update);
+    const handler = () => {
+      const cached = (window as any).__announcementStatus;
+      if (cached) { update(cached); return; }
+      fetchAnnouncementStatus().then(update);
+    };
+    window.addEventListener("announcementchange", handler);
+    window.addEventListener("notifchange", handler);
+    const interval = setInterval(() => fetchAnnouncementStatus().then(update), 30000);
+    const focusHandler = () => fetchAnnouncementStatus().then(update);
+    window.addEventListener("focus", focusHandler);
+    return () => { cancelled = true; window.removeEventListener("announcementchange", handler); window.removeEventListener("notifchange", handler); window.removeEventListener("focus", focusHandler); clearInterval(interval); };
+  }, [user]);
   useEffect(() => {
     const link = document.querySelector<HTMLLinkElement>("link[rel~=icon]");
     if (!link) return;
@@ -263,6 +290,12 @@ export default function Sidebar() {
         <NavItem href={`/timeline/${timelineTab}`} active={pathname.startsWith("/timeline")}>
           <Icon name="home_solid" /> 타임라인
         </NavItem>
+        {hasAnnouncement && (
+          <NavItem href="/announcements" active={isActive("/announcements")}>
+            <Icon name="star_filled" style={{ color: unreadAnnouncement ? "#f1c40f" : undefined }} /> 공지사항
+            {unreadAnnouncement && <span className="notif-dot" style={{ background: "#f1c40f" }} />}
+          </NavItem>
+        )}
         <NavItem href="/notifications" active={isActive("/notifications")}>
           <Icon name="bell_solid" /> 알림
           {unreadNotifs > 0 && <span className="notif-dot" />}

@@ -17,12 +17,14 @@ from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, 
 from fastapi.responses import JSONResponse, Response, FileResponse
 from PIL import Image
 from sqlalchemy import desc, or_
+from sqlalchemy.orm import joinedload
 
-from app.models import User, CustomEmoji, ServerSetting, PushSubscription, LoginSession
+from app.models import User, CustomEmoji, ServerSetting, PushSubscription, LoginSession, Announcement, AnnouncementRead
 from app.config.settings import BASE_URL, S3_ENABLED, SESSION_EXPIRE_DAYS
 from app.core.push import _get_vapid_key
 from app.db.database import get_session
 from app.routes.auth import require_auth, require_active_auth, get_session_key_from_cookie
+from app.utils.datetime import _fmt_dt, KST
 from app.utils.emoji import EMOJI_DIR, _refresh_emoji_cache_forcibly, _emoji_url
 from app.utils.log import log_admin_action
 from app.utils.storage import LocalStorage, get_storage
@@ -600,5 +602,146 @@ def delete_session(request: Request, session_id: int):
         if ls.session_key == current_key:
             raise HTTPException(status_code=400, detail="현재 사용 중인 기기는 해제할 수 없습니다.")
         s.delete(ls)
+        s.commit()
+    return {"ok": True}
+
+
+# ── Announcements ──
+
+def _parse_dt_field(value: str):
+    """Parse a datetime-local style string (KST) into a UTC-aware datetime. Empty -> None."""
+    if not value or not value.strip():
+        return None
+    try:
+        dt = datetime.fromisoformat(value.strip())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid datetime format")
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=KST)
+    return dt.astimezone(timezone.utc)
+
+
+def _is_announcement_active(a: Announcement, now_dt=None) -> bool:
+    now_dt = now_dt or datetime.now(timezone.utc)
+    def _aware(dt):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt
+    starts = _aware(a.starts_at)
+    ends = _aware(a.ends_at)
+    if starts and starts > now_dt:
+        return False
+    if ends and ends < now_dt:
+        return False
+    return True
+
+
+def _announcement_json(a: Announcement):
+    return {
+        "id": a.id,
+        "title": a.title,
+        "content": a.content,
+        "starts_at": _fmt_dt(a.starts_at),
+        "ends_at": _fmt_dt(a.ends_at),
+        "created_by": a.created_by.username if a.created_by else "",
+        "created_at": _fmt_dt(a.created_at),
+        "updated_at": _fmt_dt(a.updated_at),
+    }
+
+
+def _get_announcement_read(s, announcement_id: int, user_id: int) -> AnnouncementRead | None:
+    return s.query(AnnouncementRead).filter_by(announcement_id=announcement_id, user_id=user_id).first()
+
+
+def _user_announcement_json(s, a: Announcement, user_id: int):
+    read = _get_announcement_read(s, a.id, user_id)
+    return dict(
+        _announcement_json(a),
+        active=_is_announcement_active(a),
+        is_read=bool(read and read.is_read),
+        notified=bool(read and read.notified_at),
+    )
+
+
+@misc_router.get("/announcements")
+def api_list_announcements(request: Request):
+    user = require_auth(request)
+    with get_session() as s:
+        items = s.query(Announcement).options(joinedload(Announcement.created_by)).order_by(desc(Announcement.created_at)).all()
+        return {
+            "announcements": [
+                _user_announcement_json(s, a, user.id)
+                for a in items
+                if _is_announcement_active(a)
+            ]
+        }
+
+
+@misc_router.get("/announcements/status")
+def api_announcements_status(request: Request):
+    user = require_auth(request)
+    with get_session() as s:
+        items = s.query(Announcement).order_by(desc(Announcement.created_at)).all()
+        now_dt = datetime.now(timezone.utc)
+        active = [a for a in items if _is_announcement_active(a, now_dt)]
+        unread_count = 0
+        popups = []
+        for a in active:
+            read = _get_announcement_read(s, a.id, user.id)
+            if not (read and read.is_read):
+                unread_count += 1
+            if read is None or not read.notified_at:
+                popups.append({"id": a.id, "title": a.title})
+        return {
+            "has_active": bool(active),
+            "unread_count": unread_count,
+            "popups": popups,
+        }
+
+
+@misc_router.get("/announcements/{announcement_id}")
+def api_get_announcement(request: Request, announcement_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        a = s.query(Announcement).options(joinedload(Announcement.created_by)).get(announcement_id)
+        if not a:
+            raise HTTPException(status_code=404, detail="Announcement not found")
+        return _user_announcement_json(s, a, user.id)
+
+
+@misc_router.post("/announcements/{announcement_id}/read")
+def api_announcement_read(request: Request, announcement_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        a = s.query(Announcement).get(announcement_id)
+        if not a:
+            raise HTTPException(status_code=404, detail="Announcement not found")
+        read = _get_announcement_read(s, a.id, user.id)
+        if read is None:
+            read = AnnouncementRead(announcement_id=a.id, user_id=user.id)
+            s.add(read)
+        read.is_read = True
+        read.read_at = datetime.now(timezone.utc)
+        if not read.notified_at:
+            read.notified_at = read.read_at
+        s.commit()
+    return {"ok": True}
+
+
+@misc_router.post("/announcements/{announcement_id}/notified")
+def api_announcement_notified(request: Request, announcement_id: int):
+    user = require_auth(request)
+    with get_session() as s:
+        a = s.query(Announcement).get(announcement_id)
+        if not a:
+            raise HTTPException(status_code=404, detail="Announcement not found")
+        read = _get_announcement_read(s, a.id, user.id)
+        if read is None:
+            read = AnnouncementRead(announcement_id=a.id, user_id=user.id)
+            s.add(read)
+        if not read.notified_at:
+            read.notified_at = datetime.now(timezone.utc)
         s.commit()
     return {"ok": True}

@@ -2,7 +2,7 @@
 import Link from "next/link";
 import Icon from "./Icon";
 
-export default function AdminNav({ current }: { current: "dashboard" | "reports" | "users" | "emojis" | "settings" | "federation" | "moderation-log" | "blocked-domains" | "rules" | "content" }) {
+export default function AdminNav({ current }: { current: "dashboard" | "reports" | "users" | "emojis" | "settings" | "federation" | "moderation-log" | "blocked-domains" | "rules" | "content" | "announcements" }) {
   return (
     <>
       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", marginBottom: 6 }}>중재</div>
@@ -14,6 +14,7 @@ export default function AdminNav({ current }: { current: "dashboard" | "reports"
         <Link href="/admin/rules" className={`btn btn-small ${current === "rules" ? "btn-primary" : "btn-outline"}`}>규칙</Link>
         <Link href="/admin/moderation-log" className={`btn btn-small ${current === "moderation-log" ? "btn-primary" : "btn-outline"}`}>중재 기록</Link>
         <Link href="/admin/content" className={`btn btn-small ${current === "content" ? "btn-primary" : "btn-outline"}`}>콘텐츠 관리</Link>
+        <Link href="/admin/announcements" className={`btn btn-small ${current === "announcements" ? "btn-primary" : "btn-outline"}`}>공지사항</Link>
       </div>
       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", marginBottom: 6 }}>관리</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>

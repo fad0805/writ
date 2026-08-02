@@ -6,6 +6,7 @@ import RightSidebar from "@/components/RightSidebar";
 import MobileNav from "@/components/MobileNav";
 import KeyboardShortcuts from "@/components/KeyboardShortcuts";
 import NotifSound from "@/components/NotifSound";
+import AnnouncementToast from "@/components/AnnouncementToast";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import DeactivatedRedirect from "@/components/DeactivatedRedirect";
 import CsrfInit from "@/components/CsrfInit";
@@ -77,6 +78,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <KeyboardShortcuts />
           <ScrollRestoration />
           <NotifSound />
+          <AnnouncementToast />
           <DeactivatedRedirect />
           <CsrfInit />
         </AuthProvider>
