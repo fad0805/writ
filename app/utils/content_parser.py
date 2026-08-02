@@ -262,7 +262,7 @@ def process_local_post(text: str) -> str:
                           r'<a href="/@\1@\2" class="u-url mention">@\1@\2</a>', text_str)
         new_text = re.sub(r'(?<![A-Za-z0-9_."=/-])@([A-Za-z0-9_.-]+)(?!@[A-Za-z0-9_.-]+\.)(?!@)(?![A-Za-z0-9_.-])',
                           r'<a href="/@\1" class="u-url mention">@\1</a>', new_text)
-        new_text = re.sub(r'(?<![A-Za-z0-9_."=-])#([A-Za-z0-9가-힣_]+)(?![A-Za-z0-9_.-])',
+        new_text = re.sub(r'(?<![A-Za-z0-9_."=-])#([A-Za-z0-9가-힣_]+)(?![A-Za-z0-9가-힣_])',
                           lambda m: f'<a href="/explore?q={quote(f"#{m.group(1)}")}" rel="tag" class="mention hashtag">#{m.group(1)}</a>', new_text)
         if new_text != text_str:
             new_soup = BeautifulSoup(new_text, "html.parser")
