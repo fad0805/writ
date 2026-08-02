@@ -49,13 +49,11 @@ export default function PostDetailPage() {
   const topSentinelRef = useRef<HTMLDivElement>(null);
   const currentRef = useRef<HTMLDivElement>(null);
 
-  const initialLoadDone = useRef(false);
   useEffect(() => {
     if (post) {
-      if (initialLoadDone.current) {
+      requestAnimationFrame(() => {
         currentRef.current?.scrollIntoView({ behavior: "auto", block: "center" });
-      }
-      initialLoadDone.current = true;
+      });
     }
   }, [post]);
 
