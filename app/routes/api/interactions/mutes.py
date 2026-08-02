@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, Request, Form, HTTPException
 
 from app.models import User, Follow, UserMute, UserBlock, SeriesMute, KeywordMute
-from app.core.interactions import mute_user, unmute_user, block_user, unblock_user
+from app.core.relationship import mute_user, unmute_user, block_user, unblock_user
 from app.db.database import get_session
 from app.routes.auth import require_auth, require_active_auth
 from app.utils.datetime import _fmt_dt

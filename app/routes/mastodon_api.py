@@ -23,7 +23,8 @@ from app.models import User, Post, Follow, Like, Boost, Bookmark, Notification, 
 from app.db.database import get_db, get_session
 from app.config.settings import BASE_URL, DOMAIN, MAX_POST_LENGTH
 from app.routes.api import _broadcast_update_actor, _do_edit_post, _do_delete_post
-from app.core.interactions import follow_user, unfollow_user, like_post, unlike_post, boost_post, unboost_post, react_post, unreact_post, mute_user, unmute_user, block_user, unblock_user
+from app.core.interactions import like_post, unlike_post, boost_post, unboost_post, react_post, unreact_post
+from app.core.relationship import follow_user, unfollow_user, mute_user, unmute_user, block_user, unblock_user
 from app.utils.emoji import _emoji_url, _load_emojis
 from app.utils.filter import _load_user_filters, _timeline_filter
 from app.core.push import get_vapid_keys

@@ -10,7 +10,7 @@ from app.models import User, Follow, Notification
 from app.serializers import _user_json
 from app.config.settings import BASE_URL
 from app.core.activitypub import _resolve_actor, _send_accept, _send_reject
-from app.core.interactions import follow_user, unfollow_user
+from app.core.relationship import follow_user, unfollow_user
 from app.db.database import get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 
