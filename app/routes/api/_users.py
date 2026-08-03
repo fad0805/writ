@@ -19,7 +19,7 @@ from app.routes.auth import require_active_auth, get_current_user
 from app.utils.storage import get_storage
 
 from app.routes.api._core import _post_json, _cleanup_avatars, _broadcast_update_actor
-from app.core.interactions import _can_view
+from app.core.visibility import _can_view
 from app.utils.upload import _validate_upload, MAX_AVATAR_SIZE
 from app.routes.api._series import _novel_json, _apply_latest_activity_order, _load_novel_meta
 

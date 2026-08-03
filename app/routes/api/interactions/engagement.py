@@ -10,7 +10,7 @@ from app.core.interactions import like_post, unlike_post, boost_post, unboost_po
 from app.db.database import get_session
 from app.routes.auth import require_active_auth
 
-from app.core.interactions import _can_view
+from app.core.visibility import _can_view
 
 logger = logging.getLogger("writ.api.engagement")
 

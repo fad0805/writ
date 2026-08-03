@@ -19,7 +19,7 @@ from app.db.database import get_session
 from app.routes.auth import require_auth, get_current_user
 from app.utils.datetime import _fmt_dt
 
-from app.core.interactions import _can_view
+from app.core.visibility import _can_view
 from app.routes.api.interactions._common import _json_array_has_user, _generate_poll_end_notifications
 
 logger = logging.getLogger("writ.api.notify")

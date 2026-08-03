@@ -26,7 +26,7 @@ from app.core.timeline_stream import broadcast_refresh_notifs, add_notif_stream,
 from app.db.database import get_session
 from app.routes.auth import require_auth, require_active_auth, get_current_user
 from app.routes.api._core import _ap_fetch
-from app.core.interactions import _can_view
+from app.core.visibility import _can_view
 from app.utils.datetime import _fmt_dt
 from app.utils.emoji import _emoji_url
 

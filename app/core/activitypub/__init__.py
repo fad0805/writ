@@ -52,6 +52,9 @@ from app.core.activitypub._outbound import (
     _send_flag,
     _deliver_sync,
     _post_to_inbox,
+    _author_inbox,
+    _undo_like_activity,
+    _fanout_to_followers,
     send_to_shared_inbox,
     broadcast_to_followers,
 )

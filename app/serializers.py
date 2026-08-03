@@ -123,7 +123,7 @@ def _post_json(p, session, user, tl_type=None,
     if p.quote_of_id and _quote_depth < 2:
         _qp = session.query(Post).filter_by(id=p.quote_of_id, is_deleted=False).first()
         if _qp:
-            from app.core.interactions import _can_view
+            from app.core.visibility import _can_view
             if _can_view(_qp, user, session):
                 quoted_post = _post_json(
                     _qp, session, user, None,

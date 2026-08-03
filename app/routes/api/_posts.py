@@ -29,7 +29,7 @@ from app.utils.post import _get_descendant_ids, _sync_post_tags
 from app.utils.storage import get_storage
 
 from app.routes.api._core import _ap_fetch, _fetch_and_save_ap_object, _check_fetch_domain_allowed
-from app.core.interactions import _can_view
+from app.core.visibility import _can_view
 from app.routes.api._series import _novel_json, _episode_json
 from app.core.feed import _broadcast_federation
 

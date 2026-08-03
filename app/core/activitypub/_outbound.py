@@ -1,12 +1,14 @@
 import json
 import time
+import uuid
+import threading
 import base64
 import hashlib
 import datetime
 import logging
 
 import httpx
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import Session, selectinload
 
 from app.config.settings import BASE_URL, SECRET_KEY
 from app.db.database import get_session
@@ -222,3 +224,47 @@ def broadcast_to_followers(user: User, activity: dict):
             inboxes.add(inbox)
     for inbox in inboxes:
         _post_to_inbox(inbox, activity, user)
+
+
+def _author_inbox(post: Post) -> str | None:
+    """Inbox URL to notify the post author about interactions."""
+    return post.author.shared_inbox_url or post.author.inbox_url
+
+
+def _undo_like_activity(user: User, post: Post, reaction: str | None, target_id: str = ""):
+    """Build an ActivityPub Undo-Like object."""
+    return {
+        "@context": "https://www.w3.org/ns/activitystreams",
+        "id": f"{BASE_URL}/likes/{uuid.uuid4()}#undo",
+        "type": "Undo",
+        "actor": user.actor_uri(),
+        "object": {
+            "id": target_id or f"{BASE_URL}/likes/{uuid.uuid4()}",
+            "type": "Like",
+            "actor": user.actor_uri(),
+            "object": post.ap_id,
+            "content": reaction or "★",
+            "_misskey_reaction": reaction or "★",
+        },
+    }
+
+
+def _fanout_to_followers(db: Session, user: User, activity: dict, action: str = "boost", threaded: bool = False):
+    """Send an activity to the remote inboxes of the user's followers."""
+    try:
+        followers = db.query(User).join(Follow, Follow.follower_id == User.id).filter(Follow.following_id == user.id).all()
+        sent_inboxes = set()
+        for follower in followers:
+            if follower.is_remote and (follower.shared_inbox_url or follower.inbox_url):
+                inbox = follower.shared_inbox_url or follower.inbox_url
+                if inbox not in sent_inboxes:
+                    sent_inboxes.add(inbox)
+                    try:
+                        if threaded:
+                            threading.Thread(target=_post_to_inbox, args=(inbox, activity, user), daemon=True).start()
+                        else:
+                            _post_to_inbox(inbox, activity, user)
+                    except Exception as e:
+                        logger.error("Failed to fan-out %s to inbox %s: %s", action, inbox, e, exc_info=True)
+    except Exception as e:
+        logger.error("Failed to query followers for %s fan-out: %s", action, e, exc_info=True)
