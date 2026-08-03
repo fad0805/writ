@@ -370,6 +370,29 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         content
     )
 
+    # 인용(quote) 게시글: Mastodon 앱은 quote 필드를 렌더링하지 않으므로
+    # 인용 대상 링크를 "RE: <url>" 형식으로 본문에 붙여 클릭 가능하게 만든다.
+    _quote_url = ""
+    if post.quote_of_id:
+        _qp = db.query(Post).filter_by(id=post.quote_of_id).first()
+        if _qp and not _qp.is_deleted:
+            if _qp.is_remote:
+                _quote_url = _qp.remote_url or _qp.ap_id or ""
+            else:
+                _quote_url = _qp.ap_id or f"{BASE_URL}/@{_qp.author.username}/{_qp.id}"
+    if not _quote_url:
+        _quote_url = post.quote_of_ap_id or ""
+    if _quote_url:
+        _quote_link = (
+            f'<p>RE: <a href="{html.escape(_quote_url, quote=True)}" '
+            f'rel="nofollow noopener noreferrer" target="_blank">'
+            f'{html.escape(_quote_url)}</a></p>'
+        )
+        if content.strip().startswith("<"):
+            content = content + _quote_link
+        else:
+            content = f"<p>{content}</p>" + _quote_link
+
     shortcode_pattern = re.compile(r':(\w+):')
     used_shortcodes = {sc.lower() for sc in shortcode_pattern.findall(content)}
     post_emojis = [e for e in all_emojis if e["keyword"].lower() in used_shortcodes]
