@@ -159,6 +159,7 @@ def get_account_statuses(
     min_id: str | None = None,
     limit: int = Query(default=20, le=100),
     pinned: bool | None = None,
+    only_media: bool = False,
     exclude_reblogs: bool = False,
     exclude_replies: bool = False,
 ):
@@ -190,6 +191,9 @@ def get_account_statuses(
 
     if exclude_replies:
         q = q.filter(Post.in_reply_to_id.is_(None))
+
+    if only_media:
+        q = q.filter(Post.media_attachments != None, Post.media_attachments != "[]")
 
     if max_id:
         q = q.filter(Post.id < int(max_id))
