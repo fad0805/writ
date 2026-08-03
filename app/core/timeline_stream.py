@@ -120,7 +120,8 @@ def remove_post_stream(sid: int):
 
 def broadcast_reaction_update(post_id: int, reactions: dict):
     """Broadcast updated reactions dict for a post to all connected timeline streams and post streams."""
-    payload = json.dumps({"type": "update", "id": post_id, "reactions": reactions}, default=str)
+    likes_count = sum(v for v in reactions.values() if isinstance(v, (int, float)))
+    payload = json.dumps({"type": "update", "id": post_id, "reactions": reactions, "likes_count": likes_count}, default=str)
     for info in list(_streams.values()):
         _enqueue(info["queue"], payload)
     for info in list(_post_streams.values()):
@@ -134,7 +135,7 @@ def broadcast_reaction_update(post_id: int, reactions: dict):
     except Exception:
         bp_ids = []
     for bp_id in bp_ids:
-        bp_payload = json.dumps({"type": "update", "id": bp_id, "reactions": reactions}, default=str)
+        bp_payload = json.dumps({"type": "update", "id": bp_id, "reactions": reactions, "likes_count": likes_count}, default=str)
         for info in list(_streams.values()):
             _enqueue(info["queue"], bp_payload)
         for info in list(_post_streams.values()):

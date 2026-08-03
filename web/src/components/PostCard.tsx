@@ -145,6 +145,12 @@ const localReactionEmojiMap = useMemo(() => {
   useEffect(() => {
     setReactions(post.reactions || {});
   }, [post.reactions]);
+  useEffect(() => {
+    setLikesCount(post.likes_count);
+  }, [post.likes_count]);
+  useEffect(() => {
+    setBoostsCount(post.boosts_count);
+  }, [post.boosts_count]);
 
   useEffect(() => {
     if (!post.poll_data) return;

@@ -88,8 +88,8 @@ export default function PostByNumberPage() {
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === "update" && msg.id && msg.reactions) {
-          setPost((prev) => prev && (prev.id === msg.id || prev.boost_of_id === msg.id) ? { ...prev, reactions: msg.reactions } : prev);
-          setReplies((prev) => prev.map((r) => r.id === msg.id || r.boost_of_id === msg.id ? { ...r, reactions: msg.reactions } : r));
+          setPost((prev) => prev && (prev.id === msg.id || prev.boost_of_id === msg.id) ? { ...prev, reactions: msg.reactions, likes_count: msg.likes_count } : prev);
+          setReplies((prev) => prev.map((r) => r.id === msg.id || r.boost_of_id === msg.id ? { ...r, reactions: msg.reactions, likes_count: msg.likes_count } : r));
         }
       } catch {}
     };
