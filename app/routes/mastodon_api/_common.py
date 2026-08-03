@@ -363,7 +363,7 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
     if post.quote_of_id:
         _qp = db.query(Post).filter_by(id=post.quote_of_id).first()
         if _qp and not _qp.is_deleted:
-            if _qp.is_remote:
+            if _qp.author and _qp.author.is_remote:
                 _quote_url = _qp.remote_url or _qp.ap_id or ""
             else:
                 _quote_url = _qp.ap_id or f"{BASE_URL}/@{_qp.author.username}/{_qp.id}"
