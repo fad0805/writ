@@ -127,3 +127,26 @@ def validate_csrf_token(token: str, session_token: str) -> bool:
     except Exception:
         return False
 
+
+def csrf_token_user_id(token: str) -> int | None:
+    """Extract the user_id from a csrf token if its signature is valid.
+
+    Intentionally does not check expiry so an expired token can be used to
+    re-issue a fresh one (sliding renewal).
+    """
+    if not token:
+        return None
+    try:
+        decoded = base64.urlsafe_b64decode(token.encode()).decode()
+        parts = decoded.split(":")
+        user_id = int(parts[0])
+        expires = int(parts[1])
+        sig = parts[2]
+        expected = hmac.new(SECRET_KEY.encode(), f"{user_id}:{expires}".encode(),
+                             hashlib.sha256).hexdigest()[:16]
+        if not hmac.compare_digest(sig, expected):
+            return None
+        return user_id
+    except Exception:
+        return None
+

@@ -8,13 +8,18 @@ from starlette.responses import JSONResponse
 
 from app.config.settings import APP_ENV, DOMAIN
 from app.config.logging import _request_logger
-from app.utils.crypto import CSRF_EXEMPT_PREFIXES, CSRF_EXEMPT_EXACT, CSRF_EXEMPT_METHODS, validate_csrf_token
+from app.utils.crypto import CSRF_EXEMPT_PREFIXES, CSRF_EXEMPT_EXACT, CSRF_EXEMPT_METHODS, validate_csrf_token, generate_csrf_token, csrf_token_user_id
+
+
+def _renew_csrf_cookie(response, uid: int | None):
+    if not uid:
+        return
+    secure = APP_ENV != "development"
+    response.set_cookie(key="csrf_token", value=generate_csrf_token(uid), max_age=30*86400, httponly=False, samesite="lax", path="/", secure=secure)
 
 
 class CSRFProtectionMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        if request.method in CSRF_EXEMPT_METHODS:
-            return await call_next(request)
         path = request.url.path
         for prefix in CSRF_EXEMPT_PREFIXES:
             if path.startswith(prefix):
@@ -22,6 +27,12 @@ class CSRFProtectionMiddleware(BaseHTTPMiddleware):
         if path in CSRF_EXEMPT_EXACT or any(path.startswith(p) for p in CSRF_EXEMPT_EXACT):
             return await call_next(request)
         session_token = request.cookies.get("session", "")
+        if request.method in CSRF_EXEMPT_METHODS:
+            response = await call_next(request)
+            uid = csrf_token_user_id(request.cookies.get("csrf_token", ""))
+            if session_token and uid:
+                _renew_csrf_cookie(response, uid)
+            return response
         csrf_token = request.headers.get("X-CSRF-Token", "")
         if APP_ENV == "development":
             pass
@@ -49,7 +60,11 @@ class CSRFProtectionMiddleware(BaseHTTPMiddleware):
                     return JSONResponse({"detail": "CSRF referer mismatch"}, status_code=403)
         if not validate_csrf_token(csrf_token, session_token):
             return JSONResponse({"detail": "CSRF token missing or invalid"}, status_code=403)
-        return await call_next(request)
+        response = await call_next(request)
+        uid = csrf_token_user_id(csrf_token)
+        if uid:
+            _renew_csrf_cookie(response, uid)
+        return response
 
 
 class LogRequestsMiddleware(BaseHTTPMiddleware):
