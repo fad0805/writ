@@ -3,6 +3,7 @@ import html
 import re
 
 from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy import String, cast
 from sqlalchemy.orm import Session as SASession
 
 from app.models import User, Post, Follow, now
@@ -193,7 +194,11 @@ def get_account_statuses(
         q = q.filter(Post.in_reply_to_id.is_(None))
 
     if only_media:
-        q = q.filter(Post.media_attachments != None, Post.media_attachments != "[]", Post.media_attachments != "null")
+        q = q.filter(
+            Post.media_attachments != None,
+            cast(Post.media_attachments, String) != "[]",
+            cast(Post.media_attachments, String) != "null",
+        )
 
     if max_id:
         q = q.filter(Post.id < int(max_id))

@@ -1,6 +1,6 @@
 """Mastodon timeline endpoints (/api/v1/timelines*, /api/v1/tags*)."""
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import or_
+from sqlalchemy import String, cast, or_
 from sqlalchemy.orm import Session as SASession
 
 from app.models import User, Post, Follow, Like, Boost, Bookmark, Tag
@@ -128,7 +128,11 @@ def public_timeline(
     if remote:
         q = q.join(Post.author).filter(User.is_remote == True)
     if only_media:
-        q = q.filter(Post.media_attachments != None, Post.media_attachments != "[]")
+        q = q.filter(
+            Post.media_attachments != None,
+            cast(Post.media_attachments, String) != "[]",
+            cast(Post.media_attachments, String) != "null",
+        )
 
     if max_id:
         q = q.filter(Post.id < int(max_id))
