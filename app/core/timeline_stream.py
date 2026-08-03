@@ -5,7 +5,7 @@ import logging
 from sqlalchemy import func
 
 from app.db.database import get_session
-from app.models import Notification
+from app.models import Notification, Post
 
 logger = logging.getLogger(__name__)
 
@@ -126,3 +126,17 @@ def broadcast_reaction_update(post_id: int, reactions: dict):
     for info in list(_post_streams.values()):
         if info["post_id"] == post_id:
             _enqueue(info["queue"], payload)
+    # Boost pointer posts show the original's reactions, so broadcast to them too.
+    try:
+        with get_session() as s:
+            bp_ids = [row[0] for row in s.query(Post.id).filter(
+                Post.boost_of_id == post_id, Post.is_deleted == False).all()]
+    except Exception:
+        bp_ids = []
+    for bp_id in bp_ids:
+        bp_payload = json.dumps({"type": "update", "id": bp_id, "reactions": reactions}, default=str)
+        for info in list(_streams.values()):
+            _enqueue(info["queue"], bp_payload)
+        for info in list(_post_streams.values()):
+            if info["post_id"] == bp_id:
+                _enqueue(info["queue"], bp_payload)

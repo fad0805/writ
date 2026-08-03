@@ -401,7 +401,13 @@ export default function TimelinePage() {
         }
         if (newPost.type === "update") {
           setPosts((prev) => {
-            const next = prev.map((p) => p.id === newPost.id ? { ...p, ...newPost } : p);
+            const next = prev.map((p) => {
+              if (p.id === newPost.id) return { ...p, ...newPost };
+              if (p.boost_of_id && p.boost_of_id === newPost.id) {
+                return { ...p, ...newPost, id: p.id };
+              }
+              return p;
+            });
             const c = timelineCache.current[tlType];
             if (c) setCache(tlType, { ...c, posts: next, ts: Date.now() });
             return next;
