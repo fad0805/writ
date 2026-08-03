@@ -12,7 +12,7 @@ from app.db.database import get_session
 from app.models import CustomEmoji
 from app.utils.storage import get_storage
 from app.utils.emoji import _refresh_emoji_cache_forcibly
-from app.core.activitypub._utils import _validate_url, _validated_get, WRIT_USER_AGENT
+from app.utils.http import validate_url, validated_get, WRIT_USER_AGENT
 
 logger = logging.getLogger("writ.activitypub")
 
@@ -87,10 +87,10 @@ def _process_emoji_tags(tags: list, session):
         if existing:
             continue
 
-        if not _validate_url(img_url):
+        if not validate_url(img_url):
             continue
         try:
-            resp = _validated_get(img_url, timeout=15)
+            resp = validated_get(img_url, timeout=15)
             if resp.status_code != 200:
                 continue
             ext = "png"

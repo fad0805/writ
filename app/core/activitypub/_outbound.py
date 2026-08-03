@@ -14,7 +14,8 @@ from app.config.settings import BASE_URL, SECRET_KEY
 from app.db.database import get_session
 from app.models import User, Post, Follow, PendingDelivery
 from app.utils.crypto import sign_string, get_private_key
-from app.core.activitypub._utils import _validate_url, _federation_allowed
+from app.core.federation import federation_allowed
+from app.utils.http import validate_url
 from urllib.parse import urlparse
 
 logger = logging.getLogger("writ.activitypub")
@@ -128,7 +129,7 @@ def _deliver_sync(inbox_url: str, body: bytes, headers: dict) -> bool:
 
 
 def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
-    if not _validate_url(inbox_url):
+    if not validate_url(inbox_url):
         return
     body = json.dumps(activity, ensure_ascii=True, sort_keys=True).encode("utf-8")
     print(f"DEBUG_BODY_LENGTH: {len(body)}")
@@ -219,7 +220,7 @@ def broadcast_to_followers(user: User, activity: dict):
             if inbox in inboxes:
                 continue
             domain = urlparse(inbox).hostname or ""
-            if not _federation_allowed(domain):
+            if not federation_allowed(domain):
                 continue
             inboxes.add(inbox)
     for inbox in inboxes:

@@ -23,11 +23,10 @@ from app.utils.emoji import _refresh_emoji_cache_forcibly, _load_emojis
 from app.utils.alias import actor_urls_include
 from app.utils.crypto import generate_keypair
 from app.utils.content_parser import _sanitize_html, process_post_content
-from app.core.activitypub._utils import (
-    _validated_get, _federation_allowed,
-    _parse_username_from_url, _get_instance_actor, _extract_remote_url,
-    WRIT_USER_AGENT,
-)
+from app.core.activitypub._utils import _get_instance_actor
+from app.core.federation import federation_allowed
+from app.utils.http import validated_get, WRIT_USER_AGENT
+from app.utils.urls import parse_username_from_url, extract_remote_url
 from app.core.activitypub._media import _cache_remote_media
 from app.core.activitypub._emoji import _process_emoji_tags, _background_import_emoji
 from app.core.activitypub._fetch import _fetch_remote_post, _resolve_actor, _retry_fetch_reply
@@ -49,7 +48,7 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
     # Check federation rules for the actor's domain
     if actor and isinstance(actor, str):
         actor_domain = urlparse(actor).hostname or ""
-        if not _federation_allowed(actor_domain):
+        if not federation_allowed(actor_domain):
             logger.info("Rejected inbox activity from blocked domain: %s", actor_domain)
             return (403, "Domain not allowed")
 
@@ -94,7 +93,7 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
     object_url = raw_object if isinstance(raw_object, str) else raw_object.get("id", "")
     activity_id = activity.get("id", "")
 
-    local_username = _parse_username_from_url(object_url)
+    local_username = parse_username_from_url(object_url)
 
     # Resolve follower BEFORE opening session to avoid nested transactions
     with get_session() as s:
@@ -150,7 +149,7 @@ def _handle_reject(activity: dict) -> tuple[int, str]:
 
         local_user = None
         if follower_url:
-            local_username = _parse_username_from_url(follower_url)
+            local_username = parse_username_from_url(follower_url)
             if local_username:
                 local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
 
@@ -200,7 +199,7 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
     if isinstance(accepter_url, list):
         accepter_url = accepter_url[0]
 
-    local_username = _parse_username_from_url(follower_url)
+    local_username = parse_username_from_url(follower_url)
     if not local_username:
         return (200, "OK")
 
@@ -271,7 +270,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         if len(raw_content) > 65536:
             raw_content = raw_content[:65536]
         post_id = obj.get("id", "")
-        remote_url = _extract_remote_url(obj, post_id)
+        remote_url = extract_remote_url(obj, post_id)
         content = process_post_content(_sanitize_html(raw_content), obj)
         summary = obj.get("summary", "")
         in_reply_to = obj.get("inReplyTo", "")
@@ -1251,7 +1250,7 @@ def _handle_block(activity: dict) -> tuple[int, str]:
     if isinstance(object_url, dict):
         object_url = object_url.get("id", "")
 
-    local_username = _parse_username_from_url(object_url)
+    local_username = parse_username_from_url(object_url)
     sign_as = None
     if local_username:
         with get_session() as _s:
@@ -1297,7 +1296,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
     if not isinstance(obj, dict) and isinstance(obj, str):
         fetched = None
         try:
-            resp = _validated_get(obj, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, timeout=10)
+            resp = validated_get(obj, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, timeout=10)
             if resp is not None and resp.status_code < 300:
                 fetched = resp.json()
                 obj_type = fetched.get("type", "")
@@ -1314,7 +1313,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
         if isinstance(actor_url, list):
             actor_url = actor_url[0]
 
-        local_username = _parse_username_from_url(object_url)
+        local_username = parse_username_from_url(object_url)
         follower = _resolve_actor(actor_url)
         if not follower:
             return (200, "OK")
@@ -1459,7 +1458,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
         if isinstance(object_url, dict):
             object_url = object_url.get("id", "")
 
-        local_username = _parse_username_from_url(object_url)
+        local_username = parse_username_from_url(object_url)
         sign_as = None
         if local_username:
             with get_session() as _s:
@@ -1494,7 +1493,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
     object_data = activity.get("object", {})
     if isinstance(object_data, str):
         try:
-            resp = _validated_get(object_data, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, timeout=10)
+            resp = validated_get(object_data, headers={"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}, timeout=10)
             if resp is not None and resp.status_code < 300:
                 object_data = resp.json()
             else:
@@ -1660,7 +1659,7 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
 
     if not reporter:
         try:
-            _r = _validated_get(actor_url, headers={"Accept": "application/activity+json"}, timeout=10)
+            _r = validated_get(actor_url, headers={"Accept": "application/activity+json"}, timeout=10)
             if _r.status_code == 200:
                 _d = _r.json()
                 _pref = _d.get("preferredUsername", "")

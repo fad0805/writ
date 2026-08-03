@@ -19,11 +19,9 @@ from app.models import User, Post, Tag, CustomEmoji
 from app.utils.to_ap_serializer import to_ap_actor
 from app.utils.crypto import generate_keypair, sign_string, encrypt_key, get_private_key
 from app.utils.content_parser import _sanitize_html, process_post_content
-from app.core.activitypub._utils import (
-    _validate_url, _safe_fetch, _validated_get, _federation_allowed,
-    _get_instance_actor, _parse_username_from_url, _extract_remote_url,
-    WRIT_USER_AGENT,
-)
+from app.core.activitypub._utils import _get_instance_actor
+from app.utils.http import safe_fetch, validated_get, WRIT_USER_AGENT
+from app.utils.urls import parse_username_from_url, extract_remote_url
 from app.core.activitypub._media import _save_remote_image, _save_remote_avatar, _cache_remote_media
 from app.core.activitypub._emoji import _process_emoji_tags
 
@@ -36,7 +34,7 @@ def _fetch_ap_json(url, headers=None, timeout=10, _depth=0):
         return None
     unsigned_headers = {"Accept": "application/activity+json"}
     try:
-        resp = _safe_fetch(url, timeout=timeout, headers=headers or unsigned_headers)
+        resp = safe_fetch(url, timeout=timeout, headers=headers or unsigned_headers)
         if not resp or resp.status_code != 200:
             return None
         ct = resp.headers.get("content-type", "")
@@ -87,16 +85,6 @@ def _fetch_actor_json_signed(actor_url: str, sign_as=None) -> dict:
         return None
 
 
-def _parse_username_from_url(url: str) -> str:
-    url = url.rstrip("/")
-    # Handle /users/{username} or /@{username}
-    match = re.search(r'/(?:users/)?@?([\w.\-]+)$', url)
-    if match:
-        return match.group(1)
-    # Fallback: last segment
-    return url.split("/")[-1]
-
-
 def _extract_custom_fields(attachment: list) -> list:
     """Extract PropertyValue entries from remote actor attachment field."""
     fields = []
@@ -131,7 +119,7 @@ def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> 
             headers["Signature"] = f'keyId="{sign_as.actor_uri()}#main-key",algorithm="hs2019",created="{created}",headers="(request-target) host date (created)",signature="{sig}"'
             headers["Date"] = date
             headers["Host"] = parsed.netloc
-        resp = _validated_get(collection_url, headers=headers, timeout=10)
+        resp = validated_get(collection_url, headers=headers, timeout=10)
         if resp is not None and resp.status_code == 200:
             data = resp.json()
             return int(data.get("totalItems", 0))
@@ -172,7 +160,7 @@ def _fetch_remote_featured(actor_data: dict, sign_as: Optional[User] = None):
             headers["Signature"] = f'keyId="{sign_as.actor_uri()}#main-key",algorithm="hs2019",created="{created}",headers="(request-target) host date (created)",signature="{sig}"'
             headers["Date"] = date
             headers["Host"] = parsed.netloc
-        resp = _validated_get(featured_url, headers=headers, timeout=10)
+        resp = validated_get(featured_url, headers=headers, timeout=10)
         if resp is None or resp.status_code != 200:
             return None
         data = resp.json()
@@ -229,7 +217,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
     _actor_domain = urlparse(actor_url).hostname or ""
     _own_domain = urlparse(BASE_URL).hostname or ""
     if _actor_domain and _actor_domain == _own_domain:
-        _u = _parse_username_from_url(actor_url)
+        _u = parse_username_from_url(actor_url)
         if _u:
             with get_session() as _s:
                 local = _s.query(User).filter(User.username == _u, User.is_remote == False).first()
@@ -285,7 +273,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
     if data is None and _webfinger_user and _webfinger_domain:
         try:
             wf_url = f"https://{_webfinger_domain}/.well-known/webfinger?resource=acct:{_webfinger_user}@{_webfinger_domain}"
-            wf_resp = _safe_fetch(wf_url, timeout=10, headers={"Accept": "application/jrd+json, application/json"})
+            wf_resp = safe_fetch(wf_url, timeout=10, headers={"Accept": "application/jrd+json, application/json"})
             if wf_resp and wf_resp.status_code == 200:
                 wf_data = wf_resp.json()
                 for link in wf_data.get("links", []):
@@ -520,7 +508,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     headers["Accept"] = "application/activity+json"
     data = None
     try:
-        resp = _validated_get(url, headers=headers, timeout=10)
+        resp = validated_get(url, headers=headers, timeout=10)
         print(f"[FETCH-POST] first attempt url={url} status={resp.status_code if resp else 'None'}", flush=True)
         if resp is not None and resp.status_code == 200:
             data = resp.json()
@@ -529,7 +517,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
 
     if data is None:
         try:
-            resp = _validated_get(url, headers=headers, timeout=10)
+            resp = validated_get(url, headers=headers, timeout=10)
             print(f"[FETCH-POST] retry url={url} status={resp.status_code if resp else 'None'}", flush=True)
             if resp is not None and resp.status_code == 200:
                 data = resp.json()
@@ -550,7 +538,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         return None
 
     ap_id = obj.get("id", url)
-    remote_url = _extract_remote_url(obj, ap_id)
+    remote_url = extract_remote_url(obj, ap_id)
     existing = session.query(Post).filter_by(ap_id=ap_id).first()
     if existing and not existing.is_deleted:
         print(f"[FETCH-POST] existing post id={existing.id} ap_id={ap_id}", flush=True)

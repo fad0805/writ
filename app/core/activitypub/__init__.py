@@ -4,11 +4,6 @@ ActivityPub federation package.
 Public API (importable from app.core.activitypub):
 """
 from app.core.activitypub._utils import (
-    _validate_url,
-    _safe_fetch,
-    _validated_get,
-    _federation_allowed,
-    _parse_username_from_url,
     _get_instance_actor,
 )
 

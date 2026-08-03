@@ -19,7 +19,8 @@ from app.models import User, Post, Follow, Like, Boost, Bookmark, Novel, SeriesF
 from app.utils.to_ap_serializer import to_ap_actor
 from app.serializers import _post_json, _user_json
 from app.config.settings import SECRET_KEY
-from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _resolve_actor, _validate_url
+from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _resolve_actor
+from app.utils.http import validate_url
 from app.core.timeline_stream import add_stream, remove_stream
 from app.db.database import get_session
 from app.db.mention_resolver import _federation_allowed, _resolve_remote_user
@@ -436,14 +437,14 @@ def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
 
 def _safe_httpx_get(url, headers=None, timeout=15, max_size=5*1024*1024):
     """HTTP GET with redirect validation and size limit."""
-    if not _validate_url(url):
-        print(f"[SAFE_GET] blocked by _validate_url url={url}", flush=True)
+    if not validate_url(url):
+        print(f"[SAFE_GET] blocked by validate_url url={url}", flush=True)
         return None
     client = httpx.Client(follow_redirects=True, timeout=timeout)
     # Intercept redirects to validate each target
     original_send = client.send
     def _validated_send(request, **kwargs):
-        if _validate_url(str(request.url)):
+        if validate_url(str(request.url)):
             return original_send(request, **kwargs)
         raise httpx.InvalidURL(f"Blocked redirect to {request.url}")
     client.send = _validated_send
@@ -469,7 +470,7 @@ def _ap_fetch(url, user):
         base, username, status_id, query = m.group(1), m.group(2), m.group(3), m.group(4) or ""
         url = f"{base}/users/{username}/statuses/{status_id}{query}"
 
-    if not _validate_url(url):
+    if not validate_url(url):
         return None
 
     def _sign_and_fetch(target_url, _depth=0):

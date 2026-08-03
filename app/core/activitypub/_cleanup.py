@@ -6,7 +6,7 @@ from app.config.settings import BASE_URL
 from app.db.database import get_session
 from app.models import User, Post, Follow, RemoteMedia, ProcessedActivity
 from app.utils.storage import get_storage
-from app.core.activitypub._utils import _validated_get, WRIT_USER_AGENT
+from app.utils.http import validated_get, WRIT_USER_AGENT
 
 logger = logging.getLogger("writ.activitypub")
 

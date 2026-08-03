@@ -5,7 +5,8 @@ import httpx
 
 from app.models import User, Post, Follow
 from app.utils.to_ap_serializer import to_ap_create
-from app.core.activitypub import broadcast_to_followers, _post_to_inbox, _federation_allowed, _resolve_actor
+from app.core.activitypub import broadcast_to_followers, _post_to_inbox, _resolve_actor
+from app.core.federation import federation_allowed
 from app.db.database import get_session
 
 logger = logging.getLogger(__name__)
@@ -80,7 +81,7 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                 continue
             try:
                 r_name, r_domain = handle.split("@", 1)
-                if not _federation_allowed(r_domain):
+                if not federation_allowed(r_domain):
                     continue
                 resolved = None
                 for url in [f"https://{r_domain}/@{r_name}", f"https://{r_domain}/users/{r_name}"]:

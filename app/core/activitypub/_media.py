@@ -10,7 +10,7 @@ from PIL import Image, ImageOps, ImageSequence
 from app.db.database import get_session
 from app.models import RemoteMedia
 from app.utils.storage import get_storage
-from app.core.activitypub._utils import _validate_url, _safe_fetch, _validated_get, WRIT_USER_AGENT
+from app.utils.http import validate_url, safe_fetch, validated_get, WRIT_USER_AGENT
 
 logger = logging.getLogger("writ.activitypub")
 
@@ -19,7 +19,7 @@ _REMOTE_MEDIA_EXPIRY_DAYS = 30
 
 
 def _cache_remote_media(remote_url: str) -> str:
-    if not _validate_url(remote_url):
+    if not validate_url(remote_url):
         return remote_url
 
     with get_session() as s:
@@ -28,7 +28,7 @@ def _cache_remote_media(remote_url: str) -> str:
             return existing.local_url
 
     try:
-        resp = _safe_fetch(remote_url, max_size=_REMOTE_MEDIA_MAX_SIZE)
+        resp = safe_fetch(remote_url, max_size=_REMOTE_MEDIA_MAX_SIZE)
         if not resp:
             return remote_url
         data = resp.content
@@ -98,14 +98,14 @@ def _cache_remote_media(remote_url: str) -> str:
 
 def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url: str = "") -> str:
     """Download remote image. Keep GIF/PNG as-is, convert others (like JPG) to WebP."""
-    if not _validate_url(image_url):
+    if not validate_url(image_url):
         return ""
 
     pure_path = urlparse(image_url).path.split('?')[0].split('#')[0]
     ext = pure_path.rsplit(".", 1)[-1].lower() if "." in pure_path else "webp"
 
     try:
-        r = _validated_get(image_url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=15)
+        r = validated_get(image_url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=15)
         if r.status_code != 200 or len(r.content) > 10 * 1024 * 1024:
             return image_url
 
