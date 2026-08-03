@@ -22,6 +22,10 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    document.dispatchEvent(new CustomEvent("writ:emoji-picker", { detail: { open } }));
+  }, [open]);
+
+  useEffect(() => {
     if (open) {
       setSearch("");
       setFrequent(getFrequentEmojis(14));

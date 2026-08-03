@@ -91,6 +91,8 @@ export default function TimelinePage() {
   const totalLoadedRef = useRef(0);
   const loadIdRef = useRef(0);
   const deletedIds = useRef<Set<number>>(new Set());
+  const emojiPickerOpenRef = useRef(false);
+  const pendingPostsRef = useRef<PostData[]>([]);
   const cardRefs = useRef(new Map<string, HTMLDivElement>());
   const selectedIdxRef = useRef(selectedIdx);
   useEffect(() => { selectedIdxRef.current = selectedIdx; }, [selectedIdx]);
@@ -204,6 +206,22 @@ export default function TimelinePage() {
   });
 }, [tlType, setCache]);
 
+  const prependPosts = useCallback((newPosts: PostData[]) => {
+    if (newPosts.length === 0) return;
+    const c = timelineCache.current[tlType];
+    const cachedIds = c ? new Set(c.posts.map((p) => p.id)) : new Set();
+    const freshCount = newPosts.filter((p) => !cachedIds.has(p.id)).length;
+    totalLoadedRef.current += freshCount;
+    setPosts((prev) => {
+      const existingIds = new Set(prev.map((p) => p.id));
+      const fresh = newPosts.filter((p) => !existingIds.has(p.id));
+      if (fresh.length === 0) return prev;
+      const next = [...fresh, ...prev];
+      if (c) setCache(tlType, { ...c, posts: next, totalLoaded: totalLoadedRef.current, ts: Date.now() });
+      return next;
+    });
+  }, [tlType, setCache]);
+
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
@@ -269,6 +287,22 @@ export default function TimelinePage() {
     document.addEventListener("focusin", handler);
     return () => document.removeEventListener("focusin", handler);
   }, []);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { open?: boolean } | undefined;
+      if (detail?.open) {
+        emojiPickerOpenRef.current = true;
+        return;
+      }
+      emojiPickerOpenRef.current = false;
+      const pending = pendingPostsRef.current;
+      pendingPostsRef.current = [];
+      if (pending.length > 0) prependPosts(pending);
+    };
+    document.addEventListener("writ:emoji-picker", handler);
+    return () => document.removeEventListener("writ:emoji-picker", handler);
+  }, [prependPosts]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -389,24 +423,18 @@ export default function TimelinePage() {
           });
           return;
         }
-        const c = timelineCache.current[tlType];
-        const cachedIdx = c ? c.posts.findIndex((p) => p.id === newPost.id) : -1;
-        if (cachedIdx < 0) totalLoadedRef.current += 1;
-        setPosts((prev) => {
-          const idx = prev.findIndex((p) => p.id === newPost.id);
-          const next: PostData[] = idx >= 0
-            ? [...prev.slice(0, idx), newPost, ...prev.slice(idx + 1)]
-            : [newPost, ...prev];
-          if (c) setCache(tlType, { ...c, posts: next, totalLoaded: totalLoadedRef.current, ts: Date.now() });
-          return next;
-        });
+        if (emojiPickerOpenRef.current) {
+          pendingPostsRef.current = [...pendingPostsRef.current, newPost];
+          return;
+        }
+        prependPosts([newPost]);
       } catch (e) {
         console.error("Failed to parse SSE message:", e);
       }
     };
     es.onerror = () => {};
     return () => { es?.close(); };
-  }, [tlType, user?.id, setCache]);
+  }, [tlType, user?.id, setCache, prependPosts]);
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
   if (!user) return <div className="empty-state">로그인이 필요합니다</div>;
