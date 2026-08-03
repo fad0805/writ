@@ -124,7 +124,7 @@ export default function KeyboardShortcuts() {
             <dt>r</dt><dd>답글</dd>
             <dt>x</dt><dd>CW 펼치기</dd>
             <dt>e</dt><dd>미디어 확대</dd>
-            <dt>.</dt><dd>선택 포스트를 최상단으로</dd>
+            <dt>.</dt><dd>타임라인 맨 위로</dd>
             <dt>h / l</dt><dd>이전 / 다음 타임라인 탭</dd>
             <dt>Esc</dt><dd>선택 해제</dd>
           </dl>

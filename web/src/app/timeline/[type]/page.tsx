@@ -338,6 +338,12 @@ export default function TimelinePage() {
         });
         return;
       }
+      if (e.key === ".") {
+        e.preventDefault();
+        const scroller = document.querySelector(".main-content");
+        if (scroller) scroller.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
       if (e.key === "k") {
         e.preventDefault();
         setSelectedIdx((prev) => {
@@ -366,27 +372,6 @@ export default function TimelinePage() {
         if (e.key === "e") {
           e.preventDefault();
           window.dispatchEvent(new CustomEvent("writ:open-media", { detail: { postId: sp.id } }));
-          return;
-        }
-        if (e.key === ".") {
-          e.preventDefault();
-          const el = cardRefs.current.get(String(sp.id));
-          if (el) {
-            const scroller = el.closest(".main-content") || document.querySelector(".main-content");
-            if (scroller) {
-              const tabs = document.querySelector<HTMLElement>(".timeline-tabs");
-              let offset = 0;
-              if (tabs && getComputedStyle(tabs).position === "sticky") {
-                const sr = scroller.getBoundingClientRect();
-                const tr = tabs.getBoundingClientRect();
-                if (tr.top - sr.top < 2) offset = tr.height;
-              }
-              const top = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - offset;
-              scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-            } else {
-              el.scrollIntoView({ behavior: "smooth", block: "start" });
-            }
-          }
           return;
         }
       }
