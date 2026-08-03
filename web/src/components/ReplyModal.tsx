@@ -29,7 +29,22 @@ export default function ReplyModal({ post, onClose, onDone, initialContent }: { 
   const mentions = useMemo(() => {
     const set = new Set<string>();
     set.add(`@${post.author.username}`);
-    const text = post.content.replace(/<[^>]*>/g, '');
+    const text = (() => {
+      try {
+        const doc = new DOMParser().parseFromString(post.content || "", "text/html");
+        const parts: string[] = [];
+        const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+        let node: Node | null;
+        while ((node = walker.nextNode())) {
+          const a = node.parentElement?.closest("a");
+          if (a && !a.classList.contains("mention")) continue;
+          parts.push(node.textContent || "");
+        }
+        return parts.join(" ");
+      } catch {
+        return (post.content || "").replace(/<[^>]*>/g, "");
+      }
+    })().replace(/https?:\/\/[^\s<>]+/gi, "");
     const matches = text.match(/@([a-zA-Z0-9_]+(?:@[a-zA-Z0-9.-]+)?)/g);
     if (matches) matches.forEach((m) => set.add(m));
     if (user) {
