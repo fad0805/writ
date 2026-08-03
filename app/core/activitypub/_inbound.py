@@ -854,6 +854,25 @@ def _build_reactions(session, post_id: int) -> dict:
     return _reactions
 
 
+def _sanitize_reaction(reaction: str) -> str:
+    """원격 reaction 문자열을 안전한 형태로 정규화한다.
+
+    일부 서버는 리액션을 HTML 조각(예: <img src=...>, <p>❤️</p>)으로 보내므로,
+    HTML 태그/엔티티를 제거하고 이모지 유니코드나 :shortcode: 형태만 남긴다.
+    """
+    if not reaction:
+        return reaction
+    r = html.unescape(reaction)
+    r = re.sub(r"<[^>]*>", "", r).strip()
+    if not r:
+        return "★"
+    if re.fullmatch(r":[^<>&\"'\s]+:", r) and len(r) <= 50:
+        return r
+    if len(r) <= 32 and not re.search(r"[<>&\"']", r):
+        return r
+    return "★"
+
+
 def _handle_like(activity: dict) -> tuple[int, str]:
     raw_actor = activity.get("actor")
     if not raw_actor:
@@ -861,7 +880,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
     actor_url = raw_actor if isinstance(raw_actor, str) else raw_actor[0]
     object_url = activity["object"] if isinstance(activity.get("object"), str) else ""
     activity_id = activity.get("id", "")
-    reaction = activity.get("_misskey_reaction", activity.get("content", activity.get("reaction", "")))
+    reaction = _sanitize_reaction(activity.get("_misskey_reaction", activity.get("content", activity.get("reaction", ""))))
 
     if not object_url:
         return (200, "OK")

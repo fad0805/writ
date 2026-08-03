@@ -9,7 +9,7 @@ import Icon from "@/components/Icon";
 import Avatar from "@/components/Avatar";
 import DirectUserCard from "@/components/DirectUserCard";
 import InfiniteScroll from "@/components/InfiniteScroll";
-import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
+import { getCustomEmojis, renderCustomEmojis, renderReaction, CustomEmoji } from "@/lib/emojis";
 import { sanitizeName } from "@/lib/sanitize";
 
 type DirectUserData = User & {
@@ -57,11 +57,8 @@ const typeText = (t: string, meta?: any, emojiMap?: CustomEmoji[]) => {
   if (t === "like") {
     const reaction = meta?.reaction;
     if (reaction) {
-      const rendered = renderCustomEmojis(reaction, emojiMap || []);
-      if (rendered !== reaction) {
-        return <span>님이 <span dangerouslySetInnerHTML={{ __html: rendered }} /> 리액션했습니다</span>;
-      }
-      return `님이 ${reaction} 리액션했습니다`;
+      const rendered = renderReaction(reaction, emojiMap || []);
+      return <span>님이 <span dangerouslySetInnerHTML={{ __html: rendered }} /> 리액션했습니다</span>;
     }
     return "님이 회원님의 글을 즐겨찾기했습니다";
   }

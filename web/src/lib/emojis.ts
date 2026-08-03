@@ -149,6 +149,11 @@ export function useEmojiList(): CustomEmoji[] {
   return emojis;
 }
 
+export function renderReaction(reaction: string, emojis: CustomEmoji[], size?: number): string {
+  const escaped = reaction.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return renderCustomEmojis(escaped, emojis, size);
+}
+
 export function renderCustomEmojis(html: string, emojis: CustomEmoji[], size?: number): string {
   if (!emojis || emojis.length === 0) return html;
   const sz = size ?? 33;

@@ -71,6 +71,7 @@ from app.core.activitypub._inbound import (
     _handle_delete,
     _handle_flag,
     _handle_move,
+    _sanitize_reaction,
     _broadcast_emoji_list,
     _build_reactions,
 )

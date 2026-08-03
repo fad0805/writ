@@ -19,7 +19,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, ProfileNote, UserMute, UserBlock, SeriesMute, KeywordMute, CustomEmoji, ServerSetting
 from app.serializers import _user_json, _post_json
 from app.config.settings import BASE_URL
-from app.core.activitypub import _post_to_inbox, _resolve_actor, _send_accept, _send_reject
+from app.core.activitypub import _post_to_inbox, _resolve_actor, _send_accept, _send_reject, _sanitize_reaction
 from app.core.push import send_push_to_user
 from app.core.broadcast import broadcast_post
 from app.core.timeline_stream import broadcast_refresh_notifs, add_notif_stream, remove_notif_stream, broadcast_notif_sound, broadcast_reaction_update, broadcast_delete
@@ -1141,6 +1141,7 @@ def api_react_post(request: Request, background_tasks: BackgroundTasks, post_id:
         settings = ServerSetting.get(s)
         if not emoji or len(emoji) > 50:
             raise HTTPException(status_code=400, detail="Invalid emoji")
+        emoji = _sanitize_reaction(emoji)
         if emoji.startswith(":") and emoji.endswith(":"):
             _kw = emoji[1:-1]
             _emoji_row = s.query(CustomEmoji).filter_by(keyword=_kw, domain="").first()
