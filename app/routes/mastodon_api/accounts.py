@@ -5,7 +5,7 @@ import re
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session as SASession
 
-from app.models import User, Follow, now
+from app.models import User, Post, Follow, now
 from app.db.database import get_db
 from app.core.relationship import follow_user, unfollow_user, mute_user, unmute_user, block_user, unblock_user
 from app.routes.mastodon_api._common import (
