@@ -193,7 +193,7 @@ def get_account_statuses(
         q = q.filter(Post.in_reply_to_id.is_(None))
 
     if only_media:
-        q = q.filter(Post.media_attachments != None, Post.media_attachments != "[]")
+        q = q.filter(Post.media_attachments != None, Post.media_attachments != "[]", Post.media_attachments != "null")
 
     if max_id:
         q = q.filter(Post.id < int(max_id))
@@ -203,6 +203,9 @@ def get_account_statuses(
         q = q.filter(Post.id > int(min_id))
 
     posts = q.order_by(Post.id.desc()).limit(limit).all()
+
+    if only_media:
+        posts = [p for p in posts if isinstance(p.media_attachments, list) and len(p.media_attachments) > 0]
 
     maps = _build_status_maps(posts, db, viewer)
     result = []

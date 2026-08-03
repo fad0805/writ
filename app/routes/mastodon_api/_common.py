@@ -449,6 +449,8 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
 
     if post.media_attachments:
         for m in post.media_attachments:
+            if not isinstance(m, dict):
+                continue
             status["media_attachments"].append({
                 "id": str(m.get("id", "")),
                 "type": m.get("type", "image"),
