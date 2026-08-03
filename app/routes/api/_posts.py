@@ -55,6 +55,16 @@ def _validate_media_url(url: str) -> bool:
     return ext in allowed_ext
 
 
+def _normalize_remote_post_url(url: str) -> str:
+    """Web URL(/@user/id) → AP URL(/users/user/statuses/id) 형태로 정규화."""
+    m = re.match(r'^(https?://[^/]+)/@(\w+(?:@\S+)?)/([\w-]+)(\?.*)?$', url)
+    if m:
+        return f"{m.group(1)}/users/{m.group(2)}/statuses/{m.group(3)}"
+    if url.endswith("/activity"):
+        return url[:-len("/activity")]
+    return url
+
+
 
 
 
@@ -90,7 +100,7 @@ def api_get_post(request: Request, post_id: int):
         anc_limit = min(int(request.query_params.get("ancestor_limit", 5)), 50)
         anc_offset = int(request.query_params.get("ancestor_offset", 0))
 
-        descendant_ids = _get_descendant_ids(s, post_id, max_depth=20)
+        descendant_ids = _get_descendant_ids(s, post_id, max_depth=20) if limit > 0 else []
         result["total_descendants"] = len(descendant_ids)
         result["total_replies"] = result["total_descendants"]
 
@@ -111,45 +121,48 @@ def api_get_post(request: Request, post_id: int):
         result["has_more_replies"] = offset + limit < len(descendant_ids)
 
         ancestors = []
-        cur = post.parent
-        ancestor_ids = []
+        has_more_ancestors = False
+        fetch_remote_url = None
+        if anc_limit > 0:
+            cur = post.parent
+            ancestor_ids = []
 
-        max_depth = 100
-        depth = 0
-        while cur and depth < max_depth:
-            if not cur.is_deleted:
-                ancestor_ids.append(cur.id)
-                depth += 1
-            cur = cur.parent
+            max_depth = 100
+            depth = 0
+            while cur and depth < max_depth:
+                if not cur.is_deleted:
+                    ancestor_ids.append(cur.id)
+                    depth += 1
+                cur = cur.parent
 
-        total_ancestors = len(ancestor_ids)
-        has_more_ancestors = anc_offset + anc_limit < total_ancestors
-        sliced_ids = ancestor_ids[anc_offset:anc_offset + anc_limit]
+            total_ancestors = len(ancestor_ids)
+            has_more_ancestors = anc_offset + anc_limit < total_ancestors
+            sliced_ids = ancestor_ids[anc_offset:anc_offset + anc_limit]
 
-        if sliced_ids:
-            if user:
-                _anc_liked = {a[0] for a in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(sliced_ids)).all()}
-                _anc_boosted = {a[0] for a in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(sliced_ids)).all()}
-                _anc_bookmarked = {a[0] for a in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(sliced_ids)).all()}
-            else:
-                _anc_liked = _anc_boosted = _anc_bookmarked = set()
+            if sliced_ids:
+                if user:
+                    _anc_liked = {a[0] for a in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(sliced_ids)).all()}
+                    _anc_boosted = {a[0] for a in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(sliced_ids)).all()}
+                    _anc_bookmarked = {a[0] for a in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(sliced_ids)).all()}
+                else:
+                    _anc_liked = _anc_boosted = _anc_bookmarked = set()
 
-            sliced_posts = s.query(Post).options(
-                selectinload(Post.author), selectinload(Post.parent),
-            ).filter(Post.id.in_(sliced_ids)).all()
-            sliced_map = {p.id: p for p in sliced_posts}
+                sliced_posts = s.query(Post).options(
+                    selectinload(Post.author), selectinload(Post.parent),
+                ).filter(Post.id.in_(sliced_ids)).all()
+                sliced_map = {p.id: p for p in sliced_posts}
 
-            for aid in sliced_ids:
-                p = sliced_map.get(aid)
-                if p and _can_view(p, user, s):
-                    ancestors.append(_post_json(p, s, user, _liked_ids=_anc_liked, _boosted_ids=_anc_boosted, _bookmarked_ids=_anc_bookmarked))
+                for aid in sliced_ids:
+                    p = sliced_map.get(aid)
+                    if p and _can_view(p, user, s):
+                        ancestors.append(_post_json(p, s, user, _liked_ids=_anc_liked, _boosted_ids=_anc_boosted, _bookmarked_ids=_anc_bookmarked))
 
-        if not ancestors and not sliced_ids and post.in_reply_to_ap_id:
-            parent = s.query(Post).filter_by(ap_id=post.in_reply_to_ap_id).first()
-            if parent and _can_view(parent, user, s):
-                ancestors = [_post_json(parent, s, user)]
-            else:
-                fetch_remote_url = post.in_reply_to_ap_id
+            if not ancestors and not sliced_ids and post.in_reply_to_ap_id:
+                parent = s.query(Post).filter_by(ap_id=post.in_reply_to_ap_id).first()
+                if parent and _can_view(parent, user, s):
+                    ancestors = [_post_json(parent, s, user)]
+                else:
+                    fetch_remote_url = post.in_reply_to_ap_id
         result["ancestors"] = ancestors
         result["has_more_ancestors"] = has_more_ancestors
 
@@ -771,6 +784,18 @@ def api_fetch_post(request: Request, url: str = Form(...)):
     err = _check_fetch_domain_allowed(url)
     if err:
         raise HTTPException(status_code=403, detail=err)
+
+    # 💡 로컬 DB에 이미 저장된 원격 게시물이라면 네트워크 요청 없이 바로 반환 (빠른 인용 로딩)
+    try:
+        normalized = _normalize_remote_post_url(url)
+        with get_session() as s:
+            existing = s.query(Post).options(
+                selectinload(Post.author),
+            ).filter(Post.ap_id.in_([url, normalized]), Post.is_deleted == False).first()
+            if existing and _can_view(existing, user, s):
+                return _post_json(existing, s, user)
+    except Exception as e:
+        logger.error("fetch-post DB check failed: %s", e, exc_info=True)
 
     data = _ap_fetch(url, user)
     logger.info("fetch-post url=%s data_is_none=%s", url, data is None)

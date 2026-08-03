@@ -18,6 +18,7 @@ import { hashColor } from "@/lib/avatar";
 import { renderCustomEmojis, injectEmojis, CustomEmoji, useEmojiList } from "@/lib/emojis";
 import { sanitizePost, sanitizeName } from "@/lib/sanitize";
 import { installCodeCopyButtons } from "@/lib/codeCopy";
+import { getQuote } from "@/lib/quote-cache";
 
 const VIS_ICONS: Record<string, string> = {
   public: "globe", home: "home", followers: "lock", mention: "mail",
@@ -326,14 +327,20 @@ const localReactionEmojiMap = useMemo(() => {
     // 확장: 본문에서 로컬 포스트 URL 감지 → quote_of_id가 없을 때 자동 로드
     // NOTE: 로컬 변수로 시리즈/에피소드 매칭 여부 판단 (클로저 stale 방지)
     const hasSeriesEpisodeMatch = !!(seriesMatches || episodeMatches || epUrl || serUrl);
-    if (!(post as any).quote_of_id && !(post as any).quote_of_ap_id && !hasSeriesEpisodeMatch) {
+    if (!post.quote_of_id && !post.quote_of_ap_id && !hasSeriesEpisodeMatch) {
       const localPostMatch = rawContent.match(new RegExp(`https?://${baseDomain}/@([^/]+)/(\\d+)`, "i"));
       if (localPostMatch && !loadingQuote && !quotedPost) {
         setLoadingQuote(true);
-        fetch(`/api/by-number/${localPostMatch[1]}/${localPostMatch[2]}`, { credentials: "include" })
-          .then(r => { if (r.ok) return r.json(); throw new Error(); })
-          .then(d => { if (d._emojis) { import("@/lib/emojis").then(m => m.injectEmojis(d._emojis)); } setQuotedPost(d); setLoadingQuote(false); })
-          .catch(() => setLoadingQuote(false));
+        const username = localPostMatch[1];
+        const number = localPostMatch[2];
+        getQuote(`bynum:${username}/${number}`, () =>
+          fetch(`/api/by-number/${username}/${number}`, { credentials: "include" })
+            .then(r => { if (r.ok) return r.json(); throw new Error(); })
+        )
+          .then(d => {
+            if (d) { if (d._emojis) injectEmojis(d._emojis); setQuotedPost(d); }
+          })
+          .finally(() => setLoadingQuote(false));
       }
     }
   }, [post.id, post.content, post.summary]);
@@ -506,23 +513,31 @@ const localReactionEmojiMap = useMemo(() => {
   // Handle stored quote reference from ActivityPub (quote_of_id / quote_of_ap_id)
   useEffect(() => {
     if (quotedPost || quotedSeries || quotedEpisode || loadingQuote) return;
-    const qid = (post as any).quote_of_id;
-    const qApId = (post as any).quote_of_ap_id;
+    const embedded = post.quoted_post;
+    if (embedded && embedded.id && embedded.author) {
+      if (embedded._emojis) injectEmojis(embedded._emojis);
+      setQuotedPost(embedded);
+      return;
+    }
+    const qid = post.quote_of_id;
+    const qApId = post.quote_of_ap_id;
     if (qid) {
       setLoadingQuote(true);
-      fetch(`/api/posts/${qid}?reply_limit=0&reply_offset=0`, { credentials: "include" })
-        .then(r => { if (r.ok) return r.json(); throw new Error(); })
-        .then(d => { setQuotedPost(d); setLoadingQuote(false); })
-        .catch(() => setLoadingQuote(false));
+      getQuote(`id:${qid}`, () => api.getPost(qid, 0, 0, 0, 0).catch(() => null))
+        .then(d => { if (d) { if (d._emojis) injectEmojis(d._emojis); setQuotedPost(d); } })
+        .finally(() => setLoadingQuote(false));
     } else if (qApId) {
       setLoadingQuote(true);
       const form = new FormData(); form.append("url", qApId);
-      fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form })
-        .then(r => { if (r.ok) return r.json(); throw new Error(); })
-        .then(d => { if (d._emojis) { injectEmojis(d._emojis); } setQuotedPost(d); setLoadingQuote(false); })
-        .catch(() => setLoadingQuote(false));
+      getQuote(`url:${qApId}`, () =>
+        fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form })
+          .then(r => { if (r.ok) return r.json(); throw new Error(); })
+          .catch(() => null)
+      )
+        .then(d => { if (d) { if (d._emojis) injectEmojis(d._emojis); setQuotedPost(d); } })
+        .finally(() => setLoadingQuote(false));
     }
-  }, [post.id, (post as any).quote_of_id, (post as any).quote_of_ap_id]);
+  }, [post.id, post.quote_of_id, post.quote_of_ap_id]);
 
 // Detect series/episode share URLs in content (e.g. "series: https://.../series/123")
   useEffect(() => {

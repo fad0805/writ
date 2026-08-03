@@ -24,7 +24,7 @@ const TABS = [
 const TAB_KEYS = ["home", "social", "local", "federated"];
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
-const CACHE_STORAGE_KEY = "writ:tl-cache";
+const CACHE_STORAGE_KEY = "writ:tl-cache:v2";
 
 interface TimelineCacheEntry {
   posts: PostData[];

@@ -11,7 +11,8 @@ from app.utils.emoji import _load_emojis
 def _post_json(p, session, user, tl_type=None,
                _liked_ids=None, _boosted_ids=None, _bookmarked_ids=None,
                _vote_map=None, _my_reaction_map=None, _reactions_map=None,
-               _mentioned_users_map=None, _boost_originals=None, _skip_emojis=False):
+               _mentioned_users_map=None, _boost_originals=None, _skip_emojis=False,
+               _quote_depth=0):
     if not p:
         return None
     if p.is_deleted:
@@ -35,6 +36,7 @@ def _post_json(p, session, user, tl_type=None,
             "link_preview": None, "is_deleted": True,
             "quote_of_id": None, "quote_of_ap_id": "",
             "boost_of_id": p.boost_of_id,
+            "quoted_post": None,
         }
 
     # If this is a boost pointer post, resolve to the original
@@ -45,7 +47,7 @@ def _post_json(p, session, user, tl_type=None,
                                 _liked_ids, _boosted_ids, _bookmarked_ids,
                                 _vote_map, _my_reaction_map, _reactions_map,
                                 _mentioned_users_map, _boost_originals,
-                                _skip_emojis=_skip_emojis)
+                                _skip_emojis=_skip_emojis, _quote_depth=_quote_depth)
             result["id"] = p.id
             existing_boosted_by = result.get("boosted_by") or []
             booster_json = _user_json(p.author)
@@ -116,6 +118,24 @@ def _post_json(p, session, user, tl_type=None,
         mentioned_handles = list(set(
             f"{m.group(1)}@{m.group(2)}" for m in re.finditer(r'@([a-zA-Z0-9_]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', p.content or "")
         ))
+
+    quoted_post = None
+    if p.quote_of_id and _quote_depth < 2:
+        _qp = session.query(Post).filter_by(id=p.quote_of_id, is_deleted=False).first()
+        if _qp:
+            from app.core.interactions import _can_view
+            if _can_view(_qp, user, session):
+                quoted_post = _post_json(
+                    _qp, session, user, None,
+                    _liked_ids=_liked_ids, _boosted_ids=_boosted_ids,
+                    _bookmarked_ids=_bookmarked_ids, _vote_map=_vote_map,
+                    _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map,
+                    _mentioned_users_map=_mentioned_users_map,
+                    _boost_originals=_boost_originals,
+                    _skip_emojis=False,
+                    _quote_depth=_quote_depth + 1,
+                )
+
     return {
         "id": p.id,
         "number": p.number or "",
@@ -148,6 +168,7 @@ def _post_json(p, session, user, tl_type=None,
         "quote_of_id": p.quote_of_id or None,
         "quote_of_ap_id": p.quote_of_ap_id or "",
         "boost_of_id": p.boost_of_id,
+        "quoted_post": quoted_post,
         **(({}) if _skip_emojis else {"_emojis": _post_used_emojis(p, session, reactions)}),
     }
 
