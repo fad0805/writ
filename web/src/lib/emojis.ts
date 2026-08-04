@@ -74,12 +74,26 @@ export async function getCustomEmojis(): Promise<CustomEmoji[]> {
   if (cache !== null) return cache;
   if (fetchPromise) return fetchPromise;
   fetchPromise = (async () => {
+    let server: CustomEmoji[] = [];
     try {
       const res = await fetch(`/api/emojis?limit=9999&offset=0`, { credentials: "include" });
-      if (!res.ok) { cache = []; fetchPromise = null; return cache as CustomEmoji[]; }
-      const data = await res.json();
-      cache = data.emojis || [];
-    } catch { cache = []; }
+      if (res.ok) {
+        const data = await res.json();
+        server = data.emojis || [];
+      }
+    } catch {}
+    // 서버 목록으로 덮어쓰면 injectEmojis로 주입된 원격 이모지가 사라져
+    // 표시 이름 이모지가 렌더링됐다 풀렸다 하는 문제가 생김. 원격 이모지를 보존한다.
+    const prev = (window as any).__emojiCache as CustomEmoji[] | undefined;
+    cache = server;
+    if (Array.isArray(prev) && prev.length) {
+      const known = new Set(cache.map(e => e.keyword));
+      for (const e of prev) {
+        if (e && e.keyword && e.url && !known.has(e.keyword)) {
+          cache.push({ ...e, category: e.category || "remote" });
+        }
+      }
+    }
     if (typeof window !== "undefined") (window as any).__emojiCache = cache;
     fetchPromise = null;
     cacheTs = Date.now();
