@@ -1629,6 +1629,7 @@ from urllib.parse import urlparse
 import httpx
 from app.models import Post
 from app.db.database import get_session
+from sqlalchemy.orm.attributes import flag_modified
 
 apply_ = os.environ.get("APPLY_FLAG") == "--apply"
 _PRIVATE_ATTRS = ("is_private", "is_loopback", "is_link_local", "is_reserved")
@@ -1702,8 +1703,8 @@ with get_session() as s:
         if not p.link_preview:
             continue
         lp = p.link_preview
-        if is_private_url(lp.get("url")):
-            changes.append((f"posts id={p.id}", "link_preview 전체 제거", lp.get("url", "")))
+        if lp.get("url") and is_private_url(lp["url"]):
+            changes.append((f"posts id={p.id}", "link_preview 전체 제거", lp["url"]))
             if apply_:
                 p.link_preview = None
         elif lp.get("image") and is_private_url(lp["image"]):
@@ -1712,18 +1713,32 @@ with get_session() as s:
                 changes.append((f"posts id={p.id}", "link_preview.image 재생성", f"{lp['image']} -> {new_img}"))
                 if apply_:
                     lp["image"] = new_img
-                    p.link_preview = lp
+                    flag_modified(p, "link_preview")
             else:
                 changes.append((f"posts id={p.id}", "link_preview.image 비움", lp["image"]))
                 if apply_:
                     lp["image"] = ""
-                    p.link_preview = lp
+                    flag_modified(p, "link_preview")
+        elif apply_ and lp.get("url") and not lp.get("image"):
+            # rebuild 후 og:image가 정상화된 경우, 비워진 이미지 복구
+            new_img = _refresh_image(lp)
+            if new_img:
+                changes.append((f"posts id={p.id}", "link_preview.image 복구", f"(없음) -> {new_img}"))
+                lp["image"] = new_img
+                flag_modified(p, "link_preview")
         for att in (p.media_attachments or []):
             for u in (att.get("url"), att.get("remote_url"), att.get("thumbnail")):
                 if u and is_private_url(u):
                     changes.append((f"posts id={p.id}", "media(수동 처리 필요)", u))
     if apply_ and changes:
         s.commit()
+        # 반영 검증: 변경된 게시글의 실제 저장값 재조회
+        print("[검증] commit 후 재조회된 link_preview:")
+        ids = [int(c[0].split("=")[1]) for c in changes if c[1] != "media(수동 처리 필요)"]
+        if ids:
+            with get_session() as s2:
+                for p in s2.query(Post).filter(Post.id.in_(ids)).order_by(Post.id).all():
+                    print(f"  posts id={p.id}: {p.link_preview}")
 
 print()
 if not changes:
