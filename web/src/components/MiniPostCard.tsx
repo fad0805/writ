@@ -47,11 +47,13 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
   const mergedEmojiList = useMemo(() => {
     const postEmojis = (post as any)._emojis as CustomEmoji[] | undefined;
     if (!postEmojis || postEmojis.length === 0) return emojiList;
-    const seen = new Map(emojiList.map(e => [e.keyword, e]));
+    // 같은 키워드 충돌 시 이 글의 _emojis(작성자 도메인 기준)를 우선한다.
+    const seen = new Map<string, CustomEmoji>();
     for (const e of postEmojis) {
-      if (e.keyword && e.url && !seen.has(e.keyword)) {
-        seen.set(e.keyword, { ...e, category: "remote" });
-      }
+      if (e.keyword && e.url) seen.set(e.keyword, { ...e, category: e.category || "remote" });
+    }
+    for (const e of emojiList) {
+      if (!seen.has(e.keyword)) seen.set(e.keyword, e);
     }
     return Array.from(seen.values());
   }, [emojiList, (post as any)._emojis]);

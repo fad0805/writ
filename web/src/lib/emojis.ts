@@ -32,14 +32,13 @@ export function injectEmojis(list: CustomEmojiRaw[]) {
     if (!existing) {
       cache.push({ ...e, category: "remote" });
       changed = true;
-    } else if (e.url && existing.url !== e.url) {
-      // URL이 변경되었거나 업데이트된 경우 갱신
-      existing.url = e.url;
-      changed = true;
     }
+    // 같은 키워드가 이미 전역 캐시에 있으면 이 글의 도메인 이모지로 덮어쓰지 않는다.
+    // (다른 서버 글의 렌더링을 오염시키지 않도록. 글별 이모지는 PostCard가
+    //  _emojis를 우선 병합해 해결한다.)
 
     // map도 항상 최신으로 갱신
-    if (e.url && emojiMap[e.keyword] !== e.url) {
+    if (e.url && emojiMap[e.keyword] !== e.url && emojiMap[e.keyword] === undefined) {
       emojiMap[e.keyword] = e.url;
       changed = true;
     }

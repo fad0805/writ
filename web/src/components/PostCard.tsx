@@ -229,11 +229,13 @@ const localReactionEmojiMap = useMemo(() => {
 
   const mergedEmojiList = useMemo(() => {
     if (!post._emojis || post._emojis.length === 0) return emojiList;
-    const map = new Map(emojiList.map(e => [e.keyword, e]));
+    // 같은 키워드 충돌 시 이 글의 _emojis(작성자 도메인 기준)를 우선한다.
+    const map = new Map<string, CustomEmoji>();
     for (const e of post._emojis) {
-      if (e.keyword && e.url && !map.has(e.keyword)) {
-        map.set(e.keyword, { ...e, category: "remote" });
-      }
+      if (e.keyword && e.url) map.set(e.keyword, { ...e, category: "remote" });
+    }
+    for (const e of emojiList) {
+      if (!map.has(e.keyword)) map.set(e.keyword, e);
     }
     return Array.from(map.values());
   }, [emojiList, post._emojis]);

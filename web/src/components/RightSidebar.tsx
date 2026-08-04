@@ -87,9 +87,13 @@ export default function RightSidebar() {
   }, []);
 
   const emojisFor = useCallback((post: PostData | null | undefined): CustomEmoji[] => {
-    const map = new Map(emojiMap.map((e) => [e.keyword, e]));
+    // 같은 키워드 충돌 시 이 글의 _emojis(작성자 도메인 기준)를 우선한다.
+    const map = new Map<string, CustomEmoji>();
     for (const e of ((post as any)?._emojis) || []) {
-      if (e && e.keyword && e.url && !map.has(e.keyword)) map.set(e.keyword, e);
+      if (e && e.keyword && e.url) map.set(e.keyword, { ...e, category: "remote" });
+    }
+    for (const e of emojiMap) {
+      if (!map.has(e.keyword)) map.set(e.keyword, e);
     }
     return Array.from(map.values());
   }, [emojiMap]);

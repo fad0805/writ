@@ -174,7 +174,12 @@ def _post_json(p, session, user, tl_type=None,
 
 
 def _post_used_emojis(p, session, reactions=None):
-    """Post에 실제로 쓰인 커스텀 이모지만 골라서 반환 (전체 카탈로그 전송 방지)."""
+    """Post에 실제로 쓰인 커스텀 이모지만 골라서 반환 (전체 카탈로그 전송 방지).
+
+    같은 키워드라도 서버마다 다른 이미지일 수 있으므로, 작성자 도메인과 일치하는
+    이모지를 우선 선택한다. 해당 도메인 이모지가 없으면 로컬 정의(domain=""),
+    그것도 없으면 첫 번째 후보로 폴백한다.
+    """
     all_emojis = _load_emojis(session)
     if not all_emojis:
         return []
@@ -192,33 +197,61 @@ def _post_used_emojis(p, session, reactions=None):
     needle = " ".join(texts).lower()
     if not needle:
         return []
-    used = []
-    seen = set()
+
+    author_domain = ""
+    if p.author and p.author.is_remote:
+        uname = (p.author.username or "").lower()
+        if "@" in uname:
+            author_domain = uname.rsplit("@", 1)[-1]
+
+    candidates_by_kw = {}
     for e in all_emojis:
         kw = e["keyword"]
-        if kw in seen:
-            continue
-        seen.add(kw)
         if f":{kw.lower()}:" in needle:
-            used.append({"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]})
+            candidates_by_kw.setdefault(kw.lower(), []).append(e)
+
+    def _pick(candidates):
+        if author_domain:
+            chosen = next((e for e in candidates if (e.get("domain") or "").lower() == author_domain), None)
+            if chosen:
+                return chosen
+        chosen = next((e for e in candidates if not e.get("domain")), None)
+        return chosen or candidates[0]
+
+    used = []
+    for candidates in candidates_by_kw.values():
+        chosen = _pick(candidates)
+        used.append({"keyword": chosen["keyword"], "file_name": chosen["file_name"], "url": chosen["url"], "aliases": chosen["aliases"]})
     return used
 
 
 def _merge_boost_emojis(base_emojis, session, boosters):
-    """부스트한 사람의 표시 이름에 쓰인 이모지를 추가로 포함시킨다."""
-    booster_names = " ".join(
-        b.get("display_name") or "" for b in (boosters or []) if b
-    ).lower()
-    if not booster_names:
-        return base_emojis
+    """부스트한 사람의 표시 이름에 쓰인 이모지를 추가로 포함시킨다.
+
+    부스트한 사람마다 도메인이 다를 수 있으므로 각자 도메인의 이모지를 우선 선택한다.
+    """
     result = list(base_emojis)
     existing = {e["keyword"] for e in result}
-    for e in _load_emojis(session):
-        kw = e["keyword"]
-        if kw in existing:
+    all_emojis = _load_emojis(session)
+    for b in (boosters or []):
+        bname = (b.get("display_name") or "").lower()
+        if not bname:
             continue
-        if f":{kw.lower()}:" in booster_names:
-            result.append({"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]})
+        bdomain = ""
+        uname = (b.get("username") or "").lower()
+        if "@" in uname:
+            bdomain = uname.rsplit("@", 1)[-1]
+        for e in all_emojis:
+            kw = e["keyword"]
+            if kw in existing:
+                continue
+            if f":{kw.lower()}:" not in bname:
+                continue
+            candidates = [x for x in all_emojis if x["keyword"] == kw]
+            chosen = next((x for x in candidates if (x.get("domain") or "").lower() == bdomain), None)
+            if chosen is None:
+                chosen = next((x for x in candidates if not x.get("domain")), None) or candidates[0]
+            result.append({"keyword": chosen["keyword"], "file_name": chosen["file_name"], "url": chosen["url"], "aliases": chosen["aliases"]})
             existing.add(kw)
     return result
 
