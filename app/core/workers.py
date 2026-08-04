@@ -113,7 +113,7 @@ def refresh_remote_profiles():
     ~3 days, so remote profile changes get picked up over time without load."""
     REFRESH_STALE_SECONDS = 3 * 24 * 3600
     CHECK_INTERVAL_SECONDS = 3600
-    BATCH_SIZE = 5
+    BATCH_SIZE = 15
 
     time.sleep(300)  # give the server time to boot
     while True:
