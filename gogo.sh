@@ -1626,6 +1626,7 @@ elif [ "$1" = "fix-lna" ]; then
   docker compose exec -T -e APPLY_FLAG="$APPLY_FLAG" api python3 <<'PYEOF'
 import os, ipaddress, re, socket, sys
 from urllib.parse import urlparse
+import httpx
 from app.models import Post
 from app.db.database import get_session
 
@@ -1669,6 +1670,31 @@ def is_private_url(url):
     return _resolve_private(h)
 
 
+def _refresh_image(lp):
+    # 링크가 공개 URL인데 이미지만 사설일 때, 다시 fetch해 og:image 재생성
+    try:
+        resp = httpx.get(lp["url"], headers={"User-Agent": "WRIT/1.0"}, timeout=10, follow_redirects=True)
+        if resp.status_code != 200:
+            return None
+        html_text = resp.text
+        def _og(n):
+            m = re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', html_text, re.I)
+            if not m:
+                m = re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', html_text, re.I)
+            return m.group(1) if m else ""
+        img = _og("image")
+        if not img:
+            return None
+        if img.startswith("/"):
+            p = urlparse(lp["url"])
+            img = f"{p.scheme}://{p.netloc}{img}"
+        if is_private_url(img):
+            return None
+        return img
+    except Exception:
+        return None
+
+
 changes = []
 with get_session() as s:
     posts = s.query(Post).filter(Post.is_deleted == False).order_by(Post.id).limit(20000).all()
@@ -1681,9 +1707,17 @@ with get_session() as s:
             if apply_:
                 p.link_preview = None
         elif lp.get("image") and is_private_url(lp["image"]):
-            changes.append((f"posts id={p.id}", "link_preview.image 비움", lp["image"]))
-            if apply_:
-                lp["image"] = ""
+            new_img = _refresh_image(lp) if apply_ else None
+            if new_img:
+                changes.append((f"posts id={p.id}", "link_preview.image 재생성", f"{lp['image']} -> {new_img}"))
+                if apply_:
+                    lp["image"] = new_img
+                    p.link_preview = lp
+            else:
+                changes.append((f"posts id={p.id}", "link_preview.image 비움", lp["image"]))
+                if apply_:
+                    lp["image"] = ""
+                    p.link_preview = lp
         for att in (p.media_attachments or []):
             for u in (att.get("url"), att.get("remote_url"), att.get("thumbnail")):
                 if u and is_private_url(u):
