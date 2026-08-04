@@ -62,7 +62,7 @@ export function rewriteLinks(text: string, validMentions?: Set<string>): string 
   return text;
 }
 
-const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onReply, onRewrite, current, hideContext, selected, readonly, mentionBy }: { post: PostData; onUpdate?: (updated?: PostData) => void; onDelete?: () => void; onReply?: (newPost?: PostData) => void; onRewrite?: (content: string, visibility: string, replyTo?: { id: number; number: string; content: string; author: any; visibility: string } | null) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean; mentionBy?: User | null }) {
+const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onReply, onRewrite, current, hideContext, selected, readonly, mentionBy }: { post: PostData; onUpdate?: (updated?: PostData) => void; onDelete?: () => void; onReply?: (newPost?: PostData) => void; onRewrite?: (content: string, visibility: string, summary: string, replyTo?: { id: number; number: string; content: string; author: any; visibility: string } | null) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean; mentionBy?: User | null }) {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const [showReply, setShowReply] = useState(false);
@@ -70,6 +70,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
   const [showReport, setShowReport] = useState(false);
   const [showRewrite, setShowRewrite] = useState(false);
   const [rewriteContent, setRewriteContent] = useState<string | null>(null);
+  const [rewriteSummary, setRewriteSummary] = useState<string>("");
   const [showPollResults, setShowPollResults] = useState(false);
   const [pollRefreshing, setPollRefreshing] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -1073,8 +1074,8 @@ const localReactionEmojiMap = useMemo(() => {
                       try { await api.deletePost(post.id); } catch {}
                       if (onDelete) onDelete();
                       else if (onUpdate) onUpdate();
-                      if (onRewrite) onRewrite(stripped, post.visibility, post.reply_context);
-                      else { setRewriteContent(stripped); setShowRewrite(true); }
+                      if (onRewrite) onRewrite(stripped, post.visibility, post.summary || "", post.reply_context);
+                      else { setRewriteContent(stripped); setRewriteSummary(post.summary || ""); setShowRewrite(true); }
                     }} className="post-actions-dropdown-item">
                       <Icon name="trash" /> 지우고 다시 쓰기
                     </button>
@@ -1185,21 +1186,23 @@ const localReactionEmojiMap = useMemo(() => {
           is_mine: false,
           reply_context: null,
           media_attachments: [],
-        } as any} initialContent={rewriteContent ?? undefined} onClose={() => { setShowRewrite(false); setRewriteContent(null); }} onDone={(newPost) => {
+        } as any} initialContent={rewriteContent ?? undefined} initialSummary={rewriteSummary} onClose={() => { setShowRewrite(false); setRewriteContent(null); setRewriteSummary(""); }} onDone={(newPost) => {
           setShowRewrite(false);
           setRewriteContent(null);
+          setRewriteSummary("");
           if (onUpdate) onUpdate();
         }} />
       )}
       {!readonly && showRewrite && !post.reply_context && (
-        <div className="reply-modal-backdrop active" onClick={() => { setShowRewrite(false); setRewriteContent(null); }}>
+        <div className="reply-modal-backdrop active" onClick={() => { setShowRewrite(false); setRewriteContent(null); setRewriteSummary(""); }}>
           <div className="reply-modal modal-form" onClick={(e) => e.stopPropagation()}>
-            <button className="reply-modal-close" onClick={() => { setShowRewrite(false); setRewriteContent(null); }}>×</button>
+            <button className="reply-modal-close" onClick={() => { setShowRewrite(false); setRewriteContent(null); setRewriteSummary(""); }}>×</button>
             <h3>지우고 다시 쓰기</h3>
             <PostForm onDone={(newPost) => {
               setShowRewrite(false);
               setRewriteContent(null);
-            }} initialContent={rewriteContent ?? undefined} initialVisibility={post.visibility} />
+              setRewriteSummary("");
+            }} initialContent={rewriteContent ?? undefined} initialSummary={rewriteSummary} initialVisibility={post.visibility} />
           </div>
         </div>
       )}

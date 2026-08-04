@@ -86,7 +86,9 @@ export default function TimelinePage() {
   const [showComposer, setShowComposer] = useState(false);
   const [rewriteContent, setRewriteContent] = useState<string | null>(null);
   const [rewriteVisibility, setRewriteVisibility] = useState<string | undefined>(undefined);
+  const [rewriteSummary, setRewriteSummary] = useState<string | undefined>(undefined);
   const [rewriteInitialContent, setRewriteInitialContent] = useState<string | undefined>(undefined);
+  const [rewriteInitialSummary, setRewriteInitialSummary] = useState<string | undefined>(undefined);
 
   const totalLoadedRef = useRef(0);
   const loadIdRef = useRef(0);
@@ -439,9 +441,11 @@ export default function TimelinePage() {
             if (newPost) addOrUpdatePost(newPost);
             setRewriteContent(null);
             setRewriteVisibility(undefined);
+            setRewriteSummary(undefined);
           }}
           initialContent={rewriteContent ?? undefined}
           initialVisibility={rewriteVisibility}
+          initialSummary={rewriteSummary}
         />
       </div>
       <div className="timeline-tabs">
@@ -496,9 +500,10 @@ export default function TimelinePage() {
                     onReply={(newPost) => {
                       if (newPost) addOrUpdatePost(newPost);
                     }}
-                    onRewrite={(content, visibility, replyTo) => {
+                    onRewrite={(content, visibility, summary, replyTo) => {
                       if (replyTo) {
                         setRewriteInitialContent(content);
+                        setRewriteInitialSummary(summary);
                         setReplyPost({
                           id: replyTo.id,
                           number: replyTo.number,
@@ -516,6 +521,7 @@ export default function TimelinePage() {
                       } else {
                         setRewriteContent(content);
                         setRewriteVisibility(visibility);
+                        setRewriteSummary(summary);
                         setShowComposer(true);
                       }
                     }}
@@ -530,11 +536,13 @@ export default function TimelinePage() {
       {replyPost && (
         <ReplyModal
           post={replyPost}
-          onClose={() => { setReplyPost(null); setRewriteInitialContent(undefined); }}
+          onClose={() => { setReplyPost(null); setRewriteInitialContent(undefined); setRewriteInitialSummary(undefined); }}
           initialContent={rewriteInitialContent}
+          initialSummary={rewriteInitialSummary}
           onDone={(newPost) => {
             setReplyPost(null);
             setRewriteInitialContent(undefined);
+            setRewriteInitialSummary(undefined);
             if (newPost) addOrUpdatePost(newPost);
           }}
         />
@@ -543,11 +551,11 @@ export default function TimelinePage() {
         <Icon name="pen_solid" size={22} />
       </button>
       {showComposer && (
-        <div className="mobile-composer-overlay" onClick={() => { setShowComposer(false); setRewriteContent(null); setRewriteVisibility(undefined); }}>
+        <div className="mobile-composer-overlay" onClick={() => { setShowComposer(false); setRewriteContent(null); setRewriteVisibility(undefined); setRewriteSummary(undefined); }}>
           <div className="mobile-composer-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="mobile-composer-header">
               <span>글쓰기</span>
-              <button className="mobile-composer-close" onClick={() => { setShowComposer(false); setRewriteContent(null); setRewriteVisibility(undefined); }}>
+              <button className="mobile-composer-close" onClick={() => { setShowComposer(false); setRewriteContent(null); setRewriteVisibility(undefined); setRewriteSummary(undefined); }}>
                 <Icon name="x" size={18} />
               </button>
             </div>
@@ -558,9 +566,11 @@ export default function TimelinePage() {
                 setShowComposer(false);
                 setRewriteContent(null);
                 setRewriteVisibility(undefined);
+                setRewriteSummary(undefined);
               }}
               initialContent={rewriteContent ?? undefined}
               initialVisibility={rewriteVisibility}
+              initialSummary={rewriteSummary}
             />
           </div>
         </div>

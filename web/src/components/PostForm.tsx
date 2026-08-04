@@ -12,11 +12,11 @@ import { useAuth } from "@/lib/auth";
 
 const MAX_LENGTH = 500;
 
-export default function PostForm({ parentId, onDone, placeholder, initialContent, initialVisibility, shareUrl, parentSummary }: { parentId?: number; onDone?: (post?: any) => void; placeholder?: string; initialContent?: string; initialVisibility?: string; shareUrl?: string; parentSummary?: string | null }) {
+export default function PostForm({ parentId, onDone, placeholder, initialContent, initialVisibility, shareUrl, parentSummary, initialSummary }: { parentId?: number; onDone?: (post?: any) => void; placeholder?: string; initialContent?: string; initialVisibility?: string; shareUrl?: string; parentSummary?: string | null; initialSummary?: string | null }) {
   const draftKey = `draft_${parentId || "new"}`;
   const savedDraft = typeof localStorage !== "undefined" ? (() => { try { return JSON.parse(localStorage.getItem(draftKey) || "null"); } catch { return null; } })() : null;
   const [content, setContent] = useState((shareUrl ? initialContent : (savedDraft?.content ?? initialContent)) || "");
-  const [summary, setSummary] = useState((shareUrl ? undefined : savedDraft?.summary) ?? (parentId && parentSummary ? parentSummary : ""));
+  const [summary, setSummary] = useState((shareUrl ? undefined : savedDraft?.summary) ?? (initialSummary !== undefined ? initialSummary : (parentId && parentSummary ? parentSummary : "")));
   const [postSensitive, setPostSensitive] = useState(shareUrl ? false : (savedDraft?.sensitive ?? false));
   const { user: authUser } = useAuth();
   const [visibilityOverride, setVisibilityOverride] = useState<string | null>(
