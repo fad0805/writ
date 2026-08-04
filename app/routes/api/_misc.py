@@ -418,14 +418,15 @@ def api_pwa_manifest():
 def api_pwa_favicon(request: Request):
     storage = get_storage()
     try:
-        data = storage.get("pwa/favicon.png")
-        if data:
-            logger.info("[favicon] serving custom favicon (%d bytes)", len(data))
-            if request.method == "HEAD":
-                return Response(headers={"Cache-Control": "no-cache, max-age=0", "Vary": "Accept-Encoding"})
-            return Response(content=data, media_type="image/png", headers={"Cache-Control": "no-cache, max-age=0", "Vary": "Accept-Encoding"})
+        if storage.exists("pwa/favicon.png"):
+            data = storage.get("pwa/favicon.png")
+            if data:
+                logger.info("[favicon] serving custom favicon (%d bytes)", len(data))
+                if request.method == "HEAD":
+                    return Response(headers={"Cache-Control": "no-cache, max-age=0", "Vary": "Accept-Encoding"})
+                return Response(content=data, media_type="image/png", headers={"Cache-Control": "no-cache, max-age=0", "Vary": "Accept-Encoding"})
     except Exception as e:
-        logger.info("[favicon] no custom favicon: %s", e)
+        logger.warning("[favicon] failed to load custom favicon: %s", e)
     for path in [
         os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "favicon.ico"),
         os.path.join(os.path.dirname(__file__), "..", "..", "..", "web", "public", "favicon.ico"),
