@@ -41,11 +41,58 @@ WRIT는 AI 기반 개발 도구(opencode)의 도움을 받아 개발되고 있�
 ```bash
 git clone https://github.com/fad0805/writ.git
 cd writ
-cp .env.production.example .env
+cp .env.production.sample .env.production
 docker compose up -d
 ```
 
 기본적으로 Docker Compose를 사용하여 실행합니다.
+
+---
+
+## 설치 (Installation)
+
+### 요구사항
+- Docker 및 Docker Compose v2
+
+### 1. 저장소 복제 및 환경설정
+```bash
+git clone https://github.com/fad0805/writ.git
+cd writ
+cp .env.production.sample .env.production
+```
+
+`.env.production`을 열어 아래 항목을 설정하세요.
+
+| 항목 | 설명 | 필수 |
+|------|------|------|
+| `BASE_URL` | 서비스의 공개 URL (예: `https://writ.example.com`) | O |
+| `DATABASE_URL` | PostgreSQL 접속 문자열 (기본값 제공) | O |
+| `SECRET_KEY` | 서명/암호화용 랜덤 키 (없으면 보안 취약) | O |
+| `DOMAIN` / `SCHEME` | 미설정 시 `BASE_URL`에서 자동 추출 | - |
+| `SMTP_*` | 이메일 알림/인증 발송 | - |
+| `S3_*` | 오브젝트 스토리지 (미설정 = 로컬 저장) | - |
+
+### 2. 데이터 디렉토리 소유권 설정 (중요)
+API 컨테이너는 이미지 안의 `writ` 사용자(보통 **UID 999**)로 실행됩니다. Docker Compose의 바인드 마운트(`data`, `uploads`, `static`, `logs`)는 **호스트 디렉토리의 권한을 그대로 따르기 때문에**, 컨테이너가 쓸 수 있도록 호스트 디렉토리의 소유자를 컨테이너 UID와 일치시켜야 합니다.
+
+```bash
+mkdir -p data uploads static logs
+sudo chown -R 999:999 data uploads static logs
+```
+
+> `ls -l`에서 소유자가 `lxd`(UID 999)처럼 보여도 상관없습니다. 바인드 마운트 권한은 이름이 아니라 **숫자 UID**로 판단합니다.
+
+컨테이너의 실제 UID가 999가 아니라면(빌드 환경에 따라 달라질 수 있음), 다음으로 확인 후 맞춰주세요:
+
+```bash
+docker compose exec api id   # 예: uid=999(writ)
+```
+
+### 3. 실행
+```bash
+docker compose up -d
+docker compose logs -f api   # 정상 기동 확인
+```
 
 ---
 
