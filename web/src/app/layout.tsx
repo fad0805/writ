@@ -12,6 +12,10 @@ import DeactivatedRedirect from "@/components/DeactivatedRedirect";
 import CsrfInit from "@/components/CsrfInit";
 import ScrollRestoration from "@/components/ScrollRestoration";
 
+// 요청 호스트 기준으로 og:image 를 해석해, 빌드 시점 BASE_URL 없이도 정확한 og 태그를 서빙한다.
+// (정적 프리렌더 시 metadataBase 기본값인 localhost:3000으로 굳는 문제 방지)
+export const dynamic = "force-dynamic";
+
 const siteUrl = process.env.BASE_URL || "http://localhost:3000";
 const API_HOST = process.env.API_HOST || "http://localhost:8000";
 
