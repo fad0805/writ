@@ -16,6 +16,9 @@ elif [ "$1" = "rebuild" ]; then
   git pull
   BASE_URL=$(grep -E '^BASE_URL=' .env.production 2>/dev/null | head -1 | cut -d= -f2-)
   export BASE_URL
+  APP_UID=$(grep -E '^APP_UID=' .env.production 2>/dev/null | head -1 | cut -d= -f2-)
+  APP_GID=$(grep -E '^APP_GID=' .env.production 2>/dev/null | head -1 | cut -d= -f2-)
+  export APP_UID APP_GID
   docker compose build api web
   docker compose up -d
 
