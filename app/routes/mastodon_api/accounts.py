@@ -170,7 +170,6 @@ def get_account_statuses(
         raise MastodonAPIError(status_code=404, detail="Record not found")
 
     relationship = _relationship_json(user, target_user, db)
-    print(f"Relationship: {relationship}")
     viewer = _maybe_bearer(request, db)
 
     if pinned:
@@ -205,7 +204,7 @@ def get_account_statuses(
 
     if relationship.get('following') is False:
         q = q.filter(Post.visibility != "home")
-    if relationship.get('blocked') is True or relationship.get('blocked_by') is True:
+    if relationship.get('blocking') is True or relationship.get('blocked_by') is True:
         q = q.filter(False)
 
     if max_id:
