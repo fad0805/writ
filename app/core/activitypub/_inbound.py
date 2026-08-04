@@ -849,12 +849,12 @@ def _build_reactions(session, post_id: int) -> dict:
     """Build reactions dict from Like table for a given post."""
     _reactions = {}
     _default_react = "★"
-    for _pid, _react, _cnt in session.query(Like.post_id, func.coalesce(Like.reaction, _default_react), func.count(Like.id)).filter(
+    for _react, _cnt in session.query(
+        func.coalesce(Like.reaction, _default_react), func.count(Like.id)
+    ).filter(
         Like.post_id == post_id
-    ).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all():
-        if _pid not in _reactions:
-            _reactions[_pid] = {}
-        _reactions[_pid][_react] = _cnt
+    ).group_by(Like.reaction).order_by(func.min(Like.id)).all():
+        _reactions[_react or _default_react] = _cnt
     return _reactions
 
 

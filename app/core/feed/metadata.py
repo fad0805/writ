@@ -70,6 +70,13 @@ def _feed_used_emojis(session, posts, boost_originals=None):
                 texts.append(orig.summary or "")
                 if orig.author:
                     texts.append(orig.author.display_name or "")
+    # 리액션(커스텀 이모지)에만 쓰인 이모지도 렌더링되도록 반응 키워드 포함
+    _post_ids = {p.id for p in posts} | {p.boost_of_id for p in posts if p.boost_of_id}
+    if _post_ids:
+        for (r,) in session.query(Like.reaction).filter(
+            Like.post_id.in_(_post_ids), Like.reaction.isnot(None)
+        ).all():
+            texts.append(r or "")
     needle = " ".join(texts).lower()
     used = []
     seen = set()
