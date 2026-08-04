@@ -153,7 +153,10 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
         posts = posts[:limit]
 
         # 2. 사용자 활동(좋아요, 부스트, 북마크, 리액션, 부스터) 배치 로딩
-        post_ids = [p.id for p in posts]
+        post_ids = {p.id for p in posts}
+        for _p in posts:
+            if _p.boost_of_id:
+                post_ids.add(_p.boost_of_id)
         _liked_ids = _boosted_ids = _bookmarked_ids = set()
         _my_reaction_map = {}
         _reactions_map = {}
@@ -337,7 +340,10 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 except Exception:
                     pass
 
-        post_ids = [p.id for p in posts]
+        post_ids = {p.id for p in posts}
+        for _p in posts:
+            if _p.boost_of_id:
+                post_ids.add(_p.boost_of_id)
         _liked_ids = _boosted_ids = _bookmarked_ids = set()
         _my_reaction_map = {}
         _reactions_map = {}
