@@ -205,7 +205,7 @@ def get_account_statuses(
     if relationship.get('following') is False:
         q = q.filter(Post.visibility != "followers")
     if relationship.get('blocking') is True or relationship.get('blocked_by') is True:
-        q = q.filter(False)
+        return []
 
     if max_id:
         q = q.filter(Post.id < int(max_id))
