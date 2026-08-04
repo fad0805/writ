@@ -164,14 +164,16 @@ def get_account_statuses(
     exclude_reblogs: bool = False,
     exclude_replies: bool = False,
 ):
-    user = db.query(User).filter_by(id=int(account_id)).first()
+    user = _require_bearer(request, db)
+    target_user = db.query(User).filter_by(id=int(account_id)).first()
     if not user:
         raise MastodonAPIError(status_code=404, detail="Record not found")
 
+    relationship = _relationship_json(user, target_user, db)
     viewer = _maybe_bearer(request, db)
 
     if pinned:
-        pinned_ids = user.pinned_posts or []
+        pinned_ids = target_user.pinned_posts or []
         if not pinned_ids:
             return []
         q = db.query(Post).filter(
@@ -180,13 +182,13 @@ def get_account_statuses(
         )
     elif exclude_reblogs:
         q = db.query(Post).filter(
-            Post.author_id == user.id,
+            Post.author_id == target_user.id,
             Post.is_deleted == False,
             Post.boost_of_id.is_(None),
         )
     else:
         q = db.query(Post).filter(
-            Post.author_id == user.id,
+            Post.author_id == target_user.id,
             Post.is_deleted == False,
         )
 
@@ -199,6 +201,11 @@ def get_account_statuses(
             cast(Post.media_attachments, String) != "[]",
             cast(Post.media_attachments, String) != "null",
         )
+
+    if relationship.get('following') is False:
+        q = q.filter(Post.visibility != "private")
+    if relationship.get('blocked') is True or relationship.get('blocked_by') is True:
+        q = q.filter(False)
 
     if max_id:
         q = q.filter(Post.id < int(max_id))
@@ -217,7 +224,7 @@ def get_account_statuses(
     for p in posts:
         if p.boost_of_id:
             original = db.query(Post).filter_by(id=p.boost_of_id).first()
-            if original and not original.is_deleted and original.author_id != user.id:
+            if original and not original.is_deleted and original.author_id != target_user.id:
                 s = _boost_status_json(p, original, db, viewer=viewer, **maps)
                 if s:
                     result.append(s)
