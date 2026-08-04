@@ -222,6 +222,9 @@ def get_account_statuses(
     maps = _build_status_maps(posts, db, viewer)
     result = []
     for p in posts:
+        if p.visibility == "mention" and user not in post.mentioned_user_ids:
+            continue
+
         if p.boost_of_id:
             original = db.query(Post).filter_by(id=p.boost_of_id).first()
             if original and not original.is_deleted and original.author_id != target_user.id:
