@@ -7,6 +7,8 @@ if [ "$1" = "fetch-log" ]; then
 
 elif [ "$1" = "rebuild" ]; then
   git pull
+  BASE_URL=$(grep -E '^BASE_URL=' .env.production 2>/dev/null | head -1 | cut -d= -f2-)
+  export BASE_URL
   docker compose build api web
   docker compose up -d
 

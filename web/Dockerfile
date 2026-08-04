@@ -3,6 +3,9 @@ FROM node:20-alpine AS builder
 ARG API_HOST=http://api:8000
 ENV API_HOST=${API_HOST}
 
+ARG BASE_URL=http://localhost:3000
+ENV BASE_URL=${BASE_URL}
+
 WORKDIR /app
 
 COPY package*.json ./

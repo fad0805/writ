@@ -28,6 +28,9 @@ services:
   web:
     build:
       context: ./web
+      args:
+        API_HOST: http://api:8000
+        BASE_URL: ${BASE_URL:-http://localhost:3000}
     ports:
       - "3000:3000"
     env_file: .env.production
