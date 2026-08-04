@@ -15,11 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-ARG APP_UID=999
-ARG APP_GID=999
 RUN mkdir -p /app/data /app/uploads /app/static /app/logs && \
-    groupadd -r -g ${APP_GID} writ && useradd -r -u ${APP_UID} -g writ -d /app -s /sbin/nologin writ && \
-    chown -R ${APP_UID}:${APP_GID} /app
+    groupadd -r writ && useradd -r -g writ -d /app -s /sbin/nologin writ && \
+    chown -R writ:writ /app
 
 USER writ
 

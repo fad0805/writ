@@ -9,11 +9,7 @@ services:
     restart: unless-stopped
 
   api:
-    build:
-      context: .
-      args:
-        APP_UID: ${APP_UID:-999}
-        APP_GID: ${APP_GID:-999}
+    build: .
     env_file: .env.production
     networks:
       - external_network
