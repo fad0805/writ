@@ -233,6 +233,9 @@ def _merge_boost_emojis(base_emojis, session, boosters):
     result = list(base_emojis)
     existing = {e["keyword"] for e in result}
     all_emojis = _load_emojis(session)
+    by_kw = {}
+    for e in all_emojis:
+        by_kw.setdefault(e["keyword"], []).append(e)
     for b in (boosters or []):
         bname = (b.get("display_name") or "").lower()
         if not bname:
@@ -241,13 +244,11 @@ def _merge_boost_emojis(base_emojis, session, boosters):
         uname = (b.get("username") or "").lower()
         if "@" in uname:
             bdomain = uname.rsplit("@", 1)[-1]
-        for e in all_emojis:
-            kw = e["keyword"]
+        for kw, candidates in by_kw.items():
             if kw in existing:
                 continue
             if f":{kw.lower()}:" not in bname:
                 continue
-            candidates = [x for x in all_emojis if x["keyword"] == kw]
             chosen = next((x for x in candidates if (x.get("domain") or "").lower() == bdomain), None)
             if chosen is None:
                 chosen = next((x for x in candidates if not x.get("domain")), None) or candidates[0]
