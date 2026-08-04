@@ -2,6 +2,13 @@
 # 실행: bash gogo.sh [명령어]
 # 호스트(서버)에서 실행하세요.
 
+# ── 도메인 설정 (커밋에 하드코딩하지 않음) ──
+# BASE_URL(환경변수 또는 .env.production)에서 OWN_DOMAIN 자동 추출
+# PEER_DOMAIN은 실행 시 PEER_DOMAIN=... 환경변수 또는 .env.production의 PEER_DOMAIN 줄로 지정
+_BASE_URL="${BASE_URL:-$(grep -E '^BASE_URL=' .env.production 2>/dev/null | head -1 | cut -d= -f2-)}"
+OWN_DOMAIN="${OWN_DOMAIN:-$(printf '%s' "$_BASE_URL" | sed -E 's#https?://##; s#/.*$##')}"
+PEER_DOMAIN="${PEER_DOMAIN:-$(grep -E '^PEER_DOMAIN=' .env.production 2>/dev/null | head -1 | cut -d= -f2-)}"
+
 if [ "$1" = "fetch-log" ]; then
   docker compose logs api --tail 30
 
@@ -15,7 +22,7 @@ elif [ "$1" = "rebuild" ]; then
 elif [ "$1" = "exec" ]; then
   docker compose exec api python3 -c "
 import httpx
-url = 'https://daydream.ink/@siarte/116895178885643677'
+url = 'https://$PEER_DOMAIN/@siarte/116895178885643677'
 r = httpx.get(url, headers={'Accept': 'application/activity+json'}, follow_redirects=False)
 print('status:', r.status_code)
 print('location:', r.headers.get('location', 'no redirect'))
@@ -34,7 +41,7 @@ with get_session() as s:
     if not me: print('user not found'); exit()
     priv = get_private_key(me, SECRET_KEY)
     created = int(time.time())
-    url = 'https://daydream.ink/@siarte/116895178885643677'
+    url = 'https://$PEER_DOMAIN/@siarte/116895178885643677'
     from urllib.parse import urlparse
     parsed = urlparse(url)
     date = 'Thu, 10 Jul 2026 12:00:00 GMT'
@@ -55,7 +62,7 @@ from app.db.database import get_session
 from app.config import SECRET_KEY
 from urllib.parse import urlparse
 
-url = 'https://daydream.ink/@siarte/116895178885643677'
+url = 'https://$PEER_DOMAIN/@siarte/116895178885643677'
 parsed = urlparse(url)
 created = int(time.time())
 date = datetime.datetime.now(datetime.timezone.utc).strftime('%a, %d %b %Y %H:%M:%S GMT')
@@ -83,7 +90,7 @@ from app.config import SECRET_KEY
 from app.crypto_utils import get_private_key
 from urllib.parse import urlparse
 
-url = 'https://daydream.ink/@siarte/116895178885643677'
+url = 'https://$PEER_DOMAIN/@siarte/116895178885643677'
 parsed = urlparse(url)
 created = int(time.time())
 date = datetime.datetime.now(datetime.timezone.utc).strftime('%a, %d %b %Y %H:%M:%S GMT')
@@ -130,11 +137,11 @@ with get_session() as s:
 print('=== 로컬 공개키 (처음 120자) ===')
 print(local_pub[:120])
 
-r_key = httpx.get('https://writ.daydream.ink/users/siarte', headers={'Accept': 'application/activity+json'})
+r_key = httpx.get('https://$OWN_DOMAIN/users/siarte', headers={'Accept': 'application/activity+json'})
 if r_key.status_code == 200:
     remote_pub = r_key.json().get('publicKey', {}).get('publicKeyPem', '')
     print()
-    print('=== daydream.ink가 조회한 공개키 (처음 120자) ===')
+    print('=== $PEER_DOMAIN가 조회한 공개키 (처음 120자) ===')
     print(remote_pub[:120])
     print()
     print('일치:', local_pub == remote_pub)
@@ -152,7 +159,7 @@ from app.db.database import get_session
 from app.config import SECRET_KEY
 from urllib.parse import urlparse
 
-url = 'https://daydream.ink/@siarte/116895178885643677'
+url = 'https://$PEER_DOMAIN/@siarte/116895178885643677'
 parsed = urlparse(url)
 created = int(time.time())
 date = datetime.datetime.now(datetime.timezone.utc).strftime('%a, %d %b %Y %H:%M:%S GMT')
@@ -181,7 +188,7 @@ from app.models import Follow, User
 from app.db.database import get_session
 with get_session() as s:
     local = s.query(User).filter_by(username='siarte', is_remote=False).first()
-    remote = s.query(User).filter_by(username='siarte@daydream.ink').first()
+    remote = s.query(User).filter_by(username='siarte@$PEER_DOMAIN').first()
     if not local or not remote: print('users not found'); exit()
     f = s.query(Follow).filter_by(follower_id=local.id, following_id=remote.id).first()
     print('=== OUTGOING (writ→remote) ===')
@@ -197,7 +204,7 @@ with get_session() as s:
 elif [ "$1" = "planet-poll" ]; then
   docker compose exec api python3 -c "
 import httpx, json
-r = httpx.get('https://planet.moe/@siarte/116901379728907920', headers={'Accept':'application/activity+json'})
+r = httpx.get('https://$PEER_DOMAIN/@siarte/116901379728907920', headers={'Accept':'application/activity+json'})
 if r.status_code == 200:
     d = r.json()
     obj = d.get('object', d)
@@ -213,7 +220,7 @@ elif [ "$1" = "mastodon-poll" ]; then
   id="${2:-116901218746967775}"
   docker compose exec api python3 -c "
 import httpx, json
-url = 'https://daydream.ink/users/siarte/statuses/$id'
+url = 'https://$PEER_DOMAIN/users/siarte/statuses/$id'
 r = httpx.get(url, headers={'Accept': 'application/activity+json'})
 if r.status_code == 200:
     d = r.json()
@@ -226,7 +233,7 @@ if r.status_code == 200:
     print('cc:', obj.get('cc'))
     print()
     # WRIT 투표와 비교
-    r2 = httpx.get('https://writ.daydream.ink/@siarte/72871480', headers={'Accept':'application/activity+json'})
+    r2 = httpx.get('https://$OWN_DOMAIN/@siarte/72871480', headers={'Accept':'application/activity+json'})
     if r2.status_code == 200:
         d2 = r2.json()
         obj2 = d2.get('object', d2)
@@ -274,7 +281,7 @@ elif [ "$1" = "check-poll" ]; then
   id="${2:-659dac71}"
   docker compose exec api python3 -c "
 import httpx, json
-r = httpx.get(f'https://writ.daydream.ink/@siarte/$id', headers={'Accept':'application/activity+json'})
+r = httpx.get(f'https://$OWN_DOMAIN/@siarte/$id', headers={'Accept':'application/activity+json'})
 d = r.json()
 obj = d.get('object', d)
 print('type:', obj.get('type'))
@@ -301,7 +308,7 @@ from app.models import Follow, User, ProcessedActivity
 from app.db.database import get_session
 with get_session() as s:
     local = s.query(User).filter_by(username='siarte', is_remote=False).first()
-    remote = s.query(User).filter_by(username='siarte@daydream.ink').first()
+    remote = s.query(User).filter_by(username='siarte@$PEER_DOMAIN').first()
     f = s.query(Follow).filter_by(follower_id=local.id, following_id=remote.id).first()
     if f: s.delete(f)
     s.query(ProcessedActivity).delete()
@@ -315,7 +322,7 @@ from app.models import Follow, User
 from app.db.database import get_session
 with get_session() as s:
     local = s.query(User).filter_by(username='siarte', is_remote=False).first()
-    remote = s.query(User).filter_by(username='siarte@daydream.ink').first()
+    remote = s.query(User).filter_by(username='siarte@$PEER_DOMAIN').first()
     if not local or not remote: print('users not found'); exit()
     f = s.query(Follow).filter_by(follower_id=local.id, following_id=remote.id).first()
     print('follow exists:', f is not None)
@@ -363,8 +370,8 @@ print('DOMAIN:', DOMAIN)
 elif [ "$1" = "check-mention" ]; then
   docker compose exec api python3 -c "
 import httpx, json, re
-url = 'https://writ.daydream.ink/@siarte/3bcfe670'
-if len('$2') > 1: url = 'https://writ.daydream.ink/@siarte/' + '$2'
+url = 'https://$OWN_DOMAIN/@siarte/3bcfe670'
+if len('$2') > 1: url = 'https://$OWN_DOMAIN/@siarte/' + '$2'
 r = httpx.get(url, headers={'Accept': 'application/activity+json'})
 if r.status_code == 200:
     d = r.json()
@@ -432,23 +439,23 @@ elif [ "$1" = "nginx-check" ]; then
   grep -rn "users\|proxy_pass\|inbox\|location" /etc/nginx/ 2>/dev/null | head -20
   echo ""
   echo "=== curl 로 인박스 테스트 ==="
-  curl -s -o /dev/null -w "인박스 POST -> %{http_code}\n" -X POST "https://writ.daydream.ink/users/siarte/inbox" -H "Content-Type: application/activity+json" -d '{"test":true}'
-  curl -s -o /dev/null -w "actor GET -> %{http_code}\n" -H "Accept: application/activity+json" "https://writ.daydream.ink/users/siarte"
+  curl -s -o /dev/null -w "인박스 POST -> %{http_code}\n" -X POST "https://$OWN_DOMAIN/users/siarte/inbox" -H "Content-Type: application/activity+json" -d '{"test":true}'
+  curl -s -o /dev/null -w "actor GET -> %{http_code}\n" -H "Accept: application/activity+json" "https://$OWN_DOMAIN/users/siarte"
 
 elif [ "$1" = "mastodon-test" ]; then
-  echo "⚠️  daydream.ink 서버에서 docker compose exec web 로 실행:"
+  echo "⚠️  $PEER_DOMAIN 서버에서 docker compose exec web 로 실행:"
   echo ""
   echo "# 1. HTTP 연결 테스트"
-  echo 'docker compose exec web curl -s -o /dev/null -w "%{http_code}" -H "Accept: application/activity+json" https://writ.daydream.ink/users/siarte'
+  echo 'docker compose exec web curl -s -o /dev/null -w "%{http_code}" -H "Accept: application/activity+json" https://'"$OWN_DOMAIN"'/users/siarte'
   echo ""
   echo "# 2. DNS + SSL + HTTP 한 번에"
   echo 'docker compose exec web python3 -c "'
   echo 'import socket, ssl, http.client'
   echo 'try:'
-  echo '    ip = socket.getaddrinfo(\"writ.daydream.ink\", 443)'
+  echo '    ip = socket.getaddrinfo(\"'"$OWN_DOMAIN"'\", 443)'
   echo '    print(\"DNS OK:\", ip[0][4][0])'
   echo '    ctx = ssl.create_default_context()'
-  echo '    conn = http.client.HTTPSConnection(\"writ.daydream.ink\", 443, context=ctx, timeout=5)'
+  echo '    conn = http.client.HTTPSConnection(\"'"$OWN_DOMAIN"'\", 443, context=ctx, timeout=5)'
   echo '    conn.request(\"GET\", \"/users/siarte\", headers={\"Accept\": \"application/activity+json\"})'
   echo '    r = conn.getresponse()'
   echo '    print(\"HTTP:\", r.status)'
@@ -460,7 +467,7 @@ elif [ "$1" = "mastodon-test" ]; then
 elif [ "$1" = "webfinger-test" ]; then
   docker compose exec api python3 -c "
 import httpx
-r = httpx.get('https://writ.daydream.ink/.well-known/webfinger?resource=acct:siarte@writ.daydream.ink')
+r = httpx.get('https://$OWN_DOMAIN/.well-known/webfinger?resource=acct:siarte@$OWN_DOMAIN')
 print('WebFinger:', r.status_code)
 if r.status_code != 200: print(r.text[:300]); exit()
 data = r.json()
@@ -589,7 +596,7 @@ elif [ "$1" = "refresh-actor" ]; then
   actor_url="${2}"
   if [ -z "$actor_url" ]; then
     echo "사용법: ./gogo.sh refresh-actor [actor_url]" >&2
-    echo "예시: ./gogo.sh refresh-actor https://misskey.io/users/xxx" >&2
+    echo "예시: ./gogo.sh refresh-actor https://$PEER_DOMAIN/users/xxx" >&2
     exit 1
   fi
   docker compose exec -T -e ACTOR_URL="$actor_url" api python3 <<'PYEOF'
@@ -757,7 +764,7 @@ elif [ "$1" = "check-custom-fields" ]; then
   actor_url="${2}"
   if [ -z "$actor_url" ]; then
     echo "사용법: ./gogo.sh check-custom-fields [actor_url]" >&2
-    echo "예시: ./gogo.sh check-custom-fields https://daydream.ink/users/siarte" >&2
+    echo "예시: ./gogo.sh check-custom-fields https://$PEER_DOMAIN/users/siarte" >&2
     exit 1
   fi
   docker compose exec -T -e ACTOR_URL="$actor_url" api python3 <<'PYEOF'
@@ -799,7 +806,7 @@ elif [ "$1" = "fix-follow" ]; then
   remote_handle="${3:-}"
   if [ -z "$remote_handle" ]; then
     echo "사용법: ./gogo.sh fix-follow [로컬유저] [원격핸들]" >&2
-    echo "예시: ./gogo.sh fix-follow siarte alex@daydream.ink" >&2
+    echo "예시: ./gogo.sh fix-follow siarte alex@$PEER_DOMAIN" >&2
     exit 1
   fi
   docker compose exec -T -e LOCAL_USER="$local_name" -e REMOTE_HANDLE="$remote_handle" api python3 <<'PYEOF'
@@ -874,7 +881,7 @@ from app.db.database import get_session
 from app.config import SECRET_KEY, DOMAIN
 from urllib.parse import urlparse
 
-flag = {"@context":"https://www.w3.org/ns/activitystreams","id":"https://test.local/flag/1","type":"Flag","actor":"https://writ.daydream.ink/users/siarte","object":["https://writ.daydream.ink/users/siarte"],"content":"test"}
+flag = {"@context":"https://www.w3.org/ns/activitystreams","id":"https://test.local/flag/1","type":"Flag","actor":"https://$OWN_DOMAIN/users/siarte","object":["https://$OWN_DOMAIN/users/siarte"],"content":"test"}
 body = json.dumps(flag, ensure_ascii=False).encode()
 url = "http://localhost:8000/inbox"
 with get_session() as s:
@@ -901,7 +908,7 @@ with get_session() as s:
 PYEOF
 
 elif [ "$1" = "whitelist-add" ]; then
-  domain="${2:-daydream.ink}"
+  domain="${2:-$PEER_DOMAIN}"
   docker compose exec -T api python3 -c "
 from app.models import AllowedServer
 from app.db.database import get_session
@@ -919,7 +926,7 @@ elif [ "$1" = "test-api-direct" ]; then
   docker compose exec api python3 -c "
 import httpx
 r = httpx.post('http://localhost:8000/users/siarte/inbox',
-  json={'type':'Flag','actor':'https://daydream.ink/actor','object':['https://writ.daydream.ink/users/siarte']})
+  json={'type':'Flag','actor':'https://$PEER_DOMAIN/actor','object':['https://$OWN_DOMAIN/users/siarte']})
 print('status:', r.status_code, 'body:', r.text[:200])
 "
 
@@ -927,7 +934,7 @@ elif [ "$1" = "test-web-proxy" ]; then
   docker compose exec web python3 -c "
 import httpx
 r = httpx.post('http://localhost:3000/users/siarte/inbox',
-  json={'type':'Flag','actor':'https://daydream.ink/actor','object':['https://writ.daydream.ink/users/siarte']})
+  json={'type':'Flag','actor':'https://$PEER_DOMAIN/actor','object':['https://$OWN_DOMAIN/users/siarte']})
 print('status:', r.status_code, 'body:', r.text[:200])
 "
 
@@ -955,7 +962,7 @@ with get_session() as s:
 "
 
 elif [ "$1" = "check-actor" ]; then
-  actor_url="${2:-https://daydream.ink/actor}"
+  actor_url="${2:-https://$PEER_DOMAIN/actor}"
   docker compose exec api python3 -c "
 import httpx
 url = '$actor_url'
@@ -976,7 +983,7 @@ elif [ "$1" = "check-outbox" ]; then
   id="${2:-7c930c98}"
   docker compose exec api python3 -c "
 import httpx, json, re
-url = 'https://writ.daydream.ink/@siarte/$id'
+url = 'https://$OWN_DOMAIN/@siarte/$id'
 r = httpx.get(url, headers={'Accept': 'application/activity+json'})
 d = r.json()
 obj = d.get('object', d)
@@ -992,7 +999,7 @@ for m in re.finditer(r'<a[^>]*>', obj.get('content','')):
 "
 
 elif [ "$1" = "flag-test" ]; then
-  inbox_url="${2:-https://writ.daydream.ink/inbox}"
+  inbox_url="${2:-https://$OWN_DOMAIN/inbox}"
   docker compose exec api python3 -c "
 import httpx, json, sys
 from app.crypto_utils import sign_string, get_private_key
@@ -1005,8 +1012,8 @@ flag = {
     '@context': 'https://www.w3.org/ns/activitystreams',
     'id': 'https://test.local/flag/1',
     'type': 'Flag',
-    'actor': 'https://writ.daydream.ink/users/siarte',
-    'object': ['https://writ.daydream.ink/users/siarte'],
+    'actor': 'https://$OWN_DOMAIN/users/siarte',
+    'object': ['https://$OWN_DOMAIN/users/siarte'],
     'content': 'test report',
 }
 body = json.dumps(flag, ensure_ascii=False).encode()
@@ -1045,24 +1052,13 @@ from app.config import BASE_URL
 flag = {
     '@context': 'https://www.w3.org/ns/activitystreams',
     'type': 'Flag',
-    'actor': 'https://writ.daydream.ink/users/siarte',
-    'object': ['https://daydream.ink/users/someuser'],
+    'actor': 'https://$OWN_DOMAIN/users/siarte',
+    'object': ['https://$PEER_DOMAIN/users/someuser'],
     'content': 'Test report from gogo.sh',
 }
 r = httpx.post(f'{BASE_URL}/inbox', json=flag, headers={'Content-Type': 'application/activity+json'})
 print('status:', r.status_code)
 print('body:', r.text[:200])
-"
-
-elif [ "$1" = "network-check" ]; then
-  docker compose exec api python3 -c "
-import httpx
-for target in ['https://daydream.ink', 'https://writ.daydream.ink', 'https://mylittle.boutique']:
-    try:
-        r = httpx.get(target, timeout=5)
-        print(f'{target} -> {r.status_code} ({len(r.content)} bytes)')
-    except Exception as e:
-        print(f'{target} -> FAIL: {e}')
 "
 
 elif [ "$1" = "check-emoji-domains" ]; then
@@ -1768,15 +1764,15 @@ else
   echo "  rebuild         - 코드 풀 + api 빌드 + 재시작"
   echo "  exec            - 외부 URL 요청 테스트 (path 확인)"
   echo "  key-test        - 서명/키 검증"
-  echo "  network-check   - 네트워크 연결 확인"
+  echo "  check-emoji-domains - 이모지 도메인 확인"
   echo "  api-test        - API 인박스 직접 테스트"
   echo "  migrate-emojis  - 이모지 파일 local/remote 경로 마이그레이션"
-  echo "  fix-follow      - 꼬인 팔로우 강제 수락 및 Accept 전송 (예: ./gogo.sh fix-follow siarte alex@daydream.ink)"
+  echo "  fix-follow      - 꼬인 팔로우 강제 수락 및 Accept 전송 (예: ./gogo.sh fix-follow siarte alex@$PEER_DOMAIN)"
   echo "  dedup-users     - 중복 리모트 유저 통합"
   echo "  purge-deleted   - 스레드에 없는 삭제된 게시글 완전 제거 (댓글 있는 건 껍데기 유지)"
   echo "  purge-orphan    - 내용/부스트/답글/ap_id 없는 고아 포스트 삭제"
   echo "  purge-shadows   - 자기 도메인을 가리키는 그림자 원격 유저 삭제"
-  echo "  check-custom-fields - 원격 액터의 attachment/custom_fields 확인 (예: ./gogo.sh check-custom-fields https://daydream.ink/users/siarte)"
+  echo "  check-custom-fields - 원격 액터의 attachment/custom_fields 확인 (예: ./gogo.sh check-custom-fields https://$PEER_DOMAIN/users/siarte)"
   echo "  check-create    - 포스트의 AP Create JSON 출력 (예: ./gogo.sh check-create 5371)"
   echo "  replay-mastodon - 받은 Create를 Mastodon 포맷으로 재전송 (예: ./gogo.sh replay-mastodon 5371 https://qdon.space/inbox)"
   echo "  fix-usernames   - 리모트 유저 username 중복 도메인(user@dom@dom → user@dom) 정리"
