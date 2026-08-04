@@ -1501,6 +1501,121 @@ fetch('http://api:8000/api/server-info').then(r => {
   free -m | head -2
   docker stats --no-stream --format "  {{.Name}}: CPU {{.CPUPerc}} MEM {{.MemUsage}}" 2>/dev/null
 
+elif [ "$1" = "check-lna" ]; then
+  # Firefox "이 기기의 다른 앱과 서비스에 접근하려고 합니다"(로컬 네트워크 액세스) 팝업
+  # 유발하는 사설 주소(localhost/127.*/192.168.*/10.*/172.16-31.*) URL 진단 (읽기 전용)
+  # 사용법: ./gogo.sh check-lna [--resolve]  (--resolve = 호스트명을 DNS로 확인해 사설 IP까지 검사)
+  RESOLVE_FLAG="${2:-}"
+  docker compose exec -T -e RESOLVE_FLAG="$RESOLVE_FLAG" api python3 <<'PYEOF'
+import os, ipaddress, re, socket, sys
+from urllib.parse import urlparse
+from app.models import Post, User, CustomEmoji, Bookmark
+from app.db.database import get_session
+
+resolve = os.environ.get("RESOLVE_FLAG") == "--resolve"
+_src_re = re.compile(r'<[^>]+\bsrc=["\']([^"\']+)["\']', re.IGNORECASE)
+_poster_re = re.compile(r'<video[^>]+\bposter=["\']([^"\']+)["\']', re.IGNORECASE)
+_PRIVATE_ATTRS = ("is_private", "is_loopback", "is_link_local", "is_reserved")
+_PRIVATE_SUFFIXES = (".local", ".localhost", ".internal", ".lan", ".home", ".writ")
+
+
+def _ip_literal(h):
+    try:
+        ip = ipaddress.ip_address(h)
+    except ValueError:
+        return False
+    return any(getattr(ip, a, False) for a in _PRIVATE_ATTRS)
+
+
+def _resolve_private(h):
+    try:
+        infos = socket.getaddrinfo(h, None)
+    except OSError:
+        return False
+    return any(_ip_literal(i[4][0]) for i in infos)
+
+
+def is_private_url(url):
+    if not url or not url.startswith("http"):
+        return False
+    try:
+        host = urlparse(url).hostname
+    except ValueError:
+        return False
+    if not host:
+        return False
+    h = host.strip("[]").lower()
+    if h == "localhost" or h.endswith(".localhost") or h in ("0.0.0.0", "::1"):
+        return True
+    if _ip_literal(h):
+        return True
+    if h.endswith(_PRIVATE_SUFFIXES):
+        return True
+    if resolve:
+        return _resolve_private(h)
+    return False
+
+
+def _walk(obj):
+    if isinstance(obj, dict):
+        for v in obj.values():
+            yield from _walk(v)
+    elif isinstance(obj, list):
+        for item in obj:
+            yield from _walk(item)
+    elif isinstance(obj, str) and obj.startswith("http"):
+        yield obj
+
+
+def _post_urls(p):
+    urls = set()
+    if p.content:
+        for m in _src_re.finditer(p.content):
+            urls.add(m.group(1))
+        for m in _poster_re.finditer(p.content):
+            urls.add(m.group(1))
+    for att in (p.media_attachments or []):
+        urls.update(_walk(att))
+    if p.link_preview:
+        urls.update(_walk(p.link_preview))
+    return urls
+
+
+hits = []
+with get_session() as s:
+    posts = s.query(Post).filter(Post.is_deleted == False).order_by(Post.id).limit(20000).all()
+    print(f"[posts] 검사 {len(posts)}개", flush=True)
+    for p in posts:
+        author = p.author
+        bm = s.query(Bookmark).filter_by(post_id=p.id).count()
+        for u in _post_urls(p):
+            if is_private_url(u):
+                hits.append((f"posts id={p.id}", f"@{author.username if author else '?'}/{p.number} (북마크 {bm}명)", u))
+    for u in s.query(User).all():
+        for col, val in (("profile_image", u.profile_image), ("header_image", u.header_image)):
+            if is_private_url(val):
+                hits.append((f"users id={u.id} {col}", f"@{u.username}", val))
+    for e in s.query(CustomEmoji).all():
+        if is_private_url(e.source_url):
+            hits.append((f"custom_emojis id={e.id}", f":{e.keyword}:", e.source_url))
+
+print()
+if not hits:
+    print("[결과] 사설 주소 리소스 없음.")
+    print("       -> 이 결과면 Firefox 캐시/확장 프로그램 문제이거나, 호스트명을 DNS로 확인해야")
+    print("          감지되는 주소입니다. ./gogo.sh check-lna --resolve 로 다시 실행해 보세요.")
+    sys.exit(0)
+
+print(f"[결과] 사설 주소 리소스 {len(hits)}건 발견:")
+for where, detail, url in hits:
+    print(f"  - {where} [{detail}]")
+    print(f"      {url}")
+print()
+print("127.0.0.1 / localhost / 192.168.* / 10.* / 172.16-31.* 로 시작하는 URL이")
+print("Firefox LNA 팝업을 유발합니다. 해당 게시글 미디어를 제거하거나 URL을")
+print("정상 도메인으로 바꾸면 팝업이 사라집니다.")
+PYEOF
+
 else
   echo "사용법: ./gogo.sh [명령어]"
   echo ""
@@ -1524,4 +1639,5 @@ else
   echo "  replay-mastodon - 받은 Create를 Mastodon 포맷으로 재전송 (예: ./gogo.sh replay-mastodon 5371 https://qdon.space/inbox)"
   echo "  fix-usernames   - 리모트 유저 username 중복 도메인(user@dom@dom → user@dom) 정리"
   echo "  reprocess-avatars - 기존 아바타 이미지 정사각형 센터크롭 다시 처리"
+  echo "  check-lna       - Firefox 로컬 네트워크 접근 팝업 유발 사설 URL 진단 (예: ./gogo.sh check-lna --resolve)"
 fi
