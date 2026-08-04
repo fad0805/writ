@@ -25,7 +25,7 @@ from app.utils.crypto import generate_keypair
 from app.utils.content_parser import _sanitize_html, process_post_content
 from app.core.activitypub._utils import _get_instance_actor
 from app.core.federation import federation_allowed
-from app.utils.http import validated_get, WRIT_USER_AGENT
+from app.utils.http import validate_url, validated_get, WRIT_USER_AGENT
 from app.utils.urls import parse_username_from_url, extract_remote_url
 from app.core.activitypub._media import _cache_remote_media
 from app.core.activitypub._emoji import _process_emoji_tags, _background_import_emoji
@@ -622,8 +622,11 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             if _url_match_lp:
                 _url_lp = _url_match_lp.group(0)
                 try:
-                    _resp_lp = httpx.get(_url_lp, headers={"User-Agent": "WRIT/1.0"}, timeout=5, follow_redirects=True)
-                    if _resp_lp.status_code == 200:
+                    if not validate_url(_url_lp):
+                        _resp_lp = None
+                    else:
+                        _resp_lp = httpx.get(_url_lp, headers={"User-Agent": "WRIT/1.0"}, timeout=5, follow_redirects=True)
+                    if _resp_lp and _resp_lp.status_code == 200:
                         _html_lp = _resp_lp.text
                         def _og_lp(n):
                             _m = re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', _html_lp, re.I)
@@ -636,6 +639,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         if _og_img_lp and _og_img_lp.startswith("/"):
                             _p_lp = urlparse(_url_lp)
                             _og_img_lp = f"{_p_lp.scheme}://{_p_lp.netloc}{_og_img_lp}"
+                        if _og_img_lp and not validate_url(_og_img_lp):
+                            _og_img_lp = ""
                         if _og_title_lp:
                             link_preview = {"url": _url_lp, "title": html.unescape(_og_title_lp[:200]), "description": html.unescape(_og_desc_lp[:400]) if _og_desc_lp else "", "image": _og_img_lp or ""}
                 except Exception:

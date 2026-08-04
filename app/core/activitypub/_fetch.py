@@ -20,7 +20,7 @@ from app.utils.to_ap_serializer import to_ap_actor
 from app.utils.crypto import generate_keypair, sign_string, encrypt_key, get_private_key
 from app.utils.content_parser import _sanitize_html, process_post_content
 from app.core.activitypub._utils import _get_instance_actor
-from app.utils.http import safe_fetch, validated_get, WRIT_USER_AGENT
+from app.utils.http import validate_url, safe_fetch, validated_get, WRIT_USER_AGENT
 from app.utils.urls import parse_username_from_url, extract_remote_url
 from app.core.activitypub._media import _save_remote_image, _save_remote_avatar, _cache_remote_media
 from app.core.activitypub._emoji import _process_emoji_tags
@@ -730,6 +730,8 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     if _url_match:
         _url = _url_match.group(0)
         try:
+            if not validate_url(_url):
+                return post
             _resp = httpx.get(_url, headers={"User-Agent": "WRIT/1.0"}, timeout=5, follow_redirects=True)
             if _resp.status_code == 200:
                 _html = _resp.text
@@ -744,6 +746,8 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
                 if _og_img and _og_img.startswith("/"):
                     _p = urlparse(_url)
                     _og_img = f"{_p.scheme}://{_p.netloc}{_og_img}"
+                if _og_img and not validate_url(_og_img):
+                    _og_img = ""
                 if _og_title:
                     post.link_preview = {"url": _url, "title": html.unescape(_og_title[:200]), "description": html.unescape(_og_desc[:400]) if _og_desc else "", "image": _og_img or ""}
         except Exception:

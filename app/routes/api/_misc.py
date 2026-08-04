@@ -26,9 +26,10 @@ from app.db.database import get_session
 from app.routes.auth import require_auth, require_active_auth, get_session_key_from_cookie
 from app.utils.datetime import _fmt_dt, KST
 from app.utils.emoji import EMOJI_DIR, _refresh_emoji_cache_forcibly, _emoji_url
+from app.utils.http import validate_url
 from app.utils.log import log_admin_action
-from app.utils.storage import LocalStorage, get_storage
 
+from app.utils.storage import LocalStorage, get_storage
 logger = logging.getLogger("writ.api.misc")
 
 misc_router = APIRouter()
@@ -260,6 +261,8 @@ def api_link_preview(url: str = Form(...)):
     domain = parsed.netloc
     result = {"url": url, "title": domain, "description": "", "image": ""}
     try:
+        if not validate_url(url):
+            return result
         resp = httpx.get(url, headers={"User-Agent": "WRIT/1.0"}, timeout=10, follow_redirects=True)
         if resp.status_code == 200:
             html_text = resp.text
@@ -274,6 +277,8 @@ def api_link_preview(url: str = Form(...)):
             result["image"] = _og("image") or ""
             if result["image"] and result["image"].startswith("/"):
                 result["image"] = f"{parsed.scheme}://{parsed.netloc}{result['image']}"
+            if result["image"] and not validate_url(result["image"]):
+                result["image"] = ""
     except Exception:
         pass
     return result

@@ -1616,8 +1616,99 @@ print("Firefox LNA 팝업을 유발합니다. 해당 게시글 미디어를 제�
 print("정상 도메인으로 바꾸면 팝업이 사라집니다.")
 PYEOF
 
+elif [ "$1" = "fix-lna" ]; then
+  # Firefox LNA 팝업 유발 사설 URL 데이터 정리 (읽기 전용 검사 후, --apply 시 수정)
+  # 사용법: ./gogo.sh fix-lna        (검사만)
+  #         ./gogo.sh fix-lna --apply (프리뷰 URL/이미지가 사설 주소면 정리 후 커밋)
+  APPLY_FLAG="${2:-}"
+  docker compose exec -T -e APPLY_FLAG="$APPLY_FLAG" api python3 <<'PYEOF'
+import os, ipaddress, re, socket, sys
+from urllib.parse import urlparse
+from app.models import Post
+from app.db.database import get_session
+
+apply_ = os.environ.get("APPLY_FLAG") == "--apply"
+_PRIVATE_ATTRS = ("is_private", "is_loopback", "is_link_local", "is_reserved")
+_PRIVATE_SUFFIXES = (".local", ".localhost", ".internal", ".lan", ".home", ".writ")
+
+
+def _ip_literal(h):
+    try:
+        ip = ipaddress.ip_address(h)
+    except ValueError:
+        return False
+    return any(getattr(ip, a, False) for a in _PRIVATE_ATTRS)
+
+
+def _resolve_private(h):
+    try:
+        infos = socket.getaddrinfo(h, None)
+    except OSError:
+        return False
+    return any(_ip_literal(i[4][0]) for i in infos)
+
+
+def is_private_url(url):
+    if not url or not url.startswith("http"):
+        return False
+    try:
+        host = urlparse(url).hostname
+    except ValueError:
+        return False
+    if not host:
+        return False
+    h = host.strip("[]").lower()
+    if h == "localhost" or h.endswith(".localhost") or h in ("0.0.0.0", "::1"):
+        return True
+    if _ip_literal(h):
+        return True
+    if h.endswith(_PRIVATE_SUFFIXES):
+        return True
+    return _resolve_private(h)
+
+
+changes = []
+with get_session() as s:
+    posts = s.query(Post).filter(Post.is_deleted == False).order_by(Post.id).limit(20000).all()
+    for p in posts:
+        if not p.link_preview:
+            continue
+        lp = p.link_preview
+        if is_private_url(lp.get("url")):
+            changes.append((f"posts id={p.id}", "link_preview 전체 제거", lp.get("url", "")))
+            if apply_:
+                p.link_preview = None
+        elif lp.get("image") and is_private_url(lp["image"]):
+            changes.append((f"posts id={p.id}", "link_preview.image 비움", lp["image"]))
+            if apply_:
+                lp["image"] = ""
+        for att in (p.media_attachments or []):
+            for u in (att.get("url"), att.get("remote_url"), att.get("thumbnail")):
+                if u and is_private_url(u):
+                    changes.append((f"posts id={p.id}", "media(수동 처리 필요)", u))
+    if apply_ and changes:
+        s.commit()
+
+print()
+if not changes:
+    print("[결과] 정리할 사설 주소 데이터 없음.")
+    sys.exit(0)
+print(f"[결과] 사설 주소 리소스 {len(changes)}건" + (" 수정 완료." if apply_ else " 발견 (--apply 로 수정):"))
+seen = set()
+for where, kind, url in changes:
+    key = (where, kind, url)
+    if key in seen:
+        continue
+    seen.add(key)
+    print(f"  - {where}: {kind}")
+    print(f"      {url}")
+if not apply_:
+    print()
+    print("./gogo.sh fix-lna --apply 로 link_preview 를 자동 정리할 수 있습니다.")
+    print("media_attachments 의 사설 URL은 자동 삭제하지 않으니 수동으로 확인하세요.")
+PYEOF
+
 else
-  echo "사용법: ./gogo.sh [명령어]"
   echo ""
   echo "명령어:"
   echo "  check-streams   - SSE 스트림 누적/연결 상태 + web→api 왕복 + 서버 부하 진단"
@@ -1640,4 +1731,5 @@ else
   echo "  fix-usernames   - 리모트 유저 username 중복 도메인(user@dom@dom → user@dom) 정리"
   echo "  reprocess-avatars - 기존 아바타 이미지 정사각형 센터크롭 다시 처리"
   echo "  check-lna       - Firefox 로컬 네트워크 접근 팝업 유발 사설 URL 진단 (예: ./gogo.sh check-lna --resolve)"
+  echo "  fix-lna         - LNA 유발 사설 URL 데이터 정리 (예: ./gogo.sh fix-lna --apply)"
 fi
