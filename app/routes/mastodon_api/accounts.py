@@ -170,6 +170,7 @@ def get_account_statuses(
         raise MastodonAPIError(status_code=404, detail="Record not found")
 
     relationship = _relationship_json(user, target_user, db)
+    print(f"Relationship: {relationship}")
     viewer = _maybe_bearer(request, db)
 
     if pinned:
