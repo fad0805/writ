@@ -203,7 +203,7 @@ def get_account_statuses(
         )
 
     if relationship.get('following') is False:
-        q = q.filter(Post.visibility != "private")
+        q = q.filter(Post.visibility != "home")
     if relationship.get('blocked') is True or relationship.get('blocked_by') is True:
         q = q.filter(False)
 
