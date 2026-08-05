@@ -236,7 +236,7 @@ def _do_create_post(
     content_html = process_post_content(content, None)
     mentions = extract_mentions(content, None)
     mentioned_handles = [m["handle"] for m in mentions]
-    mentioned_ids = resolve_handles_to_ids(mentioned_handles)
+    mentioned_ids = resolve_handles_to_ids(mentioned_handles, resolve_remote=False)
     if dm_target_id:
         mentioned_ids.append(dm_target_id)
     mentioned_ids = list(set(mentioned_ids))
@@ -377,7 +377,19 @@ def _do_create_post(
                 logger.error("Failed to create notifications: %s", e, exc_info=True)
 
         threading.Thread(target=_create_notifications_and_broadcast, daemon=True).start()
-        threading.Thread(target=_broadcast_federation, args=(user_id, post.id, visibility, content), daemon=True).start()
+
+        def _resolve_remote_mentions_and_federate():
+            try:
+                full_ids = resolve_handles_to_ids(mentioned_handles)
+                if full_ids != mentioned_ids:
+                    with get_session() as s:
+                        s.query(Post).filter_by(id=post.id).update({"mentioned_user_ids": full_ids})
+                        s.commit()
+            except Exception as e:
+                logger.error("Failed to resolve remote mentions: %s", e)
+            _broadcast_federation(user_id, post.id, visibility, content)
+
+        threading.Thread(target=_resolve_remote_mentions_and_federate, daemon=True).start()
 
         try:
             broadcast("new_post", {"post_id": post.id, "author_id": user_id})

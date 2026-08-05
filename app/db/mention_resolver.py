@@ -138,8 +138,13 @@ def _resolve_remote_user(handle: str, session: Session | None = None) -> User | 
     return None
 
 
-def resolve_handles_to_ids(handles: list[str]) -> list[int]:
-    """핸들 리스트를 받아 DB에서 일치하는 User.id 리스트를 반환합니다."""
+def resolve_handles_to_ids(handles: list[str], resolve_remote: bool = True) -> list[int]:
+    """핸들 리스트를 받아 DB에서 일치하는 User.id 리스트를 반환합니다.
+
+    resolve_remote=False면 DB/캐시 기반 조회만 하고 네트워크(WebFinger/actor) 해석을
+    하지 않는다. 포스트 생성 응답을 막지 않도록 요청 경로에서는 False를 쓰고,
+    리모트 멘션 해석은 백그라운드에서 이뤄진다.
+    """
     if not handles:
         return []
 
@@ -182,6 +187,8 @@ def resolve_handles_to_ids(handles: list[str]) -> list[int]:
                     user_ids.append(u.id)
 
     for handle in unresolved:
+        if not resolve_remote:
+            continue
         user = _resolve_remote_user(handle)
         if user:
             user_ids.append(user.id)
