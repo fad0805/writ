@@ -10,6 +10,11 @@ from app.utils.filter import _timeline_filter
 
 logger = logging.getLogger(__name__)
 
+# 필터(뮤트/블록/키워드)가 많이 걸려도 무한 루프에 빠지지 않도록 하는 반복 상한.
+# 상한에 도달하면 target보다 적은 글이 반환될 수 있고, 이 경우 has_more가
+# 실제보다 작게 잡힐 수 있으나(마지막 페이지로 보임) 병목을 방지하는 것이 우선이다.
+MAX_FETCH_ITERATIONS = 20
+
 
 def query_feed_posts(
         tl_type: str,
@@ -102,8 +107,10 @@ def _fetch_filtered_posts(session, tl_type, user, limit, offset,
     filtered = []
     page_offset = 0
     target = offset + limit + 1
+    iterations = 0
 
-    while len(filtered) < target:
+    while len(filtered) < target and iterations < MAX_FETCH_ITERATIONS:
+        iterations += 1
         batch = query_feed_posts(
             tl_type,
             _visible_user_ids, _local_ids, user_id, visibility,
