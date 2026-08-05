@@ -110,6 +110,9 @@ def _ap_datetime(dt) -> str:
 
 def _account_json(user: User, db: SASession, viewer: User | None = None,
                   _counts: tuple | None = None) -> dict:
+    hide_collections = (getattr(user, 'follow_list_visibility', 'public') or 'public') == 'private'
+    viewer_is_owner = viewer is not None and viewer.id == user.id
+
     if _counts is not None:
         follower_count, following_count, statuses_count = _counts
     else:
@@ -122,6 +125,10 @@ def _account_json(user: User, db: SASession, viewer: User | None = None,
         statuses_count = db.query(sqlfunc.count(Post.id)).filter(
             Post.author_id == user.id, Post.is_deleted == False
         ).scalar() or 0
+
+    if hide_collections and not viewer_is_owner:
+        follower_count = 0
+        following_count = 0
 
     acct = user.display_handle or user.username
     if acct.count('@') > 1:
@@ -165,7 +172,7 @@ def _account_json(user: User, db: SASession, viewer: User | None = None,
         "group": False,
         "roles": [],
         "noindex": False,
-        "hide_collections": False,
+        "hide_collections": hide_collections,
         "suspended": bool(user.is_suspended),
         "limited": bool(user.is_limited),
         "created_at": _ap_datetime(user.created_at),
