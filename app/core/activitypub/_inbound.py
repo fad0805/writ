@@ -1,10 +1,13 @@
 import re
 import copy
 import sys
+import asyncio
 import datetime
 import json
 import logging
+import os
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 
 import httpx
@@ -18,7 +21,7 @@ from app.core.broadcast import broadcast_post
 from app.core.timeline_stream import broadcast_notif_sound, broadcast_refresh_notifs, broadcast_refresh_notifs, broadcast_reaction_update, broadcast_delete
 from app.config.settings import BASE_URL
 from app.db.database import get_session
-from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, MutedServer, UserBlock, Tag
+from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, MutedServer, UserBlock, Tag, ProcessedActivity
 from app.utils.emoji import _refresh_emoji_cache_forcibly, _load_emojis
 from app.utils.alias import actor_urls_include
 from app.utils.crypto import generate_keypair
@@ -33,6 +36,37 @@ from app.core.activitypub._fetch import _fetch_remote_post, _resolve_actor, _ret
 from app.core.activitypub._outbound import _send_accept
 
 logger = logging.getLogger("writ.activitypub")
+
+# 리모트 inbox 처리용 전용 executor. 글/답글 작성과는 분리된 풀을 쓰고
+# 동시 처리 수를 제한해, 한쪽의 네트워크 부하가 다른 쪽을 막지 않게 한다.
+# 코어 수에 맞춰 워커를 제한해 GIL 경합/커넥션 소진을 막는다.
+_inbox_executor = ThreadPoolExecutor(
+    max_workers=max(4, min(8, (os.cpu_count() or 1) + 1)),
+    thread_name_prefix="ap-inbox",
+)
+
+
+def _is_activity_processed(activity_id: str) -> bool:
+    """Return True if the activity was already processed (deduplication)."""
+    if not activity_id:
+        return False
+    with get_session() as s:
+        return s.query(ProcessedActivity).filter_by(id=activity_id).first() is not None
+
+
+def _mark_activity_processed(activity_id: str):
+    """Record an activity as processed. No-op for empty ids."""
+    if not activity_id:
+        return
+    with get_session() as s:
+        s.add(ProcessedActivity(id=activity_id))
+        s.commit()
+
+
+async def _submit_inbox(activity: dict) -> tuple[int, str]:
+    """Run inbox processing on the dedicated executor pool."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(_inbox_executor, handle_inbox, activity)
 
 
 def handle_inbox(activity: dict) -> tuple[int, str]:

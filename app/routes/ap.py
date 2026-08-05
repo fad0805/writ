@@ -1,22 +1,19 @@
-import asyncio
 import json
 import logging
-import os
-from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.config.settings import BASE_URL, DOMAIN, S3_ENABLED
 from app.core.activitypub import (
-    get_outbox, get_followers, get_following, handle_inbox,
+    get_outbox, get_followers, get_following, get_featured,
     verify_http_signature, _ap_post_visible, _validate_inbox_activity,
-    get_featured,
+    _is_activity_processed, _mark_activity_processed, _submit_inbox,
 )
 from app.core.rate_limit import check_rate_limit, check_burst_limit, check_daily_limit
 from app.db.database import get_session
 from app.models import (
-    User, Follow, Post, Novel, ProcessedActivity, Like, Boost, CustomEmoji,
+    User, Follow, Post, Novel, Like, Boost, CustomEmoji,
 )
 from app.utils.to_ap_serializer import to_ap_note, to_ap_create, to_ap_actor
 from app.utils.storage import get_storage
@@ -24,14 +21,6 @@ from app.utils.storage import get_storage
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# 리모트 inbox 처리용 전용 executor. 글/답글 작성과는 분리된 풀을 쓰고
-# 동시 처리 수를 제한해, 한쪽의 네트워크 부하가 다른 쪽을 막지 않게 한다.
-# 코어 수에 맞춰 워커를 제한해 GIL 경합/커넥션 소진을 막는다.
-_inbox_executor = ThreadPoolExecutor(
-    max_workers=max(4, min(8, (os.cpu_count() or 1) + 1)),
-    thread_name_prefix="ap-inbox",
-)
 
 
 # ---------------------------------------------------------------------------
@@ -80,27 +69,30 @@ def webfinger(request: Request, resource: str = ""):
 # ---------------------------------------------------------------------------
 # Actor & Collections
 # ---------------------------------------------------------------------------
+def _actor_response(request: Request, user: User, redirect_url: str) -> JSONResponse | RedirectResponse:
+    """Serve an actor as ActivityPub JSON or redirect browsers to the profile page.
+
+    Shared by /users/{username} and /@{username}. The caller resolves the user
+    and picks the browser redirect target.
+    """
+    accept = request.headers.get("Accept", "")
+    wants_json = "application/activity+json" in accept or "application/ld+json" in accept
+    if getattr(user, "is_deactivated", False):
+        if wants_json:
+            return JSONResponse({"error": "Gone"}, status_code=410)
+        raise HTTPException(status_code=410, detail="Account deleted")
+    if wants_json:
+        return JSONResponse(content=to_ap_actor(user), media_type="application/activity+json")
+    return RedirectResponse(url=redirect_url)
+
+
 @router.get("/users/{username}")
 def user_actor(request: Request, username: str):
-    accept = request.headers.get("Accept", "")
-
-    session = get_session()
-    try:
+    with get_session() as session:
         user = session.query(User).filter_by(username=username, is_remote=False).first()
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-        if getattr(user, 'is_deactivated', False):
-            if "application/activity+json" in accept or "application/ld+json" in accept:
-                return JSONResponse({"error": "Gone"}, status_code=410)
-            raise HTTPException(status_code=410, detail="Account deleted")
-
-        if "application/activity+json" in accept or "application/ld+json" in accept:
-            return JSONResponse(content=to_ap_actor(user),
-                                media_type="application/activity+json")
-
-        return RedirectResponse(url=f"{BASE_URL}/@{username}")
-    finally:
-        session.close()
+        return _actor_response(request, user, f"{BASE_URL}/@{username}")
 
 
 def _check_collection_access(username: str) -> bool:
@@ -159,46 +151,58 @@ def user_featured(username: str, page: int = None):
 # ---------------------------------------------------------------------------
 # Inbox
 # ---------------------------------------------------------------------------
-@router.post("/inbox")
-async def shared_inbox(request: Request):
+async def _parse_inbox_body(request: Request) -> tuple[bytes, dict]:
+    """Read and parse the request body, enforcing the size limit.
+
+    Returns (raw_body, activity) so signature verification can reuse the
+    exact bytes that were read.
+    """
     try:
         body = await request.body()
     except Exception:
-        return {"ok": False}
+        raise HTTPException(status_code=400, detail="Invalid body")
     if len(body) > 1024 * 1024:
         raise HTTPException(status_code=413, detail="Request body too large")
     try:
-        activity = json.loads(body)
+        return body, json.loads(body)
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON")
-    actor_url = activity.get("actor", "")
-    if isinstance(actor_url, list):
-        actor_url = actor_url[0]
+
+
+def _inbox_rate_guard(request: Request, actor_url: str):
+    """Apply daily/rate/burst limits keyed by actor and client IP."""
     client_ip = request.client.host if request.client else ""
     actor_key = f"actor:{actor_url}" if actor_url else ""
     ip_key = f"ip:{client_ip}" if client_ip else ""
     daily_key = f"daily:{actor_key or ip_key}"
     if not check_daily_limit(daily_key):
-        return JSONResponse({"status": "error", "message": "Daily limit exceeded"}, status_code=429)
+        raise HTTPException(status_code=429, detail="Daily limit exceeded")
     for rk in [actor_key, ip_key]:
         if rk and (not check_rate_limit(rk) or not check_burst_limit(rk)):
-            return JSONResponse({"status": "error", "message": "Too many requests"}, status_code=429)
-    ok, remote_actor = verify_http_signature(request, body, activity)
+            raise HTTPException(status_code=429, detail="Too many requests")
+
+
+@router.post("/inbox")
+async def shared_inbox(request: Request):
+    body, activity = await _parse_inbox_body(request)
+    actor_url = activity.get("actor", "")
+    if isinstance(actor_url, list):
+        actor_url = actor_url[0]
+    _inbox_rate_guard(request, actor_url)
+
+    ok, _remote_actor = verify_http_signature(request, body, activity)
     if not ok:
         return JSONResponse({"status": "error", "message": "Invalid signature"}, status_code=401)
     err = _validate_inbox_activity(activity)
     if err:
         return JSONResponse({"status": "error", "message": err[1]}, status_code=err[0])
+
     activity_id = activity.get("id", "")
-    if activity_id:
-        with get_session() as s:
-            already = s.query(ProcessedActivity).filter_by(id=activity_id).first()
-            if already:
-                return JSONResponse({"status": 200, "message": "Already processed"})
-            s.add(ProcessedActivity(id=activity_id))
-            s.commit()
-    loop = asyncio.get_event_loop()
-    status_code, message = await loop.run_in_executor(_inbox_executor, handle_inbox, activity)
+    if _is_activity_processed(activity_id):
+        return JSONResponse({"status": 200, "message": "Already processed"})
+    _mark_activity_processed(activity_id)
+
+    status_code, message = await _submit_inbox(activity)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)
 
 
@@ -209,34 +213,15 @@ async def user_inbox(request: Request, username: str):
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-    body = await request.body()
-    if len(body) > 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Request body too large")
-    try:
-        activity = json.loads(body)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
-
+    body, activity = await _parse_inbox_body(request)
     actor_url = activity.get("actor", "")
     if isinstance(actor_url, list):
         actor_url = actor_url[0]
 
     activity_id = activity.get("id", "")
-    if activity_id:
-        with get_session() as s:
-            already = s.query(ProcessedActivity).filter_by(id=activity_id).first()
-            if already:
-                return JSONResponse({"status": "ok", "message": "Already processed"}, status_code=200)
-
-    client_ip = request.client.host if request.client else ""
-    actor_key = f"actor:{actor_url}" if actor_url else ""
-    ip_key = f"ip:{client_ip}" if client_ip else ""
-    daily_key = f"daily:{actor_key or ip_key}"
-    if not check_daily_limit(daily_key):
-        return JSONResponse({"status": "error", "message": "Daily limit exceeded"}, status_code=429)
-    for rk in [actor_key, ip_key]:
-        if rk and (not check_rate_limit(rk) or not check_burst_limit(rk)):
-            return JSONResponse({"status": "error", "message": "Too many requests"}, status_code=429)
+    if _is_activity_processed(activity_id):
+        return JSONResponse({"status": "ok", "message": "Already processed"}, status_code=200)
+    _inbox_rate_guard(request, actor_url)
 
     to_list = activity.get("to", [])
     if isinstance(to_list, str):
@@ -247,15 +232,13 @@ async def user_inbox(request: Request, username: str):
     all_audiences = to_list + cc_list
     user_uri = user.actor_uri()
     atype = activity.get("type")
-    if atype in ("Follow", "Delete", "Reject", "Accept", "Undo", "Vote", "Like", "Announce", "Block"):
-        pass
-    elif atype == "Flag":
+    if atype in ("Follow", "Delete", "Reject", "Accept", "Undo", "Vote", "Like", "Announce", "Block", "Flag"):
         pass
     elif user_uri not in all_audiences and f"{user_uri}/followers" not in all_audiences:
         return JSONResponse({"status": "error", "message": "Not addressed to this user"}, status_code=403)
 
     request.state.sign_as_user = user
-    ok, remote_actor = verify_http_signature(request, body, activity)
+    ok, _remote_actor = verify_http_signature(request, body, activity)
     if not ok:
         return JSONResponse({"status": "error", "message": "Invalid signature"}, status_code=401)
 
@@ -271,13 +254,9 @@ async def user_inbox(request: Request, username: str):
         if isinstance(target, str) and target != user.actor_uri():
             return JSONResponse({"status": "error", "message": "Follow target mismatch"}, status_code=403)
 
-    if activity_id:
-        with get_session() as s:
-            s.add(ProcessedActivity(id=activity_id))
-            s.commit()
+    _mark_activity_processed(activity_id)
 
-    loop = asyncio.get_event_loop()
-    status_code, message = await loop.run_in_executor(_inbox_executor, handle_inbox, activity)
+    status_code, message = await _submit_inbox(activity)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)
 
 
@@ -344,8 +323,6 @@ def get_post(request: Request, post_id: int):
 
 @router.get("/@{username}")
 def get_user_by_handle(request: Request, username: str):
-    accept = request.headers.get("Accept", "")
-
     with get_session() as session:
         if "@" in username:
             user = session.query(User).filter_by(username=username, is_remote=True).first()
@@ -353,16 +330,7 @@ def get_user_by_handle(request: Request, username: str):
             user = session.query(User).filter_by(username=username, is_remote=False).first()
         if not user:
             raise HTTPException(status_code=404, detail="Not found")
-        if getattr(user, 'is_deactivated', False):
-            if "application/activity+json" in accept or "application/ld+json" in accept:
-                return JSONResponse({"error": "Gone"}, status_code=410)
-            raise HTTPException(status_code=410, detail="Account deleted")
-
-        if "application/activity+json" in accept or "application/ld+json" in accept:
-            return JSONResponse(content=to_ap_actor(user),
-                                media_type="application/activity+json")
-
-        return RedirectResponse(url=f"{BASE_URL}/profile/{username}")
+        return _actor_response(request, user, f"{BASE_URL}/profile/{username}")
 
 
 @router.get("/likes/{like_uuid}")

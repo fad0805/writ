@@ -63,6 +63,10 @@ from app.core.activitypub._outbound import (
 
 from app.core.activitypub._inbound import (
     handle_inbox,
+    _inbox_executor,
+    _is_activity_processed,
+    _mark_activity_processed,
+    _submit_inbox,
     _handle_follow,
     _handle_reject,
     _handle_accept,
