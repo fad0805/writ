@@ -10,7 +10,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 
-import httpx
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse, RedirectResponse
 
@@ -25,13 +24,40 @@ from app.models import (
     User, Follow, Post, Novel, ProcessedActivity, Like, Boost, CustomEmoji,
 )
 from app.utils.to_ap_serializer import to_ap_note, to_ap_create, to_ap_actor
-from app.utils.crypto import verify_signature, sign_string, get_private_key
+from app.utils.crypto import verify_signature
 from app.utils.storage import get_storage
 
 logger = logging.getLogger(__name__)
 
 _actor_fail_cache: dict[str, float] = {}
 _ACTOR_FAIL_TTL = 3600
+_ACTOR_FAIL_MAX = 10000
+
+
+def _record_actor_fail(actor_url: str):
+    """Record a failed actor fetch, pruning expired/oldest entries when the cache grows too large."""
+    _actor_fail_cache[actor_url] = time.time()
+    if len(_actor_fail_cache) > _ACTOR_FAIL_MAX:
+        _now = time.time()
+        for _k, _ts in list(_actor_fail_cache.items()):
+            if _now - _ts >= _ACTOR_FAIL_TTL:
+                del _actor_fail_cache[_k]
+        while len(_actor_fail_cache) > _ACTOR_FAIL_MAX:
+            _oldest = min(_actor_fail_cache, key=_actor_fail_cache.get)
+            del _actor_fail_cache[_oldest]
+
+
+def _local_user_by_actor_uri(session, actor_url: str):
+    """Match a local user by their actor URI without scanning all local users."""
+    if not actor_url or not actor_url.startswith(BASE_URL):
+        return None
+    rel = actor_url[len(BASE_URL):]
+    if not rel.startswith("/users/"):
+        return None
+    username = rel[len("/users/"):].strip("/").split("/")[0]
+    if not username:
+        return None
+    return session.query(User).filter_by(username=username, is_remote=False).first()
 
 router = APIRouter()
 
@@ -113,19 +139,23 @@ def user_actor(request: Request, username: str):
         session.close()
 
 
-def _check_collection_access(username: str, request: Request) -> bool:
-    """Check if the requester can view this user's ActivityPub collections."""
+def _check_collection_access(username: str) -> bool:
+    """Check if the user exists and is not deactivated before serving collections.
+
+    Collection functions themselves return None for missing users, but an early
+    check lets us also exclude deactivated accounts and return a proper 404.
+    """
     with get_session() as s:
         user = s.query(User).filter_by(username=username).first()
-        if not user:
+        if not user or getattr(user, 'is_deactivated', False):
             return False
         return True
 
 
 @router.get("/users/{username}/outbox")
-def user_outbox(request: Request, username: str, page: int = None):
-    if not _check_collection_access(username, request):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+def user_outbox(username: str, page: int = None):
+    if not _check_collection_access(username):
+        raise HTTPException(status_code=404, detail="Not found")
     result = get_outbox(username, page)
     if result is None:
         raise HTTPException(status_code=404, detail="Not found")
@@ -133,9 +163,9 @@ def user_outbox(request: Request, username: str, page: int = None):
 
 
 @router.get("/users/{username}/followers")
-def user_followers(request: Request, username: str, page: int = None):
-    if not _check_collection_access(username, request):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+def user_followers(username: str, page: int = None):
+    if not _check_collection_access(username):
+        raise HTTPException(status_code=404, detail="Not found")
     result = get_followers(username, page)
     if result is None:
         raise HTTPException(status_code=404, detail="Not found")
@@ -143,9 +173,9 @@ def user_followers(request: Request, username: str, page: int = None):
 
 
 @router.get("/users/{username}/following")
-def user_following(request: Request, username: str, page: int = None):
-    if not _check_collection_access(username, request):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+def user_following(username: str, page: int = None):
+    if not _check_collection_access(username):
+        raise HTTPException(status_code=404, detail="Not found")
     result = get_following(username, page)
     if result is None:
         raise HTTPException(status_code=404, detail="Not found")
@@ -153,9 +183,9 @@ def user_following(request: Request, username: str, page: int = None):
 
 
 @router.get("/users/{username}/featured")
-def user_featured(request: Request, username: str, page: int = None):
-    if not _check_collection_access(username, request):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+def user_featured(username: str, page: int = None):
+    if not _check_collection_access(username):
+        raise HTTPException(status_code=404, detail="Not found")
     result = get_featured(username, page)
     if result is None:
         raise HTTPException(status_code=404, detail="Not found")
@@ -219,10 +249,7 @@ def verify_http_signature(request: Request, body: bytes, activity: dict) -> tupl
     with get_session() as s:
         remote_actor = s.query(User).filter_by(remote_url=actor_url).first()
         if not remote_actor or not remote_actor.public_key:
-            for _u in s.query(User).filter_by(is_remote=False).all():
-                if _u.actor_uri() == actor_url:
-                    remote_actor = _u
-                    break
+            remote_actor = _local_user_by_actor_uri(s, actor_url)
         if not remote_actor or not remote_actor.public_key:
             act_actor = activity.get("actor", "")
             if isinstance(act_actor, list):
@@ -230,10 +257,7 @@ def verify_http_signature(request: Request, body: bytes, activity: dict) -> tupl
             if act_actor:
                 remote_actor = s.query(User).filter_by(remote_url=act_actor).first()
                 if not remote_actor or not remote_actor.public_key:
-                    for _u in s.query(User).filter_by(is_remote=False).all():
-                        if _u.actor_uri() == act_actor:
-                            remote_actor = _u
-                            break
+                    remote_actor = _local_user_by_actor_uri(s, act_actor)
         if not remote_actor or not remote_actor.public_key:
             remote_actor = None
     logger.debug("[SIG] db_lookup=%s", "found" if remote_actor else "miss")
@@ -248,37 +272,16 @@ def verify_http_signature(request: Request, body: bytes, activity: dict) -> tupl
             if BASE_URL in actor_url:
                 logger.debug("[SIG] skip self-fetch (%s)", BASE_URL)
             else:
-                _parsed = urlparse(actor_url)
-                _date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
-                _created = int(time.time())
-                _ss = f"(request-target): get {_parsed.path}\nhost: {_parsed.netloc}\ndate: {_date}\n(created): {_created}"
-                _headers = {"Accept": "application/activity+json", "Date": _date, "Host": _parsed.netloc}
                 with get_session() as _s:
                     _signer = _s.query(User).filter_by(is_remote=False).first()
-                    if _signer:
-                        _priv = get_private_key(_signer, SECRET_KEY)
-                        _sig = sign_string(_ss, _priv)
-                        _headers["Signature"] = f'keyId="{_signer.actor_uri()}#main-key",algorithm="hs2019",created="{_created}",headers="(request-target) host date (created)",signature="{_sig}"'
-                _resp = httpx.get(actor_url, headers=_headers, timeout=10, follow_redirects=True)
-                logger.debug("[SIG] fetch status=%s", _resp.status_code)
-                if _resp.status_code == 200:
-                    _data = _resp.json()
-                    _pubkey = _data.get("publicKey", {}).get("publicKeyPem", "") if isinstance(_data, dict) else ""
-                    logger.debug("[SIG] pubkey_len=%s", len(_pubkey))
-                    if _pubkey:
-                        class _Actor:
-                            public_key = _pubkey
-                            remote_url = actor_url
-                            is_remote = True
-                            @staticmethod
-                            def actor_uri(): return actor_url
-                        remote_actor = _Actor()
-                        logger.debug("[SIG] using inline _Actor (pubkey_len=%s)", len(_pubkey))
+                remote_actor = _resolve_actor(actor_url, lightweight=True, sign_as=_signer)
+                if remote_actor and remote_actor.public_key:
+                    logger.debug("[SIG] resolved remote actor (id=%s)", remote_actor.id)
                 else:
-                    _actor_fail_cache[actor_url] = time.time()
-                    logger.debug("[SIG] cached fail for %s (status=%s)", actor_url, _resp.status_code)
+                    _record_actor_fail(actor_url)
+                    logger.debug("[SIG] cached fail for %s", actor_url)
         except Exception:
-            pass
+            _record_actor_fail(actor_url)
     if not remote_actor or not remote_actor.public_key:
         return (False, None)
 
@@ -392,6 +395,32 @@ def verify_http_signature(request: Request, body: bytes, activity: dict) -> tupl
 # ---------------------------------------------------------------------------
 # Inbox
 # ---------------------------------------------------------------------------
+def _validate_inbox_activity(activity: dict):
+    """Validate common inbox activity fields.
+
+    Returns (status_code, message) on failure, or None when the activity is well-formed.
+    """
+    atype = activity.get("type")
+    if not atype:
+        return (400, "Missing activity type")
+    actor_url = activity.get("actor", "")
+    if isinstance(actor_url, list):
+        actor_url = actor_url[0]
+    if not actor_url:
+        return (400, "Missing actor")
+    if atype in ("Create", "Update", "Like", "Announce", "Undo") and not activity.get("object"):
+        return (400, "Missing object")
+    if atype == "Undo":
+        object_data = activity.get("object", {})
+        if isinstance(object_data, dict):
+            obj_actor = object_data.get("actor", "")
+            if isinstance(obj_actor, list):
+                obj_actor = obj_actor[0]
+            if obj_actor and obj_actor != actor_url:
+                return (403, "Undo actor mismatch")
+    return None
+
+
 @router.post("/inbox")
 async def shared_inbox(request: Request):
     try:
@@ -408,12 +437,20 @@ async def shared_inbox(request: Request):
     if isinstance(actor_url, list):
         actor_url = actor_url[0]
     client_ip = request.client.host if request.client else ""
-    rate_key = f"inbox:{actor_url or client_ip}"
-    if not check_rate_limit(rate_key):
-        return JSONResponse({"status": "error", "message": "Too many requests"}, status_code=429)
+    actor_key = f"actor:{actor_url}" if actor_url else ""
+    ip_key = f"ip:{client_ip}" if client_ip else ""
+    daily_key = f"daily:{actor_key or ip_key}"
+    if not check_daily_limit(daily_key):
+        return JSONResponse({"status": "error", "message": "Daily limit exceeded"}, status_code=429)
+    for rk in [actor_key, ip_key]:
+        if rk and (not check_rate_limit(rk) or not check_burst_limit(rk)):
+            return JSONResponse({"status": "error", "message": "Too many requests"}, status_code=429)
     ok, remote_actor = verify_http_signature(request, body, activity)
     if not ok:
         return JSONResponse({"status": "error", "message": "Invalid signature"}, status_code=401)
+    err = _validate_inbox_activity(activity)
+    if err:
+        return JSONResponse({"status": "error", "message": err[1]}, status_code=err[0])
     activity_id = activity.get("id", "")
     if activity_id:
         with get_session() as s:
@@ -484,32 +521,17 @@ async def user_inbox(request: Request, username: str):
     if not ok:
         return JSONResponse({"status": "error", "message": "Invalid signature"}, status_code=401)
 
-    if not atype:
-        return JSONResponse({"status": "error", "message": "Missing activity type"}, status_code=400)
-    if not actor_url:
-        return JSONResponse({"status": "error", "message": "Missing actor"}, status_code=400)
-    if atype in ("Create", "Update") and not activity.get("object"):
-        return JSONResponse({"status": "error", "message": "Missing object"}, status_code=400)
-    if atype in ("Like", "Announce", "Undo") and not activity.get("object"):
-        return JSONResponse({"status": "error", "message": "Missing object"}, status_code=400)
+    err = _validate_inbox_activity(activity)
+    if err:
+        return JSONResponse({"status": "error", "message": err[1]}, status_code=err[0])
 
+    atype = activity.get("type")
     if atype == "Follow":
         target = activity.get("object", "")
         if isinstance(target, dict):
             target = target.get("id", "")
         if isinstance(target, str) and target != user.actor_uri():
             return JSONResponse({"status": "error", "message": "Follow target mismatch"}, status_code=403)
-
-    if atype in ("Like", "Announce"):
-        pass
-    if atype == "Undo":
-        object_data = activity.get("object", {})
-        if isinstance(object_data, dict):
-            obj_actor = object_data.get("actor", "")
-            if isinstance(obj_actor, list):
-                obj_actor = obj_actor[0]
-            if obj_actor and obj_actor != actor_url:
-                return JSONResponse({"status": "error", "message": "Undo actor mismatch"}, status_code=403)
 
     if activity_id:
         with get_session() as s:

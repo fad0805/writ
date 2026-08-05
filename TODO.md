@@ -5,11 +5,11 @@
 - [x] 팔로워 전용/멘션 전용 글 AP 조회 불가 — `_ap_post_visible`이 `verify_http_signature(request, b"", {})`로 GET 검증 시 activity가 비어서 바인딩 체크(ap.py:290)가 항상 실패 → 404. GET일 땐 바인딩 체크 생략 필요 (body 없는 요청만 생략, POST는 actor 필수 유지)
 - [x] 죽은 삼항식 — `ap.py:538` `following.actor_uri() if ... else following.actor_uri()` → 단일 호출로 정리
 - [x] 디버그 `print("[SIG] ...")` 잔존 — `ap.py:218~387` 20여 개 → `logger.debug` 전환
-- [ ] 인라인 `_Actor` 미영속 — ap.py:269-276 원격 액터를 DB에 저장하지 않아 요청마다 재페치 + `.id` 없어 handle_inbox AttributeError 위험
-- [ ] `_actor_fail_cache` 무제한 증가 — ap.py:33-34 만료 항목 미삭제
-- [ ] `_check_collection_access` 실질 체크 없음 — ap.py:116-122 request 미사용, 접근제어 아님
-- [ ] shared_inbox vs user_inbox 검증 불균형 — ap.py:392가 audience/actor/object 검증 및 burst/daily 제한 없음
-- [ ] 로컬 유저 전체 루프 조회 — ap.py:222-225, 233-236 시그니처 검증마다 O(n)
+- [x] 인라인 `_Actor` 미영속 — ap.py:269-276 원격 액터를 DB에 저장하지 않아 요청마다 재페치 + `.id` 없어 handle_inbox AttributeError 위험 → `_resolve_actor(lightweight=True)`로 교체, DB 영속화
+- [x] `_actor_fail_cache` 무제한 증가 — ap.py:33-34 만료 항목 미삭제 → `_record_actor_fail()`로 만료/최고(最古) 항목 정리 + 크기 상한
+- [x] `_check_collection_access` 실질 체크 없음 — ap.py:116-122 request 미사용, 접근제어 아님 → 비활성 계정 404 처리 + 미사용 request 파라미터 제거
+- [x] shared_inbox vs user_inbox 검증 불균형 — ap.py:392가 audience/actor/object 검증 및 burst/daily 제한 없음 → `_validate_inbox_activity()` 공통 검증 + burst/daily 제한 추가
+- [x] 로컬 유저 전체 루프 조회 — ap.py:222-225, 233-236 시그니처 검증마다 O(n) → `_local_user_by_actor_uri()` O(1) 조회
 
 ## CRITICAL (즉시 수정)
 
