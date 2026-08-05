@@ -8,6 +8,7 @@ import datetime
 import logging
 
 import httpx
+from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.orm import Session, selectinload
 
 from app.config.settings import BASE_URL, SECRET_KEY
@@ -181,6 +182,23 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
         session.commit()
 
 
+def _post_to_inboxes(inbox_urls, activity: dict, user: User, max_workers: int = 10):
+    """Deliver an activity to multiple inboxes in parallel."""
+    inboxes = [u for u in dict.fromkeys(inbox_urls) if validate_url(u)]
+    if not inboxes:
+        return
+    if len(inboxes) == 1:
+        _post_to_inbox(inboxes[0], activity, user)
+        return
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(inboxes))) as executor:
+        futures = {executor.submit(_post_to_inbox, inbox, activity, user): inbox for inbox in inboxes}
+        for future, inbox in futures.items():
+            try:
+                future.result()
+            except Exception as e:
+                logger.error("Failed to deliver to %s: %s", inbox, e, exc_info=True)
+
+
 def send_to_shared_inbox(user: User, activity: dict):
     with get_session() as session:
         followers = session.query(Follow).options(
@@ -199,8 +217,7 @@ def send_to_shared_inbox(user: User, activity: dict):
             if inbox in inboxes:
                 continue
             inboxes.add(inbox)
-    for inbox in inboxes:
-        _post_to_inbox(inbox, activity, user)
+    _post_to_inboxes(inboxes, activity, user)
 
 
 def broadcast_to_followers(user: User, activity: dict):
@@ -223,8 +240,7 @@ def broadcast_to_followers(user: User, activity: dict):
             if not federation_allowed(domain):
                 continue
             inboxes.add(inbox)
-    for inbox in inboxes:
-        _post_to_inbox(inbox, activity, user)
+    _post_to_inboxes(inboxes, activity, user)
 
 
 def _author_inbox(post: Post) -> str | None:

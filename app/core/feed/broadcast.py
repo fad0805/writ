@@ -5,7 +5,7 @@ import httpx
 
 from app.models import User, Post, Follow
 from app.utils.to_ap_serializer import to_ap_create
-from app.core.activitypub import broadcast_to_followers, _post_to_inbox, _resolve_actor
+from app.core.activitypub import broadcast_to_followers, _post_to_inboxes, _resolve_actor
 from app.core.federation import federation_allowed
 from app.db.database import get_session
 
@@ -62,12 +62,11 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                         inbox = mu.inbox_url
                         if inbox:
                             inboxes.add(inbox)
-    for inbox in inboxes:
-        _post_to_inbox(inbox, create_activity, user)
-
-    broadcast_to_followers(user, create_activity)
+    _post_to_inboxes(inboxes, create_activity, user)
 
     if visibility != "mention":
+        broadcast_to_followers(user, create_activity)
+
         remote_handles = set(re.findall(r'@([a-zA-Z0-9_]+@[\w.-]+\.[a-zA-Z]{2,})', plain_content or ""))
         for handle in remote_handles:
             with get_session() as s:
@@ -77,7 +76,7 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
             if remote_user:
                 inbox = remote_user.inbox_url
                 if inbox:
-                    _post_to_inbox(inbox, create_activity, user)
+                    inboxes.add(inbox)
                 continue
             try:
                 r_name, r_domain = handle.split("@", 1)
@@ -109,6 +108,7 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                     if remote_user:
                         inbox = remote_user.inbox_url
                         if inbox:
-                            _post_to_inbox(inbox, create_activity, user)
+                            inboxes.add(inbox)
             except Exception:
                 pass
+        _post_to_inboxes(inboxes, create_activity, user)
