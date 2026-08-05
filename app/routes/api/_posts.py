@@ -17,7 +17,7 @@ from app.models import User, Post, Like, Boost, Vote, Bookmark, Notification, No
 from app.utils.to_ap_serializer import to_ap_note
 from app.serializers import _post_json, _user_json
 from app.config.settings import BASE_URL, MAX_POST_LENGTH
-from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _build_reactions, _resolve_actor, _send_delete_post, _send_flag, _get_instance_actor
+from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _build_reactions, _resolve_actor, _send_delete_post, _send_flag, _get_instance_actor, _ap_fetch, _fetch_and_save_ap_object
 from app.core.eventbus import broadcast
 from app.core.push import send_push_to_user
 from app.core.broadcast import broadcast_post, _broadcast_timeline
@@ -29,7 +29,7 @@ from app.utils.content_parser import process_post_content, extract_mentions
 from app.utils.post import _get_descendant_ids, _sync_post_tags
 from app.utils.storage import get_storage
 
-from app.routes.api._core import _ap_fetch, _fetch_and_save_ap_object, _check_fetch_domain_allowed
+from app.core.federation import _check_fetch_domain_allowed
 from app.core.visibility import _can_view
 from app.routes.api._series import _novel_json, _episode_json
 from app.core.feed import _broadcast_federation

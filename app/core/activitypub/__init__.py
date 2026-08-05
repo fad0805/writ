@@ -38,6 +38,10 @@ from app.core.activitypub._fetch import (
     _retry_fetch_reply,
     _fetch_remote_post,
     _fetch_actor_json_signed,
+    _safe_httpx_get,
+    _ap_fetch,
+    _fetch_and_save_ap_object,
+    _background_fetch_outbox,
 )
 
 from app.core.activitypub._signature import (
@@ -59,6 +63,7 @@ from app.core.activitypub._outbound import (
     _fanout_to_followers,
     send_to_shared_inbox,
     broadcast_to_followers,
+    _broadcast_update_actor,
 )
 
 from app.core.activitypub._inbound import (

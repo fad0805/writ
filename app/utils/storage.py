@@ -1,5 +1,6 @@
 import os
 import logging
+import time
 
 from abc import ABC, abstractmethod
 import boto3
@@ -10,6 +11,8 @@ from app.config.settings import (
     S3_ENDPOINT, S3_REGION, S3_ACCESS_KEY, S3_SECRET_KEY,
     S3_BUCKET, S3_PUBLIC_URL,
 )
+from app.db.database import get_session
+from app.models import User
 
 logger = logging.getLogger("writ.storage")
 
@@ -162,3 +165,21 @@ def get_storage() -> StorageBackend:
             public_url=S3_PUBLIC_URL,
         )
     return LocalStorage(base_dir="uploads", url_prefix="/uploads")
+
+
+def _cleanup_avatars():
+    storage = get_storage()
+    if not isinstance(storage, LocalStorage):
+        return
+    with get_session() as s:
+        used_urls = {u.profile_image for u in s.query(User).filter(User.profile_image != "").all()}
+        used_urls |= {u.header_image for u in s.query(User).filter(User.header_image != "").all()}
+    now = time.time()
+    for path in ("avatars", "headers"):
+        for key in storage.list_keys(path):
+            url = storage.url(key)
+            if url in used_urls:
+                continue
+            mtime = storage.mtime(key)
+            if mtime is not None and now - mtime > 86400:
+                storage.delete(key)

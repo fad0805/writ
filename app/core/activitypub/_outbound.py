@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.config.settings import BASE_URL, SECRET_KEY
 from app.db.database import get_session
 from app.models import User, Post, Follow, PendingDelivery
+from app.utils.to_ap_serializer import to_ap_actor
 from app.utils.crypto import sign_string, get_private_key
 from app.core.federation import federation_allowed
 from app.utils.http import validate_url
@@ -285,3 +286,18 @@ def _fanout_to_followers(db: Session, user: User, activity: dict, action: str = 
                         logger.error("Failed to fan-out %s to inbox %s: %s", action, inbox, e, exc_info=True)
     except Exception as e:
         logger.error("Failed to query followers for %s fan-out: %s", action, e, exc_info=True)
+
+
+def _broadcast_update_actor(user):
+    """Deliver Update actor activity to remote followers (background thread)."""
+    try:
+        update = {
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": f"{user.actor_uri()}#updates/{uuid.uuid4()}",
+            "type": "Update",
+            "actor": user.actor_uri(),
+            "object": to_ap_actor(user),
+        }
+        broadcast_to_followers(user, update)
+    except Exception as e:
+        logger.error("Failed to broadcast Update actor: %s", e, exc_info=True)

@@ -1,13 +1,11 @@
 """API package — core + posts + interactions + admin endpoints assembled into one router.
 
 Import ``router`` from here:
-    from app.routes.api import router, _cleanup_avatars
+    from app.routes.api import router
 """
 
 from app.routes.api._core import (
     router,
-    _cleanup_avatars,
-    _broadcast_update_actor,
 )
 
 from app.routes.api._misc import (

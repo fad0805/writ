@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session as SASession
 
 from app.models import User, Post, Like, Boost, Bookmark, CustomEmoji
 from app.db.database import get_db
-from app.routes.api import _broadcast_update_actor, _do_edit_post, _do_delete_post
+from app.core.activitypub import _broadcast_update_actor
+from app.routes.api import _do_edit_post, _do_delete_post
 from app.core.interactions import like_post, unlike_post, boost_post, unboost_post, react_post, unreact_post
 from app.utils.emoji import _load_emojis
 from app.routes.mastodon_api._common import (

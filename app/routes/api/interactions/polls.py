@@ -10,11 +10,10 @@ from sqlalchemy import func
 from app.models import Post, Vote
 from app.serializers import _post_json
 from app.config.settings import BASE_URL
-from app.core.activitypub import _post_to_inbox
+from app.core.activitypub import _post_to_inbox, _ap_fetch
 from app.db.database import get_session
 from app.core.auth import require_active_auth
 
-from app.routes.api._core import _ap_fetch
 from app.core.visibility import _can_view
 
 logger = logging.getLogger("writ.api.polls")

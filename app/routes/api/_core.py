@@ -1,13 +1,6 @@
 """Core API endpoints — admin extracted to _admin.py."""
-import re
 import asyncio
 import threading
-from datetime import datetime, timezone
-import uuid
-import logging
-import time
-import httpx
-import traceback
 
 from fastapi import APIRouter, Request, Form, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -15,22 +8,16 @@ from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.orm import selectinload
 from urllib.parse import urlparse
 
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Novel, SeriesFollow, Tag, FederationBlock, AllowedServer, ServerSetting, ServerSetting
-from app.utils.to_ap_serializer import to_ap_actor
+from app.models import User, Post, Follow, Like, Boost, Bookmark, Novel, SeriesFollow, Tag
 from app.serializers import _post_json, _user_json
-from app.config.settings import SECRET_KEY
-from app.core.activitypub import _fetch_remote_post, broadcast_to_followers, _resolve_actor
-from app.utils.http import validate_url
+from app.core.activitypub import _resolve_actor, _background_fetch_outbox
+from app.core.federation import _check_fetch_domain_allowed
 from app.core.timeline_stream import add_stream, remove_stream
 from app.db.database import get_session
 from app.db.mention_resolver import _federation_allowed, _resolve_remote_user
 from app.core.auth import require_auth, get_current_user
 from app.routes.api._series import _apply_latest_activity_order, _novel_json, _load_novel_meta
-from app.utils.crypto import get_private_key, sign_string
 from app.utils.filter import _timeline_filter
-from app.utils.storage import LocalStorage, get_storage
-
-logger = logging.getLogger("writ.api")
 
 router = APIRouter(prefix="/api")
 
@@ -60,21 +47,6 @@ async def api_timeline_stream(request: Request, tl_type: str = "home"):
         finally:
             remove_stream(sid)
     return StreamingResponse(event_gen(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
-
-
-def _broadcast_update_actor(user):
-    """Deliver Update actor activity to remote followers (background thread)."""
-    try:
-        update = {
-            "@context": "https://www.w3.org/ns/activitystreams",
-            "id": f"{user.actor_uri()}#updates/{uuid.uuid4()}",
-            "type": "Update",
-            "actor": user.actor_uri(),
-            "object": to_ap_actor(user),
-        }
-        broadcast_to_followers(user, update)
-    except Exception as e:
-        logger.error("Failed to broadcast Update actor: %s", e, exc_info=True)
 
 
 @router.get("/search/series")
@@ -112,24 +84,6 @@ def api_recent_tags(request: Request, q: str = Query("")):
                     tag_names.add(t.name)
         ordered = sorted(tag_names, key=lambda n: n.lower().startswith(query.lower()), reverse=True)[:5]
         return {"tags": [{"name": t} for t in ordered]}
-
-
-def _cleanup_avatars():
-    storage = get_storage()
-    if not isinstance(storage, LocalStorage):
-        return
-    with get_session() as s:
-        used_urls = {u.profile_image for u in s.query(User).filter(User.profile_image != "").all()}
-        used_urls |= {u.header_image for u in s.query(User).filter(User.header_image != "").all()}
-    now = time.time()
-    for path in ("avatars", "headers"):
-        for key in storage.list_keys(path):
-            url = storage.url(key)
-            if url in used_urls:
-                continue
-            mtime = storage.mtime(key)
-            if mtime is not None and now - mtime > 86400:
-                storage.delete(key)
 
 
 @router.get("/explore")
@@ -396,210 +350,6 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
         if blocked_domain:
             result["blocked_domain"] = blocked_domain
         return result
-
-
-def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
-    """Fetch a remote AP object, resolve its author, save to DB, return post.
-    Also recursively fetches parent posts (thread ancestors) up to depth 5."""
-    if _depth > 5:
-        return None
-    if _visited is None:
-        _visited = set()
-
-    # 1. 스레드 상위 글 역추적 로직 안전하게 실행
-    in_reply_to = obj.get("inReplyTo", "")
-    if isinstance(in_reply_to, dict):
-        in_reply_to = in_reply_to.get("id", "")
-    if in_reply_to and in_reply_to not in _visited:
-        _visited.add(in_reply_to)
-        parent_data = _ap_fetch(in_reply_to, user)
-        if parent_data:
-            parent_obj = parent_data.get("object", parent_data)
-            # 💡 재귀 함수가 안전하게 마칠 수 있도록 단독 실행 확보
-            try:
-                _fetch_and_save_ap_object(parent_obj, user, _visited, _depth + 1)
-            except Exception as e:
-                print(f"[WARN] Failed to process parent post {in_reply_to}: {e}", flush=True)
-
-    actor_url = obj.get("id")
-    post = None
-    # 2. 본문 페치 및 DB 저장 로직 수행
-    with get_session() as session:
-        try:
-            post = _fetch_remote_post(actor_url, user, session, _depth)
-            # 💡 페치가 성공했을 때만 확실하게 DB 세션 커밋을 보장
-            if post:
-                session.commit()
-        except Exception as e:
-            # 💡 단순 print 대신 에러가 발생한 정확한 라인과 원인을 추적하기 위해 traceback 추가
-            print(f"[ERROR] Failed to fetch remote post from {actor_url}: {e}", flush=True)
-            traceback.print_exc() 
-            return None # 껍데기를 만들지 않도록 에러 시 None 리턴 구조로 방어
-
-        if not post:
-            return None
-        return _post_json(post, session, user)
-
-
-def _safe_httpx_get(url, headers=None, timeout=15, max_size=5*1024*1024):
-    """HTTP GET with redirect validation and size limit."""
-    if not validate_url(url):
-        print(f"[SAFE_GET] blocked by validate_url url={url}", flush=True)
-        return None
-    client = httpx.Client(follow_redirects=True, timeout=timeout)
-    # Intercept redirects to validate each target
-    original_send = client.send
-    def _validated_send(request, **kwargs):
-        if validate_url(str(request.url)):
-            return original_send(request, **kwargs)
-        raise httpx.InvalidURL(f"Blocked redirect to {request.url}")
-    client.send = _validated_send
-    try:
-        resp = client.get(url, headers=headers)
-        client.close()
-        print(f"[SAFE_GET] url={url} status={resp.status_code} len={len(resp.content)}", flush=True)
-        if resp.status_code != 200:
-            return None
-        if len(resp.content) > max_size:
-            return None
-        return resp
-    except Exception:
-        client.close()
-        return None
-
-def _ap_fetch(url, user):
-    """Fetch a remote URL with HTTP Signature, return parsed JSON."""
-    # Convert web URL /@username/id to AP URL /users/username/statuses/id
-    original_url = url
-    m = re.match(r'^(https?://[^/]+)/@(\w+(?:@\S+)?)/([\w-]+)(\?.*)?$', url)
-    if m:
-        base, username, status_id, query = m.group(1), m.group(2), m.group(3), m.group(4) or ""
-        url = f"{base}/users/{username}/statuses/{status_id}{query}"
-
-    if not validate_url(url):
-        return None
-
-    def _sign_and_fetch(target_url, _depth=0):
-        if _depth > 2:
-            return None
-        date_str = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
-        parsed = urlparse(target_url)
-        path_with_query = parsed.path or "/"
-        if parsed.query:
-            path_with_query += f"?{parsed.query}"
-        signed_string = (
-            f"(request-target): get {path_with_query}\n"
-            f"host: {parsed.netloc}\n"
-            f"date: {date_str}"
-        )
-        try:
-            signature = sign_string(signed_string, get_private_key(user, SECRET_KEY))
-        except Exception:
-            return None
-        signature_header = (
-            f'keyId="{user.actor_uri()}#main-key",'
-            f'headers="(request-target) host date",'
-            f'signature="{signature}"'
-        )
-        headers = {
-            "Accept": "application/activity+json",
-            "Signature": signature_header,
-            "Date": date_str,
-            "Host": parsed.netloc,
-        }
-        resp = _safe_httpx_get(target_url, headers=headers)
-        if not resp or resp.status_code != 200:
-            print(f"[AP_FETCH] url={target_url} status={resp.status_code if resp else 'None resp'}", flush=True)
-            return None
-        ct = resp.headers.get("content-type", "")
-        if "json" not in ct and "activity" not in ct:
-            html = resp.text[:100000]
-            alt_m = re.search(r'<link[^>]+rel=["\']alternate["\'][^>]+type=["\']application/activity\+json["\'][^>]+href=["\']([^"\']+)["\']', html, re.I)
-            if not alt_m:
-                alt_m = re.search(r'<link[^>]+type=["\']application/activity\+json["\'][^>]+rel=["\']alternate["\'][^>]+href=["\']([^"\']+)["\']', html, re.I)
-            if not alt_m:
-                alt_m = re.search(r'href=["\']([^"\']+)["\'][^>]*type=["\']application/activity\+json["\']', html, re.I)
-            if alt_m:
-                alt_url = alt_m.group(1)
-                print(f"[AP_FETCH] HTML response, found alternate AP URL: {alt_url}", flush=True)
-                return _sign_and_fetch(alt_url, _depth + 1)
-            print(f"[AP_FETCH] HTML response, no alternate link found for {target_url}", flush=True)
-            return None
-        try:
-            return resp.json()
-        except Exception as e:
-            print(f"[AP_FETCH] json error url={target_url}: {e}", flush=True)
-            return None
-
-    result = _sign_and_fetch(url)
-    # Fallback: try original /@username/id URL if /users/.../statuses/... returned 404
-    if not result and original_url != url:
-        print(f"[AP_FETCH] fallback to original_url={original_url}", flush=True)
-        result = _sign_and_fetch(original_url)
-    print(f"[AP_FETCH] result_is_none={result is None} original={original_url} converted={url}", flush=True)
-    return result
-
-def _check_fetch_domain_allowed(url: str) -> str | None:
-    """Return an error message if the URL's domain is federated-blocked, else None."""
-    domain = urlparse(url).hostname or ""
-    if domain:
-        with get_session() as s:
-            mode = ServerSetting.get(s).federation_mode or "blacklist"
-            if mode == "whitelist":
-                allowed = s.query(AllowedServer).filter_by(domain=domain).first()
-                if not allowed:
-                    return f"허용되지 않은 서버입니다: {domain}"
-            else:
-                blocked = s.query(FederationBlock).filter_by(domain=domain).first()
-                if blocked:
-                    reason = f" ({blocked.reason})" if blocked.reason else ""
-                    return f"차단된 서버입니다{reason}: {domain}"
-    return None
-
-
-def _background_fetch_outbox(url: str, user_id: int, actor_id: int):
-    with get_session() as s:
-        user = s.query(User).get(user_id)
-        actor = s.query(User).get(actor_id)
-        if not user or not actor:
-            return
-        try:
-            outbox_url = getattr(actor, "outbox_url", None) or getattr(actor, "endpoints", {}).get("sharedInbox", "")
-            if not outbox_url:
-                date = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
-                parsed = urlparse(url)
-                created = int(time.time())
-                ss = f"(request-target): get {parsed.path}\nhost: {parsed.netloc}\ndate: {date}\n(created): {created}"
-                priv = get_private_key(user, SECRET_KEY)
-                sig = sign_string(ss, priv)
-                sig_header = f'keyId="{user.actor_uri()}#main-key",algorithm="hs2019",created="{created}",headers="(request-target) host date (created)",signature="{sig}"'
-                headers = {"Accept": "application/activity+json", "Signature": sig_header, "Date": date, "Host": parsed.netloc}
-                r = _safe_httpx_get(url, headers=headers)
-                if r:
-                    outbox_url = r.json().get("outbox", "")
-            if outbox_url:
-                parsed2 = urlparse(outbox_url)
-                date2 = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
-                created2 = int(time.time())
-                path2 = parsed2.path or "/"
-                if parsed2.query:
-                    path2 += f"?{parsed2.query}"
-                priv = get_private_key(user, SECRET_KEY)
-                ss2 = f"(request-target): get {path2}\nhost: {parsed2.netloc}\ndate: {date2}\n(created): {created2}"
-                sig2 = sign_string(ss2, priv)
-                sig_header2 = f'keyId="{user.actor_uri()}#main-key",algorithm="hs2019",created="{created2}",headers="(request-target) host date (created)",signature="{sig2}"'
-                headers2 = {"Accept": "application/activity+json", "Signature": sig_header2, "Date": date2, "Host": parsed2.netloc}
-                resp = _safe_httpx_get(f"{outbox_url}?page=1", headers=headers2)
-                if resp:
-                    outbox_data = resp.json()
-                    for item in outbox_data.get("orderedItems", []):
-                        try:
-                            obj = item.get("object", item)
-                            _fetch_and_save_ap_object(obj, actor)
-                        except Exception:
-                            pass
-        except Exception:
-            pass
 
 
 @router.post("/fetch-actor")

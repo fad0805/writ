@@ -13,12 +13,12 @@ from sqlalchemy.orm import selectinload
 
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Novel, UserMute, UserBlock
 from app.serializers import _user_json
-from app.core.activitypub import _resolve_actor
+from app.core.activitypub import _resolve_actor, _broadcast_update_actor
 from app.db.database import get_session
 from app.core.auth import require_active_auth, get_current_user
-from app.utils.storage import get_storage
+from app.utils.storage import get_storage, _cleanup_avatars
 
-from app.routes.api._core import _post_json, _cleanup_avatars, _broadcast_update_actor
+from app.routes.api._core import _post_json
 from app.core.visibility import _can_view
 from app.utils.upload import _validate_upload, MAX_AVATAR_SIZE
 from app.routes.api._series import _novel_json, _apply_latest_activity_order, _load_novel_meta
