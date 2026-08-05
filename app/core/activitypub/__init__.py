@@ -40,6 +40,12 @@ from app.core.activitypub._fetch import (
     _fetch_actor_json_signed,
 )
 
+from app.core.activitypub._signature import (
+    verify_http_signature,
+    _ap_post_visible,
+    _validate_inbox_activity,
+)
+
 from app.core.activitypub._outbound import (
     _send_accept,
     _send_reject,
