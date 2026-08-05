@@ -3,9 +3,84 @@ import datetime
 
 from urllib.parse import urlparse
 
+from sqlalchemy import func
+
 from app.models import Like, Boost, Bookmark, User, Vote, Post, Follow
 from app.utils.datetime import _fmt_dt
 from app.utils.emoji import _load_emojis
+
+
+# 좋아요/부스트/답글 카운트와 리액션 집계를 세션(요청) 단위로 배치 조회하는 캐시.
+# lazy="selectin" 컬렉션(p.likes/p.boosts/p.replies)을 통째로 로드하지 않고,
+# 세션 identity map에 로드된 Post 전체에 대해 한 번에 집계한다.
+_COUNTS_CACHE_KEY = "_writ_post_counts_cache"
+_REACTIONS_CACHE_KEY = "_writ_post_reactions_cache"
+_DEFAULT_REACT = "★"
+
+
+def _session_post_ids(session):
+    try:
+        return {p.id for p in session.identity_map.values()
+                if isinstance(p, Post) and p.id is not None}
+    except Exception:
+        return set()
+
+
+def _load_counts_batch(session, ids):
+    counts = {}
+    if not ids:
+        return counts
+    for pid, cnt in session.query(Like.post_id, func.count(Like.id)).filter(
+        Like.post_id.in_(ids)
+    ).group_by(Like.post_id).all():
+        counts.setdefault(pid, {})["likes"] = cnt
+    for pid, cnt in session.query(Boost.post_id, func.count(Boost.id)).filter(
+        Boost.post_id.in_(ids)
+    ).group_by(Boost.post_id).all():
+        counts.setdefault(pid, {})["boosts"] = cnt
+    # replies_count 프로퍼티와 동일 조건: in_reply_to_id 기준 + 삭제 제외
+    for pid, cnt in session.query(Post.in_reply_to_id, func.count(Post.id)).filter(
+        Post.in_reply_to_id.in_(ids), Post.is_deleted == False
+    ).group_by(Post.in_reply_to_id).all():
+        counts.setdefault(pid, {})["replies"] = cnt
+    return counts
+
+
+def _post_counts(session, pid):
+    cache = session.info.setdefault(_COUNTS_CACHE_KEY, {})
+    if pid in cache:
+        return cache[pid]
+    missing = _session_post_ids(session) | {pid}
+    missing = {i for i in missing if i not in cache}
+    if missing:
+        cache.update({i: {} for i in missing})
+        cache.update(_load_counts_batch(session, missing))
+    return cache.get(pid) or {}
+
+
+def _load_reactions_batch(session, ids):
+    reactions = {}
+    if not ids:
+        return reactions
+    for pid, react, cnt in session.query(
+        Like.post_id, func.coalesce(Like.reaction, _DEFAULT_REACT), func.count(Like.id)
+    ).filter(Like.post_id.in_(ids)).group_by(Like.post_id, Like.reaction).order_by(
+        Like.post_id, func.min(Like.id)
+    ).all():
+        reactions.setdefault(pid, {})[react] = cnt
+    return reactions
+
+
+def _post_reactions(session, pid):
+    cache = session.info.setdefault(_REACTIONS_CACHE_KEY, {})
+    if pid in cache:
+        return cache[pid]
+    missing = _session_post_ids(session) | {pid}
+    missing = {i for i in missing if i not in cache}
+    if missing:
+        cache.update({i: {} for i in missing})
+        cache.update(_load_reactions_batch(session, missing))
+    return cache.get(pid) or {}
 
 
 def _post_json(p, session, user, tl_type=None,
@@ -95,14 +170,7 @@ def _post_json(p, session, user, tl_type=None,
     if _reactions_map is not None:
         reactions = _reactions_map.get(p.id, {})
     else:
-        reactions = {}
-        _default_react = "★"
-        if p.likes:
-            for like in p.likes:
-                if like.reaction:
-                    reactions[like.reaction] = reactions.get(like.reaction, 0) + 1
-                else:
-                    reactions[_default_react] = reactions.get(_default_react, 0) + 1
+        reactions = _post_reactions(session, p.id)
     if _mentioned_users_map is not None and p.id in _mentioned_users_map:
         mentioned_handles = _mentioned_users_map[p.id]
     elif p.mentioned_user_ids:
@@ -145,9 +213,10 @@ def _post_json(p, session, user, tl_type=None,
         boosts_count = _c.get("boosts", 0)
         replies_count = _c.get("replies", 0)
     else:
-        likes_count = p.likes_count
-        boosts_count = p.boosts_count
-        replies_count = p.replies_count
+        _c = _post_counts(session, p.id)
+        likes_count = _c.get("likes", 0)
+        boosts_count = _c.get("boosts", 0)
+        replies_count = _c.get("replies", 0)
 
     return {
         "id": p.id,
