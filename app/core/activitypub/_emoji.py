@@ -11,7 +11,7 @@ from PIL import Image
 from app.db.database import get_session
 from app.models import CustomEmoji
 from app.utils.storage import get_storage
-from app.utils.emoji import _refresh_emoji_cache_forcibly
+from app.utils.emoji import EMOJI_DIR, _refresh_emoji_cache_forcibly
 from app.utils.http import validate_url, validated_get, WRIT_USER_AGENT
 
 logger = logging.getLogger("writ.activitypub")
@@ -58,7 +58,6 @@ def _process_emoji_tags(tags: list, session):
     if not tags or not isinstance(tags, list):
         return
     _storage = get_storage()
-    EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "emojis")
     os.makedirs(EMOJI_DIR, exist_ok=True)
     for tag in tags:
         if not isinstance(tag, dict) or tag.get("type") != "Emoji":
