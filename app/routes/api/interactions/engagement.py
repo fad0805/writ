@@ -1,7 +1,8 @@
 """Interaction endpoints — follow, DM, notification, mute/block, like, boost, bookmark, vote, react, pin."""
 import logging
+import threading
 
-from fastapi import APIRouter, Request, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Request, HTTPException, Query
 from sqlalchemy import desc
 
 from app.models import Post, Like, Bookmark, CustomEmoji
@@ -20,7 +21,7 @@ engagement_router = APIRouter()
 # ── Post interactions (likes/boosts/bookmarks/polls/reactions/pins) —————————————————
 
 @engagement_router.post("/posts/{post_id}/like")
-def api_like_post(request: Request, background_tasks: BackgroundTasks, post_id: int, reaction: str = "★"):
+def api_like_post(request: Request, post_id: int, reaction: str = "★"):
     user = require_active_auth(request)
     if reaction.startswith(":") and reaction.endswith(":"):
         keyword = reaction[1:-1].strip().lower().replace(" ", "_")
@@ -36,12 +37,12 @@ def api_like_post(request: Request, background_tasks: BackgroundTasks, post_id: 
         except Exception:
             pass
 
-    background_tasks.add_task(_do_like)
+    threading.Thread(target=_do_like, daemon=True).start()
     return {"ok": True}
 
 
 @engagement_router.post("/posts/{post_id}/unlike")
-def api_unlike_post(request: Request, background_tasks: BackgroundTasks, post_id: int):
+def api_unlike_post(request: Request, post_id: int):
     user = require_active_auth(request)
 
     def _do_unlike():
@@ -51,7 +52,7 @@ def api_unlike_post(request: Request, background_tasks: BackgroundTasks, post_id
         except Exception:
             pass
 
-    background_tasks.add_task(_do_unlike)
+    threading.Thread(target=_do_unlike, daemon=True).start()
     return {"ok": True}
 
 

@@ -1,7 +1,8 @@
 """Interaction endpoints — react/unreact for posts."""
 import logging
+import threading
 
-from fastapi import APIRouter, Request, Form, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Request, Form, HTTPException
 from sqlalchemy import func
 
 from app.models import Post, Like, CustomEmoji
@@ -17,7 +18,7 @@ reactions_router = APIRouter()
 
 
 @reactions_router.post("/posts/{post_id}/react")
-def api_react_post(request: Request, background_tasks: BackgroundTasks, post_id: int, emoji: str = Form(...)):
+def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
     user = require_active_auth(request)
     if not emoji or len(emoji) > 50:
         raise HTTPException(status_code=400, detail="Invalid emoji")
@@ -43,12 +44,12 @@ def api_react_post(request: Request, background_tasks: BackgroundTasks, post_id:
         except Exception:
             pass
 
-    background_tasks.add_task(_do_react)
+    threading.Thread(target=_do_react, daemon=True).start()
     return {"ok": True}
 
 
 @reactions_router.post("/posts/{post_id}/unreact")
-def api_unreact_post(request: Request, background_tasks: BackgroundTasks, post_id: int):
+def api_unreact_post(request: Request, post_id: int):
     user = require_active_auth(request)
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
@@ -62,7 +63,7 @@ def api_unreact_post(request: Request, background_tasks: BackgroundTasks, post_i
         except Exception:
             pass
 
-    background_tasks.add_task(_do_unreact)
+    threading.Thread(target=_do_unreact, daemon=True).start()
     return {"ok": True}
 
 
