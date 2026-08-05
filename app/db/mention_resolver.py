@@ -1,5 +1,7 @@
-import httpx
 import logging
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -8,8 +10,35 @@ from urllib.parse import urlparse
 from app.db.database import get_session
 from app.core.activitypub import _resolve_actor
 from app.models import User, FederationBlock, AllowedServer, ServerSetting
+from app.utils.http import safe_fetch
 
 logger = logging.getLogger(__name__)
+
+_RESOLUTION_CACHE: dict[str, tuple[float, int | None]] = {}
+_CACHE_LOCK = threading.Lock()
+_SUCCESS_TTL = 30 * 60
+_FAILURE_TTL = 15 * 60
+_RESOLVE_TIMEOUT = 6
+
+_MISS = object()
+
+
+def _cache_get(handle: str):
+    with _CACHE_LOCK:
+        entry = _RESOLUTION_CACHE.get(handle)
+        if not entry:
+            return _MISS
+        ts, user_id = entry
+        ttl = _SUCCESS_TTL if user_id is not None else _FAILURE_TTL
+        if time.monotonic() - ts > ttl:
+            _RESOLUTION_CACHE.pop(handle, None)
+            return _MISS
+        return user_id
+
+
+def _cache_set(handle: str, user_id: int | None) -> None:
+    with _CACHE_LOCK:
+        _RESOLUTION_CACHE[handle] = (time.monotonic(), user_id)
 
 
 def _federation_allowed(domain: str, session: Session | None = None) -> bool:
@@ -32,49 +61,80 @@ def _federation_allowed(domain: str, session: Session | None = None) -> bool:
         return False
 
 
+def _webfinger_actor_url(clean: str, domain: str) -> str | None:
+    """WebFinger lookup → canonical actor URL (single round trip)."""
+    try:
+        resp = safe_fetch(
+            f"https://{domain}/.well-known/webfinger?resource=acct:{clean}",
+            timeout=_RESOLVE_TIMEOUT,
+            headers={"Accept": "application/jrd+json, application/json"},
+        )
+        if resp and resp.status_code == 200:
+            for link in resp.json().get("links", []):
+                if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
+                    href = link.get("href", "")
+                    if href:
+                        return href
+    except Exception as e:
+        logger.debug("WebFinger failed for %s: %s", clean, e)
+    return None
+
+
 def _resolve_remote_user(handle: str, session: Session | None = None) -> User | None:
-    """WebFinger + Actor resolution로 리모트 유저를 DB에 저장하고 반환."""
+    """WebFinger + Actor resolution로 리모트 유저를 DB에 저장하고 반환.
+
+    결과(성공/실패)를 메모리에 캐시해 반복 멘션 시 네트워크 호출을 생략한다.
+    """
 
     clean = handle.lstrip('@')
     if '@' not in clean:
         return None
 
+    cached = _cache_get(clean)
+    if cached is not _MISS:
+        if cached is None:
+            return None
+        with get_session() as s:
+            user = s.query(User).get(cached)
+            if user:
+                return user
+
     local_part, domain = clean.split('@', 1)
     if not _federation_allowed(domain, session):
+        _cache_set(clean, None)
         return None
 
-    urls = [
-        f"https://{domain}/users/{local_part}",
-        f"https://{domain}/@{local_part}",
-        f"https://{domain}/u/{local_part}",
-        f"https://{domain}/profile/{local_part}",
-    ]
+    resolved = None
     try:
-        resolved = None
-        for url in urls:
-            try:
-                resolved = _resolve_actor(url)
-                if resolved:
-                    break
-            except Exception:
-                continue
+        actor_url = _webfinger_actor_url(clean, domain)
+        if actor_url:
+            resolved = _resolve_actor(actor_url, lightweight=True, timeout=_RESOLVE_TIMEOUT)
+            if resolved:
+                _cache_set(clean, resolved.id)
+                return resolved
 
         if not resolved:
-            wf = httpx.get(
-                f"https://{domain}/.well-known/webfinger?resource=acct:{clean}",
-                timeout=5,
-            )
-            if wf.status_code == 200:
-                for link in wf.json().get("links", []):
-                    if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
-                        href = link.get("href", "")
-                        if href:
-                            resolved = _resolve_actor(href)
+            candidates = [
+                f"https://{domain}/users/{local_part}",
+                f"https://{domain}/u/{local_part}",
+                f"https://{domain}/profile/{local_part}",
+            ]
+            with ThreadPoolExecutor(max_workers=len(candidates)) as ex:
+                futures = [ex.submit(_resolve_actor, url, lightweight=True, timeout=_RESOLVE_TIMEOUT) for url in candidates]
+                for fut in futures:
+                    try:
+                        resolved = fut.result()
+                        if resolved:
                             break
-        if resolved:
-            return resolved
+                    except Exception:
+                        continue
+            if resolved:
+                _cache_set(clean, resolved.id)
+                return resolved
     except Exception as e:
         logger.debug("Failed to resolve remote handle %s: %s", handle, e)
+
+    _cache_set(clean, None)
     return None
 
 

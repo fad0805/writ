@@ -213,7 +213,7 @@ def _sync_remote_pinned_posts(user_id: int, pinned_ap_ids: list, sign_as: Option
         session.commit()
 
 
-def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optional[User] = None) -> Optional[User]:
+def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optional[User] = None, lightweight: bool = False, timeout: int = 10) -> Optional[User]:
     _actor_domain = urlparse(actor_url).hostname or ""
     _own_domain = urlparse(BASE_URL).hostname or ""
     if _actor_domain and _actor_domain == _own_domain:
@@ -262,25 +262,25 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             sig = sign_string(ss, priv)
             sig_header = f'keyId="{sign_as.actor_uri()}#main-key",algorithm="hs2019",created="{created}",headers="(request-target) host date (created)",signature="{sig}"'
             headers = {"Accept": "application/activity+json", "Signature": sig_header, "Date": date, "Host": parsed.netloc}
-            data = _fetch_ap_json(actor_url, headers=headers)
+            data = _fetch_ap_json(actor_url, headers=headers, timeout=timeout)
         except Exception:
             pass
 
     if data is None:
-        data = _fetch_ap_json(actor_url)
+        data = _fetch_ap_json(actor_url, timeout=timeout)
 
     # Webfinger fallback for /@username URLs that /users/username doesn't serve
     if data is None and _webfinger_user and _webfinger_domain:
         try:
             wf_url = f"https://{_webfinger_domain}/.well-known/webfinger?resource=acct:{_webfinger_user}@{_webfinger_domain}"
-            wf_resp = safe_fetch(wf_url, timeout=10, headers={"Accept": "application/jrd+json, application/json"})
+            wf_resp = safe_fetch(wf_url, timeout=timeout, headers={"Accept": "application/jrd+json, application/json"})
             if wf_resp and wf_resp.status_code == 200:
                 wf_data = wf_resp.json()
                 for link in wf_data.get("links", []):
                     if link.get("type") in ("application/activity+json", "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\""):
                         alt_actor = link.get("href", "")
                         if alt_actor:
-                            data = _fetch_ap_json(alt_actor)
+                            data = _fetch_ap_json(alt_actor, timeout=timeout)
                             if data:
                                 actor_url = alt_actor
                                 break
@@ -332,12 +332,18 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
         public_key_pem = data["publicKey"].get("publicKeyPem", "")
 
     # Download images BEFORE opening DB session to avoid holding connections during network I/O
-    base_username_clean = local_username.replace("@", "_")
-    _dl_avatar = _save_remote_avatar(avatar_url, base_username_clean) if avatar_url else ""
-    _dl_header = _save_remote_image(header_url, "headers", base_username_clean) if header_url else ""
-    _dl_followers = _fetch_remote_count(data.get("followers", ""), sign_as)
-    _dl_following = _fetch_remote_count(data.get("following", ""), sign_as)
-    _pinned_ap_ids = _fetch_remote_featured(data, sign_as)
+    _dl_avatar = ""
+    _dl_header = ""
+    _dl_followers = None
+    _dl_following = None
+    _pinned_ap_ids = None
+    if not lightweight:
+        base_username_clean = local_username.replace("@", "_")
+        _dl_avatar = _save_remote_avatar(avatar_url, base_username_clean) if avatar_url else ""
+        _dl_header = _save_remote_image(header_url, "headers", base_username_clean) if header_url else ""
+        _dl_followers = _fetch_remote_count(data.get("followers", ""), sign_as)
+        _dl_following = _fetch_remote_count(data.get("following", ""), sign_as)
+        _pinned_ap_ids = _fetch_remote_featured(data, sign_as)
 
     with get_session() as session:
         existing = session.query(User).filter_by(remote_url=actor_url).first()
@@ -359,12 +365,13 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             existing.remote_followers_count = _dl_followers
             existing.remote_following_count = _dl_following
             session.commit()
-            if _pinned_ap_ids is not None:
-                _sync_remote_pinned_posts(existing.id, _pinned_ap_ids, sign_as)
-            # Process emoji tags AFTER session closes to avoid holding connection during HTTP
-            with get_session() as emoji_s:
-                _process_emoji_tags(data.get("tag", []), emoji_s)
-                emoji_s.commit()
+            if not lightweight:
+                if _pinned_ap_ids is not None:
+                    _sync_remote_pinned_posts(existing.id, _pinned_ap_ids, sign_as)
+                # Process emoji tags AFTER session closes to avoid holding connection during HTTP
+                with get_session() as emoji_s:
+                    _process_emoji_tags(data.get("tag", []), emoji_s)
+                    emoji_s.commit()
             return existing
 
         # Also check by username in case remote_url is missing/stale
@@ -383,11 +390,12 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             by_username.remote_followers_count = _dl_followers
             by_username.remote_following_count = _dl_following
             session.commit()
-            if _pinned_ap_ids is not None:
-                _sync_remote_pinned_posts(by_username.id, _pinned_ap_ids, sign_as)
-            with get_session() as emoji_s:
-                _process_emoji_tags(data.get("tag", []), emoji_s)
-                emoji_s.commit()
+            if not lightweight:
+                if _pinned_ap_ids is not None:
+                    _sync_remote_pinned_posts(by_username.id, _pinned_ap_ids, sign_as)
+                with get_session() as emoji_s:
+                    _process_emoji_tags(data.get("tag", []), emoji_s)
+                    emoji_s.commit()
             return by_username
 
         # Ensure uniqueness
@@ -421,12 +429,13 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
         session.add(user)
         session.flush()
         session.commit()
-        with get_session() as emoji_s:
-            _process_emoji_tags(data.get("tag", []), emoji_s)
-            emoji_s.commit()
-        session.commit()
-        if _pinned_ap_ids is not None:
-            _sync_remote_pinned_posts(user.id, _pinned_ap_ids, sign_as)
+        if not lightweight:
+            with get_session() as emoji_s:
+                _process_emoji_tags(data.get("tag", []), emoji_s)
+                emoji_s.commit()
+            session.commit()
+            if _pinned_ap_ids is not None:
+                _sync_remote_pinned_posts(user.id, _pinned_ap_ids, sign_as)
         return user
 
 
