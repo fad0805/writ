@@ -25,12 +25,29 @@ def query_feed_posts(
         session: Session,
         base_opts: List[Load],
         fetch_size: int,
-        offset: int):
+        offset: int = 0,
+        cursor=None):
+    """피드 포스트를 생성일 역순으로 조회한다.
+
+    cursor=(created_at, id)가 주어지면 해당 지점보다 오래된 글을 키셋 방식으로
+    조회한다(오프셋 스킵 없이 인덱스를 타고 이동). cursor가 없으면 기존 offset
+    방식을 사용한다. 두 방식 모두 생성일 역순, 동일 생성일은 id 역순으로 정렬해
+    페이지 간 경계가 결정적이도록 한다.
+    """
+    def _apply_paging(q):
+        q = q.order_by(desc(Post.created_at), desc(Post.id))
+        if cursor is not None:
+            cursor_ts, cursor_id = cursor
+            return q.filter(or_(
+                Post.created_at < cursor_ts,
+                and_(Post.created_at == cursor_ts, Post.id < cursor_id),
+            ))
+        return q.offset(offset).limit(fetch_size)
 
     posts = []
     if tl_type != 'social':
         if visible_user_ids is not None:
-            visible_posts = session.query(Post).options(*base_opts).filter(
+            q = session.query(Post).options(*base_opts).filter(
                 Post.is_deleted == False,
                 Post.visibility.in_(visibility),
                 Post.author_id.in_(visible_user_ids),
@@ -38,12 +55,14 @@ def query_feed_posts(
                     Post.parent == None,
                     Post.parent.has(Post.author_id.in_(visible_user_ids))
                 ),
-            ).order_by(desc(Post.created_at)).offset(offset).limit(fetch_size).all()
+            )
+            visible_posts = _apply_paging(q).all()
         else:
-            visible_posts = session.query(Post).options(*base_opts).filter(
+            q = session.query(Post).options(*base_opts).filter(
                 Post.is_deleted == False,
                 Post.visibility.in_(visibility),
-            ).order_by(desc(Post.created_at)).offset(offset).limit(fetch_size).all()
+            )
+            visible_posts = _apply_paging(q).all()
 
         posts = [
             p for p in visible_posts
@@ -77,8 +96,8 @@ def query_feed_posts(
                     Post.parent == None,
                     Post.parent.has(Post.author_id.in_(allowed_ids))
                 )
-            ).order_by(desc(Post.created_at)).offset(offset).limit(fetch_size)
-            posts = q.all()
+            )
+            posts = _apply_paging(q).all()
         except Exception as e:
             logging.error(f'No post in social feed: {e}')
 
@@ -102,28 +121,32 @@ def _fetch_filtered_posts(session, tl_type, user, limit, offset,
     offset은 필터링 *이후* 결과 기준이다. 원본 DB row에 offset을 적용하면
     _timeline_filter로 걸러진 글만큼 페이지 간 오프셋이 어긋나 중복/누락이 생기므로,
     필터된 결과를 누적한 뒤 offset부터 슬라이스한다.
+
+    배치 진행은 OFFSET 대신 (created_at, id) 키셋 커서를 사용한다. 필터는 여전히
+    배치 이후 적용되므로 '필터 후 offset' 보정이 그대로 유지된다.
     """
     fetch_size = limit + 20
     filtered = []
-    page_offset = 0
     target = offset + limit + 1
     iterations = 0
+    cursor = None
 
     while len(filtered) < target and iterations < MAX_FETCH_ITERATIONS:
         iterations += 1
         batch = query_feed_posts(
             tl_type,
             _visible_user_ids, _local_ids, user_id, visibility,
-            session, _base_opts, fetch_size, offset=page_offset
+            session, _base_opts, fetch_size, cursor=cursor
         )
         if not batch:
             break
         batch_size = len(batch)
+        _last_raw = batch[-1]
+        cursor = (_last_raw.created_at, _last_raw.id)
         if user:
             batch = _timeline_filter(batch, session, user, tl_type, _following_ids, filter_ctx=filter_ctx)
         filtered.extend(batch)
         if batch_size < fetch_size:
             break
-        page_offset += fetch_size
 
     return filtered[offset:target]
