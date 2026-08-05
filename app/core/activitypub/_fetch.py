@@ -356,6 +356,8 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             if _dl_header:
                 existing.header_image = _dl_header
             existing.custom_fields = _extract_custom_fields(data.get("attachment", []))
+            existing.remote_followers_count = _dl_followers
+            existing.remote_following_count = _dl_following
             session.commit()
             if _pinned_ap_ids is not None:
                 _sync_remote_pinned_posts(existing.id, _pinned_ap_ids, sign_as)
@@ -378,6 +380,8 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
             if _dl_header:
                 by_username.header_image = _dl_header
             by_username.custom_fields = _extract_custom_fields(data.get("attachment", []))
+            by_username.remote_followers_count = _dl_followers
+            by_username.remote_following_count = _dl_following
             session.commit()
             if _pinned_ap_ids is not None:
                 _sync_remote_pinned_posts(by_username.id, _pinned_ap_ids, sign_as)
