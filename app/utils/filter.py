@@ -80,7 +80,10 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
 
     # --- Boost visibility check (boost pointer가 가리키는 원글이 followers-only면 팔로워만 통과) ---
     if post.boost_of_id and tl_type in ("home", "social"):
-        _orig = session.query(Post).filter_by(id=post.boost_of_id).first()
+        if filter_ctx is not None and "boost_originals" in filter_ctx:
+            _orig = filter_ctx["boost_originals"].get(post.boost_of_id)
+        else:
+            _orig = session.query(Post).filter_by(id=post.boost_of_id).first()
         if _orig and _orig.visibility == "followers" and _orig.author_id not in following_set:
             return False
 
@@ -159,6 +162,14 @@ def _timeline_filter(posts, session: Session, user, tl_type, following_ids, filt
         if parent_ids:
             for pp in session.query(Post).filter(Post.id.in_(parent_ids)).all():
                 filter_ctx["parent_authors"][pp.id] = pp.author_id
+
+    # Pre-load boost originals for boost visibility filtering (batch optimization)
+    filter_ctx["boost_originals"] = {}
+    if tl_type in ("home", "social"):
+        boost_ids = {p.boost_of_id for p in posts if p.boost_of_id}
+        if boost_ids:
+            for _bo in session.query(Post).filter(Post.id.in_(boost_ids)).all():
+                filter_ctx["boost_originals"][_bo.id] = _bo
 
     filtered = []
     for p in posts:

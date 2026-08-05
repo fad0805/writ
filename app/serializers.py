@@ -12,7 +12,7 @@ def _post_json(p, session, user, tl_type=None,
                _liked_ids=None, _boosted_ids=None, _bookmarked_ids=None,
                _vote_map=None, _my_reaction_map=None, _reactions_map=None,
                _mentioned_users_map=None, _boost_originals=None, _skip_emojis=False,
-               _quote_depth=0):
+               _quote_depth=0, _following_ids=None):
     if not p:
         return None
     if p.is_deleted:
@@ -47,7 +47,8 @@ def _post_json(p, session, user, tl_type=None,
                                 _liked_ids, _boosted_ids, _bookmarked_ids,
                                 _vote_map, _my_reaction_map, _reactions_map,
                                 _mentioned_users_map, _boost_originals,
-                                _skip_emojis=_skip_emojis, _quote_depth=_quote_depth)
+                                _skip_emojis=_skip_emojis, _quote_depth=_quote_depth,
+                                _following_ids=_following_ids)
             result["id"] = p.id
             existing_boosted_by = result.get("boosted_by") or []
             booster_json = _user_json(p.author)
@@ -134,6 +135,7 @@ def _post_json(p, session, user, tl_type=None,
                     _boost_originals=_boost_originals,
                     _skip_emojis=False,
                     _quote_depth=_quote_depth + 1,
+                    _following_ids=_following_ids,
                 )
 
     return {
@@ -155,7 +157,7 @@ def _post_json(p, session, user, tl_type=None,
         "is_sensitive": getattr(p, 'is_sensitive', False) or False,
         "ap_id": p.ap_id or "",
         "url": p.remote_url or p.ap_id or "",
-        "reply_context": _reply_context(p, session, user, tl_type),
+        "reply_context": _reply_context(p, session, user, tl_type, _following_ids=_following_ids),
         "boosted_by": [],
         "media_attachments": (p.media_attachments or []) if hasattr(p, 'media_attachments') else [],
         "poll_data": p.poll_data,
@@ -306,7 +308,7 @@ def _user_json(u):
         "remote_following_count": getattr(u, 'remote_following_count', 0) or 0,
     }
 
-def _reply_context(p, session=None, user=None, tl_type=None):
+def _reply_context(p, session=None, user=None, tl_type=None, _following_ids=None):
     parent = p.parent if hasattr(p, 'parent') else None
     if not parent and p.in_reply_to_ap_id and session:
         try:
@@ -316,11 +318,15 @@ def _reply_context(p, session=None, user=None, tl_type=None):
     if not parent or parent.is_deleted:
         return None
     if tl_type == "home" and user and parent.author_id != user.id:
-        followed = session.query(Follow).filter_by(
-            follower_id=user.id, following_id=parent.author_id, accepted=True
-        ).first()
-        if not followed:
-            return None
+        if _following_ids is not None:
+            if parent.author_id not in _following_ids:
+                return None
+        else:
+            followed = session.query(Follow).filter_by(
+                follower_id=user.id, following_id=parent.author_id, accepted=True
+            ).first()
+            if not followed:
+                return None
     if tl_type == "local" and parent.author.is_remote:
         return None
     return {

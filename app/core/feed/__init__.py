@@ -75,6 +75,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
                    _reactions_map=posts_metadata.get("reactions_map"),
                    _mentioned_users_map=posts_metadata.get("mentioned_users_map"),
                    _boost_originals=_boost_originals,
+                   _following_ids=_following_ids,
                    _skip_emojis=True)
         for p in posts
     ]
