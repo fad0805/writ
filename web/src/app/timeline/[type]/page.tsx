@@ -359,9 +359,34 @@ export default function TimelinePage() {
       if (selIdx >= 0 && currentPosts[selIdx]) {
         const sp = currentPosts[selIdx];
         const targetId = sp.boost_of_id || sp.id;
-        if (e.key === "f") { e.preventDefault(); (sp.liked ? api.unlike(targetId) : api.like(targetId)).then(() => load()).catch(console.error); return; }
-        if (e.key === "d") { e.preventDefault(); (sp.bookmarked ? api.unbookmark(targetId) : api.bookmark(targetId)).then(() => load()).catch(console.error); return; }
-        if (e.key === "b") { e.preventDefault(); (sp.boosted ? api.unboost(targetId) : api.boost(targetId)).then(() => load()).catch(console.error); return; }
+        if (e.key === "f") {
+          e.preventDefault();
+          const next = !sp.liked;
+          setPosts((prev) => prev.map((p) => p.id === sp.id ? { ...p, liked: next, likes_count: Math.max(0, (p.likes_count || 0) + (next ? 1 : -1)) } : p));
+          (next ? api.like(targetId) : api.unlike(targetId)).catch(() => {
+            setPosts((prev) => prev.map((p) => p.id === sp.id ? { ...p, liked: !next, likes_count: Math.max(0, (p.likes_count || 0) + (next ? -1 : 1)) } : p));
+          });
+          return;
+        }
+        if (e.key === "d") {
+          e.preventDefault();
+          const next = !sp.bookmarked;
+          setPosts((prev) => prev.map((p) => p.id === sp.id ? { ...p, bookmarked: next } : p));
+          (next ? api.bookmark(targetId) : api.unbookmark(targetId)).catch(() => {
+            setPosts((prev) => prev.map((p) => p.id === sp.id ? { ...p, bookmarked: !next } : p));
+          });
+          return;
+        }
+        if (e.key === "b") {
+          e.preventDefault();
+          if (!sp.boosted && (sp.visibility === "mention" || (!sp.is_mine && sp.visibility === "followers"))) return;
+          const next = !sp.boosted;
+          setPosts((prev) => prev.map((p) => p.id === sp.id ? { ...p, boosted: next, boosts_count: Math.max(0, (p.boosts_count || 0) + (next ? 1 : -1)) } : p));
+          (next ? api.boost(targetId) : api.unboost(targetId)).catch(() => {
+            setPosts((prev) => prev.map((p) => p.id === sp.id ? { ...p, boosted: !next, boosts_count: Math.max(0, (p.boosts_count || 0) + (next ? -1 : 1)) } : p));
+          });
+          return;
+        }
         if (e.key === "r") { e.preventDefault(); api.getPost(targetId).then((d) => setReplyPost(d)).catch(console.error); return; }
         if (e.key === "Enter") { e.preventDefault(); router.push(sp.boost_of_id ? `/post/${sp.boost_of_id}` : sp.number ? `/@${sp.author.username}/${sp.number}` : `/post/${sp.id}`); return; }
         if (e.key === "x") {
@@ -384,7 +409,7 @@ export default function TimelinePage() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [tlType, load, router, user?.id]);
+  }, [tlType, router, user?.id]);
 
   useEffect(() => {
     let es: EventSource | null = null;
