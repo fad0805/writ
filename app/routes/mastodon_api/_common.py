@@ -377,6 +377,16 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
     if not _quote_url:
         _quote_url = post.quote_of_ap_id or ""
     if _quote_url:
+        # 본문에 인용 대상 URL이 텍스트 링크로 남아있으면 제거 (RE: 줄과 중복 렌더링 방지)
+        content = re.sub(
+            r'[\s\n]*RE:[\s\n]*(?:<a[^>]*?>.*?</a>|https?://[^\s<>]*)',
+            '', content, flags=re.I | re.S
+        )
+        content = re.sub(
+            r'<a\b[^>]*?\bhref="' + re.escape(_quote_url) + r'"[^>]*>.*?</a>',
+            '', content, flags=re.I | re.S
+        )
+        content = re.sub(re.escape(_quote_url), '', content)
         _quote_link = (
             f'<p>RE: <a href="{html.escape(_quote_url, quote=True)}" '
             f'rel="nofollow noopener noreferrer" target="_blank">'

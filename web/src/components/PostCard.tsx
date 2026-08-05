@@ -284,6 +284,20 @@ const localReactionEmojiMap = useMemo(() => {
     // Strip "RE: https://..." from quote posts
     html = html.replace(/(?:<span[^>]*>)?[\s\n]*RE:[\s\n]*(?:<a[^>]*>.*?<\/a>|https?:\/\/[^\s<>]+)[\s\n]*(?:<\/span>)?(?:[\s\n]*<br\s*\/?>)*/gi, '');
 
+    // 인용(quote) 대상 URL이 본문에 텍스트 링크로 남아있으면 제거 (인용 카드와 중복 렌더링 방지)
+    if (post.quote_of_id || post.quote_of_ap_id) {
+      const quoteUrls = new Set([
+        post.quote_of_ap_id,
+        (post as any).quoted_post?.url,
+        (post as any).quoted_post?.ap_id,
+      ].filter(Boolean));
+      for (const qUrl of quoteUrls) {
+        const esc = qUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        html = html.replace(new RegExp(`<a\\b[^>]*?\\bhref="${esc}"[^>]*>[\\s\\S]*?<\\/a>`, "gi"), "");
+        html = html.replace(new RegExp(esc, "g"), "");
+      }
+    }
+
     // 본문에서 series, episode 접두사 라인을 앞뒤 공백/줄바꿈 포함하여 완전히 삭제
     html = html.replace(/(?:<br\s*\/?>|\n|^)\s*(?:series|episode):\s*(?:<a[^>]*>.*?<\/a>|https?:\/\/[^\s<>]+)\s*(?:<br\s*\/?>|\n|$)/gi, '\n');
 
