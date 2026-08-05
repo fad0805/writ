@@ -18,6 +18,7 @@ class PostMetadata(TypedDict):
     vote_map: dict[int, int]
     reactions_map: dict[int, dict[str, int]]
     mentioned_users_map: dict[int, list[str]]
+    counts_map: dict[int, dict[str, int]]
 
 
 _EMPTY_POST_METADATA: PostMetadata = {
@@ -28,6 +29,7 @@ _EMPTY_POST_METADATA: PostMetadata = {
     "vote_map": {},
     "reactions_map": {},
     "mentioned_users_map": {},
+    "counts_map": {},
 }
 
 
@@ -124,6 +126,22 @@ def _load_post_metadata(
     _reactions_map: dict[int, dict[str, int]] = {}
     _default_react = "★"
 
+    # 좋아요/부스트/답글 카운트 배치 집계 (lazy="selectin" 컬렉션 로드 대체)
+    counts_map: dict[int, dict[str, int]] = {}
+    for pid, cnt in session.query(Like.post_id, func.count(Like.id)).filter(
+        Like.post_id.in_(post_ids)
+    ).group_by(Like.post_id).all():
+        counts_map.setdefault(pid, {})["likes"] = cnt
+    for pid, cnt in session.query(Boost.post_id, func.count(Boost.id)).filter(
+        Boost.post_id.in_(post_ids)
+    ).group_by(Boost.post_id).all():
+        counts_map.setdefault(pid, {})["boosts"] = cnt
+    # replies_count 프로퍼티와 동일 조건: in_reply_to_id 기준 + 삭제 제외
+    for pid, cnt in session.query(Post.in_reply_to_id, func.count(Post.id)).filter(
+        Post.in_reply_to_id.in_(post_ids), Post.is_deleted == False
+    ).group_by(Post.in_reply_to_id).all():
+        counts_map.setdefault(pid, {})["replies"] = cnt
+
     reaction_expr = func.coalesce(Like.reaction, _default_react)
     _reaction_rows = (
         session.query(
@@ -169,5 +187,6 @@ def _load_post_metadata(
         "bookmarked_ids": _bookmarked_ids,
         "vote_map": _vote_map,
         "reactions_map": _reactions_map,
-        "mentioned_users_map": _mentioned_users_map
+        "mentioned_users_map": _mentioned_users_map,
+        "counts_map": counts_map,
     }

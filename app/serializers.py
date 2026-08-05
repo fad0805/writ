@@ -12,7 +12,7 @@ def _post_json(p, session, user, tl_type=None,
                _liked_ids=None, _boosted_ids=None, _bookmarked_ids=None,
                _vote_map=None, _my_reaction_map=None, _reactions_map=None,
                _mentioned_users_map=None, _boost_originals=None, _skip_emojis=False,
-               _quote_depth=0, _following_ids=None):
+               _quote_depth=0, _following_ids=None, _counts_map=None):
     if not p:
         return None
     if p.is_deleted:
@@ -48,7 +48,7 @@ def _post_json(p, session, user, tl_type=None,
                                 _vote_map, _my_reaction_map, _reactions_map,
                                 _mentioned_users_map, _boost_originals,
                                 _skip_emojis=_skip_emojis, _quote_depth=_quote_depth,
-                                _following_ids=_following_ids)
+                                _following_ids=_following_ids, _counts_map=_counts_map)
             result["id"] = p.id
             existing_boosted_by = result.get("boosted_by") or []
             booster_json = _user_json(p.author)
@@ -136,7 +136,18 @@ def _post_json(p, session, user, tl_type=None,
                     _skip_emojis=False,
                     _quote_depth=_quote_depth + 1,
                     _following_ids=_following_ids,
+                    _counts_map=_counts_map,
                 )
+
+    if _counts_map is not None:
+        _c = _counts_map.get(p.id) or {}
+        likes_count = _c.get("likes", 0)
+        boosts_count = _c.get("boosts", 0)
+        replies_count = _c.get("replies", 0)
+    else:
+        likes_count = p.likes_count
+        boosts_count = p.boosts_count
+        replies_count = p.replies_count
 
     return {
         "id": p.id,
@@ -146,9 +157,9 @@ def _post_json(p, session, user, tl_type=None,
         "visibility": p.visibility or "public",
         "created_at": _fmt_dt(p.created_at),
         "author": _user_json(p.author),
-        "likes_count": p.likes_count,
-        "boosts_count": p.boosts_count,
-        "replies_count": p.replies_count,
+        "likes_count": likes_count,
+        "boosts_count": boosts_count,
+        "replies_count": replies_count,
         "liked": liked,
         "boosted": boosted,
         "bookmarked": bookmarked,
