@@ -21,7 +21,7 @@ from app.config.settings import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD
 from app.core.activitypub import _resolve_actor, _send_flag, _fetch_remote_count
 from app.core.timeline_stream import broadcast_refresh_notifs
 from app.db.database import get_session
-from app.routes.auth import require_auth, hash_password
+from app.core.auth import require_auth, hash_password
 from app.utils.datetime import _fmt_dt, KST
 from app.utils.log import log_admin_action
 from app.utils.storage import get_storage

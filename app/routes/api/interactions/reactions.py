@@ -8,7 +8,7 @@ from sqlalchemy import func
 from app.models import Post, Like, CustomEmoji
 from app.core.interactions import react_post, unreact_post
 from app.db.database import get_session
-from app.routes.auth import require_active_auth
+from app.core.auth import require_active_auth
 
 from app.core.visibility import _can_view
 

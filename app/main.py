@@ -17,7 +17,6 @@ from app.core.push import init_vapid_keys
 from app.core.workers import delivery_worker, refresh_remote_profiles, auto_delete_expired_posts
 from app.middleware import CSRFProtectionMiddleware, LogRequestsMiddleware
 from app.routes.api import router as api_router, _cleanup_avatars
-from app.routes.auth import router as auth_router
 from app.routes.admin import router as admin_router
 from app.routes.mastodon_api import router as mastodon_api_router, oauth_router, MastodonAPIError
 from app.routes.ap import router as ap_router
@@ -108,7 +107,6 @@ app.include_router(ap_router)
 app.include_router(nodeinfo_router)
 app.include_router(streaming_router)
 app.include_router(oauth_router)
-app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(api_router)
 app.include_router(mastodon_api_router, prefix="/api")

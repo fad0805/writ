@@ -23,7 +23,7 @@ from app.models import User, CustomEmoji, ServerSetting, PushSubscription, Login
 from app.config.settings import BASE_URL, S3_ENABLED, SESSION_EXPIRE_DAYS
 from app.core.push import _get_vapid_key
 from app.db.database import get_session
-from app.routes.auth import require_auth, require_active_auth, get_session_key_from_cookie
+from app.core.auth import require_auth, require_active_auth, get_session_key_from_cookie
 from app.utils.datetime import _fmt_dt, KST
 from app.utils.emoji import EMOJI_DIR, _refresh_emoji_cache_forcibly, _emoji_url
 from app.utils.http import validate_url

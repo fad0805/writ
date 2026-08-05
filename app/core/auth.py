@@ -4,13 +4,11 @@ import time
 import base64
 import secrets
 from datetime import datetime, timezone
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import Request, HTTPException
 
 from app.db.database import get_session
 from app.config.settings import SECRET_KEY, SESSION_EXPIRE_DAYS
 from app.models import User, LoginSession
-
-router = APIRouter()
 
 
 def hash_password(password: str, salt: str = None) -> tuple[str, str]:

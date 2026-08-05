@@ -9,7 +9,7 @@ from app.models import Post, Like, Bookmark, CustomEmoji
 from app.serializers import _post_json
 from app.core.interactions import like_post, unlike_post, boost_post, unboost_post
 from app.db.database import get_session
-from app.routes.auth import require_active_auth
+from app.core.auth import require_active_auth
 
 from app.core.visibility import _can_view
 

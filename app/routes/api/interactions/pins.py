@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request, HTTPException
 
 from app.models import User, Post
 from app.db.database import get_session
-from app.routes.auth import require_active_auth
+from app.core.auth import require_active_auth
 
 logger = logging.getLogger("writ.api.pins")
 

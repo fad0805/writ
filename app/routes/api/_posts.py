@@ -24,7 +24,7 @@ from app.core.broadcast import broadcast_post, _broadcast_timeline
 from app.core.timeline_stream import broadcast_refresh_notifs, broadcast_notif_sound, broadcast_delete
 from app.db.database import get_session
 from app.db.mention_resolver import resolve_handles_to_ids
-from app.routes.auth import require_auth, require_active_auth, get_current_user
+from app.core.auth import require_auth, require_active_auth, get_current_user
 from app.utils.content_parser import process_post_content, extract_mentions
 from app.utils.post import _get_descendant_ids, _sync_post_tags
 from app.utils.storage import get_storage

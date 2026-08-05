@@ -20,7 +20,7 @@ from app.core.activitypub import _post_to_inbox, broadcast_to_followers, _fetch_
 from app.core.timeline_stream import broadcast_refresh_notifs
 from app.db.database import get_session
 from app.db.mention_resolver import _resolve_remote_user
-from app.routes.auth import require_auth, require_active_auth, hash_password, verify_password
+from app.core.auth import require_auth, require_active_auth, hash_password, verify_password
 from app.utils.log import log_admin_action
 from app.utils.storage import get_storage
 

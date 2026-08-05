@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.db.database import get_session
 from app.models import User, MastodonApp, MastodonAuthorizationCode, MastodonAccessToken
-from app.routes.auth import verify_password
+from app.core.auth import verify_password
 
 router = APIRouter()
 

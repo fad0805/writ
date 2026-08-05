@@ -24,7 +24,7 @@ from app.utils.http import validate_url
 from app.core.timeline_stream import add_stream, remove_stream
 from app.db.database import get_session
 from app.db.mention_resolver import _federation_allowed, _resolve_remote_user
-from app.routes.auth import require_auth, get_current_user
+from app.core.auth import require_auth, get_current_user
 from app.routes.api._series import _apply_latest_activity_order, _novel_json, _load_novel_meta
 from app.utils.crypto import get_private_key, sign_string
 from app.utils.filter import _timeline_filter

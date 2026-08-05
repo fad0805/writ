@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.feed import _get_feed
 from app.core.timeline_stream import add_post_stream, remove_post_stream
 from app.db.database import get_db
-from app.routes.auth import get_current_user
+from app.core.auth import get_current_user
 
 logger = logging.getLogger("writ.api.feed")
 

@@ -15,7 +15,7 @@ from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Novel, U
 from app.serializers import _user_json
 from app.core.activitypub import _resolve_actor
 from app.db.database import get_session
-from app.routes.auth import require_active_auth, get_current_user
+from app.core.auth import require_active_auth, get_current_user
 from app.utils.storage import get_storage
 
 from app.routes.api._core import _post_json, _cleanup_avatars, _broadcast_update_actor
