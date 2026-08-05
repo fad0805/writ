@@ -42,7 +42,6 @@ __all__ = [
 
 
 def _get_feed(user, tl_type, session, limit=10, offset=0):
-    print(f"[feed] _get_feed uid={user.id if user else None} tl={tl_type} limit={limit} offset={offset}", flush=True)
     _base_opts = [selectinload(Post.author), selectinload(Post.parent)]
     user_id = user.id if user else None
 

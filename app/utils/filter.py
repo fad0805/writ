@@ -165,5 +165,4 @@ def _timeline_filter(posts, session: Session, user, tl_type, following_ids, filt
         if should_deliver_post(p, session, user, tl_type, following_ids, filter_ctx):
             filtered.append(p)
 
-    print(f"[feed] after _timeline_filter: {len(filtered)}/{len(posts)} posts", flush=True)
     return filtered
