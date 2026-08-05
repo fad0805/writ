@@ -367,7 +367,11 @@ export default function TimelinePage() {
         if (e.key === "x") {
           e.preventDefault();
           const el = cardRefs.current.get(String(sp.id));
-          if (el) el.querySelectorAll("details.cw-box").forEach((d) => { (d as HTMLDetailsElement).open = true; });
+          if (el) {
+            const boxes = el.querySelectorAll("details.cw-box");
+            const anyOpen = Array.from(boxes).some((d) => (d as HTMLDetailsElement).open);
+            boxes.forEach((d) => { (d as HTMLDetailsElement).open = !anyOpen; });
+          }
           window.dispatchEvent(new CustomEvent("writ:reveal-post", { detail: { postId: sp.id } }));
           return;
         }
