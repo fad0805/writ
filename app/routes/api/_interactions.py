@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 from uuid import uuid4
-from fastapi import APIRouter, Request, Form, HTTPException, Query, Depends, BackgroundTasks
+from fastapi import APIRouter, Request, Form, HTTPException, Query, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import or_, and_, func, String, desc
 from sqlalchemy.orm import selectinload
@@ -793,7 +793,7 @@ def api_remove_keyword_mute(request: Request, mute_id: int):
 # ── Post interactions (likes/boosts/bookmarks/polls/reactions/pins) —————————————————
 
 @interactions_router.post("/posts/{post_id}/like")
-def api_like_post(request: Request, background_tasks: BackgroundTasks, post_id: int, reaction: str = "★"):
+def api_like_post(request: Request, post_id: int, reaction: str = "★"):
     user = require_active_auth(request)
     if reaction.startswith(":") and reaction.endswith(":"):
         keyword = reaction[1:-1].strip().lower().replace(" ", "_")
@@ -864,12 +864,12 @@ def api_like_post(request: Request, background_tasks: BackgroundTasks, post_id: 
         except Exception:
             pass
 
-    background_tasks.add_task(_do_like)
+    threading.Thread(target=_do_like, daemon=True).start()
     return {"ok": True}
 
 
 @interactions_router.post("/posts/{post_id}/unlike")
-def api_unlike_post(request: Request, background_tasks: BackgroundTasks, post_id: int):
+def api_unlike_post(request: Request, post_id: int):
     user = require_active_auth(request)
 
     def _do_unlike():
@@ -915,7 +915,7 @@ def api_unlike_post(request: Request, background_tasks: BackgroundTasks, post_id
         except Exception:
             pass
 
-    background_tasks.add_task(_do_unlike)
+    threading.Thread(target=_do_unlike, daemon=True).start()
     return {"ok": True}
 
 
@@ -1135,7 +1135,7 @@ def api_unboost_post(request: Request, post_id: int):
 
 
 @interactions_router.post("/posts/{post_id}/react")
-def api_react_post(request: Request, background_tasks: BackgroundTasks, post_id: int, emoji: str = Form(...)):
+def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
     user = require_active_auth(request)
     with get_session() as s:
         settings = ServerSetting.get(s)
@@ -1231,12 +1231,12 @@ def api_react_post(request: Request, background_tasks: BackgroundTasks, post_id:
         except Exception:
             pass
 
-    background_tasks.add_task(_do_react)
+    threading.Thread(target=_do_react, daemon=True).start()
     return {"ok": True}
 
 
 @interactions_router.post("/posts/{post_id}/unreact")
-def api_unreact_post(request: Request, background_tasks: BackgroundTasks, post_id: int):
+def api_unreact_post(request: Request, post_id: int):
     user = require_active_auth(request)
     existing_reaction = None
     post_ap_id = ""
@@ -1292,7 +1292,7 @@ def api_unreact_post(request: Request, background_tasks: BackgroundTasks, post_i
         except Exception:
             pass
 
-    background_tasks.add_task(_do_unreact)
+    threading.Thread(target=_do_unreact, daemon=True).start()
     return {"ok": True}
 
 

@@ -9,7 +9,7 @@ import time
 import httpx
 import traceback
 
-from fastapi import APIRouter, Request, Form, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Request, Form, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.orm import selectinload
@@ -603,7 +603,7 @@ def _background_fetch_outbox(url: str, user_id: int, actor_id: int):
 
 
 @router.post("/fetch-actor")
-def api_fetch_actor(request: Request, background_tasks: BackgroundTasks, url: str = Form(...)):
+def api_fetch_actor(request: Request, url: str = Form(...)):
     user = require_auth(request)
     if not url.startswith("http"):
         raise HTTPException(status_code=400, detail="Invalid URL")
@@ -623,14 +623,14 @@ def api_fetch_actor(request: Request, background_tasks: BackgroundTasks, url: st
     with get_session() as _s:
         local_user = _s.query(User).filter(or_(User.remote_url == url, User.remote_url == _db_url)).first()
         if local_user:
-            background_tasks.add_task(_background_fetch_outbox, url, user.id, local_user.id)
+            threading.Thread(target=_background_fetch_outbox, args=(url, user.id, local_user.id), daemon=True).start()
             return _user_json(local_user)
 
     actor = _resolve_actor(url, force_refresh=False, sign_as=user)
     if not actor:
         raise HTTPException(status_code=400, detail="Cannot resolve actor")
 
-    background_tasks.add_task(_background_fetch_outbox, url, user.id, actor.id)
+    threading.Thread(target=_background_fetch_outbox, args=(url, user.id, actor.id), daemon=True).start()
 
     with get_session() as _s:
         _attached = _s.query(User).filter(or_(User.remote_url == url, User.remote_url == _db_url)).first()

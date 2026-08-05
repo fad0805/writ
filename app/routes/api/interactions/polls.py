@@ -3,7 +3,8 @@ import logging
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Request, Form, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Request, Form, HTTPException
+import threading
 from sqlalchemy import func
 
 from app.models import Post, Vote
@@ -22,7 +23,7 @@ polls_router = APIRouter()
 
 
 @polls_router.post("/posts/{post_id}/vote")
-def api_vote_post(request: Request, background_tasks: BackgroundTasks, post_id: int, option: int = Form(...)):
+def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
     user = require_active_auth(request)
     remote_vote_data = None
     with get_session() as s:
@@ -94,7 +95,7 @@ def api_vote_post(request: Request, background_tasks: BackgroundTasks, post_id: 
             except Exception:
                 pass
 
-        background_tasks.add_task(_deliver_remote_vote)
+        threading.Thread(target=_deliver_remote_vote, daemon=True).start()
     return {"ok": True, "post": post_json}
 
 
