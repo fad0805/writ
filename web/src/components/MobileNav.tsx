@@ -4,10 +4,11 @@ import { useAuth } from "@/lib/auth";
 import { useRouter, usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import Icon from "./Icon";
+import AccountSwitcher from "./AccountSwitcher";
 import { fetchAnnouncementStatus } from "@/lib/announcements";
 
 export default function MobileNav() {
-  const { user, loading, refresh } = useAuth();
+  const { user, loading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [unreadNotifs, setUnreadNotifs] = useState(0);
@@ -15,6 +16,7 @@ export default function MobileNav() {
   const [isDark, setIsDark] = useState(false);
   const [hasAnnouncement, setHasAnnouncement] = useState(false);
   const [unreadAnnouncement, setUnreadAnnouncement] = useState(false);
+  const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -90,12 +92,9 @@ export default function MobileNav() {
     window.dispatchEvent(new Event("themechange"));
   };
 
-  const handleLogout = async () => {
-    const { api } = await import("@/lib/api");
-    await api.logout();
-    await refresh();
+  const openAccountSwitcher = () => {
     setMenuOpen(false);
-    router.replace("/");
+    setShowAccountSwitcher(true);
   };
 
   if (!user) {
@@ -147,7 +146,7 @@ export default function MobileNav() {
       {menuOpen && (
         <div className="mobile-more-overlay" onClick={() => setMenuOpen(false)}>
           <div className="mobile-more-menu" ref={menuRef} onClick={(e) => e.stopPropagation()}>
-            <button className="mobile-more-item mobile-more-logout" onClick={handleLogout}>
+            <button className="mobile-more-item mobile-more-logout" onClick={openAccountSwitcher}>
               로그아웃
             </button>
             <div className="mobile-more-divider" />
@@ -179,6 +178,7 @@ export default function MobileNav() {
           </div>
         </div>
       )}
+      <AccountSwitcher open={showAccountSwitcher} onClose={() => setShowAccountSwitcher(false)} />
     </>
   );
 }

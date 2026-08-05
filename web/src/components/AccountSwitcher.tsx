@@ -11,6 +11,7 @@ export default function AccountSwitcher({ open, onClose }: { open: boolean; onCl
   const router = useRouter();
   const [accounts, setAccounts] = useState<StoredAccount[]>([]);
   const [switching, setSwitching] = useState<number | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [switchError, setSwitchError] = useState<string>("");
   const [showAddForm, setShowAddForm] = useState(false);
   const [addUsername, setAddUsername] = useState("");
@@ -106,6 +107,18 @@ export default function AccountSwitcher({ open, onClose }: { open: boolean; onCl
     setAddLoading(false);
   };
 
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await api.logout();
+      await refresh();
+      onClose();
+      router.replace("/");
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content account-switcher-modal" ref={modalRef} onClick={(e) => e.stopPropagation()}>
@@ -187,12 +200,20 @@ export default function AccountSwitcher({ open, onClose }: { open: boolean; onCl
               )}
             </button>
           ))}
-          <button className="account-switcher-item account-switcher-add" onClick={handleAddAccount} disabled={switching !== null}>
+          <button className="account-switcher-item account-switcher-add" onClick={handleAddAccount} disabled={switching !== null || loggingOut}>
             <div className="account-switcher-avatar rounded-[8px] flex items-center justify-center" style={{ background: "var(--bg-secondary)" }}>
               <Icon name="plus" size={20} />
             </div>
             <div className="account-switcher-info">
               <span className="account-switcher-name">새 계정 추가</span>
+            </div>
+          </button>
+          <button className="account-switcher-item account-switcher-logout" onClick={handleLogout} disabled={switching !== null || loggingOut}>
+            <div className="account-switcher-avatar rounded-[8px] flex items-center justify-center" style={{ background: "var(--bg-secondary)" }}>
+              <Icon name="logout" size={20} />
+            </div>
+            <div className="account-switcher-info">
+              <span className="account-switcher-name">{loggingOut ? "로그아웃 중..." : "로그아웃"}</span>
             </div>
           </button>
         </div>

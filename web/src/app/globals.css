@@ -5155,6 +5155,14 @@ input[type="checkbox"] {
   border-top: 1px solid var(--border);
 }
 
+.account-switcher-logout {
+  border-top: 1px solid var(--border);
+}
+
+.account-switcher-logout .account-switcher-name {
+  color: var(--danger);
+}
+
 .account-switcher-error {
   display: flex;
   align-items: center;
