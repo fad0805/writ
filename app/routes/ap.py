@@ -215,7 +215,7 @@ def verify_http_signature(request: Request, body: bytes, activity: dict) -> tupl
             return (False, None)
 
     actor_url = key_id.split("#")[0] if "#" in key_id else key_id
-    print(f"[SIG] keyId={key_id} actor_url={actor_url}", flush=True)
+    logger.debug("[SIG] keyId=%s actor_url=%s", key_id, actor_url)
     with get_session() as s:
         remote_actor = s.query(User).filter_by(remote_url=actor_url).first()
         if not remote_actor or not remote_actor.public_key:
@@ -236,17 +236,17 @@ def verify_http_signature(request: Request, body: bytes, activity: dict) -> tupl
                             break
         if not remote_actor or not remote_actor.public_key:
             remote_actor = None
-    print(f"[SIG] db_lookup={'found' if remote_actor else 'miss'}", flush=True)
+    logger.debug("[SIG] db_lookup=%s", "found" if remote_actor else "miss")
 
     if not remote_actor or not remote_actor.public_key:
         _fail_ts = _actor_fail_cache.get(actor_url)
         if _fail_ts and (time.time() - _fail_ts) < _ACTOR_FAIL_TTL:
-            print(f"[SIG] skip fetch (cached fail, {int(time.time() - _fail_ts)}s ago) for {actor_url}", flush=True)
+            logger.debug("[SIG] skip fetch (cached fail, %ds ago) for %s", int(time.time() - _fail_ts), actor_url)
             return (False, None)
-        print(f"[SIG] trying network fetch for {actor_url}", flush=True)
+        logger.debug("[SIG] trying network fetch for %s", actor_url)
         try:
             if BASE_URL in actor_url:
-                print(f"[SIG] skip self-fetch ({BASE_URL})", flush=True)
+                logger.debug("[SIG] skip self-fetch (%s)", BASE_URL)
             else:
                 _parsed = urlparse(actor_url)
                 _date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
@@ -260,11 +260,11 @@ def verify_http_signature(request: Request, body: bytes, activity: dict) -> tupl
                         _sig = sign_string(_ss, _priv)
                         _headers["Signature"] = f'keyId="{_signer.actor_uri()}#main-key",algorithm="hs2019",created="{_created}",headers="(request-target) host date (created)",signature="{_sig}"'
                 _resp = httpx.get(actor_url, headers=_headers, timeout=10, follow_redirects=True)
-                print(f"[SIG] fetch status={_resp.status_code}", flush=True)
+                logger.debug("[SIG] fetch status=%s", _resp.status_code)
                 if _resp.status_code == 200:
                     _data = _resp.json()
                     _pubkey = _data.get("publicKey", {}).get("publicKeyPem", "") if isinstance(_data, dict) else ""
-                    print(f"[SIG] pubkey_len={len(_pubkey)}", flush=True)
+                    logger.debug("[SIG] pubkey_len=%s", len(_pubkey))
                     if _pubkey:
                         class _Actor:
                             public_key = _pubkey
@@ -273,10 +273,10 @@ def verify_http_signature(request: Request, body: bytes, activity: dict) -> tupl
                             @staticmethod
                             def actor_uri(): return actor_url
                         remote_actor = _Actor()
-                        print(f"[SIG] using inline _Actor (pubkey_len={len(_pubkey)})", flush=True)
+                        logger.debug("[SIG] using inline _Actor (pubkey_len=%s)", len(_pubkey))
                 else:
                     _actor_fail_cache[actor_url] = time.time()
-                    print(f"[SIG] cached fail for {actor_url} (status={_resp.status_code})", flush=True)
+                    logger.debug("[SIG] cached fail for %s (status=%s)", actor_url, _resp.status_code)
         except Exception:
             pass
     if not remote_actor or not remote_actor.public_key:
@@ -286,11 +286,13 @@ def verify_http_signature(request: Request, body: bytes, activity: dict) -> tupl
     if isinstance(activity_actor, list):
         activity_actor = activity_actor[0]
     signer_uri = remote_actor.actor_uri() if not remote_actor.is_remote else remote_actor.remote_url
-    print(f"[SIG] bind_check signer_uri={signer_uri} activity_actor={activity_actor}", flush=True)
+    logger.debug("[SIG] bind_check signer_uri=%s activity_actor=%s", signer_uri, activity_actor)
     if not activity_actor:
-        print(f"[SIG] bind_check FAIL (no activity_actor)", flush=True)
-        return (False, None)
-    if signer_uri != activity_actor:
+        if body:
+            logger.debug("[SIG] bind_check FAIL (no activity_actor)")
+            return (False, None)
+        logger.debug("[SIG] bind_check skipped (GET dereference, no activity actor)")
+    elif signer_uri != activity_actor:
         try:
             signer_domain = urlparse(signer_uri).netloc
             actor_domain = urlparse(activity_actor).netloc
@@ -308,17 +310,18 @@ def verify_http_signature(request: Request, body: bytes, activity: dict) -> tupl
                     for a in audience if isinstance(a, str) and a.startswith("http")
                 )
                 if forwarded:
-                    print(f"[SIG] bind_check OK (inbox forwarding from {signer_domain})", flush=True)
+                    logger.debug("[SIG] bind_check OK (inbox forwarding from %s)", signer_domain)
                 else:
-                    print(f"[SIG] bind_check FAIL (signer != actor, no forwarding auth)", flush=True)
+                    logger.debug("[SIG] bind_check FAIL (signer != actor, no forwarding auth)")
                     return (False, None)
             else:
-                print(f"[SIG] bind_check FAIL (signer != actor)", flush=True)
+                logger.debug("[SIG] bind_check FAIL (signer != actor)")
                 return (False, None)
         except Exception:
-            print(f"[SIG] bind_check FAIL (signer != actor)", flush=True)
+            logger.debug("[SIG] bind_check FAIL (signer != actor)")
             return (False, None)
-    print(f"[SIG] bind_check OK", flush=True)
+    else:
+        logger.debug("[SIG] bind_check OK")
 
     activity_id = activity.get("id", "")
     if activity_id:
@@ -326,7 +329,7 @@ def verify_http_signature(request: Request, body: bytes, activity: dict) -> tupl
             actor_domain = urlparse(activity_actor).netloc
             id_domain = urlparse(activity_id).netloc
             if actor_domain and id_domain and actor_domain != id_domain:
-                print(f"[SIG] domain_check FAIL (actor_domain={actor_domain} != id_domain={id_domain})", flush=True)
+                logger.debug("[SIG] domain_check FAIL (actor_domain=%s != id_domain=%s)", actor_domain, id_domain)
                 return (False, None)
         except Exception:
             pass
@@ -340,10 +343,10 @@ def verify_http_signature(request: Request, body: bytes, activity: dict) -> tupl
                 now = datetime.datetime.now(datetime.timezone.utc)
                 diff = abs((now - date_dt).total_seconds())
                 if diff > 300:
-                    print(f"[SIG] date_freshness FAIL diff={diff}", flush=True)
+                    logger.debug("[SIG] date_freshness FAIL diff=%s", diff)
                     return (False, None)
         except (ValueError, TypeError, OverflowError):
-            print(f"[SIG] date_parse FAIL", flush=True)
+            logger.debug("[SIG] date_parse FAIL")
             return (False, None)
 
     path = request.url.path
@@ -373,15 +376,15 @@ def verify_http_signature(request: Request, body: bytes, activity: dict) -> tupl
             val = request.headers.get(h, "")
             signed_lines.append(f"{h}: {val}")
     signed_string = "\n".join(signed_lines)
-    print(f"[SIG] verifying signature... signed_string={repr(signed_string)[:200]}", flush=True)
+    logger.debug("[SIG] verifying signature... signed_string=%r", signed_string[:200])
     ok = verify_signature(signed_string, sig_b64, remote_actor.public_key)
-    print(f"[SIG] verify={'OK' if ok else 'FAIL'}", flush=True)
+    logger.debug("[SIG] verify=%s", "OK" if ok else "FAIL")
     if not ok:
-        print(f"[SIG] retrying with _resolve_actor force_refresh", flush=True)
+        logger.debug("[SIG] retrying with _resolve_actor force_refresh")
         fresh = _resolve_actor(actor_url, force_refresh=True)
         if fresh and fresh.public_key:
             ok = verify_signature(signed_string, sig_b64, fresh.public_key)
-            print(f"[SIG] retry verify={'OK' if ok else 'FAIL'}", flush=True)
+            logger.debug("[SIG] retry verify=%s", "OK" if ok else "FAIL")
             return (ok, fresh if ok else None)
     return (ok, remote_actor if ok else None)
 
@@ -535,7 +538,7 @@ def get_follow_activity(request: Request, follow_uuid: str):
         following = session.query(User).get(follow.following_id)
         if not follower or not following:
             raise HTTPException(status_code=404, detail="Not found")
-        obj = following.actor_uri() if following.is_remote else following.actor_uri()
+        obj = following.actor_uri()
         activity = {
             "@context": ["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"],
             "id": activity_id,
