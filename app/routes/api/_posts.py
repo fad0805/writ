@@ -6,6 +6,7 @@ import logging
 import threading
 import asyncio
 import secrets
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 from fastapi import APIRouter, Request, Form, HTTPException
@@ -36,6 +37,14 @@ from app.core.feed import _broadcast_federation
 logger = logging.getLogger("writ.api.posts")
 
 posts_router = APIRouter()
+
+# 글/답글 작성용 전용 executor. 리모트 inbox 처리(handle_inbox)와 기본 풀을
+# 공유하지 않아, 리모트 활동 폭주 시에도 작성 요청이 뒤에서 대기하지 않는다.
+# 코어 수에 맞춰 워커를 제한해 GIL 경합/커넥션 소진을 막는다.
+_post_create_executor = ThreadPoolExecutor(
+    max_workers=max(4, min(8, (os.cpu_count() or 1) + 1)),
+    thread_name_prefix="post-create",
+)
 
 
 
@@ -199,7 +208,7 @@ async def api_create_post(
     user = require_active_auth(request)
     loop = asyncio.get_running_loop()
     pj = await loop.run_in_executor(
-        None, _do_create_post,
+        _post_create_executor, _do_create_post,
         user.id, user.is_limited, getattr(user, 'is_sensitive', False),
         content, summary, visibility, parent_id,
         dm_target_id, share_url, media_attachments, is_sensitive,

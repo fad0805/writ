@@ -5,7 +5,9 @@ import email.utils
 import hashlib
 import json
 import logging
+import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 
 import httpx
@@ -32,6 +34,14 @@ _actor_fail_cache: dict[str, float] = {}
 _ACTOR_FAIL_TTL = 3600
 
 router = APIRouter()
+
+# 리모트 inbox 처리용 전용 executor. 글/답글 작성과는 분리된 풀을 쓰고
+# 동시 처리 수를 제한해, 한쪽의 네트워크 부하가 다른 쪽을 막지 않게 한다.
+# 코어 수에 맞춰 워커를 제한해 GIL 경합/커넥션 소진을 막는다.
+_inbox_executor = ThreadPoolExecutor(
+    max_workers=max(4, min(8, (os.cpu_count() or 1) + 1)),
+    thread_name_prefix="ap-inbox",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -410,7 +420,7 @@ async def shared_inbox(request: Request):
             s.add(ProcessedActivity(id=activity_id))
             s.commit()
     loop = asyncio.get_event_loop()
-    status_code, message = await loop.run_in_executor(None, handle_inbox, activity)
+    status_code, message = await loop.run_in_executor(_inbox_executor, handle_inbox, activity)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)
 
 
@@ -504,7 +514,7 @@ async def user_inbox(request: Request, username: str):
             s.commit()
 
     loop = asyncio.get_event_loop()
-    status_code, message = await loop.run_in_executor(None, handle_inbox, activity)
+    status_code, message = await loop.run_in_executor(_inbox_executor, handle_inbox, activity)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)
 
 

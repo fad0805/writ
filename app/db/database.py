@@ -1,5 +1,5 @@
 import contextvars
-from sqlalchemy import create_engine, text, inspect
+from sqlalchemy import create_engine, text, inspect, event
 from sqlalchemy.orm import Session
 
 from sqlalchemy.orm import DeclarativeBase
@@ -9,12 +9,26 @@ _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite"
 _request_session: contextvars.ContextVar = contextvars.ContextVar("request_session", default=None)
 
 if DATABASE_URL.startswith("sqlite"):
-    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"check_same_thread": False, "timeout": 30},
+    )
+
+    @event.listens_for(engine, "connect")
+    def _sqlite_pragmas(dbapi_conn, connection_record):
+        try:
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute("PRAGMA busy_timeout=30000")
+            cur.execute("PRAGMA synchronous=NORMAL")
+            cur.close()
+        except Exception:
+            pass
 else:
     engine = create_engine(
         DATABASE_URL,
-        pool_size=10,
-        max_overflow=20,
+        pool_size=20,
+        max_overflow=30,
         pool_use_lifo=True,
         pool_recycle=300,
         pool_timeout=15,
