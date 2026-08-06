@@ -7,7 +7,7 @@ from app.core.auth import require_auth
 from app.utils.datetime import _fmt_dt
 from app.utils.log import log_admin_action
 from app.utils.storage import get_storage
-from app.routes.api._misc import _save_pwa_icons, _save_favicon, _delete_favicon, _delete_pwa_icons
+from app.routes.api._pwa import _save_pwa_icons, _save_favicon, _delete_favicon, _delete_pwa_icons
 from app.db.database import get_session
 
 router = APIRouter()

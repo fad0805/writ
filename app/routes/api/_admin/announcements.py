@@ -9,7 +9,7 @@ from sqlalchemy.orm import joinedload
 from app.models import Announcement, AnnouncementRead, AnnouncementVote
 from app.core.auth import require_auth
 from app.utils.log import log_admin_action
-from app.routes.api._misc import _parse_dt_field, _is_announcement_active, _announcement_json
+from app.routes.api._announcements import _parse_dt_field, _is_announcement_active, _announcement_json
 from app.db.database import get_session
 
 router = APIRouter()

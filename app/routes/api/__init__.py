@@ -8,7 +8,7 @@ from app.routes.api._core import (
     router,
 )
 
-from app.routes.api._misc import (
+from app.routes.api._pwa import (
     _read_storage_file,
     _save_pwa_icons,
     _save_favicon,
@@ -51,10 +51,20 @@ from app.routes.api._users import users_router
 
 from app.routes.api._auth import auth_router
 
-from app.routes.api._misc import misc_router
+from app.routes.api._emojis import emoji_router
+from app.routes.api._push import push_router
+from app.routes.api._sessions import sessions_router
+from app.routes.api._announcements import announcements_router
+from app.routes.api._pwa import pwa_router
+from app.routes.api._meta import meta_router
 
 router.include_router(auth_router)
-router.include_router(misc_router)
+router.include_router(meta_router)
+router.include_router(emoji_router)
+router.include_router(pwa_router)
+router.include_router(push_router)
+router.include_router(sessions_router)
+router.include_router(announcements_router)
 router.include_router(feed_router)
 router.include_router(posts_router)
 router.include_router(interactions_router)
