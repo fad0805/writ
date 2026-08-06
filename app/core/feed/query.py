@@ -41,7 +41,7 @@ def query_feed_posts(
             return q.filter(or_(
                 Post.created_at < cursor_ts,
                 and_(Post.created_at == cursor_ts, Post.id < cursor_id),
-            ))
+            )).limit(fetch_size)
         return q.offset(offset).limit(fetch_size)
 
     posts = []
