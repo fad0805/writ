@@ -9,7 +9,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from app.models import Novel, Episode, Post
 from app.utils.datetime import _fmt_dt
 from app.utils.log import log_admin_action
-from app.routes.api._series import _novel_json, _apply_latest_activity_order
+from app.routes.api._novels import _novel_json, _apply_latest_activity_order
 from app.db.database import get_session
 from app.core.auth import require_auth
 

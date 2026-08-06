@@ -1,55 +1,23 @@
-"""Core API endpoints — admin extracted to _admin.py."""
-import asyncio
+"""Search and explore endpoints extracted from _core.py."""
 import threading
+from urllib.parse import urlparse
 
-from fastapi import APIRouter, Request, Form, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Request, Query
 from sqlalchemy import desc, or_, and_, func
 from sqlalchemy.orm import selectinload
-from urllib.parse import urlparse
 
 from app.models import User, Post, Follow, Like, Boost, Bookmark, Novel, SeriesFollow, Tag
 from app.serializers import _post_json, _user_json
-from app.core.activitypub import _resolve_actor, _background_fetch_outbox
-from app.core.federation import _check_fetch_domain_allowed
-from app.core.timeline_stream import add_stream, remove_stream
 from app.db.database import get_session
 from app.db.mention_resolver import _federation_allowed, _resolve_remote_user
-from app.core.auth import require_auth, get_current_user
-from app.routes.api._series import _apply_latest_activity_order, _novel_json, _load_novel_meta
+from app.core.auth import get_current_user
+from app.routes.api._novels import _apply_latest_activity_order, _novel_json, _load_novel_meta
 from app.utils.filter import _timeline_filter
 
-router = APIRouter(prefix="/api")
-
-TIMELINE_LABELS = {
-    "federated": "연합", "local": "로컬", "social": "소셜", "home": "홈",
-}
+search_router = APIRouter()
 
 
-# ── Timeline API ──
-
-@router.get("/timeline/stream")
-async def api_timeline_stream(request: Request, tl_type: str = "home"):
-    user = require_auth(request)
-    if tl_type not in TIMELINE_LABELS:
-        tl_type = "home"
-    sid, q = add_stream(user.id, tl_type)
-    async def event_gen():
-        try:
-            while True:
-                if await request.is_disconnected():
-                    break
-                try:
-                    payload = await asyncio.wait_for(q.get(), timeout=30)
-                    yield f"data: {payload}\n\n"
-                except asyncio.TimeoutError:
-                    yield ":keepalive\n\n"
-        finally:
-            remove_stream(sid)
-    return StreamingResponse(event_gen(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
-
-
-@router.get("/search/series")
+@search_router.get("/search/series")
 def api_search_series(request: Request, q: str = Query("")):
     user = get_current_user(request)
     query = q.strip()
@@ -66,7 +34,7 @@ def api_search_series(request: Request, q: str = Query("")):
         return {"series": [_novel_json(n, s, _episode_meta=_novel_meta) for n in novels]}
 
 
-@router.get("/search/tags")
+@search_router.get("/search/tags")
 def api_recent_tags(request: Request, q: str = Query("")):
     user = get_current_user(request)
     query = q.strip().lstrip("#")
@@ -86,7 +54,7 @@ def api_recent_tags(request: Request, q: str = Query("")):
         return {"tags": [{"name": t} for t in ordered]}
 
 
-@router.get("/explore")
+@search_router.get("/explore")
 def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)):
     user = get_current_user(request)
     with get_session() as s:
@@ -175,7 +143,7 @@ def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)
         }
 
 
-@router.get("/search")
+@search_router.get("/search")
 def api_search(request: Request, q: str = Query(""), author: str = Query("")):
     user = get_current_user(request)
     query = q.strip().lstrip("@").lstrip("#")
@@ -350,41 +318,3 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
         if blocked_domain:
             result["blocked_domain"] = blocked_domain
         return result
-
-
-@router.post("/fetch-actor")
-def api_fetch_actor(request: Request, url: str = Form(...)):
-    user = require_auth(request)
-    if not url.startswith("http"):
-        raise HTTPException(status_code=400, detail="Invalid URL")
-    err = _check_fetch_domain_allowed(url)
-    if err:
-        raise HTTPException(status_code=403, detail=err)
-
-    # Normalize /@username to /users/username for DB lookup
-    _p = urlparse(url)
-    _db_url = url
-    if "/@" in _p.path:
-        _uname = _p.path.split("/@")[-1].strip("/")
-        if _uname and "/" not in _uname:
-            _db_url = f"{_p.scheme}://{_p.netloc}/users/{_uname}"
-
-    # 로컬 DB에 이미 존재하는 유저인지 먼저 확인 (외부 네트워크 요청 회피)
-    with get_session() as _s:
-        local_user = _s.query(User).filter(or_(User.remote_url == url, User.remote_url == _db_url)).first()
-        if local_user:
-            threading.Thread(target=_background_fetch_outbox, args=(url, user.id, local_user.id), daemon=True).start()
-            return _user_json(local_user)
-
-    actor = _resolve_actor(url, force_refresh=False, sign_as=user)
-    if not actor:
-        raise HTTPException(status_code=400, detail="Cannot resolve actor")
-
-    threading.Thread(target=_background_fetch_outbox, args=(url, user.id, actor.id), daemon=True).start()
-
-    with get_session() as _s:
-        _attached = _s.query(User).filter(or_(User.remote_url == url, User.remote_url == _db_url)).first()
-        if not _attached:
-            _attached = _s.query(User).get(actor.id)
-        return _user_json(_attached)
-

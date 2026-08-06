@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI):
     _cleanup_remote_data()
     yield
     # 대기열에 남은 작업을 취소해 종료/리로드 지연을 줄인다 (실행 중 작업은 그대로 마무리)
-    from app.routes.api._posts import _post_create_executor
+    from app.routes.api._post_create import _post_create_executor
     from app.core.activitypub import _inbox_executor
     _post_create_executor.shutdown(wait=False, cancel_futures=True)
     _inbox_executor.shutdown(wait=False, cancel_futures=True)

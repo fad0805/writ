@@ -158,7 +158,7 @@ async def create_status(request: Request, db: SASession = Depends(get_db)):
 
 def _run_create_status(db, user, text, in_reply_to_id, sensitive, spoiler_text,
                         visibility, language, media_ids, poll_options, poll_expires):
-    from app.routes.api._posts import _do_create_post
+    from app.routes.api._post_create import _do_create_post
 
     if not text and not media_ids:
         raise MastodonAPIError(status_code=422, detail="Validation failed: Text can't be blank")

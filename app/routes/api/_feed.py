@@ -1,4 +1,4 @@
-"""Timeline/feed endpoints extracted from _posts.py."""
+"""Timeline/feed endpoints extracted from _posts.py and _core.py."""
 import asyncio
 import datetime
 import logging
@@ -8,9 +8,9 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.feed import _get_feed
-from app.core.timeline_stream import add_post_stream, remove_post_stream
+from app.core.timeline_stream import add_stream, remove_stream, add_post_stream, remove_post_stream
 from app.db.database import get_db
-from app.core.auth import get_current_user
+from app.core.auth import get_current_user, require_auth
 
 logger = logging.getLogger("writ.api.feed")
 
@@ -30,6 +30,27 @@ def _parse_cursor(cursor: str | None):
         return datetime.datetime.fromisoformat(ts), int(pid)
     except (ValueError, TypeError):
         return None
+
+
+@feed_router.get("/timeline/stream")
+async def api_timeline_stream(request: Request, tl_type: str = "home"):
+    user = require_auth(request)
+    if tl_type not in TIMELINE_LABELS:
+        tl_type = "home"
+    sid, q = add_stream(user.id, tl_type)
+    async def event_gen():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    payload = await asyncio.wait_for(q.get(), timeout=30)
+                    yield f"data: {payload}\n\n"
+                except asyncio.TimeoutError:
+                    yield ":keepalive\n\n"
+        finally:
+            remove_stream(sid)
+    return StreamingResponse(event_gen(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
 
 
 @feed_router.get("/posts/{post_id}/stream")
