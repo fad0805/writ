@@ -703,6 +703,12 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 quote_of_ap_id=quote_of_ap_id,
                 quote_of_id=quote_of_id,
             )
+            published = obj.get("published", "")
+            if published:
+                try:
+                    post.created_at = datetime.datetime.fromisoformat(published.replace("Z", "+00:00"))
+                except Exception:
+                    pass
             if quote_of_ap_id and post.content:
                 post.content = re.sub(
                     r'^[\s\n]*RE:\s*<a[^>]*>[^<]*</a>\s*[\n\s]*',
