@@ -115,7 +115,7 @@ def query_feed_posts(
 
 def _fetch_filtered_posts(session, tl_type, user, limit, offset,
                           _visible_user_ids, _local_ids, user_id, visibility,
-                          _base_opts, _following_ids, filter_ctx):
+                          _base_opts, _following_ids, filter_ctx, cursor=None):
     """2. 필요한 수량(offset + limit + 1)이 채워질 때까지 반복 조회 및 필터링 수행.
 
     offset은 필터링 *이후* 결과 기준이다. 원본 DB row에 offset을 적용하면
@@ -124,29 +124,38 @@ def _fetch_filtered_posts(session, tl_type, user, limit, offset,
 
     배치 진행은 OFFSET 대신 (created_at, id) 키셋 커서를 사용한다. 필터는 여전히
     배치 이후 적용되므로 '필터 후 offset' 보정이 그대로 유지된다.
+
+    cursor=(created_at, id)가 주어지면 해당 지점보다 오래된 글부터 limit+1개만
+    채운다(무한 스크롤 후반부에서도 이전 페이지를 다시 스캔하지 않도록 O(1) 유지).
+    cursor가 없으면 기존 offset 방식으로 동작한다.
     """
     fetch_size = limit + 20
     filtered = []
-    target = offset + limit + 1
+    if cursor is None:
+        target = offset + limit + 1
+        slice_start = offset
+    else:
+        target = limit + 1
+        slice_start = 0
     iterations = 0
-    cursor = None
+    cur = cursor
 
     while len(filtered) < target and iterations < MAX_FETCH_ITERATIONS:
         iterations += 1
         batch = query_feed_posts(
             tl_type,
             _visible_user_ids, _local_ids, user_id, visibility,
-            session, _base_opts, fetch_size, cursor=cursor
+            session, _base_opts, fetch_size, cursor=cur
         )
         if not batch:
             break
         batch_size = len(batch)
         _last_raw = batch[-1]
-        cursor = (_last_raw.created_at, _last_raw.id)
+        cur = (_last_raw.created_at, _last_raw.id)
         if user:
             batch = _timeline_filter(batch, session, user, tl_type, _following_ids, filter_ctx=filter_ctx)
         filtered.extend(batch)
         if batch_size < fetch_size:
             break
 
-    return filtered[offset:target]
+    return filtered[slice_start:target]

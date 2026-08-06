@@ -24,12 +24,12 @@ const TABS = [
 const TAB_KEYS = ["home", "social", "local", "federated"];
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
-const CACHE_STORAGE_KEY = "writ:tl-cache:v2";
+const CACHE_STORAGE_KEY = "writ:tl-cache:v3";
 
 interface TimelineCacheEntry {
   posts: PostData[];
   hasMore: boolean;
-  totalLoaded: number;
+  cursor: string | null;
   ts: number;
 }
 
@@ -91,6 +91,7 @@ export default function TimelinePage() {
   const [rewriteInitialSummary, setRewriteInitialSummary] = useState<string | undefined>(undefined);
 
   const totalLoadedRef = useRef(0);
+  const cursorRef = useRef<string | null>(null);
   const loadIdRef = useRef(0);
   const deletedIds = useRef<Set<number>>(new Set());
   const emojiPickerOpenRef = useRef(false);
@@ -166,7 +167,8 @@ export default function TimelinePage() {
     if (cached) {
       setPosts(cached.posts);
       setHasMore(cached.hasMore);
-      totalLoadedRef.current = cached.totalLoaded;
+      totalLoadedRef.current = cached.posts.length;
+      cursorRef.current = cached.cursor;
       setLoading(false);
       setError("");
       return;
@@ -176,13 +178,14 @@ export default function TimelinePage() {
     setError("");
     const snapshot = accountSnapshot();
     try {
-      const data = await api.timeline(tlType, LIMIT, 0);
+      const data = await api.timeline(tlType, LIMIT);
       if (loadId !== loadIdRef.current || accountSnapshot() !== snapshot) return;
       if (data._emojis) injectEmojis(data._emojis);
       setPosts(data.posts);
       setHasMore(data.has_more);
       totalLoadedRef.current = data.posts.length;
-      setCache(tlType, { posts: data.posts, hasMore: data.has_more, totalLoaded: data.posts.length, ts: Date.now() });
+      cursorRef.current = data.cursor ?? null;
+      setCache(tlType, { posts: data.posts, hasMore: data.has_more, cursor: cursorRef.current, ts: Date.now() });
     } catch (e: unknown) {
       if (loadId !== loadIdRef.current || accountSnapshot() !== snapshot) return;
       setError(e instanceof Error ? e.message : "불러오기 실패");
@@ -203,10 +206,10 @@ export default function TimelinePage() {
       } else {
         next = [newPost, ...prev];
       }
-    if (c) setCache(tlType, { ...c, posts: next, totalLoaded: totalLoadedRef.current, ts: Date.now() });
-    return next;
-  });
-}, [tlType, setCache]);
+      if (c) setCache(tlType, { ...c, posts: next, cursor: c.cursor, ts: Date.now() });
+      return next;
+    });
+  }, [tlType, setCache]);
 
   const prependPosts = useCallback((newPosts: PostData[]) => {
     if (newPosts.length === 0) return;
@@ -219,7 +222,7 @@ export default function TimelinePage() {
       const fresh = newPosts.filter((p) => !existingIds.has(p.id));
       if (fresh.length === 0) return prev;
       const next = [...fresh, ...prev];
-      if (c) setCache(tlType, { ...c, posts: next, totalLoaded: totalLoadedRef.current, ts: Date.now() });
+      if (c) setCache(tlType, { ...c, posts: next, cursor: c.cursor, ts: Date.now() });
       return next;
     });
   }, [tlType, setCache]);
@@ -229,17 +232,17 @@ export default function TimelinePage() {
     setLoadingMore(true);
     try {
       const snapshot = accountSnapshot();
-      const currentOffset = totalLoadedRef.current;
-      const data = await api.timeline(tlType, LOAD_MORE, currentOffset);
+      const data = await api.timeline(tlType, LOAD_MORE, cursorRef.current);
       if (accountSnapshot() !== snapshot) return;
       if (data._emojis) injectEmojis(data._emojis);
       const newTotal = totalLoadedRef.current + data.posts.length;
       const newHasMore = data.has_more && newTotal < 500;
       totalLoadedRef.current = newTotal;
+      cursorRef.current = data.cursor ?? null;
       setHasMore(newHasMore);
       setPosts((prev) => {
         const next = [...prev, ...data.posts];
-        setCache(tlType, { posts: next, hasMore: newHasMore, totalLoaded: newTotal, ts: Date.now() });
+        setCache(tlType, { posts: next, hasMore: newHasMore, cursor: cursorRef.current, ts: Date.now() });
         return next;
       });
     } catch (e) {

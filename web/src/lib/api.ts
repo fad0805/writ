@@ -267,9 +267,9 @@ export const api = {
   logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
 
   // Timeline
-  timeline: (type: string = "home", limit: number = 10, offset: number = 0) =>
-    request<{ posts: PostData[]; timeline_type: string; has_more: boolean; _emojis?: any[] }>(
-      `/api/timeline/${type}?limit=${limit}&offset=${offset}`
+  timeline: (type: string = "home", limit: number = 10, cursor?: string | null) =>
+    request<{ posts: PostData[]; timeline_type: string; has_more: boolean; cursor?: string | null; _emojis?: any[] }>(
+      `/api/timeline/${type}?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`
     ),
 
   // Posts

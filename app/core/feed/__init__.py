@@ -41,7 +41,7 @@ __all__ = [
 ]
 
 
-def _get_feed(user, tl_type, session, limit=10, offset=0):
+def _get_feed(user, tl_type, session, limit=10, offset=0, cursor=None):
     _base_opts = [selectinload(Post.author), selectinload(Post.parent)]
     user_id = user.id if user else None
 
@@ -54,10 +54,17 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
         session, tl_type, user, limit, offset,
         _visible_user_ids, _local_ids, user_id, visibility,
         _base_opts, _following_ids, filter_ctx,
+        cursor=cursor,
     )
 
     has_more = len(posts) > limit
     posts = posts[:limit]
+    # 다음 페이지 커서: 이번 페이지에서 실제로 보여준 마지막 포스트 기준.
+    # (limit+1번째 오버플로 포스트가 아니라, 보여준 포스트 뒤부터 이어서 가져오도록)
+    next_cursor = None
+    if has_more and posts:
+        _last = posts[-1]
+        next_cursor = f"{_last.created_at.isoformat()}|{_last.id}"
 
     # 3. 메타데이터 및 부스트 원본 로드
     posts_metadata = _load_post_metadata(session, user, posts)
@@ -84,4 +91,4 @@ def _get_feed(user, tl_type, session, limit=10, offset=0):
     # 5. 부스트 그룹 병합 및 정렬 후 반환
     feed_dicts = _aggregate_boost_groups(feed_dicts)
 
-    return feed_dicts, has_more, _timeline_emojis
+    return feed_dicts, has_more, _timeline_emojis, next_cursor
