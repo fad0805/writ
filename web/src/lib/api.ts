@@ -179,6 +179,7 @@ export interface PostData {
   my_reaction?: string | null;
   mentioned_handles?: string[];
   link_preview?: { url: string; title: string; description: string; image: string } | null;
+  media_attachments?: { url: string; type: string; alt?: string }[];
   is_deleted?: boolean;
   boost_of_id?: number | null;
   quote_of_id?: number | null;
@@ -281,7 +282,10 @@ export const api = {
     formRequest<PostData>("/api/posts", data),
   editPost: (id: number, data: { content: string; summary?: string }) =>
     formRequest<PostData>(`/api/posts/${id}/edit`, data),
-  deletePost: (id: number) => request<{ ok: boolean }>(`/api/posts/${id}/delete`, { method: "POST" }),
+  deletePost: (id: number, keepMedia?: boolean) =>
+    keepMedia
+      ? formRequest<{ ok: boolean }>(`/api/posts/${id}/delete`, { keep_media: true })
+      : request<{ ok: boolean }>(`/api/posts/${id}/delete`, { method: "POST" }),
   like: (id: number) => request<{ ok: boolean }>(`/api/posts/${id}/like`, { method: "POST" }),
   unlike: (id: number) => request<{ ok: boolean }>(`/api/posts/${id}/unlike`, { method: "POST" }),
   boost: (id: number) => request<{ ok: boolean }>(`/api/posts/${id}/boost`, { method: "POST" }),

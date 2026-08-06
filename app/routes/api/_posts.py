@@ -233,7 +233,7 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
         return _post_json(post, s, user)
 
 
-def _do_delete_post(s, post, user, cascade=True):
+def _do_delete_post(s, post, user, cascade=True, keep_media=False):
     media = list(post.media_attachments or [])
     ap_id = post.ap_id or ""
     is_remote_author = bool(post.author.is_remote)
@@ -283,8 +283,8 @@ def _do_delete_post(s, post, user, cascade=True):
         pass
 
     if media or (ap_id and ap_id.startswith("http") and not is_remote_author):
-        def _background(_pid=post.id, _media=media, _ap_id=ap_id, _remote=is_remote_author, _user=user):
-            if _media:
+        def _background(_pid=post.id, _media=media, _ap_id=ap_id, _remote=is_remote_author, _user=user, _keep=keep_media):
+            if _media and not _keep:
                 storage = get_storage()
                 for m in _media:
                     if isinstance(m, dict) and m.get("url"):
@@ -308,7 +308,7 @@ def _do_delete_post(s, post, user, cascade=True):
 
 
 @posts_router.post("/posts/{post_id}/delete")
-def api_delete_post(request: Request, post_id: int):
+def api_delete_post(request: Request, post_id: int, keep_media: bool = Form(False)):
     user = require_active_auth(request)
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id).first()
@@ -316,5 +316,5 @@ def api_delete_post(request: Request, post_id: int):
             raise HTTPException(status_code=404, detail="Post not found")
         if post.author_id != user.id and not user.is_admin:
             raise HTTPException(status_code=403, detail="Cannot delete this post")
-        _do_delete_post(s, post, user, cascade=True)
+        _do_delete_post(s, post, user, cascade=True, keep_media=keep_media)
     return {"ok": True}

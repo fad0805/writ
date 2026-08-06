@@ -12,7 +12,7 @@ import { useAuth } from "@/lib/auth";
 
 const MAX_LENGTH = 500;
 
-export default function PostForm({ parentId, onDone, placeholder, initialContent, initialVisibility, shareUrl, parentSummary, initialSummary }: { parentId?: number; onDone?: (post?: any) => void; placeholder?: string; initialContent?: string; initialVisibility?: string; shareUrl?: string; parentSummary?: string | null; initialSummary?: string | null }) {
+export default function PostForm({ parentId, onDone, placeholder, initialContent, initialVisibility, shareUrl, parentSummary, initialSummary, initialMedia }: { parentId?: number; onDone?: (post?: any) => void; placeholder?: string; initialContent?: string; initialVisibility?: string; shareUrl?: string; parentSummary?: string | null; initialSummary?: string | null; initialMedia?: { url: string; type: string; alt?: string }[] }) {
   const draftKey = `draft_${parentId || "new"}`;
   const savedDraft = typeof localStorage !== "undefined" ? (() => { try { return JSON.parse(localStorage.getItem(draftKey) || "null"); } catch { return null; } })() : null;
   const [content, setContent] = useState((shareUrl ? initialContent : (savedDraft?.content ?? initialContent)) || "");
@@ -51,8 +51,10 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [hashtagResults, setHashtagResults] = useState<string[]>([]);
   const [hashtagIdx, setHashtagIdx] = useState(0);
   const [hashtagPos, setHashtagPos] = useState({ top: 0, left: 0 });
-  const [mediaItems, setMediaItems] = useState<{ id: number; url: string; type: string; file?: File; alt?: string }[]>([]);
   const mediaIdRef = useRef(0);
+  const [mediaItems, setMediaItems] = useState<{ id: number; url: string; type: string; file?: File; alt?: string }[]>(() =>
+    (initialMedia || []).map((m, i) => ({ id: -(i + 1), url: m.url, type: m.type || "image", alt: m.alt || "" }))
+  );
   const [mediaUploading, setMediaUploading] = useState(false);
   const [mediaWarning, setMediaWarning] = useState("");
   const mediaInputRef = useRef<HTMLInputElement>(null);

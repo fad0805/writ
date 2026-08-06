@@ -89,6 +89,8 @@ export default function TimelinePage() {
   const [rewriteSummary, setRewriteSummary] = useState<string | undefined>(undefined);
   const [rewriteInitialContent, setRewriteInitialContent] = useState<string | undefined>(undefined);
   const [rewriteInitialSummary, setRewriteInitialSummary] = useState<string | undefined>(undefined);
+  const [rewriteMedia, setRewriteMedia] = useState<{ url: string; type: string; alt?: string }[]>([]);
+  const [rewriteInitialMedia, setRewriteInitialMedia] = useState<{ url: string; type: string; alt?: string }[]>([]);
 
   const totalLoadedRef = useRef(0);
   const cursorRef = useRef<string | null>(null);
@@ -474,10 +476,12 @@ export default function TimelinePage() {
             setRewriteContent(null);
             setRewriteVisibility(undefined);
             setRewriteSummary(undefined);
+            setRewriteMedia([]);
           }}
           initialContent={rewriteContent ?? undefined}
           initialVisibility={rewriteVisibility}
           initialSummary={rewriteSummary}
+          initialMedia={rewriteMedia}
         />
       </div>
       <div className="timeline-tabs">
@@ -532,10 +536,11 @@ export default function TimelinePage() {
                     onReply={(newPost) => {
                       if (newPost) addOrUpdatePost(newPost);
                     }}
-                    onRewrite={(content, visibility, summary, replyTo) => {
+                    onRewrite={(content, visibility, summary, replyTo, media) => {
                       if (replyTo) {
                         setRewriteInitialContent(content);
                         setRewriteInitialSummary(summary);
+                        setRewriteInitialMedia(media || []);
                         setReplyPost({
                           id: replyTo.id,
                           number: replyTo.number,
@@ -554,6 +559,7 @@ export default function TimelinePage() {
                         setRewriteContent(content);
                         setRewriteVisibility(visibility);
                         setRewriteSummary(summary);
+                        setRewriteMedia(media || []);
                         setShowComposer(true);
                       }
                     }}
@@ -568,13 +574,15 @@ export default function TimelinePage() {
       {replyPost && (
         <ReplyModal
           post={replyPost}
-          onClose={() => { setReplyPost(null); setRewriteInitialContent(undefined); setRewriteInitialSummary(undefined); }}
+          onClose={() => { setReplyPost(null); setRewriteInitialContent(undefined); setRewriteInitialSummary(undefined); setRewriteInitialMedia([]); }}
           initialContent={rewriteInitialContent}
           initialSummary={rewriteInitialSummary}
+          initialMedia={rewriteInitialMedia}
           onDone={(newPost) => {
             setReplyPost(null);
             setRewriteInitialContent(undefined);
             setRewriteInitialSummary(undefined);
+            setRewriteInitialMedia([]);
             if (newPost) addOrUpdatePost(newPost);
           }}
         />
@@ -583,11 +591,11 @@ export default function TimelinePage() {
         <Icon name="pen_solid" size={22} />
       </button>
       {showComposer && (
-        <div className="mobile-composer-overlay" onClick={() => { setShowComposer(false); setRewriteContent(null); setRewriteVisibility(undefined); setRewriteSummary(undefined); }}>
+        <div className="mobile-composer-overlay" onClick={() => { setShowComposer(false); setRewriteContent(null); setRewriteVisibility(undefined); setRewriteSummary(undefined); setRewriteMedia([]); }}>
           <div className="mobile-composer-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="mobile-composer-header">
               <span>글쓰기</span>
-              <button className="mobile-composer-close" onClick={() => { setShowComposer(false); setRewriteContent(null); setRewriteVisibility(undefined); setRewriteSummary(undefined); }}>
+              <button className="mobile-composer-close" onClick={() => { setShowComposer(false); setRewriteContent(null); setRewriteVisibility(undefined); setRewriteSummary(undefined); setRewriteMedia([]); }}>
                 <Icon name="x" size={18} />
               </button>
             </div>
@@ -599,10 +607,12 @@ export default function TimelinePage() {
                 setRewriteContent(null);
                 setRewriteVisibility(undefined);
                 setRewriteSummary(undefined);
+                setRewriteMedia([]);
               }}
               initialContent={rewriteContent ?? undefined}
               initialVisibility={rewriteVisibility}
               initialSummary={rewriteSummary}
+              initialMedia={rewriteMedia}
             />
           </div>
         </div>
