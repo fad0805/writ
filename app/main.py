@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config.settings import CORS_ORIGINS
 from app.core.activitypub import _cleanup_expired_media, _cleanup_remote_data
 from app.core.push import init_vapid_keys
-from app.core.workers import delivery_worker, refresh_remote_profiles, auto_delete_expired_posts
+from app.core.workers import delivery_worker, refresh_remote_profiles, auto_delete_expired_posts, cleanup_orphan_media
 from app.middleware import CSRFProtectionMiddleware, LogRequestsMiddleware
 from app.routes.api import router as api_router
 from app.utils.storage import _cleanup_avatars
@@ -41,6 +41,8 @@ async def lifespan(app: FastAPI):
     t2.start()
     t3 = threading.Thread(target=auto_delete_expired_posts, daemon=True)
     t3.start()
+    t4 = threading.Thread(target=cleanup_orphan_media, daemon=True)
+    t4.start()
     _cleanup_expired_media()
     _cleanup_remote_data()
     yield

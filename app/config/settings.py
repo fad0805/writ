@@ -56,6 +56,9 @@ else:
 AVATAR_STORAGE_PATH = os.environ.get("AVATAR_STORAGE_PATH", "uploads/avatars")
 AVATAR_URL_PREFIX = os.environ.get("AVATAR_URL_PREFIX", "/uploads/avatars")
 
+# Orphan media cleanup (days; files older than this with no DB reference get removed by the daily worker)
+ORPHAN_MEDIA_MIN_AGE_DAYS = int(os.environ.get("ORPHAN_MEDIA_MIN_AGE_DAYS", "7"))
+
 # Initial owner password (optional - if set, first registration must use this password)
 INITIAL_OWNER_PASSWORD = os.environ.get("INITIAL_OWNER_PASSWORD", "")
 

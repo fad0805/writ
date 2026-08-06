@@ -8,15 +8,23 @@ from urllib.parse import urlparse
 
 from sqlalchemy import or_
 
-from app.config.settings import SECRET_KEY, BASE_URL
+from app.config.settings import SECRET_KEY, BASE_URL, ORPHAN_MEDIA_MIN_AGE_DAYS
 from app.core.activitypub import _deliver_sync, _send_delete_post, _resolve_actor, _get_instance_actor
 from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs
 from app.db.database import get_session, engine
-from app.models import User, PendingDelivery, Post, Like, Boost, Bookmark, Vote, Notification
+from app.models import User, PendingDelivery, Post, Like, Boost, Bookmark, Vote, Notification, RemoteMedia
 from app.utils.crypto import sign_string, get_private_key
-from app.utils.storage import get_storage
+from app.utils.storage import get_storage, LocalStorage
 
 logger = logging.getLogger(__name__)
+
+
+def _next_3am():
+    now = datetime.datetime.now()
+    target = now.replace(hour=3, minute=0, second=0, microsecond=0)
+    if target <= now:
+        target += datetime.timedelta(days=1)
+    return (target - now).total_seconds()
 
 
 def delivery_worker():
@@ -164,13 +172,6 @@ def auto_delete_expired_posts():
     Checks CPU and DB load before and during execution; aborts if too busy.
     Uses user.post_lifetime (days) + post.created_at to determine expiry."""
 
-    def _next_3am():
-        now = datetime.datetime.now()
-        target = now.replace(hour=3, minute=0, second=0, microsecond=0)
-        if target <= now:
-            target += datetime.timedelta(days=1)
-        return (target - now).total_seconds()
-
     time.sleep(min(_next_3am(), 300))
     while True:
         try:
@@ -267,4 +268,62 @@ def auto_delete_expired_posts():
                         pass
         except Exception as e:
             logger.error("Auto-delete worker error: %s", e, exc_info=True)
+        time.sleep(_next_3am() + 60)
+
+
+def cleanup_orphan_media():
+    """Reclaim local media files (uploads/media/) no longer referenced anywhere.
+
+    '지우고 다시 쓰기'로 보존됐지만(keep_media=true) 새 글에 재첨부되지 않거나, 작성 중
+    업로드만 하고 게시하지 않은 미디어가 고아로 남는다. 매일 3시에 저장소를 스캔해
+    (1) Post.media_attachments나 RemoteMedia.local_url에 존재하지 않고
+    (2) 생성(수정)된 지 임계 시간 이상 지난 파일을 삭제한다.
+
+    원격 캐시 미디어(media/remote/)는 _cleanup_expired_media가 별도 관리하므로 제외하고,
+    아바타/헤더/이모지/커버는 서로 다른 경로라 이 작업과 무관하다.
+    임계 일수는 ORPHAN_MEDIA_MIN_AGE_DAYS로 조정할 수 있다."""
+    time.sleep(min(_next_3am(), 300))
+    while True:
+        try:
+            if _server_busy():
+                logger.info("Media cleanup: server busy, skipping")
+                time.sleep(1800)
+                continue
+
+            storage = get_storage()
+            if not isinstance(storage, LocalStorage):
+                time.sleep(3600)
+                continue
+
+            with get_session() as s:
+                used = set()
+                for (ma,) in s.query(Post.media_attachments).filter(Post.media_attachments.isnot(None)).all():
+                    if not ma:
+                        continue
+                    for m in ma:
+                        if isinstance(m, dict) and m.get("url"):
+                            used.add(m["url"])
+                for (lu,) in s.query(RemoteMedia.local_url).all():
+                    if lu:
+                        used.add(lu)
+
+            now = time.time()
+            deleted = 0
+            for key in storage.list_keys("media"):
+                if key.startswith("remote/"):
+                    continue
+                url = storage.url(key)
+                if url in used:
+                    continue
+                mtime = storage.mtime(key)
+                if mtime is not None and now - mtime > ORPHAN_MEDIA_MIN_AGE_DAYS * 24 * 3600:
+                    try:
+                        storage.delete(key)
+                        deleted += 1
+                    except Exception:
+                        pass
+            if deleted:
+                logger.info("Cleaned %d orphaned media files", deleted)
+        except Exception as e:
+            logger.error("Media cleanup worker error: %s", e, exc_info=True)
         time.sleep(_next_3am() + 60)
