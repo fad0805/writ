@@ -1,26 +1,33 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Icon from "@/components/Icon";
 import SettingsNav from "@/components/SettingsNav";
 
+type ExportItem = { key: string; name: string; count: number; format: string };
+
 export default function DataPage() {
   const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState<ExportItem[]>([]);
+  const [countsLoading, setCountsLoading] = useState(true);
   const [importResult, setImportResult] = useState<string>("");
   const [importFile, setImportFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch("/api/settings/export-counts", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => setItems(d.items || []))
+      .catch(() => setItems([]))
+      .finally(() => setCountsLoading(false));
+  }, []);
 
   const handleExportData = async (type: string) => {
     setLoading(true);
     try {
       const res = await fetch("/api/settings/export-data", { credentials: "include" });
       if (!res.ok) { alert("내보내기 실패"); setLoading(false); return; }
-      const json = await res.json();
-      let data: any;
-      if (type === "all") {
-        data = json;
-      } else {
-        data = json[type] || [];
-      }
+      const json: Record<string, unknown> = await res.json();
+      const data = type === "all" ? json : (json[type] ?? []);
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -30,6 +37,30 @@ export default function DataPage() {
       URL.revokeObjectURL(url);
     } catch { alert("오류 발생"); }
     setLoading(false);
+  };
+
+  const handleExportCsv = async (key: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/settings/export/${key}`, { credentials: "include" });
+      if (!res.ok) { alert("내보내기 실패"); setLoading(false); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `writ_${key}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch { alert("오류 발생"); }
+    setLoading(false);
+  };
+
+  const handleRowExport = (item: ExportItem) => {
+    if (item.format === "JSON") {
+      handleExportData(item.key === "filters" ? "keyword_mutes" : item.key);
+    } else {
+      handleExportCsv(item.key);
+    }
   };
 
   const handleExportArchive = async () => {
@@ -84,7 +115,7 @@ export default function DataPage() {
       <div className="novel-form">
         <h3 style={{ fontSize: "1.05em", marginBottom: 12 }}>내보내기</h3>
         <p style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 16 }}>
-          계정 데이터를 JSON 파일로 내려받을 수 있습니다.
+          계정 데이터를 파일로 내려받을 수 있습니다.
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
@@ -97,14 +128,39 @@ export default function DataPage() {
         </div>
 
         <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 16 }}>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>개별 내보내기</p>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button onClick={() => handleExportData("follows")} disabled={loading} className="btn btn-small btn-outline">팔로우</button>
-            <button onClick={() => handleExportData("mutes")} disabled={loading} className="btn btn-small btn-outline">뮤트</button>
-            <button onClick={() => handleExportData("blocks")} disabled={loading} className="btn btn-small btn-outline">차단</button>
-            <button onClick={() => handleExportData("bookmarks")} disabled={loading} className="btn btn-small btn-outline">북마크</button>
-            <button onClick={() => handleExportData("keyword_mutes")} disabled={loading} className="btn btn-small btn-outline">키워드 뮤트</button>
-          </div>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>가져오기/내보내기 형식</p>
+          {countsLoading ? (
+            <p style={{ fontSize: 13, color: "var(--text-muted)" }}>불러오는 중...</p>
+          ) : (
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead>
+                  <tr className="admin-tr text-muted">
+                    <th>데이터</th>
+                    <th>개수</th>
+                    <th>형식</th>
+                    <th style={{ textAlign: "right" }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((it) => (
+                    <tr key={it.key}>
+                      <td style={{ padding: 10 }}>{it.name}</td>
+                      <td style={{ padding: 10 }}>{it.count}</td>
+                      <td style={{ padding: 10 }}>{it.format}</td>
+                      <td style={{ padding: 10, textAlign: "right" }}>
+                        {it.format && (
+                          <button onClick={() => handleRowExport(it)} disabled={loading} className="btn btn-small btn-outline">
+                            내보내기
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 24 }}>

@@ -81,6 +81,36 @@ def api_export_account(request: Request, export_type: str):
     return PlainTextResponse(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={export_type}.csv"})
 
 
+@export_router.get("/settings/export-counts")
+def api_export_counts(request: Request):
+    user = require_auth(request)
+    with get_session() as s:
+        follows = s.query(Follow).filter_by(follower_id=user.id, accepted=True).count()
+        followers = s.query(Follow).filter_by(following_id=user.id, accepted=True).count()
+        mutes = s.query(UserMute).filter_by(user_id=user.id).count()
+        blocks = s.query(UserBlock).filter_by(user_id=user.id).count()
+        bookmarks = s.query(Bookmark).filter_by(user_id=user.id).count()
+        filters = s.query(KeywordMute).filter_by(user_id=user.id).count()
+        domains = set()
+        for b in s.query(UserBlock).filter_by(user_id=user.id).all():
+            target = s.query(User).get(b.target_user_id)
+            if target and target.is_remote:
+                domain = _domain_from_actor(target)
+                if domain:
+                    domains.add(domain)
+    return {
+        "items": [
+            {"key": "follows", "name": "팔로우", "count": follows, "format": "CSV"},
+            {"key": "followers", "name": "팔로워", "count": followers, "format": ""},
+            {"key": "mutes", "name": "뮤트", "count": mutes, "format": "CSV"},
+            {"key": "blocks", "name": "차단", "count": blocks, "format": "CSV"},
+            {"key": "domain_blocks", "name": "도메인 차단", "count": len(domains), "format": "CSV"},
+            {"key": "bookmarks", "name": "북마크", "count": bookmarks, "format": "CSV"},
+            {"key": "filters", "name": "필터", "count": filters, "format": "JSON"},
+        ]
+    }
+
+
 @export_router.get("/settings/export-data")
 def api_export_data(request: Request):
     user = require_auth(request)
