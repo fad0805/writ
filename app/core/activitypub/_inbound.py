@@ -1099,7 +1099,10 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                 _pa_s.add(ProcessedActivity(id=activity_id))
                 _pa_s.commit()
         except IntegrityError:
-            return (200, "Already processed")
+            # 라우트(inbox)가 이미 processed_activities에 넣고 진입하므로 여기서
+            # 중복이라도 실제 부스트 생성은 여전히 필요하다. 조기 반환하면 리모트
+            # 부스트가 영영 저장되지 않는다 (아래 Boost 존재 확인으로 중복 방지).
+            pass
         except Exception:
             pass
 
@@ -1207,7 +1210,13 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
             )
             session.add(n)
 
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError:
+            # 동시에 같은 Announce가 두 경로(공유/유저 인박스)로 들어와
+            # 동일 boost_ap_id 삽입이 경합한 경우 → 상대 스레드가 처리했으므로 중단
+            session.rollback()
+            return (200, "Already boosted")
 
         # 5. 커밋 이후 외부 연동 (푸시 및 스트리밍) 처리
         if not existing_n:
