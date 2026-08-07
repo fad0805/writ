@@ -14,7 +14,7 @@ from sqlalchemy.orm import selectinload
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Novel, UserMute, UserBlock
 from app.serializers import _user_json, _post_json
 from app.core.activitypub import _resolve_actor, _broadcast_update_actor
-from app.db.database import get_session
+from app.db.database import get_session, username_prefix_like
 from app.core.auth import require_active_auth, get_current_user
 from app.utils.storage import get_storage, _cleanup_avatars
 
@@ -34,9 +34,8 @@ def api_users_autocomplete(request: Request, q: str = Query("")):
     if not query:
         return {"users": []}
     with get_session() as s:
-        pattern = f"{query}%"
         matches = s.query(User).filter(
-            User.username.ilike(pattern),
+            username_prefix_like(User.username, query),
         ).limit(5).all()
         if not matches:
             return {"users": []}

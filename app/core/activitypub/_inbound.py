@@ -20,7 +20,7 @@ from app.core.push import send_push_to_user
 from app.core.broadcast import broadcast_post
 from app.core.timeline_stream import broadcast_notif_sound, broadcast_refresh_notifs, broadcast_refresh_notifs, broadcast_reaction_update, broadcast_delete
 from app.config.settings import BASE_URL
-from app.db.database import get_session
+from app.db.database import get_session, username_prefix_like
 from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, MutedServer, UserBlock, Tag, ProcessedActivity
 from app.utils.emoji import _refresh_emoji_cache_forcibly, _load_emojis
 from app.utils.alias import actor_urls_include
@@ -497,7 +497,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                 _seen_ids.add(_u.id)
                                 continue
                         candidates = session.query(User).filter(
-                            User.username.like(f"{_lp}@%"),
+                            username_prefix_like(User.username, f"{_lp}@"),
                             User.is_remote == True,
                         ).all()
                         for _c in candidates:

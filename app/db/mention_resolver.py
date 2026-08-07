@@ -7,7 +7,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from urllib.parse import urlparse
 
-from app.db.database import get_session
+from app.db.database import get_session, username_prefix_like
 from app.core.activitypub import _resolve_actor
 from app.models import User, FederationBlock, AllowedServer, ServerSetting
 from app.utils.http import safe_fetch
@@ -165,7 +165,7 @@ def resolve_handles_to_ids(handles: list[str], resolve_remote: bool = True) -> l
                         user_ids.append(u.id)
                         continue
                 candidates = s.query(User).filter(
-                    User.username.like(f"{local_part}@%"),
+                    username_prefix_like(User.username, f"{local_part}@"),
                     User.is_remote == True
                 ).all()
                 found = False

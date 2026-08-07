@@ -1,5 +1,5 @@
 import contextvars
-from sqlalchemy import create_engine, text, inspect, event
+from sqlalchemy import create_engine, text, inspect, event, func
 from sqlalchemy.orm import Session
 
 from sqlalchemy.orm import DeclarativeBase
@@ -7,6 +7,8 @@ from app.config.settings import DATABASE_URL
 
 _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 _request_session: contextvars.ContextVar = contextvars.ContextVar("request_session", default=None)
+
+_DIALECT = "sqlite" if DATABASE_URL.startswith("sqlite") else "postgresql"
 
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(
@@ -52,6 +54,18 @@ def get_session():
     if sess is not None:
         return sess
     return Session(engine, expire_on_commit=False)
+
+
+def username_prefix_like(col, prefix):
+    """username 접두사 LIKE 표현식. 전용 인덱스를 타도록 dialect별로 분기한다.
+
+    - Postgres: lower(username) text_pattern_ops 인덱스용 lower(username) LIKE 'prefix%'
+    - SQLite: username COLLATE NOCASE 인덱스용 username LIKE 'prefix%'
+      (SQLite의 LIKE는 기본적으로 ASCII 대소문자를 구분하지 않는다)
+    """
+    if _DIALECT == "sqlite":
+        return col.like(prefix + "%")
+    return func.lower(col).like(prefix.lower() + "%")
 
 
 _SAFE_TABLE_NAMES = {"users", "posts", "novels", "episodes", "follows", "likes", "boosts",
