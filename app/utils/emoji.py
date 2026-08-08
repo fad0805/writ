@@ -1,5 +1,6 @@
 import os
 import time
+import shutil
 
 from sqlalchemy import desc, case
 
@@ -7,7 +8,32 @@ from app.models import CustomEmoji
 from app.config.settings import S3_ENABLED
 from app.utils.storage import get_storage
 
-EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "emojis")
+# 이모지 파일은 쓰기 가능한 uploads 볼륨에 저장한다.
+# (web/public/emojis는 read_only 컨테이너에서 쓸 수 없어 업로드/복사가 500으로 실패함)
+EMOJI_DIR = os.path.join("uploads", "emojis")
+
+# 이전 버전은 web/public/emojis에 저장했으므로 기동 시점에 마이그레이션한다.
+_LEGACY_EMOJI_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "emojis")
+
+
+def _migrate_legacy_emoji_files():
+    """web/public/emojis에 남아 있는 이모지 파일을 uploads/emojis로 복사한다."""
+    if not os.path.isdir(_LEGACY_EMOJI_DIR):
+        return
+    for sub in ("local", "remote"):
+        _src = os.path.join(_LEGACY_EMOJI_DIR, sub)
+        if not os.path.isdir(_src):
+            continue
+        _dst = os.path.join(EMOJI_DIR, sub)
+        os.makedirs(_dst, exist_ok=True)
+        for name in os.listdir(_src):
+            _sp = os.path.join(_src, name)
+            _dp = os.path.join(_dst, name)
+            if os.path.isfile(_sp) and not os.path.exists(_dp):
+                try:
+                    shutil.copy2(_sp, _dp)
+                except Exception:
+                    pass
 
 # Simple in-memory TTL cache for emoji list
 _EMOJI_CACHE_TTL = 60  # seconds

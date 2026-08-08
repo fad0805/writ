@@ -205,10 +205,13 @@ def api_copy_emoji(request: Request, emoji_id: int):
                     _data = f.read()
 
         if _data:
-            _dst_local = os.path.join(EMOJI_DIR, "local", _new_fname)
-            os.makedirs(os.path.dirname(_dst_local), exist_ok=True)
-            with open(_dst_local, "wb") as f:
-                f.write(_data)
+            try:
+                _dst_local = os.path.join(EMOJI_DIR, "local", _new_fname)
+                os.makedirs(os.path.dirname(_dst_local), exist_ok=True)
+                with open(_dst_local, "wb") as f:
+                    f.write(_data)
+            except Exception:
+                pass
             try:
                 _storage.save(f"emojis/local/{_new_fname}", _data, f"image/{_ext}")
             except Exception:

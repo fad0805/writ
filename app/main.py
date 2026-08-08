@@ -22,6 +22,7 @@ from app.routes.mastodon_api import router as mastodon_api_router, oauth_router,
 from app.routes.ap import router as ap_router
 from app.routes.nodeinfo import router as nodeinfo_router
 from app.routes.streaming import router as streaming_router
+from app.utils.emoji import EMOJI_DIR, _migrate_legacy_emoji_files
 
 logger = logging.getLogger("writ.app")
 
@@ -97,7 +98,12 @@ import app.config.settings as _settings
 if not _settings.S3_ENABLED:
     app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-_emoji_static_dir = os.path.join(os.path.dirname(__file__), "..", "web", "public", "emojis")
+_emoji_static_dir = EMOJI_DIR
+try:
+    os.makedirs(_emoji_static_dir, exist_ok=True)
+    _migrate_legacy_emoji_files()
+except Exception:
+    pass
 if os.path.isdir(_emoji_static_dir):
     app.mount("/emojis", StaticFiles(directory=_emoji_static_dir), name="emojis")
 
