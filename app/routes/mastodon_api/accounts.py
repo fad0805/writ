@@ -247,7 +247,7 @@ def get_account_followers(
     request: Request,
     db: SASession = Depends(get_db),
     max_id: str | None = None,
-    limit: int = Query(default=40, le=80),
+    limit: int = Query(default=40, le=100),
 ):
     user = db.query(User).filter_by(id=int(account_id)).first()
     if not user:
@@ -272,7 +272,7 @@ def get_account_following(
     request: Request,
     db: SASession = Depends(get_db),
     max_id: str | None = None,
-    limit: int = Query(default=40, le=80),
+    limit: int = Query(default=40, le=100),
 ):
     user = db.query(User).filter_by(id=int(account_id)).first()
     if not user:

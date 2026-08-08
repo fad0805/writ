@@ -108,7 +108,7 @@ def list_follow_requests(
     request: Request,
     db: SASession = Depends(get_db),
     max_id: str | None = None,
-    limit: int = Query(default=40, le=80),
+    limit: int = Query(default=40, le=100),
 ):
     user = _require_bearer(request, db)
     return []
@@ -146,7 +146,7 @@ def list_bookmarks(
     max_id: str | None = None,
     since_id: str | None = None,
     min_id: str | None = None,
-    limit: int = Query(default=20, le=80),
+    limit: int = Query(default=20, le=100),
 ):
     user = _require_bearer(request, db)
     q = db.query(Bookmark).filter(Bookmark.user_id == user.id)
@@ -191,7 +191,7 @@ def list_favourites(
     max_id: str | None = None,
     since_id: str | None = None,
     min_id: str | None = None,
-    limit: int = Query(default=20, le=80),
+    limit: int = Query(default=20, le=100),
 ):
     user = _require_bearer(request, db)
     q = db.query(Like).filter(
@@ -240,7 +240,7 @@ def list_lists(request: Request, db: SASession = Depends(get_db)):
 def list_suggestions(
     request: Request,
     db: SASession = Depends(get_db),
-    limit: int = Query(default=40, le=80),
+    limit: int = Query(default=40, le=100),
 ):
     user = _require_bearer(request, db)
     return []
@@ -381,7 +381,7 @@ def get_trending_tags(db: SASession = Depends(get_db)):
 def get_trending_statuses(
     request: Request,
     db: SASession = Depends(get_db),
-    limit: int = Query(default=20, le=80),
+    limit: int = Query(default=20, le=100),
 ):
     return []
 
@@ -393,7 +393,7 @@ def get_trending_statuses(
 def get_directory(
     request: Request,
     db: SASession = Depends(get_db),
-    limit: int = Query(default=40, le=80),
+    limit: int = Query(default=40, le=100),
     order: str = "active",
     local: bool = False,
 ):
@@ -414,7 +414,7 @@ def list_conversations(
     request: Request,
     db: SASession = Depends(get_db),
     max_id: str | None = None,
-    limit: int = Query(default=20, le=80),
+    limit: int = Query(default=20, le=100),
 ):
     user = _require_bearer(request, db)
     return []

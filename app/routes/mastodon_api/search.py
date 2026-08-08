@@ -26,7 +26,7 @@ def search_v2(
     db: SASession = Depends(get_db),
     q: str = "",
     type: str = "",
-    limit: int = Query(default=20, le=80),
+    limit: int = Query(default=20, le=100),
     offset: int = 0,
     account_id: str | None = None,
     following: bool = False,

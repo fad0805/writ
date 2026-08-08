@@ -30,7 +30,7 @@ def home_timeline(
     max_id: str | None = None,
     since_id: str | None = None,
     min_id: str | None = None,
-    limit: int = Query(default=20, le=80),
+    limit: int = Query(default=20, le=100),
 ):
     user = _require_bearer(request, db)
 
@@ -113,7 +113,7 @@ def public_timeline(
     max_id: str | None = None,
     since_id: str | None = None,
     min_id: str | None = None,
-    limit: int = Query(default=20, le=80),
+    limit: int = Query(default=20, le=100),
 ):
     viewer = _maybe_bearer(request, db)
 
@@ -200,7 +200,7 @@ def hashtag_timeline(
     max_id: str | None = None,
     since_id: str | None = None,
     min_id: str | None = None,
-    limit: int = Query(default=20, le=80),
+    limit: int = Query(default=20, le=100),
 ):
     viewer = _maybe_bearer(request, db)
     tag_obj = db.query(Tag).filter(Tag.name == tag.lower()).first()

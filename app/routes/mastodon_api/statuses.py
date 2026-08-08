@@ -591,7 +591,7 @@ def reblogged_by(
     request: Request,
     db: SASession = Depends(get_db),
     max_id: str | None = None,
-    limit: int = Query(default=40, le=80),
+    limit: int = Query(default=40, le=100),
 ):
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
@@ -616,7 +616,7 @@ def favourited_by(
     request: Request,
     db: SASession = Depends(get_db),
     max_id: str | None = None,
-    limit: int = Query(default=40, le=80),
+    limit: int = Query(default=40, le=100),
 ):
     post = db.query(Post).filter_by(id=int(status_id)).first()
     if not post or post.is_deleted:
