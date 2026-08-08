@@ -73,7 +73,7 @@
 
 ## LOW
 
-- [ ] **미사용 SSE 코드** — `web/src/lib/useStream.ts:16`이 `/api/stream`(미존재)을 여는 dead code. 실제 엔드포인트는 `/api/timeline/stream`, `/api/notifications/stream`
+- [x] **미사용 SSE 코드** — `web/src/lib/useStream.ts:16`이 `/api/stream`(미존재)을 여는 dead code. 실제 엔드포인트는 `/api/timeline/stream`, `/api/notifications/stream` → import처 없음 확인 후 파일 삭제
 
 ---
 
