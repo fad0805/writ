@@ -23,7 +23,7 @@ emoji_router = APIRouter()
 
 
 @emoji_router.get("/emojis")
-def api_list_emojis(limit: int = Query(30, le=100), offset: int = Query(0), q: str = Query(""), category: str = Query("")):
+def api_list_emojis(limit: int = Query(30, le=10000), offset: int = Query(0), q: str = Query(""), category: str = Query("")):
     with get_session() as s:
         query = s.query(CustomEmoji)
         if q:
