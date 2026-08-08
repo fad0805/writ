@@ -374,10 +374,13 @@ export const api = {
   switchAccount: async (sessionToken: string): Promise<{ ok: boolean; user?: User }> => {
     const params = new URLSearchParams();
     params.append("session_token", sessionToken);
+    const csrf = getCsrfToken();
+    const headers: Record<string, string> = { "Content-Type": "application/x-www-form-urlencoded" };
+    if (csrf) headers["X-CSRF-Token"] = csrf;
     const res = await fetch("/api/auth/switch", {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers,
       body: params,
     });
     if (!res.ok) {
