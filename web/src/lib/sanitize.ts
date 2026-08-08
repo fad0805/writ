@@ -5,6 +5,7 @@ let hookRegistered = false;
 function registerHooks() {
   if (hookRegistered) return;
   hookRegistered = true;
+  if (typeof window === "undefined") return;
   DOMPurify.addHook("uponSanitizeAttribute", (node, data) => {
     if (
       data.attrName === "style" &&
