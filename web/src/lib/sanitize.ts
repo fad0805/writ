@@ -1,5 +1,23 @@
 import DOMPurify from "dompurify";
 
+let hookRegistered = false;
+
+function registerHooks() {
+  if (hookRegistered) return;
+  hookRegistered = true;
+  DOMPurify.addHook("uponSanitizeAttribute", (node, data) => {
+    if (
+      data.attrName === "style" &&
+      data.attrValue &&
+      /url\s*(\(|\\\()|@import|expression\s*\(|-moz-binding|behavior\s*:/i.test(data.attrValue)
+    ) {
+      data.keepAttr = false;
+    }
+  });
+}
+
+registerHooks();
+
 const POST_CONFIG: DOMPurify.Config = {
   ALLOWED_TAGS: ["p", "br", "strong", "em", "a", "span", "img", "h2", "h3", "h4", "blockquote", "ul", "ol", "li", "hr", "details", "summary", "figure", "figcaption", "pre", "code", "del", "u"],
   ALLOWED_ATTR: ["href", "src", "alt", "class", "style", "title", "target", "rel", "data-align", "data-width", "data-wrap"],
