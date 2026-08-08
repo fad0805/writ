@@ -68,8 +68,8 @@
 
 ## MEDIUM
 
-- [ ] **sw.js origin 검사 우회** — `web/public/sw.js:26`에서 `client.url.includes(origin)` 부분 일치 검사. push payload의 `url`을 그대로 `client.navigate()` → 유사 도메인/절대 URL 통과 가능
-- [ ] **작성 중 이탈 경고 1회만 동작** — `web/src/lib/useNavigationBlock.ts:13,35,51,63,89`에서 `navigatingRef`가 true가 된 후 리셋 없음. 첫 확인 후 세션 내내 경고 비활성화
+- [x] **sw.js origin 검사 우회** — `web/public/sw.js:26`에서 `client.url.includes(origin)` 부분 일치 검사. push payload의 `url`을 그대로 `client.navigate()` → 유사 도메인/절대 URL 통과 가능 → `new URL().origin` 정확 비교 + 대상 URL same-origin 제한(비허용 시 `/notifications` 폴백)
+- [x] **작성 중 이탈 경고 1회만 동작** — `web/src/lib/useNavigationBlock.ts:13,35,51,63,89`에서 `navigatingRef`가 true가 된 후 리셋 없음. 첫 확인 후 세션 내내 경고 비활성화 → `markNavigating()` 헬퍼로 500ms 후 리셋 + 언마운트 시 타이머 정리
 
 ## LOW
 

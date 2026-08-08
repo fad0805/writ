@@ -6,11 +6,18 @@ export function useNavigationBlock(active: boolean) {
   const router = useRouter();
   const activeRef = useRef(active);
   const navigatingRef = useRef(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   activeRef.current = active;
 
   const suppress = useCallback(() => {
     activeRef.current = false;
     navigatingRef.current = true;
+  }, []);
+
+  const markNavigating = useCallback(() => {
+    navigatingRef.current = true;
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+    resetTimer.current = setTimeout(() => { navigatingRef.current = false; }, 500);
   }, []);
 
   useEffect(() => {
@@ -32,13 +39,13 @@ export function useNavigationBlock(active: boolean) {
 
     window.history.back = () => {
       if (navigatingRef.current || !activeRef.current || confirmLeave()) {
-        navigatingRef.current = true;
+        markNavigating();
         origGo(-2);
       }
     };
     window.history.go = (delta?: number) => {
       if (navigatingRef.current || !(delta !== undefined && delta < 0) || confirmLeave()) {
-        navigatingRef.current = true;
+        markNavigating();
         origGo(delta);
       }
     };
@@ -48,19 +55,19 @@ export function useNavigationBlock(active: boolean) {
 
     (router as any).push = (...args: Parameters<typeof origRouterPush>) => {
       if (navigatingRef.current || !activeRef.current || confirmLeave()) {
-        navigatingRef.current = true;
+        markNavigating();
         return origRouterPush(...args);
       }
     };
     (router as any).replace = (...args: Parameters<typeof origRouterReplace>) => {
       if (navigatingRef.current || !activeRef.current || confirmLeave()) {
-        navigatingRef.current = true;
+        markNavigating();
         return origRouterReplace(...args);
       }
     };
     (router as any).back = () => {
       if (navigatingRef.current || !activeRef.current || confirmLeave()) {
-        navigatingRef.current = true;
+        markNavigating();
         origGo(-2);
       }
     };
@@ -69,7 +76,7 @@ export function useNavigationBlock(active: boolean) {
       if (navigatingRef.current) return;
       origPushState(null, "", location.href);
       if (!activeRef.current || confirmLeave()) {
-        navigatingRef.current = true;
+        markNavigating();
         origGo(-2);
       }
     };
@@ -86,13 +93,14 @@ export function useNavigationBlock(active: boolean) {
       if (anchor.closest("form")) return;
       e.preventDefault();
       if (confirmLeave()) {
-        navigatingRef.current = true;
+        markNavigating();
         origRouterPush(href);
       }
     };
     document.addEventListener("click", onClick, true);
 
     return () => {
+      if (resetTimer.current) clearTimeout(resetTimer.current);
       window.removeEventListener("beforeunload", beforeUnload);
       window.removeEventListener("popstate", onPopState);
       document.removeEventListener("click", onClick, true);
@@ -103,7 +111,7 @@ export function useNavigationBlock(active: boolean) {
       router.replace = origRouterReplace;
       router.back = () => { origBack(); };
     };
-  }, [active, router]);
+  }, [active, router, markNavigating]);
 
   return { suppress };
 }

@@ -18,19 +18,31 @@ self.addEventListener("push", function (event) {
 
 self.addEventListener("notificationclick", function (event) {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || "/notifications";
+  const origin = self.location.origin;
+  const dataUrl = (event.notification.data && event.notification.data.url) || "/notifications";
+  let target;
+  try {
+    const parsed = new URL(dataUrl, origin);
+    target = parsed.origin === origin ? parsed.href : origin + "/notifications";
+  } catch (e) {
+    target = origin + "/notifications";
+  }
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (clientList) {
       for (var i = 0; i < clientList.length; i++) {
         var client = clientList[i];
-        if (client.url.includes(self.location.origin) && "focus" in client) {
+        var clientOrigin = "";
+        try {
+          clientOrigin = new URL(client.url).origin;
+        } catch (e) {}
+        if (clientOrigin === origin && "focus" in client) {
           client.focus();
-          client.navigate(url);
+          client.navigate(target);
           return;
         }
       }
       if (clients.openWindow) {
-        return clients.openWindow(url);
+        return clients.openWindow(target);
       }
     })
   );
