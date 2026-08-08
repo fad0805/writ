@@ -1,7 +1,6 @@
 import os
-import sys
-import traceback
 import threading
+import logging
 import uvicorn
 
 from contextlib import asynccontextmanager
@@ -23,6 +22,8 @@ from app.routes.mastodon_api import router as mastodon_api_router, oauth_router,
 from app.routes.ap import router as ap_router
 from app.routes.nodeinfo import router as nodeinfo_router
 from app.routes.streaming import router as streaming_router
+
+logger = logging.getLogger("writ.app")
 
 
 @asynccontextmanager
@@ -58,24 +59,19 @@ app = FastAPI(title="WRIT, the sns for writers", version="1.0.0", lifespan=lifes
 
 @app.exception_handler(MastodonAPIError)
 async def mastodon_api_error_handler(request: Request, exc: MastodonAPIError):
-    print(f"[ERROR] {request.method} {request.url.path} MastodonAPIError {exc.status_code}: {exc.detail}", flush=True)
+    logger.error("%s %s MastodonAPIError %s: %s", request.method, request.url.path, exc.status_code, exc.detail)
     return JSONResponse({"error": exc.detail}, status_code=exc.status_code)
 
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    print(f"[ERROR] {request.method} {request.url.path} HTTPException {exc.status_code}: {exc.detail}", flush=True)
+    logger.error("%s %s HTTPException %s: %s", request.method, request.url.path, exc.status_code, exc.detail)
     return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
 
 @app.exception_handler(Exception)
 async def debug_exception_handler(request: Request, exc: Exception):
-    print(f"[ERROR] {request.method} {request.url.path} raised {type(exc).__name__}: {exc}", flush=True)
-    print(f"[ERROR] {'='*60}", flush=True)
-    traceback.print_exc()
-    print(f"[ERROR] {'='*60}", flush=True)
-    sys.stdout.flush()
-    sys.stderr.flush()
+    logger.exception("%s %s raised %s: %s", request.method, request.url.path, type(exc).__name__, exc)
     return JSONResponse({"detail": "Internal server error"}, status_code=500)
 
 

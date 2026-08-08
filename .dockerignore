@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 .env
 .env.development
+.env.production
+.env.*.local
 .git/
 .gitignore
 .DS_Store

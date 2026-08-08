@@ -55,7 +55,7 @@ def api_recent_tags(request: Request, q: str = Query("")):
 
 
 @search_router.get("/explore")
-def api_explore(request: Request, limit: int = Query(20), offset: int = Query(0)):
+def api_explore(request: Request, limit: int = Query(20, le=100), offset: int = Query(0)):
     user = get_current_user(request)
     with get_session() as s:
         # 1. 포스트 메인 쿼리

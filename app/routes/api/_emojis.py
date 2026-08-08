@@ -23,7 +23,7 @@ emoji_router = APIRouter()
 
 
 @emoji_router.get("/emojis")
-def api_list_emojis(limit: int = Query(30), offset: int = Query(0), q: str = Query(""), category: str = Query("")):
+def api_list_emojis(limit: int = Query(30, le=100), offset: int = Query(0), q: str = Query(""), category: str = Query("")):
     with get_session() as s:
         query = s.query(CustomEmoji)
         if q:
@@ -75,6 +75,12 @@ def api_create_emoji(
     allowed_types = {"image/png", "image/jpeg", "image/webp", "image/gif"}
     if image.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail=f"Unsupported image type: {image.content_type}")
+
+    image.file.seek(0, 2)
+    _file_size = image.file.tell()
+    image.file.seek(0)
+    if _file_size > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Emoji image is too large (max 2MB)")
 
     ct_to_ext = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}
     ext = ct_to_ext.get(image.content_type, "png")

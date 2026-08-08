@@ -6,6 +6,7 @@ import threading
 import uuid
 
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import User, Post, Like, Boost, Notification, CustomEmoji
@@ -138,9 +139,13 @@ def like_post(db: Session, user: User, post_id: int, reaction: str = "★"):
     existing = db.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
 
     if not existing:
-        db.add(Like(user_id=user.id, post_id=post_id, reaction=reaction))
-        _add_like_notif(db, post, user, post_id, reaction)
-        _dedupe_like(db, user, post_id)
+        try:
+            db.add(Like(user_id=user.id, post_id=post_id, reaction=reaction))
+            _add_like_notif(db, post, user, post_id, reaction)
+            _dedupe_like(db, user, post_id)
+        except IntegrityError:
+            db.rollback()
+            return
         broadcast_reaction_update(post_id, _get_reactions(db, post_id))
         _notify_author(db, post, user, post_id, "like")
 
@@ -206,15 +211,19 @@ def boost_post(db: Session, user: User, post_id: int):
 
     existing = db.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
     if not existing:
-        db.add(Boost(user_id=user.id, post_id=post_id))
-        db.add(Post(
-            author_id=user.id,
-            content="",
-            boost_of_id=post_id,
-            visibility=post.visibility or "public",
-        ))
-        _add_boost_notif(db, post, user, post_id)
-        db.commit()
+        try:
+            db.add(Boost(user_id=user.id, post_id=post_id))
+            db.add(Post(
+                author_id=user.id,
+                content="",
+                boost_of_id=post_id,
+                visibility=post.visibility or "public",
+            ))
+            _add_boost_notif(db, post, user, post_id)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            return
 
         try:
             _boosts_count = db.query(Boost).filter_by(post_id=post_id).count()
@@ -342,9 +351,13 @@ def react_post(db: Session, user: User, post_id: int, emoji: str):
             _notif_meta = {"reaction": emoji} if emoji else {}
             existing_notif.metadata_json = json.dumps(_notif_meta) if _notif_meta else ""
     else:
-        db.add(Like(user_id=user.id, post_id=post_id, reaction=emoji))
-        _add_like_notif(db, post, user, post_id, emoji)
-    _dedupe_like(db, user, post_id)
+        try:
+            db.add(Like(user_id=user.id, post_id=post_id, reaction=emoji))
+            _add_like_notif(db, post, user, post_id, emoji)
+            _dedupe_like(db, user, post_id)
+        except IntegrityError:
+            db.rollback()
+            return
 
     broadcast_reaction_update(post_id, _get_reactions(db, post_id))
     if post_author_id != user.id:

@@ -278,7 +278,7 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
 
 
 @users_router.get("/users/{username}/media")
-def api_user_media(request: Request, username: str, limit: int = Query(12), offset: int = Query(0)):
+def api_user_media(request: Request, username: str, limit: int = Query(12, le=100), offset: int = Query(0)):
     user = get_current_user(request)
     with get_session() as s:
         profile = s.query(User).filter_by(username=username).first()

@@ -1,5 +1,6 @@
 import os
 import time
+import logging
 from urllib.parse import urlparse
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -9,6 +10,8 @@ from starlette.responses import JSONResponse
 from app.config.settings import APP_ENV, DOMAIN
 from app.config.logging import _request_logger
 from app.utils.crypto import CSRF_EXEMPT_PREFIXES, CSRF_EXEMPT_EXACT, CSRF_EXEMPT_METHODS, validate_csrf_token, generate_csrf_token, csrf_token_user_id
+
+logger = logging.getLogger("writ.middleware")
 
 
 def _renew_csrf_cookie(response, uid: int | None):
@@ -48,7 +51,7 @@ class CSRFProtectionMiddleware(BaseHTTPMiddleware):
                 except Exception:
                     origin_host = ""
                 if origin_host and origin_host != host_header:
-                    print(f"[CSRF] origin mismatch: origin={origin_host} host={host_header}", flush=True)
+                    logger.warning("CSRF origin mismatch: origin=%s host=%s", origin_host, host_header)
                     return JSONResponse({"detail": "CSRF origin mismatch"}, status_code=403)
             elif referer:
                 try:
@@ -56,7 +59,7 @@ class CSRFProtectionMiddleware(BaseHTTPMiddleware):
                 except Exception:
                     referer_host = ""
                 if referer_host and referer_host != host_header:
-                    print(f"[CSRF] referer mismatch: referer={referer_host} host={host_header}", flush=True)
+                    logger.warning("CSRF referer mismatch: referer=%s host=%s", referer_host, host_header)
                     return JSONResponse({"detail": "CSRF referer mismatch"}, status_code=403)
         if not validate_csrf_token(csrf_token, session_token):
             return JSONResponse({"detail": "CSRF token missing or invalid"}, status_code=403)

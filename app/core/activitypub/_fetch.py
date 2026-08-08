@@ -476,18 +476,18 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     if _depth > 3 or not url:
         return None
 
-    print(f"[FETCH-POST] url={url} signer={signer.actor_uri() if signer else 'None'} depth={_depth}", flush=True)
+    logger.debug("[FETCH-POST] url=%s signer=%s depth=%s", url, signer.actor_uri() if signer else 'None', _depth)
 
     # Convert web URL /@username/id to AP URL /users/username/statuses/id (Mastodon)
     m = re.match(r'^(https?://[^/]+)/@(\w+(?:@\S+)?)/([a-f0-9]+)(\?.*)?$', url)
     if m:
         base, username, status_id, query = m.group(1), m.group(2), m.group(3), m.group(4) or ""
         url = f"{base}/users/{username}/statuses/{status_id}{query}"
-        print(f"[FETCH-POST] Mastodon URL converted to: {url}", flush=True)
+        logger.debug("[FETCH-POST] Mastodon URL converted to: %s", url)
 
     if url.endswith("/activity"):
         url = url[:-len("/activity")]
-        print(f"[FETCH-POST] stripped /activity suffix → {url}", flush=True)
+        logger.debug("[FETCH-POST] stripped /activity suffix to %s", url)
 
     parsed = urlparse(url)
     headers = {"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}
@@ -524,7 +524,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     data = None
     try:
         resp = validated_get(url, headers=headers, timeout=10)
-        print(f"[FETCH-POST] first attempt url={url} status={resp.status_code if resp else 'None'}", flush=True)
+        logger.debug("[FETCH-POST] first attempt url=%s status=%s", url, resp.status_code if resp else 'None')
         if resp is not None and resp.status_code == 200:
             data = resp.json()
     except Exception as e:
@@ -533,30 +533,30 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     if data is None:
         try:
             resp = validated_get(url, headers=headers, timeout=10)
-            print(f"[FETCH-POST] retry url={url} status={resp.status_code if resp else 'None'}", flush=True)
+            logger.debug("[FETCH-POST] retry url=%s status=%s", url, resp.status_code if resp else 'None')
             if resp is not None and resp.status_code == 200:
                 data = resp.json()
         except Exception as e:
             logger.error("[FETCH-POST] retry url=%s error=%s", url, e, exc_info=True)
 
     if data is None:
-        print(f"[FETCH-POST] FAILED url={url}", flush=True)
+        logger.debug("[FETCH-POST] FAILED url=%s", url)
         return None
 
     obj = data.get("object", data) if isinstance(data, dict) else {}
     if not isinstance(obj, dict):
-        print(f"[FETCH-POST] obj not dict url={url}", flush=True)
+        logger.debug("[FETCH-POST] obj not dict url=%s", url)
         return None
     obj_type = obj.get("type", "")
     if obj_type not in ("Note", "Question"):
-        print(f"[FETCH-POST] not Note/Question type={obj_type} url={url}", flush=True)
+        logger.debug("[FETCH-POST] not Note/Question type=%s url=%s", obj_type, url)
         return None
 
     ap_id = obj.get("id", url)
     remote_url = extract_remote_url(obj, ap_id)
     existing = session.query(Post).filter_by(ap_id=ap_id).first()
     if existing and not existing.is_deleted:
-        print(f"[FETCH-POST] existing post id={existing.id} ap_id={ap_id}", flush=True)
+        logger.debug("[FETCH-POST] existing post id=%s ap_id=%s", existing.id, ap_id)
         return existing
 
     attributed_to = obj.get("attributedTo", "")
@@ -565,13 +565,13 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     if isinstance(attributed_to, dict):
         attributed_to = attributed_to.get("id", "")
     if not attributed_to:
-        print(f"[FETCH-POST] no attributedTo url={url}", flush=True)
+        logger.debug("[FETCH-POST] no attributedTo url=%s", url)
         return None
 
     _resolve_actor(attributed_to, sign_as=signer)
     author = session.query(User).filter_by(remote_url=attributed_to).first()
     if not author:
-        print(f"[FETCH-POST] author not found attributed_to={attributed_to}", flush=True)
+        logger.debug("[FETCH-POST] author not found attributed_to=%s", attributed_to)
         return None
 
     raw_content = obj.get("content", "") or ""
@@ -774,7 +774,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
 def _safe_httpx_get(url, headers=None, timeout=15, max_size=5*1024*1024):
     """HTTP GET with redirect validation and size limit."""
     if not validate_url(url):
-        print(f"[SAFE_GET] blocked by validate_url url={url}", flush=True)
+        logger.warning("[SAFE_GET] blocked by validate_url url=%s", url)
         return None
     client = httpx.Client(follow_redirects=True, timeout=timeout)
     # Intercept redirects to validate each target
@@ -787,7 +787,7 @@ def _safe_httpx_get(url, headers=None, timeout=15, max_size=5*1024*1024):
     try:
         resp = client.get(url, headers=headers)
         client.close()
-        print(f"[SAFE_GET] url={url} status={resp.status_code} len={len(resp.content)}", flush=True)
+        logger.debug("[SAFE_GET] url=%s status=%s len=%s", url, resp.status_code, len(resp.content))
         if resp.status_code != 200:
             return None
         if len(resp.content) > max_size:
@@ -839,7 +839,7 @@ def _ap_fetch(url, user):
         }
         resp = _safe_httpx_get(target_url, headers=headers)
         if not resp or resp.status_code != 200:
-            print(f"[AP_FETCH] url={target_url} status={resp.status_code if resp else 'None resp'}", flush=True)
+            logger.debug("[AP_FETCH] url=%s status=%s", target_url, resp.status_code if resp else 'None resp')
             return None
         ct = resp.headers.get("content-type", "")
         if "json" not in ct and "activity" not in ct:
@@ -851,22 +851,22 @@ def _ap_fetch(url, user):
                 alt_m = re.search(r'href=["\']([^"\']+)["\'][^>]*type=["\']application/activity\+json["\']', html, re.I)
             if alt_m:
                 alt_url = alt_m.group(1)
-                print(f"[AP_FETCH] HTML response, found alternate AP URL: {alt_url}", flush=True)
+                logger.debug("[AP_FETCH] HTML response, found alternate AP URL: %s", alt_url)
                 return _sign_and_fetch(alt_url, _depth + 1)
-            print(f"[AP_FETCH] HTML response, no alternate link found for {target_url}", flush=True)
+            logger.debug("[AP_FETCH] HTML response, no alternate link found for %s", target_url)
             return None
         try:
             return resp.json()
         except Exception as e:
-            print(f"[AP_FETCH] json error url={target_url}: {e}", flush=True)
+            logger.debug("[AP_FETCH] json error url=%s: %s", target_url, e)
             return None
 
     result = _sign_and_fetch(url)
     # Fallback: try original /@username/id URL if /users/.../statuses/... returned 404
     if not result and original_url != url:
-        print(f"[AP_FETCH] fallback to original_url={original_url}", flush=True)
+        logger.debug("[AP_FETCH] fallback to original_url=%s", original_url)
         result = _sign_and_fetch(original_url)
-    print(f"[AP_FETCH] result_is_none={result is None} original={original_url} converted={url}", flush=True)
+    logger.debug("[AP_FETCH] result_is_none=%s original=%s converted=%s", result is None, original_url, url)
     return result
 
 
@@ -891,7 +891,7 @@ def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
             try:
                 _fetch_and_save_ap_object(parent_obj, user, _visited, _depth + 1)
             except Exception as e:
-                print(f"[WARN] Failed to process parent post {in_reply_to}: {e}", flush=True)
+                logger.warning("Failed to process parent post %s: %s", in_reply_to, e)
 
     actor_url = obj.get("id")
     post = None
@@ -904,7 +904,7 @@ def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
                 session.commit()
         except Exception as e:
             # 💡 단순 print 대신 에러가 발생한 정확한 라인과 원인을 추적하기 위해 traceback 추가
-            print(f"[ERROR] Failed to fetch remote post from {actor_url}: {e}", flush=True)
+            logger.error("Failed to fetch remote post from %s: %s", actor_url, e)
             traceback.print_exc() 
             return None # 껍데기를 만들지 않도록 에러 시 None 리턴 구조로 방어
 

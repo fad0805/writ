@@ -77,7 +77,7 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
         actor = actor[0]
 
     actor_domain = urlparse(actor).hostname or "" if actor and isinstance(actor, str) else ""
-    print(f"[INBOX] atype={atype} actor_domain={actor_domain}", flush=True)
+    logger.debug("[INBOX] atype=%s actor_domain=%s", atype, actor_domain)
 
     # Check federation rules for the actor's domain
     if actor and isinstance(actor, str):
@@ -456,8 +456,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 _a = _aud.rstrip("/")
                 if _a and _a.startswith("http"):
                     mentioned_hrefs.add(_a)
-            print(f"[_handle_create MENTION DEBUG] actor={actor_url} to={to} cc={cc}", flush=True)
-            print(f"[_handle_create MENTION DEBUG] mentioned_hrefs={mentioned_hrefs} mentioned_names={mentioned_names}", flush=True)
+            logger.debug("[_handle_create MENTION DEBUG] actor=%s to=%s cc=%s", actor_url, to, cc)
+            logger.debug("[_handle_create MENTION DEBUG] mentioned_hrefs=%s mentioned_names=%s", mentioned_hrefs, mentioned_names)
 
             _seen_ids = set()
             if mentioned_hrefs:
@@ -472,7 +472,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             if _href in local_uris and _u.id not in _seen_ids:
                                 mentioned_ids.append(_u.id)
                                 _seen_ids.add(_u.id)
-                                print(f"[_handle_create MENTION] LOCAL MATCH: href={_href} -> uid={_u.id} username={_u.username}", flush=True)
+                                logger.debug("[_handle_create MENTION] LOCAL MATCH: href=%s -> uid=%s username=%s", _href, _u.id, _u.username)
                                 _matched = True
                                 break
                     if not _matched:
@@ -480,9 +480,9 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         if u and u.id not in _seen_ids:
                             mentioned_ids.append(u.id)
                             _seen_ids.add(u.id)
-                            print(f"[_handle_create MENTION] REMOTE MATCH: href={_href} -> uid={u.id} username={u.username}", flush=True)
+                            logger.debug("[_handle_create MENTION] REMOTE MATCH: href=%s -> uid=%s username=%s", _href, u.id, u.username)
                         elif not u:
-                            print(f"[_handle_create MENTION] NO MATCH: href={_href}", flush=True)
+                            logger.debug("[_handle_create MENTION] NO MATCH: href=%s", _href)
             if mentioned_names:
                 for _name in mentioned_names:
                     if '@' in _name:
@@ -519,7 +519,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                 mentioned_ids.append(u.id)
                                 _seen_ids.add(u.id)
 
-            print(f"[_handle_create MENTION RESULT] mentioned_ids={mentioned_ids} (from hrefs={mentioned_hrefs}, names={mentioned_names})", flush=True)
+            logger.debug("[_handle_create MENTION RESULT] mentioned_ids=%s (from hrefs=%s, names=%s)", mentioned_ids, mentioned_hrefs, mentioned_names)
             actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
             if actor_domain:
                 mute_entry = session.query(MutedServer).filter_by(domain=actor_domain).first()
@@ -596,17 +596,17 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             cached = _cache_remote_media(url)
             if att_type.startswith("image/") or att_as2_type == "Image":
                 media_list.append({"url": cached, "type": "image"})
-                print(f"[_handle_create MEDIA] image url={cached} sensitive={att_sensitive}", flush=True)
+                logger.debug("[_handle_create MEDIA] image url=%s sensitive=%s", cached, att_sensitive)
             elif att_type.startswith("video/") or att_as2_type == "Video":
                 media_list.append({"url": cached, "type": "video"})
-                print(f"[_handle_create MEDIA] video url={cached} sensitive={att_sensitive}", flush=True)
+                logger.debug("[_handle_create MEDIA] video url=%s sensitive=%s", cached, att_sensitive)
             elif att_as2_type == "Document" or att_type.startswith("audio/"):
                 if att_type.startswith("image/") or att_type.startswith("video/"):
                     mtype = "video" if att_type.startswith("video/") else "image"
                 else:
                     mtype = "image"
                 media_list.append({"url": cached, "type": mtype})
-                print(f"[_handle_create MEDIA] Document({att_type}) url={cached} type={mtype} sensitive={att_sensitive}", flush=True)
+                logger.debug("[_handle_create MEDIA] Document(%s) url=%s type=%s sensitive=%s", att_type, cached, mtype, att_sensitive)
 
         # Extract quote reference from Note (FEP-044f / Mastodon / Misskey / Firefish compat)
         quote_of_ap_id = ""
@@ -1112,19 +1112,19 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
     actor_url = raw_actor if isinstance(raw_actor, str) else raw_actor[0]
     raw_object = activity.get("object")
     object_url = raw_object if isinstance(raw_object, str) else ""
-    print(f"[ANNOUNCE] actor={actor_url} object_type={type(raw_object).__name__} object_url={object_url[:120]}", flush=True)
+    logger.debug("[ANNOUNCE] actor=%s object_type=%s object_url=%s", actor_url, type(raw_object).__name__, object_url[:120])
 
     if not object_url and isinstance(raw_object, dict):
         object_url = raw_object.get("id", "")
-        print(f"[ANNOUNCE] embedded object, extracted id={object_url[:120]}", flush=True)
+        logger.debug("[ANNOUNCE] embedded object, extracted id=%s", object_url[:120])
 
     if not object_url:
-        print("[ANNOUNCE] no object_url, returning early", flush=True)
+        logger.debug("[ANNOUNCE] no object_url, returning early")
         return (200, "OK")
 
     if object_url.endswith("/activity"):
         object_url = object_url[:-len("/activity")]
-        print(f"[ANNOUNCE] stripped /activity suffix → {object_url[:120]}", flush=True)
+        logger.debug("[ANNOUNCE] stripped /activity suffix to %s", object_url[:120])
 
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
@@ -1133,10 +1133,10 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
         _sign_as = session.query(User).get(post.author_id) if post else None
         if not _sign_as:
             _sign_as = _get_instance_actor(session)
-    print(f"[ANNOUNCE] db_post={'found id='+str(post.id) if post else 'none'} signer={'id='+str(_sign_as.id) if _sign_as else 'none'}", flush=True)
+    logger.debug("[ANNOUNCE] db_post=%s signer=%s", 'found id=' + str(post.id) if post else 'none', 'id=' + str(_sign_as.id) if _sign_as else 'none')
     actor = _resolve_actor(actor_url, sign_as=_sign_as)
     if not actor:
-        print("[ANNOUNCE] actor not found, returning 404", flush=True)
+        logger.debug("[ANNOUNCE] actor not found, returning 404")
         return (404, "Actor not found")
 
     actor_id = actor.id
@@ -1146,21 +1146,21 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
         post = session.query(Post).filter_by(ap_id=object_url).first()
         if post and post.boost_of_id:
             post = session.query(Post).get(post.boost_of_id)
-        print(f"[ANNOUNCE] session2 post={'found id='+str(post.id) if post else 'none'}", flush=True)
+        logger.debug("[ANNOUNCE] session2 post=%s", 'found id=' + str(post.id) if post else 'none')
         if not post:
             _local_signer = _get_instance_actor(session)
             try:
                 post = _fetch_remote_post(object_url, _local_signer, session)
                 if post and post.boost_of_id:
                     post = session.query(Post).get(post.boost_of_id)
-                print(f"[ANNOUNCE] fetch_remote_post result={'id='+str(post.id) if post else 'None'}", flush=True)
+                logger.debug("[ANNOUNCE] fetch_remote_post result=%s", 'id=' + str(post.id) if post else 'None')
             except Exception as e:
                 logger.warning("Announce: _fetch_remote_post failed for %s: %s", object_url, e)
-                print(f"[ANNOUNCE] fetch_remote_post EXCEPTION: {e}", flush=True)
+                logger.debug("[ANNOUNCE] fetch_remote_post EXCEPTION: %s", e)
                 post = None
             if not post:
                 logger.warning("Announce: could not fetch remote post %s", object_url)
-                print(f"[ANNOUNCE] could not fetch remote post, returning early", flush=True)
+                logger.debug("[ANNOUNCE] could not fetch remote post, returning early")
                 return (200, "OK")
 
         existing = session.query(Boost).filter_by(user_id=actor_id, post_id=post.id).first()
@@ -1293,7 +1293,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
         except Exception as e:
             logger.error("Failed to broadcast boost from AP: %s", e, exc_info=True)
 
-    print(f"[ANNOUNCE] success post_id={post.id} by actor_id={actor_id}", flush=True)
+    logger.debug("[ANNOUNCE] success post_id=%s by actor_id=%s", post.id, actor_id)
     return (200, "Announced")
 
 def _handle_block(activity: dict) -> tuple[int, str]:
@@ -1564,7 +1564,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                 post = session.query(Post).filter_by(ap_id=obj_id).first()
                 if post and not post.is_deleted:
                     if post.author and post.author.remote_url != actor_url:
-                        print(f"[AP] _handle_update REJECTED: actor {actor_url} does not own post {obj_id}", flush=True)
+                        logger.warning("[AP] _handle_update REJECTED: actor %s does not own post %s", actor_url, obj_id)
                         return (403, "Actor does not own this post")
                     # Update content/summary
                     new_content = object_data.get("content", "")
@@ -1649,7 +1649,7 @@ def _handle_delete(activity: dict) -> tuple[int, str]:
         post = session.query(Post).filter_by(ap_id=object_url).first()
         if post:
             if post.author and post.author.remote_url != actor_url:
-                print(f"[AP] _handle_delete REJECTED: actor {actor_url} does not own post {object_url} (author={post.author.remote_url})", flush=True)
+                logger.warning("[AP] _handle_delete REJECTED: actor %s does not own post %s (author=%s)", actor_url, object_url, post.author.remote_url)
                 return (403, "Actor does not own this post")
             _del_author_id = post.author_id
             post.is_deleted = True

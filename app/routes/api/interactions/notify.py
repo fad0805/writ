@@ -118,7 +118,7 @@ def api_direct_threads(request: Request):
 
 
 @notify_router.get("/notifications")
-def api_notifications(request: Request, filter_type: str = Query(""), limit: int = Query(20), offset: int = Query(0), mark_read: bool = Query(True)):
+def api_notifications(request: Request, filter_type: str = Query(""), limit: int = Query(20, le=100), offset: int = Query(0), mark_read: bool = Query(True)):
     limit = min(limit, 20)
     user = require_auth(request)
     with get_session() as s:

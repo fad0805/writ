@@ -262,16 +262,16 @@ def init_vapid_keys():
                         pass
                 return
             elif _db_priv_san and _db_pub:
-                print(f"[VAPID] DB key invalid (len={len(_db_priv_san)}), regenerating...", flush=True)
+                logger.warning("VAPID DB key invalid (len=%s), regenerating...", len(_db_priv_san))
                 try:
                     _ss.vapid_private_key = ''
                     _ss.vapid_public_key = ''
                     _s.commit()
-                    print("[VAPID] Cleared invalid key from DB", flush=True)
+                    logger.warning("VAPID cleared invalid key from DB")
                 except Exception as _e:
-                    print(f"[VAPID] Failed to clear DB key: {_e}", flush=True)
+                    logger.error("VAPID failed to clear DB key: %s", _e)
     except Exception as _e:
-        print(f"[VAPID] DB read error: {_e}", flush=True)
+        logger.error("VAPID DB read error: %s", _e)
 
     if VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY:
         return
@@ -303,16 +303,16 @@ def init_vapid_keys():
                 _ss.vapid_private_key = VAPID_PRIVATE_KEY
                 _ss.vapid_public_key = VAPID_PUBLIC_KEY
                 _s.commit()
-                print(f"[VAPID] Auto-generated and saved new key (priv len={len(VAPID_PRIVATE_KEY)})", flush=True)
+                logger.warning("VAPID auto-generated and saved new key (priv len=%s)", len(VAPID_PRIVATE_KEY))
                 try:
                     _deleted = _s.query(PushSubscription).delete()
                     _s.commit()
                     if _deleted:
-                        print(f"[VAPID] Cleared {_deleted} stale push subscriptions (users must re-subscribe)", flush=True)
+                        logger.warning("VAPID cleared %s stale push subscriptions (users must re-subscribe)", _deleted)
                 except Exception as _e:
-                    print(f"[VAPID] Failed to clear push subscriptions: {_e}", flush=True)
+                    logger.error("VAPID failed to clear push subscriptions: %s", _e)
         except Exception as _e:
-            print(f"[VAPID] Failed to save auto-generated key to DB: {_e}", flush=True)
+            logger.error("VAPID failed to save auto-generated key to DB: %s", _e)
     except Exception as _e:
-        print(f"[VAPID] Auto-generate error: {_e}", flush=True)
+        logger.error("VAPID auto-generate error: %s", _e)
 

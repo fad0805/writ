@@ -75,7 +75,7 @@ async def api_post_stream(request: Request, post_id: int):
 
 
 @feed_router.get("/timeline/{tl_type}")
-def api_timeline(request: Request, tl_type: str, limit: int = Query(10), offset: int = Query(0), cursor: str | None = Query(None), s: Session = Depends(get_db)):
+def api_timeline(request: Request, tl_type: str, limit: int = Query(10, le=100), offset: int = Query(0), cursor: str | None = Query(None), s: Session = Depends(get_db)):
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)

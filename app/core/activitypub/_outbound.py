@@ -134,8 +134,7 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     if not validate_url(inbox_url):
         return
     body = json.dumps(activity, ensure_ascii=True, sort_keys=True).encode("utf-8")
-    print(f"DEBUG_BODY_LENGTH: {len(body)}")
-    print(f"DEBUG_BODY: {body.decode('utf-8')}") # 실제 전송되는 JSON
+    logger.debug("outbound body length=%s", len(body))
     digest = base64.b64encode(hashlib.sha256(body).digest()).decode()
     digest_header = f"SHA-256={digest}" # 공백 없음 확인
     now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
@@ -143,14 +142,14 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
 
     parsed = urlparse(inbox_url)
     path = parsed.path or "/"
-    print(f"DEBUG_VERIFY: incoming_inbox={inbox_url}, parsed_host={parsed.netloc}")
+    logger.debug("outbound to host=%s", parsed.netloc)
     signed_string = (
         f"(request-target): post {path}\n"
         f"host: {parsed.netloc}\n"
         f"date: {date}\n"
         f"digest: {digest_header}"
     )
-    print(f"DEBUG_SIGNED_STRING: {repr(signed_string)}") # \n 같은 제어문자까지 다 보게 repr() 사용
+    logger.debug("outbound signed string: %r", signed_string)
 
     signature = sign_string(signed_string, get_private_key(sender, SECRET_KEY))
     signature_header = (

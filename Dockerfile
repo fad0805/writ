@@ -23,5 +23,8 @@ USER writ
 
 EXPOSE 8000
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/server-info', timeout=4)" || exit 1
+
 RUN chmod +x start.sh
 CMD ["./start.sh"]

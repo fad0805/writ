@@ -1,7 +1,7 @@
 import datetime
 import uuid
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, JSON, Table, Index
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, JSON, Table, Index, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.config.settings import BASE_URL
@@ -228,6 +228,9 @@ class Vote(Base):
 
 class Like(Base):
     __tablename__ = "likes"
+    __table_args__ = (
+        UniqueConstraint("user_id", "post_id", name="uq_likes_user_post"),
+    )
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -242,6 +245,9 @@ class Like(Base):
 
 class Boost(Base):
     __tablename__ = "boosts"
+    __table_args__ = (
+        UniqueConstraint("user_id", "post_id", name="uq_boosts_user_post"),
+    )
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)

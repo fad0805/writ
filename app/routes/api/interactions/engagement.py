@@ -99,7 +99,7 @@ def api_unbookmark_post(request: Request, post_id: int):
 
 
 @engagement_router.get("/bookmarks")
-def api_bookmarks(request: Request, limit: int = Query(20), offset: int = Query(0)):
+def api_bookmarks(request: Request, limit: int = Query(20, le=100), offset: int = Query(0)):
     user = require_active_auth(request)
     with get_session() as s:
         raw = s.query(Bookmark).filter_by(user_id=user.id).order_by(desc(Bookmark.created_at)).offset(offset).limit(limit + 1).all()
@@ -109,7 +109,7 @@ def api_bookmarks(request: Request, limit: int = Query(20), offset: int = Query(
 
 
 @engagement_router.get("/favorites")
-def api_favorites(request: Request, limit: int = Query(10), offset: int = Query(0)):
+def api_favorites(request: Request, limit: int = Query(10, le=100), offset: int = Query(0)):
     limit = min(limit, 20)
     user = require_active_auth(request)
     with get_session() as s:

@@ -138,7 +138,7 @@ def api_unpin_series(request: Request, novel_id: int):
 
 
 @novels_router.get("/series")
-def api_novels(request: Request, limit: int = Query(12), offset: int = Query(0)):
+def api_novels(request: Request, limit: int = Query(12, le=100), offset: int = Query(0)):
     with get_session() as s:
         q = _apply_latest_activity_order(s.query(Novel).filter_by(is_published=True, visibility="public"), s)
         raw = q.offset(offset).limit(limit + 1).all()
@@ -149,7 +149,7 @@ def api_novels(request: Request, limit: int = Query(12), offset: int = Query(0))
 
 
 @novels_router.get("/series/my")
-def api_my_novels(request: Request, limit: int = Query(12), offset: int = Query(0)):
+def api_my_novels(request: Request, limit: int = Query(12, le=100), offset: int = Query(0)):
     user = require_auth(request)
     with get_session() as s:
         q = _apply_latest_activity_order(s.query(Novel).filter_by(author_id=user.id), s)
@@ -161,7 +161,7 @@ def api_my_novels(request: Request, limit: int = Query(12), offset: int = Query(
 
 
 @novels_router.get("/series/followed")
-def api_followed_novels(request: Request, limit: int = Query(12), offset: int = Query(0)):
+def api_followed_novels(request: Request, limit: int = Query(12, le=100), offset: int = Query(0)):
     user = require_auth(request)
     with get_session() as s:
         follow_ids = [f.novel_id for f in s.query(SeriesFollow).filter_by(user_id=user.id).all()]
