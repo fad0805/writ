@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import Icon from "./Icon";
 import AccountSwitcher from "./AccountSwitcher";
-import { fetchAnnouncementStatus } from "@/lib/announcements";
+import { subscribeAnnouncementStatus, refreshAnnouncementStatus } from "@/lib/announcements";
 
 export default function MobileNav() {
   const { user, loading } = useAuth();
@@ -54,24 +54,13 @@ export default function MobileNav() {
 
   useEffect(() => {
     if (!user) return;
-    let cancelled = false;
-    const update = (status?: { has_active: boolean; unread_count: number }) => {
-      if (cancelled) return;
-      if (status) {
-        setHasAnnouncement(status.has_active);
-        setUnreadAnnouncement(status.unread_count > 0);
-        if (typeof window !== "undefined") (window as any).__announcementStatus = status;
-      }
-    };
-    fetchAnnouncementStatus().then(update);
-    const handler = () => {
-      const cached = (window as any).__announcementStatus;
-      if (cached) { update(cached); return; }
-      fetchAnnouncementStatus().then(update);
-    };
+    const unsubscribe = subscribeAnnouncementStatus((status) => {
+      setHasAnnouncement(status.has_active);
+      setUnreadAnnouncement(status.unread_count > 0);
+    });
+    const handler = () => refreshAnnouncementStatus();
     window.addEventListener("announcementchange", handler);
-    const interval = setInterval(() => fetchAnnouncementStatus().then(update), 30000);
-    return () => { cancelled = true; window.removeEventListener("announcementchange", handler); clearInterval(interval); };
+    return () => { unsubscribe(); window.removeEventListener("announcementchange", handler); };
   }, [user]);
 
   useEffect(() => {

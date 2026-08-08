@@ -9,6 +9,7 @@ import Avatar from "./Avatar";
 import { useRouter } from "next/navigation";
 import { renderCustomEmojis, renderReaction, useEmojiList, CustomEmoji, invalidateEmojiCache } from "@/lib/emojis";
 import { sanitizeName } from "@/lib/sanitize";
+import { onNotificationStream } from "@/lib/notificationStream";
 
 const MODAL_ACTION_NAMES: Record<string, string> = {
   warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지",
@@ -32,28 +33,25 @@ export default function RightSidebar() {
     setNotifs([]);
     api.getMyNovels().then((d) => { if (!cancelled) setNovels(d.novels); }).catch(() => {});
     api.getNotifications(undefined, 10, 0).then((d) => { if (!cancelled) setNotifs(d.notifications); }).catch(() => {});
-    const es = new EventSource("/api/notifications/stream");
-    es.onmessage = (event) => {
-      if (event.data === "refresh") {
-        invalidateEmojiCache();
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-          const autoRead = document.visibilityState === "visible";
-          api.getNotifications(undefined, 5, 0, autoRead).then((d) => {
-            setNotifs((prev) => {
-              const existing = new Set(prev.map((n) => n.id));
-              const newItems = d.notifications.filter((n) => !existing.has(n.id));
-              if (newItems.length === 0) return prev;
-              window.dispatchEvent(new Event("notifchange"));
-              return [...newItems, ...prev].slice(0, 20);
-            });
-            if (autoRead) window.dispatchEvent(new Event("notificationsread"));
-          }).catch(() => {});
-        }, 300);
-      }
-    };
-    es.onerror = () => {};
-    return () => { cancelled = true; clearTimeout(debounceTimer); es.close(); };
+    const unsubscribe = onNotificationStream((raw) => {
+      if (raw !== "refresh") return;
+      invalidateEmojiCache();
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        const autoRead = document.visibilityState === "visible";
+        api.getNotifications(undefined, 5, 0, autoRead).then((d) => {
+          setNotifs((prev) => {
+            const existing = new Set(prev.map((n) => n.id));
+            const newItems = d.notifications.filter((n) => !existing.has(n.id));
+            if (newItems.length === 0) return prev;
+            window.dispatchEvent(new Event("notifchange"));
+            return [...newItems, ...prev].slice(0, 20);
+          });
+          if (autoRead) window.dispatchEvent(new Event("notificationsread"));
+        }).catch(() => {});
+      }, 300);
+    });
+    return () => { cancelled = true; clearTimeout(debounceTimer); unsubscribe(); };
   }, [user, refreshKey]);
 
   const [serverRefreshKey, setServerRefreshKey] = useState(0);

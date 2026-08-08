@@ -23,14 +23,25 @@ def _notice_json(n):
 
 
 @notices_router.get("/series/{novel_id}/notices")
-def api_list_notices(request: Request, novel_id: int):
+def api_list_notices(request: Request, novel_id: int, pinned: int = 0):
     with get_session() as s:
         novel = s.query(Novel).filter_by(id=novel_id).first()
         if not novel:
             raise HTTPException(status_code=404, detail="Series not found")
-        notices = s.query(SeriesNotice).filter_by(novel_id=novel_id).order_by(
-            SeriesNotice.is_pinned.desc(), SeriesNotice.created_at.desc()).all()
+        q = s.query(SeriesNotice).filter_by(novel_id=novel_id)
+        if pinned:
+            q = q.filter_by(is_pinned=True)
+        notices = q.order_by(SeriesNotice.is_pinned.desc(), SeriesNotice.created_at.desc()).all()
         return [_notice_json(n) for n in notices]
+
+
+@notices_router.get("/series/{novel_id}/notices/{notice_id}")
+def api_get_notice(request: Request, novel_id: int, notice_id: int):
+    with get_session() as s:
+        notice = s.query(SeriesNotice).filter_by(id=notice_id, novel_id=novel_id).first()
+        if not notice:
+            raise HTTPException(status_code=404, detail="Notice not found")
+        return _notice_json(notice)
 
 
 @notices_router.post("/series/{novel_id}/notices/new")

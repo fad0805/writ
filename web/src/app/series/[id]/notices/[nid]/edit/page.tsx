@@ -1,7 +1,7 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
-import { api, NoticeData } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useBeforeUnload } from "@/lib/useBeforeUnload";
 import EpisodeEditor from "@/components/EpisodeEditor";
 
@@ -28,11 +28,10 @@ export default function EditNoticePage() {
       if (!d.is_mine) { router.push(`/series/${novelId}`); return; }
       setNovelTitle(d.novel.title);
     }).catch(() => router.push("/series"));
-    fetch(`/api/series/${novelId}/notices`, { credentials: "include" })
+    fetch(`/api/series/${novelId}/notices/${noticeId}`, { credentials: "include" })
       .then((r) => r.json())
-      .then((list) => {
-        const found = list.find((n: NoticeData) => n.id === noticeId);
-        if (found) { setTitle(found.title); setContent(found.content); setLoading(false); }
+      .then((found) => {
+        if (found && found.id === noticeId) { setTitle(found.title); setContent(found.content); setLoading(false); }
         else router.push(`/series/${novelId}/notices`);
       })
       .catch(() => router.push(`/series/${novelId}/notices`));

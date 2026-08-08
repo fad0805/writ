@@ -30,28 +30,34 @@ function restoreScroll(container: HTMLElement, target: number) {
 export default function ScrollRestoration() {
   const pathname = usePathname();
   const prevPath = useRef(pathname);
+  const positionsRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     history.scrollRestoration = "manual";
+    positionsRef.current = getPositions();
 
     const container = document.querySelector(".main-content");
     if (!container) return;
 
     const key = prevPath.current;
-    const saved = getPositions()[key];
+    const saved = positionsRef.current[key];
     if (saved) {
       restoreScroll(container as HTMLElement, saved);
     }
 
     const onScroll = () => {
-      const positions = getPositions();
-      positions[prevPath.current] = container.scrollTop;
-      sessionStorage.setItem(SCROLL_KEY, JSON.stringify(positions));
+      positionsRef.current[prevPath.current] = container.scrollTop;
     };
-
     container.addEventListener("scroll", onScroll, { passive: true });
+
+    const save = () => {
+      try { sessionStorage.setItem(SCROLL_KEY, JSON.stringify(positionsRef.current)); } catch {}
+    };
+    window.addEventListener("pagehide", save);
     return () => {
+      save();
       container.removeEventListener("scroll", onScroll);
+      window.removeEventListener("pagehide", save);
       history.scrollRestoration = "auto";
     };
   }, []);
@@ -62,13 +68,12 @@ export default function ScrollRestoration() {
 
     const key = prevPath.current;
     if (container && container.scrollTop > 0) {
-      const positions = getPositions();
-      positions[key] = container.scrollTop;
-      sessionStorage.setItem(SCROLL_KEY, JSON.stringify(positions));
+      positionsRef.current[key] = container.scrollTop;
     }
 
     prevPath.current = pathname;
-    const saved = getPositions()[pathname];
+    try { sessionStorage.setItem(SCROLL_KEY, JSON.stringify(positionsRef.current)); } catch {}
+    const saved = positionsRef.current[pathname];
     if (saved && container) {
       restoreScroll(container as HTMLElement, saved);
     } else {

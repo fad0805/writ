@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import { useAuth } from "@/lib/auth";
+import { onNotificationStream } from "@/lib/notificationStream";
 
 const LS_KEY = "writ_notif_sound";
 
@@ -34,11 +35,10 @@ export default function NotifSound() {
     document.addEventListener("click", unlock);
     document.addEventListener("keydown", unlock);
 
-    const es = new EventSource("/api/notifications/stream");
-    es.onmessage = (event) => {
+    const unsubscribe = onNotificationStream((raw) => {
       try {
-        if (event.data === "refresh") return;
-        const parsed = JSON.parse(event.data);
+        if (raw === "refresh") return;
+        const parsed = JSON.parse(raw);
         if (parsed && parsed.event === "notif") {
           if (parsed.unread !== undefined) {
             const badge = document.querySelector(".notif-badge");
@@ -58,9 +58,8 @@ export default function NotifSound() {
           }
         }
       } catch {}
-    };
-    es.onerror = () => {};
-    return () => { es.close(); document.removeEventListener("click", unlock); document.removeEventListener("keydown", unlock); };
+    });
+    return () => { unsubscribe(); document.removeEventListener("click", unlock); document.removeEventListener("keydown", unlock); };
   }, [user?.id]);
 
   return null;

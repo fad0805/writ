@@ -41,6 +41,10 @@ export function getCachedQuote(key: string): PostData | null {
 export function setQuoteCache(key: string, post: PostData): void {
   if (!isValidQuote(post)) return;
   memoryCache.set(key, post);
+  if (memoryCache.size > MAX_STORED) {
+    const oldest = memoryCache.keys().next().value;
+    if (oldest !== undefined) memoryCache.delete(oldest);
+  }
   persist();
 }
 

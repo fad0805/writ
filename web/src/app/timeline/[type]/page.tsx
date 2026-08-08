@@ -38,9 +38,9 @@ function timelineCacheKey(userId: number) {
 }
 
 function loadTimelineCache(userId: number): Record<string, TimelineCacheEntry> {
-  if (typeof localStorage === "undefined") return {};
+  if (typeof sessionStorage === "undefined") return {};
   try {
-    const raw = localStorage.getItem(timelineCacheKey(userId));
+    const raw = sessionStorage.getItem(timelineCacheKey(userId));
     if (!raw) return {};
     const parsed = JSON.parse(raw) as Record<string, TimelineCacheEntry>;
     const now = Date.now();
@@ -55,9 +55,9 @@ function loadTimelineCache(userId: number): Record<string, TimelineCacheEntry> {
 }
 
 function saveTimelineCache(userId: number, cache: Record<string, TimelineCacheEntry>) {
-  if (typeof localStorage === "undefined") return;
+  if (typeof sessionStorage === "undefined") return;
   try {
-    localStorage.setItem(timelineCacheKey(userId), JSON.stringify(cache));
+    sessionStorage.setItem(timelineCacheKey(userId), JSON.stringify(cache));
   } catch {}
 }
 

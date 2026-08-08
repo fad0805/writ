@@ -95,10 +95,10 @@
 
 ## 병목 (PERF)
 
-- [ ] 알림 SSE 2중 연결 — `RightSidebar.tsx:35` + `NotifSound.tsx:37` 페이지당 EventSource 2개
-- [ ] 공지 폴링 3중화 — `AnnouncementToast.tsx:52`/`Sidebar.tsx:97`/`MobileNav.tsx:73`이 각각 30초 폴링
-- [ ] ScrollRestoration.tsx:46-50 모든 scroll 이벤트마다 sessionStorage 전체 직렬화
-- [ ] quote-cache.ts:6 memoryCache 무제한 (세션 동안 인용 글 전부 보유)
-- [ ] series/[id]/notices/[nid]/page.tsx:31, [nid]/edit:34, series/[id]/page.tsx:70-73 공지 전체 fetch 후 클라이언트 필터
-- [ ] emojis.ts:78 이모지 전체 `limit=9999` 로드 → localStorage 캐시
-- [ ] timeline/[type]/page.tsx 계정별 타임라인 localStorage 평문 캐시(5분 TTL)
+- [x] 알림 SSE 2중 연결 — `RightSidebar.tsx:35` + `NotifSound.tsx:37`이 각각 `new EventSource("/api/notifications/stream")` → `lib/notificationStream.ts` 싱글턴 모듈 생성, 두 컴포넌트가 `onNotificationStream` 구독(마지막 구독자 해제 시 연결 종료)
+- [x] 공지 폴링 3중화 — `AnnouncementToast`/`Sidebar`/`MobileNav`가 각각 30초 폴링 → `lib/announcements.ts`에 공유 폴러(`subscribeAnnouncementStatus`) 추가, 구독자 0명이면 중지. `announcementchange` 이벤트 시 `refreshAnnouncementStatus()` 즉시 갱신
+- [x] ScrollRestoration.tsx:46-50 모든 scroll 이벤트마다 sessionStorage 전체 직렬화 → 메모리 ref에 위치만 기록, sessionStorage 저장은 경로 변경·pagehide·언마운트 시점으로 이동
+- [x] quote-cache.ts:6 memoryCache 무제한 → `setQuoteCache`에서 `MAX_STORED` 초과 시 FIFO eviction (Map 삽입순 최초 키 제거)
+- [x] series/[id]/notices/[nid]/page.tsx:31, [nid]/edit:34, series/[id]/page.tsx:70-73 공지 전체 fetch 후 클라이언트 필터 → 백엔드에 `GET /series/{id}/notices/{notice_id}` 단건 엔드포인트·`GET /notices?pinned=1` 필터 추가, 프론트 3곳 단건 fetch로 전환
+- [x] emojis.ts:78 이모지 전체 `limit=9999` 로드 → 이미 `emoji_cache` localStorage 캐시 구현됨(`emojis.ts:61-72,99-101`), `invalidateEmojiCache`로 무효화 — 추가 조치 불필요
+- [x] timeline/[type]/page.tsx 계정별 타임라인 평문 캐시(5분 TTL) → `localStorage`를 `sessionStorage`로 변경해 탭 종료 시 소거(개인 글 노출 창 축소)

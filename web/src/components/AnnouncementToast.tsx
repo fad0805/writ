@@ -3,9 +3,8 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Icon from "./Icon";
-import { fetchAnnouncementStatus } from "@/lib/announcements";
+import { subscribeAnnouncementStatus } from "@/lib/announcements";
 
-const POLL_INTERVAL = 30000;
 const TOAST_DURATION = 8000;
 
 interface Popup {
@@ -36,30 +35,15 @@ export default function AnnouncementToast() {
 
   useEffect(() => {
     if (!user) return;
-    let cancelled = false;
-    const poll = async () => {
-      const status = await fetchAnnouncementStatus();
-      if (cancelled) return;
+    const unsubscribe = subscribeAnnouncementStatus((status) => {
       const unseen = status.popups.filter((p) => !shownRef.current.has(p.id));
       for (const p of unseen) shownRef.current.add(p.id);
       if (unseen.length > 0) {
         queueRef.current.push(...unseen);
         if (currentRef.current === null) showNext();
       }
-      window.dispatchEvent(new Event("announcementchange"));
-    };
-    poll();
-    const interval = setInterval(poll, POLL_INTERVAL);
-    const focusHandler = () => poll();
-    const visibleHandler = () => { if (document.visibilityState === "visible") poll(); };
-    window.addEventListener("focus", focusHandler);
-    document.addEventListener("visibilitychange", visibleHandler);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-      window.removeEventListener("focus", focusHandler);
-      document.removeEventListener("visibilitychange", visibleHandler);
-    };
+    });
+    return () => unsubscribe();
   }, [user, showNext]);
 
   useEffect(() => {

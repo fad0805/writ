@@ -25,11 +25,10 @@ export default function NoticeDetailPage() {
       setNovel(d.novel);
       setIsMine(d.is_mine);
     }).catch(() => {});
-    fetch(`/api/series/${novelId}/notices`, { credentials: "include" })
+    fetch(`/api/series/${novelId}/notices/${noticeId}`, { credentials: "include" })
       .then((r) => r.json())
-      .then((list) => {
-        const found = list.find((n: NoticeData) => n.id === noticeId);
-        if (found) setNotice(found);
+      .then((found) => {
+        if (found && found.id === noticeId) setNotice(found);
         setLoading(false);
       })
       .catch(() => setLoading(false));

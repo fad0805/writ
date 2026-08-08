@@ -67,9 +67,9 @@ export default function NovelDetailPage() {
         .catch(() => {});
       setIsSeriesPinned((user as any).pinned_series?.includes(id) || false);
     }
-    fetch(`/api/series/${id}/notices`, { credentials: "include" })
+    fetch(`/api/series/${id}/notices?pinned=1`, { credentials: "include" })
       .then((r) => r.json())
-      .then((list) => setPinnedNotices((list as NoticeData[]).filter((n) => n.is_pinned)))
+      .then((list) => setPinnedNotices(list as NoticeData[]))
       .catch(() => {});
   }, [params.id, user]);
 
