@@ -86,7 +86,8 @@ def api_create_emoji(
     ext = ct_to_ext.get(image.content_type, "png")
     file_name = f"{uuid4().hex}.{ext}"
     local_dir = os.path.join(EMOJI_DIR, "local")
-    os.makedirs(local_dir, exist_ok=True)
+    if not S3_ENABLED:
+        os.makedirs(local_dir, exist_ok=True)
     file_path = os.path.join(local_dir, file_name)
     _emoji_data = None
 
@@ -99,8 +100,9 @@ def api_create_emoji(
             raise HTTPException(status_code=400, detail="Emoji is too wide (max 2x height)")
         if ext == "gif":
             _emoji_data = image.file.read()
-            with open(file_path, "wb") as f:
-                f.write(_emoji_data)
+            if not S3_ENABLED:
+                with open(file_path, "wb") as f:
+                    f.write(_emoji_data)
         else:
             file_name = f"{uuid4().hex}.webp"
             file_path = os.path.join(local_dir, file_name)
@@ -114,8 +116,9 @@ def api_create_emoji(
             buf = io.BytesIO()
             img.save(buf, format="WEBP", quality=100)
             _emoji_data = buf.getvalue()
-            with open(file_path, "wb") as f:
-                f.write(_emoji_data)
+            if not S3_ENABLED:
+                with open(file_path, "wb") as f:
+                    f.write(_emoji_data)
         if S3_ENABLED and _emoji_data:
             try:
                 get_storage().save(f"emojis/local/{file_name}", _emoji_data, f"image/{ext}")
@@ -205,13 +208,14 @@ def api_copy_emoji(request: Request, emoji_id: int):
                     _data = f.read()
 
         if _data:
-            try:
-                _dst_local = os.path.join(EMOJI_DIR, "local", _new_fname)
-                os.makedirs(os.path.dirname(_dst_local), exist_ok=True)
-                with open(_dst_local, "wb") as f:
-                    f.write(_data)
-            except Exception:
-                pass
+            if not S3_ENABLED:
+                try:
+                    _dst_local = os.path.join(EMOJI_DIR, "local", _new_fname)
+                    os.makedirs(os.path.dirname(_dst_local), exist_ok=True)
+                    with open(_dst_local, "wb") as f:
+                        f.write(_data)
+                except Exception:
+                    pass
             try:
                 _storage.save(f"emojis/local/{_new_fname}", _data, f"image/{_ext}")
             except Exception:
@@ -238,9 +242,10 @@ def api_delete_emoji(request: Request, emoji_id: int):
             get_storage().delete(f"emojis/{_del_sub}/{emoji.file_name}")
         except Exception:
             pass
-        file_path = os.path.join(EMOJI_DIR, _del_sub, emoji.file_name)
-        if os.path.isfile(file_path):
-            os.remove(file_path)
+        if not S3_ENABLED:
+            file_path = os.path.join(EMOJI_DIR, _del_sub, emoji.file_name)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
         s.delete(emoji)
         s.commit()
         _refresh_emoji_cache_forcibly(s)

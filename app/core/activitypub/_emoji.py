@@ -10,6 +10,7 @@ from PIL import Image
 
 from app.db.database import get_session
 from app.models import CustomEmoji
+from app.config.settings import S3_ENABLED
 from app.utils.storage import get_storage
 from app.utils.emoji import EMOJI_DIR, _refresh_emoji_cache_forcibly
 from app.utils.http import validate_url, validated_get, WRIT_USER_AGENT
@@ -58,7 +59,11 @@ def _process_emoji_tags(tags: list, session):
     if not tags or not isinstance(tags, list):
         return
     _storage = get_storage()
-    os.makedirs(EMOJI_DIR, exist_ok=True)
+    if not S3_ENABLED:
+        try:
+            os.makedirs(EMOJI_DIR, exist_ok=True)
+        except Exception:
+            pass
     for tag in tags:
         if not isinstance(tag, dict) or tag.get("type") != "Emoji":
             continue
@@ -116,7 +121,11 @@ def _process_emoji_tags(tags: list, session):
                 continue
 
             remote_dir = os.path.join(EMOJI_DIR, "remote")
-            os.makedirs(remote_dir, exist_ok=True)
+            if not S3_ENABLED:
+                try:
+                    os.makedirs(remote_dir, exist_ok=True)
+                except Exception:
+                    pass
 
             if ext in ("gif", "png"):
                 file_name = f"{uuid.uuid4().hex}.{ext}"
@@ -138,11 +147,12 @@ def _process_emoji_tags(tags: list, session):
                 data = buf.getvalue()
                 content_type = "image/webp"
 
-            try:
-                with open(file_path, "wb") as f:
-                    f.write(data)
-            except Exception:
-                pass
+            if not S3_ENABLED:
+                try:
+                    with open(file_path, "wb") as f:
+                        f.write(data)
+                except Exception:
+                    pass
             try:
                 _storage.save(f"emojis/remote/{file_name}", data, content_type)
             except Exception:
