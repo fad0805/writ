@@ -58,9 +58,13 @@ def _mark_activity_processed(activity_id: str):
     """Record an activity as processed. No-op for empty ids."""
     if not activity_id:
         return
-    with get_session() as s:
-        s.add(ProcessedActivity(id=activity_id))
-        s.commit()
+    try:
+        with get_session() as s:
+            s.add(ProcessedActivity(id=activity_id))
+            s.commit()
+    except IntegrityError:
+        # 동시 처리(TOCTOU) 시 PK 중복은 정상 — 이미 처리됨으로 간주
+        pass
 
 
 async def _submit_inbox(activity: dict) -> tuple[int, str]:
