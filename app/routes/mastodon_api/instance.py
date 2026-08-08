@@ -5,10 +5,23 @@ from sqlalchemy.orm import Session as SASession
 
 from app.models import User, Post, Tag, ServerSetting, now
 from app.db.database import get_db
-from app.config.settings import BASE_URL, DOMAIN, MAX_POST_LENGTH
+from app.config.settings import BASE_URL, DOMAIN, SCHEME, MAX_POST_LENGTH
 from app.core.push import get_vapid_keys
 
 router = APIRouter()
+
+
+def _abs_url(value: str | None) -> str | None:
+    """로컬 상대 경로를 절대 URL로 변환. 비어 있으면 None 반환."""
+    if not value:
+        return None
+    if value.startswith("http://") or value.startswith("https://"):
+        return value
+    if value.startswith("//"):
+        return f"{SCHEME}:{value}"
+    if value.startswith("/"):
+        return f"{BASE_URL}{value}"
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -39,10 +52,10 @@ def mastodon_instance(db: SASession = Depends(get_db)):
             "username": contact_user.username,
             "acct": contact_user.username,
             "display_name": contact_user.display_name or contact_user.username,
-            "avatar": contact_user.profile_image or "",
-            "avatar_static": contact_user.profile_image or "",
-            "header": contact_user.header_image or "",
-            "header_static": contact_user.header_image or "",
+            "avatar": _abs_url(contact_user.profile_image) or f"{BASE_URL}/default-avatar.png",
+            "avatar_static": _abs_url(contact_user.profile_image) or f"{BASE_URL}/default-avatar.png",
+            "header": _abs_url(contact_user.header_image) or f"{BASE_URL}/default-header.png",
+            "header_static": _abs_url(contact_user.header_image) or f"{BASE_URL}/default-header.png",
             "url": f"{BASE_URL}/@{contact_user.username}",
             "note": contact_user.summary or "",
             "locked": False,
@@ -76,7 +89,7 @@ def mastodon_instance(db: SASession = Depends(get_db)):
             "status_count": status_count,
             "domain_count": 0,
         },
-        "thumbnail": settings.logo or "",
+        "thumbnail": _abs_url(settings.logo),
         "registrations": True,
         "approval_required": False,
         "invites_enabled": False,

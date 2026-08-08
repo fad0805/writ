@@ -108,6 +108,19 @@ def _ap_datetime(dt) -> str:
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
+def _abs_url(value: str | None) -> str | None:
+    """로컬 상대 경로를 절대 URL로 변환. 비어 있으면 None 반환."""
+    if not value:
+        return None
+    if value.startswith("http://") or value.startswith("https://"):
+        return value
+    if value.startswith("//"):
+        return f"https:{value}"
+    if value.startswith("/"):
+        return f"{BASE_URL}{value}"
+    return value
+
+
 def _account_json(user: User, db: SASession, viewer: User | None = None,
                   _counts: tuple | None = None) -> dict:
     hide_collections = (getattr(user, 'follow_list_visibility', 'public') or 'public') == 'private'
@@ -178,10 +191,10 @@ def _account_json(user: User, db: SASession, viewer: User | None = None,
         "created_at": _ap_datetime(user.created_at),
         "note": note_html,
         "url": user.profile_url or (user.remote_url if user.is_remote else f"{BASE_URL}/@{username}"),
-        "avatar": user.profile_image or f"{BASE_URL}/default-avatar.png",
-        "avatar_static": user.profile_image or f"{BASE_URL}/default-avatar.png",
-        "header": user.header_image or f"{BASE_URL}/default-header.png",
-        "header_static": user.header_image or f"{BASE_URL}/default-header.png",
+        "avatar": _abs_url(user.profile_image) or f"{BASE_URL}/default-avatar.png",
+        "avatar_static": _abs_url(user.profile_image) or f"{BASE_URL}/default-avatar.png",
+        "header": _abs_url(user.header_image) or f"{BASE_URL}/default-header.png",
+        "header_static": _abs_url(user.header_image) or f"{BASE_URL}/default-header.png",
         "followers_count": follower_count,
         "following_count": following_count,
         "statuses_count": statuses_count,
