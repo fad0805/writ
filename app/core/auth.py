@@ -25,7 +25,7 @@ def verify_password(password: str, salt: str, hashed: str) -> bool:
 
 def _sign_session_key(session_key: str, expires: int) -> str:
     payload = f"{session_key}:{expires}"
-    sig = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+    sig = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return base64.urlsafe_b64encode(f"{payload}:{sig}".encode()).decode()
 
 
@@ -38,7 +38,7 @@ def _decode_session_token(token: str):
         expires = int(parts[1])
         sig = parts[2]
         expected = hmac.new(SECRET_KEY.encode(), f"{session_key}:{expires}".encode(),
-                            hashlib.sha256).hexdigest()[:16]
+                            hashlib.sha256).hexdigest()
         if not hmac.compare_digest(sig, expected) or expires <= time.time():
             return None
         return session_key, expires
@@ -97,6 +97,13 @@ def get_session_key_from_cookie(request: Request) -> str | None:
 def delete_session_by_key(session_key: str):
     with get_session() as s:
         s.query(LoginSession).filter_by(session_key=session_key).delete()
+        s.commit()
+
+
+def delete_user_sessions(user_id: int):
+    """비밀번호 변경 등으로 해당 사용자의 모든 세션을 무효화한다."""
+    with get_session() as s:
+        s.query(LoginSession).filter_by(user_id=user_id).delete()
         s.commit()
 
 

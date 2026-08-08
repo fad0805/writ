@@ -21,7 +21,7 @@ export default function RightSidebar() {
   const [novels, setNovels] = useState<NovelData[]>([]);
   const [notifs, setNotifs] = useState<NotificationData[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [serverInfo, setServerInfo] = useState<{ name: string; description?: string; admins: { username: string; email: string }[] } | null>(null);
+  const [serverInfo, setServerInfo] = useState<{ name: string; description?: string; admins: { username: string }[] } | null>(null);
   const emojiMap = useEmojiList();
 
 
@@ -324,7 +324,6 @@ export default function RightSidebar() {
                 {serverInfo.admins.map((a) => (
                   <div key={a.username} style={{ marginBottom: 2 }}>
                     <Link href={`/@${a.username}`} style={{ color: "var(--accent)" }}>@{a.username}</Link>
-                    {a.email ? <span style={{ color: "var(--text-dim)", marginLeft: 4 }}>· {a.email}</span> : ""}
                   </div>
                 ))}
               </div>

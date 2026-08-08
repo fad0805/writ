@@ -16,7 +16,11 @@ if BASE_URL_ENV:
     BASE_URL = BASE_URL_ENV
 else:
     DOMAIN = os.environ.get("DOMAIN", "localhost:3000")
-    SCHEME = os.environ.get("SCHEME", "http")
+    _scheme = os.environ.get("SCHEME")
+    if not _scheme:
+        _host = DOMAIN.split(":")[0]
+        _scheme = "http" if _host in ("localhost", "127.0.0.1") else "https"
+    SCHEME = _scheme
     BASE_URL = f"{SCHEME}://{DOMAIN}"
 
 DATABASE_URL = os.environ.get("DATABASE_URL")

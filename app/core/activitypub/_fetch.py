@@ -747,7 +747,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         try:
             if not validate_url(_url):
                 return post
-            _resp = httpx.get(_url, headers={"User-Agent": "WRIT/1.0"}, timeout=5, follow_redirects=True)
+            _resp = validated_get(_url, timeout=5)
             if _resp.status_code == 200:
                 _html = _resp.text
                 def _og(n):

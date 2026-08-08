@@ -34,9 +34,10 @@ def api_admin_reset_password(request: Request, user_id: int):
         if not u:
             raise HTTPException(status_code=404, detail="User not found")
         u.password_hash = salt + ":" + hsh
-        u.session_token = ""
         target_username = u.username
         s.commit()
+    from app.core.auth import delete_user_sessions
+    delete_user_sessions(user_id)
     log_admin_action(user.id, user.username, "reset_password", target_type="user", target_id=user_id, target_username=target_username, ip_address=request.client.host if request.client else "")
     return {"ok": True, "new_password": new_pass}
 

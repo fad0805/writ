@@ -53,6 +53,7 @@ def _sanitize_html(html: str) -> str:
     """Strip dangerous HTML tags/attributes, keep only safe ones."""
     if not html:
         return ""
+    html = html.replace("\x00", "")
     # ActivityPub(마스토돈, 미스키 등)에서 흔히 사용하는 안전한 태그 목록
     allowed_tags = {
         "a", "p", "del", "br", "span", "b", "i", "strong", "em",

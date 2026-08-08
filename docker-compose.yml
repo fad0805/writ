@@ -7,6 +7,8 @@ services:
     volumes:
       - ./db_data:/var/lib/postgresql/data
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
 
   api:
     build: .
@@ -22,6 +24,10 @@ services:
     depends_on:
       - db
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
   web:
     build:
@@ -43,6 +49,10 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
 networks:
   external_network:

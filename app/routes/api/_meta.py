@@ -4,14 +4,13 @@ import html
 import logging
 from urllib.parse import urlparse
 
-import httpx
 from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.models import User, ServerSetting
 from app.db.database import get_session
 from app.core.auth import require_auth
-from app.utils.http import validate_url
+from app.utils.http import validate_url, validated_get
 from app.utils.log import log_admin_action
 
 logger = logging.getLogger("writ.api.meta")
@@ -22,15 +21,16 @@ meta_router = APIRouter()
 # ── Link Preview ──
 
 @meta_router.post("/link-preview")
-def api_link_preview(url: str = Form(...)):
+def api_link_preview(request: Request, url: str = Form(...)):
+    require_auth(request)
     parsed = urlparse(url)
     domain = parsed.netloc
     result = {"url": url, "title": domain, "description": "", "image": ""}
     try:
         if not validate_url(url):
             return result
-        resp = httpx.get(url, headers={"User-Agent": "WRIT/1.0"}, timeout=10, follow_redirects=True)
-        if resp.status_code == 200:
+        resp = validated_get(url, timeout=10)
+        if resp and resp.status_code == 200:
             html_text = resp.text
             def _og(n):
                 m = re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', html_text, re.I)
@@ -62,7 +62,10 @@ def _resolve_admin_users(s, admin_ids_str: str):
 
 
 @meta_router.get("/server-info")
-def api_server_info():
+def api_server_info(request: Request):
+    from app.core.auth import get_current_user
+    user = get_current_user(request)
+    is_admin = bool(user and user.role in ("admin", "moderator", "owner"))
     with get_session() as s:
         settings = ServerSetting.get(s)
         admins = _resolve_admin_users(s, settings.admin_ids or "")
@@ -71,7 +74,7 @@ def api_server_info():
             "name": settings.server_name or "WRIT",
             "description": getattr(settings, 'server_description', '') or '',
             "admins": [
-                {"username": a.username, "email": admin_email or ""}
+                {"username": a.username, "email": (admin_email or a.email) if is_admin else ""}
                 for a in admins
             ],
             "logo": settings.logo,

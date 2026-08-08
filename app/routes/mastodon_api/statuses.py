@@ -617,21 +617,26 @@ async def upload_media(
 ):
     user = _require_bearer(request, db)
 
+    from app.utils.upload import _validate_upload
+
+    ext, is_image, is_video, is_audio = _validate_upload(file, allow_video=True, allow_audio=True, label="미디어")
     upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "media")
     os.makedirs(upload_dir, exist_ok=True)
 
-    ext = os.path.splitext(file.filename or "upload")[1] or ".bin"
     filename = f"{secrets.token_urlsafe(16)}{ext}"
     filepath = os.path.join(upload_dir, filename)
 
-    content = await file.read()
     with open(filepath, "wb") as f:
-        f.write(content)
+        while True:
+            chunk = file.file.read(1024 * 1024)
+            if not chunk:
+                break
+            f.write(chunk)
 
     media_type = "image"
-    if file.content_type and file.content_type.startswith("video"):
+    if is_video:
         media_type = "video"
-    elif file.content_type and file.content_type.startswith("audio"):
+    elif is_audio:
         media_type = "audio"
 
     return {

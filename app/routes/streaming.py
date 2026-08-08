@@ -1,7 +1,5 @@
 import asyncio
-import base64
 import json
-import time
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, Request, WebSocket
@@ -9,28 +7,18 @@ from fastapi.responses import StreamingResponse, JSONResponse
 
 from app.db.database import get_session
 from app.models import MastodonAccessToken
+from app.core.auth import _decode_session_token
 from app.core.eventbus import add_queue, remove_queue, add_ws, remove_ws
 
 router = APIRouter()
 
 
 def _verify_session_cookie(request: Request) -> bool:
-    """Verify session cookie is present and well-formed (basic auth check)."""
+    """Verify session cookie signature/expiry (HMAC-verified)."""
     token = request.cookies.get("session")
     if not token:
         return False
-    try:
-        decoded = base64.urlsafe_b64decode(token.encode()).decode()
-        parts = decoded.split(":")
-        if len(parts) != 3:
-            return False
-        user_id = int(parts[0])
-        expires = int(parts[1])
-        if expires <= time.time():
-            return False
-        return True
-    except Exception:
-        return False
+    return _decode_session_token(token) is not None
 
 
 @router.get("/api/stream")
@@ -68,13 +56,7 @@ async def websocket_stream(websocket: WebSocket):
                 await websocket.close(code=4001, reason="Unauthorized")
                 return
     if token:
-        try:
-            decoded = base64.urlsafe_b64decode(token.encode()).decode()
-            parts = decoded.split(":")
-            if len(parts) != 3 or int(parts[2]) <= 0:
-                await websocket.close(code=4001, reason="Unauthorized")
-                return
-        except Exception:
+        if _decode_session_token(token) is None:
             await websocket.close(code=4001, reason="Unauthorized")
             return
     await websocket.accept()

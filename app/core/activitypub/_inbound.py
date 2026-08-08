@@ -632,7 +632,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             try:
                 _q_fields = {k: obj.get(k) for k in ("quote", "quoteUrl", "quoteUri", "_misskey_quote") if obj.get(k)}
                 if quote_url:
-                    print(f"[_handle_create QUOTE] post_id={post_id} url={quote_url} fields={_q_fields}", flush=True)
+                    logger.debug("[_handle_create QUOTE] post_id=%s url=%s fields=%s", post_id, quote_url, _q_fields)
             except Exception:
                 pass
             if quote_url and isinstance(quote_url, str):
@@ -643,9 +643,9 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         if quote_post:
                             quote_s.commit()
                             quote_of_id = quote_post.id
-                            print(f"[_handle_create QUOTE OK] post_id={quote_post.id}", flush=True)
+                            logger.debug("[_handle_create QUOTE OK] post_id=%s", quote_post.id)
                         else:
-                            print(f"[_handle_create QUOTE FETCH FAIL] url={quote_url}", flush=True)
+                            logger.debug("[_handle_create QUOTE FETCH FAIL] url=%s", quote_url)
                 except Exception as e:
                     logger.error("[QUOTE] url=%s %s", quote_url, e, exc_info=True)
 
@@ -659,7 +659,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     if not validate_url(_url_lp):
                         _resp_lp = None
                     else:
-                        _resp_lp = httpx.get(_url_lp, headers={"User-Agent": "WRIT/1.0"}, timeout=5, follow_redirects=True)
+                        _resp_lp = validated_get(_url_lp, timeout=5)
                     if _resp_lp and _resp_lp.status_code == 200:
                         _html_lp = _resp_lp.text
                         def _og_lp(n):

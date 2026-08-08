@@ -5,6 +5,7 @@ import secrets
 import logging
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 import smtplib
 
@@ -49,6 +50,8 @@ def _record_auth_failure(ip: str):
 def _get_auth_backoff_seconds(ip: str) -> int:
     with _auth_lock:
         count = len([t for t in _auth_failures.get(ip, []) if t > time.time() - _AUTH_FAIL_WINDOW])
+        if len(_auth_failures) > 5000:
+            _auth_failures.clear()
     if count < _AUTH_FAIL_MAX:
         return 0
     return _AUTH_FAIL_BACKOFF_BASE * (2 ** min(count - _AUTH_FAIL_MAX, 6))
@@ -290,6 +293,7 @@ def api_forgot_password(request: Request, email: str = Form(...)):
             return {"ok": True}
         token = secrets.token_urlsafe(32)
         u.reset_token = token
+        u.reset_token_expires_at = datetime.utcnow() + timedelta(hours=1)
         s.commit()
         reset_url = f"{BASE_URL}/reset-password?token={token}"
         try:
@@ -328,10 +332,18 @@ def api_reset_password(request: Request, token: str = Form(...), password: str =
         u = s.query(User).filter_by(reset_token=token, is_remote=False).first()
         if not u:
             raise HTTPException(status_code=400, detail="유효하지 않거나 만료된 토큰입니다.")
+        if u.reset_token_expires_at and datetime.now(timezone.utc) > u.reset_token_expires_at:
+            u.reset_token = ""
+            u.reset_token_expires_at = None
+            s.commit()
+            raise HTTPException(status_code=400, detail="유효하지 않거나 만료된 토큰입니다.")
         salt, hval = hash_password(password)
         u.password_hash = f"{salt}:{hval}"
         u.reset_token = ""
+        u.reset_token_expires_at = None
         s.commit()
+    from app.core.auth import delete_user_sessions
+    delete_user_sessions(u.id)
     return {"ok": True, "password_reset": True}
 
 

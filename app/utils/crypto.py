@@ -42,7 +42,10 @@ def decrypt_key(ciphertext: str, secret: str) -> str:
     try:
         return _fernet(secret).decrypt(ciphertext.encode()).decode()
     except Exception:
-        return ciphertext
+        # 레거시 평문 PEM이면 그대로 반환 (역호환)
+        if ciphertext.strip().startswith("-----BEGIN"):
+            return ciphertext
+        raise ValueError("Failed to decrypt private key (SECRET_KEY mismatch or corrupted key)")
 
 
 def get_private_key(user, secret: str) -> str:
@@ -99,7 +102,7 @@ CSRF_EXEMPT_METHODS = ("GET", "HEAD", "OPTIONS")
 def generate_csrf_token(user_id: int) -> str:
     expires = int(time.time()) + 3600
     payload = f"{user_id}:{expires}"
-    sig = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+    sig = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return base64.urlsafe_b64encode(f"{payload}:{sig}".encode()).decode()
 
 
@@ -113,7 +116,7 @@ def validate_csrf_token(token: str, session_token: str) -> bool:
         expires = int(parts[1])
         sig = parts[2]
         expected = hmac.new(SECRET_KEY.encode(), f"{user_id}:{expires}".encode(),
-                             hashlib.sha256).hexdigest()[:16]
+                             hashlib.sha256).hexdigest()
         if not hmac.compare_digest(sig, expected) or expires <= time.time():
             return False
         # Verify session cookie is also valid HMAC-signed (same browser)
@@ -122,7 +125,7 @@ def validate_csrf_token(token: str, session_token: str) -> bool:
         session_payload = f"{session_parts[0]}:{session_parts[1]}"
         session_sig = session_parts[2]
         session_expected = hmac.new(SECRET_KEY.encode(), session_payload.encode(),
-                                     hashlib.sha256).hexdigest()[:16]
+                                     hashlib.sha256).hexdigest()
         return hmac.compare_digest(session_sig, session_expected)
     except Exception:
         return False
@@ -143,7 +146,7 @@ def csrf_token_user_id(token: str) -> int | None:
         expires = int(parts[1])
         sig = parts[2]
         expected = hmac.new(SECRET_KEY.encode(), f"{user_id}:{expires}".encode(),
-                             hashlib.sha256).hexdigest()[:16]
+                             hashlib.sha256).hexdigest()
         if not hmac.compare_digest(sig, expected):
             return None
         return user_id
