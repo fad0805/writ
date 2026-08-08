@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from sqlalchemy import func as sqlfunc, or_
 from sqlalchemy.orm import Session as SASession
 
-from app.models import User, Post, Like, Boost, Bookmark, CustomEmoji
+from app.models import User, Post, Like, Boost, Bookmark, CustomEmoji, Follow
 from app.db.database import get_db
 from app.core.activitypub import _broadcast_update_actor
 from app.routes.api import _do_edit_post, _do_delete_post
@@ -251,6 +251,30 @@ def delete_status(status_id: str, request: Request, db: SASession = Depends(get_
 # ---------------------------------------------------------------------------
 # GET /api/v1/statuses/:id/context
 # ---------------------------------------------------------------------------
+def _visible_in_thread(post: Post, viewer: User | None, following_ids: set, db: SASession) -> bool:
+    """스레드 가시성 필터: 내가 팔로하지 않은 계정의 followers/mention 공개글은 제외."""
+    if viewer and post.author_id == viewer.id:
+        return True
+    v = post.visibility or "public"
+    if v in ("public", "home"):
+        return True
+    if not viewer:
+        return False
+    if v == "followers":
+        if post.mentioned_user_ids and viewer.id in post.mentioned_user_ids:
+            return True
+        if viewer.username and f"@{viewer.username}" in (post.content or ""):
+            return True
+        return post.author_id in following_ids
+    if v == "mention":
+        if post.mentioned_user_ids and viewer.id in post.mentioned_user_ids:
+            return True
+        if viewer.username and f"@{viewer.username}" in (post.content or ""):
+            return True
+        return False
+    return True
+
+
 @router.get("/v1/statuses/{status_id}/context")
 def get_status_context(status_id: str, request: Request, db: SASession = Depends(get_db)):
     post = db.query(Post).filter_by(id=int(status_id)).first()
@@ -258,6 +282,11 @@ def get_status_context(status_id: str, request: Request, db: SASession = Depends
         raise MastodonAPIError(status_code=404, detail="Record not found")
 
     viewer = _maybe_bearer(request, db)
+    following_ids = set()
+    if viewer:
+        following_ids = {row[0] for row in db.query(Follow.following_id).filter(
+            Follow.follower_id == viewer.id, Follow.accepted == True
+        ).all()}
 
     ancestors = []
     current = post.parent
@@ -265,6 +294,7 @@ def get_status_context(status_id: str, request: Request, db: SASession = Depends
     while current and not current.is_deleted and len(ancestor_posts) < 40:
         ancestor_posts.append(current)
         current = current.parent
+    ancestor_posts = [p for p in ancestor_posts if _visible_in_thread(p, viewer, following_ids, db)]
     maps = _build_status_maps(ancestor_posts, db, viewer)
     for cur in ancestor_posts:
         s = _status_json(cur, db, viewer, **maps)
@@ -280,7 +310,8 @@ def get_status_context(status_id: str, request: Request, db: SASession = Depends
     all_descendants = []
     while queue:
         child = queue.pop(0)
-        all_descendants.append(child)
+        if _visible_in_thread(child, viewer, following_ids, db):
+            all_descendants.append(child)
         grandchild = db.query(Post).filter(
             Post.in_reply_to_id == child.id, Post.is_deleted == False
         ).order_by(Post.id.asc()).limit(10).all()
