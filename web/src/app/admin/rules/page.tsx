@@ -1,7 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import AdminNav from "@/components/AdminNav";
 import Icon from "@/components/Icon";
+import { useAuth } from "@/lib/auth";
 
 interface Rule {
   id: number;
@@ -11,6 +13,8 @@ interface Rule {
 }
 
 export default function AdminRulesPage() {
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -30,6 +34,12 @@ export default function AdminRulesPage() {
   };
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (!authLoading && user?.role !== "admin" && user?.role !== "moderator" && user?.role !== "owner") {
+      router.push("/timeline/home");
+    }
+  }, [user, authLoading, router]);
 
   const handleReorder = async (newRules: Rule[]) => {
     setRules(newRules);
@@ -94,6 +104,8 @@ export default function AdminRulesPage() {
     }
   };
 
+  if (authLoading) return <p className="empty-state">로딩 중...</p>;
+  if (!user || (user.role !== "admin" && user.role !== "moderator" && user.role !== "owner")) return null;
   if (loading) return <p className="empty-state">로딩 중...</p>;
 
   return (

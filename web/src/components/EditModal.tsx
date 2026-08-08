@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { PostData, api } from "@/lib/api";
 import EmojiPicker from "./EmojiPicker";
+import { sanitizePost } from "@/lib/sanitize";
 
 export default function EditModal({ post, onClose, onDone }: { post: PostData; onClose: () => void; onDone?: (updated?: PostData) => void }) {
   useEffect(() => {
@@ -79,7 +80,7 @@ export default function EditModal({ post, onClose, onDone }: { post: PostData; o
         <div className="reply-modal-original">
           <strong>수정 전 원문</strong>
           {/* 원문 보기 영역도 유저가 알아볼 수 있게 가볍게 텍스트만 출력되게 하거나 HTML 프리뷰 처리를 할 수 있습니다 */}
-          <p className="edit-modal-original-text" dangerouslySetInnerHTML={{ __html: post.content }} />
+          <p className="edit-modal-original-text" dangerouslySetInnerHTML={{ __html: sanitizePost(post.content) }} />
         </div>
         <form onSubmit={handleSubmit}>
           <textarea

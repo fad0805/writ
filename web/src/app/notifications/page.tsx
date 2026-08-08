@@ -57,7 +57,7 @@ const typeText = (t: string, meta?: any, emojiMap?: CustomEmoji[]) => {
   if (t === "like") {
     const reaction = meta?.reaction;
     if (reaction) {
-      const rendered = renderReaction(reaction, emojiMap || []);
+      const rendered = sanitizeName(renderReaction(reaction, emojiMap || []));
       return <span>님이 <span dangerouslySetInnerHTML={{ __html: rendered }} /> 리액션했습니다</span>;
     }
     return "님이 회원님의 글을 즐겨찾기했습니다";

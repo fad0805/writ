@@ -1,10 +1,14 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import AdminNav from "@/components/AdminNav";
 import Icon from "@/components/Icon";
 import { Announcement, toInputValue, fmtAnnouncementTime } from "@/lib/announcements";
+import { useAuth } from "@/lib/auth";
 
 export default function AdminAnnouncementsPage() {
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [items, setItems] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
@@ -22,6 +26,12 @@ export default function AdminAnnouncementsPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (!authLoading && user?.role !== "admin" && user?.role !== "moderator" && user?.role !== "owner") {
+      router.push("/timeline/home");
+    }
+  }, [user, authLoading, router]);
 
   const resetForm = () => {
     setForm({ title: "", content: "", starts_at: "", ends_at: "" });
@@ -76,6 +86,8 @@ export default function AdminAnnouncementsPage() {
     }
   };
 
+  if (authLoading) return <p className="empty-state">로딩 중...</p>;
+  if (!user || (user.role !== "admin" && user.role !== "moderator" && user.role !== "owner")) return null;
   if (loading) return <p className="empty-state">로딩 중...</p>;
 
   return (
