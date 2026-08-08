@@ -101,7 +101,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           // 2. 시리즈 에피소드용 (만약 POST로 url을 넘기는 구조라면)
           fetchUrl = "/api/fetch-episode";
           isPostRequest = true;
-        } else if (seriesByNumberMatch || seriesEpisodeMatch) { // 혹은 기존 시리즈 관련 통합 처리
+        } else if (seriesByNumberMatch) {
           // 3. 시리즈 관련 POST 요청
           fetchUrl = "/api/fetch-series";
           isPostRequest = true;
@@ -158,6 +158,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     const match = content.match(urlRegex);
     if (!match) { setLinkPreview(null); if (!shareUrl || quoteUrl !== shareUrl) { setQuoteUrl(""); setQuotePost(null); } return; }
     const url = match[0].replace(/[.,;:!?)]+$/, "");
+    if (quoteUrl === url) return;
     if (linkPreview && linkPreview.url === url && !quoteUrl) return;
 
     linkPreviewTimerRef.current = setTimeout(async () => {
@@ -203,7 +204,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       setLinkPreviewLoading(false);
     }, 300);
     return () => { if (linkPreviewTimerRef.current) clearTimeout(linkPreviewTimerRef.current); };
-  }, [content]);
+  }, [content, quoteUrl]);
 
   const totalLen = content.length + summary.length;
   const nearLimit = totalLen > MAX_LENGTH - 50 && totalLen <= MAX_LENGTH;
@@ -652,6 +653,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       const uploaded = mediaItems.filter(m => !m.file).map(m => ({ url: m.url, type: m.type, alt: m.alt || "" }));
       const filesToUpload = mediaItems.filter(m => m.file);
       if (filesToUpload.length > 0) {
+        setMediaUploading(true);
         const results = await Promise.all(filesToUpload.map(async (m) => {
           const formData = new FormData();
           formData.append("file", m.file!);
@@ -659,6 +661,10 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           if (res.ok) { const d = await res.json(); return { url: d.url, type: d.type, alt: m.alt || "" }; }
           return null;
         }));
+        const failedCount = results.filter(r => !r).length;
+        if (failedCount > 0) {
+          throw new Error(`${failedCount}개의 미디어 업로드에 실패했습니다.`);
+        }
         results.forEach(r => { if (r) uploaded.push(r); });
       }
       const opts = showPoll ? pollOptions.filter(o => o.trim()).map(o => o.trim()) : [];
@@ -668,12 +674,13 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         if (urlMatch) shareUrlFinal = urlMatch[0].replace(/[.,;:!?)]+$/, "");
       }
       const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrlFinal, media_attachments: JSON.stringify(uploaded), is_sensitive: postSensitive, poll_options: opts.length >= 2 ? JSON.stringify(opts) : "", poll_expires_in: pollExpiresIn, link_preview: linkPreview ? JSON.stringify(linkPreview) : "" });
-      setContent(""); setSummary(""); setPostSensitive(false); setMediaItems([]); setShowPoll(false); setPollOptions(["", ""]); setPollExpiresIn(24); setLinkPreview(null); setQuoteUrl(""); setQuotePost(null);
+      setContent(""); setSummary(""); setPostSensitive(false); setMediaItems([]); setShowPoll(false); setPollOptions(["", ""]); setPollExpiresIn(1440); setLinkPreview(null); setQuoteUrl(""); setQuotePost(null);
       if (typeof localStorage !== "undefined") localStorage.removeItem(draftKey);
       if (onDone) onDone(result);
       else router.refresh();
     } catch (err: unknown) { alert(err instanceof Error ? err.message : "오류가 발생했습니다"); }
     setSubmitting(false);
+    setMediaUploading(false);
   };
 
   return (
@@ -921,7 +928,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
             const pos = ta && ta.selectionStart != null ? ta.selectionStart : content.length;
             const end = ta && ta.selectionEnd != null ? ta.selectionEnd : content.length;
             const inserted = e + " ";
-            setContent(content.slice(0, pos) + inserted + content.slice(end));
+            setContent((prev: string) => prev.slice(0, pos) + inserted + prev.slice(end));
             requestAnimationFrame(() => {
               if (ta) {
                 const p = pos + inserted.length;

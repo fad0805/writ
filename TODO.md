@@ -81,17 +81,17 @@
 
 ## 버그 (BUG)
 
-- [ ] 인용 글 입력 중 반복 요청 — `web/src/components/PostForm.tsx:161` `!quoteUrl` 가드로 인용 해석 후에도 타이핑마다 `/api/fetch-post` 재요청
-- [ ] 서버 정보 1회만 fetch — `web/src/components/RightSidebar.tsx:60` `__serverInfoFetched` 가드 미리셋 → `serverchange`로 갱신 불가, 실패 시 재시도 없음
-- [ ] 알림 배열 무한 성장 — `web/src/components/RightSidebar.tsx:43-49` SSE 알림 prepend 상한 없음
-- [ ] Backspace 중복 트리거 — `web/src/components/AccountSwitcher.tsx:42-45` 모달 닫기 + KeyboardShortcuts `router.back()` 동시 발생
-- [ ] PostForm:104 `seriesEpisodeMatch` dead code / :671 `setPollExpiresIn(24)` 유효 옵션 아님 / :659-662 업로드 실패 조용히 사라짐 / :907 `mediaUploading` 미사용 / :919-924 stale `content` 클로저
-- [ ] InfiniteScroll.tsx:28-33 `.main-content` 1회 조회 — 없으면 무한 스크롤 정지
-- [ ] Avatar.tsx:13-16 `imgError` 미리셋 — avatar 변경돼도 폴백 유지
-- [ ] ScrollRestoration.tsx:56-74 `scrollRestoration="manual"` 미복원
-- [ ] MiniPostCard.tsx:62-66 엔티티 디코딩 휴리스틱 — `&amp;` 텍스트가 태그로 변환될 수 있음
-- [ ] users/settings/export/page.tsx:41 SettingsNav 탭 오표시 (`current="migrate"`)
-- [ ] page.tsx(홈):18 클라이언트 useEffect에서 서버용 `redirect()` 사용 → `router.replace` 권장
+- [x] 인용 글 입력 중 반복 요청 — `web/src/components/PostForm.tsx:161` `!quoteUrl` 가드로 인용 해석 후에도 타이핑마다 `/api/fetch-post` 재요청 → `quoteUrl === url` 조기 반환 추가 + effect deps에 `quoteUrl`
+- [x] 서버 정보 1회만 fetch — `web/src/components/RightSidebar.tsx:60` `__serverInfoFetched` 가드 미리셋 → `serverchange`로 갱신 불가, 실패 시 재시도 없음 → 전역 플래그 제거, `serverRefreshKey` 변경마다 fetch (마운트 시에도 1회)
+- [x] 알림 배열 무한 성장 — `web/src/components/RightSidebar.tsx:43-49` SSE 알림 prepend 상한 없음 → `.slice(0, 20)` 캡
+- [x] Backspace 중복 트리거 — `web/src/components/AccountSwitcher.tsx:42-45` 모달 닫기 + KeyboardShortcuts `router.back()` 동시 발생 → KeyboardShortcuts에서 `.modal-overlay` 열림 시 Backspace 처리 건너뜀
+- [x] PostForm:104 `seriesEpisodeMatch` dead code / :671 `setPollExpiresIn(24)` 유효 옵션 아님 / :659-662 업로드 실패 조용히 사라짐 / :907 `mediaUploading` 미사용 / :919-924 stale `content` 클로저 → dead 분기 제거·`1440`으로 리셋·실패 시 throw(alert)·`mediaUploading` 배선·functional update
+- [x] InfiniteScroll.tsx:28-33 `.main-content` 1회 조회 — 없으면 무한 스크롤 정지 → 500ms 인터벌 재시도로 스크롤 리스너 부착
+- [x] Avatar.tsx:13-16 `imgError` 미리셋 — avatar 변경돼도 폴백 유지 → `imgError`를 avatar 문자열로 관리해 변경 시 리셋
+- [x] ScrollRestoration.tsx:56-74 `scrollRestoration="manual"` 미복원 → 언마운트 정리에서 `"auto"` 복원
+- [x] MiniPostCard.tsx:62-66 엔티티 디코딩 휴리스틱 — `&amp;` 텍스트가 태그로 변환될 수 있음 → 서버가 이미 HTML 인코딩 완료 상태이므로 디코딩/인코딩 휴리스틱 자체를 제거, sanitizePost가 이스케이프 담당
+- [x] users/settings/export/page.tsx:41 SettingsNav 탭 오표시 (`current="migrate"`) → `current="data"`로 수정
+- [x] page.tsx(홈):18 클라이언트 useEffect에서 서버용 `redirect()` 사용 → `router.replace`로 교체, 미사용 import 제거
 
 ## 병목 (PERF)
 

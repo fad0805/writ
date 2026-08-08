@@ -50,7 +50,10 @@ export default function ScrollRestoration() {
     };
 
     container.addEventListener("scroll", onScroll, { passive: true });
-    return () => container.removeEventListener("scroll", onScroll);
+    return () => {
+      container.removeEventListener("scroll", onScroll);
+      history.scrollRestoration = "auto";
+    };
   }, []);
 
   useEffect(() => {

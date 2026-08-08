@@ -26,10 +26,21 @@ export default function InfiniteScroll({
   }, []);
 
   useEffect(() => {
-    const el = document.querySelector(".main-content");
-    if (!el) return;
-    el.addEventListener("scroll", checkNearBottom, { passive: true });
-    return () => el.removeEventListener("scroll", checkNearBottom);
+    let el: HTMLElement | null = null;
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const attach = () => {
+      el = document.querySelector(".main-content");
+      if (el) {
+        el.addEventListener("scroll", checkNearBottom, { passive: true });
+        if (timer) { clearInterval(timer); timer = null; }
+      }
+    };
+    attach();
+    if (!el) timer = setInterval(attach, 500);
+    return () => {
+      if (timer) clearInterval(timer);
+      el?.removeEventListener("scroll", checkNearBottom);
+    };
   }, [checkNearBottom]);
 
   useEffect(() => {

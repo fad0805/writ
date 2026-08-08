@@ -45,7 +45,7 @@ export default function RightSidebar() {
               const newItems = d.notifications.filter((n) => !existing.has(n.id));
               if (newItems.length === 0) return prev;
               window.dispatchEvent(new Event("notifchange"));
-              return [...newItems, ...prev];
+              return [...newItems, ...prev].slice(0, 20);
             });
             if (autoRead) window.dispatchEvent(new Event("notificationsread"));
           }).catch(() => {});
@@ -57,7 +57,11 @@ export default function RightSidebar() {
   }, [user, refreshKey]);
 
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
-  useEffect(() => { if (!(window as any).__serverInfoFetched) { (window as any).__serverInfoFetched = true; fetch("/api/server-info").then((r) => r.json()).then(setServerInfo).catch(() => {}); } }, [serverRefreshKey]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/server-info").then((r) => r.json()).then((d) => { if (!cancelled) setServerInfo(d); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [serverRefreshKey]);
 
   useEffect(() => {
     const handler = () => setRefreshKey((k) => k + 1);

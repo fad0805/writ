@@ -38,7 +38,7 @@ export default function ExportPage() {
   return (
     <>
       <div className="page-header"><h2><Icon name="settings" /> 설정 관리</h2></div>
-      <SettingsNav current="migrate" />
+      <SettingsNav current="data" />
 
       <div className="novel-form">
         <h3 style={{ fontSize: "1.05em", marginBottom: 12 }}>데이터 내려받기</h3>

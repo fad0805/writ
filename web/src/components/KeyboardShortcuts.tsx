@@ -18,6 +18,7 @@ export default function KeyboardShortcuts() {
     const isEditing = tag === "input" || tag === "textarea" || tag === "select" || document.activeElement?.closest(".ProseMirror, .episode-editor") != null;
 
     if (e.key === "Backspace" && !isEditing && !e.repeat) {
+      if (document.querySelector(".modal-overlay")) return;
       e.preventDefault();
       router.back();
       return;
