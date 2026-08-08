@@ -21,6 +21,20 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        source: "/about/rules",
+        destination: "/rules",
+        permanent: true,
+      },
+      {
+        source: "/about/rules/:path*",
+        destination: "/rules",
+        permanent: true,
+      },
+    ];
+  },
   async rewrites() {
     return [
       {

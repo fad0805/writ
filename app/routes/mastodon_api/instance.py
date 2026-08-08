@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func as sqlfunc
 from sqlalchemy.orm import Session as SASession
 
-from app.models import User, Post, Tag, ServerSetting, now
+from app.models import User, Post, Tag, ServerSetting, ServerRule, now
 from app.db.database import get_db
 from app.config.settings import BASE_URL, DOMAIN, SCHEME, MAX_POST_LENGTH
 from app.core.push import get_vapid_keys
@@ -22,6 +22,18 @@ def _abs_url(value: str | None) -> str | None:
     if value.startswith("/"):
         return f"{BASE_URL}{value}"
     return value
+
+
+def _rules_json(db: SASession) -> list[dict]:
+    """DB의 서버 규칙을 Mastodon Rule 형태([{id, text}])로 변환."""
+    rules = db.query(ServerRule).order_by(ServerRule.sort_order).all()
+    return [
+        {
+            "id": str(r.id),
+            "text": r.title if not r.description else f"{r.title} — {r.description}",
+        }
+        for r in rules
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +106,7 @@ def mastodon_instance(db: SASession = Depends(get_db)):
         "approval_required": False,
         "invites_enabled": False,
         "contact_account": contact_account,
+        "rules": _rules_json(db),
         "configuration": {
             "urls": {
                 "accounts": f"{BASE_URL}/authorize_fetch",
@@ -129,7 +142,6 @@ def mastodon_instance(db: SASession = Depends(get_db)):
                 "max_reactions": 10,
             },
         },
-        "rules": [],
     }
 
 
@@ -157,8 +169,8 @@ def instance_trends(db: SASession = Depends(get_db)):
 # GET /api/v1/instance/rules
 # ---------------------------------------------------------------------------
 @router.get("/v1/instance/rules")
-def instance_rules():
-    return []
+def instance_rules(db: SASession = Depends(get_db)):
+    return _rules_json(db)
 
 
 # ---------------------------------------------------------------------------
