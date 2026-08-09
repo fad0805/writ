@@ -1755,6 +1755,83 @@ if not apply_:
     print("media_attachments 의 사설 URL은 자동 삭제하지 않으니 수동으로 확인하세요.")
 PYEOF
 
+elif [ "$1" = "fix-mentions" ]; then
+  # 로컬 글의 리모트 멘션 재해석 — mentioned_user_ids 누락 복구 (outbound 멘션 깨짐 방지)
+  # 사용법: ./gogo.sh fix-mentions [--notify]
+  #   --notify: 수정된 글에 대해 Update 활동을 팔로워에게 재발송
+  NOTIFY_FLAG="${2}"
+  docker compose exec -T -e NOTIFY_FLAG="$NOTIFY_FLAG" api python3 <<'PYEOF'
+import os
+from app.models import Post
+from app.db.database import get_session
+from app.utils.content_parser import extract_mentions
+from app.db.mention_resolver import resolve_handles_to_ids
+
+NOTIFY = os.environ.get("NOTIFY_FLAG") == "--notify"
+
+fixed = 0
+notified = 0
+with get_session() as s:
+    posts = s.query(Post).filter(
+        Post.is_deleted == False,
+        Post.content.like("%u-url mention%"),
+    ).order_by(Post.id).all()
+    for p in posts:
+        author = p.author
+        if author is None or author.is_remote:
+            continue
+        mentions = extract_mentions(p.content, p)
+        handles = [m["handle"] for m in mentions]
+        if not handles:
+            continue
+        full_ids = resolve_handles_to_ids(handles)
+        if not full_ids:
+            continue
+        old = set(p.mentioned_user_ids or [])
+        if set(full_ids).issubset(old):
+            continue
+        p.mentioned_user_ids = list(old | set(full_ids))
+        s.commit()
+        fixed += 1
+        print(f"  #{p.id} ({p.number}) {handles} -> ids {full_ids}")
+        if NOTIFY:
+            from datetime import datetime, timezone
+            from app.config import BASE_URL
+            from app.utils.to_ap_serializer import to_ap_note
+            from app.core.activitypub import broadcast_to_followers
+            try:
+                with get_session() as _s:
+                    _p = _s.query(Post).filter_by(id=p.id).first()
+                    if not _p:
+                        continue
+                    note_data = to_ap_note(_p)
+                    note_data.pop("@context", None)
+                    note_data.pop("url", None)
+                    note_data["atomUri"] = _p.ap_id
+                    note_data["updated"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                    note_data.setdefault("summary", None)
+                    note_data.setdefault("sensitive", False)
+                    note_data.setdefault("attachment", [])
+                    note_data.setdefault("tag", [])
+                    note_data.setdefault("inReplyTo", None)
+                    update_activity = {
+                        "@context": ["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"],
+                        "id": f"{BASE_URL}/activities/update/{_p.id}",
+                        "type": "Update",
+                        "actor": _p.author.actor_uri(),
+                        "to": note_data.get("to", []),
+                        "cc": note_data.get("cc", []),
+                        "object": note_data,
+                    }
+                    broadcast_to_followers(_p.author, update_activity)
+                    notified += 1
+            except Exception as e:
+                print(f"    notify failed for #{p.id}: {e}")
+    print(f"done: fixed {fixed}, notified {notified}")
+    if fixed == 0:
+        print("복구할 글 없음 (리모트 멘션이 이미 해석돼 있거나 멘션 자체가 없음)")
+PYEOF
+
 else
   echo ""
   echo "명령어:"
@@ -1779,4 +1856,5 @@ else
   echo "  reprocess-avatars - 기존 아바타 이미지 정사각형 센터크롭 다시 처리"
   echo "  check-lna       - Firefox 로컬 네트워크 접근 팝업 유발 사설 URL 진단 (예: ./gogo.sh check-lna --resolve)"
   echo "  fix-lna         - LNA 유발 사설 URL 데이터 정리 (예: ./gogo.sh fix-lna --apply)"
+  echo "  fix-mentions    - 로컬 글 리모트 멘션 재해석, mentioned_user_ids 복구 (예: ./gogo.sh fix-mentions --notify)"
 fi

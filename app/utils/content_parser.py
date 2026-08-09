@@ -309,7 +309,8 @@ def extract_mentions_from_local(text: str) -> list[dict]:
     full_pattern = r'@([A-Za-z0-9_.-]+)@([A-Za-z0-9_.-]+\.[A-Za-z]{2,})'
     # 2. 단축 핸들: @user (도메인 형식이 뒤에 붙지 않는 경우만 매칭)
     # (?!...) : 뒤에 @domain 형태가 오지 않아야 함
-    short_pattern = r'(?<![A-Za-z0-9_./])@([A-Za-z0-9_.-]+)(?!@[A-Za-z0-9_.-]+\.[A-Za-z]{2,})'
+    # (?![A-Za-z0-9_.-]) : 풀 핸들의 일부(접두사)를 잘못 매칭하지 않도록 방지
+    short_pattern = r'(?<![A-Za-z0-9_./])@([A-Za-z0-9_.-]+)(?!@[A-Za-z0-9_.-]+\.[A-Za-z]{2,})(?![A-Za-z0-9_.-])'
 
     mentions = []
     seen_handles = set()
