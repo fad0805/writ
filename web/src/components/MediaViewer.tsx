@@ -17,7 +17,7 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
   const panStart = useRef({ x: 0, y: 0 });
   const panOrigin = useRef({ x: 0, y: 0 });
   const swipeStartX = useRef(0);
-  const prevIndex = useRef(index);
+  const prevIndex = useRef(-1);
   const closingFromPop = useRef(false);
 
   const closeViewer = useCallback(() => {
