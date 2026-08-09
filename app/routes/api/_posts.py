@@ -16,7 +16,8 @@ from app.core.broadcast import broadcast_post
 from app.core.timeline_stream import broadcast_refresh_notifs, broadcast_delete
 from app.db.database import get_session
 from app.core.auth import require_active_auth, get_current_user
-from app.utils.content_parser import process_post_content
+from app.utils.content_parser import process_post_content, extract_mentions
+from app.db.mention_resolver import resolve_handles_to_ids
 from app.utils.post import _get_descendant_ids, _sync_post_tags
 from app.utils.storage import get_storage
 from app.core.visibility import _can_view
@@ -146,6 +147,12 @@ def _do_edit_post(s, post, user, content, summary, visibility=None, is_sensitive
         raise HTTPException(status_code=403, detail="관리자가 강제한 CW는 수정할 수 없습니다")
     new_content = content.replace('\r\n', '\n').replace('\r', '\n')
     post.content = process_post_content(new_content, post=post)
+    # 수정 시 멘션 재추출 — mentioned_user_ids를 새 내용에 맞게 갱신
+    # (리모트 멘션은 백그라운드에서 해석한 뒤 Update 활동 발송)
+    mentions = extract_mentions(new_content, post=post)
+    mentioned_handles = [m["handle"] for m in mentions]
+    mentioned_ids = resolve_handles_to_ids(mentioned_handles, resolve_remote=False)
+    post.mentioned_user_ids = mentioned_ids
     post.summary = summary
     if visibility is not None:
         post.visibility = visibility
@@ -187,37 +194,52 @@ def _do_edit_post(s, post, user, content, summary, visibility=None, is_sensitive
         pass
 
     if post.ap_id and not post.author.is_remote:
-        try:
-            note_data = to_ap_note(post)
-            note_data.pop("@context", None)
-            note_data.pop("url", None)
-            note_data["atomUri"] = post.ap_id
-            note_data["updated"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-            note_data.setdefault("summary", None)
-            note_data.setdefault("sensitive", False)
-            note_data.setdefault("attachment", [])
-            note_data.setdefault("tag", [])
-            note_data.setdefault("inReplyTo", None)
-            update_activity = {
-                "@context": [
-                    "https://www.w3.org/ns/activitystreams",
-                    "https://w3id.org/security/v1",
-                ],
-                "id": f"{BASE_URL}/activities/update/{post.id}",
-                "type": "Update",
-                "actor": user.actor_uri(),
-                "to": note_data.get("to", []),
-                "cc": note_data.get("cc", []),
-                "object": note_data,
-            }
-            def _send_update():
+        _post_id = post.id
+
+        def _send_update():
+            try:
+                # 리모트 멘션을 해석해 mentioned_user_ids를 최종 확정한 뒤 Update 발송
                 try:
-                    broadcast_to_followers(user, update_activity)
+                    full_ids = resolve_handles_to_ids(mentioned_handles)
+                    if full_ids != mentioned_ids:
+                        with get_session() as s:
+                            s.query(Post).filter_by(id=_post_id).update({"mentioned_user_ids": full_ids})
+                            s.commit()
                 except Exception as e:
-                    logger.error("Update federation failed: %s", e, exc_info=True)
-            threading.Thread(target=_send_update, daemon=True).start()
-        except Exception as e:
-            logger.error("Update activity build failed: %s", e, exc_info=True)
+                    logger.error("Failed to resolve remote mentions on edit: %s", e, exc_info=True)
+                update_activity = None
+                with get_session() as s:
+                    _p = s.query(Post).filter_by(id=_post_id).first()
+                    if not _p:
+                        return
+                    note_data = to_ap_note(_p)
+                    note_data.pop("@context", None)
+                    note_data.pop("url", None)
+                    note_data["atomUri"] = _p.ap_id
+                    note_data["updated"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                    note_data.setdefault("summary", None)
+                    note_data.setdefault("sensitive", False)
+                    note_data.setdefault("attachment", [])
+                    note_data.setdefault("tag", [])
+                    note_data.setdefault("inReplyTo", None)
+                    update_activity = {
+                        "@context": [
+                            "https://www.w3.org/ns/activitystreams",
+                            "https://w3id.org/security/v1",
+                        ],
+                        "id": f"{BASE_URL}/activities/update/{_p.id}",
+                        "type": "Update",
+                        "actor": user.actor_uri(),
+                        "to": note_data.get("to", []),
+                        "cc": note_data.get("cc", []),
+                        "object": note_data,
+                    }
+                if update_activity:
+                    broadcast_to_followers(user, update_activity)
+            except Exception as e:
+                logger.error("Update federation failed: %s", e, exc_info=True)
+
+        threading.Thread(target=_send_update, daemon=True).start()
 
 
 @posts_router.post("/posts/{post_id}/edit")
