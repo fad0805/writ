@@ -8,8 +8,16 @@ import EmojiPicker from "./EmojiPicker";
 import MiniPostCard from "./MiniPostCard";
 import { getCustomEmojis, CustomEmoji } from "@/lib/emojis";
 import { useAuth } from "@/lib/auth";
+import { useInlineAutocomplete, useSeriesSearch } from "@/hooks/useAutocomplete";
 
 const MAX_LENGTH = 500;
+
+const MENTION_PREV_CHAR = /\s/;
+const MENTION_WORD_END = /@[a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?/g;
+const EMOJI_PREV_CHAR = /[\s:]/;
+const EMOJI_WORD_END = /[\s:]/;
+const HASHTAG_PREV_CHAR = /\s/;
+const HASHTAG_WORD_END = /[\s#]/;
 
 export default function PostForm({ parentId, onDone, placeholder, initialContent, initialVisibility, shareUrl, parentSummary, initialSummary, initialMedia }: { parentId?: number; onDone?: (post?: PostData) => void; placeholder?: string; initialContent?: string; initialVisibility?: string; shareUrl?: string; parentSummary?: string | null; initialSummary?: string | null; initialMedia?: { url: string; type: string; alt?: string }[] }) {
   const draftKey = `draft_${parentId || "new"}`;
@@ -34,21 +42,76 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const router = useRouter();
 
-  const [mentionQuery, setMentionQuery] = useState("");
-  const [mentionUsers, setMentionUsers] = useState<User[]>([]);
-  const [mentionIdx, setMentionIdx] = useState(0);
-  const [mentionStart, setMentionStart] = useState(-1);
-  const [mentionPos, setMentionPos] = useState({ top: 0, left: 0 });
-  const [emojiQuery, setEmojiQuery] = useState("");
-  const [emojiResults, setEmojiResults] = useState<CustomEmoji[]>([]);
-  const [emojiStart, setEmojiStart] = useState(-1);
-  const [emojiIdx, setEmojiIdx] = useState(0);
-  const [emojiPos, setEmojiPos] = useState({ top: 0, left: 0 });
-  const [hashtagStart, setHashtagStart] = useState(-1);
-  const [hashtagQuery, setHashtagQuery] = useState("");
-  const [hashtagResults, setHashtagResults] = useState<string[]>([]);
-  const [hashtagIdx, setHashtagIdx] = useState(0);
-  const [hashtagPos, setHashtagPos] = useState({ top: 0, left: 0 });
+  const searchMentions = useCallback(async (q: string) => (await api.autocomplete(q)).users, []);
+  const searchEmojis = useCallback(async (q: string) => {
+    const all = await getCustomEmojis();
+    const lq = q.toLowerCase();
+    return all.filter(e => e.category !== "remote" && (e.keyword.startsWith(lq) || (e.aliases || []).some(a => a.startsWith(lq))));
+  }, []);
+  const searchHashtags = useCallback(async (q: string) => {
+    const res = await fetch(`/api/search/tags?q=${encodeURIComponent(q)}`, { credentials: "include" });
+    if (res.ok) {
+      const d = await res.json();
+      return d.tags?.map((t: { name: string }) => t.name) || [];
+    }
+    return [];
+  }, []);
+
+  const {
+    query: emojiQuery,
+    results: emojiResults,
+    idx: emojiIdx,
+    pos: emojiPos,
+    setIdx: setEmojiIdx,
+    setResults: setEmojiResults,
+    detect: detectEmoji,
+    insert: emojiInsert,
+    onKeyDown: emojiOnKeyDown,
+  } = useInlineAutocomplete<CustomEmoji>({
+    trigger: ":",
+    prevCharRegex: EMOJI_PREV_CHAR,
+    wordEndRegex: EMOJI_WORD_END,
+    search: searchEmojis,
+    content,
+    setContent,
+    taRef,
+  });
+
+  const {
+    results: mentionUsers,
+    idx: mentionIdx,
+    pos: mentionPos,
+    setIdx: setMentionIdx,
+    detect: detectMention,
+    insert: mentionInsert,
+    onKeyDown: mentionOnKeyDown,
+  } = useInlineAutocomplete<User>({
+    trigger: "@",
+    prevCharRegex: MENTION_PREV_CHAR,
+    wordEndRegex: MENTION_WORD_END,
+    search: searchMentions,
+    content,
+    setContent,
+    taRef,
+  });
+
+  const {
+    results: hashtagResults,
+    idx: hashtagIdx,
+    pos: hashtagPos,
+    setIdx: setHashtagIdx,
+    detect: detectHashtag,
+    insert: hashtagInsert,
+    onKeyDown: hashtagOnKeyDown,
+  } = useInlineAutocomplete<string>({
+    trigger: "#",
+    prevCharRegex: HASHTAG_PREV_CHAR,
+    wordEndRegex: HASHTAG_WORD_END,
+    search: searchHashtags,
+    content,
+    setContent,
+    taRef,
+  });
   const mediaIdRef = useRef(0);
   const [mediaItems, setMediaItems] = useState<{ id: number; url: string; type: string; file?: File; alt?: string }[]>(() =>
     (initialMedia || []).map((m, i) => ({ id: -(i + 1), url: m.url, type: m.type || "image", alt: m.alt || "" }))
@@ -62,12 +125,19 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [pollExpiresIn, setPollExpiresIn] = useState(1440);
   const pollLastRef = useRef<HTMLInputElement>(null);
   const [altModalIdx, setAltModalIdx] = useState<number | null>(null);
-  const [seriesResults, setSeriesResults] = useState<{ id: number; title: string; cover_image: string }[]>([]);
-  const [seriesIdx, setSeriesIdx] = useState(0);
-  const [seriesPos, setSeriesPos] = useState({ top: 0, left: 0 });
-  const [showSeriesSearch, setShowSeriesSearch] = useState(false);
-  const [seriesSearchQ, setSeriesSearchQ] = useState("");
-  const seriesSearchRef = useRef<HTMLInputElement>(null);
+  const {
+    show: showSeriesSearch,
+    query: seriesSearchQ,
+    results: seriesResults,
+    idx: seriesIdx,
+    pos: seriesPos,
+    setQuery: setSeriesSearchQ,
+    setIdx: setSeriesIdx,
+    inputRef: seriesSearchRef,
+    detect: detectSeries,
+    insert: insertSeries,
+    handleKeyDown: seriesOnKeyDown,
+  } = useSeriesSearch({ content, setContent, taRef });
   const [linkPreview, setLinkPreview] = useState<{ url: string; title: string; description: string; image: string } | null>(null);
   const [linkPreviewLoading, setLinkPreviewLoading] = useState(false);
   const linkPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -220,198 +290,6 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const nearLimit = totalLen > MAX_LENGTH - 50 && totalLen <= MAX_LENGTH;
   const overLimit = totalLen > MAX_LENGTH;
 
-  const detectEmoji = useCallback((val: string, cursor: number) => {
-    const before = val.slice(0, cursor);
-    const colonIdx = before.lastIndexOf(":");
-    if (colonIdx === -1 || (colonIdx > 0 && !/[\s:]/.test(val[colonIdx - 1]))) {
-      setEmojiStart(-1); setEmojiQuery(""); setEmojiResults([]);
-      return;
-    }
-    const partial = before.slice(colonIdx + 1);
-    if (partial.length === 0 || /[\s:]/.test(partial)) {
-      setEmojiStart(-1); setEmojiQuery(""); setEmojiResults([]);
-      return;
-    }
-    setEmojiStart(colonIdx);
-    setEmojiQuery(partial);
-    // Position near cursor in textarea
-    const ta = taRef.current;
-    if (ta) {
-      const rect = ta.getBoundingClientRect();
-      const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
-      const textBefore = val.slice(0, cursor);
-      const lines = textBefore.split('\n');
-      const top = rect.top + lines.length * lineHeight + 4;
-      const lastLine = lines[lines.length - 1] || '';
-      const left = rect.left + lastLine.length * 8 + 10;
-      setEmojiPos({ top, left });
-    }
-  }, []);
-
-  const detectMention = useCallback((val: string, cursor: number) => {
-    const before = val.slice(0, cursor);
-    const atIdx = before.lastIndexOf("@");
-    if (atIdx === -1 || (atIdx > 0 && !/\s/.test(val[atIdx - 1]))) {
-      setMentionStart(-1); setMentionQuery(""); setMentionUsers([]);
-      return;
-    }
-    const partial = before.slice(atIdx + 1);
-    if (partial.length === 0 || /[\s@]/.test(partial)) {
-      setMentionStart(-1); setMentionQuery(""); setMentionUsers([]);
-      return;
-    }
-    setMentionStart(atIdx);
-    setMentionQuery(partial);
-    const ta = taRef.current;
-    if (ta) {
-      const rect = ta.getBoundingClientRect();
-      const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
-      const textBefore = val.slice(0, cursor);
-      const lines = textBefore.split('\n');
-      const top = rect.top + lines.length * lineHeight + 4;
-      const lastLine = lines[lines.length - 1] || '';
-      const left = rect.left + lastLine.length * 8 + 10;
-      setMentionPos({ top, left });
-    }
-  }, []);
-
-  const mentionQueryRef = useRef("");
-  const mentionHadQueryRef = useRef(false);
-  useEffect(() => {
-    if (mentionQueryRef.current !== mentionQuery) {
-      mentionQueryRef.current = mentionQuery;
-      if (mentionHadQueryRef.current !== !!mentionQuery) {
-        mentionHadQueryRef.current = !!mentionQuery;
-        setMentionUsers([]);
-      }
-      if (mentionQuery) {
-        const t = setTimeout(async () => {
-          try {
-            const res = await api.autocomplete(mentionQuery);
-            setMentionUsers(res.users);
-            setMentionIdx(0);
-          } catch { setMentionUsers([]); }
-        }, 100);
-        return () => clearTimeout(t);
-      }
-    }
-  }, [mentionQuery]);
-
-  const detectHashtag = useCallback((val: string, cursor: number) => {
-    const before = val.slice(0, cursor);
-    const hashIdx = before.lastIndexOf("#");
-    if (hashIdx === -1 || (hashIdx > 0 && !/\s/.test(val[hashIdx - 1]))) {
-      setHashtagStart(-1); setHashtagQuery(""); setHashtagResults([]);
-      return;
-    }
-    const partial = before.slice(hashIdx + 1);
-    if (/[\s#]/.test(partial) || partial.length === 0) {
-      setHashtagStart(-1); setHashtagQuery(""); setHashtagResults([]);
-      return;
-    }
-    setHashtagStart(hashIdx);
-    setHashtagQuery(partial);
-    const ta = taRef.current;
-    if (ta) {
-      const rect = ta.getBoundingClientRect();
-      const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
-      const textBefore = val.slice(0, cursor);
-      const lines = textBefore.split('\n');
-      const top = rect.top + lines.length * lineHeight + 4;
-      const lastLine = lines[lines.length - 1] || '';
-      const left = rect.left + lastLine.length * 8 + 10;
-      setHashtagPos({ top, left });
-    }
-  }, []);
-
-  const hashtagQueryRef = useRef("");
-  const hashtagHadQueryRef = useRef(false);
-  useEffect(() => {
-    if (hashtagQueryRef.current !== hashtagQuery) {
-      hashtagQueryRef.current = hashtagQuery;
-      if (hashtagHadQueryRef.current !== !!hashtagQuery) {
-        hashtagHadQueryRef.current = !!hashtagQuery;
-        setHashtagResults([]);
-      }
-      if (hashtagQuery) {
-        const t = setTimeout(async () => {
-          try {
-            const res = await fetch(`/api/search/tags?q=${encodeURIComponent(hashtagQuery)}`, { credentials: "include" });
-            if (res.ok) { const d = await res.json(); setHashtagResults(d.tags?.map((t: { name: string }) => t.name) || []); setHashtagIdx(0); }
-            else setHashtagResults([]);
-          } catch { setHashtagResults([]); }
-        }, 100);
-        return () => clearTimeout(t);
-      }
-    }
-  }, [hashtagQuery]);
-
-  const detectSeries = useCallback((val: string, cursor: number) => {
-    const before = val.slice(0, cursor);
-    const slashIdx = before.lastIndexOf("/");
-    if (slashIdx === -1 || (slashIdx > 0 && !/\s/.test(val[slashIdx - 1]))) {
-      setShowSeriesSearch(false); setSeriesResults([]); return;
-    }
-    const raw = before.slice(slashIdx + 1);
-    const cmd = raw.toLowerCase();
-    if (cmd !== "series" && cmd !== "시리즈" && !cmd.startsWith("series ") && !cmd.startsWith("시리즈 ")) {
-      setShowSeriesSearch(false); setSeriesResults([]); return;
-    }
-    if (!cmd.includes(" ") && (cmd === "series" || cmd === "시리즈")) {
-      setShowSeriesSearch(true); setSeriesSearchQ(""); setSeriesResults([]);
-      const ta = taRef.current;
-      if (ta) {
-        const rect = ta.getBoundingClientRect();
-        const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
-        const textBefore = val.slice(0, cursor);
-        const lines = textBefore.split('\n');
-        const top = rect.top + lines.length * lineHeight + 4;
-        const lastLine = lines[lines.length - 1] || '';
-        const left = rect.left + lastLine.length * 8 + 10;
-        setSeriesPos({ top, left });
-      }
-      setTimeout(() => seriesSearchRef.current?.focus(), 0);
-      return;
-    }
-    setShowSeriesSearch(false); setSeriesResults([]);
-  }, []);
-
-  useEffect(() => {
-    if (!showSeriesSearch) return;
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/search/series?q=${encodeURIComponent(seriesSearchQ)}`, { credentials: "include" });
-        if (res.ok) { const d = await res.json(); setSeriesResults(d.series?.map((s: { id: number; title: string; cover_image: string }) => ({ id: s.id, title: s.title, cover_image: s.cover_image })) || []); setSeriesIdx(0); }
-        else setSeriesResults([]);
-      } catch { setSeriesResults([]); }
-    }, 100);
-    return () => clearTimeout(t);
-  }, [seriesSearchQ, showSeriesSearch]);
-
-  const emojiQueryRef = useRef("");
-  const emojiHadQueryRef = useRef(false);
-  useEffect(() => {
-    if (emojiQueryRef.current !== emojiQuery) {
-      emojiQueryRef.current = emojiQuery;
-      if (emojiHadQueryRef.current !== !!emojiQuery) {
-        emojiHadQueryRef.current = !!emojiQuery;
-        setEmojiResults([]);
-      }
-      if (emojiQuery) {
-        const t = setTimeout(async () => {
-          try {
-            const all = await getCustomEmojis();
-            const q = emojiQuery.toLowerCase();
-            const matched = all.filter(e => e.category !== "remote" && (e.keyword.startsWith(q) || (e.aliases || []).some(a => a.startsWith(q))));
-            setEmojiResults(matched);
-            setEmojiIdx(0);
-          } catch { setEmojiResults([]); }
-        }, 100);
-        return () => clearTimeout(t);
-      }
-    }
-  }, [emojiQuery]);
-
   // Close emoji picker on scroll/resize/click-outside/Escape
   useEffect(() => {
     if (!emojiQuery) return;
@@ -429,63 +307,11 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       document.removeEventListener("keydown", keyHandler);
       document.removeEventListener("click", clickHandler);
     };
-  }, [emojiQuery]);
+  }, [emojiQuery, setEmojiResults]);
 
-  // Close series search on click-outside/Escape
-  useEffect(() => {
-    if (!showSeriesSearch) return;
-    const close = () => {
-      const cur = taRef.current?.value || content;
-      const slashIdx = cur.lastIndexOf("/");
-      if (slashIdx >= 0 && (cur.slice(slashIdx + 1).toLowerCase().startsWith("series") || cur.slice(slashIdx + 1).toLowerCase().startsWith("시리즈"))) {
-        const after = cur.slice(slashIdx);
-        const wordEndMatch = after.search(/[\s]|$/);
-        const wordEnd = slashIdx + (wordEndMatch >= 0 ? wordEndMatch : after.length);
-        setContent((cur.slice(0, slashIdx - 1) + cur.slice(wordEnd)).replace(/^\s+/, ""));
-      }
-      setShowSeriesSearch(false); setSeriesResults([]);
-    };
-    const keyHandler = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
-    document.addEventListener("keydown", keyHandler);
-    const clickHandler = (e: MouseEvent) => {
-      const popup = document.querySelector('.emoji-autocomplete');
-      if (popup && !popup.contains(e.target as Node)) close();
-    };
-    setTimeout(() => document.addEventListener("click", clickHandler), 0);
-    return () => {
-      document.removeEventListener("keydown", keyHandler);
-      document.removeEventListener("click", clickHandler);
-    };
-  }, [showSeriesSearch, content]);
+  const insertEmoji = (emo: CustomEmoji) => emojiInsert(emo.keyword, ": ");
 
-  const insertEmoji = useCallback((emo: CustomEmoji) => {
-    if (emojiStart === -1) return;
-    const afterEmoji = content.slice(emojiStart + 1);
-    const wordEndMatch = afterEmoji.search(/[\s:]|$/);
-    const wordEnd = emojiStart + 1 + (wordEndMatch >= 0 ? wordEndMatch : afterEmoji.length);
-    const before = content.slice(0, emojiStart);
-    const after = content.slice(wordEnd);
-    const inserted = `${before}:${emo.keyword}: ${after}`;
-    setContent(inserted);
-    setEmojiStart(-1); setEmojiQuery(""); setEmojiResults([]);
-    requestAnimationFrame(() => {
-      const ta = taRef.current;
-      if (ta) {
-        const pos = before.length + emo.keyword.length + 3;
-        ta.setSelectionRange(pos, pos);
-        ta.focus();
-      }
-    });
-  }, [content, emojiStart]);
-
-  const insertMention = useCallback((u: User) => {
-    if (mentionStart === -1) return;
-    const mentionRegex = /@[a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?/g;
-    const afterMention = content.slice(mentionStart + 1);
-    const wordEndMatch = afterMention.search(mentionRegex);
-    const wordEnd = mentionStart + 1 + (wordEndMatch >= 0 ? wordEndMatch : afterMention.length);
-    const before = content.slice(0, mentionStart);
-    const after = content.slice(wordEnd);
+  const insertMention = (u: User) => {
     let handle = u.username;
     if (u.is_remote && u.remote_url) {
       try {
@@ -493,56 +319,10 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         if (h) handle = `${u.username}@${h}`;
       } catch {}
     }
-    const inserted = `${before}@${handle} ${after}`;
-    setContent(inserted);
-    setMentionStart(-1);
-    setMentionQuery("");
-    setMentionUsers([]);
-    requestAnimationFrame(() => {
-      const ta = taRef.current;
-      if (ta) {
-        const pos = before.length + handle.length + 2;
-        ta.setSelectionRange(pos, pos);
-        ta.focus();
-      }
-    });
-  }, [content, mentionStart]);
+    mentionInsert(handle);
+  };
 
-  const insertHashtag = useCallback((tag: string) => {
-    if (hashtagStart === -1) return;
-    const afterHash = content.slice(hashtagStart + 1);
-    const wordEndMatch = afterHash.search(/[\s#]|$/);
-    const wordEnd = hashtagStart + 1 + (wordEndMatch >= 0 ? wordEndMatch : afterHash.length);
-    const before = content.slice(0, hashtagStart);
-    const after = content.slice(wordEnd);
-    const inserted = `${before}#${tag} ${after}`;
-    setContent(inserted);
-    setHashtagStart(-1); setHashtagQuery(""); setHashtagResults([]);
-    requestAnimationFrame(() => {
-      const ta = taRef.current;
-      if (ta) {
-        const pos = before.length + tag.length + 2;
-        ta.setSelectionRange(pos, pos);
-        ta.focus();
-      }
-    });
-  }, [content, hashtagStart]);
-
-  const insertSeries = useCallback((series: { id: number; title: string }) => {
-    const slashIdx = content.lastIndexOf("/");
-    const before = slashIdx > 0 ? content.slice(0, slashIdx - 1) : "";
-    const fullUrl = `${window.location.origin}/series/${series.id}`;
-    const inserted = `${before} ${fullUrl} `;
-    setContent(inserted);
-    setShowSeriesSearch(false); setSeriesResults([]); setSeriesSearchQ("");
-    requestAnimationFrame(() => {
-      const ta = taRef.current;
-      if (ta) {
-        ta.setSelectionRange(inserted.length, inserted.length);
-        ta.focus();
-      }
-    });
-  }, [content]);
+  const insertHashtag = (tag: string) => hashtagInsert(tag);
 
   const handleTaEvent = useCallback((e: React.KeyboardEvent | React.MouseEvent) => {
     const el = e.target as HTMLTextAreaElement;
@@ -553,84 +333,14 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   }, [detectMention, detectEmoji, detectHashtag, detectSeries]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (showSeriesSearch) {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        if (seriesResults.length > 0 && seriesResults[seriesIdx]) insertSeries(seriesResults[seriesIdx]);
-        return;
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        const cur = content;
-        const slashIdx = cur.lastIndexOf("/");
-        if (slashIdx >= 0 && (cur.slice(slashIdx + 1).toLowerCase().startsWith("series") || cur.slice(slashIdx + 1).toLowerCase().startsWith("시리즈"))) {
-          const after = cur.slice(slashIdx);
-          const wordEndMatch = after.search(/[\s]|$/);
-          const wordEnd = slashIdx + (wordEndMatch >= 0 ? wordEndMatch : after.length);
-          setContent((cur.slice(0, slashIdx - 1) + cur.slice(wordEnd)).replace(/^\s+/, ""));
-        }
-        setShowSeriesSearch(false); setSeriesResults([]);
-        return;
-      }
-    }
+    if (seriesOnKeyDown(e)) return;
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       formRef.current?.requestSubmit();
       return;
     }
-    if (emojiResults.length > 0) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setEmojiIdx((i) => Math.min(i + 1, emojiResults.length - 1));
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setEmojiIdx((i) => Math.max(i - 1, 0));
-      } else if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault();
-        if (emojiResults[emojiIdx]) insertEmoji(emojiResults[emojiIdx]);
-      } else if (e.key === "Escape") {
-        setEmojiResults([]);
-      }
-      return;
-    }
-    if (mentionUsers.length > 0) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setMentionIdx((i) => Math.min(i + 1, mentionUsers.length - 1));
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setMentionIdx((i) => Math.max(i - 1, 0));
-      } else if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault();
-        if (mentionUsers[mentionIdx]) insertMention(mentionUsers[mentionIdx]);
-      } else if (e.key === "Escape") {
-        setMentionUsers([]);
-      }
-      return;
-    }
-    if (hashtagResults.length > 0) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setHashtagIdx((i) => Math.min(i + 1, hashtagResults.length - 1));
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setHashtagIdx((i) => Math.max(i - 1, 0));
-      } else if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault();
-        if (hashtagResults[hashtagIdx]) insertHashtag(hashtagResults[hashtagIdx]);
-      } else if (e.key === "Escape") {
-        setHashtagResults([]);
-      }
-      return;
-    }
-    if (seriesResults.length > 0) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSeriesIdx((i) => Math.min(i + 1, seriesResults.length - 1));
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSeriesIdx((i) => Math.max(i - 1, 0));
-      }
-    }
+    if (emojiOnKeyDown(e, insertEmoji)) return;
+    if (mentionOnKeyDown(e, insertMention)) return;
+    if (hashtagOnKeyDown(e, insertHashtag)) return;
   };
 
   const handleContentChange = (val: string, cursor?: number) => {
