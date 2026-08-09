@@ -2,7 +2,8 @@
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import { api, User, PostData, NovelData } from "@/lib/api";
-import PostCard, { rewriteLinks } from "@/components/PostCard";
+import PostCard from "@/components/PostCard";
+import { rewriteLinks } from "@/lib/postContent";
 import InfiniteScroll from "@/components/InfiniteScroll";
 import Icon from "@/components/Icon";
 import { hashColor } from "@/lib/avatar";

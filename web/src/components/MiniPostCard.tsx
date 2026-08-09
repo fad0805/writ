@@ -6,7 +6,7 @@ import Icon from "./Icon";
 import MediaViewer from "./MediaViewer";
 import { injectEmojis, renderCustomEmojis, CustomEmoji, useEmojiList } from "@/lib/emojis";
 import { sanitizePost, sanitizeName } from "@/lib/sanitize";
-import { rewriteLinks } from "./PostCard";
+import { rewriteLinks } from "@/lib/postContent";
 
 const LIGHT_BG: Record<string, string> = {
   boost: "rgba(104, 159, 56, 0.1)",
