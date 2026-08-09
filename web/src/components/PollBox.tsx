@@ -10,7 +10,7 @@ export default function PollBox({ post, targetId, readonly, onUpdate }: {
   readonly?: boolean;
   onUpdate?: (updated?: PostData) => void;
 }) {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   const [showPollResults, setShowPollResults] = useState(false);
   const [pollRefreshing, setPollRefreshing] = useState(false);
 
@@ -43,7 +43,7 @@ export default function PollBox({ post, targetId, readonly, onUpdate }: {
                 }
                 if (onUpdate) onUpdate();
                 else window.dispatchEvent(new Event("postchange"));
-              } catch (err: any) { alert(err.message); }
+                } catch (err) { alert(err instanceof Error ? err.message : String(err)); }
             }}
             style={{
               position: "relative", padding: "8px 10px", marginBottom: 4, borderRadius: 6,
@@ -76,7 +76,7 @@ export default function PollBox({ post, targetId, readonly, onUpdate }: {
                   if (result?.post) Object.assign(post, result.post);
                   if (onUpdate) onUpdate();
                   else window.dispatchEvent(new Event("postchange"));
-                } catch (err: any) { alert(err.message); }
+              } catch (err) { alert(err instanceof Error ? err.message : String(err)); }
                 finally { setPollRefreshing(false); }
               }}
               className="action-btn"

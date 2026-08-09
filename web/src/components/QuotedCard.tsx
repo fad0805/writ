@@ -4,6 +4,7 @@ import MiniPostCard from "./MiniPostCard";
 import ClickableCover from "./ClickableCover";
 import Icon from "./Icon";
 import { hashColor } from "@/lib/avatar";
+import { WindowWithGlobals } from "@/lib/windowGlobals";
 
 export type QuotedSeries = { type: "series"; novel: NovelData; author: User };
 export type QuotedEpisode = { type: "episode"; episode: EpisodeData; novel: NovelData; author: User };
@@ -21,9 +22,9 @@ export default function QuotedCard({ quotedPost, quotedSeries, quotedEpisode, on
         <div className="quoted-series" onClick={(e) => { e.stopPropagation(); onNavigate(`/series/${quotedSeries.novel.id}`); }}>
             <div className="cover-wrap-64 bg-tertiary">
             {quotedSeries.novel.cover_image ? (
-              <ClickableCover src={quotedSeries.novel.cover_image} isSensitive={(quotedSeries.novel as any).is_sensitive} className="cover-img" />
+              <ClickableCover src={quotedSeries.novel.cover_image} isSensitive={quotedSeries.novel.is_sensitive} className="cover-img" />
             ) : (
-              (window as any).__serverLogo ? <img src={(window as any).__serverLogo} alt="" className="cover-img" style={{width:64,height:64,objectFit:"contain",padding:8,background:"var(--bg-tertiary)"}} />
+              (window as WindowWithGlobals).__serverLogo ? <img src={(window as WindowWithGlobals).__serverLogo} alt="" className="cover-img" style={{width:64,height:64,objectFit:"contain",padding:8,background:"var(--bg-tertiary)"}} />
               : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(quotedSeries.novel.title) }}>
                 {quotedSeries.novel.title[0]}
               </div>
@@ -41,9 +42,9 @@ export default function QuotedCard({ quotedPost, quotedSeries, quotedEpisode, on
         <div className="quoted-series" onClick={(e) => { e.stopPropagation(); onNavigate(`/series/${quotedEpisode.novel.id}/episodes/${quotedEpisode.episode.id}`); }}>
           <div className="cover-wrap-64 bg-tertiary">
             {quotedEpisode.novel.cover_image ? (
-              <ClickableCover src={quotedEpisode.novel.cover_image} isSensitive={(quotedEpisode.novel as any).is_sensitive} className="cover-img" />
+              <ClickableCover src={quotedEpisode.novel.cover_image} isSensitive={quotedEpisode.novel.is_sensitive} className="cover-img" />
             ) : (
-              (window as any).__serverLogo ? <img src={(window as any).__serverLogo} alt="" className="cover-img" style={{width:64,height:64,objectFit:"contain",padding:8,background:"var(--bg-tertiary)"}} />
+              (window as WindowWithGlobals).__serverLogo ? <img src={(window as WindowWithGlobals).__serverLogo} alt="" className="cover-img" style={{width:64,height:64,objectFit:"contain",padding:8,background:"var(--bg-tertiary)"}} />
               : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(quotedEpisode.novel.title) }}>
                 {quotedEpisode.novel.title[0]}
               </div>

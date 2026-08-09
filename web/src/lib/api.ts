@@ -138,6 +138,8 @@ export interface User {
   post_lifetime?: number;
   post_lifetime_exceptions?: string[];
   remote_url?: string;
+  is_sensitive?: boolean;
+  show_badge?: boolean;
 }
 
 export interface PollOption {
@@ -180,6 +182,7 @@ export interface PostData {
   mentioned_handles?: string[];
   link_preview?: { url: string; title: string; description: string; image: string } | null;
   media_attachments?: { url: string; type: string; alt?: string }[];
+  is_sensitive?: boolean;
   is_deleted?: boolean;
   boost_of_id?: number | null;
   quote_of_id?: number | null;
@@ -194,6 +197,8 @@ export interface ReplyContext {
   content: string;
   author: User;
   visibility: string;
+  summary?: string;
+  is_sensitive?: boolean;
 }
 
 export interface NotificationData {
@@ -222,6 +227,7 @@ export interface NovelData {
   updated_at: string | null;
   author: User | null;
   author_id: number;
+  is_sensitive?: boolean;
 }
 
 export interface SearchResults {

@@ -20,11 +20,19 @@ export function useReactions(post: PostData, targetId: number) {
       setMyReactionOverride(post.my_reaction || null);
     }
   }, [post.id, post.liked, post.likes_count, post.reactions, post.my_reaction]);
+  const reactionsRef = useRef(post.reactions || {});
   useEffect(() => {
-    setReactions(post.reactions || {});
+    if (reactionsRef.current !== post.reactions) {
+      reactionsRef.current = post.reactions || {};
+      setReactions(post.reactions || {});
+    }
   }, [post.reactions]);
+  const likesCountRef = useRef(post.likes_count);
   useEffect(() => {
-    setLikesCount(post.likes_count);
+    if (likesCountRef.current !== post.likes_count) {
+      likesCountRef.current = post.likes_count;
+      setLikesCount(post.likes_count);
+    }
   }, [post.likes_count]);
 
   const toggleLike = useCallback(() => {

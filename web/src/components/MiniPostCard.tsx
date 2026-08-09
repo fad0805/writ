@@ -2,7 +2,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { PostData } from "@/lib/api";
 import Link from "next/link";
-import Icon from "./Icon";
 import MediaViewer from "./MediaViewer";
 import { injectEmojis, renderCustomEmojis, CustomEmoji, useEmojiList } from "@/lib/emojis";
 import { sanitizePost, sanitizeName } from "@/lib/sanitize";
@@ -18,71 +17,54 @@ const DARK_BG: Record<string, string> = {
   like: "rgba(241, 196, 15, 0.15)",
   poll_ended: "rgba(124, 77, 255, 0.15)",
 };
-const TYPE_ICONS: Record<string, string> = {
-  follow: "user_solid", like: "star_filled", boost: "refresh",
-  reply: "mention", mention: "mention", poll_ended: "chart",
-};
-const TYPE_COLORS: Record<string, string> = {
-  boost: "var(--accent)",
-  like: "#f1c40f",
-  follow: "var(--text-muted)",
-  reply: "var(--text-dim)",
-  mention: "var(--text-dim)",
-  poll_ended: "#7c4dff",
-};
 
 export default function MiniPostCard({ post, notifType, notifLabel }: { post: PostData; notifType?: string; notifLabel?: React.ReactNode }) {
   const [isDark, setIsDark] = useState(false);
   const emojiList = useEmojiList();
   const [viewerIndex, setViewerIndex] = useState(-1);
-  const mediaAttachments = (post as any).media_attachments || [];
-  const postImages = useMemo(() => mediaAttachments.filter((m: any) => m.type !== "video"), [mediaAttachments]);
+  const mediaAttachments = useMemo(() => post.media_attachments || [], [post.media_attachments]);
+  const postImages = useMemo(() => mediaAttachments.filter((m) => m.type !== "video"), [mediaAttachments]);
 
-  useEffect(() => { setIsDark(document.body.classList.contains("dark-theme")); }, []);
   useEffect(() => {
-    if ((post as any)._emojis) injectEmojis((post as any)._emojis);
-  }, [(post as any)._emojis]);
-  const validMentions = useMemo(() => new Set(post.mentioned_handles || []), [post.mentioned_handles]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsDark(document.body.classList.contains("dark-theme"));
+  }, []);
+  useEffect(() => {
+    if (post._emojis) injectEmojis(post._emojis);
+  }, [post._emojis]);
   const bg = notifType
     ? (isDark ? DARK_BG[notifType] : LIGHT_BG[notifType]) || "var(--bg-tertiary)"
     : "var(--bg-tertiary)";
-  const iconColor = notifType ? TYPE_COLORS[notifType] || "var(--text-muted)" : "var(--text-muted)";
   const mergedEmojiList = useMemo(() => {
-    const postEmojis = (post as any)._emojis as CustomEmoji[] | undefined;
+    const postEmojis = post._emojis;
     if (!postEmojis || postEmojis.length === 0) return emojiList;
     // 같은 키워드 충돌 시 이 글의 _emojis(작성자 도메인 기준)를 우선한다.
     const seen = new Map<string, CustomEmoji>();
     for (const e of postEmojis) {
-      if (e.keyword && e.url) seen.set(e.keyword, { ...e, category: e.category || "remote" });
+      if (e.keyword && e.url) seen.set(e.keyword, { ...e, category: "remote" });
     }
     for (const e of emojiList) {
       if (!seen.has(e.keyword)) seen.set(e.keyword, e);
     }
     return Array.from(seen.values());
-  }, [emojiList, (post as any)._emojis]);
+  }, [emojiList, post._emojis]);
   const contentHtml = useMemo(() => {
     let html = post.content || "";
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     html = html.replace(/\n/g, '<br>');
     html = renderCustomEmojis(html, mergedEmojiList);
-    return sanitizePost(rewriteLinks(html, validMentions));
-  }, [post.content, mergedEmojiList, validMentions]);
-  const makeUrl = ((post: any): string => {
-    if (post.type === 'series' && post.author?.username && post.novel?.number) {
-      return `/series/@${post.author.username}/${post.novel.number}`;
+    return sanitizePost(rewriteLinks(html));
+  }, [post.content, mergedEmojiList]);
+  const makeUrl = (p: PostData): string => {
+    if (p.number && p.author?.username) {
+      return `/@${p.author.username}/${p.number}`;
     }
-    if (post.type === 'episode' && post.novel?.id && post.episode?.id) {
-      return `/series/${post.novel.id}/episodes/${post.episode.id}`;
-    }
-    if (post.number && post.author?.username) {
-      return `/@${post.author.username}/${post.number}`;
-    }
-    if (post.id) {
-      return `/post/${post.id}`;
+    if (p.id) {
+      return `/post/${p.id}`;
     }
     return '#'; // 모든 조건에 해당 안 될 때의 기본 안전 경로
-  });
+  };
 
   if (!post || !post.author) return null;
   return (<>
@@ -120,7 +102,7 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
         {!post.summary && <div className="mini-post-body" dangerouslySetInnerHTML={{ __html: contentHtml }} />}
         {mediaAttachments.length > 0 && (
           <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} style={{ display: "grid", gridTemplateColumns: mediaAttachments.length <= 2 ? "1fr" : "1fr 1fr", gridAutoRows: "120px", gap: 2, marginTop: 6, borderRadius: 4, overflow: "hidden" }}>
-            {mediaAttachments.slice(0, 4).map((m: any, i: number) => (
+            {mediaAttachments.slice(0, 4).map((m, i) => (
               m.type === "video" ? (
                 <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", background: "#000", borderRadius: 4 }}>
                   <video src={m.url} controls style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000" }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} />

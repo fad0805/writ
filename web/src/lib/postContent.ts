@@ -10,7 +10,7 @@ export function formatRelative(iso: string, now: number = Date.now()): string {
   return `${Math.floor(abs / 86400000)}일`;
 }
 
-export function rewriteLinks(text: string, validMentions?: Set<string>): string {
+export function rewriteLinks(text: string): string {
   const protectedTags: string[] = [];
   text = text.replace(/<a\b[^>]*>[\s\S]*?<\/a>/gi, (m) => {
     protectedTags.push(m);
@@ -85,6 +85,6 @@ export function buildPostContentHtml(post: PostData, emojiList: CustomEmoji[]): 
     html = html.replace(`\x00CODEBLOCK_${i}\x00`, block);
   });
   html = renderCustomEmojis(html, uniqueEmojis);
-  html = rewriteLinks(html, new Set(post.mentioned_handles || []));
+  html = rewriteLinks(html);
   return html;
 }

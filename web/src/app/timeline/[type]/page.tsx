@@ -1,7 +1,7 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { api, PostData, accountSnapshot, User } from "@/lib/api";
+import { api, PostData, accountSnapshot } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import PostCard from "@/components/PostCard";
 import PostForm from "@/components/PostForm";
@@ -545,7 +545,7 @@ export default function TimelinePage() {
                           id: replyTo.id,
                           number: replyTo.number,
                           content: replyTo.content,
-                          author: replyTo.author as User,
+                          author: replyTo.author,
                           visibility: replyTo.visibility,
                           summary: "",
                           created_at: null,

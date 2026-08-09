@@ -20,7 +20,7 @@ export default function RewriteModal({ post, initialContent, initialSummary, ini
         content: post.reply_context.content,
         author: post.reply_context.author,
         visibility: post.reply_context.visibility,
-        summary: null,
+        summary: "",
         created_at: null,
         ap_id: "",
         likes_count: 0,
@@ -32,7 +32,7 @@ export default function RewriteModal({ post, initialContent, initialSummary, ini
         is_mine: false,
         reply_context: null,
         media_attachments: [],
-      } as any} initialContent={initialContent} initialSummary={initialSummary} initialMedia={initialMedia} onClose={onClose} onDone={() => { onClose(); onDone?.(); }} />
+      }} initialContent={initialContent} initialSummary={initialSummary} initialMedia={initialMedia} onClose={onClose} onDone={() => { onClose(); onDone?.(); }} />
     );
   }
   return (

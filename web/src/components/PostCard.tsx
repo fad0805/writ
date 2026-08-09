@@ -1,5 +1,5 @@
 "use client";
-import { PostData, User, api } from "@/lib/api";
+import { PostData, User, ReplyContext, api } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { useState, useEffect, useMemo, useRef } from "react";
@@ -10,6 +10,7 @@ import { getQuote } from "@/lib/quote-cache";
 import { useAuth } from "@/lib/auth";
 import { useReactions } from "@/lib/useReactions";
 import { buildPostContentHtml } from "@/lib/postContent";
+import { WindowWithGlobals } from "@/lib/windowGlobals";
 import Icon from "./Icon";
 import MediaViewer from "./MediaViewer";
 import EditModal from "./EditModal";
@@ -25,7 +26,7 @@ import PostActions from "./PostActions";
 import ReportModal from "./ReportModal";
 import RewriteModal from "./RewriteModal";
 
-const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onReply, onRewrite, current, hideContext, selected, readonly, mentionBy }: { post: PostData; onUpdate?: (updated?: PostData) => void; onDelete?: () => void; onReply?: (newPost?: PostData) => void; onRewrite?: (content: string, visibility: string, summary: string, replyTo?: { id: number; number: string; content: string; author: any; visibility: string } | null, media?: { url: string; type: string; alt?: string }[]) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean; mentionBy?: User | null }) {
+const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onReply, onRewrite, current, hideContext, selected, readonly, mentionBy }: { post: PostData; onUpdate?: (updated?: PostData) => void; onDelete?: () => void; onReply?: (newPost?: PostData) => void; onRewrite?: (content: string, visibility: string, summary: string, replyTo?: ReplyContext | null, media?: { url: string; type: string; alt?: string }[]) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean; mentionBy?: User | null }) {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const [showReply, setShowReply] = useState(false);
@@ -59,11 +60,11 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
   const reactionEmojiMap = useMemo(() => {
     const map: Record<string, string> = {};
     for (const e of emojiList) if (e.keyword && e.url) map[e.keyword] = e.url;
-    const cached = (window as any).__emojiMap as Record<string, string> | undefined;
+    const cached = (window as WindowWithGlobals).__emojiMap;
     if (cached) {
       for (const [k, v] of Object.entries(cached)) if (!map[k] && v) map[k] = v;
     }
-    (window as any).__emojiMap = map;
+    (window as WindowWithGlobals).__emojiMap = map;
     return map;
   }, [emojiList]);
   const localReactionEmojiMap = useMemo(() => {
@@ -73,11 +74,11 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
         map[e.keyword] = e.url;
       }
     }
-    const cached = (window as any).__localEmojiMap as Record<string, string> | undefined;
+    const cached = (window as WindowWithGlobals).__localEmojiMap;
     if (cached) {
       for (const [k, v] of Object.entries(cached)) if (!map[k] && v) map[k] = v;
     }
-    (window as any).__localEmojiMap = map;
+    (window as WindowWithGlobals).__localEmojiMap = map;
     return map;
   }, [emojiList]);
 
@@ -151,10 +152,8 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
     if (post._emojis) injectEmojis(post._emojis);
   }, [post._emojis]);
 
-  const validMentions = useMemo(() => new Set(post.mentioned_handles || []), [post.mentioned_handles]);
-
   // contentHtml: emojiList 변경 시 즉시 재계산하여 이모지 렌더링 깜빡임 방지
-  const contentHtml = useMemo(() => sanitizePost(buildPostContentHtml(post, mergedEmojiList)), [post.id, post.content, post.summary, mergedEmojiList]);
+  const contentHtml = useMemo(() => sanitizePost(buildPostContentHtml(post, mergedEmojiList)), [post, mergedEmojiList]);
 
   // 코드 복사 버튼 플러그인 Effect
   useEffect(() => {
@@ -202,7 +201,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
           .finally(() => setLoadingQuote(false));
       }
     }
-  }, [post.id, post.content, post.summary]);
+  }, [post, loadingQuote, quotedPost]);
 
   // Handle stored quote reference from ActivityPub (quote_of_id / quote_of_ap_id)
   useEffect(() => {
@@ -231,7 +230,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
         .then(d => { if (d) { if (d._emojis) injectEmojis(d._emojis); setQuotedPost(d); } })
         .finally(() => setLoadingQuote(false));
     }
-  }, [post.id, post.quote_of_id, post.quote_of_ap_id]);
+  }, [post, loadingQuote, quotedPost, quotedSeries, quotedEpisode]);
 
   // Detect series/episode share URLs in content (e.g. "series: https://.../series/123")
   useEffect(() => {
@@ -253,8 +252,6 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
     // 2. 시리즈 단독 주소 (ex: /series/1, /series/@user/1)
     const seriesOnlyMatch = url.match(/\/series\/(?:by-number\/[^/]+\/|@[^/]+\/)?([a-zA-Z0-9]+)(?:\?.*)?$/);
     if (epMatch) {
-      const novelId = parseInt(epMatch[1]);
-      const episodeId = parseInt(epMatch[2]);
       setLoadingQuote(true);
       const form = new FormData();
       form.append("url", url);
@@ -296,13 +293,13 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
     }
   // 🌟 의존성 배열에 seriesMatch와 episodeMatch를 추가해 주어야
   // 주소가 먼저 파싱되어 나왔을 때 이 이펙트가 기민하게 감지하고 fetch를 쏩니다.
-  }, [post.id, seriesMatch, episodeMatch]);
+  }, [post.id, seriesMatch, episodeMatch, loadingQuote]);
 
   useEffect(() => {
     const onOpenMedia = (e: Event) => {
       const d = (e as CustomEvent).detail;
       if (d && d.postId && d.postId !== post.id) return;
-      const media = (post as any).media_attachments || [];
+      const media = post.media_attachments || [];
       if (!media.length) return;
       setRevealedSensitive(true);
       setViewerIndex(d && typeof d.index === "number" ? d.index : 0);
@@ -399,9 +396,9 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
 
   if (!post || !post.author) return null;
 
-  const postSensitive = (post as any).is_sensitive || (post.author as any)?.is_sensitive || !!(post as any).summary;
+  const postSensitive = post.is_sensitive || post.author.is_sensitive || !!post.summary;
   const mediaGallery = (sensitive: boolean) => (
-    <MediaGallery media={(post as any).media_attachments || []} sensitive={sensitive} revealed={revealedSensitive} onReveal={() => setRevealedSensitive(true)} onHide={() => setRevealedSensitive(false)} onOpen={(i) => setViewerIndex(i)} />
+    <MediaGallery media={post.media_attachments || []} sensitive={sensitive} revealed={revealedSensitive} onReveal={() => setRevealedSensitive(true)} onHide={() => setRevealedSensitive(false)} onOpen={(i) => setViewerIndex(i)} />
   );
 
   return (
@@ -419,14 +416,14 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
         )}
         <PostHeader post={post} mergedEmojiList={mergedEmojiList} timeStr={timeStr} postHref={postHref} />
         {!hideContext && post.reply_context && (
-          <ReplyContextBox post={post} mergedEmojiList={mergedEmojiList} validMentions={validMentions} />
+          <ReplyContextBox post={post} mergedEmojiList={mergedEmojiList} />
         )}
         {post.summary ? (
           <details className="cw-box">
             <summary onClick={(e) => e.stopPropagation()} dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.summary, mergedEmojiList)) }} />
             <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
-            {(post as any).media_attachments?.length > 0 && mediaGallery(postSensitive)}
-            {post.link_preview && !(post as any).quote_of_id && !(post as any).quote_of_ap_id && !seriesMatch && !episodeMatch && <LinkPreviewCard lp={post.link_preview} />}
+            {(post.media_attachments?.length ?? 0) > 0 && mediaGallery(postSensitive)}
+            {post.link_preview && !post.quote_of_id && !post.quote_of_ap_id && !seriesMatch && !episodeMatch && <LinkPreviewCard lp={post.link_preview} />}
           </details>
         ) : (() => {
           const textOnly = (post.content || "").replace(/<[^>]+>/g, "").replace(/&[^;]+;/g, "x");
@@ -447,11 +444,11 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
             </div>
           );
         })()}
-        {!post.summary && (post as any).media_attachments?.length > 0 && mediaGallery(postSensitive)}
+        {!post.summary && (post.media_attachments?.length ?? 0) > 0 && mediaGallery(postSensitive)}
         {post.poll_data && <PollBox post={post} targetId={targetId} readonly={readonly} onUpdate={onUpdate} />}
         {loadingQuote && <div className="empty-small loading-small">인용 불러오는 중...</div>}
         <QuotedCard quotedPost={quotedPost} quotedSeries={quotedSeries} quotedEpisode={quotedEpisode} onNavigate={(href) => router.push(href)} />
-        {!post.summary && post.link_preview && !(post as any).quote_of_id && !(post as any).quote_of_ap_id && !seriesMatch && !episodeMatch && <LinkPreviewCard lp={post.link_preview} />}
+        {!post.summary && post.link_preview && !post.quote_of_id && !post.quote_of_ap_id && !seriesMatch && !episodeMatch && <LinkPreviewCard lp={post.link_preview} />}
         {reactions && Object.keys(reactions).length > 0 && currentUser?.enable_reactions !== false && (
           <ReactionsRow reactions={reactions} myReaction={myReaction} onToggle={handleToggleReaction} targetId={targetId} emojiMap={reactionEmojiMap} localEmojiMap={localReactionEmojiMap} />
         )}
@@ -485,9 +482,9 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
       {!readonly && showReply && <ReplyModal post={post} onClose={() => setShowReply(false)} onDone={(newPost) => { setShowReply(false); if (onReply) onReply(newPost); }} />}
       {!readonly && showEdit && <EditModal post={post} onClose={() => setShowEdit(false)} onDone={(updated) => { setShowEdit(false); if (onUpdate) onUpdate(updated); }} />}
       {!readonly && showReport && <ReportModal post={post} onClose={() => setShowReport(false)} />}
-      {viewerIndex >= 0 && (post as any).media_attachments?.length > 0 && (
+      {viewerIndex >= 0 && (post.media_attachments?.length ?? 0) > 0 && (
         <MediaViewer
-          media={(post as any).media_attachments}
+          media={post.media_attachments || []}
           index={viewerIndex}
           onIndexChange={setViewerIndex}
           onClose={() => setViewerIndex(-1)}
