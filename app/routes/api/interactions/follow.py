@@ -160,6 +160,21 @@ def api_toggle_notify(request: Request, username: str):
         return {"ok": True, "notify_on_post": follow.notify_on_post}
 
 
+@follow_router.post("/users/{username}/toggle-boosts")
+def api_toggle_boosts(request: Request, username: str):
+    user = require_active_auth(request)
+    with get_session() as s:
+        target = s.query(User).filter_by(username=username).first()
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found")
+        follow = s.query(Follow).filter_by(follower_id=user.id, following_id=target.id).first()
+        if not follow:
+            raise HTTPException(status_code=404, detail="Not following this user")
+        follow.show_boosts = not follow.show_boosts
+        s.commit()
+        return {"ok": True, "show_boosts": follow.show_boosts}
+
+
 @follow_router.get("/users/{username}/followers")
 def api_followers(request: Request, username: str):
     user = get_current_user(request)

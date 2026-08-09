@@ -3,7 +3,7 @@ import re
 
 from sqlalchemy.orm import Session
 
-from app.models import Post, UserMute, UserBlock, SeriesMute, KeywordMute
+from app.models import Post, UserMute, UserBlock, SeriesMute, KeywordMute, Follow
 
 
 def _load_user_filters(session: Session, user):
@@ -16,6 +16,10 @@ def _load_user_filters(session: Session, user):
     blocked_by_ids = {row[0] for row in session.query(UserBlock.user_id).filter_by(target_user_id=user.id).all()}
     muted_series_ids = {row[0] for row in session.query(SeriesMute.novel_id).filter_by(user_id=user.id).all()}
     hidden_ids = muted_user_ids | blocked_ids | blocked_by_ids
+    boost_hidden_ids = {
+        row[0] for row in session.query(Follow.following_id)
+        .filter_by(follower_id=user.id, show_boosts=False).all()
+    }
     kw_mutes = session.query(KeywordMute).filter_by(user_id=user.id).all()
     parsed_kw = []
     for kw in kw_mutes:
@@ -34,6 +38,7 @@ def _load_user_filters(session: Session, user):
         "hidden_ids": hidden_ids,
         "muted_series_ids": muted_series_ids,
         "parsed_kw": parsed_kw,
+        "boost_hidden_ids": boost_hidden_ids,
     }
 
 
@@ -86,6 +91,10 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
             _orig = session.query(Post).filter_by(id=post.boost_of_id).first()
         if _orig and _orig.visibility == "followers" and _orig.author_id not in following_set:
             return False
+
+    # --- 부스트 숨김 (per-follow show_boosts=False면 그 유저의 부스트만 제외) ---
+    if is_boosted and filter_ctx and post.author_id in filter_ctx.get("boost_hidden_ids", ()):
+        return False
 
     # --- 1. 블록/뮤트/키워드 (최우선 — 멘션보다 우선) ---
     if filter_ctx:

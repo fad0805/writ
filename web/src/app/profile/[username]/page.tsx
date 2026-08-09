@@ -38,6 +38,7 @@ export default function ProfilePage() {
   const [isFollowing, setIsFollowing] = useState(false);
   const [isFollowPending, setIsFollowPending] = useState(false);
   const [notifyOnPost, setNotifyOnPost] = useState(false);
+  const [showBoosts, setShowBoosts] = useState(true);
   const [hasPendingFollower, setHasPendingFollower] = useState(false);
   const [isFollower, setIsFollower] = useState(false);
   const [approvedFollower, setApprovedFollower] = useState<boolean | null>(null);
@@ -84,6 +85,7 @@ export default function ProfilePage() {
       setFollowers(d.followers); setFollowing(d.following);
       setFollowersCount(d.followers_count); setFollowingCount(d.following_count);
       setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setNotifyOnPost(d.notify_on_post); setHasPendingFollower(d.has_pending_follower); setIsFollower(d.is_follower); setApprovedFollower(null); setIsMine(d.is_mine);
+      setShowBoosts(d.show_boosts !== false);
       setIsBlocked(!!(d as any).is_blocked); setAmBlocked(!!(d as any).am_i_blocked); setIsMutedUser(!!(d as any).is_muted);
       setPinnedPosts((d as any).pinned_posts_data || []); setPinnedSeries((d as any).pinned_series_data || []);
       setTotalPosts((d as any).total_posts || 0);
@@ -177,6 +179,15 @@ export default function ProfilePage() {
                 </button>
               </div>
             )}
+            {(isFollower || approvedFollower === true) && (
+              <span
+                onClick={() => setShowRemoveFollower(true)}
+                className="profile-follower-status"
+                title="팔로워 삭제"
+              >
+                <Icon name="user_solid" size={14} /> {isFollowing || approvedFollower === true ? "맞팔로우" : "내 팔로워"}
+              </span>
+            )}
           </div>
           <div className="profile-info-relative">
               <div className="profile-corner-actions">
@@ -194,14 +205,19 @@ export default function ProfilePage() {
                     <Icon name={notifyOnPost ? "bell_solid" : "bell"} size={14} />
                   </button>
                 )}
-                {(isFollower || approvedFollower === true) && (
-                  <span
-                    onClick={() => setShowRemoveFollower(true)}
-                    className="profile-follower-status"
-                    title="팔로워 삭제"
+                {isFollowing && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await api.toggleBoosts(username);
+                        setShowBoosts(res.show_boosts);
+                      } catch {}
+                    }}
+                    className={`action-btn ${!showBoosts ? "boost-hidden" : ""}`}
+                    title={showBoosts ? "부스트 숨기기" : "부스트 숨기기 해제"}
                   >
-                    <Icon name="user_solid" size={14} /> {isFollowing || approvedFollower === true ? "맞팔로우" : "내 팔로워"}
-                  </span>
+                    <Icon name="refresh" size={14} />
+                  </button>
                 )}
                 {hasPendingFollower && (
                   <>
@@ -338,7 +354,7 @@ export default function ProfilePage() {
         <div className="reply-modal-backdrop active" onClick={() => setShowMuteModal(false)}>
           <div className="reply-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
             <button className="reply-modal-close" onClick={() => setShowMuteModal(false)}>×</button>
-            <h3>@${profile.username} 님 뮤트</h3>
+            <h3>@{profile.username} 님 뮤트</h3>
             <div className="form-group" style={{ marginTop: 12 }}>
               <label>뮤트 기간</label>
               <select value={muteDuration} onChange={(e) => setMuteDuration(Number(e.target.value))} className="cw-input">

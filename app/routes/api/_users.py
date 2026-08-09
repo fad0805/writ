@@ -176,12 +176,14 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             follower_id=user.id, following_id=profile.id, accepted=False
         ).first() is not None if user else False
         notify_on_post = False
+        show_boosts = True
         if is_following and user:
             follow_rel = s.query(Follow).filter_by(
                 follower_id=user.id, following_id=profile.id, accepted=True
             ).first()
             if follow_rel:
                 notify_on_post = follow_rel.notify_on_post
+                show_boosts = follow_rel.show_boosts
         has_pending_follower = s.query(Follow).filter_by(
             follower_id=profile.id, following_id=user.id, accepted=False
         ).first() is not None if user else False
@@ -264,6 +266,7 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             "is_following": is_following,
             "is_follow_pending": is_follow_pending,
             "notify_on_post": notify_on_post,
+            "show_boosts": show_boosts,
             "has_pending_follower": has_pending_follower,
             "is_follower": is_follower,
             "is_mine": profile.id == user.id if user else False,

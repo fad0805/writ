@@ -996,6 +996,21 @@ img.custom-emoji:hover {
 }
 .action-btn.liked { color: #f1c40f; }
 .action-btn.boosted { color: var(--accent); }
+.action-btn.boost-hidden {
+  position: relative;
+  color: var(--text-muted);
+}
+.action-btn.boost-hidden::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  top: 50%;
+  height: 1.5px;
+  background: var(--danger);
+  transform: translateY(-50%) rotate(-18deg);
+  pointer-events: none;
+}
 
 .inline-form { display: inline-flex; align-items: center; }
 

@@ -321,6 +321,7 @@ export const api = {
   follow: (username: string) => request<{ ok: boolean }>(`/api/users/${username}/follow`, { method: "POST" }),
   unfollow: (username: string) => request<{ ok: boolean }>(`/api/users/${username}/unfollow`, { method: "POST" }),
   toggleNotify: (username: string) => request<{ ok: boolean; notify_on_post: boolean }>(`/api/users/${username}/toggle-notify`, { method: "POST" }),
+  toggleBoosts: (username: string) => request<{ ok: boolean; show_boosts: boolean }>(`/api/users/${username}/toggle-boosts`, { method: "POST" }),
   getFollowers: (username: string) => request<{ users: User[] }>(`/api/users/${username}/followers`),
   getFollowing: (username: string) => request<{ users: User[] }>(`/api/users/${username}/following`),
 
