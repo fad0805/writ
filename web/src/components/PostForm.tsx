@@ -1,18 +1,17 @@
 "use client";
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { api, User } from "@/lib/api";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { api, User, PostData } from "@/lib/api";
 import Icon from "@/components/Icon";
 import { useRouter } from "next/navigation";
 import TextareaHighlight from "./TextareaHighlight";
 import EmojiPicker from "./EmojiPicker";
-import VisibilitySelector from "./VisibilitySelector";
 import MiniPostCard from "./MiniPostCard";
 import { getCustomEmojis, CustomEmoji } from "@/lib/emojis";
 import { useAuth } from "@/lib/auth";
 
 const MAX_LENGTH = 500;
 
-export default function PostForm({ parentId, onDone, placeholder, initialContent, initialVisibility, shareUrl, parentSummary, initialSummary, initialMedia }: { parentId?: number; onDone?: (post?: any) => void; placeholder?: string; initialContent?: string; initialVisibility?: string; shareUrl?: string; parentSummary?: string | null; initialSummary?: string | null; initialMedia?: { url: string; type: string; alt?: string }[] }) {
+export default function PostForm({ parentId, onDone, placeholder, initialContent, initialVisibility, shareUrl, parentSummary, initialSummary, initialMedia }: { parentId?: number; onDone?: (post?: PostData) => void; placeholder?: string; initialContent?: string; initialVisibility?: string; shareUrl?: string; parentSummary?: string | null; initialSummary?: string | null; initialMedia?: { url: string; type: string; alt?: string }[] }) {
   const draftKey = `draft_${parentId || "new"}`;
   const savedDraft = typeof localStorage !== "undefined" ? (() => { try { return JSON.parse(localStorage.getItem(draftKey) || "null"); } catch { return null; } })() : null;
   const [content, setContent] = useState((shareUrl ? initialContent : (savedDraft?.content ?? initialContent)) || "");
@@ -40,7 +39,6 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [mentionIdx, setMentionIdx] = useState(0);
   const [mentionStart, setMentionStart] = useState(-1);
   const [mentionPos, setMentionPos] = useState({ top: 0, left: 0 });
-  const mentionRef = useRef<HTMLDivElement>(null);
   const [emojiQuery, setEmojiQuery] = useState("");
   const [emojiResults, setEmojiResults] = useState<CustomEmoji[]>([]);
   const [emojiStart, setEmojiStart] = useState(-1);
@@ -73,8 +71,10 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [linkPreview, setLinkPreview] = useState<{ url: string; title: string; description: string; image: string } | null>(null);
   const [linkPreviewLoading, setLinkPreviewLoading] = useState(false);
   const linkPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastUrlRef = useRef<string | null>(null);
+  const quoteTiedToContentRef = useRef(false);
   const [quoteUrl, setQuoteUrl] = useState(shareUrl || "");
-  const [quotePost, setQuotePost] = useState<any>(null);
+  const [quotePost, setQuotePost] = useState<PostData | null>(null);
 
   useEffect(() => {
     if (shareUrl && !quotePost) {
@@ -129,7 +129,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         }
       })();
     }
-  }, [shareUrl]);
+  }, [shareUrl, quotePost]);
 
   useEffect(() => {
     if (!showVisPicker) return;
@@ -153,58 +153,68 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   }, [content, summary, postSensitive, draftKey]);
 
   useEffect(() => {
-    if (linkPreviewTimerRef.current) clearTimeout(linkPreviewTimerRef.current);
     const urlRegex = /https?:\/\/[^\s<>"')\]]+/i;
     const match = content.match(urlRegex);
-    if (!match) { setLinkPreview(null); if (!shareUrl || quoteUrl !== shareUrl) { setQuoteUrl(""); setQuotePost(null); } return; }
-    const url = match[0].replace(/[.,;:!?)]+$/, "");
-    if (quoteUrl === url) return;
-    if (linkPreview && linkPreview.url === url && !quoteUrl) return;
+    const url = match ? match[0].replace(/[.,;:!?)]+$/, "") : null;
+    if (lastUrlRef.current !== url) {
+      lastUrlRef.current = url;
+      if (linkPreviewTimerRef.current) clearTimeout(linkPreviewTimerRef.current);
+      setLinkPreview(null);
+      if (url) {
+        if (quoteUrl === url) return;
+        if (linkPreview && linkPreview.url === url && !quoteUrl) return;
+        quoteTiedToContentRef.current = true;
+        linkPreviewTimerRef.current = setTimeout(async () => {
+          setLinkPreviewLoading(true);
 
-    linkPreviewTimerRef.current = setTimeout(async () => {
-      setLinkPreviewLoading(true);
+          const base = typeof window !== "undefined" ? window.location.origin : "";
+          const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const localMatch = base ? url.match(new RegExp(`^${escapedBase}/@([^/]+)/(\\d+)`)) : null;
 
-      const base = typeof window !== "undefined" ? window.location.origin : "";
-      const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const localMatch = base ? url.match(new RegExp(`^${escapedBase}/@([^/]+)/(\\d+)`)) : null;
+          let quoteResolved = false;
 
-      let quoteResolved = false;
-
-      if (localMatch) {
-        setQuoteUrl(url);
-        try {
-          const r = await fetch(`/api/by-number/${localMatch[1]}/${localMatch[2]}`, { credentials: "include" });
-          if (r.ok) { setQuotePost(await r.json()); quoteResolved = true; }
-        } catch {}
-      }
-
-      if (!quoteResolved) {
-        const form = new FormData(); form.append("url", url);
-        try {
-          const r = await fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form });
-          if (r.ok) {
-            const d = await r.json();
-            if (d._emojis) { import("@/lib/emojis").then(m => m.injectEmojis(d._emojis)); }
-            setQuoteUrl(url); setQuotePost(d); quoteResolved = true;
+          if (localMatch) {
+            setQuoteUrl(url);
+            try {
+              const r = await fetch(`/api/by-number/${localMatch[1]}/${localMatch[2]}`, { credentials: "include" });
+              if (r.ok) { setQuotePost(await r.json()); quoteResolved = true; }
+            } catch {}
           }
-        } catch {}
-      }
 
-      if (!quoteResolved) {
-        setQuoteUrl(url);
+          if (!quoteResolved) {
+            const form = new FormData(); form.append("url", url);
+            try {
+              const r = await fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form });
+              if (r.ok) {
+                const d = await r.json();
+                if (d._emojis) { import("@/lib/emojis").then(m => m.injectEmojis(d._emojis)); }
+                setQuoteUrl(url); setQuotePost(d); quoteResolved = true;
+              }
+            } catch {}
+          }
+
+          if (!quoteResolved) {
+            setQuoteUrl(url);
+            setQuotePost(null);
+            try {
+              const data = await api.fetchLinkPreview(url);
+              if (data && data.title) setLinkPreview(data);
+            } catch {}
+          } else {
+            setLinkPreview(null);
+          }
+
+          setLinkPreviewLoading(false);
+        }, 300);
+        return () => { if (linkPreviewTimerRef.current) clearTimeout(linkPreviewTimerRef.current); };
+      }
+      if (quoteTiedToContentRef.current) {
+        quoteTiedToContentRef.current = false;
+        setQuoteUrl("");
         setQuotePost(null);
-        try {
-          const data = await api.fetchLinkPreview(url);
-          if (data && data.title) setLinkPreview(data);
-        } catch {}
-      } else {
-        setLinkPreview(null);
       }
-
-      setLinkPreviewLoading(false);
-    }, 300);
-    return () => { if (linkPreviewTimerRef.current) clearTimeout(linkPreviewTimerRef.current); };
-  }, [content, quoteUrl]);
+    }
+  }, [content, quoteUrl, linkPreview]);
 
   const totalLen = content.length + summary.length;
   const nearLimit = totalLen > MAX_LENGTH - 50 && totalLen <= MAX_LENGTH;
@@ -265,16 +275,26 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     }
   }, []);
 
+  const mentionQueryRef = useRef("");
+  const mentionHadQueryRef = useRef(false);
   useEffect(() => {
-    if (!mentionQuery) { setMentionUsers([]); return; }
-    const t = setTimeout(async () => {
-      try {
-        const res = await api.autocomplete(mentionQuery);
-        setMentionUsers(res.users);
-        setMentionIdx(0);
-      } catch { setMentionUsers([]); }
-    }, 100);
-    return () => clearTimeout(t);
+    if (mentionQueryRef.current !== mentionQuery) {
+      mentionQueryRef.current = mentionQuery;
+      if (mentionHadQueryRef.current !== !!mentionQuery) {
+        mentionHadQueryRef.current = !!mentionQuery;
+        setMentionUsers([]);
+      }
+      if (mentionQuery) {
+        const t = setTimeout(async () => {
+          try {
+            const res = await api.autocomplete(mentionQuery);
+            setMentionUsers(res.users);
+            setMentionIdx(0);
+          } catch { setMentionUsers([]); }
+        }, 100);
+        return () => clearTimeout(t);
+      }
+    }
   }, [mentionQuery]);
 
   const detectHashtag = useCallback((val: string, cursor: number) => {
@@ -304,16 +324,26 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     }
   }, []);
 
+  const hashtagQueryRef = useRef("");
+  const hashtagHadQueryRef = useRef(false);
   useEffect(() => {
-    if (!hashtagQuery) { setHashtagResults([]); return; }
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/search/tags?q=${encodeURIComponent(hashtagQuery)}`, { credentials: "include" });
-        if (res.ok) { const d = await res.json(); setHashtagResults(d.tags?.map((t: any) => t.name) || []); setHashtagIdx(0); }
-        else setHashtagResults([]);
-      } catch { setHashtagResults([]); }
-    }, 100);
-    return () => clearTimeout(t);
+    if (hashtagQueryRef.current !== hashtagQuery) {
+      hashtagQueryRef.current = hashtagQuery;
+      if (hashtagHadQueryRef.current !== !!hashtagQuery) {
+        hashtagHadQueryRef.current = !!hashtagQuery;
+        setHashtagResults([]);
+      }
+      if (hashtagQuery) {
+        const t = setTimeout(async () => {
+          try {
+            const res = await fetch(`/api/search/tags?q=${encodeURIComponent(hashtagQuery)}`, { credentials: "include" });
+            if (res.ok) { const d = await res.json(); setHashtagResults(d.tags?.map((t: { name: string }) => t.name) || []); setHashtagIdx(0); }
+            else setHashtagResults([]);
+          } catch { setHashtagResults([]); }
+        }, 100);
+        return () => clearTimeout(t);
+      }
+    }
   }, [hashtagQuery]);
 
   const detectSeries = useCallback((val: string, cursor: number) => {
@@ -351,25 +381,35 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     const t = setTimeout(async () => {
       try {
         const res = await fetch(`/api/search/series?q=${encodeURIComponent(seriesSearchQ)}`, { credentials: "include" });
-        if (res.ok) { const d = await res.json(); setSeriesResults(d.series?.map((s: any) => ({ id: s.id, title: s.title, cover_image: s.cover_image })) || []); setSeriesIdx(0); }
+        if (res.ok) { const d = await res.json(); setSeriesResults(d.series?.map((s: { id: number; title: string; cover_image: string }) => ({ id: s.id, title: s.title, cover_image: s.cover_image })) || []); setSeriesIdx(0); }
         else setSeriesResults([]);
       } catch { setSeriesResults([]); }
     }, 100);
     return () => clearTimeout(t);
   }, [seriesSearchQ, showSeriesSearch]);
 
+  const emojiQueryRef = useRef("");
+  const emojiHadQueryRef = useRef(false);
   useEffect(() => {
-    if (!emojiQuery) { setEmojiResults([]); return; }
-    const t = setTimeout(async () => {
-      try {
-        const all = await getCustomEmojis();
-        const q = emojiQuery.toLowerCase();
-        const matched = all.filter(e => e.category !== "remote" && (e.keyword.startsWith(q) || (e.aliases || []).some(a => a.startsWith(q))));
-        setEmojiResults(matched);
-        setEmojiIdx(0);
-      } catch { setEmojiResults([]); }
-    }, 100);
-    return () => clearTimeout(t);
+    if (emojiQueryRef.current !== emojiQuery) {
+      emojiQueryRef.current = emojiQuery;
+      if (emojiHadQueryRef.current !== !!emojiQuery) {
+        emojiHadQueryRef.current = !!emojiQuery;
+        setEmojiResults([]);
+      }
+      if (emojiQuery) {
+        const t = setTimeout(async () => {
+          try {
+            const all = await getCustomEmojis();
+            const q = emojiQuery.toLowerCase();
+            const matched = all.filter(e => e.category !== "remote" && (e.keyword.startsWith(q) || (e.aliases || []).some(a => a.startsWith(q))));
+            setEmojiResults(matched);
+            setEmojiIdx(0);
+          } catch { setEmojiResults([]); }
+        }, 100);
+        return () => clearTimeout(t);
+      }
+    }
   }, [emojiQuery]);
 
   // Close emoji picker on scroll/resize/click-outside/Escape
@@ -510,7 +550,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     detectEmoji(el.value, el.selectionStart);
     detectHashtag(el.value, el.selectionStart);
     detectSeries(el.value, el.selectionStart);
-  }, [detectMention]);
+  }, [detectMention, detectEmoji, detectHashtag, detectSeries]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (showSeriesSearch) {
