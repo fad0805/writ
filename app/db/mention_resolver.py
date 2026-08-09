@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from urllib.parse import urlparse
 
 from app.db.database import get_session, username_prefix_like
-from app.core.activitypub import _resolve_actor
+from app.core.activitypub import _resolve_actor, _get_instance_actor
 from app.models import User, FederationBlock, AllowedServer, ServerSetting
 from app.utils.http import safe_fetch
 
@@ -104,11 +104,20 @@ def _resolve_remote_user(handle: str, session: Session | None = None) -> User | 
         _cache_set(clean, None)
         return None
 
+    # Mastodon 등 authorized-fetch 인스턴스는 서명 없는 actor 요청을 401로 거부하므로
+    # 인스턴스 액터로 서명한 요청을 사용한다.
+    signer = None
+    try:
+        with get_session() as _as:
+            signer = _get_instance_actor(_as)
+    except Exception as e:
+        logger.debug("Failed to get instance actor for %s: %s", handle, e)
+
     resolved = None
     try:
         actor_url = _webfinger_actor_url(clean, domain)
         if actor_url:
-            resolved = _resolve_actor(actor_url, lightweight=True, timeout=_RESOLVE_TIMEOUT)
+            resolved = _resolve_actor(actor_url, lightweight=True, timeout=_RESOLVE_TIMEOUT, sign_as=signer)
             if resolved:
                 _cache_set(clean, resolved.id)
                 return resolved
@@ -120,7 +129,7 @@ def _resolve_remote_user(handle: str, session: Session | None = None) -> User | 
                 f"https://{domain}/profile/{local_part}",
             ]
             with ThreadPoolExecutor(max_workers=len(candidates)) as ex:
-                futures = [ex.submit(_resolve_actor, url, lightweight=True, timeout=_RESOLVE_TIMEOUT) for url in candidates]
+                futures = [ex.submit(_resolve_actor, url, lightweight=True, timeout=_RESOLVE_TIMEOUT, sign_as=signer) for url in candidates]
                 for fut in futures:
                     try:
                         resolved = fut.result()
