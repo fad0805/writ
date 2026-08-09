@@ -11,6 +11,7 @@ import PostForm from "./PostForm";
 import Icon from "./Icon";
 import Avatar from "./Avatar";
 import MiniPostCard from "./MiniPostCard";
+import MediaViewer from "./MediaViewer";
 import EmojiPicker from "./EmojiPicker";
 import { useAuth } from "@/lib/auth";
 import ShareButton from "@/components/ShareButton";
@@ -385,47 +386,8 @@ const localReactionEmojiMap = useMemo(() => {
   const [quotedEpisode, setQuotedEpisode] = useState<QuotedEpisode | null>(null);
   const [loadingQuote, setLoadingQuote] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(-1);
-  const [viewerZoom, setViewerZoom] = useState(1);
-  const [viewerPan, setViewerPan] = useState({ x: 0, y: 0 });
-  const viewerImgRef = useRef<HTMLImageElement>(null);
-  const lastTouchDist = useRef(0);
-  const lastTouchCenter = useRef({ x: 0, y: 0 });
-  const isPanning = useRef(false);
-  const panStart = useRef({ x: 0, y: 0 });
-  const panOrigin = useRef({ x: 0, y: 0 });
-  const swipeStartX = useRef(0);
   const cardRef = useRef<HTMLDivElement>(null);
   const [revealedSensitive, setRevealedSensitive] = useState(false);
-  const prevViewerIndex = useRef(viewerIndex);
-  const closingFromPop = useRef(false);
-  const closeViewer = useCallback(() => {
-    if (!closingFromPop.current) history.back();
-    closingFromPop.current = false;
-    setViewerIndex(-1); setViewerZoom(1); setViewerPan({ x: 0, y: 0 });
-  }, []);
-  useEffect(() => {
-    const wasOpen = prevViewerIndex.current >= 0;
-    const isOpen = viewerIndex >= 0;
-    prevViewerIndex.current = viewerIndex;
-    if (!wasOpen && isOpen) {
-      history.pushState({ viewer: true }, "");
-    }
-    if (!isOpen) return;
-    setViewerZoom(1);
-    setViewerPan({ x: 0, y: 0 });
-    const onPop = () => {
-      closingFromPop.current = true;
-      setViewerIndex(-1); setViewerZoom(1); setViewerPan({ x: 0, y: 0 });
-    };
-    window.addEventListener("popstate", onPop);
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeViewer();
-      else if (e.key === "ArrowLeft" && viewerIndex > 0) setViewerIndex(viewerIndex - 1);
-      else if (e.key === "ArrowRight" && viewerIndex < (post as any).media_attachments.length - 1) setViewerIndex(viewerIndex + 1);
-    };
-    window.addEventListener("keydown", handler);
-    return () => { window.removeEventListener("keydown", handler); window.removeEventListener("popstate", onPop); };
-  }, [viewerIndex]);
   useEffect(() => {
     const onOpenMedia = (e: Event) => {
       const d = (e as CustomEvent).detail;
@@ -447,85 +409,6 @@ const localReactionEmojiMap = useMemo(() => {
       window.removeEventListener("writ:reveal-post", onReveal);
     };
   }, [post]);
-
-  const handleViewerWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const delta = e.deltaY > 0 ? -0.15 : 0.15;
-    setViewerZoom((z) => Math.min(5, Math.max(0.5, z + delta)));
-  }, []);
-  const handleViewerTouchStart = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length === 2) {
-      e.preventDefault();
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      lastTouchDist.current = Math.hypot(dx, dy);
-      lastTouchCenter.current = {
-        x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
-        y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
-      };
-    } else if (e.touches.length === 1 && viewerZoom > 1) {
-      isPanning.current = true;
-      panStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      panOrigin.current = { ...viewerPan };
-    } else if (e.touches.length === 1) {
-      swipeStartX.current = e.touches[0].clientX;
-    }
-  }, [viewerZoom, viewerPan]);
-  const handleViewerTouchMove = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length === 2) {
-      e.preventDefault();
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      const dist = Math.hypot(dx, dy);
-      if (lastTouchDist.current > 0) {
-        const scale = dist / lastTouchDist.current;
-        setViewerZoom((z) => Math.min(5, Math.max(0.5, z * scale)));
-      }
-      lastTouchDist.current = dist;
-    } else if (e.touches.length === 1 && isPanning.current) {
-      e.preventDefault();
-      const dx = e.touches[0].clientX - panStart.current.x;
-      const dy = e.touches[0].clientY - panStart.current.y;
-      setViewerPan({ x: panOrigin.current.x + dx, y: panOrigin.current.y + dy });
-    }
-  }, []);
-  const handleViewerTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (swipeStartX.current !== 0 && viewerZoom <= 1) {
-      const dx = e.changedTouches[0].clientX - swipeStartX.current;
-      if (Math.abs(dx) > 60) {
-        const media = (post as any).media_attachments || [];
-        if (dx > 0 && viewerIndex > 0) setViewerIndex(viewerIndex - 1);
-        else if (dx < 0 && viewerIndex < media.length - 1) setViewerIndex(viewerIndex + 1);
-      }
-    }
-    swipeStartX.current = 0;
-    lastTouchDist.current = 0;
-    isPanning.current = false;
-  }, [viewerZoom, viewerIndex, post]);
-  const handleViewerDblClick = useCallback(() => {
-    setViewerZoom((z) => {
-      if (z > 1) { setViewerPan({ x: 0, y: 0 }); return 1; }
-      return 2;
-    });
-  }, []);
-  const handleViewerMouseDown = useCallback((e: React.MouseEvent) => {
-    if (viewerZoom > 1) {
-      isPanning.current = true;
-      panStart.current = { x: e.clientX, y: e.clientY };
-      panOrigin.current = { ...viewerPan };
-      e.preventDefault();
-    }
-  }, [viewerZoom, viewerPan]);
-  const handleViewerMouseMove = useCallback((e: React.MouseEvent) => {
-    if (isPanning.current) {
-      const dx = e.clientX - panStart.current.x;
-      const dy = e.clientY - panStart.current.y;
-      setViewerPan({ x: panOrigin.current.x + dx, y: panOrigin.current.y + dy });
-    }
-  }, []);
-
-  const handleViewerMouseUp = useCallback(() => { isPanning.current = false; }, []);
 
   useEffect(() => {
     if (!showMoreActions) return;
@@ -1155,35 +1038,12 @@ const localReactionEmojiMap = useMemo(() => {
         </div>
       )}
       {viewerIndex >= 0 && (post as any).media_attachments?.length > 0 && (
-        <div className="reply-modal-backdrop active" onClick={closeViewer} style={{ zIndex: 2000 }}>
-          <div className="media-viewer" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "90vw", maxHeight: "90vh", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", cursor: viewerZoom > 1 ? "grab" : "default", touchAction: "none" }}
-            onWheel={handleViewerWheel}
-            onTouchStart={handleViewerTouchStart}
-            onTouchMove={handleViewerTouchMove}
-            onTouchEnd={handleViewerTouchEnd}
-            onMouseDown={handleViewerMouseDown}
-            onMouseMove={handleViewerMouseMove}
-            onMouseUp={handleViewerMouseUp}
-            onMouseLeave={handleViewerMouseUp}
-          >
-            {(viewerIndex > 0) && (
-              <button onClick={(e) => { e.stopPropagation(); setViewerIndex(viewerIndex - 1); }} style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 10, fontSize: 20, color: "#fff" }}>‹</button>
-            )}
-            {(viewerIndex < (post as any).media_attachments.length - 1) && (
-              <button onClick={(e) => { e.stopPropagation(); setViewerIndex(viewerIndex + 1); }} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 10, fontSize: 20, color: "#fff" }}>›</button>
-            )}
-            <button onClick={(e) => { e.stopPropagation(); closeViewer(); }} style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 22, cursor: "pointer", zIndex: 10 }}>×</button>
-            {viewerZoom > 1 && <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.5)", color: "#fff", borderRadius: 12, padding: "2px 10px", fontSize: 12, zIndex: 10, userSelect: "none" }}>{Math.round(viewerZoom * 100)}%</div>}
-            {(() => {
-              const m = (post as any).media_attachments[viewerIndex];
-              return m?.type === "video" ? (
-                <video src={m.url} controls style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: 8 }} />
-              ) : (
-                <img ref={viewerImgRef} src={m.url} alt={m.alt || ""} draggable={false} onDoubleClick={handleViewerDblClick} style={{ maxWidth: viewerZoom > 1 ? "none" : "100%", maxHeight: viewerZoom > 1 ? "none" : "85vh", borderRadius: viewerZoom > 1 ? 0 : 8, objectFit: "contain", transform: `scale(${viewerZoom}) translate(${viewerPan.x / viewerZoom}px, ${viewerPan.y / viewerZoom}px)`, transition: isPanning.current ? "none" : "transform 0.15s ease", userSelect: "none" }} />
-              );
-            })()}
-          </div>
-        </div>
+        <MediaViewer
+          media={(post as any).media_attachments}
+          index={viewerIndex}
+          onIndexChange={setViewerIndex}
+          onClose={() => setViewerIndex(-1)}
+        />
       )}
       {!readonly && showRewrite && post.reply_context && (
         <ReplyModal post={{

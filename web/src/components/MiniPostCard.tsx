@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { PostData } from "@/lib/api";
 import Link from "next/link";
 import Icon from "./Icon";
+import MediaViewer from "./MediaViewer";
 import { injectEmojis, renderCustomEmojis, CustomEmoji, useEmojiList } from "@/lib/emojis";
 import { sanitizePost, sanitizeName } from "@/lib/sanitize";
 import { rewriteLinks } from "./PostCard";
@@ -33,7 +34,9 @@ const TYPE_COLORS: Record<string, string> = {
 export default function MiniPostCard({ post, notifType, notifLabel }: { post: PostData; notifType?: string; notifLabel?: React.ReactNode }) {
   const [isDark, setIsDark] = useState(false);
   const emojiList = useEmojiList();
-  const [viewerUrl, setViewerUrl] = useState("");
+  const [viewerIndex, setViewerIndex] = useState(-1);
+  const mediaAttachments = (post as any).media_attachments || [];
+  const postImages = useMemo(() => mediaAttachments.filter((m: any) => m.type !== "video"), [mediaAttachments]);
 
   useEffect(() => { setIsDark(document.body.classList.contains("dark-theme")); }, []);
   useEffect(() => {
@@ -115,25 +118,28 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
           </div>
         )}
         {!post.summary && <div className="mini-post-body" dangerouslySetInnerHTML={{ __html: contentHtml }} />}
-        {(post as any).media_attachments?.length > 0 && (
-          <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} style={{ display: "grid", gridTemplateColumns: (post as any).media_attachments.length <= 2 ? "1fr" : "1fr 1fr", gridAutoRows: "120px", gap: 2, marginTop: 6, borderRadius: 4, overflow: "hidden" }}>
-            {(post as any).media_attachments.slice(0, 4).map((m: any, i: number) => (
+        {mediaAttachments.length > 0 && (
+          <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} style={{ display: "grid", gridTemplateColumns: mediaAttachments.length <= 2 ? "1fr" : "1fr 1fr", gridAutoRows: "120px", gap: 2, marginTop: 6, borderRadius: 4, overflow: "hidden" }}>
+            {mediaAttachments.slice(0, 4).map((m: any, i: number) => (
               m.type === "video" ? (
                 <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", background: "#000", borderRadius: 4 }}>
                   <video src={m.url} controls style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000" }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} />
                 </div>
               ) : (
-                <img key={i} src={m.url} alt={m.alt || ""} style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000", borderRadius: 4, cursor: "pointer" }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); setViewerUrl(m.url); }} />
+                <img key={i} src={m.url} alt={m.alt || ""} style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000", borderRadius: 4, cursor: "pointer" }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); const idx = postImages.indexOf(m); setViewerIndex(idx); }} />
               )
             ))}
           </div>
         )}
       </div>
     </Link>
-    {viewerUrl && (
-      <div className="reply-modal-backdrop active" style={{ zIndex: 9999, cursor: "zoom-out" }} onClick={(e) => { e.stopPropagation(); e.preventDefault(); setViewerUrl(""); }}>
-        <img src={viewerUrl} alt="" style={{ maxWidth: "90vw", maxHeight: "90vh", objectFit: "contain", borderRadius: 8 }} onClick={(e) => e.stopPropagation()} />
-      </div>
+    {viewerIndex >= 0 && postImages.length > 0 && (
+      <MediaViewer
+        media={postImages}
+        index={viewerIndex}
+        onIndexChange={setViewerIndex}
+        onClose={() => setViewerIndex(-1)}
+      />
     )}
   </>);
 }
