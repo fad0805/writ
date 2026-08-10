@@ -126,11 +126,15 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
                 if post_id:
                     try:
                         _p = s.query(Post).get(post_id)
-                        if _p and _p.content:
-                            _preview = re.sub(r'<[^>]+>', ' ', _p.content).replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
-                            _preview = re.sub(r'\s+', ' ', _preview).strip()[:80]
-                            if _preview:
-                                body += f": {_preview}"
+                        if _p:
+                            _summary = (_p.summary or "").strip()
+                            if _summary:
+                                body += f": {_summary[:80]}"
+                            elif _p.content:
+                                _preview = re.sub(r'<[^>]+>', ' ', _p.content).replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+                                _preview = re.sub(r'\s+', ' ', _preview).strip()[:80]
+                                if _preview:
+                                    body += f": {_preview}"
                     except Exception:
                         pass
             else:
