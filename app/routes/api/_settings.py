@@ -16,7 +16,7 @@ from app.config.settings import BASE_URL
 from app.core.activitypub import _post_to_inbox
 from app.core.timeline_stream import broadcast_refresh_notifs
 from app.db.database import get_session
-from app.core.auth import require_auth, require_active_auth, hash_password, verify_password
+from app.core.auth import require_auth, require_active_auth, hash_password, verify_password, delete_user_sessions
 from app.utils.log import log_admin_action
 from app.utils.storage import get_storage
 
@@ -320,6 +320,7 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
             pass
         user_id = db.id
         username = db.username
+    delete_user_sessions(user_id)
 
     log_admin_action(user_id, username, "delete_account_self", ip_address=request.client.host if request.client else "")
 

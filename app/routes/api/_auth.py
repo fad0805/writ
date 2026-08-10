@@ -143,6 +143,12 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
             if getattr(db_user, 'is_suspended', False):
                 log_admin_action(db_user.id, db_user.username, "login_blocked", details="suspended", ip_address=client_ip)
                 raise HTTPException(status_code=403, detail="계정이 정지되었습니다.")
+            if getattr(db_user, 'is_deactivated', False):
+                if db_user.password_hash == "deleted":
+                    log_admin_action(db_user.id, db_user.username, "login_blocked", details="deleted", ip_address=client_ip)
+                    raise HTTPException(status_code=403, detail="탈퇴한 계정입니다.")
+                log_admin_action(db_user.id, db_user.username, "login_blocked", details="deactivated", ip_address=client_ip)
+                raise HTTPException(status_code=403, detail="비활성화된 계정입니다.")
             stored = db_user.password_hash
             if ":" not in stored:
                 raise HTTPException(status_code=401, detail="Invalid credentials")
