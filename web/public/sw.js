@@ -2,17 +2,24 @@ self.addEventListener("push", function (event) {
   if (!event.data) return;
   try {
     if (Notification.permission === "denied") return;
-    const data = event.data.json();
-    const title = data.title || "WRIT";
-    const options = {
-      body: data.body || "",
-      icon: data.icon || "/icons/icon-192.png",
-      badge: "/icons/alert.png",
-      data: { url: data.url || "/notifications" },
-      tag: "writ-notif",
-      renotify: true,
-    };
-    event.waitUntil(self.registration.showNotification(title, options));
+    event.waitUntil(
+      clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (clientList) {
+        for (var i = 0; i < clientList.length; i++) {
+          if (clientList[i].visibilityState === "visible") return;
+        }
+        const data = event.data.json();
+        const title = data.title || "WRIT";
+        const options = {
+          body: data.body || "",
+          icon: data.icon || "/icons/icon-192.png",
+          badge: "/icons/alert.png",
+          data: { url: data.url || "/notifications" },
+          tag: "writ-notif",
+          renotify: true,
+        };
+        return self.registration.showNotification(title, options);
+      })
+    );
   } catch (e) {}
 });
 
