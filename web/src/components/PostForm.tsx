@@ -584,14 +584,27 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           ))}
         </div>
       )}
-      <input
-        type="text"
-        value={summary}
-        onChange={(e) => { setSummary(e.target.value); if (e.target.value && !postSensitive) setPostSensitive(true); }}
-        placeholder="CW (선택사항)"
-        className="cw-input"
-        onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { formRef.current?.requestSubmit(); } }}
-      />
+      <div style={{ position: "relative", marginBottom: 10 }}>
+        <input
+          type="text"
+          value={summary}
+          onChange={(e) => { setSummary(e.target.value); if (e.target.value && !postSensitive) setPostSensitive(true); }}
+          placeholder="CW (선택사항)"
+          className="cw-input"
+          style={{ marginBottom: 0, ...(summary ? { paddingRight: 28 } : {}) }}
+          onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { formRef.current?.requestSubmit(); } }}
+        />
+        {summary && (
+          <button
+            type="button"
+            aria-label="CW 초기화"
+            onClick={() => { setSummary(""); setPostSensitive(false); formRef.current?.querySelector<HTMLInputElement>(".cw-input")?.focus(); }}
+            style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", display: "flex", padding: 2, lineHeight: 1 }}
+          >
+            <Icon name="x" size={14} />
+          </button>
+        )}
+      </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, fontSize: 13 }}>
         <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: !!summary ? "not-allowed" : "pointer", color: "var(--text-secondary)", opacity: !!summary ? 0.6 : 1 }}>
           <input type="checkbox" checked={postSensitive || !!summary} disabled={!!summary} onChange={(e) => setPostSensitive(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
