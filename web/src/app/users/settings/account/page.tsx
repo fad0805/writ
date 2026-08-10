@@ -193,7 +193,7 @@ export default function AccountSettingsPage() {
 
       {showDeleteModal && (
         <div className="modal-overlay" onClick={() => !deleteLoading && setShowDeleteModal(false)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420, padding: 20 }}>
             <h3 style={{ marginTop: 0, color: "var(--danger)" }}>회원 탈퇴</h3>
             <p style={{ fontSize: 13, marginBottom: 16 }}>
               되돌릴 수 없습니다. 탈퇴하려면 비밀번호와 아이디를 확인하세요.
