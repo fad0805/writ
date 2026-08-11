@@ -1,9 +1,25 @@
 import json
 import re
+import time
 
 from sqlalchemy.orm import Session
 
 from app.models import Post, UserMute, UserBlock, SeriesMute, KeywordMute, Follow
+
+# 유저별 필터 데이터 TTL 캐시. 브로드캐스트/타임라인마다 반복되는 5회의 쿼리를 줄인다.
+# 호출자(_timeline_filter 등)가 반환 dict를 변형하므로 항상 복사본을 돌려준다.
+_filters_cache: dict[int, tuple[float, dict]] = {}
+_FILTERS_CACHE_TTL = 30.0
+_FILTERS_CACHE_MAX = 8192
+
+
+def _copy_filter_ctx(ctx: dict) -> dict:
+    return {
+        "hidden_ids": set(ctx["hidden_ids"]),
+        "muted_series_ids": set(ctx["muted_series_ids"]),
+        "parsed_kw": list(ctx["parsed_kw"]),
+        "boost_hidden_ids": set(ctx["boost_hidden_ids"]),
+    }
 
 
 def _load_user_filters(session: Session, user):
@@ -11,6 +27,10 @@ def _load_user_filters(session: Session, user):
     Returns a dict that can be reused across multiple should_deliver_post() calls."""
     if not user:
         return None
+    now = time.monotonic()
+    cached = _filters_cache.get(user.id)
+    if cached is not None and cached[0] > now:
+        return _copy_filter_ctx(cached[1])
     muted_user_ids = {row[0] for row in session.query(UserMute.target_user_id).filter_by(user_id=user.id).all()}
     blocked_ids = {row[0] for row in session.query(UserBlock.target_user_id).filter_by(user_id=user.id).all()}
     blocked_by_ids = {row[0] for row in session.query(UserBlock.user_id).filter_by(target_user_id=user.id).all()}
@@ -34,12 +54,16 @@ def _load_user_filters(session: Session, user):
                 keywords = [kw.keyword]
             keywords = [k.strip().lower() for k in keywords if k.strip()]
             parsed_kw.append(("text", None, kw.mode, keywords))
-    return {
+    ctx = {
         "hidden_ids": hidden_ids,
         "muted_series_ids": muted_series_ids,
         "parsed_kw": parsed_kw,
         "boost_hidden_ids": boost_hidden_ids,
     }
+    if len(_filters_cache) >= _FILTERS_CACHE_MAX:
+        _filters_cache.clear()
+    _filters_cache[user.id] = (now + _FILTERS_CACHE_TTL, ctx)
+    return ctx
 
 
 def _match_keyword_mute(content_lower: str, parsed_kw: list) -> bool:

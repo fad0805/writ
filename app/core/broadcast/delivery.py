@@ -44,6 +44,13 @@ def broadcast_post(
             _db_post = _load_post_for_filter(
                 s, post_json.get("id"), post_json.get("_boost_pointer_id"))
 
+            # 부스트 원본은 1회만 로드해 뷰어별 개별 쿼리를 없앤다
+            _boost_originals = {}
+            if _db_post and _db_post.boost_of_id:
+                _orig = s.query(Post).filter_by(id=_db_post.boost_of_id).first()
+                if _orig:
+                    _boost_originals[_orig.id] = _orig
+
             _filter_cache: dict[int, dict | None] = {}
 
             for _, info in list(_streams.items()):
@@ -55,7 +62,10 @@ def broadcast_post(
                 # Home/social: use unified filter (mention, reply, mute/block, keyword)
                 if tl in ("home", "social") and post_visibility != "mention":
                     if uid not in _filter_cache:
-                        _filter_cache[uid] = _load_user_filters(s, stream_users.get(uid))
+                        _ctx = _load_user_filters(s, stream_users.get(uid))
+                        if _ctx is not None and _boost_originals:
+                            _ctx = dict(_ctx, boost_originals=_boost_originals)
+                        _filter_cache[uid] = _ctx
                     viewer = stream_users.get(uid)
                     following_set = home_follows.get(uid, set()) | {uid}
                     if _db_post and not should_deliver_post(_db_post, s, viewer, tl, following_set, _filter_cache[uid]):
