@@ -468,17 +468,22 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 for _href in mentioned_hrefs:
                     _matched = False
                     if BASE_URL in _href:
-                        for _u in session.query(User).filter_by(is_remote=False).all():
-                            local_uris = {
-                                _u.actor_uri().rstrip("/"),
-                                _u.actor_uri().replace("/users/", "/@").rstrip("/")
-                            }
-                            if _href in local_uris and _u.id not in _seen_ids:
-                                mentioned_ids.append(_u.id)
-                                _seen_ids.add(_u.id)
-                                logger.debug("[_handle_create MENTION] LOCAL MATCH: href=%s -> uid=%s username=%s", _href, _u.id, _u.username)
-                                _matched = True
+                        # 로컬 유저 전체 스캔 대신 URL 경로에서 username을 뽑아 인덱스 조회
+                        _path = urlparse(_href).path.rstrip("/")
+                        _uname = None
+                        for _prefix in ("/users/", "/@"):
+                            if _path.startswith(_prefix):
+                                _uname = _path[len(_prefix):].split("/")[0].split("@")[0]
                                 break
+                        if _uname:
+                            u = session.query(User).filter(
+                                User.username == _uname, User.is_remote == False,
+                            ).first()
+                            if u and u.id not in _seen_ids:
+                                mentioned_ids.append(u.id)
+                                _seen_ids.add(u.id)
+                                logger.debug("[_handle_create MENTION] LOCAL MATCH: href=%s -> uid=%s username=%s", _href, u.id, u.username)
+                                _matched = True
                     if not _matched:
                         u = session.query(User).filter(User.remote_url == _href).first()
                         if u and u.id not in _seen_ids:
@@ -498,7 +503,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             _p = urlparse(u.remote_url)
                             if _p.hostname and _p.hostname.lower() == _dom.lower():
                                 mentioned_ids.append(u.id)
-                                _seen_ids.add(_u.id)
+                                _seen_ids.add(u.id)
                                 continue
                         candidates = session.query(User).filter(
                             username_prefix_like(User.username, f"{_lp}@"),
