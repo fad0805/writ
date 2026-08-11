@@ -625,11 +625,19 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
                   const next = [...pollOptions];
                   next[i] = e.target.value;
                   setPollOptions(next);
+                  // 마지막 칸에 내용이 생기면 빈 칸을 하나 추가하되, 포커스를 뺏지 않는다.
+                  // (포커스를 새 칸으로 옮기면 한 글자/자모마다 새 칸이 생기던 버그 방지)
                   if (i === pollOptions.length - 1 && e.target.value.trim() && pollOptions.length < 10) {
-                    setTimeout(() => {
-                      setPollOptions((prev) => prev.length < 10 && prev[prev.length - 1] !== "" ? [...prev, ""] : prev);
+                    setPollOptions((prev) => prev.length < 10 && prev[prev.length - 1] !== "" ? [...prev, ""] : prev);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (pollOptions.length < 10) {
+                      setPollOptions((prev) => [...prev, ""]);
                       setTimeout(() => pollLastRef.current?.focus(), 0);
-                    }, 0);
+                    }
                   }
                 }}
                 style={{ flex: 1, padding: "4px 8px", fontSize: 14, borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-secondary)" }}
