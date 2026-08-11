@@ -280,6 +280,54 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         }
 
 
+def _page_follow_users(s, profile, user, *, follower_of_id, follow_of_id, limit, offset):
+    """팔로워/팔로잉을 페이지네이션으로 반환. 공통 로직을 공유한다."""
+    if not (user and (profile.id == user.id or profile.follow_list_visibility != "private")):
+        return {"users": [], "has_more": False, "total": 0}
+    base = s.query(Follow).filter_by(accepted=True).order_by(desc(Follow.created_at))
+    if follower_of_id:
+        base = base.filter_by(following_id=follower_of_id)
+        id_col = Follow.follower_id
+    else:
+        base = base.filter_by(follower_id=follow_of_id)
+        id_col = Follow.following_id
+    rows = base.with_entities(id_col).offset(offset).limit(limit + 1).all()
+    ids = [r[0] for r in rows]
+    has_more = len(ids) > limit
+    ids = ids[:limit]
+    if not ids:
+        return {"users": [], "has_more": has_more, "total": 0}
+    umap = {u.id: u for u in s.query(User).filter(User.id.in_(ids)).all()}
+    users = [_user_json(umap[i]) for i in ids if i in umap]
+    total = s.query(Follow).filter(
+        (Follow.following_id == follower_of_id) if follower_of_id else (Follow.follower_id == follow_of_id),
+        Follow.accepted == True,
+    ).count()
+    return {"users": users, "has_more": has_more, "total": total}
+
+
+@users_router.get("/users/{username}/followers")
+def api_user_followers(request: Request, username: str, limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0)):
+    """프로필 팔로워 목록 페이지네이션 — 기존 프로필 응답의 20명 제한을 보완한다."""
+    user = get_current_user(request)
+    with get_session() as s:
+        profile = s.query(User).filter_by(username=username).first()
+        if not profile:
+            raise HTTPException(status_code=404, detail="User not found")
+        return _page_follow_users(s, profile, user, follower_of_id=profile.id, follow_of_id=None, limit=limit, offset=offset)
+
+
+@users_router.get("/users/{username}/following")
+def api_user_following(request: Request, username: str, limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0)):
+    """프로필 팔로잉 목록 페이지네이션 — 기존 프로필 응답의 20명 제한을 보완한다."""
+    user = get_current_user(request)
+    with get_session() as s:
+        profile = s.query(User).filter_by(username=username).first()
+        if not profile:
+            raise HTTPException(status_code=404, detail="User not found")
+        return _page_follow_users(s, profile, user, follower_of_id=None, follow_of_id=profile.id, limit=limit, offset=offset)
+
+
 @users_router.get("/users/{username}/media")
 def api_user_media(request: Request, username: str, limit: int = Query(12, le=100), offset: int = Query(0)):
     user = get_current_user(request)

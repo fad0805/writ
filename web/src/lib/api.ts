@@ -346,8 +346,8 @@ export const api = {
   unfollow: (username: string) => request<{ ok: boolean }>(`/api/users/${username}/unfollow`, { method: "POST" }),
   toggleNotify: (username: string) => request<{ ok: boolean; notify_on_post: boolean }>(`/api/users/${username}/toggle-notify`, { method: "POST" }),
   toggleBoosts: (username: string) => request<{ ok: boolean; show_boosts: boolean }>(`/api/users/${username}/toggle-boosts`, { method: "POST" }),
-  getFollowers: (username: string) => request<{ users: User[] }>(`/api/users/${username}/followers`),
-  getFollowing: (username: string) => request<{ users: User[] }>(`/api/users/${username}/following`),
+  getFollowers: (username: string, limit = 20, offset = 0) => request<{ users: User[]; has_more: boolean; total: number }>(`/api/users/${username}/followers?limit=${limit}&offset=${offset}`),
+  getFollowing: (username: string, limit = 20, offset = 0) => request<{ users: User[]; has_more: boolean; total: number }>(`/api/users/${username}/following?limit=${limit}&offset=${offset}`),
 
   // Notifications
   getNotifications: (filter?: string, limit = 20, offset = 0, mark_read = true) =>
