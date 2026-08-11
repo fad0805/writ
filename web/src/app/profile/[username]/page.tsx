@@ -82,7 +82,8 @@ export default function ProfilePage() {
   const [mediaHasMore, setMediaHasMore] = useState(false);
   const [mediaOffset, setMediaOffset] = useState(0);
   const [mediaLoadingMore, setMediaLoadingMore] = useState(false);
-  const [followHasMore, setFollowHasMore] = useState(false);
+  const [followersHasMore, setFollowersHasMore] = useState(false);
+  const [followingHasMore, setFollowingHasMore] = useState(false);
   const [followLoadingMore, setFollowLoadingMore] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
   const [amBlocked, setAmBlocked] = useState(false);
@@ -97,7 +98,8 @@ export default function ProfilePage() {
       setProfile(d.profile); setPosts(d.posts); setNovels(d.novels);
       setFollowers(d.followers); setFollowing(d.following);
       setFollowersCount(d.followers_count); setFollowingCount(d.following_count);
-      setFollowHasMore(d.followers_count > d.followers.length || d.following_count > d.following.length);
+      setFollowersHasMore(d.followers_count > d.followers.length);
+      setFollowingHasMore(d.following_count > d.following.length);
       setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setHasPendingFollower(d.has_pending_follower); setIsMine(d.is_mine);
       setIsBlocked(!!d.is_blocked); setAmBlocked(!!d.am_i_blocked); setIsMutedUser(!!d.is_muted);
       setPinnedPosts(d.pinned_posts_data || []); setPinnedSeries(d.pinned_series_data || []);
@@ -114,7 +116,8 @@ export default function ProfilePage() {
       setProfile(d.profile); setPosts(d.posts); setNovels(d.novels);
       setFollowers(d.followers); setFollowing(d.following);
       setFollowersCount(d.followers_count); setFollowingCount(d.following_count);
-      setFollowHasMore(d.followers_count > d.followers.length || d.following_count > d.following.length);
+      setFollowersHasMore(d.followers_count > d.followers.length);
+      setFollowingHasMore(d.following_count > d.following.length);
       setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setNotifyOnPost(d.notify_on_post); setHasPendingFollower(d.has_pending_follower); setIsFollower(d.is_follower); setApprovedFollower(null); setIsMine(d.is_mine);
       setShowBoosts(d.show_boosts !== false);
       setIsBlocked(!!d.is_blocked); setAmBlocked(!!d.am_i_blocked); setIsMutedUser(!!d.is_muted);
@@ -166,21 +169,23 @@ export default function ProfilePage() {
   }, [username, mediaOffset, mediaHasMore, mediaLoadingMore]);
 
   const loadMoreFollows = useCallback(async () => {
-    if (followLoadingMore || !followHasMore) return;
+    if (followLoadingMore) return;
+    if (tab === "followers" && !followersHasMore) return;
+    if (tab === "following" && !followingHasMore) return;
     setFollowLoadingMore(true);
     try {
       if (tab === "followers") {
         const d = await api.getFollowers(username, 20, followers.length);
         setFollowers((prev) => [...prev, ...d.users.map((u) => ({ user: u }))]);
-        setFollowHasMore(d.has_more);
+        setFollowersHasMore(d.has_more);
       } else if (tab === "following") {
         const d = await api.getFollowing(username, 20, following.length);
         setFollowing((prev) => [...prev, ...d.users.map((u) => ({ user: u }))]);
-        setFollowHasMore(d.has_more);
+        setFollowingHasMore(d.has_more);
       }
     } catch (e) {}
     setFollowLoadingMore(false);
-  }, [username, tab, followers.length, following.length, followHasMore, followLoadingMore]);
+  }, [username, tab, followers.length, following.length, followersHasMore, followingHasMore, followLoadingMore]);
 
   useEffect(() => {
     if (tab !== "media" || mediaLoaded || mediaLoading) return;
@@ -216,6 +221,8 @@ export default function ProfilePage() {
             setProfile(d.profile); setPosts(d.posts); setNovels(d.novels);
             setFollowers(d.followers); setFollowing(d.following);
             setFollowersCount(d.followers_count); setFollowingCount(d.following_count);
+            setFollowersHasMore(d.followers_count > d.followers.length);
+            setFollowingHasMore(d.following_count > d.following.length);
             setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setNotifyOnPost(d.notify_on_post); setHasPendingFollower(d.has_pending_follower); setIsFollower(d.is_follower); setApprovedFollower(null); setIsMine(d.is_mine);
             setShowBoosts(d.show_boosts !== false);
             setIsBlocked(!!d.is_blocked); setAmBlocked(!!d.am_i_blocked); setIsMutedUser(!!d.is_muted);
@@ -581,7 +588,7 @@ export default function ProfilePage() {
       </div>
 
       <div id="tab-following" className="profile-tab-content" style={{ display: tab === "following" ? "block" : "none" }}>
-        <InfiniteScroll hasMore={followHasMore && tab === "following"} loadingMore={followLoadingMore} loadMore={loadMoreFollows}>
+        <InfiniteScroll hasMore={followingHasMore && tab === "following"} loadingMore={followLoadingMore} loadMore={loadMoreFollows}>
           {following.length === 0 ? <p className="empty-state">팔로잉이 없습니다.</p> : following.map((f) => (
             <Link key={f.user.id} href={`/@${f.user.username}`} className="post-card tab-content-link">
               <div className="profile-user-row">
@@ -597,7 +604,7 @@ export default function ProfilePage() {
       </div>
 
       <div id="tab-followers" className="profile-tab-content" style={{ display: tab === "followers" ? "block" : "none" }}>
-        <InfiniteScroll hasMore={followHasMore && tab === "followers"} loadingMore={followLoadingMore} loadMore={loadMoreFollows}>
+        <InfiniteScroll hasMore={followersHasMore && tab === "followers"} loadingMore={followLoadingMore} loadMore={loadMoreFollows}>
           {followers.length === 0 ? <p className="empty-state">팔로워가 없습니다.</p> : followers.map((f) => (
             <Link key={f.user.id} href={`/@${f.user.username}`} className="post-card tab-content-link">
               <div className="profile-user-row">
