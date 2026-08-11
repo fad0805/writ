@@ -632,12 +632,22 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
                   }
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+                  if (e.key !== "Enter" && e.key !== "Tab") return;
+                  if (e.key === "Tab" && e.shiftKey) {
+                    const prevInput = e.currentTarget.parentElement?.previousElementSibling?.querySelector<HTMLInputElement>("input");
+                    if (prevInput) { e.preventDefault(); prevInput.focus(); }
+                    return;
+                  }
+                  const nextInput = e.currentTarget.parentElement?.nextElementSibling?.querySelector<HTMLInputElement>("input");
+                  if (nextInput) {
                     e.preventDefault();
-                    if (pollOptions.length < 10) {
-                      setPollOptions((prev) => [...prev, ""]);
-                      setTimeout(() => pollLastRef.current?.focus(), 0);
-                    }
+                    nextInput.focus();
+                  } else if (pollOptions[i].trim() && pollOptions.length < 10) {
+                    e.preventDefault();
+                    setPollOptions((prev) => [...prev, ""]);
+                    setTimeout(() => pollLastRef.current?.focus(), 0);
+                  } else if (e.key === "Enter") {
+                    e.preventDefault();
                   }
                 }}
                 style={{ flex: 1, padding: "4px 8px", fontSize: 14, borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-secondary)" }}
