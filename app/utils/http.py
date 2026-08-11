@@ -2,6 +2,7 @@ import ipaddress
 import logging
 import os
 import socket
+import time
 from urllib.parse import urlparse, urljoin
 
 import httpx
@@ -30,6 +31,39 @@ _PRIVATE_SUBNETS = [
 ]
 
 
+# 호스트별 DNS 검사 결과 TTL 캐시 — validate_url은 리다이렉트/요청마다 호출되어
+# 매번 동기 getaddrinfo를 수행하므로, 같은 호스트는 60초간 재사용한다.
+# value = (만료시각, private 여부)
+_DNS_RESULT_CACHE: dict[str, tuple[float, bool]] = {}
+_DNS_CACHE_TTL = 60.0
+_DNS_CACHE_MAX = 4096
+
+
+def _dns_resolves_private(host: str) -> bool:
+    """Return True if any resolved address of `host` is in a private subnet."""
+    now = time.time()
+    cached = _DNS_RESULT_CACHE.get(host)
+    if cached is not None and cached[0] > now:
+        return cached[1]
+    is_private = False
+    try:
+        addrs = socket.getaddrinfo(host, 80, family=socket.AF_UNSPEC)
+        for addr in addrs:
+            ip = ipaddress.ip_address(addr[4][0])
+            for net in _PRIVATE_SUBNETS:
+                if ip in net:
+                    is_private = True
+                    break
+            if is_private:
+                break
+    except (socket.gaierror, OSError, ValueError):
+        pass
+    if len(_DNS_RESULT_CACHE) >= _DNS_CACHE_MAX:
+        _DNS_RESULT_CACHE.clear()
+    _DNS_RESULT_CACHE[host] = (now + _DNS_CACHE_TTL, is_private)
+    return is_private
+
+
 def validate_url(url: str) -> bool:
     """Reject URLs pointing to private/internal IPs (SSRF protection)."""
     parsed = urlparse(url)
@@ -43,15 +77,8 @@ def validate_url(url: str) -> bool:
         return False
     if host.endswith(".localhost"):
         return False
-    try:
-        addrs = socket.getaddrinfo(host, 80, family=socket.AF_UNSPEC)
-        for addr in addrs:
-            ip = ipaddress.ip_address(addr[4][0])
-            for net in _PRIVATE_SUBNETS:
-                if ip in net:
-                    return False
-    except (socket.gaierror, OSError, ValueError):
-        pass
+    if _dns_resolves_private(host):
+        return False
     try:
         ip = ipaddress.ip_address(host)
         for net in _PRIVATE_SUBNETS:

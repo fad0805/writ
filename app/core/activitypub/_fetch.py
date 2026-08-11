@@ -531,15 +531,6 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         logger.error("[FETCH-POST] url=%s error=%s", url, e, exc_info=True)
 
     if data is None:
-        try:
-            resp = validated_get(url, headers=headers, timeout=10)
-            logger.debug("[FETCH-POST] retry url=%s status=%s", url, resp.status_code if resp else 'None')
-            if resp is not None and resp.status_code == 200:
-                data = resp.json()
-        except Exception as e:
-            logger.error("[FETCH-POST] retry url=%s error=%s", url, e, exc_info=True)
-
-    if data is None:
         logger.debug("[FETCH-POST] FAILED url=%s", url)
         return None
 

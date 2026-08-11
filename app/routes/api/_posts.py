@@ -1,6 +1,7 @@
 """Post detail, edit, and delete endpoints extracted from _core.py."""
 import threading
 import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request, Form, HTTPException
@@ -24,7 +25,22 @@ from app.core.visibility import _can_view
 
 logger = logging.getLogger("writ.api.posts")
 
+# 리모트 부모 fetch 전용 바운드 실행기 — 요청 스레드풀을 잠식하지 않도록 제한된 스레드에서만
+# 느린 리모트 I/O(_fetch_remote_post → _resolve_actor)가 실행되게 한다.
+_remote_fetch_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="remote-parent")
+
 posts_router = APIRouter()
+
+
+def _fetch_remote_parent_json(url, user_id):
+    """Fetch a remote parent post off the request thread and serialize it."""
+    with get_session() as s:
+        signer = s.query(User).filter_by(id=user_id).first()
+        remote_parent = _fetch_remote_post(url, signer, s)
+        if remote_parent is None:
+            return None
+        user = s.query(User).filter_by(id=user_id).first()
+        return _post_json(remote_parent, s, user)
 
 
 @posts_router.get("/posts/{post_id}")
@@ -126,17 +142,19 @@ def api_get_post(request: Request, post_id: int):
         result["has_more_ancestors"] = has_more_ancestors
 
     if fetch_remote_url:
+        # 리모트 부모 fetch는 별도 바운드 실행기에서 8초 상한으로만 대기한다.
+        # 느린/응답 없는 리모트 서버가 요청 스레드를 최대 수십 초 붙잡지 않게 한다.
+        fut = _remote_fetch_executor.submit(_fetch_remote_parent_json, fetch_remote_url, user.id)
         try:
-            with get_session() as remote_s:
-                remote_parent = _fetch_remote_post(fetch_remote_url, user, remote_s)
-                # 💡 remote_parent가 정확히 존재하고(None이 아니고) 부모 게시글 객체일 때만 파싱하도록 방어막을 칩니다.
-                if remote_parent is not None:
-                    result["ancestors"] = [_post_json(remote_parent, remote_s, user)]
-                else:
-                    logger.warning("Remote parent fetch returned None for URL: %s", fetch_remote_url)
+            remote_parent_json = fut.result(timeout=8)
+        except TimeoutError:
+            logger.warning("Remote parent fetch for %s exceeded 8s, skipping", fetch_remote_url)
+            remote_parent_json = None
         except Exception as e:
-            # 💡 pass로 에러를 완전히 지우지 말고, 개발 중에는 최소한 어떤 에러인지 로그를 남겨줍니다.
             logger.error("Failed to fetch or process remote parent: %s", e, exc_info=True)
+            remote_parent_json = None
+        if remote_parent_json is not None:
+            result["ancestors"] = [remote_parent_json]
     return result
 
 
