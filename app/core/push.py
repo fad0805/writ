@@ -2,9 +2,9 @@ import os
 import json
 import logging
 import re
-import threading
 
 import base64
+from concurrent.futures import ThreadPoolExecutor
 from py_vapid import Vapid
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -16,6 +16,10 @@ from app.models import ServerSetting, PushSubscription, Post
 from app.db.database import get_session
 
 logger = logging.getLogger("writ.push")
+
+# 푸시 발송 전용 바운드 실행기 — 수신자 수만큼 무제한 스레드를 만들지 않는다.
+# 발송은 외부 VAPID 엔드포인트 I/O라 느릴 수 있으므로 워커 수를 제한해 폭주를 막는다.
+_push_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="push")
 
 # Web Push / VAPID
 def _sanitize_pem(val: str) -> str:
@@ -103,8 +107,7 @@ def _get_vapid_key():
 
 def send_push_to_user(user_id: int, notification_type: str, from_username: str = "", post_id: int = None, metadata: dict = None):
     """Send web push notification to all subscriptions of a user. Runs in background thread."""
-    t = threading.Thread(target=_send_push_sync, args=(user_id, notification_type, from_username, post_id, metadata), daemon=True)
-    t.start()
+    _push_executor.submit(_send_push_sync, user_id, notification_type, from_username, post_id, metadata)
 
 
 def _send_push_sync(user_id: int, notification_type: str, from_username: str, post_id: int, metadata: dict):

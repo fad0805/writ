@@ -2,7 +2,6 @@
 import os
 import json
 import secrets
-import threading
 import logging
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -239,7 +238,7 @@ def _do_create_post(
             except Exception as e:
                 logger.error("Failed to create notifications: %s", e, exc_info=True)
 
-        threading.Thread(target=_create_notifications_and_broadcast, daemon=True).start()
+        _post_create_executor.submit(_create_notifications_and_broadcast)
 
         def _resolve_remote_mentions_and_federate():
             try:
@@ -252,7 +251,7 @@ def _do_create_post(
                 logger.error("Failed to resolve remote mentions: %s", e)
             _broadcast_federation(user_id, post.id, visibility, content)
 
-        threading.Thread(target=_resolve_remote_mentions_and_federate, daemon=True).start()
+        _post_create_executor.submit(_resolve_remote_mentions_and_federate)
 
         try:
             broadcast("new_post", {"post_id": post.id, "author_id": user_id})
@@ -260,5 +259,5 @@ def _do_create_post(
             logger.error("Failed to broadcast new_post event: %s", e, exc_info=True)
 
         pj = _post_json(post, s, _author)
-        threading.Thread(target=_broadcast_timeline, args=(pj, user_id, visibility), daemon=True).start()
+        _post_create_executor.submit(_broadcast_timeline, pj, user_id, visibility)
         return pj
