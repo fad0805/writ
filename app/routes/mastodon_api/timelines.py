@@ -20,6 +20,14 @@ from app.routes.mastodon_api._common import (
 router = APIRouter()
 
 
+def _load_posts_by_id(db: SASession, ids) -> dict:
+    """배치로 id 목록의 Post를 로드해 루프 내 개별 쿼리(N+1)를 제거한다."""
+    ids = list({i for i in ids if i})
+    if not ids:
+        return {}
+    return {p.id: p for p in db.query(Post).filter(Post.id.in_(ids)).all()}
+
+
 # ---------------------------------------------------------------------------
 # GET /api/v1/timelines/home
 # ---------------------------------------------------------------------------
@@ -71,15 +79,18 @@ def home_timeline(
 
     following_set = set(following_ids)
 
+    _original_map = _load_posts_by_id(db, [p.boost_of_id for p in posts])
+    _parent_map = _load_posts_by_id(db, [p.in_reply_to_id for p in posts])
+
     maps = _build_status_maps(posts, db, user)
     result = []
     for p in posts:
         if p.boost_of_id:
-            original = db.query(Post).filter_by(id=p.boost_of_id).first()
+            original = _original_map.get(p.boost_of_id)
             if original and not original.is_deleted:
                 # Reply filtering for boosted replies
                 if original.in_reply_to_id and original.author_id != user.id:
-                    parent = db.query(Post).filter_by(id=original.in_reply_to_id).first()
+                    parent = _parent_map.get(original.in_reply_to_id)
                     if parent and parent.author_id not in following_set and parent.author_id != user.id:
                         continue
                 s = _boost_status_json(p, original, db, viewer=user,
@@ -90,7 +101,7 @@ def home_timeline(
         else:
             # Reply filtering: drop replies to posts by non-followed, non-self users (but always keep own posts)
             if p.in_reply_to_id and p.author_id != user.id:
-                parent = db.query(Post).filter_by(id=p.in_reply_to_id).first()
+                parent = _parent_map.get(p.in_reply_to_id)
                 if parent and parent.author_id not in following_set and parent.author_id != user.id:
                     continue
             s = _status_json(p, db, viewer=user, _boosted_ids=_boosted_ids,
@@ -164,11 +175,13 @@ def public_timeline(
             Bookmark.user_id == viewer.id, Bookmark.post_id.in_(post_ids)
         ).all()) if post_ids else set()
 
+    _original_map = _load_posts_by_id(db, [p.boost_of_id for p in posts])
+
     maps = _build_status_maps(posts, db, viewer)
     result = []
     for p in posts:
         if p.boost_of_id:
-            original = db.query(Post).filter_by(id=p.boost_of_id).first()
+            original = _original_map.get(p.boost_of_id)
             if original and not original.is_deleted:
                 s = _boost_status_json(p, original, db, viewer=viewer,
                                        _boosted_ids=_boosted_ids, _liked_ids=_liked_ids,

@@ -250,11 +250,12 @@ def _build_account_counts_map(user_ids: set, db: SASession) -> dict:
 
 
 def _build_status_maps(posts: list, db: SASession, viewer: User | None = None) -> dict:
-    """Precompute all per-post / per-author counts and lookups for a status list (~7 queries total)."""
+    """Precompute all per-post / per-author counts and lookups for a status list (~10 queries total)."""
     maps = {
         "_replies_map": {}, "_reblogs_map": {}, "_favs_map": {},
         "_reactions_map": {}, "_my_reactions_map": {},
         "_users_map": {}, "_username_map": {}, "_author_counts": {},
+        "_quotes_map": {}, "_parents_map": {},
     }
     post_ids = [p.id for p in posts]
     if not post_ids:
@@ -289,11 +290,35 @@ def _build_status_maps(posts: list, db: SASession, viewer: User | None = None) -
         for pid, react in my_rows:
             maps["_my_reactions_map"].setdefault(pid, react)
 
+    # 인용/부모 대상 포스트를 배치 로드해 _status_json의 개별 쿼리를 제거
+    related_ids = {p.quote_of_id for p in posts if p.quote_of_id} | {
+        p.in_reply_to_id for p in posts if p.in_reply_to_id
+    }
+    if related_ids:
+        related = db.query(Post).filter(Post.id.in_(related_ids)).all()
+        for rp in related:
+            if rp.id in related_ids:
+                maps["_quotes_map"].setdefault(rp.id, rp)
+                maps["_parents_map"].setdefault(rp.id, rp)
+
     user_ids = set(author_ids) | set(mention_ids)
     if user_ids:
         users = db.query(User).filter(User.id.in_(user_ids)).all()
         maps["_users_map"] = {u.id: u for u in users}
         maps["_username_map"] = {u.username: u for u in users}
+
+    # 멘션 href에 등장하는 username을 배치 해석해 _fmt_mention의 개별 쿼리를 제거
+    mention_names = set()
+    for p in posts:
+        for m in re.finditer(r'href="[^"]*?/@([^/"]+)', p.content or ""):
+            mention_names.add(m.group(1))
+    if mention_names:
+        mention_names -= set(maps["_username_map"])
+        if mention_names:
+            extra = db.query(User).filter(User.username.in_(mention_names)).all()
+            for u in extra:
+                maps["_username_map"].setdefault(u.username, u)
+
     maps["_author_counts"] = _build_account_counts_map(author_ids, db)
     return maps
 
@@ -325,7 +350,8 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
                  _reblogs_map: dict = None, _favs_map: dict = None,
                  _reactions_map: dict = None, _my_reactions_map: dict = None,
                  _users_map: dict = None, _username_map: dict = None,
-                 _author_counts: dict = None) -> dict:
+                 _author_counts: dict = None, _quotes_map: dict = None,
+                 _parents_map: dict = None) -> dict:
     if post.is_deleted:
         return None
 
@@ -381,7 +407,12 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
     # 인용 대상 링크를 "RE: <url>" 형식으로 본문에 붙여 클릭 가능하게 만든다.
     _quote_url = ""
     if post.quote_of_id:
-        _qp = db.query(Post).filter_by(id=post.quote_of_id).first()
+        if _quotes_map is not None:
+            _qp = _quotes_map.get(post.quote_of_id)
+            if _qp is None:
+                _qp = db.query(Post).filter_by(id=post.quote_of_id).first()
+        else:
+            _qp = db.query(Post).filter_by(id=post.quote_of_id).first()
         if _qp and not _qp.is_deleted:
             if _qp.author and _qp.author.is_remote:
                 _quote_url = _qp.remote_url or _qp.ap_id or ""
@@ -474,8 +505,15 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         "reactions": [],
     }
 
-    if post.in_reply_to_id and post.parent:
-        status["in_reply_to_account_id"] = str(post.parent.author_id)
+    if post.in_reply_to_id:
+        if _parents_map is not None:
+            _parent = _parents_map.get(post.in_reply_to_id)
+            if _parent is None:
+                _parent = post.parent
+        else:
+            _parent = post.parent
+        if _parent:
+            status["in_reply_to_account_id"] = str(_parent.author_id)
 
     if post.media_attachments:
         for m in post.media_attachments:
