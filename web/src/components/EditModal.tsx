@@ -68,7 +68,7 @@ export default function EditModal({ post, onClose, onDone }: { post: PostData; o
     try {
       const updatedPost = await api.editPost(post.id, { content, summary });
       if (onDone) onDone(updatedPost);
-    } catch (err: any) { alert(err.message); }
+    } catch (err: unknown) { alert(err instanceof Error ? err.message : String(err)); }
     setSubmitting(false);
   };
 

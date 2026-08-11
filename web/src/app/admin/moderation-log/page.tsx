@@ -24,10 +24,20 @@ const actionLabels: Record<string, string> = {
   set_post_cw: "CW 설정", update_settings: "서버 설정 변경",
 };
 
+interface ModerationLog {
+  id: number;
+  created_at?: string;
+  username?: string;
+  action: string;
+  target_username?: string;
+  details?: string;
+  ip_address?: string;
+}
+
 export default function AdminModerationLogPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<ModerationLog[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [actionFilter, setActionFilter] = useState("");
@@ -62,7 +72,22 @@ export default function AdminModerationLogPage() {
     setLoading(false);
   };
 
-  useEffect(() => { if (!authLoading) loadInitial(); }, [authLoading, actionFilter]);
+  useEffect(() => {
+    if (!authLoading) {
+      let cancelled = false;
+      (async () => {
+        try {
+          const params = new URLSearchParams({ offset: "0", limit: String(INITIAL_LIMIT) });
+          if (actionFilter) params.set("action", actionFilter);
+          const res = await fetch(`/api/admin/logs?${params}`, { credentials: "include" });
+          if (!cancelled) setMode("initial");
+          if (res.ok) { const d = await res.json(); if (!cancelled) { setLogs(d.logs); setTotal(d.total || 0); } }
+        } catch {}
+        if (!cancelled) setLoading(false);
+      })();
+      return () => { cancelled = true; };
+    }
+  }, [authLoading, actionFilter]);
 
   const totalPages = Math.max(0, Math.ceil((total - INITIAL_LIMIT) / PAGE_LIMIT));
 
@@ -89,7 +114,7 @@ export default function AdminModerationLogPage() {
           <span style={{ flex: 1 }}>상세</span>
           <span style={{ width: 100 }}>IP</span>
         </div>
-        {logs.map((log: any) => (
+        {logs.map((log: ModerationLog) => (
           <div key={log.id} className="admin-table-row">
             <span style={{ width: 140, fontSize: "0.85em", fontFamily: "monospace" }}>{log.created_at?.slice(0, 19) || "-"}</span>
             <span style={{ width: 80 }}>{log.username || "-"}</span>

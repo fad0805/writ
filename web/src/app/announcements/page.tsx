@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
@@ -16,18 +16,20 @@ export default function AnnouncementsPage() {
     if (!authLoading && !user) router.replace("/login");
   }, [user, authLoading, router]);
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch("/api/announcements", { credentials: "include" });
-      if (res.ok) {
-        const d = await res.json();
-        setItems(d.announcements || []);
-      }
-    } catch {}
-    setLoading(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/announcements", { credentials: "include" });
+        if (res.ok) {
+          const d = await res.json();
+          if (!cancelled) setItems(d.announcements || []);
+        }
+      } catch {}
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
   }, []);
-
-  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     if (items.some((a) => !a.is_read)) {

@@ -63,7 +63,7 @@ export default function MutesSettingsPage() {
           {mutedUsers.length === 0 ? <p className="empty-small">뮤트한 사용자가 없습니다.</p> : mutedUsers.map(m => (
             <div key={m.id} className="admin-table-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 12px", background: "var(--bg-tertiary)", borderRadius: 6, marginBottom: 4 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Avatar user={{ username: m.username, display_name: m.display_name, avatar: m.avatar } as any} className="sidebar-avatar rounded-[8px]" style={{ width: 28, height: 28, minWidth: 28 }} />
+                <Avatar user={{ id: m.id, username: m.username, display_name: m.display_name, avatar: m.avatar, summary: "", is_admin: false, is_remote: false }} className="sidebar-avatar rounded-[8px]" style={{ width: 28, height: 28, minWidth: 28 }} />
                 <span><strong>{m.display_name}</strong> @{m.username}</span>
               </div>
               <button onClick={async () => { await fetch(`/api/mutes/users/${m.target_user_id}`, { method: "DELETE", credentials: "include" }); setMutedUsers(prev => prev.filter(x => x.id !== m.id)); }} className="btn btn-small btn-outline text-xs">해제</button>
@@ -77,7 +77,7 @@ export default function MutesSettingsPage() {
           {blockedUsers.length === 0 ? <p className="empty-small">블락한 사용자가 없습니다.</p> : blockedUsers.map(b => (
             <div key={b.id} className="admin-table-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 12px", background: "var(--bg-tertiary)", borderRadius: 6, marginBottom: 4 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Avatar user={{ username: b.username, display_name: b.display_name, avatar: b.avatar } as any} className="sidebar-avatar rounded-[8px]" style={{ width: 28, height: 28, minWidth: 28 }} />
+                <Avatar user={{ id: b.id, username: b.username, display_name: b.display_name, avatar: b.avatar, summary: "", is_admin: false, is_remote: false }} className="sidebar-avatar rounded-[8px]" style={{ width: 28, height: 28, minWidth: 28 }} />
                 <span><strong>{b.display_name}</strong> @{b.username}</span>
               </div>
               <button onClick={async () => { await fetch(`/api/blocks/users/${b.target_user_id}`, { method: "DELETE", credentials: "include" }); setBlockedUsers(prev => prev.filter(x => x.id !== b.id)); }} className="btn btn-small btn-outline text-xs">해제</button>

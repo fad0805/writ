@@ -108,7 +108,18 @@ export default function EditEpisodePage() {
     } catch {}
   }, [novelId, episodeId]);
 
-  useEffect(() => { if (!loading) loadDrafts(); }, [loading, loadDrafts]);
+  useEffect(() => {
+    if (loading || isNaN(novelId)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/series/${novelId}/drafts`, { credentials: "include" });
+        const data = await res.json();
+        if (!cancelled) setDrafts((data.drafts || []).filter((d: DraftData) => d.episode_id === episodeId));
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [loading, novelId, episodeId]);
 
   const doSave = useCallback(async () => {
     if (isNaN(novelId)) return;
@@ -251,7 +262,7 @@ export default function EditEpisodePage() {
         router.push(`/series/${params.id}/episodes/${params.eid}`);
       } else alert("저장 실패");
     } catch (err) {
-      if ((err as any)?.name === "AbortError") alert("요청 시간이 초과되었습니다. 파일 크기를 줄이거나 다시 시도해주세요.");
+      if (err instanceof Error ? err.name === "AbortError" : false) alert("요청 시간이 초과되었습니다. 파일 크기를 줄이거나 다시 시도해주세요.");
       else alert("저장 실패");
     }
     setSubmitting(false);

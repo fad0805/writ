@@ -5,10 +5,17 @@ import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
 import AdminNav from "@/components/AdminNav";
 
+interface BlockedDomain {
+  id: number;
+  domain: string;
+  created_by?: string;
+  created_at?: string;
+}
+
 export default function AdminBlockedDomainsPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-  const [domains, setDomains] = useState<any[]>([]);
+  const [domains, setDomains] = useState<BlockedDomain[]>([]);
   const [loading, setLoading] = useState(true);
   const [newDomain, setNewDomain] = useState("");
   const [msg, setMsg] = useState("");
@@ -27,7 +34,19 @@ export default function AdminBlockedDomainsPage() {
     setLoading(false);
   };
 
-  useEffect(() => { if (!authLoading) load(); }, [authLoading]);
+  useEffect(() => {
+    if (!authLoading) {
+      let cancelled = false;
+      (async () => {
+        try {
+          const res = await fetch("/api/admin/blocked-domains", { credentials: "include" });
+          if (res.ok) { const d = await res.json(); if (!cancelled) setDomains(d.domains || []); }
+        } catch {}
+        if (!cancelled) setLoading(false);
+      })();
+      return () => { cancelled = true; };
+    }
+  }, [authLoading]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,7 +96,7 @@ export default function AdminBlockedDomainsPage() {
             <span style={{ width: 160 }}>차단 일시</span>
             <span style={{ width: 60 }}> </span>
           </div>
-          {domains.map((d: any) => (
+          {domains.map((d: BlockedDomain) => (
             <div key={d.id} className="admin-table-row">
               <span style={{ flex: 1, fontFamily: "monospace" }}>{d.domain}</span>
               <span style={{ width: 120 }}>{d.created_by || "-"}</span>

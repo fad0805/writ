@@ -19,6 +19,14 @@ interface UserDetail {
   moderation_history?: { id: number; action: string; created_at: string; by: { display_name: string; username: string } | null; meta: { action?: string; message?: string } }[];
 }
 
+interface ModLog {
+  id: number;
+  created_at?: string;
+  username?: string;
+  action: string;
+  details?: string;
+}
+
 const actionLabels: Record<string, string> = {
   warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지",
   unsuspend: "정지 해제", unlimit: "제한 해제", unfreeze: "동결 해제", unsensitive: "민감 해제",
@@ -49,7 +57,7 @@ export default function AdminUserDetailPage() {
   const [modAction, setModAction] = useState("warning");
   const [modMessage, setModMessage] = useState("");
   const [modEmail, setModEmail] = useState(false);
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<ModLog[]>([]);
 
   const load = async () => {
     const [userRes, logsRes] = await Promise.all([
@@ -74,7 +82,31 @@ export default function AdminUserDetailPage() {
       router.push("/timeline/home");
   }, [me, authLoading, router]);
 
-  useEffect(() => { if (!authLoading) load(); }, [authLoading, params.id]);
+  useEffect(() => {
+    if (!authLoading) {
+      let cancelled = false;
+      (async () => {
+        const [userRes, logsRes] = await Promise.all([
+          fetch(`/api/admin/users/${params.id}`, { credentials: "include" }),
+          fetch(`/api/admin/logs?target_type=user&target_id=${params.id}&limit=20`, { credentials: "include" }),
+        ]);
+        if (userRes.ok) {
+          const d = await userRes.json();
+          if (!cancelled) {
+            setU(d);
+            setNoteText(d.moderation_note || "");
+          }
+          getCustomEmojis().then((emojis) => { if (!cancelled) setEmojiMap(emojis); });
+        }
+        if (logsRes.ok) {
+          const d = await logsRes.json();
+          if (!cancelled) setLogs(d.logs || []);
+        }
+        if (!cancelled) setLoading(false);
+      })();
+      return () => { cancelled = true; };
+    }
+  }, [authLoading, params.id]);
 
   const act = async (path: string, body?: Record<string, string>) => {
     const form = new FormData();
@@ -288,7 +320,7 @@ export default function AdminUserDetailPage() {
               <span style={{ width: 100, flexShrink: 0 }}>액션</span>
               <span style={{ flex: "1 1 0", minWidth: 0 }}>상세</span>
             </div>
-            {logs.map((log: any) => (
+            {logs.map((log: ModLog) => (
               <div key={log.id} className="admin-table-row">
                 <span style={{ width: 140, flexShrink: 0, fontSize: "0.85em", fontFamily: "monospace" }}>{log.created_at?.slice(0, 19) || "-"}</span>
                 <span style={{ width: 80, flexShrink: 0 }}>{log.username || "-"}</span>

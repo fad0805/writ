@@ -82,7 +82,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
 }
 
-async function formRequest<T>(path: string, data: Record<string, any>): Promise<T> {
+async function formRequest<T>(path: string, data: Record<string, unknown>): Promise<T> {
   const form = new FormData();
   for (const [k, v] of Object.entries(data)) {
     if (v !== undefined && v !== null) form.append(k, String(v));
@@ -201,6 +201,24 @@ export interface ReplyContext {
   is_sensitive?: boolean;
 }
 
+export interface NotificationMetadata {
+  target_type: string;
+  action: string;
+  is_author?: boolean;
+  reaction?: string;
+  type?: string;
+  message?: string;
+  novel_id?: number;
+  episode_id?: number;
+  novel_title?: string;
+  report_id?: number;
+  target_author?: string;
+  target_id?: number;
+  target_label?: string;
+  reason?: string;
+  [key: string]: unknown;
+}
+
 export interface NotificationData {
   id: number;
   type: string;
@@ -208,7 +226,7 @@ export interface NotificationData {
   is_read: boolean;
   from_user: User | null;
   post: PostData | null;
-  metadata?: Record<string, any>;
+  metadata: NotificationMetadata;
 }
 
 export interface NovelData {
@@ -275,7 +293,7 @@ export const api = {
 
   // Timeline
   timeline: (type: string = "home", limit: number = 10, cursor?: string | null) =>
-    request<{ posts: PostData[]; timeline_type: string; has_more: boolean; cursor?: string | null; _emojis?: any[] }>(
+    request<{ posts: PostData[]; timeline_type: string; has_more: boolean; cursor?: string | null; _emojis?: { keyword: string; file_name: string; url: string; aliases: string[] }[] }>(
       `/api/timeline/${type}?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`
     ),
 

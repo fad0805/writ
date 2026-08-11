@@ -8,11 +8,8 @@ export default function InfiniteScroll({
   hasMore: boolean; loadingMore: boolean; loadMore: () => void; children: ReactNode;
 }) {
   const loadMoreRef = useRef(loadMore);
-  loadMoreRef.current = loadMore;
   const hasMoreRef = useRef(hasMore);
-  hasMoreRef.current = hasMore;
   const loadingRef = useRef(loadingMore);
-  loadingRef.current = loadingMore;
 
   const checkNearBottom = useCallback(() => {
     if (loadingRef.current || !hasMoreRef.current) return;
@@ -24,6 +21,12 @@ export default function InfiniteScroll({
       loadMoreRef.current();
     }
   }, []);
+
+  useEffect(() => {
+    loadMoreRef.current = loadMore;
+    hasMoreRef.current = hasMore;
+    loadingRef.current = loadingMore;
+  }, [loadMore, hasMore, loadingMore]);
 
   useEffect(() => {
     let el: HTMLElement | null = null;

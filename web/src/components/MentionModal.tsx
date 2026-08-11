@@ -4,7 +4,7 @@ import PostForm from "./PostForm";
 
 export default function MentionModal({ username, onClose, onDone }: { username: string; onClose: () => void; onDone?: () => void }) {
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onCloseRef.current(); };
     window.addEventListener("keydown", handler);

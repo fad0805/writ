@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import AdminNav from "@/components/AdminNav";
 import Icon from "@/components/Icon";
@@ -17,15 +17,17 @@ export default function AdminAnnouncementsPage() {
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const pollLastRef = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch("/api/admin/announcements", { credentials: "include" });
-      if (res.ok) setItems(await res.json());
-    } catch {}
-    setLoading(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/announcements", { credentials: "include" });
+        if (res.ok) { const d = await res.json(); if (!cancelled) setItems(d); }
+      } catch {}
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
   }, []);
-
-  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     if (!authLoading && user?.role !== "admin" && user?.role !== "moderator" && user?.role !== "owner") {

@@ -1,4 +1,5 @@
 import { Extension } from "@tiptap/core";
+import { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "prosemirror-state";
 import { DecorationSet, Decoration } from "prosemirror-view";
 
@@ -6,9 +7,9 @@ const LINES_PER_PAGE = 20;
 
 const pageBreakPluginKey = new PluginKey("pageBreaks");
 
-function findBlockNodes(doc: any): number[] {
+function findBlockNodes(doc: ProseMirrorNode): number[] {
   const positions: number[] = [];
-  doc.forEach((node: any, offset: number) => {
+  doc.forEach((node: ProseMirrorNode, offset: number) => {
     if (node.isBlock) {
       positions.push(offset);
     }
@@ -16,7 +17,7 @@ function findBlockNodes(doc: any): number[] {
   return positions;
 }
 
-function buildDecorations(doc: any, enabled: boolean): DecorationSet {
+function buildDecorations(doc: ProseMirrorNode, enabled: boolean): DecorationSet {
   if (!enabled) return DecorationSet.empty;
   const blockPositions = findBlockNodes(doc);
   const decorations: Decoration[] = [];
@@ -54,19 +55,18 @@ export const PageBreakExtension = Extension.create({
   },
 
   addProseMirrorPlugins() {
-    const ext = this;
     return [
       new Plugin({
         key: pageBreakPluginKey,
         state: {
           init: (_tr, state) => {
-            return buildDecorations(state.doc, ext.storage.enabled);
+            return buildDecorations(state.doc, this.storage.enabled);
           },
           apply: (tr, old, oldState, newState) => {
-            if (ext.storage.enabled && (tr.docChanged || tr.getMeta("pageBreaksToggle"))) {
-              return buildDecorations(newState.doc, ext.storage.enabled);
+            if (this.storage.enabled && (tr.docChanged || tr.getMeta("pageBreaksToggle"))) {
+              return buildDecorations(newState.doc, this.storage.enabled);
             }
-            if (!ext.storage.enabled) return DecorationSet.empty;
+            if (!this.storage.enabled) return DecorationSet.empty;
             return old.map(tr.mapping, tr.doc);
           },
         },

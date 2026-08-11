@@ -10,7 +10,7 @@ export default function DeactivatedRedirect() {
 
   useEffect(() => {
     if (loading || !user) return;
-    const isDeactivated = (user as any)?.is_deactivated;
+    const isDeactivated = (user as unknown as { is_deactivated?: boolean } | undefined)?.is_deactivated;
     const isOnDeactivatedPage = pathname === "/users/settings/deactivated";
     if (isDeactivated && !isOnDeactivatedPage) {
       router.replace("/users/settings/deactivated");

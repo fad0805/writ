@@ -78,7 +78,20 @@ export default function ReportDetailPage() {
     }
   }, [user, authLoading, router]);
 
-  useEffect(() => { if (!authLoading) load(); }, [params.id, authLoading]);
+  useEffect(() => {
+    if (!authLoading) {
+      let cancelled = false;
+      (async () => {
+        try {
+          const res = await fetch(`/api/admin/reports/${params.id}`, { credentials: "include" });
+          if (res.ok) { const r = await res.json(); if (!cancelled) setReport(r); }
+          else if (!cancelled) setMsg("신고를 불러올 수 없습니다.");
+        } catch { if (!cancelled) setMsg("오류 발생"); }
+        if (!cancelled) setLoading(false);
+      })();
+      return () => { cancelled = true; };
+    }
+  }, [params.id, authLoading]);
 
   const handleAction = async (action: "resolve" | "dismiss") => {
     setMsg("");

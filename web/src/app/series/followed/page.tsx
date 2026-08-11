@@ -7,6 +7,8 @@ import Link from "next/link";
 import ClickableCover from "@/components/ClickableCover";
 import { hashColor } from "@/lib/avatar";
 
+type NovelWithFollowers = NovelData & { followers_count?: number };
+
 export default function FollowedNovelsPage() {
   const router = useRouter();
   const touchStartX = useRef(0);
@@ -45,7 +47,22 @@ export default function FollowedNovelsPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(1); }, [load]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const d = await api.getFollowedNovels(12, 0);
+        if (cancelled) return;
+        setNovels(d.novels);
+        setPage(d.page);
+        setPages(d.pages);
+        setTotal(d.total);
+      } catch {}
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleUnfollow = async (e: React.MouseEvent, novelId: number) => {
     e.stopPropagation();
@@ -62,7 +79,7 @@ export default function FollowedNovelsPage() {
       <div className="novel-card-body novel-card-body-flex">
         <div className="cover-wrap-80">
           {n.cover_image ? (
-            <ClickableCover src={n.cover_image} isSensitive={(n as any).is_sensitive} className="cover-img" />
+            <ClickableCover src={n.cover_image} isSensitive={n.is_sensitive} className="cover-img" />
           ) : (
             <div className="cover-fallback cover-fallback-lg" style={{ backgroundColor: hashColor(n.title) }}>
               <Icon name="book" size={24} />
@@ -78,7 +95,7 @@ export default function FollowedNovelsPage() {
           <div className="novel-meta">
             <span><Icon name="book" /> {n.episode_count}화</span>
             <span><Icon name={({ ongoing: "edit", hiatus: "moon", discontinued: "x", completed: "check" } as Record<string,string>)[n.status] || "edit"} /> {({ ongoing: "연재중", hiatus: "휴재", discontinued: "연재중단", completed: "완결" } as Record<string,string>)[n.status] || "연재중"}</span>
-            <span><Icon name="users" /> {(n as any).followers_count || 0}</span>
+            <span><Icon name="users" /> {(n as NovelWithFollowers).followers_count || 0}</span>
           </div>
           <div className="novel-actions my-series-actions">
             <button className="btn btn-small btn-danger op-70" onClick={(e) => handleUnfollow(e, n.id)}>구독 해제</button>

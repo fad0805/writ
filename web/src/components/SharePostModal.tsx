@@ -4,7 +4,7 @@ import PostForm from "./PostForm";
 
 export default function SharePostModal({ url, title, authorName, description, tags, content, onClose, onDone }: { url: string; title?: string; authorName?: string; description?: string; tags?: string; content?: string; onClose: () => void; onDone?: () => void }) {
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onCloseRef.current(); };
     window.addEventListener("keydown", handler);

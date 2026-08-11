@@ -19,12 +19,15 @@ function OAuthAuthorizeForm() {
 
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
-    setClientId(sp.get("client_id") || "");
-    setRedirectUri(sp.get("redirect_uri") || "urn:ietf:wg:oauth:2.0:oob");
-    setResponseType(sp.get("response_type") || "code");
-    setScope(sp.get("scope") || "read write push");
-    setState(sp.get("state") || "");
-    setReady(true);
+    const id = setTimeout(() => {
+      setClientId(sp.get("client_id") || "");
+      setRedirectUri(sp.get("redirect_uri") || "urn:ietf:wg:oauth:2.0:oob");
+      setResponseType(sp.get("response_type") || "code");
+      setScope(sp.get("scope") || "read write push");
+      setState(sp.get("state") || "");
+      setReady(true);
+    }, 0);
+    return () => clearTimeout(id);
   }, []);
 
   if (!ready) return <div className="empty-state">로딩 중...</div>;

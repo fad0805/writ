@@ -11,7 +11,10 @@ export function useEditorInit({value, onChange}: {value: string; onChange: (html
   })
 
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
     if (!editor) return;

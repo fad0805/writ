@@ -21,7 +21,6 @@ export default function AnnouncementDetailPage() {
 
   useEffect(() => {
     if (!id || !user) return;
-    setLoading(true);
     fetch(`/api/announcements/${id}`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {

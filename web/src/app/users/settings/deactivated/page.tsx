@@ -2,6 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Icon from "@/components/Icon";
+import { User } from "@/lib/api";
 
 const EXPORT_TYPES = [
   { key: "follows", label: "팔로우", icon: "user_solid" },
@@ -18,7 +19,7 @@ export default function DeactivatedPage() {
   const { user, refresh } = useAuth();
 
   if (!user) return <div className="empty-state">로그인이 필요합니다</div>;
-  if (!(user as any).is_deactivated) {
+  if (!(user as User & { is_deactivated?: boolean }).is_deactivated) {
     router.replace("/timeline/home");
     return null;
   }

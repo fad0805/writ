@@ -22,8 +22,9 @@ export default function MobileNav() {
   useEffect(() => {
     if (!user) return;
     const update = () => {
-      if (typeof window !== "undefined" && (window as any).__unreadNotifs !== undefined) {
-        setUnreadNotifs((window as any).__unreadNotifs);
+      if (typeof window !== "undefined") {
+        const unread = (window as unknown as { __unreadNotifs?: number }).__unreadNotifs;
+        if (unread !== undefined) setUnreadNotifs(unread);
       }
     };
     update();
@@ -37,10 +38,10 @@ export default function MobileNav() {
   }, [user]);
 
   useEffect(() => {
-    setIsDark(document.body.classList.contains("dark-theme"));
+    const id = setTimeout(() => setIsDark(document.body.classList.contains("dark-theme")), 0);
     const handler = () => setIsDark(document.body.classList.contains("dark-theme"));
     window.addEventListener("themechange", handler);
-    return () => window.removeEventListener("themechange", handler);
+    return () => { clearTimeout(id); window.removeEventListener("themechange", handler); };
   }, []);
 
   useEffect(() => {
@@ -64,7 +65,8 @@ export default function MobileNav() {
   }, [user]);
 
   useEffect(() => {
-    setMenuOpen(false);
+    const id = setTimeout(() => setMenuOpen(false), 0);
+    return () => clearTimeout(id);
   }, [pathname]);
 
   if (loading) return null;
@@ -77,7 +79,7 @@ export default function MobileNav() {
   };
 
   const toggleTheme = () => {
-    (window as any).__toggleTheme();
+    (window as unknown as { __toggleTheme: () => void }).__toggleTheme();
     window.dispatchEvent(new Event("themechange"));
   };
 

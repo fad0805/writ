@@ -43,7 +43,21 @@ export default function AdminFederationPage() {
 
   useEffect(() => {
     if (authLoading) return;
-    loadFedData();
+    let cancelled = false;
+    (async () => {
+      try {
+        const modeRes = await fetch("/api/admin/federation-mode", { credentials: "include" });
+        if (modeRes.ok) { const md = await modeRes.json(); if (!cancelled) setFedMode(md.mode || "blacklist"); }
+        const blocksRes = await fetch("/api/admin/federation-blocks", { credentials: "include" });
+        if (blocksRes.ok) { const bd = await blocksRes.json(); if (!cancelled) setBlocks(bd.blocks || []); }
+        const allowsRes = await fetch("/api/admin/allowed-servers", { credentials: "include" });
+        if (allowsRes.ok) { const ad = await allowsRes.json(); if (!cancelled) setAllows(ad.servers || []); }
+        const remoteRes = await fetch("/api/admin/remote-servers", { credentials: "include" });
+        if (remoteRes.ok) { const rd = await remoteRes.json(); if (!cancelled) setRemoteServers(rd.servers || []); }
+      } catch {}
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
   }, [authLoading]);
 
 

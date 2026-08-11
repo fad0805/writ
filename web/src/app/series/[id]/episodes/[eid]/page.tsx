@@ -1,6 +1,6 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api, NovelData, EpisodeData } from "@/lib/api";
 import Icon from "@/components/Icon";
 import ShareButton from "@/components/ShareButton";
@@ -11,6 +11,11 @@ import { installCodeCopyButtons } from "@/lib/codeCopy";
 import { sanitizeEpisode, sanitizeBasic } from "@/lib/sanitize";
 import AudioPlayer from "@/components/AudioPlayer";
 import { splitIntoPages } from "@/lib/pages";
+
+interface ReportRule {
+  id: number;
+  title: string;
+}
 
 
 export default function EpisodeDetailPage() {
@@ -29,7 +34,7 @@ export default function EpisodeDetailPage() {
   const [reportReason, setReportReason] = useState("");
   const [reportError, setReportError] = useState("");
   const [reportDone, setReportDone] = useState(false);
-  const [reportRules, setReportRules] = useState<any[]>([]);
+  const [reportRules, setReportRules] = useState<ReportRule[]>([]);
   const [selectedRuleIds, setSelectedRuleIds] = useState<number[]>([]);
   const bodyRef = useRef<HTMLDivElement>(null);
   const [currentPage, setCurrentPage] = useState(0);
@@ -89,28 +94,22 @@ export default function EpisodeDetailPage() {
     return () => el.removeEventListener("click", onClick);
   }, [episode]);
 
-  const pages = useMemo(() => {
-    if (!episode?.content) return [""];
-    if (!episode.page_mode) return [episode.content];
-    return splitIntoPages(episode.content);
-  }, [episode?.content, episode?.page_mode]);
+  const pages = !episode?.content ? [""] : !episode.page_mode ? [episode.content] : splitIntoPages(episode.content);
 
   useEffect(() => {
-    setCurrentPage(0);
-    setComicPage(0);
+    const t1 = setTimeout(() => setCurrentPage(0), 0);
+    const t2 = setTimeout(() => setComicPage(0), 0);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [episode?.id]);
 
   const totalPages = pages.length;
   const isRtl = episode?.reading_direction === "rtl";
 
   useEffect(() => {
-    if (isRtl && episode?.view_mode === "comic" && (episode.comic_view_mode || "paged") !== "paged") {
-      setShowDirHint(true);
-      const t = setTimeout(() => setShowDirHint(false), 1500);
-      return () => clearTimeout(t);
-    } else {
-      setShowDirHint(false);
-    }
+    const shouldShow = isRtl && episode?.view_mode === "comic" && (episode.comic_view_mode || "paged") !== "paged";
+    const showT = setTimeout(() => setShowDirHint(shouldShow), 0);
+    const hideT = setTimeout(() => setShowDirHint(false), shouldShow ? 1500 : 0);
+    return () => { clearTimeout(showT); clearTimeout(hideT); };
   }, [episode?.id, episode?.view_mode, episode?.comic_view_mode, episode?.reading_direction, isRtl]);
 
   useEffect(() => {
@@ -141,9 +140,9 @@ export default function EpisodeDetailPage() {
       if (images.length <= 1) return;
       const el = document.querySelector(".episode-comic-viewer-paged");
       if (!el) return;
-      const onStart = (e: Event) => { touchStartX.current = (e as any).touches[0].clientX; };
+      const onStart = (e: Event) => { touchStartX.current = (e as TouchEvent).touches[0].clientX; };
       const onEnd = (e: Event) => {
-        const dx = (e as any).changedTouches[0].clientX - touchStartX.current;
+        const dx = (e as TouchEvent).changedTouches[0].clientX - touchStartX.current;
         if (Math.abs(dx) > 50) {
           if (isRtl) {
             if (dx > 0) setComicPage((p) => Math.min(images.length - 1, p + 1));
@@ -164,9 +163,9 @@ export default function EpisodeDetailPage() {
     if (totalPages <= 1) return;
     const el = document.querySelector(".episode-view-paged-wrap");
     if (!el) return;
-    const onStart = (e: Event) => { touchStartX.current = (e as any).touches[0].clientX; };
+    const onStart = (e: Event) => { touchStartX.current = (e as TouchEvent).touches[0].clientX; };
     const onEnd = (e: Event) => {
-      const dx = (e as any).changedTouches[0].clientX - touchStartX.current;
+      const dx = (e as TouchEvent).changedTouches[0].clientX - touchStartX.current;
       if (Math.abs(dx) > 50) {
         if (dx > 0) setCurrentPage((p) => Math.max(0, p - 1));
         else setCurrentPage((p) => Math.min(totalPages - 1, p + 1));
@@ -197,9 +196,9 @@ export default function EpisodeDetailPage() {
     if (fullscreenIdx === null) return;
     const el = document.querySelector(".comic-fullscreen-overlay");
     if (!el) return;
-    const onStart = (e: Event) => { fsTouchStartX.current = (e as any).touches[0].clientX; };
+    const onStart = (e: Event) => { fsTouchStartX.current = (e as TouchEvent).touches[0].clientX; };
     const onEnd = (e: Event) => {
-      const dx = (e as any).changedTouches[0].clientX - fsTouchStartX.current;
+      const dx = (e as TouchEvent).changedTouches[0].clientX - fsTouchStartX.current;
       if (Math.abs(dx) > 50) {
         if (isRtl) {
           if (dx > 0) setFullscreenIdx((p) => p === null ? p : Math.min(fullscreenImages.length - 1, p + 1));
@@ -416,7 +415,7 @@ export default function EpisodeDetailPage() {
                   if (reportReason.trim().length < 10) { setReportError("최소 10자 이상 입력해주세요."); return; }
                   setReportError("");
                   try { await api.report("episode", episode.id, reportReason.trim(), selectedRuleIds); setReportDone(true); }
-                  catch (e: any) { setReportError(e.message || "신고 처리 중 오류가 발생했습니다."); }
+                  catch (e) { setReportError(e instanceof Error ? (e.message || "신고 처리 중 오류가 발생했습니다.") : "신고 처리 중 오류가 발생했습니다."); }
                 }} className="btn" style={{ width: "100%" }}>신고 제출</button>
               </>
             )}

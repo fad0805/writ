@@ -33,7 +33,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     api.me().then((u) => {
-      const user = u as any;
+      const user = u as User & { is_bot?: boolean };
       setDefaultVis(user.default_visibility || "public");
       setShowBadge(user.show_badge || false);
       setIsLocked(user.is_locked || false);
@@ -41,7 +41,7 @@ export default function SettingsPage() {
       setFollowListVis(user.follow_list_visibility || "public");
       setEnableReactions(user.enable_reactions !== false);
       setNotifSound(isNotifSoundEnabled());
-      fetch("/api/server-info").then(r=>r.json()).then((info: any) => setServerEnableReactions(info.enable_reactions !== false)).catch(() => {});
+      fetch("/api/server-info").then(r=>r.json()).then((info: { enable_reactions?: boolean }) => setServerEnableReactions(info.enable_reactions !== false)).catch(() => {});
       setLoading(false);
     }).catch(() => router.push("/login"));
   }, [router]);
@@ -98,7 +98,7 @@ export default function SettingsPage() {
             await unsubscribePush();
           }
           setPushInitial(pushEnabled);
-        } catch (e: any) {
+        } catch {
           alert("알림 설정 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.");
           setPushEnabled(pushInitial);
         }

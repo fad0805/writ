@@ -66,7 +66,21 @@ export default function AdminUsersPage() {
       router.push("/timeline/home");
   }, [user, authLoading, router]);
 
-  useEffect(() => { if (!authLoading) loadUsers(); }, [authLoading, loc, status, role, sort]);
+  useEffect(() => {
+    if (!authLoading) {
+      let cancelled = false;
+      const params = new URLSearchParams({ location: loc, status, role, sort });
+      if (usernameQ) params.set("username_q", usernameQ);
+      if (nameQ) params.set("name_q", nameQ);
+      if (emailQ) params.set("email_q", emailQ);
+      if (ipQ) params.set("ip_q", ipQ);
+      if (domainQ) params.set("domain_q", domainQ);
+      fetch(`/api/admin/users?${params}`, { credentials: "include" })
+        .then(r => r.json()).then(d => { if (!cancelled) { setUsers(d.users); setLoading(false); } })
+        .catch(() => { if (!cancelled) setLoading(false); });
+      return () => { cancelled = true; };
+    }
+  }, [authLoading, loc, status, role, sort]);
 
   const toggleAll = () => {
     if (selected.size === users.length) setSelected(new Set());

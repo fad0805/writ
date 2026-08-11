@@ -17,13 +17,20 @@ export interface CustomEmoji {
   url: string;
 }
 
-export function injectEmojis(list: CustomEmojiRaw[]) {
-  if (!cache) cache = (window as any).__emojiCache ? [...(window as any).__emojiCache] : [];
-  let changed = false;
-  if (!(window as any).__emojiMap) {
-    (window as any).__emojiMap = {};
+declare global {
+  interface Window {
+    __emojiCache?: CustomEmoji[];
+    __emojiMap?: Record<string, string | undefined>;
   }
-  const emojiMap = (window as any).__emojiMap;
+}
+
+export function injectEmojis(list: CustomEmojiRaw[]) {
+  if (!cache) cache = window.__emojiCache ? [...window.__emojiCache] : [];
+  let changed = false;
+  if (!window.__emojiMap) {
+    window.__emojiMap = {};
+  }
+  const emojiMap = window.__emojiMap;
 
   for (const e of list) {
     if (!e.keyword) continue;
@@ -46,7 +53,7 @@ export function injectEmojis(list: CustomEmojiRaw[]) {
 
   if (changed && typeof window !== "undefined") {
     cache = [...cache];
-    (window as any).__emojiCache = cache;
+    window.__emojiCache = cache;
     window.dispatchEvent(new CustomEvent("emojichange", { detail: cache }));
     _emojiSubscribers.forEach(fn => fn(cache as CustomEmoji[]));
     _versionListeners.forEach(fn => fn());
@@ -83,7 +90,7 @@ export async function getCustomEmojis(): Promise<CustomEmoji[]> {
     } catch {}
     // 서버 목록으로 덮어쓰면 injectEmojis로 주입된 원격 이모지가 사라져
     // 표시 이름 이모지가 렌더링됐다 풀렸다 하는 문제가 생김. 원격 이모지를 보존한다.
-    const prev = (window as any).__emojiCache as CustomEmoji[] | undefined;
+    const prev = window.__emojiCache;
     cache = server;
     if (Array.isArray(prev) && prev.length) {
       const known = new Set(cache.map(e => e.keyword));
@@ -93,7 +100,7 @@ export async function getCustomEmojis(): Promise<CustomEmoji[]> {
         }
       }
     }
-    if (typeof window !== "undefined") (window as any).__emojiCache = cache;
+    if (typeof window !== "undefined") window.__emojiCache = cache;
     fetchPromise = null;
     cacheTs = Date.now();
     if (typeof localStorage !== "undefined") {
@@ -143,13 +150,13 @@ const _versionListeners = new Set<() => void>();
 
 export function useEmojiList(): CustomEmoji[] {
   const [emojis, setEmojis] = useState<CustomEmoji[]>(() =>
-    typeof window !== "undefined" && (window as any).__emojiCache
-      ? (window as any).__emojiCache as CustomEmoji[]
+    typeof window !== "undefined" && window.__emojiCache
+      ? window.__emojiCache
       : (cache || [])
   );
 
   useEffect(() => {
-    const handler = () => setEmojis((window as any).__emojiCache || cache || []);
+    const handler = () => setEmojis(window.__emojiCache || cache || []);
     _versionListeners.add(handler);
 
     getCustomEmojis().then(list => {

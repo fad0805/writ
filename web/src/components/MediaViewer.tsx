@@ -13,7 +13,7 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const lastTouchDist = useRef(0);
   const lastTouchCenter = useRef({ x: 0, y: 0 });
-  const isPanning = useRef(false);
+  const [isPanning, setIsPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0 });
   const panOrigin = useRef({ x: 0, y: 0 });
   const swipeStartX = useRef(0);
@@ -34,8 +34,10 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
       history.pushState({ viewer: true }, "");
     }
     if (!isOpen) return;
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
+    const resetId = setTimeout(() => {
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+    }, 0);
     const onPop = () => {
       closingFromPop.current = true;
       onClose();
@@ -47,7 +49,7 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
       else if (e.key === "ArrowRight" && index < media.length - 1) onIndexChange(index + 1);
     };
     window.addEventListener("keydown", handler);
-    return () => { window.removeEventListener("keydown", handler); window.removeEventListener("popstate", onPop); };
+    return () => { clearTimeout(resetId); window.removeEventListener("keydown", handler); window.removeEventListener("popstate", onPop); };
   }, [index, media.length, onClose, onIndexChange, closeViewer]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -68,7 +70,7 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
         y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
       };
     } else if (e.touches.length === 1 && zoom > 1) {
-      isPanning.current = true;
+      setIsPanning(true);
       panStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       panOrigin.current = { ...pan };
     } else if (e.touches.length === 1) {
@@ -87,7 +89,7 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
         setZoom((z) => Math.min(5, Math.max(0.5, z * scale)));
       }
       lastTouchDist.current = dist;
-    } else if (e.touches.length === 1 && isPanning.current) {
+    } else if (e.touches.length === 1 && isPanning) {
       e.preventDefault();
       const dx = e.touches[0].clientX - panStart.current.x;
       const dy = e.touches[0].clientY - panStart.current.y;
@@ -105,7 +107,7 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
     }
     swipeStartX.current = 0;
     lastTouchDist.current = 0;
-    isPanning.current = false;
+    setIsPanning(false);
   }, [zoom, index, media.length, onIndexChange]);
 
   const handleDblClick = useCallback(() => {
@@ -117,7 +119,7 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (zoom > 1) {
-      isPanning.current = true;
+      setIsPanning(true);
       panStart.current = { x: e.clientX, y: e.clientY };
       panOrigin.current = { ...pan };
       e.preventDefault();
@@ -125,14 +127,14 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
   }, [zoom, pan]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (isPanning.current) {
+    if (isPanning) {
       const dx = e.clientX - panStart.current.x;
       const dy = e.clientY - panStart.current.y;
       setPan({ x: panOrigin.current.x + dx, y: panOrigin.current.y + dy });
     }
   }, []);
 
-  const handleMouseUp = useCallback(() => { isPanning.current = false; }, []);
+  const handleMouseUp = useCallback(() => { setIsPanning(false); }, []);
 
   if (index < 0 || !media[index]) return null;
   const m = media[index];
@@ -159,7 +161,7 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
         {m.type === "video" ? (
           <video src={m.url} controls style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: 8 }} />
         ) : (
-          <img src={m.url} alt={m.alt || ""} draggable={false} onDoubleClick={handleDblClick} style={{ maxWidth: zoom > 1 ? "none" : "100%", maxHeight: zoom > 1 ? "none" : "85vh", borderRadius: zoom > 1 ? 0 : 8, objectFit: "contain", transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transition: isPanning.current ? "none" : "transform 0.15s ease", userSelect: "none" }} />
+          <img src={m.url} alt={m.alt || ""} draggable={false} onDoubleClick={handleDblClick} style={{ maxWidth: zoom > 1 ? "none" : "100%", maxHeight: zoom > 1 ? "none" : "85vh", borderRadius: zoom > 1 ? 0 : 8, objectFit: "contain", transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transition: isPanning ? "none" : "transform 0.15s ease", userSelect: "none" }} />
         )}
       </div>
     </div>

@@ -1,10 +1,10 @@
 "use client";
-import { Component, ReactNode } from "react";
+import { Component, ErrorInfo, ReactNode } from "react";
 
 export default class ErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNode }> {
   state = { hasError: false, error: null as Error | null };
   static getDerivedStateFromError(error: Error) { return { hasError: true, error }; }
-  componentDidCatch(error: Error, info: any) {
+  componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("[ErrorBoundary]", error.message, info?.componentStack);
   }
   render() {

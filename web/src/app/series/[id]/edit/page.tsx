@@ -59,7 +59,7 @@ export default function EditNovelPage() {
         setVisibility(d.novel.visibility || "public");
         setCoverImageUrl(d.novel.cover_image || "");
         setSeriesStatus(d.novel.status || "ongoing");
-        setCoverSensitive((d.novel as any).is_sensitive || false);
+        setCoverSensitive(d.novel.is_sensitive || false);
         setLoading(false);
       })
       .catch(() => router.push("/series"));

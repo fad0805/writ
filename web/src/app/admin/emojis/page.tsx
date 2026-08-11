@@ -6,6 +6,10 @@ import Icon from "@/components/Icon";
 import AdminNav from "@/components/AdminNav";
 import { CustomEmoji, invalidateEmojiCache } from "@/lib/emojis";
 
+interface AdminEmoji extends CustomEmoji {
+  domain?: string;
+}
+
 export default function AdminEmojiPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -48,7 +52,19 @@ export default function AdminEmojiPage() {
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    fetchEmojis(0);
+    let cancelled = false;
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: "0", category: "" });
+    fetch(`/api/emojis?${params}`, { credentials: "include" })
+      .then(r => r.json())
+      .then(d => {
+        if (!cancelled) {
+          setEmojis(d.emojis || d || []);
+          setTotal(d.total || 0);
+          setEmojiLoading(false);
+        }
+      })
+      .catch(() => { if (!cancelled) setEmojiLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
@@ -130,7 +146,7 @@ export default function AdminEmojiPage() {
                     <div className="emoji-keyword">:<span className="emoji-accent">{emo.keyword}</span>:</div>
                     <div className="emoji-meta">
                       {emo.category && <span>#{emo.category}</span>}
-                      {(emo as any).domain && <span className="text-dim text-sm">@{(emo as any).domain}</span>}
+                      {(emo as AdminEmoji).domain && <span className="text-dim text-sm">@{(emo as AdminEmoji).domain}</span>}
                       {emo.aliases && emo.aliases.length > 0 && <span> {emo.aliases.map((a: string) => `:${a}:`).join(" ")}</span>}
                     </div>
                   </div>

@@ -43,14 +43,15 @@ export default function ProfileEditPage() {
   };
 
   useEffect(() => {
-    api.me().then((u: any) => {
+    api.me().then((u) => {
+      const me = u as User & { custom_fields?: { label: string; value: string }[]; profile_hashtags?: string[] };
       setUser(u);
       setDisplayName(u.display_name);
       setSummary(u.summary);
       setAvatarUrl(u.avatar || "");
       setHeaderPreview(u.header || "");
-      setCustomFields(u.custom_fields || []);
-      setProfileHashtags(u.profile_hashtags || []);
+      setCustomFields(me.custom_fields || []);
+      setProfileHashtags(me.profile_hashtags || []);
       setLoading(false);
     }).catch(() => router.push("/login"));
     return revokeBlobs;

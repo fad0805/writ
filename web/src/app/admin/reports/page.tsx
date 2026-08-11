@@ -16,7 +16,10 @@ interface Report {
   rules?: { id: number; title: string; description: string }[];
   status: string;
   created_at: string | null;
-  target?: any;
+  target?: {
+    content?: string;
+    title?: string;
+  };
   resolved_by?: { id: number; username: string };
 }
 
@@ -29,26 +32,26 @@ export default function AdminReportsPage() {
   const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState("");
 
-  const loadReports = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/admin/reports?status=${filterStatus}`, { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
-        setReports(data.reports);
-        setTotal(data.total);
-      }
-    } catch {}
-    setLoading(false);
-  };
-
   useEffect(() => {
     if (!authLoading && user?.role !== "admin" && user?.role !== "moderator" && user?.role !== "owner") {
       router.push("/timeline/home");
     }
   }, [user, authLoading, router]);
 
-  useEffect(() => { loadReports(); }, [filterStatus]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/admin/reports?status=${filterStatus}`, { credentials: "include" });
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) { setReports(data.reports); setTotal(data.total); }
+        }
+      } catch {}
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [filterStatus]);
 
   const handleAction = async (reportId: number, action: "resolve" | "dismiss") => {
     setActionMsg("");
@@ -112,7 +115,7 @@ export default function AdminReportsPage() {
               </div>
               {r.rules && r.rules.length > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "4px 12px 0" }}>
-                  {r.rules.map((rule: any) => (
+                  {r.rules.map((rule) => (
                     <span key={rule.id} className="badge badge-warning" style={{ fontSize: 11 }}>{rule.title}</span>
                   ))}
                 </div>
