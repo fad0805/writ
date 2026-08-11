@@ -51,6 +51,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
   const [viewerIndex, setViewerIndex] = useState(-1);
   const [revealedSensitive, setRevealedSensitive] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+  const quoteAttemptedUrlRef = useRef<string | null>(null);
 
   const targetId = post.boost_of_id || post.id;
 
@@ -239,6 +240,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
     if (!match) {
       setQuotedSeries(null);
       setQuotedEpisode(null);
+      quoteAttemptedUrlRef.current = null;
       return;
     }
 
@@ -246,6 +248,13 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
 
     const url = typeof match === 'string' ? match : (match[2] || match[3] || match[0]);
     if (!url) return;
+    // 🌟 이미 시도한 URL이면(성공/실패 무관) 재시도하지 않는다.
+    // loadingQuote가 의존성에 있어 fetch 완료 후 setLoadingQuote(false)가 이펙트를 재실행시키므로,
+    // 가드가 없으면 같은 주소를 무한히 refetch하게 된다.
+    if (quoteAttemptedUrlRef.current === url) return;
+    quoteAttemptedUrlRef.current = url;
+    setQuotedSeries(null);
+    setQuotedEpisode(null);
     // 🌟 [정규식 수정] 실제 주소 스펙에 맞춤
     // 1. 에피소드 주소 (ex: /series/1/episodes/5)
     const epMatch = url.match(/\/series\/(?:@[^/]+\/)?(\d+)\/episodes\/(\d+)/);
