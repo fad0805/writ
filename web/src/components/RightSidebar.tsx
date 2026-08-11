@@ -29,8 +29,10 @@ export default function RightSidebar() {
     if (!user) return;
     let cancelled = false;
     let debounceTimer: ReturnType<typeof setTimeout>;
-    setNovels([]);
-    setNotifs([]);
+    const resetId = setTimeout(() => {
+      setNovels([]);
+      setNotifs([]);
+    }, 0);
     api.getMyNovels().then((d) => { if (!cancelled) setNovels(d.novels); }).catch(() => {});
     api.getNotifications(undefined, 10, 0).then((d) => { if (!cancelled) setNotifs(d.notifications); }).catch(() => {});
     const unsubscribe = onNotificationStream((raw) => {
@@ -51,7 +53,7 @@ export default function RightSidebar() {
         }).catch(() => {});
       }, 300);
     });
-    return () => { cancelled = true; clearTimeout(debounceTimer); unsubscribe(); };
+    return () => { cancelled = true; clearTimeout(debounceTimer); clearTimeout(resetId); unsubscribe(); };
   }, [user, refreshKey]);
 
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
@@ -91,7 +93,7 @@ export default function RightSidebar() {
   const emojisFor = useCallback((post: PostData | null | undefined): CustomEmoji[] => {
     // 같은 키워드 충돌 시 이 글의 _emojis(작성자 도메인 기준)를 우선한다.
     const map = new Map<string, CustomEmoji>();
-    for (const e of ((post as any)?._emojis) || []) {
+    for (const e of ((post as unknown as { _emojis?: CustomEmoji[] })?._emojis) || []) {
       if (e && e.keyword && e.url) map.set(e.keyword, { ...e, category: "remote" });
     }
     for (const e of emojiMap) {

@@ -76,7 +76,33 @@ export default function PostByNumberPage() {
     setLoading(false);
   };
 
-  useEffect(() => { loadPost(); }, [params.username, params.number]);
+  useEffect(() => {
+    let cancelled = false;
+    const username = Array.isArray(params.username) ? params.username[0] : params.username;
+    const number = Array.isArray(params.number) ? params.number[0] : params.number;
+    if (!username || !number) return;
+    offsetRef.current = 0;
+    ancOffsetRef.current = 0;
+    (async () => {
+      try {
+        const data = await fetch(`/api/by-number/${username}/${number}`, { credentials: "include" });
+        if (!data.ok) { if (!cancelled) setPost(null); return; }
+        const p = await data.json();
+        if (!p?.id) { if (!cancelled) setPost(null); return; }
+        const full = await api.getPost(p.id, 0, 50, 0, 20);
+        if (cancelled) return;
+        setPost(full);
+        setAncestors([...(full.ancestors || [])].reverse());
+        setHasMoreAncestors(full.has_more_ancestors || false);
+        setReplies(full.replies || []);
+        setTotalReplies(full.total_replies);
+        setHasMore(full.has_more_replies);
+        offsetRef.current = 50;
+      } catch { if (!cancelled) setPost(null); }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [params.username, params.number]);
 
   useEffect(() => {
     if (!post?.id) return;

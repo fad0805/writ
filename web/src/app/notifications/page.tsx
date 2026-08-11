@@ -43,6 +43,22 @@ const NOTIF_ICONS: Record<string, string> = {
 const TYPE_NAMES: Record<string, string> = { post: "게시글", novel: "시리즈", episode: "에피소드" };
 const ACTION_NAMES: Record<string, string> = { warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지", unsuspend: "정지 해제" };
 
+interface NotificationMeta {
+  reaction?: string;
+  novel_title?: string;
+  type?: string;
+  target_type?: string;
+  target_label?: string;
+  action?: string;
+  report_id?: number;
+  novel_id?: number;
+  episode_id?: number;
+  target_author?: string;
+  target_id?: number;
+  reason?: string;
+  message?: string;
+}
+
 const mergeEmojis = (base: CustomEmoji[], extra?: CustomEmoji[]): CustomEmoji[] => {
   const map = new Map((base || []).map((e) => [e.keyword, e]));
   for (const e of extra || []) {
@@ -51,7 +67,7 @@ const mergeEmojis = (base: CustomEmoji[], extra?: CustomEmoji[]): CustomEmoji[] 
   return Array.from(map.values());
 };
 
-const typeText = (t: string, meta?: any, emojiMap?: CustomEmoji[]) => {
+const typeText = (t: string, meta?: NotificationMeta, emojiMap?: CustomEmoji[]) => {
   if (t === "follow") return "님이 회원님을 팔로우했습니다";
   if (t === "follow_request") return "님이 회원님을 팔로우 요청했습니다";
   if (t === "like") {
@@ -70,9 +86,9 @@ const typeText = (t: string, meta?: any, emojiMap?: CustomEmoji[]) => {
     return "님이 새 에피소드를 작성했습니다";
   }
   if (t === "moderation") {
-    if (meta?.type === "report") return `님이 ${TYPE_NAMES[meta.target_type] || meta.target_type}을(를) 신고했습니다`;
+    if (meta?.type === "report") return `님이 ${TYPE_NAMES[meta.target_type || ""] || meta.target_type}을(를) 신고했습니다`;
     if (meta?.type === "new_user") return `님이 가입했습니다`;
-    const act = ACTION_NAMES[meta?.action] || meta?.action || "중재";
+    const act = ACTION_NAMES[meta?.action || ""] || meta?.action || "중재";
     return `계정에 ${act} 조치가 적용되었습니다.`;
   }
   return "";
@@ -123,37 +139,16 @@ export default function NotificationsPage() {
   }, [filter]);
 
   useEffect(() => {
+    let id: ReturnType<typeof setTimeout> | undefined;
     try {
       const saved = sessionStorage.getItem("notif_filter");
       if (saved) {
         sessionStorage.removeItem("notif_filter");
-        setFilter(saved);
+        id = setTimeout(() => setFilter(saved), 0);
       }
     } catch {}
+    return () => { if (id) clearTimeout(id); };
   }, []);
-
-  const load = useCallback(async () => {
-    if (!user) return;
-    const myUser = user.id;
-    setLoading(true);
-    try {
-      if (filter === "direct") {
-        const res = await fetch("/api/notifications/direct-threads", { credentials: "include" });
-        const data = await res.json();
-        if (user.id !== myUser) return;
-        setDirectGroups(data.users || []);
-        setNotifs([]);
-      } else {
-        const data = await api.getNotifications(filter || undefined, 20, 0);
-        if (user.id !== myUser) return;
-        setNotifs(data.notifications);
-        setHasMore(data.has_more);
-        offsetRef.current = 20;
-        setDirectGroups([]);
-      }
-    } catch {}
-    setLoading(false);
-  }, [filter, user]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || !user) return;
@@ -170,7 +165,32 @@ export default function NotificationsPage() {
     setLoadingMore(false);
   }, [filter, hasMore, loadingMore, user]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const myUser = user.id;
+    (async () => {
+      try {
+        if (filter === "direct") {
+          const res = await fetch("/api/notifications/direct-threads", { credentials: "include" });
+          const data = await res.json();
+          if (user.id !== myUser) return;
+          if (!cancelled) { setDirectGroups(data.users || []); setNotifs([]); }
+        } else {
+          const data = await api.getNotifications(filter || undefined, 20, 0);
+          if (user.id !== myUser) return;
+          if (!cancelled) {
+            setNotifs(data.notifications);
+            setHasMore(data.has_more);
+            offsetRef.current = 20;
+            setDirectGroups([]);
+          }
+        }
+      } catch {}
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [filter, user]);
   useEffect(() => { window.dispatchEvent(new Event("notificationsread")); }, []);
   useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
   useEffect(() => {
@@ -309,7 +329,7 @@ export default function NotificationsPage() {
                       {n.metadata.target_author && <span>작성자: {n.metadata.target_author} · </span>}
                       대상 #{n.metadata.target_id}
                     </div>
-                    {n.metadata.target_label && <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 4 }}>"{n.metadata.target_label}"</div>}
+                    {n.metadata.target_label && <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 4 }}>&quot;{n.metadata.target_label}&quot;</div>}
                     <div style={{ fontSize: 13 }}>사유: {n.metadata.reason}</div>
                   </div>
                 </>
@@ -333,7 +353,7 @@ export default function NotificationsPage() {
                   }} className="btn btn-small btn-outline">거절</button>
                 </div></>
               ) : n.type === "moderation" ? (
-                <><span className="font-bold" style={{ color: "var(--danger)" }}>{ACTION_NAMES[n.metadata?.action] || n.metadata?.action || "중재"}</span> 조치가 적용되었습니다.</>
+                <><span className="font-bold" style={{ color: "var(--danger)" }}>{ACTION_NAMES[n.metadata?.action || ""] || n.metadata?.action || "중재"}</span> 조치가 적용되었습니다.</>
               ) : n.type === "poll_ended" ? (
                 <>회원님이 참여한 투표가 끝났습니다</>
               ) : (
@@ -342,7 +362,7 @@ export default function NotificationsPage() {
                     <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user.display_name, emojiMap)) }} />
                   </Link>
                 )}{" "}
-                {typeText(n.type, n.metadata, mergeEmojis(emojiMap, (n.post as any)?._emojis))}</>
+                {typeText(n.type, n.metadata as NotificationMeta, mergeEmojis(emojiMap, n.post?._emojis))}</>
               )}
               <span className="notif-time">{fmtTime(n.created_at)}</span>
               {n.type === "moderation" && n.metadata?.message && n.metadata?.type !== "report" && n.metadata?.type !== "new_user" && (

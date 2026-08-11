@@ -9,7 +9,18 @@ import Link from "next/link";
 import { hashColor } from "@/lib/avatar";
 import { useAuth } from "@/lib/auth";
 
-function CoverImg({ novel, coverRevealed, setCoverRevealed }: { novel: any; coverRevealed: boolean; setCoverRevealed: (v: boolean) => void }) {
+interface ReportRule {
+  id: number;
+  title: string;
+}
+
+interface MutesResp {
+  mutes?: { novel_id: number }[];
+}
+
+type NovelWithFollowers = NovelData & { followers_count?: number };
+
+function CoverImg({ novel, coverRevealed, setCoverRevealed }: { novel: NovelData; coverRevealed: boolean; setCoverRevealed: (v: boolean) => void }) {
   const isCovSensitive = novel.is_sensitive;
   return (
     <div style={{ position: "relative", display: "inline-block" }}>
@@ -41,7 +52,7 @@ export default function NovelByNumberPage() {
   const [reportReason, setReportReason] = useState("");
   const [reportError, setReportError] = useState("");
   const [reportDone, setReportDone] = useState(false);
-  const [reportRules, setReportRules] = useState<any[]>([]);
+  const [reportRules, setReportRules] = useState<ReportRule[]>([]);
   const [selectedRuleIds, setSelectedRuleIds] = useState<number[]>([]);
 
   useEffect(() => {
@@ -55,9 +66,9 @@ export default function NovelByNumberPage() {
           if (user) {
             fetch("/api/mutes/series", { credentials: "include" })
               .then((r) => r.json())
-              .then((m) => setIsSeriesMuted((m.mutes || []).some((mt: any) => mt.novel_id === d.id)))
+              .then((m: MutesResp) => setIsSeriesMuted(m.mutes?.some((mt) => mt.novel_id === d.id) || false))
               .catch(() => {});
-            setIsSeriesPinned((user as any).pinned_series?.includes(d.id) || false);
+            setIsSeriesPinned(user.pinned_series?.includes(d.id) || false);
           }
           fetch(`/api/series/${d.id}/notices`, { credentials: "include" })
             .then((r) => r.json())
@@ -163,7 +174,7 @@ export default function NovelByNumberPage() {
           <span><Icon name={({ ongoing: "edit", hiatus: "moon", discontinued: "x", completed: "check" } as Record<string,string>)[novel.status] || "edit"} /> {({ ongoing: "연재중", hiatus: "휴재", discontinued: "연재중단", completed: "완결" } as Record<string,string>)[novel.status] || "연재중"}</span>
           <span><Icon name="book" /> 총 {novel.episode_count}화</span>
           {isMine && typeof novel.total_views === 'number' && <span><Icon name="eye" /> 총 {novel.total_views}회 조회</span>}
-          {isMine && typeof (novel as any).followers_count === 'number' && <span><Icon name="user" /> {(novel as any).followers_count}명 팔로우</span>}
+          {isMine && typeof (novel as NovelWithFollowers).followers_count === 'number' && <span><Icon name="user" /> {(novel as NovelWithFollowers).followers_count}명 팔로우</span>}
           <span><Icon name={novel.visibility === "public" ? "globe" : novel.visibility === "unlisted" ? "eye" : "lock"} /> {novel.visibility === "public" ? "전체공개" : novel.visibility === "unlisted" ? "공개" : "비공개"}</span>
         </div>
         {novel.description && <p className="novel-description">{novel.description}</p>}
@@ -256,7 +267,7 @@ export default function NovelByNumberPage() {
                   if (reportReason.trim().length < 10) { setReportError("최소 10자 이상 입력해주세요."); return; }
                   setReportError("");
                   try { await api.report("novel", novel.id, reportReason.trim(), selectedRuleIds); setReportDone(true); }
-                  catch (e: any) { setReportError(e.message || "신고 처리 중 오류가 발생했습니다."); }
+                  catch (e) { setReportError(e instanceof Error ? (e.message || "신고 처리 중 오류가 발생했습니다.") : "신고 처리 중 오류가 발생했습니다."); }
                 }} className="btn" style={{ width: "100%" }}>신고 제출</button>
               </>
             )}

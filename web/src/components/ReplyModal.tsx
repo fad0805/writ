@@ -15,7 +15,7 @@ export default function ReplyModal({ post, onClose, onDone, initialContent, init
     return VIS_ORDER[userVis] >= VIS_ORDER[parentVis] ? userVis : parentVis;
   }, [user, post.visibility]);
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onCloseRef.current(); };
     window.addEventListener("keydown", handler);

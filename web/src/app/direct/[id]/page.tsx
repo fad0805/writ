@@ -31,7 +31,23 @@ export default function DirectConversationPage() {
     } catch { if (id === loadIdRef.current) setLoading(false); }
   }, [params.id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let cancelled = false;
+    const otherId = Array.isArray(params.id) ? params.id[0] : params.id;
+    if (!otherId) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/direct/conversation/${otherId}`, { credentials: "include" });
+        const d = await res.json();
+        if (cancelled) return;
+        setOtherUser(d.other_user);
+        setMessages(d.messages || []);
+        setLoading(false);
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+      } catch { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [params.id]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -6,13 +6,21 @@ export default function NotFound() {
   const [logo, setLogo] = useState("");
 
   useEffect(() => {
-    const cached = (window as any).__serverLogo;
-    if (cached !== undefined) { setLogo(cached); return; }
-    fetch("/api/server-info").then((r) => r.json()).then((d) => {
+    const win = window as unknown as { __serverLogo?: string };
+    const cached = win.__serverLogo;
+    if (cached !== undefined) {
+      const id = setTimeout(() => setLogo(cached), 0);
+      return () => clearTimeout(id);
+    }
+    let cancelled = false;
+    fetch("/api/server-info").then((r) => r.json()).then((d: { logo?: string }) => {
       const logo = d.logo || "";
-      (window as any).__serverLogo = logo;
-      setLogo(logo);
+      if (!cancelled) {
+        win.__serverLogo = logo;
+        setLogo(logo);
+      }
     }).catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   return (

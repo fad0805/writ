@@ -80,7 +80,7 @@ export default function KeyboardShortcuts() {
 
     if (e.key === "d" && !isEditing && !document.querySelector(".post-card.selected")) {
       e.preventDefault();
-      (window as any).__toggleTheme?.();
+      (window as unknown as { __toggleTheme?: () => void }).__toggleTheme?.();
       window.dispatchEvent(new Event("themechange"));
       return;
     }

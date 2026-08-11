@@ -25,15 +25,17 @@ export default function AdminRulesPage() {
   const [showNew, setShowNew] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
 
-  const load = async () => {
-    try {
-      const res = await fetch("/api/admin/rules", { credentials: "include" });
-      if (res.ok) setRules(await res.json());
-    } catch {}
-    setLoading(false);
-  };
-
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/rules", { credentials: "include" });
+        if (res.ok) { const d = await res.json(); if (!cancelled) setRules(d); }
+      } catch {}
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!authLoading && user?.role !== "admin" && user?.role !== "moderator" && user?.role !== "owner") {

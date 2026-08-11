@@ -51,7 +51,7 @@ function ExploreContent() {
     exploreOffsetRef.current += 20;
     try {
       const d = await api.explore(20, exploreOffsetRef.current);
-      setPosts((prev) => { const ids = new Set(prev.map((p) => p.id)); return [...prev, ...d.posts.filter((p: any) => !ids.has(p.id))]; });
+      setPosts((prev) => { const ids = new Set(prev.map((p) => p.id)); return [...prev, ...d.posts.filter((p) => !ids.has(p.id))]; });
       setHasMore(d.has_more);
     } catch {}
     setLoadingMore(false);
@@ -145,16 +145,18 @@ function ExploreContent() {
     const urlParam = searchParams.get("url");
     const qParam = searchParams.get("q");
     const authorParam = searchParams.get("author");
-    if (urlParam) {
-      setInputValue(urlParam);
-      handleUrlFetch(urlParam);
-    } else if (qParam) {
-      setInputValue(qParam);
-      setSearchAuthor(authorParam || "");
-      doSearch(qParam, authorParam || undefined);
-    } else {
-      loadExplore();
-    }
+    Promise.resolve().then(() => {
+      if (urlParam) {
+        setInputValue(urlParam);
+        handleUrlFetch(urlParam);
+      } else if (qParam) {
+        setInputValue(qParam);
+        setSearchAuthor(authorParam || "");
+        doSearch(qParam, authorParam || undefined);
+      } else {
+        loadExplore();
+      }
+    });
   }, [searchParams, loadExplore, doSearch, handleUrlFetch]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -209,7 +211,7 @@ function ExploreContent() {
                 <div key={n.id} className="explore-series-card" onClick={() => router.push(`/series/${n.id}`)}>
                   <div className="explore-series-cover">
                     {n.cover_image ? (
-                      <ClickableCover src={n.cover_image} isSensitive={(n as any).is_sensitive} className="cover-img" />
+                      <ClickableCover src={n.cover_image} isSensitive={n.is_sensitive} className="cover-img" />
                     ) : (
                       <div className="cover-fallback cover-fallback-md" style={{ backgroundColor: hashColor(n.title) }}>
                         {n.title[0]}
@@ -269,7 +271,7 @@ function ExploreContent() {
                         <div className="novel-card-body novel-card-body-flex">
                           <div className="cover-wrap-80">
                             {n.cover_image ? (
-                      <ClickableCover src={n.cover_image} isSensitive={(n as any).is_sensitive} className="cover-img" />
+                      <ClickableCover src={n.cover_image} isSensitive={n.is_sensitive} className="cover-img" />
                             ) : (
                               <div className="cover-fallback cover-fallback-lg" style={{ backgroundColor: hashColor(n.title) }}>
                                 <Icon name="book" size={24} />

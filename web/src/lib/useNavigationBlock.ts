@@ -7,7 +7,10 @@ export function useNavigationBlock(active: boolean) {
   const activeRef = useRef(active);
   const navigatingRef = useRef(false);
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  activeRef.current = active;
+
+  useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
 
   const suppress = useCallback(() => {
     activeRef.current = false;
@@ -20,6 +23,7 @@ export function useNavigationBlock(active: boolean) {
     resetTimer.current = setTimeout(() => { navigatingRef.current = false; }, 500);
   }, []);
 
+  // eslint-disable-next-line react-hooks/immutability -- intentional: router monkey-patching restored in cleanup
   useEffect(() => {
     if (!active) return;
 
@@ -53,19 +57,26 @@ export function useNavigationBlock(active: boolean) {
     const origRouterPush = router.push.bind(router);
     const origRouterReplace = router.replace.bind(router);
 
-    (router as any).push = (...args: Parameters<typeof origRouterPush>) => {
+    const routerPatch = router as unknown as {
+      push: (...args: Parameters<typeof origRouterPush>) => void;
+      replace: (...args: Parameters<typeof origRouterReplace>) => void;
+      back: () => void;
+    };
+
+    // eslint-disable-next-line react-hooks/immutability -- intentional: router monkey-patching restored in cleanup
+    routerPatch.push = (...args: Parameters<typeof origRouterPush>) => {
       if (navigatingRef.current || !activeRef.current || confirmLeave()) {
         markNavigating();
         return origRouterPush(...args);
       }
     };
-    (router as any).replace = (...args: Parameters<typeof origRouterReplace>) => {
+    routerPatch.replace = (...args: Parameters<typeof origRouterReplace>) => {
       if (navigatingRef.current || !activeRef.current || confirmLeave()) {
         markNavigating();
         return origRouterReplace(...args);
       }
     };
-    (router as any).back = () => {
+    routerPatch.back = () => {
       if (navigatingRef.current || !activeRef.current || confirmLeave()) {
         markNavigating();
         origGo(-2);

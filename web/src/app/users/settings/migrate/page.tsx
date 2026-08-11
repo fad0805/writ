@@ -18,21 +18,25 @@ export default function MigratePage() {
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
 
-  const load = useCallback(async () => {
-    try {
-      const [aliasesRes, notifs, novels] = await Promise.all([
-        fetch("/api/settings/aliases", { credentials: "include" }).then(r => r.json()),
-        api.getNotifications("moderation"),
-        api.getMyNovels(999, 0),
-      ]);
-      setAliases(aliasesRes.aliases || []);
-      setPendingRequests(notifs.notifications.filter((n: any) => n.metadata?.type === "migrate_request"));
-      setMySeries(novels.novels);
-    } catch {}
-    setLoading(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [aliasesRes, notifs, novels] = await Promise.all([
+          fetch("/api/settings/aliases", { credentials: "include" }).then(r => r.json()),
+          api.getNotifications("moderation"),
+          api.getMyNovels(999, 0),
+        ]);
+        if (!cancelled) {
+          setAliases(aliasesRes.aliases || []);
+          setPendingRequests(notifs.notifications.filter((n) => n.metadata?.type === "migrate_request"));
+          setMySeries(novels.novels);
+        }
+      } catch {}
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
   }, []);
-
-  useEffect(() => { load(); }, [load]);
 
   const handleAddAlias = useCallback(async () => {
     const val = aliasInput.trim();

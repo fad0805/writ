@@ -19,7 +19,15 @@ export default function FavoritesPage() {
       .catch(() => setLoading(false));
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let cancelled = false;
+    api.getFavorites(10, 0)
+      .then((d) => {
+        if (!cancelled) { setPosts(d.posts); setHasMore(d.has_more); setLoading(false); }
+      })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;

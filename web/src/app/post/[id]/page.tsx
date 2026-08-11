@@ -79,7 +79,31 @@ export default function PostDetailPage() {
     setLoading(false);
   }, [params.id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let cancelled = false;
+    offsetRef.current = 0;
+    ancOffsetRef.current = 0;
+    (async () => {
+      try {
+        const id = Number(params.id);
+        if (isNaN(id)) return;
+        const data = await api.getPost(id, 0, 50, 0, 20);
+        if (cancelled) return;
+        setPost(data);
+        setAncestors([...(data.ancestors || [])].reverse());
+        setHasMoreAncestors(data.has_more_ancestors || false);
+        setReplies(data.replies || []);
+        setTotalReplies(data.total_replies);
+        setHasMore(data.has_more_replies);
+        offsetRef.current = 50;
+        if (data.author?.is_limited && !data.is_mine && !data.is_following_author) {
+          setShowRestrictedWarning(true);
+        }
+      } catch {}
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [params.id]);
 
   useEffect(() => {
     if (!post?.id) return;

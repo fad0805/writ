@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { getStoredAccounts, removeStoredAccount, setActiveAccountId, storeAccount, api, StoredAccount } from "@/lib/api";
+import { getStoredAccounts, removeStoredAccount, setActiveAccountId, storeAccount, api, StoredAccount, User } from "@/lib/api";
 import Avatar from "./Avatar";
 import Icon from "./Icon";
 
@@ -22,14 +22,16 @@ export default function AccountSwitcher({ open, onClose }: { open: boolean; onCl
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    const id = setTimeout(() => {
       setAccounts(getStoredAccounts());
       setSwitchError("");
       setShowAddForm(false);
       setAddUsername("");
       setAddPassword("");
       setAddError("");
-    }
+    }, 0);
+    return () => clearTimeout(id);
   }, [open]);
 
   useEffect(() => {
@@ -140,7 +142,7 @@ export default function AccountSwitcher({ open, onClose }: { open: boolean; onCl
                 {accounts.map((a) => (
                   <div key={a.user_id} className="account-switcher-existing-item">
                     <Avatar
-                      user={{ username: a.username, display_name: a.display_name, avatar: a.avatar } as any}
+                      user={{ username: a.username, display_name: a.display_name, avatar: a.avatar } as unknown as User}
                       className="account-switcher-avatar rounded-[8px] flex items-center justify-center text-white font-bold text-lg"
                       style={{ width: 24, height: 24 }}
                     />
@@ -176,7 +178,7 @@ export default function AccountSwitcher({ open, onClose }: { open: boolean; onCl
               disabled={switching !== null}
             >
               <Avatar
-                user={{ username: account.username, display_name: account.display_name, avatar: account.avatar } as any}
+                user={{ username: account.username, display_name: account.display_name, avatar: account.avatar } as unknown as User}
                 className="account-switcher-avatar rounded-[8px] flex items-center justify-center text-white font-bold text-lg"
               />
               <div className="account-switcher-info">

@@ -1,17 +1,24 @@
 "use client";
 import { useEffect, useState } from "react";
+import type { WindowWithGlobals } from "@/lib/windowGlobals";
 
 export default function Loading({ text = "로딩 중..." }: { text?: string }) {
   const [logo, setLogo] = useState("");
 
   useEffect(() => {
-    const cached = (window as any).__serverLogo;
-    if (cached !== undefined) { setLogo(cached); return; }
+    const win = window as WindowWithGlobals;
+    const cached = win.__serverLogo;
+    if (cached !== undefined) {
+      const id = setTimeout(() => setLogo(cached), 0);
+      return () => clearTimeout(id);
+    }
+    let cancelled = false;
     fetch("/api/server-info").then((r) => r.json()).then((d) => {
-      const logo = d.logo || "";
-      (window as any).__serverLogo = logo;
-      setLogo(logo);
+      const newLogo = d.logo || "";
+      win.__serverLogo = newLogo;
+      if (!cancelled) setLogo(newLogo);
     }).catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   return (

@@ -29,6 +29,14 @@ interface ServerDetail {
   server_icon: string;
 }
 
+interface ModLog {
+  id: number;
+  created_at?: string;
+  username?: string;
+  action: string;
+  details?: string;
+}
+
 const actionLabels: Record<string, string> = {
   federation_block: "연합 차단", federation_unblock: "연합 차단 해제",
   server_mute: "서버 뮤트", server_unmute: "서버 뮤트 해제",
@@ -44,7 +52,7 @@ export default function RemoteServerDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<ModLog[]>([]);
   const [users, setUsers] = useState<RemoteUser[]>([]);
   const [userOffset, setUserOffset] = useState(0);
   const [hasMoreUsers, setHasMoreUsers] = useState(false);
@@ -105,7 +113,36 @@ export default function RemoteServerDetailPage() {
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    if (!authLoading && domain) load();
+    if (!authLoading && domain) {
+      let cancelled = false;
+      (async () => {
+        try {
+          const [serverRes, logsRes] = await Promise.all([
+            fetch(`/api/admin/remote-server/${encodeURIComponent(domain)}?offset=0&limit=20`, { credentials: "include" }),
+            fetch(`/api/admin/logs?target_type=domain&target_username=${encodeURIComponent(domain)}&limit=20`, { credentials: "include" }),
+          ]);
+          if (serverRes.ok) {
+            const d = await serverRes.json();
+            if (!cancelled) {
+              setServer(d);
+              setUsers(d.users || []);
+              setUserOffset(d.users.length);
+              setHasMoreUsers(d.has_more || false);
+            }
+          } else if (!cancelled) {
+            setError("서버 정보를 불러올 수 없습니다.");
+          }
+          if (logsRes.ok) {
+            const d = await logsRes.json();
+            if (!cancelled) setLogs(d.logs || []);
+          }
+        } catch {
+          if (!cancelled) setError("오류가 발생했습니다.");
+        }
+        if (!cancelled) setLoading(false);
+      })();
+      return () => { cancelled = true; };
+    }
   }, [domain, authLoading]);
 
   const doAction = async (action: string, confirmMsg: string) => {
@@ -226,7 +263,7 @@ export default function RemoteServerDetailPage() {
               <span style={{ width: 100, flexShrink: 0 }}>액션</span>
               <span style={{ flex: "1 1 0", minWidth: 0 }}>상세</span>
             </div>
-            {logs.map((log: any) => (
+            {logs.map((log: ModLog) => (
               <div key={log.id} className="admin-table-row">
                 <span style={{ width: 140, flexShrink: 0, fontSize: "0.85em", fontFamily: "monospace" }}>{log.created_at?.slice(0, 19) || "-"}</span>
                 <span style={{ width: 80, flexShrink: 0 }}>{log.username || "-"}</span>

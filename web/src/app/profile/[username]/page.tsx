@@ -15,6 +15,32 @@ import ConfirmModal from "@/components/ConfirmModal";
 import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
 import { sanitizeName, sanitizePost, sanitizeSummary } from "@/lib/sanitize";
 
+interface ProfileResp {
+  profile: User;
+  posts: PostData[];
+  novels: NovelData[];
+  followers: { user: User }[];
+  following: { user: User }[];
+  followers_count: number;
+  following_count: number;
+  is_following: boolean;
+  is_follow_pending: boolean;
+  notify_on_post: boolean;
+  has_pending_follower: boolean;
+  is_follower: boolean;
+  is_mine: boolean;
+  show_boosts: boolean;
+  is_blocked: boolean;
+  am_i_blocked: boolean;
+  is_muted: boolean;
+  pinned_posts_data: PostData[];
+  pinned_series_data: NovelData[];
+  total_posts: number;
+  has_more: boolean;
+}
+
+type ProfileUser = User & { custom_fields?: { name?: string; label?: string; value: string }[]; profile_hashtags?: string[] };
+
 export default function ProfilePage() {
   const params = useParams();
   const router = useRouter();
@@ -44,13 +70,13 @@ export default function ProfilePage() {
   const [isFollower, setIsFollower] = useState(false);
   const [approvedFollower, setApprovedFollower] = useState<boolean | null>(null);
   const [isMine, setIsMine] = useState(false);
-  const [pinnedPosts, setPinnedPosts] = useState<any[]>([]);
-  const [pinnedSeries, setPinnedSeries] = useState<any[]>([]);
+  const [pinnedPosts, setPinnedPosts] = useState<PostData[]>([]);
+  const [pinnedSeries, setPinnedSeries] = useState<NovelData[]>([]);
   const [totalPosts, setTotalPosts] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [postOffset, setPostOffset] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [mediaPosts, setMediaPosts] = useState<any[]>([]);
+  const [mediaPosts, setMediaPosts] = useState<PostData[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [mediaLoaded, setMediaLoaded] = useState(false);
   const [mediaHasMore, setMediaHasMore] = useState(false);
@@ -65,13 +91,13 @@ export default function ProfilePage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const d = await api.getProfile(username);
+      const d = (await api.getProfile(username)) as ProfileResp;
       setProfile(d.profile); setPosts(d.posts); setNovels(d.novels);
       setFollowers(d.followers); setFollowing(d.following);
       setFollowersCount(d.followers_count); setFollowingCount(d.following_count);
       setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setHasPendingFollower(d.has_pending_follower); setIsMine(d.is_mine);
-      setIsBlocked(!!(d as any).is_blocked); setAmBlocked(!!(d as any).am_i_blocked); setIsMutedUser(!!(d as any).is_muted);
-      setPinnedPosts((d as any).pinned_posts_data || []); setPinnedSeries((d as any).pinned_series_data || []);
+      setIsBlocked(!!d.is_blocked); setAmBlocked(!!d.am_i_blocked); setIsMutedUser(!!d.is_muted);
+      setPinnedPosts(d.pinned_posts_data || []); setPinnedSeries(d.pinned_series_data || []);
     } catch {}
     setLoading(false);
   }, [username]);
@@ -81,16 +107,16 @@ export default function ProfilePage() {
     try {
       const url = `/api/users/${username}?limit=10${noCache ? `&t=${Date.now()}` : ""}`;
       const res = await fetch(url, { credentials: "include" });
-      const d = await res.json();
+      const d: ProfileResp = await res.json();
       setProfile(d.profile); setPosts(d.posts); setNovels(d.novels);
       setFollowers(d.followers); setFollowing(d.following);
       setFollowersCount(d.followers_count); setFollowingCount(d.following_count);
       setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setNotifyOnPost(d.notify_on_post); setHasPendingFollower(d.has_pending_follower); setIsFollower(d.is_follower); setApprovedFollower(null); setIsMine(d.is_mine);
       setShowBoosts(d.show_boosts !== false);
-      setIsBlocked(!!(d as any).is_blocked); setAmBlocked(!!(d as any).am_i_blocked); setIsMutedUser(!!(d as any).is_muted);
-      setPinnedPosts((d as any).pinned_posts_data || []); setPinnedSeries((d as any).pinned_series_data || []);
-      setTotalPosts((d as any).total_posts || 0);
-      if (!noCache) { setHasMore((d as any).has_more || false); setPostOffset(10); }
+      setIsBlocked(!!d.is_blocked); setAmBlocked(!!d.am_i_blocked); setIsMutedUser(!!d.is_muted);
+      setPinnedPosts(d.pinned_posts_data || []); setPinnedSeries(d.pinned_series_data || []);
+      setTotalPosts(d.total_posts || 0);
+      if (!noCache) { setHasMore(d.has_more || false); setPostOffset(10); }
     } catch (e) {}
     setLoading(false);
   }, [username]);
@@ -100,8 +126,8 @@ export default function ProfilePage() {
     setLoadingMore(true);
     try {
       const res = await fetch(`/api/users/${username}?offset=${postOffset}&limit=5`, { credentials: "include" });
-      const d = await res.json();
-      setPosts((prev) => { const ids = new Set(prev.map((p) => p.id)); return [...prev, ...((d.posts || []).filter((p: any) => !ids.has(p.id)))]; });
+      const d: ProfileResp = await res.json();
+      setPosts((prev) => { const ids = new Set(prev.map((p) => p.id)); return [...prev, ...((d.posts || []).filter((p: PostData) => !ids.has(p.id)))]; });
       setHasMore(d.has_more || false);
       setPostOffset(prev => prev + 5);
     } catch (e) {}
@@ -112,7 +138,8 @@ export default function ProfilePage() {
     if (mediaLoaded) return;
     setMediaLoading(true);
     try {
-      const d = await (await fetch(`/api/users/${username}/media?limit=12&offset=0`, { credentials: "include" })).json();
+      const res = await fetch(`/api/users/${username}/media?limit=12&offset=0`, { credentials: "include" });
+      const d: ProfileResp = await res.json();
       setMediaPosts(d.posts || []);
       setMediaHasMore(d.has_more || false);
       setMediaOffset(12);
@@ -125,7 +152,8 @@ export default function ProfilePage() {
     if (mediaLoadingMore || !mediaHasMore) return;
     setMediaLoadingMore(true);
     try {
-      const d = await (await fetch(`/api/users/${username}/media?limit=6&offset=${mediaOffset}`, { credentials: "include" })).json();
+      const res = await fetch(`/api/users/${username}/media?limit=6&offset=${mediaOffset}`, { credentials: "include" });
+      const d: ProfileResp = await res.json();
       setMediaPosts((prev) => [...prev, ...(d.posts || [])]);
       setMediaHasMore(d.has_more || false);
       setMediaOffset((prev) => prev + 6);
@@ -134,10 +162,52 @@ export default function ProfilePage() {
   }, [username, mediaOffset, mediaHasMore, mediaLoadingMore]);
 
   useEffect(() => {
-    if (tab === "media" && !mediaLoaded && !mediaLoading) loadMedia();
-  }, [tab, loadMedia, mediaLoaded, mediaLoading]);
+    if (tab !== "media" || mediaLoaded || mediaLoading) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/users/${username}/media?limit=12&offset=0`, { credentials: "include" });
+        if (res.ok) {
+          const d: ProfileResp = await res.json();
+          if (!cancelled) {
+            setMediaPosts(d.posts || []);
+            setMediaHasMore(d.has_more || false);
+            setMediaOffset(12);
+            setMediaLoaded(true);
+          }
+        }
+      } catch {}
+      if (!cancelled) setMediaLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [tab, mediaLoaded, mediaLoading, username]);
 
-  useEffect(() => { loadProfile(); }, [loadProfile, router]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const url = `/api/users/${username}?limit=10`;
+        const res = await fetch(url, { credentials: "include" });
+        if (res.ok) {
+          const d: ProfileResp = await res.json();
+          if (!cancelled) {
+            setProfile(d.profile); setPosts(d.posts); setNovels(d.novels);
+            setFollowers(d.followers); setFollowing(d.following);
+            setFollowersCount(d.followers_count); setFollowingCount(d.following_count);
+            setIsFollowing(d.is_following); setIsFollowPending(d.is_follow_pending); setNotifyOnPost(d.notify_on_post); setHasPendingFollower(d.has_pending_follower); setIsFollower(d.is_follower); setApprovedFollower(null); setIsMine(d.is_mine);
+            setShowBoosts(d.show_boosts !== false);
+            setIsBlocked(!!d.is_blocked); setAmBlocked(!!d.am_i_blocked); setIsMutedUser(!!d.is_muted);
+            setPinnedPosts(d.pinned_posts_data || []); setPinnedSeries(d.pinned_series_data || []);
+            setTotalPosts(d.total_posts || 0);
+            setHasMore(d.has_more || false); setPostOffset(10);
+          }
+        }
+      } catch {}
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [username, router]);
   useEffect(() => { getCustomEmojis().then(setEmojiMap); }, []);
 
   useEffect(() => {
@@ -261,7 +331,7 @@ export default function ProfilePage() {
                   </div>
                 )}
               </div>
-            <h2><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(profile.display_name, emojiMap, 14)) }} /> {profile.is_locked && <Icon name="lock_filled" style={{ fontSize: "0.7em", verticalAlign: "middle", color: "var(--text-muted)" }} />} {(profile.role === "admin" || profile.role === "moderator" || profile.role === "owner") && (isMine || (profile as any).show_badge) && <Icon name={profile.role === "owner" ? "books_solid" : "shield_filled"} style={{ color: profile.role === "owner" ? "var(--accent)" : profile.role === "admin" ? "#27ae60" : "#cc8800", fontSize: "0.75em", verticalAlign: "middle", marginLeft: 3 }} title={profile.role === "owner" ? "오너" : profile.role === "admin" ? "관리자" : "조율자"} />}{(profile as any).is_deceased && <span className="deceased-badge"><svg viewBox="0 0 24 24" width="11" height="11" fill="#e8a0bf" stroke="#e8a0bf" stroke-width="0.5" style={{ verticalAlign: "middle", marginRight: 1 }}><circle cx="9" cy="8" r="2.8"/><circle cx="15" cy="8" r="2.8"/><circle cx="12" cy="5.5" r="2.8"/><path d="M6 12c2 3 4 5 6 8 2-3 4-5 6-8"/></svg> 당신을 만나고 싶습니다</span>}</h2>
+            <h2><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(profile.display_name, emojiMap, 14)) }} /> {profile.is_locked && <Icon name="lock_filled" style={{ fontSize: "0.7em", verticalAlign: "middle", color: "var(--text-muted)" }} />} {(profile.role === "admin" || profile.role === "moderator" || profile.role === "owner") && (isMine || profile.show_badge) && <Icon name={profile.role === "owner" ? "books_solid" : "shield_filled"} style={{ color: profile.role === "owner" ? "var(--accent)" : profile.role === "admin" ? "#27ae60" : "#cc8800", fontSize: "0.75em", verticalAlign: "middle", marginLeft: 3 }} title={profile.role === "owner" ? "오너" : profile.role === "admin" ? "관리자" : "조율자"} />}{profile.is_deceased && <span className="deceased-badge"><svg viewBox="0 0 24 24" width="11" height="11" fill="#e8a0bf" stroke="#e8a0bf" stroke-width="0.5" style={{ verticalAlign: "middle", marginRight: 1 }}><circle cx="9" cy="8" r="2.8"/><circle cx="15" cy="8" r="2.8"/><circle cx="12" cy="5.5" r="2.8"/><path d="M6 12c2 3 4 5 6 8 2-3 4-5 6-8"/></svg> 당신을 만나고 싶습니다</span>}</h2>
             <p className="profile-username">@{profile.display_handle || profile.username}</p>
             {profile.summary && (
               <p key={emojiMap.length} className="profile-summary" dangerouslySetInnerHTML={{
@@ -271,9 +341,9 @@ export default function ProfilePage() {
                 )))
               }} />
             )}
-            {(profile as any).custom_fields?.length > 0 && (
+            {((profile as ProfileUser).custom_fields?.length ?? 0) > 0 && (
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
-                {(profile as any).custom_fields.map((f: { name?: string; label?: string; value: string }, i: number) => (
+                {(profile as ProfileUser).custom_fields!.map((f: { name?: string; label?: string; value: string }, i: number) => (
                     <div key={i} style={{ fontSize: "0.85em", color: "var(--text-secondary)" }}>
                     <span className="custom-field-name" style={{ fontWeight: 600, marginRight: 4 }} dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(f.name || f.label || "", emojiMap)) }} />
                     {f.value.startsWith("http") ? <a href={f.value} target="_blank" rel="noopener" className="custom-field-url" style={{ color: "var(--accent)" }}>{f.value}</a> : <span dangerouslySetInnerHTML={{ __html: sanitizePost(rewriteLinks(renderCustomEmojis(f.value, emojiMap))) }} />}
@@ -281,9 +351,9 @@ export default function ProfilePage() {
                 ))}
               </div>
             )}
-            {(profile as any).profile_hashtags?.length > 0 && (
+            {((profile as ProfileUser).profile_hashtags?.length ?? 0) > 0 && (
               <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
-                {(profile as any).profile_hashtags.map((tag: string, i: number) => (
+                {(profile as ProfileUser).profile_hashtags!.map((tag: string, i: number) => (
                   <Link key={i} href={`/explore?q=%23${encodeURIComponent(tag)}&author=${profile.username}`} style={{ display: "inline-flex", padding: "2px 8px", background: "var(--bg-tertiary)", border: "1px solid var(--border)", borderRadius: 10, fontSize: "0.82em", color: "var(--accent)", textDecoration: "none" }}>
                     #{tag}
                   </Link>
@@ -344,8 +414,7 @@ export default function ProfilePage() {
           message={`@${profile.username} 님을 블락하시겠습니까? 블락하면 서로를 볼 수 없습니다.`}
           onConfirm={async () => {
             await fetch(`/api/blocks/users/${profile.id}`, { method: "POST", credentials: "include" });
-            (profile as any).is_blocked = true;
-            setProfile({ ...profile } as any);
+            setProfile(profile ? ({ ...profile, is_blocked: true } as User) : profile);
             setShowBlockConfirm(false);
           }}
           onCancel={() => setShowBlockConfirm(false)}
@@ -379,8 +448,7 @@ export default function ProfilePage() {
                 form.append("duration", String(muteDuration));
                 form.append("hide_notifications", muteHideNotif ? "true" : "false");
                 await fetch(`/api/mutes/users/${profile.id}`, { method: "POST", credentials: "include", body: form });
-                (profile as any).is_muted = true;
-                setProfile({ ...profile } as any);
+                setProfile(profile ? ({ ...profile, is_muted: true } as User) : profile);
                 setShowMuteModal(false);
               }} className="btn btn-primary">뮤트</button>
               <button onClick={() => setShowMuteModal(false)} className="btn btn-outline">취소</button>
@@ -401,10 +469,10 @@ export default function ProfilePage() {
       ) : (
       <>
       {profile?.moved_to && !isMine && (() => {
-        const match = (profile as any).moved_to.match(/https?:\/\/([^/]+)\/(?:@|users\/)([^/]+)/);
+        const match = (profile as ProfileUser).moved_to?.match(/https?:\/\/([^/]+)\/(?:@|users\/)([^/]+)/);
         const newDomain = match ? match[1] : "";
         const newUser = match ? match[2] : "";
-        const newFull = newUser && newDomain ? `@${newUser}@${newDomain}` : (profile as any).moved_to;
+        const newFull = newUser && newDomain ? `@${newUser}@${newDomain}` : (profile as ProfileUser).moved_to;
         const oldFull = `@${profile?.display_handle || profile?.username}@${window.location.host}`;
         return (
           <div style={{ padding: "12px 16px", marginBottom: 12, background: "var(--bg-tertiary)", borderRadius: 8, border: "1px solid var(--border)", fontSize: 14, lineHeight: 1.5 }}>
@@ -421,9 +489,9 @@ export default function ProfilePage() {
       </div>
 
       <div id="tab-posts" className="profile-tab-posts" style={{ display: tab === "posts" ? "block" : "none" }}>
-        {pinnedPosts.map((p: any) => <div key={`pin-${p.id}`} className="post-card-pinned"><PostCard post={p} onUpdate={load} /></div>)}
+        {pinnedPosts.map((p: PostData) => <div key={`pin-${p.id}`} className="post-card-pinned"><PostCard post={p} onUpdate={load} /></div>)}
         {(() => {
-          const pinnedIds = new Set(pinnedPosts.map((p: any) => p.id));
+          const pinnedIds = new Set(pinnedPosts.map((p: PostData) => p.id));
           const rest = posts.filter((p) => !pinnedIds.has(p.id));
           if (rest.length === 0 && pinnedPosts.length === 0) return <p className="empty-state">게시글이 없습니다.</p>;
           return <InfiniteScroll hasMore={hasMore && tab === "posts"} loadingMore={loadingMore} loadMore={loadMore}>{rest.map((p) => <PostCard key={p.id} post={p} onUpdate={load} />)}</InfiniteScroll>;
@@ -433,16 +501,16 @@ export default function ProfilePage() {
       <div id="tab-media" className="profile-tab-posts" style={{ display: tab === "media" ? "block" : "none" }}>
         {mediaLoading ? <p className="empty-state">로딩 중...</p> : mediaPosts.length === 0 ? <p className="empty-state">미디어가 포함된 게시글이 없습니다.</p> : (
           <InfiniteScroll hasMore={mediaHasMore} loadingMore={mediaLoadingMore} loadMore={loadMoreMedia}>
-            {mediaPosts.map((p: any) => <PostCard key={p.id} post={p} onUpdate={load} />)}
+            {mediaPosts.map((p: PostData) => <PostCard key={p.id} post={p} onUpdate={load} />)}
           </InfiniteScroll>
         )}
       </div>
 
       <div id="tab-novels" className="profile-novel-list profile-tab-novels" style={{ display: tab === "novels" ? "flex" : "none" }}>
-        {pinnedSeries.map((n: any) => (
+        {pinnedSeries.map((n: NovelData) => (
           <div key={`pin-${n.id}`} className="profile-novel series-card-pinned" style={{ display: "flex", gap: 14, alignItems: "center", cursor: "pointer" }} onClick={() => router.push(n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`)}>
             <div className="cover-wrap-56">
-              {n.cover_image ? <ClickableCover src={n.cover_image} isSensitive={(n as any).is_sensitive} className="cover-img" /> : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(n.title) }}><Icon name="book" size={16} /></div>}
+              {n.cover_image ? <ClickableCover src={n.cover_image} isSensitive={n.is_sensitive} className="cover-img" /> : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(n.title) }}><Icon name="book" size={16} /></div>}
             </div>
             <div className="novel-card-body-content" style={{ flex: 1 }}>
               <strong className="profile-novel-title">{n.title}</strong>
@@ -452,7 +520,7 @@ export default function ProfilePage() {
             </div>
             {isMine && (
               <button className="action-btn" onClick={async (e) => { e.stopPropagation();
-                setPinnedSeries(pinnedSeries.filter((ps: any) => ps.id !== n.id));
+                setPinnedSeries(pinnedSeries.filter((ps: NovelData) => ps.id !== n.id));
                 const res = await fetch(`/api/unpin/series/${n.id}`, { method: "POST", credentials: "include" });
                 if (!res.ok) { setPinnedSeries([...pinnedSeries, n]); const d = await res.json().catch(() => ({})); if (d.detail) alert(d.detail); }
                 else window.dispatchEvent(new Event("pinchange"));
@@ -460,11 +528,11 @@ export default function ProfilePage() {
             )}
           </div>
         ))}
-        {novels.length === 0 && pinnedSeries.length === 0 ? <p className="empty-state">시리즈가 없습니다.</p> : novels.filter((n) => !pinnedSeries.some((ps: any) => ps.id === n.id)).map((n) => (
+        {novels.length === 0 && pinnedSeries.length === 0 ? <p className="empty-state">시리즈가 없습니다.</p> : novels.filter((n) => !pinnedSeries.some((ps: NovelData) => ps.id === n.id)).map((n) => (
           <div key={n.id} className="profile-novel" style={{ display: "flex", gap: 14, alignItems: "center", cursor: "pointer" }} onClick={() => router.push(n.number ? `/series/@${n.author?.username}/${n.number}` : `/series/${n.id}`)}>
             <div className="cover-wrap-56">
               {n.cover_image ? (
-                <ClickableCover src={n.cover_image} isSensitive={(n as any).is_sensitive} className="cover-img" />
+                <ClickableCover src={n.cover_image} isSensitive={n.is_sensitive} className="cover-img" />
               ) : (
                 <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(n.title) }}>
                   <Icon name="book" size={16} />
@@ -479,13 +547,13 @@ export default function ProfilePage() {
             </div>
             {isMine && (
               <button className="action-btn" onClick={async (e) => { e.stopPropagation();
-                const nowPinned = pinnedSeries.some((ps: any) => ps.id === n.id);
-                if (nowPinned) { setPinnedSeries(pinnedSeries.filter((ps: any) => ps.id !== n.id)); }
+                const nowPinned = pinnedSeries.some((ps: NovelData) => ps.id === n.id);
+                if (nowPinned) { setPinnedSeries(pinnedSeries.filter((ps: NovelData) => ps.id !== n.id)); }
                 else { setPinnedSeries([...pinnedSeries, n]); }
                 const res = await fetch(`/api/${nowPinned ? "unpin" : "pin"}/series/${n.id}`, { method: "POST", credentials: "include" });
-                if (!res.ok) { if (nowPinned) setPinnedSeries([...pinnedSeries, n]); else setPinnedSeries(pinnedSeries.filter((ps: any) => ps.id !== n.id)); const d = await res.json().catch(() => ({})); if (d.detail) alert(d.detail); }
+                if (!res.ok) { if (nowPinned) setPinnedSeries([...pinnedSeries, n]); else setPinnedSeries(pinnedSeries.filter((ps: NovelData) => ps.id !== n.id)); const d = await res.json().catch(() => ({})); if (d.detail) alert(d.detail); }
                 else window.dispatchEvent(new Event("pinchange"));
-              }} title={(pinnedSeries.some((ps: any) => ps.id === n.id) ? "고정 해제" : "고정")} style={{ color: pinnedSeries.some((ps: any) => ps.id === n.id) ? "var(--danger)" : undefined }}><Icon name={pinnedSeries.some((ps: any) => ps.id === n.id) ? "pin_filled" : "pin"} /></button>
+              }} title={(pinnedSeries.some((ps: NovelData) => ps.id === n.id) ? "고정 해제" : "고정")} style={{ color: pinnedSeries.some((ps: NovelData) => ps.id === n.id) ? "var(--danger)" : undefined }}><Icon name={pinnedSeries.some((ps: NovelData) => ps.id === n.id) ? "pin_filled" : "pin"} /></button>
             )}
           </div>
         ))}

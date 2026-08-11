@@ -26,7 +26,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    refresh();
+    let cancelled = false;
+    (async () => {
+      try {
+        const u = await api.me();
+        if (cancelled) return;
+        setUser(u);
+      } catch {
+        if (cancelled) return;
+        setUser(null);
+      } finally {
+        if (cancelled) return;
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [refresh]);
 
   const value = useMemo(() => ({ user, loading, refresh }), [user, loading, refresh]);

@@ -28,7 +28,7 @@ export default function Sidebar() {
   const { user, loading, refresh } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(() => typeof localStorage !== "undefined" && localStorage.getItem("theme") === "dark");
   const [mounted, setMounted] = useState(false);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const originalFaviconRef = useRef<string>("");
@@ -48,25 +48,30 @@ export default function Sidebar() {
       .catch(() => {});
   }, [sidebarRefreshKey]);
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    const id = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(id);
+  }, []);
   useEffect(() => {
     if (localStorage.getItem("theme") === "dark" && !document.body.classList.contains("dark-theme")) {
       document.body.classList.add("dark-theme");
-      setIsDark(true);
     }
   }, []);
   useEffect(() => {
-    if (typeof localStorage !== "undefined") setTimelineTab(localStorage.getItem("lastTimelineTab") || "home");
+    if (typeof localStorage === "undefined") return;
+    const id = setTimeout(() => setTimelineTab(localStorage.getItem("lastTimelineTab") || "home"), 0);
+    return () => clearTimeout(id);
   }, [pathname]);
   useEffect(() => {
     if (!user) return;
     const update = () => {
-      if (typeof window !== "undefined" && (window as any).__unreadNotifs !== undefined) {
-        setUnreadNotifs((window as any).__unreadNotifs);
+      if (typeof window !== "undefined") {
+        const unread = (window as unknown as { __unreadNotifs?: number }).__unreadNotifs;
+        if (unread !== undefined) setUnreadNotifs(unread);
       }
     };
     update();
-    const handler = () => { setUnreadNotifs(0); (window as any).__unreadNotifs = 0; };
+    const handler = () => { setUnreadNotifs(0); (window as unknown as { __unreadNotifs: number }).__unreadNotifs = 0; };
     const profileHandler = () => refresh();
     window.addEventListener("notificationsread", handler);
     window.addEventListener("profilechange", profileHandler);
@@ -109,14 +114,14 @@ export default function Sidebar() {
     };
   }, [unreadNotifs]);
   useEffect(() => {
-    setIsDark(document.body.classList.contains("dark-theme"));
+    const id = setTimeout(() => setIsDark(document.body.classList.contains("dark-theme")), 0);
     const handler = () => setIsDark(document.body.classList.contains("dark-theme"));
     window.addEventListener("themechange", handler);
-    return () => window.removeEventListener("themechange", handler);
+    return () => { clearTimeout(id); window.removeEventListener("themechange", handler); };
   }, []);
 
   const toggleTheme = () => {
-    (window as any).__toggleTheme();
+    (window as unknown as { __toggleTheme: () => void }).__toggleTheme();
     window.dispatchEvent(new Event("themechange"));
   };
 
@@ -177,7 +182,7 @@ export default function Sidebar() {
     );
   }
 
-  const isDeactivated = (user as any)?.is_deactivated;
+  const isDeactivated = (user as unknown as { is_deactivated?: boolean } | undefined)?.is_deactivated;
 
   if (isDeactivated) {
     return (

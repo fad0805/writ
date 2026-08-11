@@ -43,7 +43,7 @@ export default function NotifSound() {
           if (parsed.unread !== undefined) {
             const badge = document.querySelector(".notif-badge");
             if (badge) badge.textContent = String(parsed.unread);
-            if (typeof window !== "undefined") (window as any).__unreadNotifs = parsed.unread;
+            if (typeof window !== "undefined") (window as unknown as { __unreadNotifs?: number }).__unreadNotifs = parsed.unread;
             window.dispatchEvent(new Event("notifchange"));
           }
           if (parsed.sound && audioRef.current && isNotifSoundEnabled()) {

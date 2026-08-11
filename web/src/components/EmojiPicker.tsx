@@ -26,10 +26,12 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
   }, [open]);
 
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    const id = setTimeout(() => {
       setSearch("");
       setFrequent(getFrequentEmojis(14));
-    }
+    }, 0);
+    return () => clearTimeout(id);
   }, [open]);
 
   useEffect(() => {
@@ -76,11 +78,13 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
   }, [dropUp]);
 
   useEffect(() => {
-    if (!open) { setPos(null); setFlipUp(false); return; }
-    updatePos();
-    window.addEventListener("scroll", updatePos, true);
-    window.addEventListener("resize", updatePos);
-    return () => { window.removeEventListener("scroll", updatePos, true); window.removeEventListener("resize", updatePos); };
+    const id = setTimeout(() => {
+      if (!open) { setPos(null); setFlipUp(false); return; }
+      updatePos();
+      window.addEventListener("scroll", updatePos, true);
+      window.addEventListener("resize", updatePos);
+    }, 0);
+    return () => { clearTimeout(id); window.removeEventListener("scroll", updatePos, true); window.removeEventListener("resize", updatePos); };
   }, [open, updatePos]);
 
   useLayoutEffect(() => {

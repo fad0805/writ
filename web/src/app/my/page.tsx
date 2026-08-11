@@ -25,7 +25,14 @@ export default function MyArchivePage() {
     fetcher.then((d) => { setPosts(d.posts); setHasMore(d.has_more); setLoading(false); }).catch(() => setLoading(false));
   }, [filter]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let cancelled = false;
+    const fetcher = filter === "bookmarks" ? api.getBookmarks(20, 0) : api.getFavorites(20, 0);
+    fetcher.then((d) => {
+      if (!cancelled) { setPosts(d.posts); setHasMore(d.has_more); setLoading(false); }
+    }).catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [filter]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;

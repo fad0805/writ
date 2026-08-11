@@ -15,7 +15,8 @@ export default function EpisodeEditor({ value, onChange, pageMode, onPageModeCha
 
   useEffect(() => {
     if (!editor) return;
-    const storage = editor.extensionStorage as Record<string, any>;
+    const storage = editor.extensionStorage as unknown as { pageBreaks?: { enabled: boolean } };
+    // eslint-disable-next-line react-hooks/immutability -- tiptap storage mutation is the only supported API
     if (storage.pageBreaks) storage.pageBreaks.enabled = !!pageMode;
     editor.chain().command(({ tr }) => { tr.setMeta("pageBreaksToggle", true); return true; }).run();
   }, [editor, pageMode]);

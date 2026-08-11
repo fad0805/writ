@@ -55,7 +55,7 @@ export default function NovelsPage() {
       <div className="novel-card-body novel-card-body-flex">
         <div className="cover-wrap-80">
           {n.cover_image ? (
-                  <ClickableCover src={n.cover_image} isSensitive={(n as any).is_sensitive} className="cover-img" />
+                  <ClickableCover src={n.cover_image} isSensitive={n.is_sensitive} className="cover-img" />
                 ) : (
             <div className="cover-fallback cover-fallback-lg" style={{ backgroundColor: hashColor(n.title) }}>
               <Icon name="book" size={24} />

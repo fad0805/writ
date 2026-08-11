@@ -43,14 +43,29 @@ export default function MyNovelsPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(1); }, [load]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const d = await api.getMyNovels(12, 0);
+        if (cancelled) return;
+        setNovels(d.novels);
+        setPage(d.page);
+        setPages(d.pages);
+        setTotal(d.total);
+      } catch {}
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const card = (n: NovelData) => (
     <div key={n.id} className="novel-card novel-card-clickable" onClick={() => router.push(`/series/@${n.author?.username || ''}/${n.number}`)}>
       <div className="novel-card-body novel-card-body-flex">
         <div className="cover-wrap-80">
           {n.cover_image ? (
-                  <ClickableCover src={n.cover_image} isSensitive={(n as any).is_sensitive} className="cover-img" />
+                  <ClickableCover src={n.cover_image} isSensitive={n.is_sensitive} className="cover-img" />
                 ) : (
             <div className="cover-fallback cover-fallback-lg" style={{ backgroundColor: hashColor(n.title) }}>
               <Icon name="book" size={24} />
