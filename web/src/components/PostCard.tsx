@@ -9,6 +9,7 @@ import { installCodeCopyButtons } from "@/lib/codeCopy";
 import { getQuote } from "@/lib/quote-cache";
 import { useAuth } from "@/lib/auth";
 import { useReactions } from "@/lib/useReactions";
+import { useNow } from "@/hooks/useNow";
 import { buildPostContentHtml } from "@/lib/postContent";
 import { WindowWithGlobals } from "@/lib/windowGlobals";
 import Icon from "./Icon";
@@ -130,10 +131,15 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
   const handleDelete = async () => {
     const isAdminDeletingOther = currentUser?.is_admin && !post.is_mine;
     if (!confirm(isAdminDeletingOther ? "관리자 권한으로 이 게시글을 삭제하시겠습니까?" : "삭제하시겠습니까?")) return;
+    try {
+      await api.deletePost(post.id);
+    } catch {
+      alert("삭제에 실패했습니다. 다시 시도해주세요.");
+      return;
+    }
     if (onDelete) onDelete();
     else if (onUpdate) onUpdate();
     else if (current) router.back();
-    try { await api.deletePost(post.id); } catch {}
   };
 
   const mergedEmojiList = useMemo(() => {
@@ -344,8 +350,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
     }
   };
 
-  const [nowTime, setNowTime] = useState(Date.now());
-  useEffect(() => { const id = setInterval(() => setNowTime(Date.now()), 10000); return () => clearInterval(id); }, []);
+  const nowTime = useNow();
   const timeStr = post.created_at ? (() => {
     const t = new Date(post.created_at).getTime();
     const diff = nowTime - t;
@@ -384,7 +389,12 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
   const handleRewrite = async () => {
     const stripped = (post.content || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
     const media = (post.media_attachments || []).map((m) => ({ url: m.url, type: m.type || "image", alt: m.alt || "" }));
-    try { await api.deletePost(post.id, true); } catch {}
+    try {
+      await api.deletePost(post.id, true);
+    } catch {
+      alert("삭제에 실패했습니다. 다시 시도해주세요.");
+      return;
+    }
     if (onDelete) onDelete();
     else if (onUpdate) onUpdate();
     if (onRewrite) onRewrite(stripped, post.visibility, post.summary || "", post.reply_context, media);

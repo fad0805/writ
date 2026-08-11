@@ -157,10 +157,11 @@ export default function NotificationsPage() {
       const myUser = user.id;
       const currentOffset = offsetRef.current;
       const data = await api.getNotifications(filter || undefined, 5, currentOffset);
-      if (user.id !== myUser) return;
-      setNotifs((prev) => { const merged = [...prev, ...data.notifications]; if (merged.length >= 200) setHasMore(false); return merged; });
-      setHasMore(data.has_more);
-      offsetRef.current = currentOffset + 5;
+      if (user.id === myUser) {
+        setNotifs((prev) => { const merged = [...prev, ...data.notifications]; if (merged.length >= 200) setHasMore(false); return merged; });
+        setHasMore(data.has_more);
+        offsetRef.current = currentOffset + 5;
+      }
     } catch {}
     setLoadingMore(false);
   }, [filter, hasMore, loadingMore, user]);

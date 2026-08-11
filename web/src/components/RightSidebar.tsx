@@ -15,6 +15,8 @@ const MODAL_ACTION_NAMES: Record<string, string> = {
   warning: "경고", freeze: "동결", sensitive: "민감 처리", limit: "제한", suspend: "정지",
 };
 
+let lastEmojiInvalidateTs = 0;
+
 export default function RightSidebar() {
   const router = useRouter();
   const { user } = useAuth();
@@ -34,10 +36,14 @@ export default function RightSidebar() {
       setNotifs([]);
     }, 0);
     api.getMyNovels().then((d) => { if (!cancelled) setNovels(d.novels); }).catch(() => {});
-    api.getNotifications(undefined, 10, 0).then((d) => { if (!cancelled) setNotifs(d.notifications); }).catch(() => {});
+    api.getNotifications(undefined, 10, 0, false).then((d) => { if (!cancelled) setNotifs(d.notifications); }).catch(() => {});
     const unsubscribe = onNotificationStream((raw) => {
       if (raw !== "refresh") return;
-      invalidateEmojiCache();
+      const now = Date.now();
+      if (now - lastEmojiInvalidateTs > 60000) {
+        lastEmojiInvalidateTs = now;
+        invalidateEmojiCache();
+      }
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
         const autoRead = document.visibilityState === "visible";

@@ -1,7 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { PostData, api } from "@/lib/api";
 import { formatRelative } from "@/lib/postContent";
+import { useNow } from "@/hooks/useNow";
 import Icon from "./Icon";
 
 export default function PollBox({ post, targetId, readonly, onUpdate }: {
@@ -10,22 +11,23 @@ export default function PollBox({ post, targetId, readonly, onUpdate }: {
   readonly?: boolean;
   onUpdate?: (updated?: PostData) => void;
 }) {
-  const [now, setNow] = useState(() => Date.now());
+  const now = useNow(1000);
   const [showPollResults, setShowPollResults] = useState(false);
   const [pollRefreshing, setPollRefreshing] = useState(false);
+  const [pollData, setPollData] = useState(post.poll_data);
+  const [prevPollData, setPrevPollData] = useState(post.poll_data);
+  if (post.poll_data !== prevPollData) {
+    setPrevPollData(post.poll_data);
+    setPollData(post.poll_data);
+  }
 
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const total = post.poll_data!.options.reduce((s, o) => s + (o.votes_count || 0), 0);
-  const isExpired = post.poll_data!.expires_at && new Date(post.poll_data!.expires_at).getTime() < now;
+  const total = pollData!.options.reduce((s, o) => s + (o.votes_count || 0), 0);
+  const isExpired = pollData!.expires_at && new Date(pollData!.expires_at).getTime() < now;
   const showResults = showPollResults || post.my_vote != null || isExpired || readonly || post.is_mine;
 
   return (
     <div className="poll-box" style={{ marginTop: 8, padding: 10, borderRadius: 8, background: "var(--bg-tertiary)" }}>
-      {post.poll_data!.options.map((opt, i) => {
+      {pollData!.options.map((opt, i) => {
         const pct = showResults && total > 0 ? Math.round(((opt.votes_count || 0) / total) * 100) : 0;
         const isSelected = post.my_vote === i;
         const canVote = !showResults && !isExpired && post.my_vote == null && !readonly && !post.is_mine;
@@ -38,8 +40,8 @@ export default function PollBox({ post, targetId, readonly, onUpdate }: {
               if (!canVote) return;
               try {
                 const result = await api.vote(targetId, i);
-                if (result?.post) {
-                  Object.assign(post, result.post);
+                if (result?.post?.poll_data) {
+                  setPollData(result.post.poll_data);
                 }
                 if (onUpdate) onUpdate();
                 else window.dispatchEvent(new Event("postchange"));
@@ -73,7 +75,7 @@ export default function PollBox({ post, targetId, readonly, onUpdate }: {
                 setPollRefreshing(true);
                 try {
                   const result = await api.refreshPoll(targetId);
-                  if (result?.post) Object.assign(post, result.post);
+                  if (result?.post?.poll_data) setPollData(result.post.poll_data);
                   if (onUpdate) onUpdate();
                   else window.dispatchEvent(new Event("postchange"));
               } catch (err) { alert(err instanceof Error ? err.message : String(err)); }
@@ -94,8 +96,8 @@ export default function PollBox({ post, targetId, readonly, onUpdate }: {
           {showResults && post.my_vote == null && !isExpired && !readonly && !post.is_mine && (
             <button type="button" onClick={(e) => { e.stopPropagation(); setShowPollResults(false); }} className="action-btn" style={{ fontSize: 11, padding: "2px 6px" }}>투표하기</button>
           )}
-          {post.poll_data!.expires_at ? (
-            new Date(post.poll_data!.expires_at).getTime() < now ? <span>종료</span> : <span>{formatRelative(post.poll_data!.expires_at, now)}</span>
+          {pollData!.expires_at ? (
+            new Date(pollData!.expires_at).getTime() < now ? <span>종료</span> : <span>{formatRelative(pollData!.expires_at, now)}</span>
           ) : null}
         </span>
       </div>

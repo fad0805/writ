@@ -174,21 +174,43 @@ export function renderReaction(reaction: string, emojis: CustomEmoji[], size?: n
   return renderCustomEmojis(escaped, emojis, size);
 }
 
-export function renderCustomEmojis(html: string, emojis: CustomEmoji[], size?: number): string {
-  if (!emojis || emojis.length === 0) return html;
-  const sz = size ?? 33;
-  const seen = new Set<string>();
-  const uniq = emojis.filter(e => { if (seen.has(e.keyword)) return false; seen.add(e.keyword); return true; });
-  const sorted = [...uniq].sort((a, b) => b.keyword.length - a.keyword.length);
-  for (const emoji of sorted) {
-    if (!emoji.url) continue;
-    const safeUrl = emoji.url.replace(/"/g, "%22").replace(/</g, "%3C").replace(/>/g, "%3E");
-    if (!safeUrl.startsWith("https:") && !safeUrl.startsWith("/")) continue;
-    const kw = emoji.keyword;
-    const kwAttr = kw.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`:${escaped}:`, "gi");
-    html = html.replace(re, () => `<img src="${safeUrl}" alt=":${kwAttr}:" title=":${kwAttr}:" class="custom-emoji" width="${sz}" height="${sz}" style="width:${sz}px;height:${sz}px;vertical-align:middle;display:inline-block;object-fit:contain">`);
+const renderCache = new WeakMap<CustomEmoji[], { re: RegExp | null; emojiByKeyword: Map<string, CustomEmoji> }>();
+
+function getRenderData(emojis: CustomEmoji[]) {
+  let data = renderCache.get(emojis);
+  if (!data) {
+    const seen = new Set<string>();
+    const uniq: CustomEmoji[] = [];
+    for (const e of emojis) {
+      if (!e || !e.keyword || !e.url) continue;
+      if (seen.has(e.keyword)) continue;
+      seen.add(e.keyword);
+      const safeUrl = e.url.replace(/"/g, "%22").replace(/</g, "%3C").replace(/>/g, "%3E");
+      if (!safeUrl.startsWith("https:") && !safeUrl.startsWith("/")) continue;
+      uniq.push({ ...e, url: safeUrl });
+    }
+    uniq.sort((a, b) => b.keyword.length - a.keyword.length);
+    const parts: string[] = [];
+    const emojiByKeyword = new Map<string, CustomEmoji>();
+    for (const e of uniq) {
+      parts.push(e.keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      emojiByKeyword.set(e.keyword, e);
+    }
+    data = { re: parts.length > 0 ? new RegExp(`:(${parts.join("|")}):`, "gi") : null, emojiByKeyword };
+    renderCache.set(emojis, data);
   }
-  return html;
+  return data;
+}
+
+export function renderCustomEmojis(html: string, emojis: CustomEmoji[], size?: number): string {
+  if (!html || !emojis || emojis.length === 0) return html;
+  const sz = size ?? 33;
+  const { re, emojiByKeyword } = getRenderData(emojis);
+  if (!re) return html;
+  return html.replace(re, (match, kw: string) => {
+    const emoji = emojiByKeyword.get(kw);
+    if (!emoji) return match;
+    const kwAttr = emoji.keyword.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return `<img src="${emoji.url}" alt=":${kwAttr}:" title=":${kwAttr}:" class="custom-emoji" width="${sz}" height="${sz}" style="width:${sz}px;height:${sz}px;vertical-align:middle;display:inline-block;object-fit:contain">`;
+  });
 }

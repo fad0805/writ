@@ -113,9 +113,12 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     taRef,
   });
   const mediaIdRef = useRef(0);
-  const [mediaItems, setMediaItems] = useState<{ id: number; url: string; type: string; file?: File; alt?: string }[]>(() =>
+  const [mediaItems, setMediaItems] = useState<{ id: number; url: string; type: string; file?: File; alt?: string; preview?: string }[]>(() =>
     (initialMedia || []).map((m, i) => ({ id: -(i + 1), url: m.url, type: m.type || "image", alt: m.alt || "" }))
   );
+  const revokeMediaPreviews = useCallback((items: { preview?: string }[]) => {
+    for (const m of items) if (m.preview) URL.revokeObjectURL(m.preview);
+  }, []);
   const [mediaUploading, setMediaUploading] = useState(false);
   const [mediaWarning, setMediaWarning] = useState("");
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -370,7 +373,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       if (f.size > 26214400 && isVideo) { setMediaWarning("비디오는 25MB를 초과할 수 없습니다."); continue; }
       if (isVideo && mediaItems.some(m => m.type === "video")) continue;
       if (mediaItems.length >= 4) break;
-      const id = ++mediaIdRef.current; setMediaItems(prev => [...prev, { id, url: "", type: isVideo ? "video" : "image", file: f }]);
+      const id = ++mediaIdRef.current; setMediaItems(prev => [...prev, { id, url: "", type: isVideo ? "video" : "image", file: f, preview: URL.createObjectURL(f) }]);
     }
   }, [mediaItems]);
 
@@ -424,7 +427,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         if (urlMatch) shareUrlFinal = urlMatch[0].replace(/[.,;:!?)]+$/, "");
       }
       const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrlFinal, media_attachments: JSON.stringify(uploaded), is_sensitive: postSensitive, poll_options: opts.length >= 2 ? JSON.stringify(opts) : "", poll_expires_in: pollExpiresIn, link_preview: linkPreview ? JSON.stringify(linkPreview) : "" });
-      setContent(""); setSummary(""); setPostSensitive(false); setMediaItems([]); setShowPoll(false); setPollOptions(["", ""]); setPollExpiresIn(1440); setLinkPreview(null); setQuoteUrl(""); setQuotePost(null);
+      setContent(""); setSummary(""); setPostSensitive(false); revokeMediaPreviews(mediaItems); setMediaItems([]); setShowPoll(false); setPollOptions(["", ""]); setPollExpiresIn(1440); setLinkPreview(null); setQuoteUrl(""); setQuotePost(null);
       if (typeof localStorage !== "undefined") localStorage.removeItem(draftKey);
       if (onDone) onDone(result);
       else router.refresh();
@@ -447,12 +450,12 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
                 onDrop={(e) => { e.preventDefault(); const from = parseInt(e.dataTransfer.getData("text/plain")); const to = i; if (from !== to) { const c = [...mediaItems]; const [removed] = c.splice(from, 1); c.splice(to, 0, removed); setMediaItems(c); } }}
               >
                 {m.type === "video" ? (
-                  <video src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6, pointerEvents: "none" }} />
+                  <video src={m.preview || m.url} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6, pointerEvents: "none" }} />
                 ) : (
-                  <img src={m.url || (m.file ? URL.createObjectURL(m.file) : "")} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6, pointerEvents: "none" }} />
+                  <img src={m.preview || m.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6, pointerEvents: "none" }} />
                 )}
                 <span onClick={(e) => { e.stopPropagation(); setAltModalIdx(i); }} style={{ position: "absolute", bottom: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: m.alt ? "var(--accent)" : "var(--bg-secondary)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontStyle: "italic", cursor: "pointer", color: m.alt ? "#fff" : "var(--text-muted)" }} title="미디어 설명">a</span>
-                <span onClick={(e) => { e.stopPropagation(); setMediaItems(mediaItems.filter((_, j) => j !== i)); }} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "var(--danger)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer" }}>×</span>
+                <span onClick={(e) => { e.stopPropagation(); revokeMediaPreviews(mediaItems.slice(i, i + 1)); setMediaItems(mediaItems.filter((_, j) => j !== i)); }} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "var(--danger)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer" }}>×</span>
               </div>
             ))}
           </div>

@@ -235,18 +235,19 @@ export default function TimelinePage() {
     try {
       const snapshot = accountSnapshot();
       const data = await api.timeline(tlType, LOAD_MORE, cursorRef.current);
-      if (accountSnapshot() !== snapshot) return;
-      if (data._emojis) injectEmojis(data._emojis);
-      const newTotal = totalLoadedRef.current + data.posts.length;
-      const newHasMore = data.has_more && newTotal < 500;
-      totalLoadedRef.current = newTotal;
-      cursorRef.current = data.cursor ?? null;
-      setHasMore(newHasMore);
-      setPosts((prev) => {
-        const next = [...prev, ...data.posts];
-        setCache(tlType, { posts: next, hasMore: newHasMore, cursor: cursorRef.current, ts: Date.now() });
-        return next;
-      });
+      if (accountSnapshot() === snapshot) {
+        if (data._emojis) injectEmojis(data._emojis);
+        const newTotal = totalLoadedRef.current + data.posts.length;
+        const newHasMore = data.has_more && newTotal < 500;
+        totalLoadedRef.current = newTotal;
+        cursorRef.current = data.cursor ?? null;
+        setHasMore(newHasMore);
+        setPosts((prev) => {
+          const next = [...prev, ...data.posts];
+          setCache(tlType, { posts: next, hasMore: newHasMore, cursor: cursorRef.current, ts: Date.now() });
+          return next;
+        });
+      }
     } catch (e) {
       console.error("Failed to load more posts:", e);
     }
