@@ -16,7 +16,7 @@ export default function FollowingPage() {
 
   useEffect(() => {
     api.getFollowing(params.username as string)
-      .then((d) => { setUsers(d.users); setLoading(false); })
+      .then((d) => { setUsers(d?.users || []); setLoading(false); })
       .catch(() => setLoading(false));
   }, [params.username]);
 

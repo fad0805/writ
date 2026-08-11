@@ -3,8 +3,6 @@ import logging
 from uuid import uuid4
 
 from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import JSONResponse
-from sqlalchemy import desc
 
 from app.models import User, Follow, Notification
 from app.serializers import _user_json
@@ -12,7 +10,7 @@ from app.config.settings import BASE_URL
 from app.core.activitypub import _resolve_actor, _send_accept, _send_reject
 from app.core.relationship import follow_user, unfollow_user
 from app.db.database import get_session
-from app.core.auth import require_auth, require_active_auth, get_current_user
+from app.core.auth import require_auth, require_active_auth
 
 
 logger = logging.getLogger("writ.api.follow")
@@ -173,28 +171,3 @@ def api_toggle_boosts(request: Request, username: str):
         follow.show_boosts = not follow.show_boosts
         s.commit()
         return {"ok": True, "show_boosts": follow.show_boosts}
-
-
-@follow_router.get("/users/{username}/followers")
-def api_followers(request: Request, username: str):
-    user = get_current_user(request)
-    if not user:
-        return JSONResponse({"error": "Not authenticated"}, status_code=401)
-    with get_session() as s:
-        target = s.query(User).filter_by(username=username, is_remote=False).first()
-        if not target:
-            raise HTTPException(status_code=404, detail="User not found")
-        follows = s.query(Follow).filter_by(following_id=target.id, accepted=True).order_by(desc(Follow.created_at)).all()
-        users = [s.query(User).get(f.follower_id) for f in follows]
-    return {"users": [_user_json(u) for u in users if u]}
-
-
-@follow_router.get("/users/{username}/following")
-def api_following(request: Request, username: str):
-    user = get_current_user(request)
-    if not user:
-        return JSONResponse({"error": "Not authenticated"}, status_code=401)
-    with get_session() as s:
-        target = s.query(User).filter_by(username=username, is_remote=False).first()
-        if not target:
-            raise HTTPException(status_code=404, detail="User not found")

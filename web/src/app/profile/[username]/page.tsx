@@ -176,12 +176,12 @@ export default function ProfilePage() {
     try {
       if (tab === "followers") {
         const d = await api.getFollowers(username, 20, followers.length);
-        setFollowers((prev) => [...prev, ...d.users.map((u) => ({ user: u }))]);
-        setFollowersHasMore(d.has_more);
+        setFollowers((prev) => [...prev, ...(d?.users || []).map((u) => ({ user: u }))]);
+        setFollowersHasMore(!!d?.has_more);
       } else if (tab === "following") {
         const d = await api.getFollowing(username, 20, following.length);
-        setFollowing((prev) => [...prev, ...d.users.map((u) => ({ user: u }))]);
-        setFollowingHasMore(d.has_more);
+        setFollowing((prev) => [...prev, ...(d?.users || []).map((u) => ({ user: u }))]);
+        setFollowingHasMore(!!d?.has_more);
       }
     } catch (e) {}
     setFollowLoadingMore(false);
