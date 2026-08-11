@@ -1,3 +1,4 @@
+import functools
 import re
 from urllib.parse import quote, unquote, urlparse
 
@@ -223,7 +224,7 @@ def process_local_post(text: str) -> str:
     # 2. 코드 블록 보호 (플레이스홀더 사용)
     code_blocks = []
     # 2.1 마크다운 코드 블록 처리
-    text = re.sub(r'```(\w*)\r?\n([\s\S]*?)```', _save_code_block, text)
+    text = re.sub(r'```(\w*)\r?\n([\s\S]*?)```', functools.partial(_save_code_block, code_blocks=code_blocks), text)
     text = re.sub(r'```([^`\n]+?)```', lambda m: f'<pre><code>{m.group(1)}</code></pre>', text)
 
     # series: 처리
@@ -340,7 +341,7 @@ def extract_mentions_from_local(text: str) -> list[dict]:
     return mentions
 
 
-def _save_code_block(m):
+def _save_code_block(m, code_blocks):
     code_blocks.append(f'<pre><code>{m.group(2).rstrip()}</code></pre>')
     return f'\x00codeblock_{len(code_blocks) - 1}\x00'
 
