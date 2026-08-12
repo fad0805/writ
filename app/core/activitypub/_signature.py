@@ -127,33 +127,12 @@ def verify_http_signature(request: Request, body: bytes, activity: dict) -> tupl
             return (False, None)
         logger.debug("[SIG] bind_check skipped (GET dereference, no activity actor)")
     elif signer_uri != activity_actor:
-        try:
-            signer_domain = urlparse(signer_uri).netloc
-            actor_domain = urlparse(activity_actor).netloc
-            if signer_domain and actor_domain and signer_domain != actor_domain:
-                audience = []
-                for key in ("to", "cc", "bto", "bcc"):
-                    val = activity.get(key)
-                    if val:
-                        if isinstance(val, list):
-                            audience.extend(val)
-                        else:
-                            audience.append(val)
-                forwarded = any(
-                    urlparse(a).netloc == signer_domain
-                    for a in audience if isinstance(a, str) and a.startswith("http")
-                )
-                if forwarded:
-                    logger.debug("[SIG] bind_check OK (inbox forwarding from %s)", signer_domain)
-                else:
-                    logger.debug("[SIG] bind_check FAIL (signer != actor, no forwarding auth)")
-                    return (False, None)
-            else:
-                logger.debug("[SIG] bind_check FAIL (signer != actor)")
-                return (False, None)
-        except Exception:
-            logger.debug("[SIG] bind_check FAIL (signer != actor)")
-            return (False, None)
+        # 서명자(HTTP 서명 keyId의 주인)와 activity.actor가 일치해야만 신뢰한다.
+        # 예전에는 "inbox forwarding" 예외(상대방 to/cc에 서명자 도메인이 있으면 허용)가 있었는데,
+        # 공격자가 to/cc에 자기 도메인을 넣으면 언제나 통과해 임의 액터(로컬 포함) 사칭이 가능했다.
+        # 크로스서버 포워딩은 포기하되, 사칭 벡터를 완전히 제거한다.
+        logger.debug("[SIG] bind_check FAIL (signer != actor)")
+        return (False, None)
     else:
         logger.debug("[SIG] bind_check OK")
 
