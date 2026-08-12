@@ -11,6 +11,7 @@ from app.core.broadcast.queries import (
 )
 from app.core.timeline_stream import _streams, _enqueue
 from app.db.database import get_session
+from app.models import Post
 from app.utils.filter import should_deliver_post, _load_user_filters
 
 logger = logging.getLogger(__name__)
