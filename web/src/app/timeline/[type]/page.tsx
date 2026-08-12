@@ -198,7 +198,12 @@ export default function TimelinePage() {
   const addOrUpdatePost = useCallback((newPost: PostData) => {
     const c = timelineCache.current[tlType];
     const cachedIdx = c ? c.posts.findIndex((p) => p.id === newPost.id) : -1;
-    if (cachedIdx < 0) totalLoadedRef.current += 1;
+    const inList = cachedIdx >= 0;
+    // 로컬/연합 타임라인은 공개 글만 노출한다. 공개가 아닌 새 글(예: 홈)이
+    // 작성자 본인의 피드 갱신으로 맨 위에 끼어드는 것을 막는다.
+    // (서버 스트림/조회는 이미 필터링되며, 여기는 작성 직후 반환 JSON 경로다.)
+    if (!inList && tlType !== "home" && tlType !== "social" && newPost.visibility !== "public") return;
+    if (!inList) totalLoadedRef.current += 1;
     setPosts((prev) => {
       const idx = prev.findIndex((p) => p.id === newPost.id);
       let next: PostData[];
