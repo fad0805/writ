@@ -20,7 +20,7 @@ export default function ReplyContextBox({ post, mergedEmojiList }: {
         const hasCw = !!rc.summary || !!rc.is_sensitive;
         if (hasCw) {
           const cwLabel = rc.summary || "내용 숨김";
-          return `<span style="opacity:0.5;font-size:0.9em">${cwLabel}</span>`;
+          return `<span style="opacity:0.5;font-size:0.9em">${sanitizeName(cwLabel)}</span>`;
         }
         const rawText = (rc.content || "");
         const text = rawText.slice(0, 200);
