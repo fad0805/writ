@@ -2,6 +2,8 @@ import os
 import logging
 import datetime
 
+from sqlalchemy.exc import IntegrityError
+
 from app.config.settings import BASE_URL
 from app.db.database import get_session
 from app.models import User, Post, Follow, RemoteMedia, ProcessedActivity
@@ -59,8 +61,17 @@ def _cleanup_remote_data():
                 ).count()
                 posts = s.query(Post).filter_by(author_id=u.id).count()
                 if follows == 0 and posts == 0:
-                    s.delete(u)
-                    removed += 1
+                    try:
+                        # Follow/Post 외에도 Report, Like, Boost, Notification 등
+                        # 다른 테이블이 아직 이 유저를 참조할 수 있다. savepoint로
+                        # 격리해 실패해도 전체 정리 트랜잭션이 깨지지 않게 하고,
+                        # 참조가 남은 유저는 이번엔 건너뛴다.
+                        with s.begin_nested():
+                            s.delete(u)
+                            s.flush()
+                        removed += 1
+                    except IntegrityError:
+                        continue
             if removed:
                 logger.info("Cleaned %d stale remote users", removed)
             s.commit()
