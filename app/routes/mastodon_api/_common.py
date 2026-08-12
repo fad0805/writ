@@ -359,6 +359,10 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
     if not author or author.is_suspended:
         return None
 
+    from app.core.visibility import _can_view
+    if not _can_view(post, viewer, db):
+        return None
+
     content = post.content or ""
 
     all_emojis = _load_emojis(db)

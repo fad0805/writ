@@ -53,6 +53,8 @@ def api_get_post(request: Request, post_id: int):
             post = s.query(Post).filter_by(id=post_id).first()
             if not post:
                 raise HTTPException(status_code=404, detail="Not Found")
+            if post.visibility not in ("public", "unlisted", "home"):
+                raise HTTPException(status_code=403, detail="Not authorized")
             note = to_ap_note(post)
             return JSONResponse(content=note, media_type="application/activity+json")
     # --- [추가 끝] ---
