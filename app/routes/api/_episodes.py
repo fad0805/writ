@@ -2,7 +2,6 @@
 import os
 import json
 import secrets
-import threading
 import logging
 from uuid import uuid4
 from datetime import datetime
@@ -18,6 +17,7 @@ from app.core.push import send_push_to_user
 from app.core.timeline_stream import broadcast_notif_sound
 from app.db.database import get_session
 from app.core.auth import require_active_auth, get_current_user
+from app.core.threads import spawn
 from app.utils.upload import _validate_upload, MAX_AUDIO_SIZE
 from app.utils.datetime import _fmt_dt
 from app.utils.content_parser import process_post_content
@@ -143,7 +143,7 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
                     "object": to_ap_note(post),
                 }
                 s.commit()
-                threading.Thread(target=broadcast_to_followers, args=(user, create_activity), daemon=True).start()
+                spawn(broadcast_to_followers, user, create_activity)
             except Exception as e:
                 logger.warning("Failed to broadcast episode federation: %s", e)
                 s.commit()
@@ -305,7 +305,7 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
                     "object": to_ap_note(post),
                 }
                 s.commit()
-                threading.Thread(target=broadcast_to_followers, args=(user, create_activity), daemon=True).start()
+                spawn(broadcast_to_followers, user, create_activity)
             except Exception as e:
                 logger.warning("Failed to broadcast episode edit federation: %s", e)
                 s.commit()

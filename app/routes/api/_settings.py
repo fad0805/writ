@@ -2,7 +2,6 @@
 import re
 import json
 import io
-import threading
 from uuid import uuid4
 from urllib.parse import urlparse
 
@@ -17,6 +16,7 @@ from app.core.activitypub import _post_to_inbox
 from app.core.timeline_stream import broadcast_refresh_notifs
 from app.db.database import get_session
 from app.core.auth import require_auth, require_active_auth, hash_password, verify_password, delete_user_sessions
+from app.core.threads import spawn
 from app.utils.log import log_admin_action
 from app.utils.storage import get_storage
 
@@ -247,21 +247,32 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
                 "object": _actor_uri,
             }
             for _inbox in _inboxes:
-                threading.Thread(target=_post_to_inbox, args=(_inbox, _delete_activity, db), daemon=True).start()
+                spawn(_post_to_inbox, _inbox, _delete_activity, db)
 
         _del_notif_user_ids = set()
-        for p in s.query(Post).filter_by(author_id=db.id).all():
-            has_replies = s.query(Post).filter(Post.in_reply_to_id == p.id).first() is not None
-            if not has_replies and p.ap_id:
-                has_replies = s.query(Post).filter(Post.in_reply_to_ap_id == p.ap_id).first() is not None
-            s.query(Like).filter(Like.post_id == p.id).delete()
-            s.query(Boost).filter(Boost.post_id == p.id).delete()
-            s.query(Bookmark).filter(Bookmark.post_id == p.id).delete()
-            s.query(Vote).filter(Vote.post_id == p.id).delete()
-            for _n in s.query(Notification.user_id).filter(Notification.post_id == p.id).distinct().all():
-                _del_notif_user_ids.add(_n[0])
-            s.query(Notification).filter(Notification.post_id == p.id).delete()
-            if has_replies:
+        _posts = s.query(Post).filter_by(author_id=db.id).all()
+        _post_ids = [p.id for p in _posts]
+        _has_replies = set()
+        if _post_ids:
+            for (_rid,) in s.query(Post.in_reply_to_id).filter(Post.in_reply_to_id.in_(_post_ids)).all():
+                if _rid:
+                    _has_replies.add(_rid)
+            _ap_to_pid = {p.ap_id: p.id for p in _posts if p.ap_id}
+            if _ap_to_pid:
+                for (_rid,) in s.query(Post.in_reply_to_ap_id).filter(
+                    Post.in_reply_to_ap_id.in_(list(_ap_to_pid))
+                ).all():
+                    if _rid in _ap_to_pid:
+                        _has_replies.add(_ap_to_pid[_rid])
+            s.query(Like).filter(Like.post_id.in_(_post_ids)).delete(synchronize_session=False)
+            s.query(Boost).filter(Boost.post_id.in_(_post_ids)).delete(synchronize_session=False)
+            s.query(Bookmark).filter(Bookmark.post_id.in_(_post_ids)).delete(synchronize_session=False)
+            s.query(Vote).filter(Vote.post_id.in_(_post_ids)).delete(synchronize_session=False)
+            for (_n,) in s.query(Notification.user_id).filter(Notification.post_id.in_(_post_ids)).distinct().all():
+                _del_notif_user_ids.add(_n)
+            s.query(Notification).filter(Notification.post_id.in_(_post_ids)).delete(synchronize_session=False)
+        for p in _posts:
+            if p.id in _has_replies:
                 p.content = ""
                 p.media_attachments = []
                 p.poll_data = None
@@ -277,7 +288,7 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
                         "object": {"id": p.ap_id, "type": "Note"},
                     }
                     for _inbox in _inboxes:
-                        threading.Thread(target=_post_to_inbox, args=(_inbox, _delete_note, db), daemon=True).start()
+                        spawn(_post_to_inbox, _inbox, _delete_note, db)
             else:
                 s.delete(p)
 

@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Request, Form, HTTPException
-import threading
 from sqlalchemy import func
 
 from app.models import Post, Vote
@@ -13,6 +12,7 @@ from app.config.settings import BASE_URL
 from app.core.activitypub import _post_to_inbox, _ap_fetch
 from app.db.database import get_session
 from app.core.auth import require_active_auth
+from app.core.threads import spawn
 
 from app.core.visibility import _can_view
 
@@ -37,7 +37,10 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
         expires_at = post.poll_data.get("expires_at")
         if expires_at:
             try:
-                if datetime.fromisoformat(expires_at) < datetime.now(timezone.utc):
+                exp = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                if exp.tzinfo is None:
+                    exp = exp.replace(tzinfo=timezone.utc)
+                if exp < datetime.now(timezone.utc):
                     raise HTTPException(status_code=400, detail="Poll has ended")
             except (ValueError, TypeError):
                 pass
@@ -94,7 +97,7 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
             except Exception:
                 pass
 
-        threading.Thread(target=_deliver_remote_vote, daemon=True).start()
+        spawn(_deliver_remote_vote)
     return {"ok": True, "post": post_json}
 
 

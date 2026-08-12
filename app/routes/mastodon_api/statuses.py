@@ -2,7 +2,6 @@
 import json
 import os
 import secrets
-import threading
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from sqlalchemy import func as sqlfunc, or_
@@ -11,6 +10,7 @@ from sqlalchemy.orm import Session as SASession
 from app.models import User, Post, Like, Boost, Bookmark, CustomEmoji, Follow
 from app.db.database import get_db
 from app.core.activitypub import _broadcast_update_actor
+from app.core.threads import spawn
 from app.routes.api import _do_edit_post, _do_delete_post
 from app.core.interactions import like_post, unlike_post, boost_post, unboost_post, react_post, unreact_post
 from app.utils.emoji import _load_emojis
@@ -559,7 +559,7 @@ def pin_status(status_id: str, request: Request, db: SASession = Depends(get_db)
         db.query(User).filter_by(id=user.id).update({"pinned_posts": pinned})
     post.is_pinned = True
     db.commit()
-    threading.Thread(target=_broadcast_update_actor, args=(user,), daemon=True).start()
+    spawn(_broadcast_update_actor, user)
     return _status_json(post, db, viewer=user)
 
 
@@ -578,7 +578,7 @@ def unpin_status(status_id: str, request: Request, db: SASession = Depends(get_d
         db.query(User).filter_by(id=user.id).update({"pinned_posts": pinned})
     post.is_pinned = False
     db.commit()
-    threading.Thread(target=_broadcast_update_actor, args=(user,), daemon=True).start()
+    spawn(_broadcast_update_actor, user)
     return _status_json(post, db, viewer=user)
 
 

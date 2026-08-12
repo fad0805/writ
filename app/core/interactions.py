@@ -2,7 +2,6 @@
 
 import json
 import logging
-import threading
 import uuid
 
 from sqlalchemy import func
@@ -15,6 +14,7 @@ from app.core.activitypub import _post_to_inbox, _author_inbox, _undo_like_activ
 from app.core.visibility import _can_view
 from app.core.push import send_push_to_user
 from app.core.broadcast import broadcast_post
+from app.core.threads import spawn
 from app.core.timeline_stream import (
     broadcast_refresh_notifs, broadcast_notif_sound,
     broadcast_reaction_update, broadcast_delete,
@@ -257,7 +257,7 @@ def boost_post(db: Session, user: User, post_id: int):
 
         if post.author.is_remote and author_inbox:
             try:
-                threading.Thread(target=_post_to_inbox, args=(author_inbox, announce, user), daemon=True).start()
+                spawn(_post_to_inbox, author_inbox, announce, user)
             except Exception as e:
                 logger.error("Failed to send boost to author inbox: %s", e, exc_info=True)
 
@@ -318,7 +318,7 @@ def unboost_post(db: Session, user: User, post_id: int):
         author_inbox = _author_inbox(post)
         if post.author.is_remote and author_inbox:
             try:
-                threading.Thread(target=_post_to_inbox, args=(author_inbox, undo, user), daemon=True).start()
+                spawn(_post_to_inbox, author_inbox, undo, user)
             except Exception as e:
                 logger.error("Failed to send unboost to author inbox: %s", e, exc_info=True)
         _fanout_to_followers(db, user, undo, action="unboost")

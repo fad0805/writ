@@ -1,6 +1,5 @@
 """URL/remote-content resolution endpoints extracted from _core.py and _posts.py."""
 import re
-import threading
 import logging
 from urllib.parse import urlparse
 
@@ -20,6 +19,7 @@ from app.core.federation import _check_fetch_domain_allowed
 from app.core.visibility import _can_view
 from app.db.database import get_session
 from app.core.auth import require_auth, get_current_user
+from app.core.threads import spawn
 from app.routes.api._novels import _novel_json
 from app.routes.api._episodes import _episode_json
 
@@ -224,14 +224,14 @@ def api_fetch_actor(request: Request, url: str = Form(...)):
     with get_session() as _s:
         local_user = _s.query(User).filter(or_(User.remote_url == url, User.remote_url == _db_url)).first()
         if local_user:
-            threading.Thread(target=_background_fetch_outbox, args=(url, user.id, local_user.id), daemon=True).start()
+            spawn(_background_fetch_outbox, url, user.id, local_user.id)
             return _user_json(local_user)
 
     actor = _resolve_actor(url, force_refresh=False, sign_as=user)
     if not actor:
         raise HTTPException(status_code=400, detail="Cannot resolve actor")
 
-    threading.Thread(target=_background_fetch_outbox, args=(url, user.id, actor.id), daemon=True).start()
+    spawn(_background_fetch_outbox, url, user.id, actor.id)
 
     with get_session() as _s:
         _attached = _s.query(User).filter(or_(User.remote_url == url, User.remote_url == _db_url)).first()

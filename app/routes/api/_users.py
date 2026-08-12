@@ -1,7 +1,6 @@
 """User profile, search, and media endpoints extracted from _core.py."""
 import json
 import io
-import threading
 import logging
 from uuid import uuid4
 from urllib.parse import urlparse
@@ -16,6 +15,7 @@ from app.serializers import _user_json, _post_json
 from app.core.activitypub import _resolve_actor, _broadcast_update_actor
 from app.db.database import get_session, username_prefix_like
 from app.core.auth import require_active_auth, get_current_user
+from app.core.threads import spawn
 from app.utils.storage import get_storage, _cleanup_avatars
 
 from app.core.visibility import _can_view
@@ -84,7 +84,7 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             remote_user, remote_domain = parts
             actor_url = f"https://{remote_domain}/@{remote_user}"
             try:
-                threading.Thread(target=_resolve_actor, args=(actor_url,), daemon=True).start()
+                spawn(_resolve_actor, actor_url)
             except Exception:
                 pass
     with get_session() as s:
@@ -429,5 +429,5 @@ def api_update_profile(request: Request, display_name: str = Form(""), summary: 
             pass
         s.commit()
     _cleanup_avatars()
-    threading.Thread(target=_broadcast_update_actor, args=(user,), daemon=True).start()
+    spawn(_broadcast_update_actor, user)
     return {"ok": True}

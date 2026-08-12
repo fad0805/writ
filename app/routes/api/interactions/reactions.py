@@ -1,6 +1,5 @@
 """Interaction endpoints — react/unreact for posts."""
 import logging
-import threading
 
 from fastapi import APIRouter, Request, Form, HTTPException
 from sqlalchemy import func
@@ -9,6 +8,7 @@ from app.models import Post, Like, CustomEmoji
 from app.core.interactions import react_post, unreact_post
 from app.db.database import get_session
 from app.core.auth import require_active_auth
+from app.core.threads import spawn
 
 from app.core.visibility import _can_view
 
@@ -44,7 +44,7 @@ def api_react_post(request: Request, post_id: int, emoji: str = Form(...)):
         except Exception:
             pass
 
-    threading.Thread(target=_do_react, daemon=True).start()
+    spawn(_do_react)
     return {"ok": True}
 
 
@@ -63,7 +63,7 @@ def api_unreact_post(request: Request, post_id: int):
         except Exception:
             pass
 
-    threading.Thread(target=_do_unreact, daemon=True).start()
+    spawn(_do_unreact)
     return {"ok": True}
 
 

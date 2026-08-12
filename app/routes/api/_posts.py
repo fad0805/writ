@@ -1,5 +1,4 @@
 """Post detail, edit, and delete endpoints extracted from _core.py."""
-import threading
 import logging
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from datetime import datetime, timezone
@@ -22,6 +21,7 @@ from app.db.mention_resolver import resolve_handles_to_ids
 from app.utils.post import _get_descendant_ids, _sync_post_tags
 from app.utils.storage import get_storage
 from app.core.visibility import _can_view
+from app.core.threads import spawn
 
 logger = logging.getLogger("writ.api.posts")
 
@@ -257,7 +257,7 @@ def _do_edit_post(s, post, user, content, summary, visibility=None, is_sensitive
             except Exception as e:
                 logger.error("Update federation failed: %s", e, exc_info=True)
 
-        threading.Thread(target=_send_update, daemon=True).start()
+        spawn(_send_update)
 
 
 @posts_router.post("/posts/{post_id}/edit")
@@ -342,7 +342,7 @@ def _do_delete_post(s, post, user, cascade=True, keep_media=False):
                             logger.warning("DELETE_FAIL: post %s not found in DB", _pid)
                 except Exception as e:
                     logger.error("DELETE_FAIL: %s", e, exc_info=True)
-        threading.Thread(target=_background, daemon=True).start()
+        spawn(_background)
 
     return media, ap_id
 

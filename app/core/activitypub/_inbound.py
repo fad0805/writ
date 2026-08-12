@@ -34,6 +34,7 @@ from app.core.activitypub._media import _cache_remote_media
 from app.core.activitypub._emoji import _process_emoji_tags, _background_import_emoji
 from app.core.activitypub._fetch import _fetch_remote_post, _resolve_actor, _retry_fetch_reply
 from app.core.activitypub._outbound import _send_accept
+from app.core.threads import spawn
 
 logger = logging.getLogger("writ.activitypub")
 
@@ -967,8 +968,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                         _import_data["domain"] = urlparse(_tag.get("id", "")).netloc if _tag.get("id", "") else ""
                         break
                 if _import_data.get("url"):
-                    import threading as _thr
-                    _thr.Thread(target=_background_import_emoji, args=(_import_data["url"], _import_data["kw"], _import_data["domain"]), daemon=True).start()
+                    spawn(_background_import_emoji, _import_data["url"], _import_data["kw"], _import_data["domain"])
 
         existing = session.query(Like).filter_by(user_id=actor_id, post_id=post.id).first()
         if existing:

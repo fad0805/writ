@@ -1,7 +1,6 @@
 import json
 import time
 import uuid
-import threading
 import base64
 import hashlib
 import datetime
@@ -17,6 +16,7 @@ from app.models import User, Post, Follow, PendingDelivery
 from app.utils.to_ap_serializer import to_ap_actor
 from app.utils.crypto import sign_string, get_private_key
 from app.core.federation import federation_allowed
+from app.core.threads import spawn
 from app.utils.http import validate_url
 from urllib.parse import urlparse
 
@@ -278,7 +278,7 @@ def _fanout_to_followers(db: Session, user: User, activity: dict, action: str = 
                     sent_inboxes.add(inbox)
                     try:
                         if threaded:
-                            threading.Thread(target=_post_to_inbox, args=(inbox, activity, user), daemon=True).start()
+                            spawn(_post_to_inbox, inbox, activity, user)
                         else:
                             _post_to_inbox(inbox, activity, user)
                     except Exception as e:

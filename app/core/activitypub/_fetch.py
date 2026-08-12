@@ -5,7 +5,6 @@ import time
 import datetime
 import json
 import logging
-import threading
 import uuid
 import html
 import traceback
@@ -22,6 +21,7 @@ from app.utils.to_ap_serializer import to_ap_actor
 from app.utils.crypto import generate_keypair, sign_string, encrypt_key, get_private_key
 from app.utils.content_parser import _sanitize_html, process_post_content
 from app.core.activitypub._utils import _get_instance_actor
+from app.core.threads import spawn
 from app.utils.http import validate_url, safe_fetch, validated_get, WRIT_USER_AGENT
 from app.utils.urls import parse_username_from_url, extract_remote_url
 from app.core.activitypub._media import _save_remote_image, _save_remote_avatar, _cache_remote_media
@@ -468,7 +468,7 @@ def _retry_fetch_reply(post_id: int, in_reply_to_ap_id: str, attempt: int = 0):
                     logger.warning("[RETRY-REPLY] gave up post_id=%s ap_id=%s after %d attempts", post_id, in_reply_to_ap_id, MAX_ATTEMPTS)
         except Exception as e:
             logger.error("[RETRY-REPLY] failed post_id=%s err=%s", post_id, e, exc_info=True)
-    threading.Thread(target=_worker, daemon=True).start()
+    spawn(_worker)
 
 
 def _fetch_remote_post(url: str, signer: User, session, _depth=0):

@@ -1,5 +1,4 @@
 """Search and explore endpoints extracted from _core.py."""
-import threading
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request, Query
@@ -11,6 +10,7 @@ from app.serializers import _post_json, _user_json
 from app.db.database import get_session
 from app.db.mention_resolver import _federation_allowed, _resolve_remote_user
 from app.core.auth import get_current_user
+from app.core.threads import spawn
 from app.routes.api._novels import _apply_latest_activity_order, _novel_json, _load_novel_meta
 from app.utils.filter import _timeline_filter
 
@@ -258,7 +258,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
 
             if not already_found:
                 try:
-                    threading.Thread(target=_resolve_remote_user, args=(query,), daemon=True).start()
+                    spawn(_resolve_remote_user, query)
                 except Exception:
                     pass
 

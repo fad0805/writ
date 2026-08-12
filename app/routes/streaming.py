@@ -27,8 +27,8 @@ async def sse_stream(request: Request):
         return JSONResponse({"detail": "Unauthorized"}, status_code=401)
     q: asyncio.Queue = asyncio.Queue(maxsize=50)
     add_queue(q)
-    try:
-        async def event_gen() -> AsyncGenerator[str, None]:
+    async def event_gen() -> AsyncGenerator[str, None]:
+        try:
             while True:
                 if await request.is_disconnected():
                     break
@@ -37,9 +37,9 @@ async def sse_stream(request: Request):
                     yield payload
                 except asyncio.TimeoutError:
                     yield ":keepalive\n\n"
-        return StreamingResponse(event_gen(), media_type="text/event-stream")
-    finally:
-        remove_queue(q)
+        finally:
+            remove_queue(q)
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
 
 
 @router.websocket("/api/v1/streaming")
