@@ -21,6 +21,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_ROLE_PRIORITY = {"user": 0, "moderator": 1, "admin": 2, "owner": 3}
+
+
+def _guard_target_role(actor: User, target: User):
+    """등급이 같거나 높은 대상 계정(오너/관리자/중재자)에 대한 관리 행위를 차단한다."""
+    actor_rank = _ROLE_PRIORITY.get(actor.role or "user", 0)
+    target_rank = _ROLE_PRIORITY.get(target.role or "user", 0)
+    if target_rank >= actor_rank:
+        raise HTTPException(status_code=403, detail="상위 또는 동급 계정은 관리할 수 없습니다.")
+
 
 @router.post("/admin/users/{user_id}/reset-password")
 def api_admin_reset_password(request: Request, user_id: int):
@@ -33,6 +43,7 @@ def api_admin_reset_password(request: Request, user_id: int):
         u = s.query(User).get(user_id)
         if not u:
             raise HTTPException(status_code=404, detail="User not found")
+        _guard_target_role(user, u)
         u.password_hash = salt + ":" + hsh
         target_username = u.username
         s.commit()
@@ -51,6 +62,7 @@ def api_admin_change_email(request: Request, user_id: int, email: str = Form(...
         u = s.query(User).get(user_id)
         if not u:
             raise HTTPException(status_code=404, detail="User not found")
+        _guard_target_role(user, u)
         old_email = u.email
         u.email = email
         u.email_verified = False
@@ -71,6 +83,7 @@ def api_admin_change_role(request: Request, user_id: int, role: str = Form("user
         u = s.query(User).get(user_id)
         if not u:
             raise HTTPException(status_code=404, detail="User not found")
+        _guard_target_role(user, u)
         old_role = u.role
         u.role = role
         u.is_admin = role in ("admin", "owner")
@@ -89,6 +102,7 @@ def api_admin_verify_email(request: Request, user_id: int):
         u = s.query(User).get(user_id)
         if not u:
             raise HTTPException(status_code=404, detail="User not found")
+        _guard_target_role(user, u)
         u.email_verified = True
         s.commit()
         target_username = u.username
@@ -105,6 +119,7 @@ def api_admin_remove_avatar(request: Request, user_id: int):
         u = s.query(User).get(user_id)
         if not u:
             raise HTTPException(status_code=404, detail="User not found")
+        _guard_target_role(user, u)
         old = u.profile_image
         u.profile_image = ""
         s.commit()
@@ -126,6 +141,7 @@ def api_admin_refresh_profile(request: Request, user_id: int):
         u = s.query(User).get(user_id)
         if not u:
             raise HTTPException(status_code=404, detail="User not found")
+        _guard_target_role(user, u)
         if not u.is_remote or not u.remote_url:
             raise HTTPException(status_code=400, detail="Not a remote user or no remote_url")
         remote_url = u.remote_url
@@ -162,6 +178,8 @@ def api_admin_suspend_users(request: Request, user_ids: str = Form(...)):
     with get_session() as s:
         targets = s.query(User).filter(User.id.in_(ids)).all()
         for t in targets:
+            _guard_target_role(user, t)
+        for t in targets:
             t.is_suspended = True
         s.commit()
         target_infos = [(t.id, t.username) for t in targets]
@@ -180,6 +198,8 @@ def api_admin_unsuspend_users(request: Request, user_ids: str = Form(...)):
     with get_session() as s:
         targets = s.query(User).filter(User.id.in_(ids)).all()
         for t in targets:
+            _guard_target_role(user, t)
+        for t in targets:
             t.is_suspended = False
         s.commit()
         target_infos = [(t.id, t.username) for t in targets]
@@ -196,6 +216,7 @@ def api_admin_user_note(request: Request, user_id: int, note: str = Form("")):
     with get_session() as s:
         u = s.query(User).get(user_id)
         if not u: raise HTTPException(status_code=404, detail="User not found")
+        _guard_target_role(user, u)
         u.moderation_note = note
         target_username = u.username
         s.commit()
@@ -214,6 +235,7 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
     with get_session() as s:
         u = s.query(User).get(user_id)
         if not u: raise HTTPException(status_code=404, detail="User not found")
+        _guard_target_role(user, u)
 
         if action == "warning":
             pass  # Just a warning, no automatic action
@@ -312,6 +334,7 @@ def api_admin_toggle_sensitive(request: Request, user_id: int):
     with get_session() as s:
         u = s.query(User).get(user_id)
         if not u: raise HTTPException(status_code=404, detail="User not found")
+        _guard_target_role(user, u)
         u.is_sensitive = not u.is_sensitive
         s.commit()
         target_username = u.username
