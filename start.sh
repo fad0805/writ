@@ -60,10 +60,8 @@ with engine.connect() as conn:
 " || echo "[start] WARNING: Column verification script failed (non-fatal)"
 
 # Start uvicorn
-LOGFILE="/app/logs/$(date +%Y-%m-%d).log"
-touch "$LOGFILE" 2>/dev/null || true
-
+# 로그 파일은 app/config/logging.py의 미드나잇 로테이팅 핸들러가 담당하므로
+# (일 단위 YYYY-MM-DD.log 자동 생성), 여기서 tee로 중복 기록하지 않는다.
+# stdout은 컨테이너 로그(docker compose logs)로 흘러간다.
 echo "[start] Starting uvicorn..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 2>&1 \
-  | while IFS= read -r line; do printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"; done \
-  | tee -a "$LOGFILE"
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000
