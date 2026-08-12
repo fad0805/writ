@@ -11,11 +11,13 @@ const LIGHT_BG: Record<string, string> = {
   boost: "rgba(104, 159, 56, 0.1)",
   like: "rgba(241, 196, 15, 0.12)",
   poll_ended: "rgba(124, 77, 255, 0.1)",
+  dm: "rgba(255, 183, 77, 0.14)",
 };
 const DARK_BG: Record<string, string> = {
   boost: "rgba(104, 159, 56, 0.15)",
   like: "rgba(241, 196, 15, 0.15)",
   poll_ended: "rgba(124, 77, 255, 0.15)",
+  dm: "rgba(255, 183, 77, 0.16)",
 };
 
 export default function MiniPostCard({ post, notifType, notifLabel }: { post: PostData; notifType?: string; notifLabel?: React.ReactNode }) {
@@ -32,9 +34,11 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
   useEffect(() => {
     if (post._emojis) injectEmojis(post._emojis);
   }, [post._emojis]);
-  const bg = notifType
-    ? (isDark ? DARK_BG[notifType] : LIGHT_BG[notifType]) || "var(--bg-tertiary)"
-    : "var(--bg-tertiary)";
+  const bg = post.is_dm
+    ? (isDark ? DARK_BG.dm : LIGHT_BG.dm)
+    : notifType
+      ? (isDark ? DARK_BG[notifType] : LIGHT_BG[notifType]) || "var(--bg-tertiary)"
+      : "var(--bg-tertiary)";
   const mergedEmojiList = useMemo(() => {
     const postEmojis = post._emojis;
     if (!postEmojis || postEmojis.length === 0) return emojiList;
