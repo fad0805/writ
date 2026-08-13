@@ -375,7 +375,7 @@ def api_reset_password(request: Request, token: str = Form(...), password: str =
         u = s.query(User).filter_by(reset_token=token, is_remote=False).first()
         if not u:
             raise HTTPException(status_code=400, detail="유효하지 않거나 만료된 토큰입니다.")
-        if u.reset_token_expires_at and datetime.now(timezone.utc) > u.reset_token_expires_at:
+        if u.reset_token_expires_at and datetime.utcnow() > u.reset_token_expires_at:
             u.reset_token = ""
             u.reset_token_expires_at = None
             s.commit()
