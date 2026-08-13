@@ -21,9 +21,15 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
   const closingFromPop = useRef(false);
 
   const closeViewer = useCallback(() => {
-    if (!closingFromPop.current) history.back();
-    closingFromPop.current = false;
-    onClose();
+    // popstate(브라우저 뒤로가기)에서 호출됐다면 이미 onClose를 호출한 상태이므로
+    // history.back()을 다시 실행하지 않는다. X/백드롭 클릭은 pushState로 남긴
+    // 히스토리를 되돌리고, popstate 핸들러(onPop)가 onClose를 단 한 번 호출한다.
+    if (closingFromPop.current) {
+      closingFromPop.current = false;
+      onClose();
+      return;
+    }
+    history.back();
   }, [onClose]);
 
   useEffect(() => {
