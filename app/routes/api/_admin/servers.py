@@ -12,8 +12,9 @@ from app.models import (
     User, Post, Follow, Like, Boost, Vote, Bookmark, Notification,
     FederationBlock, MutedServer, AdminLog,
 )
-from app.core.activitypub import _resolve_actor
+from app.core.activitypub import _resolve_actor, _safe_httpx_get
 from app.core.auth import require_auth
+from app.utils.http import validate_url
 from app.utils.log import log_admin_action
 from app.utils.storage import get_storage
 from app.db.database import get_session
@@ -98,8 +99,11 @@ def api_admin_remote_server(domain: str, request: Request, offset: int = 0, limi
         is_media_muted = mute_entry is not None and mute_entry.media_muted
 
         try:
-            resp = httpx.get(f"https://{domain}", timeout=5)
-            is_reachable = resp.status_code < 500
+            if not validate_url(f"https://{domain}"):
+                is_reachable = False
+            else:
+                resp = httpx.get(f"https://{domain}", timeout=5)
+                is_reachable = resp.status_code < 500
         except:
             is_reachable = False
 
@@ -207,12 +211,13 @@ def api_admin_federation_search(request: Request, q: str = ""):
                             continue
                     if not resolved:
                         # Try WebFinger discovery
-                        try:
-                            wf = httpx.get(
-                                f"https://{domain}/.well-known/webfinger?resource=acct:{handle}@{domain}",
-                                timeout=5,
-                            )
-                            if wf.status_code == 200:
+                        wf = _safe_httpx_get(
+                            f"https://{domain}/.well-known/webfinger?resource=acct:{handle}@{domain}",
+                            timeout=5,
+                            max_size=2*1024*1024,
+                        )
+                        if wf is not None:
+                            try:
                                 wf_data = wf.json()
                                 for link in wf_data.get("links", []):
                                     if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
@@ -220,8 +225,8 @@ def api_admin_federation_search(request: Request, q: str = ""):
                                         if href:
                                             resolved = _resolve_actor(href)
                                             break
-                        except Exception:
-                            pass
+                            except (ValueError, TypeError):
+                                pass
                     if resolved:
                         results.append({
                             "source": "remote_fetched",
