@@ -1,4 +1,5 @@
 import functools
+import html
 import re
 from urllib.parse import quote, unquote, urlparse
 
@@ -89,6 +90,7 @@ def _serialize_html(soup):
             attrs_list = []
             for k, v in node.attrs.items():
                 val = " ".join(v) if isinstance(v, list) else v
+                val = html.escape(str(val), quote=True)
                 if k == "href" and "/explore?q=" in val:
                     try:
                         _, query = val.split("/explore?q=", 1)
@@ -113,6 +115,7 @@ def _serialize_html(soup):
             attrs_list = []
             for k, v in node.attrs.items():
                 val = " ".join(v) if isinstance(v, list) else v
+                val = html.escape(str(val), quote=True)
                 attrs_list.append(f'{k}="{val}"')
             attrs_str = f" {' '.join(attrs_list)}" if attrs_list else ""
             return f"<img{attrs_str}>"
@@ -122,6 +125,9 @@ def _serialize_html(soup):
     return re.sub(r'\n{3,}', '\n\n', result).strip()
 
 
+_MENTION_NAME_RE = re.compile(r'^@?[A-Za-z0-9_.-]+(@[A-Za-z0-9_.:-]+)?$')
+
+
 def process_remote_post(sanitized_content: str, post: dict) -> str:
     # 1. 메타데이터 추출
     obj_data = post.get("object", post) if isinstance(post.get("object"), dict) else post
@@ -129,7 +135,10 @@ def process_remote_post(sanitized_content: str, post: dict) -> str:
     mentioned_user_ids = []
     for t in raw_tags:
         if isinstance(t, dict) and t.get("type") == "Mention" and t.get("name"):
-            mentioned_user_ids.append(t.get("name").strip())
+            name = t.get("name").strip()
+            # 원격 Mention name이 속성 탈출 문자를 포함하면 거부한다 (저장형 XSS 방지)
+            if _MENTION_NAME_RE.match(name):
+                mentioned_user_ids.append(name)
 
     soup = BeautifulSoup(sanitized_content, "html.parser")
 
