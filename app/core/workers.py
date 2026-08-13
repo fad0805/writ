@@ -13,7 +13,7 @@ from app.core.activitypub import _deliver_sync, _send_delete_post, _resolve_acto
 from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs
 from app.db.database import get_session, engine
 from app.models import User, PendingDelivery, Post, Like, Boost, Bookmark, Vote, Notification, RemoteMedia
-from app.utils.crypto import sign_string, get_private_key
+from app.utils.crypto import sign_string, decrypt_key
 from app.utils.storage import get_storage, LocalStorage
 
 logger = logging.getLogger(__name__)
@@ -31,50 +31,71 @@ def delivery_worker():
     while True:
         time.sleep(30)
         try:
+            # 네트워크 I/O 동안 DB 쓰기 트랜잭션을 잡고 있으면 SQLite에서
+            # 다른 쓰기가 락을 기다리며 블로킹된다. 배치를 먼저 수집하고
+            # 세션을 닫은 뒤 배달하고, 결과를 항목별로 짧게 커밋한다.
+            items = []
             with get_session() as s:
-                items = s.query(PendingDelivery).filter_by(status="pending").order_by(PendingDelivery.created_at).limit(50).all()
-                for item in items:
-                    try:
-                        sender = s.query(User).get(item.sender_id)
-                        if not sender:
-                            item.status = "failed"
-                            item.last_error = "Sender not found"
-                            continue
-                        activity = json.loads(item.activity_json)
-                        body = json.dumps(activity, ensure_ascii=True, sort_keys=True).encode("utf-8")
-                        digest = base64.b64encode(hashlib.sha256(body).digest()).decode()
-                        date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
-                        parsed = urlparse(item.inbox_url)
-                        path = parsed.path or "/"
-                        signed_string = f"(request-target): post {path}\nhost: {parsed.netloc}\ndate: {date}\ndigest: SHA-256={digest}"
-                        signature = sign_string(signed_string, get_private_key(sender, SECRET_KEY))
-                        signature_header = (
-                            f'keyId="{sender.actor_uri()}#main-key",'
-                            f'algorithm="rsa-sha256",'
-                            f'headers="(request-target) host date digest",'
-                            f'signature="{signature}"'
-                        )
-                        headers = {
-                            "Content-Type": "application/activity+json",
-                            "Signature": signature_header,
-                            "Date": date,
-                            "Digest": f"SHA-256={digest}",
-                            "Host": parsed.netloc,
-                        }
-                        ok = _deliver_sync(item.inbox_url, body, headers)
-                        if ok:
-                            s.delete(item)
-                        else:
-                            item.attempts += 1
-                            if item.attempts >= 7:
-                                item.status = "failed"
-                            item.last_error = "Max retries reached"
-                    except Exception as e:
-                        item.attempts += 1
-                        item.last_error = str(e)
-                        if item.attempts >= 7:
-                            item.status = "failed"
+                rows = s.query(PendingDelivery).filter_by(status="pending").order_by(PendingDelivery.created_at).limit(50).all()
+                for item in rows:
+                    sender = s.query(User).get(item.sender_id)
+                    if not sender:
+                        item.status = "failed"
+                        item.last_error = "Sender not found"
+                        continue
+                    items.append({
+                        "id": item.id,
+                        "inbox_url": item.inbox_url,
+                        "activity_json": item.activity_json,
+                        "private_key": sender.private_key,
+                        "actor_uri": sender.actor_uri(),
+                    })
                 s.commit()
+
+            for it in items:
+                try:
+                    activity = json.loads(it["activity_json"])
+                    body = json.dumps(activity, ensure_ascii=True, sort_keys=True).encode("utf-8")
+                    digest = base64.b64encode(hashlib.sha256(body).digest()).decode()
+                    date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+                    parsed = urlparse(it["inbox_url"])
+                    path = parsed.path or "/"
+                    signed_string = f"(request-target): post {path}\nhost: {parsed.netloc}\ndate: {date}\ndigest: SHA-256={digest}"
+                    signature = sign_string(signed_string, decrypt_key(it["private_key"], SECRET_KEY))
+                    signature_header = (
+                        f'keyId="{it["actor_uri"]}#main-key",'
+                        f'algorithm="rsa-sha256",'
+                        f'headers="(request-target) host date digest",'
+                        f'signature="{signature}"'
+                    )
+                    headers = {
+                        "Content-Type": "application/activity+json",
+                        "Signature": signature_header,
+                        "Date": date,
+                        "Digest": f"SHA-256={digest}",
+                        "Host": parsed.netloc,
+                    }
+                    ok = _deliver_sync(it["inbox_url"], body, headers)
+                    with get_session() as s2:
+                        if ok:
+                            s2.query(PendingDelivery).filter_by(id=it["id"]).delete()
+                        else:
+                            row = s2.query(PendingDelivery).get(it["id"])
+                            if row:
+                                row.attempts += 1
+                                if row.attempts >= 7:
+                                    row.status = "failed"
+                                row.last_error = "Max retries reached"
+                        s2.commit()
+                except Exception as e:
+                    with get_session() as s2:
+                        row = s2.query(PendingDelivery).get(it["id"])
+                        if row:
+                            row.attempts += 1
+                            row.last_error = str(e)
+                            if row.attempts >= 7:
+                                row.status = "failed"
+                        s2.commit()
         except Exception as e:
             logger.error("Delivery worker error: %s", e, exc_info=True)
 
