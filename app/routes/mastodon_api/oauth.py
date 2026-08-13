@@ -151,8 +151,13 @@ async def oauth_token(request: Request):
 
         if grant_type == "authorization_code":
             code = body.get("code", "")
-            auth_code = db.query(MastodonAuthorizationCode).filter_by(code=code, used=False).first()
+            auth_code = db.query(MastodonAuthorizationCode).filter_by(
+                code=code, used=False, app_id=app_obj.id
+            ).first()
             if not auth_code:
+                return JSONResponse({"error": "invalid_grant"}, status_code=400)
+            requested_redirect = body.get("redirect_uri", "")
+            if requested_redirect and requested_redirect != auth_code.redirect_uri:
                 return JSONResponse({"error": "invalid_grant"}, status_code=400)
             auth_code.used = True
             db.commit()

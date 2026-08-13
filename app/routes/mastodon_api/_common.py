@@ -65,6 +65,8 @@ def _require_bearer(request: Request, db: SASession) -> User:
         raise MastodonAPIError(status_code=403, detail="Account suspended")
     if user.is_frozen:
         raise MastodonAPIError(status_code=403, detail="Account frozen")
+    if getattr(user, "is_deactivated", False):
+        raise MastodonAPIError(status_code=403, detail="Account deactivated")
     return user
 
 
