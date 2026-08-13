@@ -245,9 +245,12 @@ def api_get_novel(request: Request, novel_id: int):
             raise HTTPException(status_code=404, detail="Novel not found")
         if not user and novel.visibility in ("public", "unlisted"):
             pass
-        episodes = s.query(Episode).filter_by(novel_id=novel_id).order_by(Episode.episode_number).all()
-        author = s.query(User).get(novel.author_id)
+        episodes = s.query(Episode).filter_by(novel_id=novel_id)
         is_mine = user.id == novel.author_id if user else False
+        if not is_mine:
+            episodes = episodes.filter(Episode.is_published == True)
+        episodes = episodes.order_by(Episode.episode_number).all()
+        author = s.query(User).get(novel.author_id)
         from app.routes.api._episodes import _episode_json  # circular-avoiding lazy import
         episode_list = [_episode_json(e, summary_only=True) for e in episodes]
         novel_json = _novel_json(novel, s)

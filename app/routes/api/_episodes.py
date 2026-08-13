@@ -191,6 +191,8 @@ def api_get_episode(request: Request, novel_id: int, episode_id: int):
         if not user and novel.visibility in ("public", "unlisted"):
             pass
         is_mine = novel.author_id == user.id if user else False
+        if not is_mine and not episode.is_published:
+            raise HTTPException(status_code=404, detail="Episode not found")
         prev_ep = s.query(Episode).filter(
             Episode.novel_id == novel_id,
             Episode.episode_number < episode.episode_number,
