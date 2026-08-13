@@ -124,7 +124,12 @@ def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> 
         resp = validated_get(collection_url, headers=headers, timeout=10)
         if resp is not None and resp.status_code == 200:
             data = resp.json()
-            return int(data.get("totalItems", 0))
+            try:
+                count = int(data.get("totalItems", 0))
+            except (TypeError, ValueError):
+                return 0
+            # 원격 서버가 조작한 과도한 수치가 표시되지 않도록 상한을 둔다
+            return max(0, min(count, 10_000_000))
     except Exception:
         pass
     return 0

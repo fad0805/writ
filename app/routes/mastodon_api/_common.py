@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session as SASession
 
 from app.models import User, Post, Follow, Like, Boost, MastodonAccessToken, UserMute, UserBlock, now
 from app.config.settings import BASE_URL
+from app.utils.content_parser import _sanitize_html
 from app.utils.emoji import _load_emojis
 
 
@@ -157,8 +158,9 @@ def _account_json(user: User, db: SASession, viewer: User | None = None,
         username = user.username
 
     display_name = user.display_name or ""
-    note_html = f"<p>{user.summary}</p>" if user.summary else "<p></p>"
-    source_note = user.summary or ""
+    _summary_sanitized = _sanitize_html(user.summary or "")
+    note_html = f"<p>{_summary_sanitized}</p>" if _summary_sanitized else "<p></p>"
+    source_note = re.sub(r'<[^>]*>', '', _summary_sanitized)
 
     all_emojis = _load_emojis(db)
     shortcode_re = re.compile(r':(\w+):')
@@ -477,7 +479,7 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         "in_reply_to_id": str(post.in_reply_to_id) if post.in_reply_to_id else None,
         "in_reply_to_account_id": None,
         "sensitive": bool(post.is_sensitive),
-        "spoiler_text": post.summary or "",
+        "spoiler_text": _sanitize_html(post.summary or ""),
         "visibility": _visibility_to_mastodon(post.visibility),
         "language": "ko",
         "uri": post.ap_id or f"{BASE_URL}/posts/{post.id}",
