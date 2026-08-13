@@ -5,6 +5,7 @@ import secrets
 import logging
 import threading
 import time
+import ipaddress
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 import smtplib
@@ -55,6 +56,42 @@ def _get_auth_backoff_seconds(ip: str) -> int:
     if count < _AUTH_FAIL_MAX:
         return 0
     return _AUTH_FAIL_BACKOFF_BASE * (2 ** min(count - _AUTH_FAIL_MAX, 6))
+
+
+_PRIVATE_PEER_SUBNETS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+def _get_client_ip(request) -> str:
+    """Rate-limit key for the client.
+
+    XFF는 직접 연결 피어가 사설/루프백 주소(즉 로컬 리버스 프록시)일 때만 신뢰한다.
+    이렇게 하면 앱에 직접 붙은 공격자가 XFF 헤더를 조작해 IP를 계속 바꾸며
+    레이트리밋을 우회할 수 없다.
+    """
+    peer = request.client.host if request.client else ""
+    peer_bare = peer.split("%")[0]
+    try:
+        peer_ip = ipaddress.ip_address(peer_bare)
+    except ValueError:
+        peer_ip = None
+    is_private_peer = bool(peer_ip and any(peer_ip in net for net in _PRIVATE_PEER_SUBNETS))
+    if is_private_peer:
+        xff = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        if xff:
+            try:
+                ipaddress.ip_address(xff.split("%")[0])
+                return xff
+            except ValueError:
+                pass
+    return peer
 
 
 RESERVED_HANDLES = frozenset({
@@ -121,7 +158,7 @@ def api_me(request: Request, s: Session = Depends(get_db)):
 @auth_router.post("/auth/login")
 def api_login(request: Request, username: str = Form(...), password: str = Form(...)):
     try:
-        client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
+        client_ip = _get_client_ip(request)
         backoff = _get_auth_backoff_seconds(client_ip)
         if backoff > 0:
             raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
@@ -186,7 +223,7 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
 @auth_router.post("/auth/register")
 def api_register(request: Request, username: str = Form(...), password: str = Form(...),
                  display_name: str = Form(""), email: str = Form(...)):
-    client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
+    client_ip = _get_client_ip(request)
     if not _check_auth_rate_limit(client_ip):
         raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
     display_handle = username
@@ -290,7 +327,7 @@ def api_resend_verification(request: Request, email: str = Form(...)):
 
 @auth_router.post("/auth/forgot-password")
 def api_forgot_password(request: Request, email: str = Form(...)):
-    client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
+    client_ip = _get_client_ip(request)
     if not _check_auth_rate_limit(client_ip):
         raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
     with get_session() as s:

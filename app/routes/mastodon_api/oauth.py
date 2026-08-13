@@ -7,13 +7,17 @@ from fastapi.responses import JSONResponse
 from app.db.database import get_session
 from app.models import User, MastodonApp, MastodonAuthorizationCode, MastodonAccessToken
 from app.core.auth import verify_password
+from app.routes.api._auth import _check_auth_rate_limit, _record_auth_failure, _get_client_ip
 
 router = APIRouter()
 
 
-def _do_authorize(client_id: str, redirect_uri: str, response_type: str, scope: str, state: str, username: str, password: str):
+def _do_authorize(client_id: str, redirect_uri: str, response_type: str, scope: str, state: str, username: str, password: str, client_ip: str):
     if response_type != "code":
         return JSONResponse({"error": "unsupported_response_type"}, status_code=400)
+
+    if not _check_auth_rate_limit(client_ip):
+        return JSONResponse({"error": "rate_limited", "error_description": "Too many attempts. Please try again later."}, status_code=429)
 
     with get_session() as db:
         app_obj = db.query(MastodonApp).filter_by(client_id=client_id).first()
@@ -25,6 +29,7 @@ def _do_authorize(client_id: str, redirect_uri: str, response_type: str, scope: 
             ((User.username == username) | (User.email == username))
         ).first()
         if not user or not user.password_hash:
+            _record_auth_failure(client_ip)
             return JSONResponse({"error": "Invalid username or password"}, status_code=401)
 
         if getattr(user, "is_frozen", False):
@@ -34,6 +39,7 @@ def _do_authorize(client_id: str, redirect_uri: str, response_type: str, scope: 
 
         salt, hval = user.password_hash.split(":", 1)
         if not verify_password(password, salt, hval):
+            _record_auth_failure(client_ip)
             return JSONResponse({"error": "Invalid username or password"}, status_code=401)
 
         code = secrets.token_urlsafe(32)
@@ -73,6 +79,7 @@ async def api_oauth_authorize(request: Request):
         state=body.get("state", ""),
         username=body.get("username", ""),
         password=body.get("password", ""),
+        client_ip=_get_client_ip(request),
     )
 
 
@@ -88,6 +95,7 @@ async def oauth_authorize_form(request: Request):
         state=body.get("state", ""),
         username=body.get("username", ""),
         password=body.get("password", ""),
+        client_ip=_get_client_ip(request),
     )
 
 
@@ -117,15 +125,20 @@ async def oauth_token(request: Request):
             return {"access_token": token, "token_type": "bearer", "scope": "read", "created_at": int(time.time())}
 
         if grant_type == "password":
+            client_ip = _get_client_ip(request)
+            if not _check_auth_rate_limit(client_ip):
+                return JSONResponse({"error": "rate_limited", "error_description": "Too many attempts. Please try again later."}, status_code=429)
             username = body.get("username", "")
             password = body.get("password", "")
             user = db.query(User).filter(
                 (User.username == username) | (User.email == username)
             ).first()
             if not user or not user.password_hash:
+                _record_auth_failure(client_ip)
                 return JSONResponse({"error": "invalid_grant"}, status_code=400)
             salt = user.password_hash[:32]
             if not verify_password(password, salt, user.password_hash):
+                _record_auth_failure(client_ip)
                 return JSONResponse({"error": "invalid_grant"}, status_code=400)
             if user.is_suspended:
                 return JSONResponse({"error": "invalid_grant"}, status_code=400)
