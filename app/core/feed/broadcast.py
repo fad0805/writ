@@ -1,11 +1,10 @@
 """Federation broadcast for newly created posts."""
 import re
 import logging
-import httpx
 
 from app.models import User, Post, Follow
 from app.utils.to_ap_serializer import to_ap_create
-from app.core.activitypub import broadcast_to_followers, _post_to_inboxes, _resolve_actor
+from app.core.activitypub import broadcast_to_followers, _post_to_inboxes, _resolve_actor, _safe_httpx_get
 from app.core.federation import federation_allowed
 from app.db.database import get_session
 
@@ -91,17 +90,21 @@ def _broadcast_federation(user_id, post_id, visibility, plain_content=''):
                     except Exception:
                         continue
                 if not resolved:
-                    wf = httpx.get(
+                    wf = _safe_httpx_get(
                         f"https://{r_domain}/.well-known/webfinger?resource=acct:{handle}",
                         timeout=5,
+                        max_size=2*1024*1024,
                     )
-                    if wf.status_code == 200:
-                        for link in wf.json().get("links", []):
-                            if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
-                                href = link.get("href", "")
-                                if href:
-                                    resolved = _resolve_actor(href, sign_as=user)
-                                    break
+                    if wf is not None:
+                        try:
+                            for link in wf.json().get("links", []):
+                                if link.get("rel") == "self" and link.get("type", "").endswith("activity+json"):
+                                    href = link.get("href", "")
+                                    if href:
+                                        resolved = _resolve_actor(href, sign_as=user)
+                                        break
+                        except (ValueError, TypeError):
+                            pass
                 if resolved:
                     with get_session() as s:
                         remote_user = s.query(User).get(resolved.id)
