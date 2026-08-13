@@ -237,10 +237,13 @@ export default function TimelinePage() {
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
+    const _tl = tlType;
     try {
       const snapshot = accountSnapshot();
-      const data = await api.timeline(tlType, LOAD_MORE, cursorRef.current);
-      if (accountSnapshot() === snapshot) {
+      const data = await api.timeline(_tl, LOAD_MORE, cursorRef.current);
+      // 요청이 진행되는 동안 탭(tlType)이나 계정이 바뀌었으면 이전 탭의 응답이
+      // 현재 탭의 타임라인에 섞여 들어가지 않도록 폐기한다.
+      if (accountSnapshot() === snapshot && tlTypeRef.current === _tl) {
         if (data._emojis) injectEmojis(data._emojis);
         const newTotal = totalLoadedRef.current + data.posts.length;
         const newHasMore = data.has_more && newTotal < 500;
@@ -249,7 +252,7 @@ export default function TimelinePage() {
         setHasMore(newHasMore);
         setPosts((prev) => {
           const next = [...prev, ...data.posts];
-          setCache(tlType, { posts: next, hasMore: newHasMore, cursor: cursorRef.current, ts: Date.now() });
+          setCache(_tl, { posts: next, hasMore: newHasMore, cursor: cursorRef.current, ts: Date.now() });
           return next;
         });
       }
