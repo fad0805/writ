@@ -8,12 +8,24 @@ function registerHooks() {
   hookRegistered = true;
   if (typeof window === "undefined") return;
   DOMPurify.addHook("uponSanitizeAttribute", (node, data) => {
-    if (
-      data.attrName === "style" &&
-      data.attrValue &&
-      /url\s*(\(|\\\()|@import|expression\s*\(|-moz-binding|behavior\s*:/i.test(data.attrValue)
-    ) {
-      data.keepAttr = false;
+    if (data.attrName === "style") {
+      // 레이아웃 공격(전면 오버레이 등)을 막기 위해 style은 이미지에서만 허용한다.
+      if (node && node.tagName !== "IMG") {
+        data.keepAttr = false;
+        return;
+      }
+      if (
+        data.attrValue &&
+        /url\s*(\(|\\\()|@import|expression\s*\(|-moz-binding|behavior\s*:/i.test(data.attrValue)
+      ) {
+        data.keepAttr = false;
+      }
+    }
+  });
+  DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+    if (node.tagName === "A" && node.getAttribute("target") === "_blank") {
+      // tabnabbing 방지: 새 탭으로 열리는 링크에 window.opener 접근을 차단한다.
+      node.setAttribute("rel", "noopener noreferrer");
     }
   });
 }
