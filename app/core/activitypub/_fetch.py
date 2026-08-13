@@ -545,6 +545,11 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
 
     ap_id = obj.get("id", url)
     remote_url = extract_remote_url(obj, ap_id)
+    req_domain = urlparse(url).hostname or ""
+    resp_domain = urlparse(ap_id).hostname or ""
+    if req_domain and resp_domain and req_domain != resp_domain:
+        logger.warning("[FETCH-POST] id domain mismatch: requested %s, response claims %s", req_domain, resp_domain)
+        return None
     existing = session.query(Post).filter_by(ap_id=ap_id).first()
     if existing and not existing.is_deleted:
         logger.debug("[FETCH-POST] existing post id=%s ap_id=%s", existing.id, ap_id)
@@ -557,6 +562,10 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         attributed_to = attributed_to.get("id", "")
     if not attributed_to:
         logger.debug("[FETCH-POST] no attributedTo url=%s", url)
+        return None
+    att_domain = urlparse(attributed_to).hostname or ""
+    if req_domain and att_domain and req_domain != att_domain:
+        logger.warning("[FETCH-POST] attributedTo domain mismatch: requested %s, response claims %s", req_domain, att_domain)
         return None
 
     _resolve_actor(attributed_to, sign_as=signer)
