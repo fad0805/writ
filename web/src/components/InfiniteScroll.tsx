@@ -31,10 +31,15 @@ export default function InfiniteScroll({
   useEffect(() => {
     let el: HTMLElement | null = null;
     let timer: ReturnType<typeof setInterval> | null = null;
+    let ro: ResizeObserver | null = null;
     const attach = () => {
       el = document.querySelector(".main-content");
       if (el) {
         el.addEventListener("scroll", checkNearBottom, { passive: true });
+        if (typeof ResizeObserver !== "undefined" && !ro) {
+          ro = new ResizeObserver(() => checkNearBottom());
+          ro.observe(el);
+        }
         if (timer) { clearInterval(timer); timer = null; }
       }
     };
@@ -42,6 +47,7 @@ export default function InfiniteScroll({
     if (!el) timer = setInterval(attach, 500);
     return () => {
       if (timer) clearInterval(timer);
+      ro?.disconnect();
       el?.removeEventListener("scroll", checkNearBottom);
     };
   }, [checkNearBottom]);
