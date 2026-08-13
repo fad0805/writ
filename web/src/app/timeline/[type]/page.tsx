@@ -81,7 +81,7 @@ export default function TimelinePage() {
   const isReloadRef = useRef<boolean | null>(null);
   const saveTimer = useRef<number | null>(null);
 
-  const [selectedIdx, setSelectedIdx] = useState(-1);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [replyPost, setReplyPost] = useState<PostData | null>(null);
   const [showComposer, setShowComposer] = useState(false);
   const [rewriteContent, setRewriteContent] = useState<string | null>(null);
@@ -99,8 +99,6 @@ export default function TimelinePage() {
   const emojiPickerOpenRef = useRef(false);
   const pendingPostsRef = useRef<PostData[]>([]);
   const cardRefs = useRef(new Map<string, HTMLDivElement>());
-  const selectedIdxRef = useRef(selectedIdx);
-  useEffect(() => { selectedIdxRef.current = selectedIdx; }, [selectedIdx]);
   const touchStartX = useRef(0);
   const tlTypeRef = useRef(tlType);
   useEffect(() => { tlTypeRef.current = tlType; }, [tlType]);
@@ -113,6 +111,13 @@ export default function TimelinePage() {
   const filteredPostsRef = useRef(filteredPosts);
   // eslint-disable-next-line react-hooks/refs -- sync ref with render output for keyboard handler
   filteredPostsRef.current = filteredPosts;
+
+  const selectedIdx = useMemo(() => {
+    if (selectedId === null) return -1;
+    return filteredPosts.findIndex((p) => p.id === selectedId);
+  }, [filteredPosts, selectedId]);
+  const selectedIdRef = useRef<number | null>(null);
+  useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
 
   const flushCache = useCallback(() => {
     if (saveTimer.current) {
@@ -298,7 +303,7 @@ export default function TimelinePage() {
   useEffect(() => {
     const handler = (e: FocusEvent) => {
       const tag = (e.target as HTMLElement).tagName;
-      if (tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT") setSelectedIdx(-1);
+      if (tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT") setSelectedId(null);
     };
     document.addEventListener("focusin", handler);
     return () => document.removeEventListener("focusin", handler);
@@ -324,34 +329,37 @@ export default function TimelinePage() {
     const handler = (e: KeyboardEvent) => {
       const tag = (document.activeElement?.tagName || "").toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select") return;
-      const selIdx = selectedIdxRef.current;
       const currentPosts = filteredPostsRef.current;
+      const selIdx = selectedIdRef.current === null
+        ? -1
+        : currentPosts.findIndex((p) => p.id === selectedIdRef.current);
       if (e.key === "Escape" && selIdx >= 0) {
         e.preventDefault();
-        setSelectedIdx(-1);
+        setSelectedId(null);
         return;
       }
       const currentTabIdx = TAB_KEYS.indexOf(tlType);
       if (e.key === "h" && currentTabIdx > 0) {
         e.preventDefault();
-        setSelectedIdx(-1);
+        setSelectedId(null);
         router.push(`/timeline/${TAB_KEYS[currentTabIdx - 1]}`);
         return;
       }
       if (e.key === "l" && currentTabIdx < TAB_KEYS.length - 1) {
         e.preventDefault();
-        setSelectedIdx(-1);
+        setSelectedId(null);
         router.push(`/timeline/${TAB_KEYS[currentTabIdx + 1]}`);
         return;
       }
       if (e.key === "j") {
         e.preventDefault();
-        setSelectedIdx((prev) => {
-          const next = prev < 0 ? 0 : Math.min(prev + 1, currentPosts.length - 1);
-          const post = currentPosts[next];
-          if (post) cardRefs.current.get(String(post.id))?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-          return next;
-        });
+        const next = selIdx < 0 ? 0 : Math.min(selIdx + 1, currentPosts.length - 1);
+        const post = currentPosts[next];
+        if (post) {
+          setSelectedId(post.id);
+          selectedIdRef.current = post.id;
+          cardRefs.current.get(String(post.id))?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
         return;
       }
       if (e.key === ".") {
@@ -362,12 +370,13 @@ export default function TimelinePage() {
       }
       if (e.key === "k") {
         e.preventDefault();
-        setSelectedIdx((prev) => {
-          const next = Math.max(prev - 1, 0);
-          const post = currentPosts[next];
-          if (post) cardRefs.current.get(String(post.id))?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-          return next;
-        });
+        const next = Math.max(selIdx - 1, 0);
+        const post = currentPosts[next];
+        if (post) {
+          setSelectedId(post.id);
+          selectedIdRef.current = post.id;
+          cardRefs.current.get(String(post.id))?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
         return;
       }
       if (selIdx >= 0 && currentPosts[selIdx]) {
@@ -436,6 +445,12 @@ export default function TimelinePage() {
         if (newPost._emojis) injectEmojis(newPost._emojis);
         if (deletedIds.current.has(newPost.id)) return;
         if (newPost.type === "delete") {
+          if (selectedIdRef.current === newPost.id) {
+            const idx = filteredPostsRef.current.findIndex((p) => p.id === newPost.id);
+            const remaining = filteredPostsRef.current.filter((p) => p.id !== newPost.id);
+            const repl = remaining[Math.min(Math.max(idx, 0), remaining.length - 1)];
+            setSelectedId(repl ? repl.id : null);
+          }
           setPosts((prev) => {
             const next = prev.filter((p) => p.id !== newPost.id);
             const c = timelineCache.current[tlType];
@@ -528,6 +543,12 @@ export default function TimelinePage() {
                     post={p}
                     onDelete={() => {
                       deletedIds.current.add(p.id);
+                      if (selectedIdRef.current === p.id) {
+                        const idx = filteredPostsRef.current.findIndex((x) => x.id === p.id);
+                        const remaining = filteredPostsRef.current.filter((x) => x.id !== p.id);
+                        const repl = remaining[Math.min(Math.max(idx, 0), remaining.length - 1)];
+                        setSelectedId(repl ? repl.id : null);
+                      }
                       setPosts((prev) => {
                         const next = prev.filter((x) => x.id !== p.id);
                         const c = timelineCache.current[tlType];
