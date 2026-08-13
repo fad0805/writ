@@ -17,46 +17,21 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
   const panStart = useRef({ x: 0, y: 0 });
   const panOrigin = useRef({ x: 0, y: 0 });
   const swipeStartX = useRef(0);
-  const prevIndex = useRef(-1);
-  const closingFromPop = useRef(false);
-
-  const closeViewer = useCallback(() => {
-    // popstate(브라우저 뒤로가기)에서 호출됐다면 이미 onClose를 호출한 상태이므로
-    // history.back()을 다시 실행하지 않는다. X/백드롭 클릭은 pushState로 남긴
-    // 히스토리를 되돌리고, popstate 핸들러(onPop)가 onClose를 단 한 번 호출한다.
-    if (closingFromPop.current) {
-      closingFromPop.current = false;
-      onClose();
-      return;
-    }
-    history.back();
-  }, [onClose]);
 
   useEffect(() => {
-    const wasOpen = prevIndex.current >= 0;
-    const isOpen = index >= 0;
-    prevIndex.current = index;
-    if (!wasOpen && isOpen) {
-      history.pushState({ viewer: true }, "");
-    }
-    if (!isOpen) return;
+    if (index < 0) return;
     const resetId = setTimeout(() => {
       setZoom(1);
       setPan({ x: 0, y: 0 });
     }, 0);
-    const onPop = () => {
-      closingFromPop.current = true;
-      onClose();
-    };
-    window.addEventListener("popstate", onPop);
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeViewer();
+      if (e.key === "Escape") onClose();
       else if (e.key === "ArrowLeft" && index > 0) onIndexChange(index - 1);
       else if (e.key === "ArrowRight" && index < media.length - 1) onIndexChange(index + 1);
     };
     window.addEventListener("keydown", handler);
-    return () => { clearTimeout(resetId); window.removeEventListener("keydown", handler); window.removeEventListener("popstate", onPop); };
-  }, [index, media.length, onClose, onIndexChange, closeViewer]);
+    return () => { clearTimeout(resetId); window.removeEventListener("keydown", handler); };
+  }, [index, media.length, onClose, onIndexChange]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
@@ -145,7 +120,7 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
   if (index < 0 || !media[index]) return null;
   const m = media[index];
   return (
-    <div className="reply-modal-backdrop active" onClick={closeViewer} style={{ zIndex: 2000 }}>
+    <div className="reply-modal-backdrop active" onClick={onClose} style={{ zIndex: 2000 }}>
       <div className="media-viewer" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "90vw", maxHeight: "90vh", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", cursor: zoom > 1 ? "grab" : "default", touchAction: "none" }}
         onWheel={handleWheel}
         onTouchStart={handleTouchStart}
@@ -162,7 +137,7 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
         {index < media.length - 1 && (
           <button onClick={(e) => { e.stopPropagation(); onIndexChange(index + 1); }} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 10, fontSize: 20, color: "#fff" }}>›</button>
         )}
-        <button onClick={(e) => { e.stopPropagation(); closeViewer(); }} style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 22, cursor: "pointer", zIndex: 10 }}>×</button>
+        <button onClick={(e) => { e.stopPropagation(); onClose(); }} style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 22, cursor: "pointer", zIndex: 10 }}>×</button>
         {zoom > 1 && <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.5)", color: "#fff", borderRadius: 12, padding: "2px 10px", fontSize: 12, zIndex: 10, userSelect: "none" }}>{Math.round(zoom * 100)}%</div>}
         {m.type === "video" ? (
           <video src={m.url} controls style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: 8 }} />
