@@ -5,7 +5,6 @@ import uuid
 import logging
 from urllib.parse import urlparse
 
-import httpx
 from PIL import Image
 
 from app.db.database import get_session
@@ -21,8 +20,8 @@ logger = logging.getLogger("writ.activitypub")
 def _background_import_emoji(url: str, keyword: str, domain: str):
     """Download and save a remote emoji in the background. GIF/PNG preserved, others converted to WebP."""
     try:
-        _resp = httpx.get(url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=15)
-        if _resp.status_code != 200:
+        _resp = validated_get(url, headers={"User-Agent": WRIT_USER_AGENT}, timeout=15)
+        if _resp is None or _resp.status_code != 200:
             return
         _ct = _resp.headers.get("content-type", "")
         _ext_from_url = url.rsplit(".", 1)[-1].lower() if "." in url.split("?")[0] else ""

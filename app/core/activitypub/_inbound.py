@@ -10,7 +10,6 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 
-import httpx
 import html
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -222,8 +221,8 @@ def _handle_accept(activity: dict) -> tuple[int, str]:
         follower_url = obj.get("actor", "")
     elif isinstance(obj, str):
         try:
-            resp = httpx.get(obj, headers={"Accept": "application/activity+json, application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"", "User-Agent": WRIT_USER_AGENT}, timeout=10)
-            if resp.status_code == 200:
+            resp = validated_get(obj, headers={"Accept": "application/activity+json, application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"", "User-Agent": WRIT_USER_AGENT}, timeout=10)
+            if resp is not None and resp.status_code == 200:
                 follow_activity = resp.json()
                 follower_url = follow_activity.get("actor", "")
         except Exception:

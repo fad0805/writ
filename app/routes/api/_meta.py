@@ -29,7 +29,7 @@ def api_link_preview(request: Request, url: str = Form(...)):
     try:
         if not validate_url(url):
             return result
-        resp = validated_get(url, timeout=10)
+        resp = validated_get(url, timeout=10, max_size=1024 * 1024)
         if resp and resp.status_code == 200:
             html_text = resp.text
             def _og(n):

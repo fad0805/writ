@@ -117,25 +117,33 @@ def safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
         client.close()
 
 
-def validated_get(url: str, headers: dict = None, timeout: int = 15, max_redirects: int = 5):
-    """HTTP GET with SSRF-safe redirect validation."""
+def validated_get(url: str, headers: dict = None, timeout: int = 15, max_redirects: int = 5, max_size: int = 30 * 1024 * 1024):
+    """HTTP GET with SSRF-safe redirect validation and bounded response body size."""
     if not validate_url(url):
         return None
     client = httpx.Client(follow_redirects=False, timeout=timeout)
     try:
-        resp = client.get(url, headers=headers or {})
-        for _ in range(max_redirects):
-            if resp.status_code not in (301, 302, 307, 308):
+        for _ in range(max_redirects + 1):
+            with client.stream("GET", url, headers=headers or {}) as resp:
+                if resp.status_code in (301, 302, 307, 308):
+                    location = resp.headers.get("location", "")
+                    if not location:
+                        return resp
+                    next_url = urljoin(url, location)
+                    if not validate_url(next_url):
+                        logger.warning("SSRF blocked redirect to %s", next_url)
+                        return None
+                    url = next_url
+                    continue
+                body = bytearray()
+                for chunk in resp.iter_bytes():
+                    body.extend(chunk)
+                    if len(body) > max_size:
+                        logger.warning("Response body exceeds %s bytes from %s", max_size, url)
+                        return None
+                resp._content = bytes(body)
                 return resp
-            location = resp.headers.get("location", "")
-            if not location:
-                return resp
-            url = urljoin(url, location)
-            if not validate_url(url):
-                logger.warning("SSRF blocked redirect to %s", url)
-                return None
-            resp = client.get(url, headers=headers or {})
-        return resp
+        return None
     except Exception:
         return None
     finally:
