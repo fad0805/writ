@@ -270,7 +270,9 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
             email_verified=email_verified,
         )
         s.add(user)
-        client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
+        # 신뢰된 클라이언트 IP 추출 사용 — H4(XFF 스푸핑)와 동일한 로직으로,
+        # 원시 XFF 헤더를 그대로 recent_ips에 기록하지 않는다.
+        client_ip = _get_client_ip(request)
         if client_ip:
             user.recent_ips = [client_ip]
         s.flush()
