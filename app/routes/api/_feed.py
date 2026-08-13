@@ -9,8 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.core.feed import _get_feed
 from app.core.timeline_stream import add_stream, remove_stream, add_post_stream, remove_post_stream
-from app.db.database import get_db
+from app.db.database import get_session, get_db
 from app.core.auth import get_current_user, require_auth
+from app.core.visibility import _can_view
+from app.models import Post
 
 logger = logging.getLogger("writ.api.feed")
 
@@ -58,6 +60,12 @@ async def api_post_stream(request: Request, post_id: int):
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    # 구독 시점에 가시성 검사: 비공개/DM/팔로워 전용 글은 권한 있는 사용자만
+    # 구독할 수 있게 해서 임의 post_id 구독으로 글 존재가 새어나가는 것을 막는다.
+    with get_session() as s:
+        post = s.query(Post).get(post_id)
+        if not post or not _can_view(post, user, s):
+            return JSONResponse({"error": "Post not found"}, status_code=404)
     sid, q = add_post_stream(post_id)
     async def event_gen():
         try:

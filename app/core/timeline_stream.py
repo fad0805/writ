@@ -118,12 +118,29 @@ def remove_post_stream(sid: int):
     _post_streams.pop(sid, None)
 
 
+def _post_visibility_author(post_id: int) -> tuple[bool, int | None]:
+    """(공개 여부, 작성자 id). 삭제된 글/오류 시 (True, None)로 안전하게 전역 브로드캐스트."""
+    try:
+        with get_session() as s:
+            p = s.query(Post).filter_by(id=post_id).first()
+            if p is None:
+                return True, None
+            return p.visibility in ("public", "unlisted", "home"), p.author_id
+    except Exception:
+        return True, None
+
+
 def broadcast_reaction_update(post_id: int, reactions: dict):
     """Broadcast updated reactions dict for a post to all connected timeline streams and post streams."""
     likes_count = sum(v for v in reactions.values() if isinstance(v, (int, float)))
     payload = json.dumps({"type": "update", "id": post_id, "reactions": reactions, "likes_count": likes_count}, default=str)
+    # 비공개/DM/팔로워 전용 글은 작성자에게만 푸시해 다른 사용자의 타임라인
+    # 스트림으로 존재·리액션 정보가 새어나가는 것을 막는다. (글 스트림은
+    # 구독 시 _can_view로 이미 검증된 구독자에게만 전달된다.)
+    is_public, author_id = _post_visibility_author(post_id)
     for info in list(_streams.values()):
-        _enqueue(info["queue"], payload)
+        if is_public or info.get("user_id") == author_id:
+            _enqueue(info["queue"], payload)
     for info in list(_post_streams.values()):
         if info["post_id"] == post_id:
             _enqueue(info["queue"], payload)
@@ -137,7 +154,8 @@ def broadcast_reaction_update(post_id: int, reactions: dict):
     for bp_id in bp_ids:
         bp_payload = json.dumps({"type": "update", "id": bp_id, "reactions": reactions, "likes_count": likes_count}, default=str)
         for info in list(_streams.values()):
-            _enqueue(info["queue"], bp_payload)
+            if is_public or info.get("user_id") == author_id:
+                _enqueue(info["queue"], bp_payload)
         for info in list(_post_streams.values()):
             if info["post_id"] == bp_id:
                 _enqueue(info["queue"], bp_payload)
