@@ -364,6 +364,19 @@ export default function TimelinePage() {
       }
       if (e.key === ".") {
         e.preventDefault();
+        if (selIdx >= 0 && currentPosts[selIdx]) {
+          const id = currentPosts[selIdx].id;
+          setPosts((prev) => {
+            const idx = prev.findIndex((p) => p.id === id);
+            if (idx <= 0) return prev;
+            const next = [...prev];
+            const [post] = next.splice(idx, 1);
+            next.unshift(post);
+            const c = timelineCache.current[tlType];
+            if (c) setCache(tlType, { ...c, posts: next, ts: Date.now() });
+            return next;
+          });
+        }
         const scroller = document.querySelector(".main-content");
         if (scroller) scroller.scrollTo({ top: 0, behavior: "smooth" });
         return;
