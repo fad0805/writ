@@ -7,6 +7,9 @@ from urllib.parse import urlparse
 
 from PIL import Image, ImageOps, ImageSequence
 
+from app.utils.image import guard_image
+guard_image()
+
 from app.db.database import get_session
 from app.models import RemoteMedia
 from app.utils.storage import get_storage

@@ -7,6 +7,9 @@ from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, 
 from PIL import Image, ImageOps
 from sqlalchemy import desc, func
 
+from app.utils.image import guard_image
+guard_image()
+
 from app.models import User, Novel, Episode, SeriesFollow, SeriesNotice, Post, Tag
 from app.serializers import _user_json
 from app.db.database import get_session
@@ -202,7 +205,10 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
         if "gif" in ct:
             ext = "gif"
         key = f"series/covers/{uuid4().hex[:16]}.{ext}"
-        img = Image.open(cover_image.file)
+        try:
+            img = Image.open(cover_image.file)
+        except (Image.DecompressionBombError, ValueError, OSError):
+            raise HTTPException(status_code=400, detail="커버 이미지 해상도가 너무 큽니다.")
         img = ImageOps.exif_transpose(img)
         target_w, target_h = 120, 160
         img_w, img_h = img.size
@@ -312,7 +318,10 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
         if "gif" in ct:
             ext = "gif"
         key = f"series/covers/{uuid4().hex[:16]}.{ext}"
-        img = Image.open(cover_image.file)
+        try:
+            img = Image.open(cover_image.file)
+        except (Image.DecompressionBombError, ValueError, OSError):
+            raise HTTPException(status_code=400, detail="커버 이미지 해상도가 너무 큽니다.")
         img = ImageOps.exif_transpose(img)
         target_w, target_h = 120, 160
         img_w, img_h = img.size

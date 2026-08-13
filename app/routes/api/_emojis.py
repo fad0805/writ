@@ -10,6 +10,9 @@ from fastapi.responses import JSONResponse
 from PIL import Image
 from sqlalchemy import desc, or_
 
+from app.utils.image import guard_image
+guard_image()
+
 from app.models import CustomEmoji
 from app.config.settings import S3_ENABLED
 from app.db.database import get_session

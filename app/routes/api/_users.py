@@ -10,6 +10,9 @@ from PIL import Image, ImageOps
 from sqlalchemy import desc, or_, func, select, text
 from sqlalchemy.orm import selectinload
 
+from app.utils.image import guard_image
+guard_image()
+
 from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Novel, UserMute, UserBlock
 from app.serializers import _user_json, _post_json
 from app.core.activitypub import _resolve_actor, _broadcast_update_actor
@@ -358,7 +361,10 @@ def api_user_media(request: Request, username: str, limit: int = Query(12, le=10
 def _save_profile_image(user_id: int, file: UploadFile, prefix: str, max_size: tuple[int, int], storage) -> str:
     _validate_upload(file, allow_video=False, max_size=MAX_AVATAR_SIZE, label="프로필 이미지")
     key = f"{prefix}/local/u{user_id}_{uuid4().hex[:8]}.webp"
-    img = Image.open(file.file)
+    try:
+        img = Image.open(file.file)
+    except (Image.DecompressionBombError, ValueError, OSError):
+        raise HTTPException(status_code=400, detail="프로필 이미지 해상도가 너무 큽니다.")
     img = ImageOps.exif_transpose(img)
     if max_size[0] == max_size[1]:
         size = min(img.size)

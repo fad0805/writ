@@ -7,6 +7,9 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse, FileResponse
 from PIL import Image
 
+from app.utils.image import guard_image
+guard_image()
+
 from app.models import ServerSetting
 from app.config.settings import BASE_URL
 from app.db.database import get_session

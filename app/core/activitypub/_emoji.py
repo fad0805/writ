@@ -7,6 +7,9 @@ from urllib.parse import urlparse
 
 from PIL import Image
 
+from app.utils.image import guard_image
+guard_image()
+
 from app.db.database import get_session
 from app.models import CustomEmoji
 from app.config.settings import S3_ENABLED
