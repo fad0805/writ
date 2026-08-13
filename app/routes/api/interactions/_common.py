@@ -2,7 +2,7 @@
 import logging
 import json
 from datetime import datetime, timezone
-from sqlalchemy import String, func
+from sqlalchemy import String, func, or_
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB
 from app.models import User, Post, Vote, Notification
@@ -14,9 +14,16 @@ def _json_array_has_user(column, user_id):
     """JSON 배열 컬럼에 user_id가 정확히 포함되어 있는지 확인"""
     if isinstance(column.type, postgresql.JSONB):
         return column.cast(JSONB).op('@>')(func.json_build_array(user_id).cast(JSONB))
-    else:
-        # SQLite fallback: cast to text and check containment via LIKE
-        return column.cast(String).like(f'%{user_id}%')
+    # SQLite fallback: '%{uid}%' LIKE는 2가 12/20/120을 매칭해 타인의 DM 스레드를
+    # 노출하던 부정확 버그가 있었다. JSON 직렬화는 json.dumps → "[1, 2]" 형태이므로
+    # 배열 요소 경계를 명시해 정확히 매칭한다.
+    uid = str(user_id)
+    return or_(
+        column.cast(String).like(f'[{uid}]'),
+        column.cast(String).like(f'[{uid},%'),
+        column.cast(String).like(f'%, {uid},%'),
+        column.cast(String).like(f'%, {uid}]'),
+    )
 
 
 def _generate_poll_end_notifications(user_id: int, session):

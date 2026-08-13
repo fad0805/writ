@@ -103,6 +103,10 @@ def init_db():
             conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_boosts_user_post ON boosts(user_id, post_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_bookmarks_user_post ON bookmarks(user_id, post_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_votes_user_post ON votes(user_id, post_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_episode_views_user_episode_viewed ON episode_views(user_id, episode_id, viewed_at)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_episode_views_episode ON episode_views(episode_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_episodes_novel_number ON episodes(novel_id, episode_number)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_posts_author_vis_deleted_created ON posts(author_id, visibility, is_deleted, created_at, id)"))
             conn.commit()
     except Exception:
         pass
