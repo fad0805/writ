@@ -134,7 +134,7 @@ function ExploreContent() {
         setNovels([]);
         setUsers([]);
         setFetchedUrl(url);
-      } else { if (!url.match(/\/@[\w]+\/[\w-]+/)) { const text = await res.text().catch(() => ""); alert("불러오기 실패: " + text.slice(0, 100)); } setPosts([]); setNovels([]); setUsers([]); }
+      } else { if (!url.match(/\/@[\w]+\/[\w-]+/)) { const text = await res.text().catch(() => ""); alert("불러오기 실패: " + sanitizeName(text.slice(0, 100))); } setPosts([]); setNovels([]); setUsers([]); }
     } catch (e: unknown) { if (!url.match(/\/@[\w]+\/[\w-]+/)) { alert("불러오기 실패: " + ((e instanceof Error ? e.message : "") || "")); } setPosts([]); setNovels([]); setUsers([]); }
     setLoading(false);
   }, [router]);
