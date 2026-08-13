@@ -3,7 +3,6 @@ import os
 import io
 import logging
 
-import httpx
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse, FileResponse
 from PIL import Image
@@ -11,6 +10,7 @@ from PIL import Image
 from app.models import ServerSetting
 from app.config.settings import BASE_URL
 from app.db.database import get_session
+from app.utils.http import validated_get
 from app.utils.storage import LocalStorage, get_storage
 
 logger = logging.getLogger("writ.api.pwa")
@@ -30,8 +30,8 @@ def _read_storage_file(url: str) -> bytes:
     try:
         if not url.startswith("http"):
             url = f"{BASE_URL}{url}"
-        resp = httpx.get(url, timeout=10)
-        if resp.is_success:
+        resp = validated_get(url, timeout=10, max_size=5*1024*1024)
+        if resp is not None:
             return resp.content
     except Exception as e:
         logger.warning("Failed to read file via HTTP %s: %s", url, e)
