@@ -104,3 +104,26 @@ def test_remote_post_accepts_legit_mention_name():
     }
     html = process_remote_post('<p>hello <a href="http://mastodon.example/@friend">@friend</a></p>', post)
     assert "@friend" in html
+
+
+def test_remote_span_content_not_turned_into_img():
+    # Misskey notes wrap text in <span>; the serializer must keep the text
+    # instead of collapsing the node into a bare <img>.
+    post = {
+        "id": "https://madost.one/notes/apw8df8r11",
+        "attributedTo": "https://madost.one/users/805dgm8rlz",
+        "tag": [],
+    }
+    html = process_remote_post("<p><span>오늘 날씨가 좋네요</span></p>", post)
+    assert "오늘 날씨가 좋네요" in html
+    assert html != "<img>"
+
+
+def test_remote_img_with_attrs_is_kept():
+    post = {
+        "id": "https://example.com/notes/1",
+        "attributedTo": "https://example.com/users/u",
+        "tag": [],
+    }
+    html = process_remote_post('<p><img src="https://example.com/a.png" alt="a"></p>', post)
+    assert '<img src="https://example.com/a.png" alt="a">' in html

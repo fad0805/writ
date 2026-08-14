@@ -105,9 +105,9 @@ def _serialize_html(soup):
                         pass
                 attrs_list.append(f'{k}="{val}"')
             attrs_str = f" {' '.join(attrs_list)}" if attrs_list else ""
-            if node.name == "a":
+            if node.name == "a" or node.name == "span":
                 children_str = "".join(_to_html(c) for c in list(node.children))
-                return f"<a{attrs_str}>{children_str}</a>"
+                return f"<{node.name}{attrs_str}>{children_str}</{node.name}>"
             return f"<img{attrs_str}>"
         if node.name == "br":
             return "<br>"
