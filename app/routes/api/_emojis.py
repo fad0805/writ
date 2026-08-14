@@ -112,10 +112,10 @@ def api_create_emoji(
         else:
             file_name = f"{uuid4().hex}.webp"
             file_path = os.path.join(local_dir, file_name)
-            img = Image.open(image.file)
+            img: Image.Image = Image.open(image.file)
             img = img.convert("RGBA") if img.mode == "RGBA" or img.mode == "P" else img.convert("RGB")
             if img.width > 66 or img.height > 66:
-                img = img.resize((img.width // 2, img.height // 2), Image.LANCZOS)
+                img = img.resize((img.width // 2, img.height // 2), Image.Resampling.LANCZOS)
             buf = io.BytesIO()
             img.save(buf, format="WEBP", quality=100)
             _emoji_data = buf.getvalue()

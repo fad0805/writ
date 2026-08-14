@@ -36,7 +36,7 @@ def _background_import_emoji(url: str, keyword: str, domain: str):
         elif "png" in _ct or _ext_from_url == "png":
             _ext, _ct_save = "png", "image/png"
         else:
-            _img = Image.open(io.BytesIO(_resp.content))
+            _img: Image.Image = Image.open(io.BytesIO(_resp.content))
             _img = _img.convert("RGBA") if _img.mode in ("RGBA", "P") else _img.convert("RGB")
             _out = io.BytesIO()
             _img.save(_out, format="WEBP", quality=85)
@@ -133,10 +133,10 @@ def _process_emoji_tags(tags: list, session):
             else:
                 file_name = f"{uuid.uuid4().hex}.webp"
                 file_path = os.path.join(remote_dir, file_name)
-                img = Image.open(io.BytesIO(resp.content))
+                img: Image.Image = Image.open(io.BytesIO(resp.content))
                 img = img.convert("RGBA") if img.mode in ("RGBA", "P") else img.convert("RGB")
                 if img.width > 66 or img.height > 66:
-                    img = img.resize((img.width // 2, img.height // 2), Image.LANCZOS)
+                    img = img.resize((img.width // 2, img.height // 2), Image.Resampling.LANCZOS)
                 buf = io.BytesIO()
                 img.save(buf, format="WEBP", quality=100)
                 data = buf.getvalue()

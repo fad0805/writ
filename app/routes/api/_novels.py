@@ -203,10 +203,10 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
             ext = "gif"
         key = f"series/covers/{uuid4().hex[:16]}.{ext}"
         try:
-            img = Image.open(cover_image.file)
+            img: Image.Image = Image.open(cover_image.file)
         except (Image.DecompressionBombError, ValueError, OSError) as exc:
             raise HTTPException(status_code=400, detail="커버 이미지 해상도가 너무 큽니다.") from exc
-        img = ImageOps.exif_transpose(img)
+        img = ImageOps.exif_transpose(img) or img
         target_w, target_h = 120, 160
         img_w, img_h = img.size
         ratio = max(target_w / img_w, target_h / img_h)
@@ -315,10 +315,10 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
             ext = "gif"
         key = f"series/covers/{uuid4().hex[:16]}.{ext}"
         try:
-            img = Image.open(cover_image.file)
+            img: Image.Image = Image.open(cover_image.file)
         except (Image.DecompressionBombError, ValueError, OSError) as exc:
             raise HTTPException(status_code=400, detail="커버 이미지 해상도가 너무 큽니다.") from exc
-        img = ImageOps.exif_transpose(img)
+        img = ImageOps.exif_transpose(img) or img
         target_w, target_h = 120, 160
         img_w, img_h = img.size
         ratio = max(target_w / img_w, target_h / img_h)

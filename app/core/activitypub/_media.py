@@ -50,8 +50,8 @@ def _cache_remote_media(remote_url: str) -> str:
                 logger.info("Preserving original animated/emoji media without processing: %s", remote_url)
             else:
                 try:
-                    img = Image.open(io.BytesIO(data))
-                    img = ImageOps.exif_transpose(img)
+                    img: Image.Image = Image.open(io.BytesIO(data))
+                    img = ImageOps.exif_transpose(img) or img
                     is_animated = getattr(img, "is_animated", False) or (img.format == "GIF")
                     max_dim = 2048
                     out = io.BytesIO()
@@ -65,14 +65,14 @@ def _cache_remote_media(remote_url: str) -> str:
 
                         if any(f.width > max_dim or f.height > max_dim for f in frames):
                             ratio = min(max_dim / max(f.width for f in frames), max_dim / max(f.height for f in frames))
-                            frames = [f.resize((int(f.width * ratio), int(f.height * ratio)), Image.LANCZOS) for f in frames]
+                            frames = [f.resize((int(f.width * ratio), int(f.height * ratio)), Image.Resampling.LANCZOS) for f in frames]
                         frames[0].save(out, format="WEBP", save_all=True, append_images=frames[1:], duration=durations, loop=0, quality=85)
                         data = out.getvalue()
                         ext = "webp"
                     else:
                         if img.width > max_dim or img.height > max_dim:
                             ratio = min(max_dim / img.width, max_dim / img.height)
-                            img = img.resize((int(img.width * ratio), int(img.height * ratio)), Image.LANCZOS)
+                            img = img.resize((int(img.width * ratio), int(img.height * ratio)), Image.Resampling.LANCZOS)
                         save_format = "PNG" if orig_ext == "png" else "WEBP"
                         img.save(out, format=save_format, quality=85)
                         data = out.getvalue()
@@ -122,8 +122,8 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
         is_avatar = prefix == "avatars"
         if ext in ("gif", "png") or "gif" in content_type_header or "png" in content_type_header:
             if is_avatar and ext != "gif" and "gif" not in content_type_header:
-                img = Image.open(io.BytesIO(data))
-                img = ImageOps.exif_transpose(img)
+                img: Image.Image = Image.open(io.BytesIO(data))
+                img = ImageOps.exif_transpose(img) or img
                 sz = min(img.size)
                 img = img.crop(((img.width - sz) // 2, (img.height - sz) // 2, (img.width + sz) // 2, (img.height + sz) // 2))
                 out = io.BytesIO()
@@ -139,7 +139,7 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
         else:
             try:
                 img = Image.open(io.BytesIO(data))
-                img = ImageOps.exif_transpose(img)
+                img = ImageOps.exif_transpose(img) or img
                 if is_avatar:
                     sz = min(img.size)
                     img = img.crop(((img.width - sz) // 2, (img.height - sz) // 2, (img.width + sz) // 2, (img.height + sz) // 2))

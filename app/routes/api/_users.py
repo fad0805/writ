@@ -362,10 +362,10 @@ def _save_profile_image(user_id: int, file: UploadFile, prefix: str, max_size: t
     _validate_upload(file, allow_video=False, max_size=MAX_AVATAR_SIZE, label="프로필 이미지")
     key = f"{prefix}/local/u{user_id}_{uuid4().hex[:8]}.webp"
     try:
-        img = Image.open(file.file)
+        img: Image.Image = Image.open(file.file)
     except (Image.DecompressionBombError, ValueError, OSError) as exc:
         raise HTTPException(status_code=400, detail="프로필 이미지 해상도가 너무 큽니다.") from exc
-    img = ImageOps.exif_transpose(img)
+    img = ImageOps.exif_transpose(img) or img
     if max_size[0] == max_size[1]:
         size = min(img.size)
         left = (img.width - size) // 2

@@ -134,10 +134,10 @@ def api_upload_media(request: Request, file: UploadFile = File(...)):
     key = f"media/{name}"
     if is_image:
         try:
-            img = Image.open(io.BytesIO(file.file.read()))
+            img: Image.Image = Image.open(io.BytesIO(file.file.read()))
         except (Image.DecompressionBombError, ValueError, OSError) as exc:
             raise HTTPException(status_code=400, detail="미디어 이미지 해상도가 너무 큽니다.") from exc
-        img = ImageOps.exif_transpose(img)
+        img = ImageOps.exif_transpose(img) or img
         buf = io.BytesIO()
         img.save(buf, "WEBP", quality=85, lossless=(img.mode == "RGBA"))
         storage.save(key, buf.getvalue())

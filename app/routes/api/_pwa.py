@@ -49,11 +49,11 @@ def _save_pwa_icons(source_url: str):
         return
     try:
         data = _read_storage_file(source_url)
-        img = Image.open(io.BytesIO(data))
+        img: Image.Image = Image.open(io.BytesIO(data))
         img = img.convert("RGBA")
         storage = get_storage()
         for size in (192, 512):
-            resized = img.resize((size, size), Image.LANCZOS)
+            resized = img.resize((size, size), Image.Resampling.LANCZOS)
             buf = io.BytesIO()
             resized.save(buf, format="PNG")
             buf.seek(0)
@@ -67,9 +67,9 @@ def _save_favicon(source_url: str):
         return
     try:
         data = _read_storage_file(source_url)
-        img = Image.open(io.BytesIO(data))
+        img: Image.Image = Image.open(io.BytesIO(data))
         img = img.convert("RGBA")
-        resized = img.resize((32, 32), Image.LANCZOS)
+        resized = img.resize((32, 32), Image.Resampling.LANCZOS)
         buf = io.BytesIO()
         resized.save(buf, format="PNG")
         buf.seek(0)
