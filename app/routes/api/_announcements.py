@@ -1,6 +1,6 @@
 """User-facing announcement endpoints extracted from _misc.py."""
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 
 from fastapi import APIRouter, Request, Form, HTTPException
 from sqlalchemy import desc, func
@@ -26,16 +26,16 @@ def _parse_dt_field(value: str):
         raise HTTPException(status_code=400, detail="Invalid datetime format")
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=KST)
-    return dt.astimezone(timezone.utc)
+    return dt.astimezone(UTC)
 
 
 def _is_announcement_active(a: Announcement, now_dt=None) -> bool:
-    now_dt = now_dt or datetime.now(timezone.utc)
+    now_dt = now_dt or datetime.now(UTC)
     def _aware(dt):
         if dt is None:
             return None
         if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
+            return dt.replace(tzinfo=UTC)
         return dt
     starts = _aware(a.starts_at)
     ends = _aware(a.ends_at)
@@ -111,7 +111,7 @@ def api_announcements_status(request: Request):
     user = require_auth(request)
     with get_session() as s:
         items = s.query(Announcement).order_by(desc(Announcement.created_at)).all()
-        now_dt = datetime.now(timezone.utc)
+        now_dt = datetime.now(UTC)
         active = [a for a in items if _is_announcement_active(a, now_dt)]
         unread_count = 0
         popups = []
@@ -150,7 +150,7 @@ def api_announcement_read(request: Request, announcement_id: int):
             read = AnnouncementRead(announcement_id=a.id, user_id=user.id)
             s.add(read)
         read.is_read = True
-        read.read_at = datetime.now(timezone.utc)
+        read.read_at = datetime.now(UTC)
         if not read.notified_at:
             read.notified_at = read.read_at
         s.commit()
@@ -169,7 +169,7 @@ def api_announcement_notified(request: Request, announcement_id: int):
             read = AnnouncementRead(announcement_id=a.id, user_id=user.id)
             s.add(read)
         if not read.notified_at:
-            read.notified_at = datetime.now(timezone.utc)
+            read.notified_at = datetime.now(UTC)
         s.commit()
     return {"ok": True}
 

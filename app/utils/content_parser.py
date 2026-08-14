@@ -82,24 +82,35 @@ def _finalize_html(soup):
         tag.insert_before("\n")
         tag.insert_after("\n")
 
+_SERIALIZE_ALLOWED_ATTRS = {
+    "a": {"href", "target", "class", "rel"},
+    "img": {"src", "alt", "title", "class", "width", "height", "style", "draggable"},
+    "span": {"class", "lang"},
+}
+
+
 def _serialize_html(soup):
     def _to_html(node):
         if isinstance(node, NavigableString):
             return node.output_ready()
-        if node.name == "a":
+        if node.name in _SERIALIZE_ALLOWED_ATTRS:
             attrs_list = []
             for k, v in node.attrs.items():
+                if k not in _SERIALIZE_ALLOWED_ATTRS[node.name]:
+                    continue
                 val = " ".join(v) if isinstance(v, list) else v
                 val = html.escape(str(val), quote=True)
-                if k == "href" and "/explore?q=" in val:
+                if node.name == "a" and k == "href" and "/explore?q=" in val:
                     try:
                         _, query = val.split("/explore?q=", 1)
                         val = f"/explore?q={quote(unquote(query))}"
                     except Exception: pass
                 attrs_list.append(f'{k}="{val}"')
             attrs_str = f" {' '.join(attrs_list)}" if attrs_list else ""
-            children_str = "".join(_to_html(c) for c in list(node.children))
-            return f"<a{attrs_str}>{children_str}</a>"
+            if node.name == "a":
+                children_str = "".join(_to_html(c) for c in list(node.children))
+                return f"<a{attrs_str}>{children_str}</a>"
+            return f"<img{attrs_str}>"
         if node.name == "br":
             return "<br>"
         if node.name in ("blockquote", "strong", "em", "b", "i", "code", "pre", "del", "span"):
@@ -111,14 +122,6 @@ def _serialize_html(soup):
         if node.name == "li":
             children_str = "".join(_to_html(c) for c in list(node.children))
             return f"<li>{children_str}</li>\n"
-        if node.name == "img":
-            attrs_list = []
-            for k, v in node.attrs.items():
-                val = " ".join(v) if isinstance(v, list) else v
-                val = html.escape(str(val), quote=True)
-                attrs_list.append(f'{k}="{val}"')
-            attrs_str = f" {' '.join(attrs_list)}" if attrs_list else ""
-            return f"<img{attrs_str}>"
         return "".join(_to_html(c) for c in list(node.children))
 
     result = "".join(_to_html(c) for c in list(soup.contents))
@@ -155,7 +158,7 @@ def process_remote_post(sanitized_content: str, post: dict) -> str:
         for uid in mentioned_user_ids:
             uid_lower = uid.lower()
             pure_username = uid_lower.lstrip('@').split('@')[0]
-            if (raw_username == pure_username or uid_lower == text.lower() or 
+            if (raw_username == pure_username or uid_lower == text.lower() or
                 pure_username in href_lower or uid_lower in href_lower):
                 is_mention_matched = True
                 matched_uid = uid

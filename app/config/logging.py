@@ -72,7 +72,7 @@ if _log_file_dir:
     try:
         _log_handlers.append(_MidnightRotatingFileHandler(_log_file_dir))
     except PermissionError:
-        print(f"[WARN] Cannot write to log file logs/ - check permissions", file=sys.stderr)
+        print("[WARN] Cannot write to log file logs/ - check permissions", file=sys.stderr)
 
 logging.basicConfig(
     level=logging.INFO,

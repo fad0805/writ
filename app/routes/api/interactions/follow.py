@@ -11,6 +11,7 @@ from app.core.activitypub import _resolve_actor, _send_accept, _send_reject
 from app.core.relationship import follow_user, unfollow_user
 from app.db.database import get_session
 from app.core.auth import require_auth, require_active_auth
+from app.core.timeline_stream import broadcast_refresh_notifs
 
 
 logger = logging.getLogger("writ.api.follow")

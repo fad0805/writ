@@ -4,7 +4,7 @@ import re
 import time
 import logging
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request, Form, HTTPException, Query
@@ -66,7 +66,7 @@ def api_direct_conversation(request: Request, other_id: int):
 @notify_router.get("/notifications/direct-threads")
 def api_direct_threads(request: Request):
     user = require_auth(request)
-    three_months_ago = datetime.now(timezone.utc) - timedelta(days=90)
+    three_months_ago = datetime.now(UTC) - timedelta(days=90)
     with get_session() as s:
         posts = s.query(Post).filter(
             Post.visibility == "mention",
@@ -240,7 +240,7 @@ async def api_notifications_stream(request: Request):
                 try:
                     payload = await asyncio.wait_for(q.get(), timeout=30)
                     yield f"data: {payload}\n\n"
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     yield ":keepalive\n\n"
         finally:
             remove_notif_stream(sid)

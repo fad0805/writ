@@ -12,7 +12,7 @@ router = APIRouter()
 @router.get("/nodeinfo/2.0")
 def nodeinfo():
     with get_session() as session:
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
         user_count = session.query(User).filter_by(is_remote=False).count()
         active_month = session.query(User).filter(
             User.is_remote == False,

@@ -119,4 +119,4 @@ def api_admin_logs(request: Request, action: str = "", target_type: str = "", ta
         }
 
 
-__all__ = ["admin_router"]
+__all__ = ["router"]

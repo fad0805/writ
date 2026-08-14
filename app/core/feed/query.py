@@ -1,6 +1,5 @@
 """Feed DB query and paginated filtering."""
 import logging
-from typing import List
 
 from sqlalchemy import desc, or_, and_
 from sqlalchemy.orm import Session, Load
@@ -23,7 +22,7 @@ def query_feed_posts(
         user_id: int,
         visibility: list,
         session: Session,
-        base_opts: List[Load],
+        base_opts: list[Load],
         fetch_size: int,
         offset: int = 0,
         cursor=None):

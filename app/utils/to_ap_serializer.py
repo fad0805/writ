@@ -12,8 +12,8 @@ def _ap_datetime(dt):
     if dt is None:
         return ""
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=datetime.timezone.utc)
-    return dt.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        dt = dt.replace(tzinfo=datetime.UTC)
+    return dt.astimezone(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def to_ap_actor(user) -> dict:

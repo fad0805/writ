@@ -5,7 +5,7 @@ import secrets
 import logging
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request, Form, HTTPException
@@ -169,7 +169,7 @@ def _do_create_post(
             try:
                 opts = json.loads(poll_options)
                 if isinstance(opts, list) and 2 <= len(opts) <= 10 and all(isinstance(o, str) and o.strip() for o in opts):
-                    now = datetime.now(timezone.utc)
+                    now = datetime.now(UTC)
                     expires_at = (now + timedelta(minutes=poll_expires_in)).isoformat() if poll_expires_in > 0 else None
                     post.poll_data = {
                         "options": [{"text": o.strip(), "votes_count": 0} for o in opts],

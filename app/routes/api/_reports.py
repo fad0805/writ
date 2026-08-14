@@ -1,7 +1,7 @@
 """Report and server-rules endpoints extracted from _posts.py."""
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 
 from fastapi import APIRouter, Request, Form, HTTPException
 
@@ -24,7 +24,7 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
     if target_type not in ("post", "novel", "episode"):
         raise HTTPException(status_code=400, detail="Invalid target_type")
     if forward_to_remote:
-        _cutoff = datetime.now(timezone.utc) - timedelta(minutes=1)
+        _cutoff = datetime.now(UTC) - timedelta(minutes=1)
         with get_session() as _s:
             _recent = _s.query(Report).filter(
                 Report.reporter_id == user.id,

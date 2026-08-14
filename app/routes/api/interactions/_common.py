@@ -1,7 +1,7 @@
 """Shared helpers for the interactions package."""
 import logging
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from sqlalchemy import String, func, or_
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB
@@ -27,7 +27,7 @@ def _json_array_has_user(column, user_id):
 
 
 def _generate_poll_end_notifications(user_id: int, session):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     # 빠른 확인: 사용자의 poll이 없으면 skip
     has_any_poll = session.query(Post.id).filter(
         Post.poll_data.isnot(None), Post.is_deleted == False,
@@ -65,7 +65,7 @@ def _generate_poll_end_notifications(user_id: int, session):
         try:
             exp = datetime.fromisoformat(expires_at)
             if exp.tzinfo is None:
-                exp = exp.replace(tzinfo=timezone.utc)
+                exp = exp.replace(tzinfo=UTC)
             if exp > now:
                 continue
         except (ValueError, TypeError):

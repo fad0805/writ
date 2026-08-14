@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, Request, WebSocket
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -35,7 +35,7 @@ async def sse_stream(request: Request):
                 try:
                     payload = await asyncio.wait_for(q.get(), timeout=30)
                     yield payload
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     yield ":keepalive\n\n"
         finally:
             remove_queue(q)
@@ -66,7 +66,7 @@ async def websocket_stream(websocket: WebSocket):
             try:
                 payload = await asyncio.wait_for(ws_q.get(), timeout=30)
                 await websocket.send_text(payload)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 await websocket.send_text(json.dumps({"event": "ping"}))
     except Exception:
         pass

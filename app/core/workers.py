@@ -57,7 +57,7 @@ def delivery_worker():
                     activity = json.loads(it["activity_json"])
                     body = json.dumps(activity, ensure_ascii=True, sort_keys=True).encode("utf-8")
                     digest = base64.b64encode(hashlib.sha256(body).digest()).decode()
-                    date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+                    date = datetime.datetime.now(datetime.UTC).strftime("%a, %d %b %Y %H:%M:%S GMT")
                     parsed = urlparse(it["inbox_url"])
                     path = parsed.path or "/"
                     signed_string = f"(request-target): post {path}\nhost: {parsed.netloc}\ndate: {date}\ndigest: SHA-256={digest}"
@@ -152,7 +152,7 @@ def refresh_remote_profiles():
                 time.sleep(1800)
                 continue
 
-            cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=REFRESH_STALE_SECONDS)
+            cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=REFRESH_STALE_SECONDS)
             with get_session() as s:
                 signer = _get_instance_actor(s)
                 candidates = [
@@ -178,7 +178,7 @@ def refresh_remote_profiles():
                     with get_session() as s2:
                         u = s2.query(User).get(uid)
                         if u:
-                            u.updated_at = datetime.datetime.now(datetime.timezone.utc)
+                            u.updated_at = datetime.datetime.now(datetime.UTC)
                             s2.commit()
                 except Exception:
                     pass
@@ -202,7 +202,7 @@ def auto_delete_expired_posts():
                 continue
 
             with get_session() as s:
-                now = datetime.datetime.now(datetime.timezone.utc)
+                now = datetime.datetime.now(datetime.UTC)
                 users_with_lifetime = s.query(User).filter(
                     User.post_lifetime > 0,
                     User.is_remote == False,

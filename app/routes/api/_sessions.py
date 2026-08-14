@@ -1,7 +1,7 @@
 """Login session management endpoints extracted from _misc.py."""
 import re
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 
 from fastapi import APIRouter, Request, HTTPException
 
@@ -40,7 +40,7 @@ def list_sessions(request: Request):
     user = require_active_auth(request)
     current_key = get_session_key_from_cookie(request)
     with get_session() as s:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=SESSION_EXPIRE_DAYS)
+        cutoff = datetime.now(UTC) - timedelta(days=SESSION_EXPIRE_DAYS)
         s.query(LoginSession).filter(LoginSession.user_id == user.id, LoginSession.created_at < cutoff).delete(synchronize_session=False)
         s.commit()
         sessions = s.query(LoginSession).filter_by(user_id=user.id).order_by(LoginSession.last_active.desc()).limit(50).all()

@@ -137,7 +137,7 @@ def _post_to_inbox(inbox_url: str, activity: dict, sender: User):
     logger.debug("outbound body length=%s", len(body))
     digest = base64.b64encode(hashlib.sha256(body).digest()).decode()
     digest_header = f"SHA-256={digest}" # 공백 없음 확인
-    now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+    now = datetime.datetime.now(datetime.UTC).replace(microsecond=0)
     date = now.strftime("%a, %d %b %Y %H:%M:%S GMT")
 
     parsed = urlparse(inbox_url)

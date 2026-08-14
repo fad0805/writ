@@ -38,7 +38,7 @@ def api_link_preview(request: Request, url: str = Form(...)):
                     m = re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', html_text, re.I)
                 return m.group(1) if m else ""
             og_title = _og("title") or re.search(r'<title>([^<]*)</title>', html_text, re.I)
-            result["title"] = html.unescape((_og("title") or (og_title.group(1) if og_title else domain)))[:200]
+            result["title"] = html.unescape(_og("title") or (og_title.group(1) if og_title else domain))[:200]
             result["description"] = html.unescape(_og("description") or "")[:400]
             result["image"] = _og("image") or ""
             if result["image"] and result["image"].startswith("/"):

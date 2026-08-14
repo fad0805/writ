@@ -27,7 +27,7 @@ def _cache_remote_media(remote_url: str) -> str:
 
     with get_session() as s:
         existing = s.query(RemoteMedia).filter_by(remote_url=remote_url).first()
-        if existing and existing.expires_at and existing.expires_at > datetime.datetime.now(datetime.timezone.utc):
+        if existing and existing.expires_at and existing.expires_at > datetime.datetime.now(datetime.UTC):
             return existing.local_url
 
     try:
@@ -86,7 +86,7 @@ def _cache_remote_media(remote_url: str) -> str:
         storage = get_storage()
         ct = f"image/{ext}" if is_image else "application/octet-stream"
         local_url = storage.save(key, data, ct)
-        expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=_REMOTE_MEDIA_EXPIRY_DAYS)
+        expires = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=_REMOTE_MEDIA_EXPIRY_DAYS)
         with get_session() as s:
             existing2 = s.query(RemoteMedia).filter_by(remote_url=remote_url).first()
             if existing2:

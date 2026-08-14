@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.eventbus import broadcast
 from app.core.push import send_push_to_user
 from app.core.broadcast import broadcast_post
-from app.core.timeline_stream import broadcast_notif_sound, broadcast_refresh_notifs, broadcast_refresh_notifs, broadcast_reaction_update, broadcast_delete
+from app.core.timeline_stream import broadcast_notif_sound, broadcast_refresh_notifs, broadcast_reaction_update, broadcast_delete
 from app.config.settings import BASE_URL
 from app.db.database import get_session, username_prefix_like
 from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, MutedServer, UserBlock, Tag, ProcessedActivity
@@ -199,7 +199,7 @@ def _handle_reject(activity: dict) -> tuple[int, str]:
             query_filter["follower_id"] = local_user.id
 
         follow_rel = session.query(Follow).filter_by(**query_filter).first()
-        
+
         if not follow_rel:
             return (200, "No pending follow request found")
 
@@ -406,10 +406,10 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     if expires_at:
                         try:
                             exp = datetime.datetime.fromisoformat(expires_at)
-                            now = datetime.datetime.now(datetime.timezone.utc)
+                            now = datetime.datetime.now(datetime.UTC)
                             if exp < now:
                                 return (200, "poll ended")
-                        except (valueerror, typeerror) as ex:
+                        except (ValueError, TypeError) as ex:
                             pass
                     existing_vote = session.query(Vote).filter_by(user_id=actor_id, post_id=poll_post.id).first()
                     if existing_vote:
@@ -423,7 +423,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     new_options[option_idx]["votes_count"] = new_options[option_idx].get("votes_count", 0) + 1
                     poll_post.poll_data = {**poll_post.poll_data, "options": new_options}
                     session.commit()
-                    _voter_ids = {v.user_id for v in session.query(vote).filter_by(post_id=poll_post.id).all()}
+                    _voter_ids = {v.user_id for v in session.query(Vote).filter_by(post_id=poll_post.id).all()}
                     _voter_ids.add(poll_post.author_id)
                     for _vid in _voter_ids:
                         broadcast_refresh_notifs(_vid)
@@ -435,7 +435,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                         "type": "update",
                         "poll_data": poll_post.poll_data,
                         "_emojis": _broadcast_emoji_list(session),
-                    }, poll_post.author_id, poll_post.visibility or "public", false)
+                    }, poll_post.author_id, poll_post.visibility or "public", False)
                     return (200, "voted")
 
             # Parse mentions ONLY from AP tag array (No regex body parsing)
@@ -564,18 +564,18 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                 "display_name": _ra.display_name or _ra.username,
                                 "avatar": _ra.profile_image or "", "header": _ra.header_image or "",
                                 "summary": _ra.summary or "", "is_admin": _ra.is_admin,
-                                "is_locked": getattr(_ra, "is_locked", false),
-                                "is_limited": getattr(_ra, "is_limited", false),
+                                "is_locked": getattr(_ra, "is_locked", False),
+                                "is_limited": getattr(_ra, "is_limited", False),
                                 "is_remote": _ra.is_remote, "ap_id": _ra.remote_url or "",
                             },
                             "likes_count": 0, "boosts_count": 0, "replies_count": 0,
-                            "liked": false, "boosted": false, "bookmarked": false, "is_mine": false,
-                            "is_dm": false, "is_sensitive": getattr(fetched_reply, "is_sensitive", false) or false,
+                            "liked": False, "boosted": False, "bookmarked": False, "is_mine": False,
+                            "is_dm": False, "is_sensitive": getattr(fetched_reply, "is_sensitive", False) or False,
                             "ap_id": fetched_reply.ap_id or "", "media_attachments": fetched_reply.media_attachments or [],
-                            "poll_data": fetched_reply.poll_data, "my_vote": none, "reactions": {}, "my_reaction": none,
+                            "poll_data": fetched_reply.poll_data, "my_vote": None, "reactions": {}, "my_reaction": None,
                             "quote_of_id": fetched_reply.quote_of_id or None, "quote_of_ap_id": fetched_reply.quote_of_ap_id or "",
                             "_emojis": _broadcast_emoji_list(fetch_s),
-                        }, fetched_reply.author_id, fetched_reply.visibility or "public", false)
+                        }, fetched_reply.author_id, fetched_reply.visibility or "public", False)
                     except Exception:
                         pass
 
@@ -1077,7 +1077,7 @@ def _handle_vote(activity: dict) -> tuple[int, str]:
         expires_at = post.poll_data.get("expires_at")
         if expires_at:
             try:
-                if datetime.datetime.fromisoformat(expires_at) < datetime.datetime.now(datetime.timezone.utc):
+                if datetime.datetime.fromisoformat(expires_at) < datetime.datetime.now(datetime.UTC):
                     return (200, "Poll ended")
             except (ValueError, TypeError):
                 pass
@@ -1637,7 +1637,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     "my_reaction": None,
                             "type": "update",
                             "_emojis": _broadcast_emoji_list(session),
-            }, actor_id, post.visibility or "public", False)
+            }, post.author_id, post.visibility or "public", False)
                     except Exception:
                         pass
     return (200, "Updated")

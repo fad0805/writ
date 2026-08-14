@@ -17,7 +17,7 @@ def _cleanup_expired_media():
     storage = get_storage()
     try:
         with get_session() as s:
-            items = s.query(RemoteMedia).filter(RemoteMedia.expires_at < datetime.datetime.now(datetime.timezone.utc)).all()
+            items = s.query(RemoteMedia).filter(RemoteMedia.expires_at < datetime.datetime.now(datetime.UTC)).all()
             for item in items:
                 try:
                     storage.delete(item.local_url)
@@ -35,7 +35,7 @@ _REMOTE_USER_CLEANUP_DAYS = 30
 
 def _cleanup_remote_data():
     """Clean up expired media and old processed activities only. Remote posts are kept."""
-    cutoff = datetime.datetime.now(datetime.timezone.utc)
+    cutoff = datetime.datetime.now(datetime.UTC)
     try:
         with get_session() as s:
             # Clean old processed activities (dedup tracking)

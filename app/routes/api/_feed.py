@@ -48,7 +48,7 @@ async def api_timeline_stream(request: Request, tl_type: str = "home"):
                 try:
                     payload = await asyncio.wait_for(q.get(), timeout=30)
                     yield f"data: {payload}\n\n"
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     yield ":keepalive\n\n"
         finally:
             remove_stream(sid)
@@ -75,7 +75,7 @@ async def api_post_stream(request: Request, post_id: int):
                 try:
                     payload = await asyncio.wait_for(q.get(), timeout=30)
                     yield f"data: {payload}\n\n"
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     yield ":keepalive\n\n"
         finally:
             remove_post_stream(sid)

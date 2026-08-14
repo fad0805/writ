@@ -1,6 +1,6 @@
 """Interaction endpoints — follow, DM, notification, mute/block, like, boost, bookmark, vote, react, pin."""
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from uuid import uuid4
 
 from fastapi import APIRouter, Request, Form, HTTPException
@@ -39,8 +39,8 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
             try:
                 exp = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
                 if exp.tzinfo is None:
-                    exp = exp.replace(tzinfo=timezone.utc)
-                if exp < datetime.now(timezone.utc):
+                    exp = exp.replace(tzinfo=UTC)
+                if exp < datetime.now(UTC):
                     raise HTTPException(status_code=400, detail="Poll has ended")
             except (ValueError, TypeError):
                 pass

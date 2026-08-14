@@ -152,8 +152,8 @@ def verify_http_signature(request: Request, body: bytes, activity: dict) -> tupl
         try:
             date_tuple = email.utils.parsedate_tz(date_header)
             if date_tuple:
-                date_dt = datetime.datetime.fromtimestamp(email.utils.mktime_tz(date_tuple), tz=datetime.timezone.utc)
-                now = datetime.datetime.now(datetime.timezone.utc)
+                date_dt = datetime.datetime.fromtimestamp(email.utils.mktime_tz(date_tuple), tz=datetime.UTC)
+                now = datetime.datetime.now(datetime.UTC)
                 diff = abs((now - date_dt).total_seconds())
                 if diff > 300:
                     logger.debug("[SIG] date_freshness FAIL diff=%s", diff)

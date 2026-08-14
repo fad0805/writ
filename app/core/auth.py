@@ -3,7 +3,7 @@ import hmac
 import time
 import base64
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from fastapi import Request, HTTPException
 
 from app.db.database import get_session
@@ -72,10 +72,10 @@ def get_current_user(request: Request):
     with get_session() as session:
         ls = session.query(LoginSession).filter_by(session_key=session_key).first()
         if ls:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             # last_active 갱신은 세션 목록 정렬용이므로 분 단위 해상도면 충분하다.
             # 커밋 빈도를 낮춰(SQLite 단일 writer 락) 읽기 트래픽의 쓰기 경합을 줄인다.
-            if not ls.last_active or (now - ls.last_active.replace(tzinfo=timezone.utc)).total_seconds() > 900:
+            if not ls.last_active or (now - ls.last_active.replace(tzinfo=UTC)).total_seconds() > 900:
                 ls.last_active = now
                 session.commit()
             return session.query(User).filter_by(id=ls.user_id, is_remote=False).first()

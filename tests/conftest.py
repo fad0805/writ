@@ -11,15 +11,32 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.db.database import engine, init_db, Base, get_session
-from app.models import User
+from app.models import User, Post, Follow
 from app.routes.api import router as api_router
+from app.routes.mastodon_api import router as mastodon_api_router, oauth_router
+from app.routes.ap import router as ap_router
+from app.routes.nodeinfo import router as nodeinfo_router
+from app.routes.streaming import router as streaming_router
+from app.routes.admin import router as admin_router
+from app.middleware import LogRequestsMiddleware
 from app.core.auth import create_session, hash_password
-from app.utils.crypto import generate_keypair
+from app.utils.crypto import generate_keypair, generate_csrf_token
 
 
 def _build_app():
-    app = FastAPI()
+    """Test app mirroring app.main.py — all routers in priority order, no static
+    mounts, no lifespan workers, and no CSRF middleware (POST tests stay simple;
+    CSRF behavior is covered by tests/test_csrf.py which mounts it explicitly).
+    """
+    app = FastAPI(title="writ-test")
+    app.add_middleware(LogRequestsMiddleware)
+    app.include_router(ap_router)
+    app.include_router(nodeinfo_router)
+    app.include_router(streaming_router)
+    app.include_router(oauth_router)
+    app.include_router(admin_router)
     app.include_router(api_router)
+    app.include_router(mastodon_api_router, prefix="/api")
     return app
 
 
@@ -38,12 +55,34 @@ def _fresh_db():
     Base.metadata.drop_all(engine)
 
 
+@pytest.fixture(autouse=True)
+def _reset_in_memory_limits():
+    """Clear in-memory rate-limit state between tests.
+
+    Auth failures (app.routes.api._auth) and the generic rate limiter
+    (app.core.rate_limit) are module-level dicts keyed by client IP, so they
+    would otherwise accumulate across tests that share a single TestClient IP.
+    """
+    import app.routes.api._auth as auth_mod
+    from app.core.rate_limit import _rate_limit_store, _rate_limit_daily
+
+    with auth_mod._auth_lock:
+        auth_mod._auth_failures.clear()
+    _rate_limit_store.clear()
+    _rate_limit_daily.clear()
+    yield
+    with auth_mod._auth_lock:
+        auth_mod._auth_failures.clear()
+    _rate_limit_store.clear()
+    _rate_limit_daily.clear()
+
+
 @pytest.fixture
 def make_user():
     """Create a local user directly in the DB. Returns the ORM object."""
     counter = [0]
 
-    def _make(username):
+    def _make(username, role="user"):
         counter[0] += 1
         salt, hval = hash_password("test-password")
         priv, pub = generate_keypair()
@@ -56,6 +95,8 @@ def make_user():
                 private_key=priv,
                 public_key=pub,
                 is_remote=False,
+                role=role,
+                email_verified=True,
             )
             s.add(u)
             s.commit()
@@ -68,8 +109,79 @@ def make_user():
 @pytest.fixture
 def auth_cookie(make_user):
     """Create a user and return (user, {'session': signed_cookie})."""
-    def _auth(username):
-        user = make_user(username)
+
+    def _auth(username, role="user"):
+        user = make_user(username, role=role)
         token = create_session(user.id)
         return user, {"session": token}
+
     return _auth
+
+
+@pytest.fixture
+def make_post(make_user):
+    """Create a post directly in the DB. Returns the ORM object."""
+    counter = [0]
+
+    def _make(
+        author,
+        content="<p>test post</p>",
+        visibility="public",
+        mentioned_user_ids=None,
+        parent=None,
+        is_dm=False,
+        poll_data=None,
+        summary="",
+        is_deleted=False,
+    ):
+        counter[0] += 1
+        n = counter[0]
+        with get_session() as s:
+            p = Post(
+                author_id=author.id,
+                content=content,
+                summary=summary,
+                visibility=visibility,
+                mentioned_user_ids=mentioned_user_ids or [],
+                number=f"n{n}",
+                ap_id=f"http://localhost:3000/@x/{n}",
+                is_dm=is_dm,
+                poll_data=poll_data,
+                is_deleted=is_deleted,
+                in_reply_to_id=parent.id if parent else None,
+            )
+            s.add(p)
+            s.commit()
+            s.refresh(p)
+            return p
+
+    return _make
+
+
+@pytest.fixture
+def make_follow():
+    """Create a follow relation directly in the DB."""
+
+    def _make(follower, following, accepted=True):
+        with get_session() as s:
+            f = Follow(
+                follower_id=follower.id,
+                following_id=following.id,
+                accepted=accepted,
+            )
+            s.add(f)
+            s.commit()
+            s.refresh(f)
+            return f
+
+    return _make
+
+
+@pytest.fixture
+def csrf_token():
+    """Generate a valid CSRF token for a user (used by the CSRF middleware tests)."""
+
+    def _token(user):
+        return generate_csrf_token(user.id)
+
+    return _token

@@ -1,13 +1,13 @@
 """Post detail, edit, and delete endpoints extracted from _core.py."""
 import logging
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 
 from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import selectinload
 
-from app.models import Post, Like, Boost, Vote, Bookmark, Notification
+from app.models import User, Post, Like, Boost, Vote, Bookmark, Notification
 from app.utils.to_ap_serializer import to_ap_note
 from app.serializers import _post_json
 from app.config.settings import BASE_URL
@@ -236,7 +236,7 @@ def _do_edit_post(s, post, user, content, summary, visibility=None, is_sensitive
                     note_data.pop("@context", None)
                     note_data.pop("url", None)
                     note_data["atomUri"] = _p.ap_id
-                    note_data["updated"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                    note_data["updated"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
                     note_data.setdefault("summary", None)
                     note_data.setdefault("sensitive", False)
                     note_data.setdefault("attachment", [])

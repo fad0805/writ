@@ -2,7 +2,7 @@
 import html
 import logging
 import re
-from datetime import timezone
+from datetime import timezone, UTC
 
 from fastapi import HTTPException, Request
 from sqlalchemy import func as sqlfunc, or_
@@ -107,8 +107,8 @@ def _ap_datetime(dt) -> str:
     if dt is None:
         return now().strftime("%Y-%m-%dT%H:%M:%S.000Z")
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
 def _abs_url(value: str | None) -> str | None:

@@ -70,7 +70,7 @@ def _fetch_actor_json_signed(actor_url: str, sign_as=None) -> dict:
             "User-Agent": WRIT_USER_AGENT,
         }
         if sign_as is not None:
-            date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+            date = datetime.datetime.now(datetime.UTC).strftime("%a, %d %b %Y %H:%M:%S GMT")
             created = int(time.time())
             ss = f"(request-target): get {parsed.path}\nhost: {parsed.netloc}\ndate: {date}\n(created): {created}"
             priv = get_private_key(sign_as, SECRET_KEY)
@@ -105,7 +105,7 @@ def _extract_custom_fields(attachment: list) -> list:
     return fields
 
 
-def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> int:
+def _fetch_remote_count(collection_url: str, sign_as: User | None = None) -> int:
     """Fetch totalItems from a remote ActivityPub collection (followers/following)."""
     if not collection_url:
         return 0
@@ -113,7 +113,7 @@ def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> 
         headers = {"Accept": "application/activity+json, application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"", "User-Agent": WRIT_USER_AGENT}
         if sign_as:
             parsed = urlparse(collection_url)
-            date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+            date = datetime.datetime.now(datetime.UTC).strftime("%a, %d %b %Y %H:%M:%S GMT")
             created = int(time.time())
             ss = f"(request-target): get {parsed.path}\nhost: {parsed.netloc}\ndate: {date}\n(created): {created}"
             priv = get_private_key(sign_as, SECRET_KEY)
@@ -135,7 +135,7 @@ def _fetch_remote_count(collection_url: str, sign_as: Optional[User] = None) -> 
     return 0
 
 
-def _fetch_remote_featured(actor_data: dict, sign_as: Optional[User] = None):
+def _fetch_remote_featured(actor_data: dict, sign_as: User | None = None):
     """Fetch a remote user's featured (pinned) collection.
 
     Returns a list of pinned post AP IDs, or None if the actor exposes no
@@ -159,7 +159,7 @@ def _fetch_remote_featured(actor_data: dict, sign_as: Optional[User] = None):
         headers = {"Accept": "application/activity+json, application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"", "User-Agent": WRIT_USER_AGENT}
         if sign_as:
             parsed = urlparse(featured_url)
-            date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+            date = datetime.datetime.now(datetime.UTC).strftime("%a, %d %b %Y %H:%M:%S GMT")
             created = int(time.time())
             ss = f"(request-target): get {parsed.path}\nhost: {parsed.netloc}\ndate: {date}\n(created): {created}"
             priv = get_private_key(sign_as, SECRET_KEY)
@@ -193,7 +193,7 @@ def _fetch_remote_featured(actor_data: dict, sign_as: Optional[User] = None):
     return pinned
 
 
-def _sync_remote_pinned_posts(user_id: int, pinned_ap_ids: list, sign_as: Optional[User] = None):
+def _sync_remote_pinned_posts(user_id: int, pinned_ap_ids: list, sign_as: User | None = None):
     """Resolve remote featured (pinned) AP IDs to local Post IDs and store on the user.
 
     Empty pinned_ap_ids clears existing pins (the remote user unpinned everything).
@@ -220,7 +220,7 @@ def _sync_remote_pinned_posts(user_id: int, pinned_ap_ids: list, sign_as: Option
         session.commit()
 
 
-def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optional[User] = None, lightweight: bool = False, timeout: int = 10) -> Optional[User]:
+def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: User | None = None, lightweight: bool = False, timeout: int = 10) -> User | None:
     _actor_domain = urlparse(actor_url).hostname or ""
     _own_domain = urlparse(BASE_URL).hostname or ""
     if _actor_domain and _actor_domain == _own_domain:
@@ -261,7 +261,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: Optiona
     data = None
     if sign_as:
         try:
-            date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+            date = datetime.datetime.now(datetime.UTC).strftime("%a, %d %b %Y %H:%M:%S GMT")
             parsed = urlparse(actor_url)
             created = int(time.time())
             ss = f"(request-target): get {parsed.path}\nhost: {parsed.netloc}\ndate: {date}\n(created): {created}"
@@ -598,9 +598,9 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     pub_set = {pub, "as:Public"}
 
     tags = obj.get("tag", [])
-    if isinstance(tags, dict): 
+    if isinstance(tags, dict):
         tags = [tags]
-    elif not isinstance(tags, list): 
+    elif not isinstance(tags, list):
         tags = []
 
     has_mention_tag = False
@@ -756,9 +756,9 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
             if _resp.status_code == 200:
                 _html = _resp.text
                 def _og(n):
-                    _m = re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', _html, _re.I)
+                    _m = re.search(f'<meta[^>]+property="og:{n}"[^>]+content="([^"]*)"', _html, re.I)
                     if not _m:
-                        _m = re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', _html, _re.I)
+                        _m = re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', _html, re.I)
                     return _m.group(1) if _m else ""
                 _og_title = _og("title") or (re.search(r'<title>([^<]*)</title>', _html, re.I).group(1) if re.search(r'<title>([^<]*)</title>', _html, re.I) else "")
                 _og_desc = _og("description")
@@ -817,7 +817,7 @@ def _ap_fetch(url, user):
     def _sign_and_fetch(target_url, _depth=0):
         if _depth > 2:
             return None
-        date_str = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+        date_str = datetime.datetime.now(datetime.UTC).strftime("%a, %d %b %Y %H:%M:%S GMT")
         parsed = urlparse(target_url)
         path_with_query = parsed.path or "/"
         if parsed.query:
@@ -910,7 +910,7 @@ def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
         except Exception as e:
             # 💡 단순 print 대신 에러가 발생한 정확한 라인과 원인을 추적하기 위해 traceback 추가
             logger.error("Failed to fetch remote post from %s: %s", actor_url, e)
-            traceback.print_exc() 
+            traceback.print_exc()
             return None # 껍데기를 만들지 않도록 에러 시 None 리턴 구조로 방어
 
         if not post:
@@ -927,7 +927,7 @@ def _background_fetch_outbox(url: str, user_id: int, actor_id: int):
         try:
             outbox_url = getattr(actor, "outbox_url", None) or getattr(actor, "endpoints", {}).get("sharedInbox", "")
             if not outbox_url:
-                date = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+                date = datetime.datetime.now(datetime.UTC).strftime("%a, %d %b %Y %H:%M:%S GMT")
                 parsed = urlparse(url)
                 created = int(time.time())
                 ss = f"(request-target): get {parsed.path}\nhost: {parsed.netloc}\ndate: {date}\n(created): {created}"
@@ -940,7 +940,7 @@ def _background_fetch_outbox(url: str, user_id: int, actor_id: int):
                     outbox_url = r.json().get("outbox", "")
             if outbox_url:
                 parsed2 = urlparse(outbox_url)
-                date2 = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+                date2 = datetime.datetime.now(datetime.UTC).strftime("%a, %d %b %Y %H:%M:%S GMT")
                 created2 = int(time.time())
                 path2 = parsed2.path or "/"
                 if parsed2.query:

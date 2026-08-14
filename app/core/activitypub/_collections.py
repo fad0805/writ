@@ -12,7 +12,7 @@ from app.utils.to_ap_serializer import to_ap_note, to_ap_create
 logger = logging.getLogger("writ.activitypub")
 
 
-def get_outbox(username: str, page: Optional[int] = None):
+def get_outbox(username: str, page: int | None = None):
     with get_session() as session:
         user = session.query(User).filter_by(username=username).first()
         if not user:
@@ -51,7 +51,7 @@ def get_outbox(username: str, page: Optional[int] = None):
             }
 
 
-def get_followers(username: str, page: Optional[int] = None):
+def get_followers(username: str, page: int | None = None):
     with get_session() as session:
         user = session.query(User).filter_by(username=username).first()
         if not user:
@@ -90,7 +90,7 @@ def get_followers(username: str, page: Optional[int] = None):
             }
 
 
-def get_following(username: str, page: Optional[int] = None):
+def get_following(username: str, page: int | None = None):
     with get_session() as session:
         user = session.query(User).filter_by(username=username).first()
         if not user:
@@ -129,7 +129,7 @@ def get_following(username: str, page: Optional[int] = None):
             }
 
 
-def get_featured(username: str, page: Optional[int] = None):
+def get_featured(username: str, page: int | None = None):
     with get_session() as session:
         user = session.query(User).filter_by(username=username).first()
         if not user:
