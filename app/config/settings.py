@@ -23,11 +23,15 @@ else:
     SCHEME = _scheme
     BASE_URL = f"{SCHEME}://{DOMAIN}"
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
+_database_url = os.environ.get("DATABASE_URL")
+if not _database_url:
+    raise RuntimeError("DATABASE_URL environment variable is required")
+DATABASE_URL: str = _database_url
 
-SECRET_KEY = os.environ.get("SECRET_KEY")
-if not SECRET_KEY:
+_secret_key = os.environ.get("SECRET_KEY")
+if not _secret_key:
     raise RuntimeError("SECRET_KEY environment variable is required")
+SECRET_KEY: str = _secret_key
 SESSION_EXPIRE_DAYS = 30
 
 # ActivityPub

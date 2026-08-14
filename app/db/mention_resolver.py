@@ -118,7 +118,7 @@ def _resolve_remote_user(handle: str, session: Session | None = None) -> User | 
         if actor_url:
             resolved = _resolve_actor(actor_url, lightweight=True, timeout=_RESOLVE_TIMEOUT, sign_as=signer)
             if resolved:
-                _cache_set(clean, resolved.id)
+                _cache_set(clean, resolved.id)  # type: ignore[arg-type]
                 return resolved
 
         if not resolved:
@@ -137,7 +137,7 @@ def _resolve_remote_user(handle: str, session: Session | None = None) -> User | 
                     except Exception:
                         continue
             if resolved:
-                _cache_set(clean, resolved.id)
+                _cache_set(clean, resolved.id)  # type: ignore[arg-type]
                 return resolved
     except Exception as e:
         logger.debug("Failed to resolve remote handle %s: %s", handle, e)

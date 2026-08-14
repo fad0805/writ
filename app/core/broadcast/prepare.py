@@ -53,7 +53,7 @@ def _resolve_parent_author(
                 _is_reply = True
                 _parent = session.query(Post).filter_by(id=_db_post.in_reply_to_id).first()
                 if _parent:
-                    parent_author_id = _parent.author_id
+                    parent_author_id = _parent.author_id  # type: ignore[return-value]
         except Exception:
             logger.warning(f"Failed to resolve parent author for post {post_id}", exc_info=True)
 

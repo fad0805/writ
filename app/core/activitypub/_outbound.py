@@ -23,7 +23,7 @@ from app.utils.to_ap_serializer import to_ap_actor
 logger = logging.getLogger("writ.activitypub")
 
 
-def _send_accept(actor_url: str, activity_id: str, target: User, follower: User = None):
+def _send_accept(actor_url: str, activity_id: str, target: User, follower: User | None = None):
     inbox = follower.inbox_url if follower and follower.inbox_url else (actor_url.rstrip("/") + "/inbox")
     accept = {
         "@context": "https://www.w3.org/ns/activitystreams",
@@ -37,7 +37,7 @@ def _send_accept(actor_url: str, activity_id: str, target: User, follower: User 
             "object": target.actor_uri(),
         },
     }
-    _post_to_inbox(inbox, accept, target)
+    _post_to_inbox(inbox, accept, target)  # type: ignore[arg-type]
 
 
 def _send_reject(inbox_url: str, activity_id: str, target: User, follower_actor_url: str = ""):
@@ -87,7 +87,7 @@ def _send_delete_post(post: Post, sender: User):
             logger.error("Failed to send Delete to parent author: %s", e, exc_info=True)
 
 
-def _send_flag(reporter: User, target_type: str, target_obj, reason: str, rule_ids: list = None):
+def _send_flag(reporter: User, target_type: str, target_obj, reason: str, rule_ids: list | None = None):
     if target_type == "post":
         object_id = target_obj.ap_id
         target_actor_uri = target_obj.author.actor_uri()
@@ -280,7 +280,7 @@ def _fanout_to_followers(db: Session, user: User, activity: dict, action: str = 
                         if threaded:
                             spawn(_post_to_inbox, inbox, activity, user)
                         else:
-                            _post_to_inbox(inbox, activity, user)
+                            _post_to_inbox(inbox, activity, user)  # type: ignore[arg-type]
                     except Exception as e:
                         logger.error("Failed to fan-out %s to inbox %s: %s", action, inbox, e, exc_info=True)
     except Exception as e:

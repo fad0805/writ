@@ -30,7 +30,7 @@ def _record_actor_fail(actor_url: str):
             if _now - _ts >= _ACTOR_FAIL_TTL:
                 del _actor_fail_cache[_k]
         while len(_actor_fail_cache) > _ACTOR_FAIL_MAX:
-            _oldest = min(_actor_fail_cache, key=_actor_fail_cache.get)
+            _oldest = min(_actor_fail_cache, key=_actor_fail_cache.get)  # type: ignore[arg-type]
             del _actor_fail_cache[_oldest]
 
 
@@ -196,7 +196,7 @@ def verify_http_signature(request: Request, body: bytes, activity: dict) -> tupl
         logger.debug("[SIG] retrying with _resolve_actor force_refresh")
         fresh = _resolve_actor(actor_url, force_refresh=True)
         if fresh and fresh.public_key:
-            ok = verify_signature(signed_string, sig_b64, fresh.public_key)
+            ok = verify_signature(signed_string, sig_b64, fresh.public_key)  # type: ignore[arg-type]
             logger.debug("[SIG] retry verify=%s", "OK" if ok else "FAIL")
             return (ok, fresh if ok else None)
     return (ok, remote_actor if ok else None)

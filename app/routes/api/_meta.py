@@ -88,9 +88,9 @@ def api_server_info(request: Request):
 # ── Client Log ──
 
 @meta_router.post("/log")
-def api_client_log(request: Request):
+async def api_client_log(request: Request):
     try:
-        data = request.json()
+        data = await request.json()
         action = data.get("action", "client_event")
         details = data.get("details", "")
         ip = request.client.host if request.client else ""

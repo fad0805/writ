@@ -1,6 +1,7 @@
 import json
 import re
 import time
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -41,13 +42,13 @@ def _load_user_filters(session: Session, user):
         .filter_by(follower_id=user.id, show_boosts=False).all()
     }
     kw_mutes = session.query(KeywordMute).filter_by(user_id=user.id).all()
-    parsed_kw = []
+    parsed_kw: list[Any] = []
     for kw in kw_mutes:
         if kw.is_regex:
             parsed_kw.append(("regex", kw.keyword, kw.mode, None))
         else:
             try:
-                keywords = json.loads(kw.keyword)
+                keywords = json.loads(kw.keyword)  # type: ignore[arg-type]
                 if isinstance(keywords, str):
                     keywords = [keywords]
             except (json.JSONDecodeError, TypeError):
@@ -86,7 +87,7 @@ def _match_keyword_mute(content_lower: str, parsed_kw: list) -> bool:
 
 
 def should_deliver_post(post, session: Session, user, tl_type: str,
-                         following_ids: set | list = None,
+                         following_ids: set | list | None = None,
                          filter_ctx: dict | None = None) -> bool:
     """Decide whether a single post should be shown to the given user.
 

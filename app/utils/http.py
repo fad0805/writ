@@ -117,7 +117,7 @@ def safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
         client.close()
 
 
-def validated_get(url: str, headers: dict = None, timeout: int = 15, max_redirects: int = 5, max_size: int = 30 * 1024 * 1024):
+def validated_get(url: str, headers: dict | None = None, timeout: int = 15, max_redirects: int = 5, max_size: int = 30 * 1024 * 1024):
     """HTTP GET with SSRF-safe redirect validation and bounded response body size."""
     if not validate_url(url):
         return None

@@ -65,7 +65,7 @@ class _MidnightRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
 
 
 # ── logging configuration ──
-_log_handlers = [logging.StreamHandler()]
+_log_handlers: list[logging.Handler] = [logging.StreamHandler()]
 _log_file_dir = "logs"
 if _log_file_dir:
     os.makedirs(_log_file_dir, exist_ok=True)

@@ -104,12 +104,12 @@ def _get_vapid_key():
     return None
 
 
-def send_push_to_user(user_id: int, notification_type: str, from_username: str = "", post_id: int = None, metadata: dict = None):
+def send_push_to_user(user_id: int, notification_type: str, from_username: str = "", post_id: int | None = None, metadata: dict | None = None):
     """Send web push notification to all subscriptions of a user. Runs in background thread."""
     _push_executor.submit(_send_push_sync, user_id, notification_type, from_username, post_id, metadata)
 
 
-def _send_push_sync(user_id: int, notification_type: str, from_username: str, post_id: int, metadata: dict):
+def _send_push_sync(user_id: int, notification_type: str, from_username: str, post_id: int | None, metadata: dict | None):
     try:
 
         vapid_key = _get_vapid_key()

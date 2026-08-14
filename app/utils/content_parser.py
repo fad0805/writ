@@ -32,7 +32,7 @@ def process_post_content(sanitized_content: str, post: dict | Post | None) -> st
     return process_local_post(sanitized_content)
 
 
-def extract_mentions(post_content: str, post: dict | Post | None) -> list[str]:
+def extract_mentions(post_content: str, post: dict | Post | None) -> list[dict]:
     # 1. 리모트/로컬 판별 (기존 로직 재사용)
     is_remote = False
     if isinstance(post, dict):
@@ -136,7 +136,7 @@ def process_remote_post(sanitized_content: str, post: dict) -> str:
     mentioned_user_ids = []
     for t in raw_tags:
         if isinstance(t, dict) and t.get("type") == "Mention" and t.get("name"):
-            name = t.get("name").strip()
+            name = (t.get("name") or "").strip()
             # 원격 Mention name이 속성 탈출 문자를 포함하면 거부한다 (저장형 XSS 방지)
             if _MENTION_NAME_RE.match(name):
                 mentioned_user_ids.append(name)
@@ -146,7 +146,7 @@ def process_remote_post(sanitized_content: str, post: dict) -> str:
     # 2. 기존 <a> 태그 리모델링
     for a_tag in soup.find_all("a"):
         text = a_tag.get_text().strip()
-        raw_href = a_tag.get("href", "").strip()
+        raw_href = str(a_tag.get("href", "") or "").strip()
         raw_username = text.lstrip('@').lower()
         href_lower = raw_href.lower()
 
@@ -232,7 +232,7 @@ def process_local_post(text: str) -> str:
         return ""
 
     # 2. 코드 블록 보호 (플레이스홀더 사용)
-    code_blocks = []
+    code_blocks: list[str] = []
     # 2.1 마크다운 코드 블록 처리
     text = re.sub(r'```(\w*)\r?\n([\s\S]*?)```', functools.partial(_save_code_block, code_blocks=code_blocks), text)
     text = re.sub(r'```([^`\n]+?)```', lambda m: f'<pre><code>{m.group(1)}</code></pre>', text)

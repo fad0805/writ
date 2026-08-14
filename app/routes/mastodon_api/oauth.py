@@ -1,5 +1,6 @@
 import secrets
 import time
+from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -10,6 +11,11 @@ from app.models import MastodonAccessToken, MastodonApp, MastodonAuthorizationCo
 from app.routes.api._auth import _check_auth_rate_limit, _get_client_ip, _record_auth_failure
 
 router = APIRouter()
+
+
+def _form_text(form: dict[str, Any], key: str, default: str = "") -> str:
+    val = form.get(key)
+    return val if isinstance(val, str) else default
 
 
 def _do_authorize(client_id: str, redirect_uri: str, response_type: str, scope: str, state: str, username: str, password: str, client_ip: str):
@@ -72,13 +78,13 @@ async def api_oauth_authorize(request: Request):
         form = await request.form()
         body = dict(form)
     return _do_authorize(
-        client_id=body.get("client_id", ""),
-        redirect_uri=body.get("redirect_uri", "urn:ietf:wg:oauth:2.0:oob"),
-        response_type=body.get("response_type", "code"),
-        scope=body.get("scope", "read write push"),
-        state=body.get("state", ""),
-        username=body.get("username", ""),
-        password=body.get("password", ""),
+        client_id=_form_text(body, "client_id"),
+        redirect_uri=_form_text(body, "redirect_uri", "urn:ietf:wg:oauth:2.0:oob"),
+        response_type=_form_text(body, "response_type", "code"),
+        scope=_form_text(body, "scope", "read write push"),
+        state=_form_text(body, "state"),
+        username=_form_text(body, "username"),
+        password=_form_text(body, "password"),
         client_ip=_get_client_ip(request),
     )
 
@@ -88,13 +94,13 @@ async def oauth_authorize_form(request: Request):
     form = await request.form()
     body = dict(form)
     return _do_authorize(
-        client_id=body.get("client_id", ""),
-        redirect_uri=body.get("redirect_uri", "urn:ietf:wg:oauth:2.0:oob"),
-        response_type=body.get("response_type", "code"),
-        scope=body.get("scope", "read write push"),
-        state=body.get("state", ""),
-        username=body.get("username", ""),
-        password=body.get("password", ""),
+        client_id=_form_text(body, "client_id"),
+        redirect_uri=_form_text(body, "redirect_uri", "urn:ietf:wg:oauth:2.0:oob"),
+        response_type=_form_text(body, "response_type", "code"),
+        scope=_form_text(body, "scope", "read write push"),
+        state=_form_text(body, "state"),
+        username=_form_text(body, "username"),
+        password=_form_text(body, "password"),
         client_ip=_get_client_ip(request),
     )
 

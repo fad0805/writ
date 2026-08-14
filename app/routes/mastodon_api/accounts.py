@@ -30,7 +30,7 @@ router = APIRouter()
 # GET /api/v1/accounts/lookup?acct=user@domain
 # ---------------------------------------------------------------------------
 @router.get("/v1/accounts/lookup")
-def lookup_account(acct: str = "", request: Request = None, db: SASession = Depends(get_db)):
+def lookup_account(acct: str = "", request: Request = None, db: SASession = Depends(get_db)):  # type: ignore[assignment]
     if not acct:
         raise MastodonAPIError(status_code=400, detail="Missing acct parameter")
     raw = acct.strip().lstrip("/@")
@@ -82,15 +82,15 @@ async def update_credentials(request: Request, db: SASession = Depends(get_db)):
         fields_attributes = body.get("fields_attributes")
 
     if display_name is not None:
-        user.display_name = str(display_name)[:128]
+        user.display_name = str(display_name)[:128]  # type: ignore[assignment]
     if note is not None:
-        user.summary = html.unescape(re.sub(r"<[^>]+>", "", str(note)))[:500]
+        user.summary = html.unescape(re.sub(r"<[^>]+>", "", str(note)))[:500]  # type: ignore[assignment]
     if locked is not None:
-        user.is_locked = bool(locked)
+        user.is_locked = bool(locked)  # type: ignore[assignment]
     if bot is not None:
-        user.is_bot = bool(bot)
+        user.is_bot = bool(bot)  # type: ignore[assignment]
     if source_privacy:
-        user.default_visibility = _visibility_from_mastodon(source_privacy)
+        user.default_visibility = _visibility_from_mastodon(source_privacy if isinstance(source_privacy, str) else "")  # type: ignore[assignment]
     if fields_attributes and isinstance(fields_attributes, dict):
         fields = []
         for key in sorted(fields_attributes.keys()):
@@ -101,7 +101,7 @@ async def update_credentials(request: Request, db: SASession = Depends(get_db)):
             value = val.get("value", "") if isinstance(val, dict) else ""
             if name:
                 fields.append({"name": name, "value": value, "verified_at": None})
-        user.custom_fields = fields
+        user.custom_fields = fields  # type: ignore[assignment]
 
     user.updated_at = now()
     db.commit()
@@ -164,14 +164,14 @@ def get_account_statuses(
 ):
     user = _require_bearer(request, db)
     target_user = db.query(User).filter_by(id=int(account_id)).first()
-    if not user:
+    if not user or not target_user:
         raise MastodonAPIError(status_code=404, detail="Record not found")
 
     relationship = _relationship_json(user, target_user, db)
     viewer = _maybe_bearer(request, db)
 
     if pinned:
-        pinned_ids = target_user.pinned_posts or []
+        pinned_ids: list[int] = target_user.pinned_posts or []
         if not pinned_ids:
             return []
         q = db.query(Post).filter(

@@ -6,7 +6,7 @@ from app.models import Follow, Post, User
 def _load_follower_ids(session: Session, author_id: int) -> set[int]:
     return {f.follower_id for f in session.query(Follow).filter_by(
         following_id=author_id, accepted=True
-    ).all()}
+    ).all()}  # type: ignore[misc]
 
 
 def _load_author_is_local(session: Session, author_id: int) -> bool:
@@ -25,22 +25,22 @@ def _load_stream_users(session: Session, streams: dict[int, dict]) -> tuple[set[
             if info.get("tl_type") in ("home", "social"):
                 home_uids.add(uid)
 
-    stream_users = {}
+    stream_users: dict[int, User] = {}
     if all_stream_uids:
         for u in session.query(User).filter(User.id.in_(all_stream_uids)).all():
-            stream_users[u.id] = u
+            stream_users[u.id] = u  # type: ignore[index]
 
     return home_uids, stream_users
 
 
 def _load_home_follow_map(session: Session, home_uids: set[int]) -> dict[int, set[int]]:
-    home_follows = {}
+    home_follows: dict[int, set[int]] = {}
     if home_uids:
         for f in session.query(Follow).filter(
             Follow.follower_id.in_(home_uids),
             Follow.accepted == True
         ).all():
-            home_follows.setdefault(f.follower_id, set()).add(f.following_id)
+            home_follows.setdefault(f.follower_id, set()).add(f.following_id)  # type: ignore[index]
     return home_follows
 
 
