@@ -1,27 +1,28 @@
 """Post detail, edit, and delete endpoints extracted from _core.py."""
+import contextlib
 import logging
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Like, Boost, Vote, Bookmark, Notification
-from app.utils.to_ap_serializer import to_ap_note
-from app.serializers import _post_json
 from app.config.settings import BASE_URL
-from app.core.activitypub import _build_reactions, broadcast_to_followers, _fetch_remote_post, _send_delete_post
+from app.core.activitypub import _build_reactions, _fetch_remote_post, _send_delete_post, broadcast_to_followers
+from app.core.auth import get_current_user, require_active_auth
 from app.core.broadcast import broadcast_post
-from app.core.timeline_stream import broadcast_refresh_notifs, broadcast_delete
+from app.core.threads import spawn
+from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs
+from app.core.visibility import _can_view
 from app.db.database import get_session
-from app.core.auth import require_active_auth, get_current_user
-from app.utils.content_parser import process_post_content, extract_mentions
 from app.db.mention_resolver import resolve_handles_to_ids
+from app.models import Bookmark, Boost, Like, Notification, Post, User, Vote
+from app.serializers import _post_json
+from app.utils.content_parser import extract_mentions, process_post_content
 from app.utils.post import _get_descendant_ids, _sync_post_tags
 from app.utils.storage import get_storage
-from app.core.visibility import _can_view
-from app.core.threads import spawn
+from app.utils.to_ap_serializer import to_ap_note
 
 logger = logging.getLogger("writ.api.posts")
 
@@ -91,9 +92,9 @@ def api_get_post(request: Request, post_id: int):
         reply_id_set = {r.id for r in descendants}
         _reply_liked_ids = _reply_boosted_ids = _reply_bookmarked_ids = set()
         if user and reply_id_set:
-            _reply_liked_ids = set(r[0] for r in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(reply_id_set)).all())
-            _reply_boosted_ids = set(r[0] for r in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(reply_id_set)).all())
-            _reply_bookmarked_ids = set(r[0] for r in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(reply_id_set)).all())
+            _reply_liked_ids = {r[0] for r in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(reply_id_set)).all()}
+            _reply_boosted_ids = {r[0] for r in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(reply_id_set)).all()}
+            _reply_bookmarked_ids = {r[0] for r in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(reply_id_set)).all()}
         result["replies"] = [_post_json(r, s, user, _liked_ids=_reply_liked_ids, _boosted_ids=_reply_boosted_ids, _bookmarked_ids=_reply_bookmarked_ids) for r in descendants if _can_view(r, user, s)]
         result["has_more_replies"] = offset + limit < len(descendant_ids)
 
@@ -330,10 +331,8 @@ def _do_delete_post(s, post, user, cascade=True, keep_media=False):
                 storage = get_storage()
                 for m in _media:
                     if isinstance(m, dict) and m.get("url"):
-                        try:
+                        with contextlib.suppress(Exception):
                             storage.delete(m["url"])
-                        except Exception:
-                            pass
             if _ap_id and _ap_id.startswith("http") and not _remote:
                 try:
                     with get_session() as _s:

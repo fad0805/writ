@@ -1,5 +1,6 @@
-import json
 import asyncio
+import contextlib
+import json
 import logging
 
 from sqlalchemy import func
@@ -24,16 +25,12 @@ def _set_loop():
 def _enqueue(queue: asyncio.Queue, item: str):
     if _main_loop and _main_loop.is_running():
         def _put():
-            try:
+            with contextlib.suppress(asyncio.QueueFull):
                 queue.put_nowait(item)
-            except asyncio.QueueFull:
-                pass
         _main_loop.call_soon_threadsafe(_put)
     else:
-        try:
+        with contextlib.suppress(asyncio.QueueFull):
             queue.put_nowait(item)
-        except asyncio.QueueFull:
-            pass
 
 
 def add_stream(user_id: int, tl_type: str) -> tuple[int, asyncio.Queue]:

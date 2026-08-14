@@ -1,8 +1,8 @@
 import contextvars
-from sqlalchemy import create_engine, text, inspect, event, func
-from sqlalchemy.orm import Session
 
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import create_engine, event, func, inspect, text
+from sqlalchemy.orm import DeclarativeBase, Session
+
 from app.config.settings import DATABASE_URL
 
 _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}

@@ -4,10 +4,10 @@ import time
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app.db.database import get_session
-from app.models import User, MastodonApp, MastodonAuthorizationCode, MastodonAccessToken
 from app.core.auth import verify_password
-from app.routes.api._auth import _check_auth_rate_limit, _record_auth_failure, _get_client_ip
+from app.db.database import get_session
+from app.models import MastodonAccessToken, MastodonApp, MastodonAuthorizationCode, User
+from app.routes.api._auth import _check_auth_rate_limit, _get_client_ip, _record_auth_failure
 
 router = APIRouter()
 

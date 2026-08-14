@@ -1,15 +1,19 @@
-import os
 import logging
+import os
 import time
-
 from abc import ABC, abstractmethod
-import boto3
 from urllib.parse import urlparse
 
+import boto3
+
 from app.config.settings import (
+    S3_ACCESS_KEY,
+    S3_BUCKET,
     S3_ENABLED,
-    S3_ENDPOINT, S3_REGION, S3_ACCESS_KEY, S3_SECRET_KEY,
-    S3_BUCKET, S3_PUBLIC_URL,
+    S3_ENDPOINT,
+    S3_PUBLIC_URL,
+    S3_REGION,
+    S3_SECRET_KEY,
 )
 from app.db.database import get_session
 from app.models import User

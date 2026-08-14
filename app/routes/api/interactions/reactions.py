@@ -1,16 +1,14 @@
 """Interaction endpoints — react/unreact for posts."""
 import logging
 
-from fastapi import APIRouter, Request, Form, HTTPException
-from sqlalchemy import func
+from fastapi import APIRouter, Form, HTTPException, Request
 
-from app.models import Post, Like, CustomEmoji
-from app.core.interactions import react_post, unreact_post
-from app.db.database import get_session
 from app.core.auth import require_active_auth
+from app.core.interactions import react_post, unreact_post
 from app.core.threads import spawn
-
 from app.core.visibility import _can_view
+from app.db.database import get_session
+from app.models import CustomEmoji, Like, Post
 
 logger = logging.getLogger("writ.api.reactions")
 
@@ -84,7 +82,7 @@ def api_reaction_users(request: Request, post_id: int, emoji: str = ""):
         else:
             q = q.filter(Like.reaction.is_(None))
         like_rows = q.order_by(Like.id.desc()).limit(20).all()
-        user_ids = list(dict.fromkeys(l.user_id for l in like_rows))
+        user_ids = list(dict.fromkeys(like.user_id for like in like_rows))
         from app.models import User
         users = s.query(User).filter(User.id.in_(user_ids)).all()
         from app.serializers import _user_json

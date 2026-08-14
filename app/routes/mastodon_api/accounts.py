@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import String, cast
 from sqlalchemy.orm import Session as SASession
 
-from app.models import User, Post, Follow, now
+from app.core.relationship import block_user, follow_user, mute_user, unblock_user, unfollow_user, unmute_user
 from app.db.database import get_db
-from app.core.relationship import follow_user, unfollow_user, mute_user, unmute_user, block_user, unblock_user
+from app.models import Follow, Post, User, now
 from app.routes.mastodon_api._common import (
     MastodonAPIError,
     _account_json,
@@ -66,8 +66,8 @@ async def update_credentials(request: Request, db: SASession = Depends(get_db)):
         form = await request.form()
         display_name = form.get("display_name")
         note = form.get("note")
-        avatar = form.get("avatar")
-        header = form.get("header")
+        form.get("avatar")
+        form.get("header")
         locked = form.get("locked")
         bot = form.get("bot")
         source_privacy = form.get("source[privacy]")
@@ -78,8 +78,6 @@ async def update_credentials(request: Request, db: SASession = Depends(get_db)):
         note = body.get("note")
         locked = body.get("locked")
         bot = body.get("bot")
-        avatar = None
-        header = None
         source_privacy = body.get("source", {}).get("privacy") if isinstance(body.get("source"), dict) else None
         fields_attributes = body.get("fields_attributes")
 

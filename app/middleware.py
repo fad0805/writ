@@ -1,15 +1,21 @@
-import os
-import time
 import logging
+import time
 from urllib.parse import urlparse
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from app.config.settings import APP_ENV, DOMAIN
 from app.config.logging import _request_logger
-from app.utils.crypto import CSRF_EXEMPT_PREFIXES, CSRF_EXEMPT_EXACT, CSRF_EXEMPT_METHODS, validate_csrf_token, generate_csrf_token, csrf_token_user_id
+from app.config.settings import APP_ENV, DOMAIN
+from app.utils.crypto import (
+    CSRF_EXEMPT_EXACT,
+    CSRF_EXEMPT_METHODS,
+    CSRF_EXEMPT_PREFIXES,
+    csrf_token_user_id,
+    generate_csrf_token,
+    validate_csrf_token,
+)
 
 logger = logging.getLogger("writ.middleware")
 

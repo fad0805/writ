@@ -1,19 +1,19 @@
-import os
+import base64
 import json
 import logging
+import os
 import re
-
-import base64
 from concurrent.futures import ThreadPoolExecutor
-from py_vapid import Vapid
+
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
-from pywebpush import webpush, WebPushException
+from py_vapid import Vapid
+from pywebpush import WebPushException, webpush
 
 from app.config.settings import DOMAIN
-from app.models import ServerSetting, PushSubscription, Post
 from app.db.database import get_session
+from app.models import Post, PushSubscription, ServerSetting
 
 logger = logging.getLogger("writ.push")
 
@@ -26,8 +26,7 @@ def _sanitize_pem(val: str) -> str:
     if not val:
         return val
     val = val.strip()
-    val = val.replace("\\n", "\n").replace("\\r", "")
-    return val
+    return val.replace("\\n", "\n").replace("\\r", "")
 
 VAPID_PRIVATE_KEY = _sanitize_pem(os.environ.get("VAPID_PRIVATE_KEY", ""))
 VAPID_PUBLIC_KEY = _sanitize_pem(os.environ.get("VAPID_PUBLIC_KEY", ""))
@@ -260,7 +259,7 @@ def init_vapid_keys():
                 VAPID_PUBLIC_KEY = _sanitize_pem(_db_pub)
                 os.environ["VAPID_PRIVATE_KEY"] = VAPID_PRIVATE_KEY
                 os.environ["VAPID_PUBLIC_KEY"] = VAPID_PUBLIC_KEY
-                if VAPID_PRIVATE_KEY != _db_priv or VAPID_PUBLIC_KEY != _db_pub:
+                if _db_priv != VAPID_PRIVATE_KEY or _db_pub != VAPID_PUBLIC_KEY:
                     try:
                         _ss.vapid_private_key = VAPID_PRIVATE_KEY
                         _ss.vapid_public_key = VAPID_PUBLIC_KEY
@@ -268,7 +267,7 @@ def init_vapid_keys():
                     except Exception:
                         pass
                 return
-            elif _db_priv_san and _db_pub:
+            if _db_priv_san and _db_pub:
                 logger.warning("VAPID DB key invalid (len=%s), regenerating...", len(_db_priv_san))
                 try:
                     _ss.vapid_private_key = ''

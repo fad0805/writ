@@ -1,16 +1,16 @@
 """Report and server-rules endpoints extracted from _posts.py."""
 import json
 import logging
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 
-from app.models import Report, User, Post, Novel, Episode, ServerRule, Notification
 from app.core.activitypub import _send_flag
-from app.core.push import send_push_to_user
-from app.core.timeline_stream import broadcast_refresh_notifs, broadcast_notif_sound
-from app.db.database import get_session
 from app.core.auth import require_active_auth
+from app.core.push import send_push_to_user
+from app.core.timeline_stream import broadcast_notif_sound, broadcast_refresh_notifs
+from app.db.database import get_session
+from app.models import Episode, Notification, Novel, Post, Report, ServerRule, User
 
 logger = logging.getLogger("writ.api.reports")
 
@@ -41,9 +41,8 @@ def api_create_report(request: Request, target_type: str = Form(...), target_id:
                 parsed_rule_ids = parsed
         except (json.JSONDecodeError, TypeError):
             pass
-    if not reason or len(reason.strip()) < 10:
-        if not parsed_rule_ids:
-            raise HTTPException(status_code=400, detail="Reason must be at least 10 characters")
+    if (not reason or len(reason.strip()) < 10) and not parsed_rule_ids:
+        raise HTTPException(status_code=400, detail="Reason must be at least 10 characters")
     with get_session() as s:
         existing = s.query(Report).filter_by(
             reporter_id=user.id, target_type=target_type, target_id=target_id, status="pending"

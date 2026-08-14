@@ -1,23 +1,26 @@
 """Emoji CRUD endpoints extracted from _misc.py."""
-import os
-import re
 import io
 import logging
+import os
+import re
 from uuid import uuid4
 
-from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 from PIL import Image
 from sqlalchemy import desc, or_
 
 from app.utils.image import guard_image
+
 guard_image()
 
-from app.models import CustomEmoji
+import contextlib
+
 from app.config.settings import S3_ENABLED
-from app.db.database import get_session
 from app.core.auth import require_auth
-from app.utils.emoji import EMOJI_DIR, _refresh_emoji_cache_forcibly, _emoji_url
+from app.db.database import get_session
+from app.models import CustomEmoji
+from app.utils.emoji import EMOJI_DIR, _emoji_url, _refresh_emoji_cache_forcibly
 from app.utils.storage import get_storage
 
 logger = logging.getLogger("writ.api.emojis")
@@ -110,10 +113,7 @@ def api_create_emoji(
             file_name = f"{uuid4().hex}.webp"
             file_path = os.path.join(local_dir, file_name)
             img = Image.open(image.file)
-            if img.mode == "RGBA" or img.mode == "P":
-                img = img.convert("RGBA")
-            else:
-                img = img.convert("RGB")
+            img = img.convert("RGBA") if img.mode == "RGBA" or img.mode == "P" else img.convert("RGB")
             if img.width > 66 or img.height > 66:
                 img = img.resize((img.width // 2, img.height // 2), Image.LANCZOS)
             buf = io.BytesIO()
@@ -123,13 +123,11 @@ def api_create_emoji(
                 with open(file_path, "wb") as f:
                     f.write(_emoji_data)
         if S3_ENABLED and _emoji_data:
-            try:
+            with contextlib.suppress(Exception):
                 get_storage().save(f"emojis/local/{file_name}", _emoji_data, f"image/{ext}")
-            except Exception:
-                pass
-    except Exception as e:
+    except Exception as exc:
         logger.exception("Failed to process emoji image")
-        raise HTTPException(status_code=400, detail="Failed to process image")
+        raise HTTPException(status_code=400, detail="Failed to process image") from exc
 
     alias_list = [a.strip().lower().replace(" ", "_") for a in aliases.split(",") if a.strip()]
 
@@ -200,10 +198,8 @@ def api_copy_emoji(request: Request, emoji_id: int):
         _data = None
 
         _storage = get_storage()
-        try:
+        with contextlib.suppress(Exception):
             _data = _storage.get(f"emojis/{_src_sub}/{src.file_name}")
-        except Exception:
-            pass
         if not _data:
             _src_path = os.path.join(EMOJI_DIR, _src_sub, src.file_name)
             if os.path.isfile(_src_path):
@@ -219,10 +215,8 @@ def api_copy_emoji(request: Request, emoji_id: int):
                         f.write(_data)
                 except Exception:
                     pass
-            try:
+            with contextlib.suppress(Exception):
                 _storage.save(f"emojis/local/{_new_fname}", _data, f"image/{_ext}")
-            except Exception:
-                pass
 
         copy = CustomEmoji(keyword=new_kw, file_name=_new_fname, category="기본", aliases=src.aliases or [])
         s.add(copy)
@@ -241,10 +235,8 @@ def api_delete_emoji(request: Request, emoji_id: int):
         if not emoji:
             raise HTTPException(status_code=404, detail="Emoji not found")
         _del_sub = "remote" if emoji.domain or emoji.category == "remote" else "local"
-        try:
+        with contextlib.suppress(Exception):
             get_storage().delete(f"emojis/{_del_sub}/{emoji.file_name}")
-        except Exception:
-            pass
         if not S3_ENABLED:
             file_path = os.path.join(EMOJI_DIR, _del_sub, emoji.file_name)
             if os.path.isfile(file_path):

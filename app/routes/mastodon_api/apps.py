@@ -4,8 +4,8 @@ import secrets
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session as SASession
 
-from app.models import MastodonApp, MastodonAccessToken
 from app.db.database import get_db
+from app.models import MastodonAccessToken, MastodonApp
 from app.routes.mastodon_api._common import MastodonAPIError
 
 router = APIRouter()

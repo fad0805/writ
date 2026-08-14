@@ -1,14 +1,15 @@
+import base64
 import hashlib
 import hmac
-import time
-import base64
 import secrets
-from datetime import datetime, timezone, UTC
-from fastapi import Request, HTTPException
+import time
+from datetime import UTC, datetime
 
-from app.db.database import get_session
+from fastapi import HTTPException, Request
+
 from app.config.settings import SECRET_KEY, SESSION_EXPIRE_DAYS
-from app.models import User, LoginSession
+from app.db.database import get_session
+from app.models import LoginSession, User
 
 
 def hash_password(password: str, salt: str = None) -> tuple[str, str]:

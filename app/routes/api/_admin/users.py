@@ -2,13 +2,13 @@
 
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Request, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import String
 
-from app.models import User, Post, Follow, Novel
-from app.serializers import _user_json
 from app.core.auth import require_auth
 from app.db.database import get_session
+from app.models import Follow, Novel, Post, User
+from app.serializers import _user_json
 
 router = APIRouter()
 
@@ -75,10 +75,7 @@ def api_admin_users(request: Request, location: str = Query("local"), status: st
             qb = qb.filter(User.recent_ips.cast(String).ilike(f"%{ip_q}%"))
         if domain_q:
             qb = qb.filter(User.username.ilike(f"%@{domain_q}%") | User.email.ilike(f"%@{domain_q}%"))
-        if sort == "active":
-            qb = qb.order_by(User.updated_at.desc())
-        else:
-            qb = qb.order_by(User.created_at.desc())
+        qb = qb.order_by(User.updated_at.desc()) if sort == "active" else qb.order_by(User.created_at.desc())
         users = qb.limit(50).all()
         result = []
         for u in users:

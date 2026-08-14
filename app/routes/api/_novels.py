@@ -3,20 +3,21 @@ import io
 import secrets
 from uuid import uuid4
 
-from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from PIL import Image, ImageOps
 from sqlalchemy import desc, func
 
 from app.utils.image import guard_image
+
 guard_image()
 
-from app.models import User, Novel, Episode, SeriesFollow, SeriesNotice, Post, Tag
-from app.serializers import _user_json
+from app.core.auth import get_current_user, require_active_auth, require_auth
 from app.db.database import get_session
-from app.core.auth import require_auth, require_active_auth, get_current_user
-from app.utils.upload import _validate_upload
+from app.models import Episode, Novel, Post, SeriesFollow, SeriesNotice, Tag, User
+from app.serializers import _user_json
 from app.utils.datetime import _fmt_dt
 from app.utils.storage import get_storage
+from app.utils.upload import _validate_upload
 
 novels_router = APIRouter()
 
@@ -30,8 +31,7 @@ def _apply_latest_activity_order(q, s):
     ).group_by(SeriesNotice.novel_id).subquery()
     q = q.outerjoin(latest_ep, Novel.id == latest_ep.c.novel_id)
     q = q.outerjoin(latest_nt, Novel.id == latest_nt.c.novel_id)
-    q = q.order_by(desc(func.coalesce(latest_ep.c.max_ep, latest_nt.c.max_nt)).nullslast())
-    return q
+    return q.order_by(desc(func.coalesce(latest_ep.c.max_ep, latest_nt.c.max_nt)).nullslast())
 
 
 def _load_novel_meta(s, novels):
@@ -186,10 +186,7 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
                      cover_image: UploadFile = File(None), is_sensitive: bool = Form(False)):
     user = require_active_auth(request)
     is_user_deceased = False
-    if isinstance(user, dict):
-        is_user_deceased = user.get('is_deceased', False)
-    else:
-        is_user_deceased = getattr(user, 'is_deceased', False)
+    is_user_deceased = user.get('is_deceased', False) if isinstance(user, dict) else getattr(user, 'is_deceased', False)
 
     if is_user_deceased:
         raise HTTPException(status_code=403, detail="고인 계정은 시리즈를 생성할 수 없습니다.")
@@ -200,15 +197,15 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
     storage = get_storage()
     cover_url = ""
     if cover_image and cover_image.filename:
-        ext, is_image, is_video, _ = _validate_upload(cover_image, allow_video=False, max_size=5 * 1024 * 1024, label="커버 이미지")
+        ext, _is_image, _is_video, _ = _validate_upload(cover_image, allow_video=False, max_size=5 * 1024 * 1024, label="커버 이미지")
         ct = cover_image.content_type or ""
         if "gif" in ct:
             ext = "gif"
         key = f"series/covers/{uuid4().hex[:16]}.{ext}"
         try:
             img = Image.open(cover_image.file)
-        except (Image.DecompressionBombError, ValueError, OSError):
-            raise HTTPException(status_code=400, detail="커버 이미지 해상도가 너무 큽니다.")
+        except (Image.DecompressionBombError, ValueError, OSError) as exc:
+            raise HTTPException(status_code=400, detail="커버 이미지 해상도가 너무 큽니다.") from exc
         img = ImageOps.exif_transpose(img)
         target_w, target_h = 120, 160
         img_w, img_h = img.size
@@ -264,14 +261,13 @@ def api_get_novel(request: Request, novel_id: int):
             for e in episode_list:
                 e.pop("views", None)
             novel_json.pop("total_views", None)
-        result = {
+        return {
             "novel": novel_json,
             "episodes": episode_list,
             "author": _user_json(author) if author else None,
             "is_mine": user.id == novel.author_id if user else False,
             "is_following": s.query(SeriesFollow).filter_by(user_id=user.id, novel_id=novel.id).count() > 0 if user else False,
         }
-    return result
 
 
 @novels_router.post("/series/{novel_id}/follow")
@@ -313,15 +309,15 @@ def api_edit_novel(request: Request, novel_id: int, title: str = Form(...), desc
     storage = get_storage()
     cover_url = ""
     if cover_image and cover_image.filename:
-        ext, is_image, is_video, _ = _validate_upload(cover_image, allow_video=False, max_size=5 * 1024 * 1024, label="커버 이미지")
+        ext, _is_image, _is_video, _ = _validate_upload(cover_image, allow_video=False, max_size=5 * 1024 * 1024, label="커버 이미지")
         ct = cover_image.content_type or ""
         if "gif" in ct:
             ext = "gif"
         key = f"series/covers/{uuid4().hex[:16]}.{ext}"
         try:
             img = Image.open(cover_image.file)
-        except (Image.DecompressionBombError, ValueError, OSError):
-            raise HTTPException(status_code=400, detail="커버 이미지 해상도가 너무 큽니다.")
+        except (Image.DecompressionBombError, ValueError, OSError) as exc:
+            raise HTTPException(status_code=400, detail="커버 이미지 해상도가 너무 큽니다.") from exc
         img = ImageOps.exif_transpose(img)
         target_w, target_h = 120, 160
         img_w, img_h = img.size

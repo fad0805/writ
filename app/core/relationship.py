@@ -1,15 +1,16 @@
 """Shared interaction logic used by both internal API and Mastodon-compat API."""
 
+import contextlib
 import logging
 import uuid
 
 from sqlalchemy.orm import Session
 
-from app.models import User, Follow, Notification, UserMute, UserBlock
 from app.config.settings import BASE_URL
 from app.core.activitypub import _post_to_inbox
 from app.core.push import send_push_to_user
-from app.core.timeline_stream import broadcast_refresh_notifs, broadcast_notif_sound
+from app.core.timeline_stream import broadcast_notif_sound, broadcast_refresh_notifs
+from app.models import Follow, Notification, User, UserBlock, UserMute
 
 logger = logging.getLogger("writ.relationships")
 
@@ -65,10 +66,8 @@ def unfollow_user(db: Session, user: User, target: User):
             Notification.notification_type.in_(["follow", "follow_request"])
         ).delete(synchronize_session=False)
         db.commit()
-        try:
+        with contextlib.suppress(Exception):
             broadcast_refresh_notifs(target.id)
-        except Exception:
-            pass
         if target.is_remote and target.inbox_url:
             follow_activity_id = f"{user.actor_uri()}#follows/{target.id}"
             undo = {

@@ -43,7 +43,7 @@ def alias_to_actor_urls(alias: str) -> list[str]:
     if not alias or not isinstance(alias, str):
         return []
     alias = alias.strip()
-    if alias.startswith("http://") or alias.startswith("https://"):
+    if alias.startswith(("http://", "https://")):
         return [alias]
     clean = alias.lstrip("@")
     if "@" not in clean:

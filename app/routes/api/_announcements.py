@@ -1,15 +1,15 @@
 """User-facing announcement endpoints extracted from _misc.py."""
 import logging
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 from sqlalchemy import desc, func
 from sqlalchemy.orm import joinedload
 
-from app.models import Announcement, AnnouncementRead, AnnouncementVote
-from app.db.database import get_session
 from app.core.auth import require_auth
-from app.utils.datetime import _fmt_dt, KST
+from app.db.database import get_session
+from app.models import Announcement, AnnouncementRead, AnnouncementVote
+from app.utils.datetime import KST, _fmt_dt
 
 logger = logging.getLogger("writ.api.announcements")
 
@@ -22,8 +22,8 @@ def _parse_dt_field(value: str):
         return None
     try:
         dt = datetime.fromisoformat(value.strip())
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid datetime format")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid datetime format") from exc
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=KST)
     return dt.astimezone(UTC)
@@ -41,9 +41,7 @@ def _is_announcement_active(a: Announcement, now_dt=None) -> bool:
     ends = _aware(a.ends_at)
     if starts and starts > now_dt:
         return False
-    if ends and ends < now_dt:
-        return False
-    return True
+    return not (ends and ends < now_dt)
 
 
 def _announcement_json(a: Announcement):

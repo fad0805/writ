@@ -4,14 +4,38 @@ line-length = 120
 
 [tool.ruff.lint]
 select = [
-    "W",      # pycodestyle warnings
-    "UP",     # pyupgrade
-    "F821",   # undefined names (real bugs)
-    "F811",   # redefinition of unused name
-    "F541",   # f-string without placeholders
-    "F822",   # undefined name in __all__
-    "RUF100", # unused noqa directives
+    "E",     # pycodestyle errors
+    "F",     # pyflakes
+    "W",     # pycodestyle warnings
+    "UP",    # pyupgrade
+    "I",     # import sorting
+    "B",     # flake8-bugbear
+    "C4",    # comprehensions
+    "SIM",   # simplify
+    "RUF",   # ruff-specific
+    "PIE",   # pie (unnecessary pass/else etc.)
+    "RET",   # return statement simplifications
+    "PERF",  # performance
+    "ISC",   # implicit string concatenation
+    "FLY",   # flynt (f-strings)
+    "T20",   # flake8-print
 ]
+ignore = [
+    "B008",    # FastAPI `Depends()`/`File()` 기본값 패턴 — FastAPI 관용구 유지
+    "E402",    # 모듈 레벨 재수출 import(__init__ 등) — 의도된 패턴
+    "E501",    # 줄 길이 래핑 강제 없음 — 대량 수동 래핑은 별도 작업으로 이연
+    "E711",    # SQLAlchemy 컬럼 `== None` 은 IS NULL 구문 — `is None` 로 바꾸면 쿼리 파손
+    "E712",    # SQLAlchemy 컬럼 `== True/False` 는 SQL 비교 구문 — `is True` 로 바꾸면 쿼리 파손
+    "ARG001",  # FastAPI 라우트/테스트 시그니처의 미사용 파라미터
+    "RUF013",  # SQLAlchemy `Optional[...]` 기본값 패턴
+    "ERA001",  # 주석 처리된 코드는 유지
+    "PTH",     # pathlib 마이그레이션은 별도 작업으로 이연
+    "S",       # 보안 린트(밴딧 류)는 별도 보안 패스로 이연
+]
+
+[tool.ruff.lint.per-file-ignores]
+# __init__ 은 의도적인 재수출 파일 — F401(미사용 import) 검사 제외
+"app/**/__init__.py" = ["F401"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

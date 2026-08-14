@@ -4,7 +4,7 @@ import time
 
 from sqlalchemy.orm import Session
 
-from app.models import Post, UserMute, UserBlock, SeriesMute, KeywordMute, Follow
+from app.models import Follow, KeywordMute, Post, SeriesMute, UserBlock, UserMute
 
 # 유저별 필터 데이터 TTL 캐시. 브로드캐스트/타임라인마다 반복되는 5회의 쿼리를 줄인다.
 # 호출자(_timeline_filter 등)가 반환 dict를 변형하므로 항상 복사본을 돌려준다.
@@ -86,7 +86,7 @@ def _match_keyword_mute(content_lower: str, parsed_kw: list) -> bool:
 
 
 def should_deliver_post(post, session: Session, user, tl_type: str,
-                         following_ids: set | list = [],
+                         following_ids: set | list = None,
                          filter_ctx: dict | None = None) -> bool:
     """Decide whether a single post should be shown to the given user.
 
@@ -100,6 +100,8 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
 
     Returns True if the post should be delivered, False to hide it.
     """
+    if following_ids is None:
+        following_ids = []
     if not user:
         return True
 
@@ -204,9 +206,4 @@ def _timeline_filter(posts, session: Session, user, tl_type, following_ids, filt
             for _bo in session.query(Post).filter(Post.id.in_(boost_ids)).all():
                 filter_ctx["boost_originals"][_bo.id] = _bo
 
-    filtered = []
-    for p in posts:
-        if should_deliver_post(p, session, user, tl_type, following_ids, filter_ctx):
-            filtered.append(p)
-
-    return filtered
+    return [p for p in posts if should_deliver_post(p, session, user, tl_type, following_ids, filter_ctx)]

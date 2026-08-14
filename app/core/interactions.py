@@ -1,5 +1,6 @@
 """Shared interaction logic used by both internal API and Mastodon-compat API."""
 
+import contextlib
 import json
 import logging
 import uuid
@@ -8,17 +9,19 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import User, Post, Like, Boost, Notification, CustomEmoji
 from app.config.settings import BASE_URL
-from app.core.activitypub import _post_to_inbox, _author_inbox, _undo_like_activity, _fanout_to_followers
-from app.core.visibility import _can_view
-from app.core.push import send_push_to_user
+from app.core.activitypub import _author_inbox, _fanout_to_followers, _post_to_inbox, _undo_like_activity
 from app.core.broadcast import broadcast_post
+from app.core.push import send_push_to_user
 from app.core.threads import spawn
 from app.core.timeline_stream import (
-    broadcast_refresh_notifs, broadcast_notif_sound,
-    broadcast_reaction_update, broadcast_delete,
+    broadcast_delete,
+    broadcast_notif_sound,
+    broadcast_reaction_update,
+    broadcast_refresh_notifs,
 )
+from app.core.visibility import _can_view
+from app.models import Boost, CustomEmoji, Like, Notification, Post, User
 from app.utils.emoji import _emoji_url
 
 logger = logging.getLogger("writ.post_interactions")
@@ -172,10 +175,8 @@ def like_post(db: Session, user: User, post_id: int, reaction: str = "★"):
         if is_custom or _react:
             like_activity["content"] = _react
             like_activity["_misskey_reaction"] = _react
-        try:
+        with contextlib.suppress(Exception):
             _post_to_inbox(inbox, like_activity, user)
-        except Exception:
-            pass
 
 
 def unlike_post(db: Session, user: User, post_id: int):
@@ -190,10 +191,8 @@ def unlike_post(db: Session, user: User, post_id: int):
     inbox = _author_inbox(post)
     if post.author.is_remote and inbox:
         undo = _undo_like_activity(user, post, removed_reaction, like_id)
-        try:
+        with contextlib.suppress(Exception):
             _post_to_inbox(inbox, undo, user)
-        except Exception:
-            pass
 
 
 # ---------------------------------------------------------------------------
@@ -388,10 +387,8 @@ def react_post(db: Session, user: User, post_id: int, emoji: str):
         if _tag:
             like_activity["tag"] = _tag
         if is_new or old_reaction != emoji:
-            try:
+            with contextlib.suppress(Exception):
                 _post_to_inbox(post_author_shared_inbox, like_activity, user)
-            except Exception:
-                pass
 
 
 def unreact_post(db: Session, user: User, post_id: int, emoji: str | None = None):
@@ -405,7 +402,5 @@ def unreact_post(db: Session, user: User, post_id: int, emoji: str | None = None
     removed = _delete_like(db, user, post, match_reaction=emoji)
     if removed and post_author_is_remote and post_author_shared_inbox:
         undo = _undo_like_activity(user, post, removed[0])
-        try:
+        with contextlib.suppress(Exception):
             _post_to_inbox(post_author_shared_inbox, undo, user)
-        except Exception:
-            pass

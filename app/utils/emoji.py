@@ -1,11 +1,12 @@
+import contextlib
 import os
-import time
 import shutil
+import time
 
-from sqlalchemy import desc, case
+from sqlalchemy import case, desc
 
-from app.models import CustomEmoji
 from app.config.settings import S3_ENABLED
+from app.models import CustomEmoji
 from app.utils.storage import get_storage
 
 # 이모지 파일은 쓰기 가능한 uploads 볼륨에 저장한다.
@@ -30,10 +31,8 @@ def _migrate_legacy_emoji_files():
             _sp = os.path.join(_src, name)
             _dp = os.path.join(_dst, name)
             if os.path.isfile(_sp) and not os.path.exists(_dp):
-                try:
+                with contextlib.suppress(Exception):
                     shutil.copy2(_sp, _dp)
-                except Exception:
-                    pass
 
 # Simple in-memory TTL cache for emoji list
 _EMOJI_CACHE_TTL = 60  # seconds

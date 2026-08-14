@@ -2,12 +2,12 @@
 
 import json
 
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 from sqlalchemy import func
 
-from app.models import ServerRule
 from app.core.auth import require_auth
 from app.db.database import get_session
+from app.models import ServerRule
 
 router = APIRouter()
 
@@ -72,8 +72,8 @@ def api_admin_reorder_rules(request: Request, rule_ids: str = Form(...)):
     ids = []
     try:
         ids = json.loads(rule_ids)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid rule_ids")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid rule_ids") from exc
     with get_session() as s:
         for i, rid in enumerate(ids):
             s.query(ServerRule).filter_by(id=rid).update({"sort_order": i})

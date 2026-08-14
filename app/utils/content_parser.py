@@ -6,8 +6,8 @@ from urllib.parse import quote, unquote, urlparse
 import nh3
 from bs4 import BeautifulSoup, NavigableString
 
-from app.models import Post
 from app.config.settings import BASE_URL
+from app.models import Post
 
 
 def process_post_content(sanitized_content: str, post: dict | Post | None) -> str:
@@ -29,8 +29,7 @@ def process_post_content(sanitized_content: str, post: dict | Post | None) -> st
     if is_remote:
         post_data = post if isinstance(post, dict) else {"object": post}
         return process_remote_post(sanitized_content, post_data)
-    else:
-        return process_local_post(sanitized_content)
+    return process_local_post(sanitized_content)
 
 
 def extract_mentions(post_content: str, post: dict | Post | None) -> list[str]:
@@ -47,8 +46,7 @@ def extract_mentions(post_content: str, post: dict | Post | None) -> list[str]:
     # 2. 판별된 타입에 따라 빠른 경로 선택
     if is_remote:
         return extract_mentions_from_remote(post if isinstance(post, dict) else {"object": post})
-    else:
-        return extract_mentions_from_local(post_content)
+    return extract_mentions_from_local(post_content)
 
 
 def _sanitize_html(html: str) -> str:
@@ -59,7 +57,7 @@ def _sanitize_html(html: str) -> str:
     # ActivityPub(마스토돈, 미스키 등)에서 흔히 사용하는 안전한 태그 목록
     allowed_tags = {
         "a", "p", "del", "br", "span", "b", "i", "strong", "em",
-        "ul", "ol", "li", "blockquote", "code", "pre", "del", "img"
+        "ul", "ol", "li", "blockquote", "code", "pre", "img"
     }
     # 각 태그별로 허용할 속성 (XSS 방지를 위해 href는 https/http만 허용)
     allowed_attributes = {
@@ -68,13 +66,12 @@ def _sanitize_html(html: str) -> str:
         "img": {"src", "alt", "title", "class", "width", "height", "style", "draggable"},
     }
     # 스크립트, 스타일, 온클릭 이벤트 등을 전부 날려버리고 안전한 HTML만 반환
-    clean_html = nh3.clean(
+    return nh3.clean(
         html,
         tags=allowed_tags,
         attributes=allowed_attributes,
         link_rel="noopener noreferrer" # 링크 추가 시 보안 속성 강제
     )
-    return clean_html
 
 
 def _finalize_html(soup):
@@ -104,7 +101,8 @@ def _serialize_html(soup):
                     try:
                         _, query = val.split("/explore?q=", 1)
                         val = f"/explore?q={quote(unquote(query))}"
-                    except Exception: pass
+                    except Exception:
+                        pass
                 attrs_list.append(f'{k}="{val}"')
             attrs_str = f" {' '.join(attrs_list)}" if attrs_list else ""
             if node.name == "a":

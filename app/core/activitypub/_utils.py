@@ -1,6 +1,6 @@
 from app.config.settings import SECRET_KEY
 from app.models import User
-from app.utils.crypto import generate_keypair, encrypt_key
+from app.utils.crypto import encrypt_key, generate_keypair
 
 
 def _get_instance_actor(session) -> User:

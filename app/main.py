@@ -1,42 +1,38 @@
+import logging
 import os
 import threading
-import logging
+from contextlib import asynccontextmanager, suppress
+
 import uvicorn
-
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.settings import CORS_ORIGINS
 from app.core.activitypub import _cleanup_expired_media, _cleanup_remote_data
 from app.core.push import init_vapid_keys
-from app.core.workers import delivery_worker, refresh_remote_profiles, auto_delete_expired_posts, cleanup_orphan_media
+from app.core.workers import auto_delete_expired_posts, cleanup_orphan_media, delivery_worker, refresh_remote_profiles
 from app.middleware import CSRFProtectionMiddleware, LogRequestsMiddleware
-from app.routes.api import router as api_router
-from app.utils.storage import _cleanup_avatars
 from app.routes.admin import router as admin_router
-from app.routes.mastodon_api import router as mastodon_api_router, oauth_router, MastodonAPIError
 from app.routes.ap import router as ap_router
+from app.routes.api import router as api_router
+from app.routes.mastodon_api import MastodonAPIError, oauth_router
+from app.routes.mastodon_api import router as mastodon_api_router
 from app.routes.nodeinfo import router as nodeinfo_router
 from app.routes.streaming import router as streaming_router
 from app.utils.emoji import EMOJI_DIR, _migrate_legacy_emoji_files
+from app.utils.storage import _cleanup_avatars
 
 logger = logging.getLogger("writ.app")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    try:
+    with suppress(Exception):
         _cleanup_avatars()
-    except Exception:
-        pass
-    try:
+    with suppress(Exception):
         init_vapid_keys()
-    except Exception:
-        pass
     t = threading.Thread(target=delivery_worker, daemon=True)
     t.start()
     t2 = threading.Thread(target=refresh_remote_profiles, daemon=True)
@@ -49,8 +45,8 @@ async def lifespan(app: FastAPI):
     _cleanup_remote_data()
     yield
     # 대기열에 남은 작업을 취소해 종료/리로드 지연을 줄인다 (실행 중 작업은 그대로 마무리)
-    from app.routes.api._post_create import _post_create_executor
     from app.core.activitypub import _inbox_executor
+    from app.routes.api._post_create import _post_create_executor
     _post_create_executor.shutdown(wait=False, cancel_futures=True)
     _inbox_executor.shutdown(wait=False, cancel_futures=True)
 
@@ -95,6 +91,7 @@ app.add_middleware(
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 import app.config.settings as _settings
+
 if not _settings.S3_ENABLED:
     app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 

@@ -1,9 +1,9 @@
 """Series notice (공지) endpoints extracted from _series.py."""
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 
-from app.models import SeriesNotice, Novel
-from app.db.database import get_session
 from app.core.auth import require_auth
+from app.db.database import get_session
+from app.models import Novel, SeriesNotice
 from app.utils.datetime import _fmt_dt
 
 notices_router = APIRouter()

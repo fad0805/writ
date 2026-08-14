@@ -1,9 +1,9 @@
-import os
-import time
+import contextlib
 import datetime
 import logging
 import logging.handlers
-import sys
+import os
+import time
 
 
 class _MidnightRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
@@ -69,10 +69,8 @@ _log_handlers = [logging.StreamHandler()]
 _log_file_dir = "logs"
 if _log_file_dir:
     os.makedirs(_log_file_dir, exist_ok=True)
-    try:
+    with contextlib.suppress(PermissionError):
         _log_handlers.append(_MidnightRotatingFileHandler(_log_file_dir))
-    except PermissionError:
-        print("[WARN] Cannot write to log file logs/ - check permissions", file=sys.stderr)
 
 logging.basicConfig(
     level=logging.INFO,

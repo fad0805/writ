@@ -1,17 +1,16 @@
 """Interaction endpoints — follow, DM, notification, mute/block, like, boost, bookmark, vote, react, pin."""
 import logging
 
-from fastapi import APIRouter, Request, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import desc
 
-from app.models import Post, Like, Bookmark, CustomEmoji
-from app.serializers import _post_json
-from app.core.interactions import like_post, unlike_post, boost_post, unboost_post
-from app.db.database import get_session
 from app.core.auth import require_active_auth
+from app.core.interactions import boost_post, like_post, unboost_post, unlike_post
 from app.core.threads import spawn
-
 from app.core.visibility import _can_view
+from app.db.database import get_session
+from app.models import Bookmark, CustomEmoji, Like, Post
+from app.serializers import _post_json
 
 logger = logging.getLogger("writ.api.engagement")
 
@@ -115,7 +114,7 @@ def api_favorites(request: Request, limit: int = Query(10, le=100), offset: int 
     with get_session() as s:
         raw = s.query(Like).filter_by(user_id=user.id).order_by(desc(Like.created_at)).offset(offset).limit(limit + 1).all()
         has_more = len(raw) > limit
-        posts = [_post_json(l.post, s, user) for l in raw[:limit] if l.post and not l.post.is_deleted and _can_view(l.post, user, s)]
+        posts = [_post_json(like.post, s, user) for like in raw[:limit] if like.post and not like.post.is_deleted and _can_view(like.post, user, s)]
         return {"posts": posts, "has_more": has_more}
 
 

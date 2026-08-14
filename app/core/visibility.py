@@ -2,7 +2,7 @@
 
 from sqlalchemy.orm import Session
 
-from app.models import User, Post, Follow
+from app.models import Follow, Post, User
 
 
 def _can_view(post: Post, viewer: User | None, session: Session) -> bool:
@@ -26,7 +26,5 @@ def _can_view(post: Post, viewer: User | None, session: Session) -> bool:
     if v == "mention":
         if post.mentioned_user_ids and viewer.id in post.mentioned_user_ids:
             return True
-        if viewer.username and f"@{viewer.username}" in (post.content or ""):
-            return True
-        return False
+        return bool(viewer.username and f"@{viewer.username}" in (post.content or ""))
     return True

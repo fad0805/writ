@@ -1,39 +1,59 @@
-import re
-import copy
-import sys
 import asyncio
+import contextlib
+import copy
 import datetime
+import html
 import json
 import logging
 import os
+import re
+import sys
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 
-import html
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
-from app.core.eventbus import broadcast
-from app.core.push import send_push_to_user
-from app.core.broadcast import broadcast_post
-from app.core.timeline_stream import broadcast_notif_sound, broadcast_refresh_notifs, broadcast_reaction_update, broadcast_delete
 from app.config.settings import BASE_URL
-from app.db.database import get_session, username_prefix_like
-from app.models import User, Post, Follow, Like, Boost, Vote, Notification, Report, CustomEmoji, MutedServer, UserBlock, Tag, ProcessedActivity
-from app.utils.emoji import _refresh_emoji_cache_forcibly, _load_emojis
-from app.utils.alias import actor_urls_include
-from app.utils.crypto import generate_keypair
-from app.utils.content_parser import _sanitize_html, process_post_content
-from app.core.activitypub._utils import _get_instance_actor
-from app.core.federation import federation_allowed
-from app.utils.http import validate_url, validated_get, WRIT_USER_AGENT
-from app.utils.urls import parse_username_from_url, extract_remote_url
-from app.core.activitypub._media import _cache_remote_media
-from app.core.activitypub._emoji import _process_emoji_tags, _background_import_emoji
+from app.core.activitypub._emoji import _background_import_emoji, _process_emoji_tags
 from app.core.activitypub._fetch import _fetch_remote_post, _resolve_actor, _retry_fetch_reply
+from app.core.activitypub._media import _cache_remote_media
 from app.core.activitypub._outbound import _send_accept
+from app.core.activitypub._utils import _get_instance_actor
+from app.core.broadcast import broadcast_post
+from app.core.eventbus import broadcast
+from app.core.federation import federation_allowed
+from app.core.push import send_push_to_user
 from app.core.threads import spawn
+from app.core.timeline_stream import (
+    broadcast_delete,
+    broadcast_notif_sound,
+    broadcast_reaction_update,
+    broadcast_refresh_notifs,
+)
+from app.db.database import get_session, username_prefix_like
+from app.models import (
+    Boost,
+    CustomEmoji,
+    Follow,
+    Like,
+    MutedServer,
+    Notification,
+    Post,
+    ProcessedActivity,
+    Report,
+    Tag,
+    User,
+    UserBlock,
+    Vote,
+)
+from app.utils.alias import actor_urls_include
+from app.utils.content_parser import _sanitize_html, process_post_content
+from app.utils.crypto import generate_keypair
+from app.utils.emoji import _load_emojis, _refresh_emoji_cache_forcibly
+from app.utils.http import WRIT_USER_AGENT, validate_url, validated_get
+from app.utils.urls import extract_remote_url, parse_username_from_url
 
 logger = logging.getLogger("writ.activitypub")
 
@@ -92,34 +112,33 @@ def handle_inbox(activity: dict) -> tuple[int, str]:
 
     if atype == "Follow":
         return _handle_follow(activity)
-    elif atype == "Accept":
+    if atype == "Accept":
         return _handle_accept(activity)
-    elif atype == "Reject":
+    if atype == "Reject":
         return _handle_reject(activity)
-    elif atype == "Create":
+    if atype == "Create":
         return _handle_create(activity)
-    elif atype == "Like":
+    if atype == "Like":
         return _handle_like(activity)
-    elif atype == "Announce":
+    if atype == "Announce":
         return _handle_announce(activity)
-    elif atype == "Undo":
+    if atype == "Undo":
         return _handle_undo(activity)
-    elif atype == "Update":
+    if atype == "Update":
         return _handle_update(activity)
-    elif atype == "Delete":
+    if atype == "Delete":
         return _handle_delete(activity)
-    elif atype == "Flag":
+    if atype == "Flag":
         return _handle_flag(activity)
-    elif atype == "Move":
+    if atype == "Move":
         return _handle_move(activity)
-    elif atype == "Vote":
+    if atype == "Vote":
         return _handle_vote(activity)
-    elif atype == "EmojiReact":
+    if atype == "EmojiReact":
         return _handle_like(activity)
-    elif atype == "Block":
+    if atype == "Block":
         return _handle_block(activity)
-    else:
-        return (202, f"Accepted {atype}")
+    return (202, f"Accepted {atype}")
 
 
 def _handle_follow(activity: dict) -> tuple[int, str]:
@@ -147,7 +166,6 @@ def _handle_follow(activity: dict) -> tuple[int, str]:
     with get_session() as session:
         target = session.query(User).get(target_id)
         follower = session.merge(follower)
-        follower_id = follower.id
         accepted = not target.is_locked
         existing = session.query(Follow).filter_by(
             follower_id=follower.id, following_id=target.id
@@ -409,7 +427,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             now = datetime.datetime.now(datetime.UTC)
                             if exp < now:
                                 return (200, "poll ended")
-                        except (ValueError, TypeError) as ex:
+                        except (ValueError, TypeError):
                             pass
                     existing_vote = session.query(Vote).filter_by(user_id=actor_id, post_id=poll_post.id).first()
                     if existing_vote:
@@ -610,7 +628,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 media_list.append({"url": cached, "type": "video"})
                 logger.debug("[_handle_create MEDIA] video url=%s sensitive=%s", cached, att_sensitive)
             elif att_as2_type == "Document" or att_type.startswith("audio/"):
-                if att_type.startswith("image/") or att_type.startswith("video/"):
+                if att_type.startswith(("image/", "video/")):
                     mtype = "video" if att_type.startswith("video/") else "image"
                 else:
                     mtype = "image"
@@ -665,10 +683,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             if _url_match_lp:
                 _url_lp = _url_match_lp.group(0)
                 try:
-                    if not validate_url(_url_lp):
-                        _resp_lp = None
-                    else:
-                        _resp_lp = validated_get(_url_lp, timeout=5)
+                    _resp_lp = None if not validate_url(_url_lp) else validated_get(_url_lp, timeout=5)
                     if _resp_lp and _resp_lp.status_code == 200:
                         _html_lp = _resp_lp.text
                         def _og_lp(n):
@@ -714,10 +729,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             )
             published = obj.get("published", "")
             if published:
-                try:
+                with contextlib.suppress(Exception):
                     post.created_at = datetime.datetime.fromisoformat(published.replace("Z", "+00:00"))
-                except Exception:
-                    pass
             if quote_of_ap_id and post.content:
                 post.content = re.sub(
                     r'^[\s\n]*RE:\s*<a[^>]*>[^<]*</a>\s*[\n\s]*',
@@ -1339,8 +1352,8 @@ def _handle_block(activity: dict) -> tuple[int, str]:
             local_user = session.query(User).filter_by(username=local_username, is_remote=False).first()
             if not local_user:
                 return (200, "OK")
-            deleted_incoming = session.query(Follow).filter_by(follower_id=remote.id, following_id=local_user.id).delete()
-            deleted_outgoing = session.query(Follow).filter_by(follower_id=local_user.id, following_id=remote.id).delete()
+            session.query(Follow).filter_by(follower_id=remote.id, following_id=local_user.id).delete()
+            session.query(Follow).filter_by(follower_id=local_user.id, following_id=remote.id).delete()
             existing = session.query(UserBlock).filter_by(user_id=remote.id, target_user_id=local_user.id).first()
             if not existing:
                 session.add(UserBlock(user_id=remote.id, target_user_id=local_user.id))
@@ -1392,7 +1405,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
 
         return (200, "Unfollowed")
 
-    elif obj_type == "Like":
+    if obj_type == "Like":
         actor_url = activity.get("actor", "")
         if isinstance(actor_url, list):
             actor_url = actor_url[0]
@@ -1400,10 +1413,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
 
         with get_session() as session:
             post = session.query(Post).filter_by(ap_id=object_url).first()
-            if post:
-                _sign_as = session.query(User).get(post.author_id)
-            else:
-                _sign_as = None
+            _sign_as = session.query(User).get(post.author_id) if post else None
         actor = _resolve_actor(actor_url, sign_as=_sign_as)
         if not actor:
             return (200, "OK")
@@ -1451,7 +1461,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
 
         return (200, "Unliked")
 
-    elif obj_type == "Announce":
+    if obj_type == "Announce":
         actor_url = activity.get("actor", "")
         object_url = obj.get("object", "") if isinstance(obj, dict) else ""
         if isinstance(actor_url, list):
@@ -1459,10 +1469,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
 
         with get_session() as session:
             post = session.query(Post).filter_by(ap_id=object_url).first()
-            if post:
-                _sign_as = session.query(User).get(post.author_id)
-            else:
-                _sign_as = None
+            _sign_as = session.query(User).get(post.author_id) if post else None
         actor = _resolve_actor(actor_url, sign_as=_sign_as)
         if not actor:
             return (200, "OK")
@@ -1512,7 +1519,7 @@ def _handle_undo(activity: dict) -> tuple[int, str]:
 
         return (200, "Unboosted")
 
-    elif obj_type == "Block":
+    if obj_type == "Block":
         actor_url = obj.get("actor", activity.get("actor", ""))
         object_url = obj.get("object", "")
         if isinstance(actor_url, list):
@@ -1779,12 +1786,11 @@ def _handle_flag(activity: dict) -> tuple[int, str]:
                 _notify_admins(s, reporter, "post", post.id, content)
                 continue
             user = s.query(User).filter(User.remote_url == obj_url).first()
-            if not user:
-                if BASE_URL in obj_url:
-                    for _u in s.query(User).filter_by(is_remote=False).all():
-                        if _u.actor_uri() == obj_url:
-                            user = _u
-                            break
+            if not user and BASE_URL in obj_url:
+                for _u in s.query(User).filter_by(is_remote=False).all():
+                    if _u.actor_uri() == obj_url:
+                        user = _u
+                        break
             if user and not user.is_remote:
                 logger.info("FLAG found local user %s", user.username)
                 report = Report(

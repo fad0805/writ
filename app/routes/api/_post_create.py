@@ -1,29 +1,30 @@
 """Post creation endpoint extracted from _posts.py."""
-import os
-import json
-import secrets
-import logging
 import asyncio
+import contextlib
+import json
+import logging
+import os
+import secrets
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 
-from app.models import User, Post, Notification
-from app.serializers import _post_json
 from app.config.settings import BASE_URL, MAX_POST_LENGTH
 from app.core.activitypub import _ap_fetch, _fetch_and_save_ap_object
-from app.core.eventbus import broadcast
-from app.core.push import send_push_to_user
+from app.core.auth import require_active_auth
 from app.core.broadcast import _broadcast_timeline
-from app.core.timeline_stream import broadcast_refresh_notifs, broadcast_notif_sound
+from app.core.eventbus import broadcast
+from app.core.feed import _broadcast_federation
+from app.core.push import send_push_to_user
+from app.core.timeline_stream import broadcast_notif_sound, broadcast_refresh_notifs
 from app.db.database import get_session
 from app.db.mention_resolver import resolve_handles_to_ids
-from app.core.auth import require_active_auth
-from app.utils.content_parser import process_post_content, extract_mentions
+from app.models import Notification, Post, User
+from app.serializers import _post_json
+from app.utils.content_parser import extract_mentions, process_post_content
 from app.utils.post import _sync_post_tags
-from app.core.feed import _broadcast_federation
 
 logger = logging.getLogger("writ.api.post_create")
 
@@ -69,14 +70,13 @@ async def api_create_post(
 ):
     user = require_active_auth(request)
     loop = asyncio.get_running_loop()
-    pj = await loop.run_in_executor(
+    return await loop.run_in_executor(
         _post_create_executor, _do_create_post,
         user.id, user.is_limited, getattr(user, 'is_sensitive', False),
         content, summary, visibility, parent_id,
         dm_target_id, share_url, media_attachments, is_sensitive,
         poll_options, poll_expires_in, link_preview,
     )
-    return pj
 
 
 def _do_create_post(
@@ -148,10 +148,8 @@ def _do_create_post(
             quote_of_id=quote_of_id,
         )
         if link_preview:
-            try:
+            with contextlib.suppress(json.JSONDecodeError, TypeError):
                 post.link_preview = json.loads(link_preview)
-            except (json.JSONDecodeError, TypeError):
-                pass
         try:
             media = json.loads(media_attachments)
             if isinstance(media, list):

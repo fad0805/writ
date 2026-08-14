@@ -93,8 +93,8 @@ def test_logout_clears_session(client, auth_cookie):
 
 
 def test_switch_requires_login(client, auth_cookie):
-    alice, alice_cookie = auth_cookie("alice")
-    bob, bob_cookie = auth_cookie("bob")
+    _alice, alice_cookie = auth_cookie("alice")
+    _bob, bob_cookie = auth_cookie("bob")
     # Switch from bob's session requires an active session cookie AND a valid CSRF token.
     assert client.get("/api/auth/me", cookies=bob_cookie).status_code == 200
     # No CSRF header -> rejected before the session check.

@@ -1,10 +1,11 @@
 import datetime
+
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from app.config.settings import BASE_URL
 from app.db.database import get_session
-from app.models import User, Post, ServerSetting
+from app.models import Post, ServerSetting, User
 
 router = APIRouter()
 

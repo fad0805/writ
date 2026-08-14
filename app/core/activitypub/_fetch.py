@@ -1,31 +1,27 @@
-import io
-import os
+import contextlib
+import datetime
+import html
+import logging
 import re
 import time
-import datetime
-import json
-import logging
-import uuid
-import html
 import traceback
-from typing import Optional
+import uuid
 from urllib.parse import urlparse
 
 import httpx
 
 from app.config.settings import BASE_URL, SECRET_KEY
-from app.db.database import get_session
-from app.models import User, Post, Tag, CustomEmoji
-from app.serializers import _post_json
-from app.utils.to_ap_serializer import to_ap_actor
-from app.utils.crypto import generate_keypair, sign_string, encrypt_key, get_private_key
-from app.utils.content_parser import _sanitize_html, process_post_content
+from app.core.activitypub._emoji import _process_emoji_tags
+from app.core.activitypub._media import _cache_remote_media, _save_remote_avatar, _save_remote_image
 from app.core.activitypub._utils import _get_instance_actor
 from app.core.threads import spawn
-from app.utils.http import validate_url, safe_fetch, validated_get, WRIT_USER_AGENT
-from app.utils.urls import parse_username_from_url, extract_remote_url
-from app.core.activitypub._media import _save_remote_image, _save_remote_avatar, _cache_remote_media
-from app.core.activitypub._emoji import _process_emoji_tags
+from app.db.database import get_session
+from app.models import Post, Tag, User
+from app.serializers import _post_json
+from app.utils.content_parser import _sanitize_html, process_post_content
+from app.utils.crypto import encrypt_key, generate_keypair, get_private_key, sign_string
+from app.utils.http import WRIT_USER_AGENT, safe_fetch, validate_url, validated_get
+from app.utils.urls import extract_remote_url, parse_username_from_url
 
 logger = logging.getLogger("writ.activitypub")
 
@@ -498,10 +494,8 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     headers = {"Accept": "application/activity+json", "User-Agent": WRIT_USER_AGENT}
 
     if not signer:
-        try:
+        with contextlib.suppress(Exception):
             signer = _get_instance_actor(session)
-        except Exception:
-            pass
     if signer:
         try:
             date_str = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
@@ -590,9 +584,11 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     summary = obj.get("summary", "")
 
     to = obj.get("to", [])
-    if isinstance(to, str): to = [to]
+    if isinstance(to, str):
+        to = [to]
     cc = obj.get("cc", [])
-    if isinstance(cc, str): cc = [cc]
+    if isinstance(cc, str):
+        cc = [cc]
     all_auds = to + cc
     pub = "https://www.w3.org/ns/activitystreams#Public"
     pub_set = {pub, "as:Public"}
@@ -640,9 +636,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         vis = "home"
     elif any(a.endswith("/followers") for a in all_auds):
         vis = "followers"
-    elif not (pub_set & set(all_auds)) and has_mention_tag:
-        vis = "mention"
-    elif all(a.startswith("http") for a in all_auds if a):
+    elif (not (pub_set & set(all_auds)) and has_mention_tag) or all(a.startswith("http") for a in all_auds if a):
         vis = "mention"
     else:
         vis = "home"
@@ -730,10 +724,8 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     )
     published = obj.get("published", "")
     if published:
-        try:
+        with contextlib.suppress(Exception):
             post.created_at = datetime.datetime.fromisoformat(published.replace("Z", "+00:00"))
-        except Exception:
-            pass
     session.add(post)
     try:
         session.flush()

@@ -1,12 +1,12 @@
 import base64
-import time
-import hmac
 import hashlib
+import hmac
+import time
 
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.backends import default_backend
 from cryptography.fernet import Fernet
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from app.config.settings import SECRET_KEY
 
@@ -41,11 +41,11 @@ def encrypt_key(plaintext: str, secret: str) -> str:
 def decrypt_key(ciphertext: str, secret: str) -> str:
     try:
         return _fernet(secret).decrypt(ciphertext.encode()).decode()
-    except Exception:
+    except Exception as exc:
         # 레거시 평문 PEM이면 그대로 반환 (역호환)
         if ciphertext.strip().startswith("-----BEGIN"):
             return ciphertext
-        raise ValueError("Failed to decrypt private key (SECRET_KEY mismatch or corrupted key)")
+        raise ValueError("Failed to decrypt private key (SECRET_KEY mismatch or corrupted key)") from exc
 
 
 def get_private_key(user, secret: str) -> str:

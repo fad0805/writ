@@ -3,19 +3,19 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import String, cast, or_
 from sqlalchemy.orm import Session as SASession
 
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Tag
-from app.db.database import get_db
 from app.config.settings import BASE_URL
-from app.utils.filter import _load_user_filters, _timeline_filter
+from app.db.database import get_db
+from app.models import Bookmark, Boost, Follow, Like, Post, Tag, User
 from app.routes.mastodon_api._common import (
-    MastodonAPIError,
     STAR_REACTION,
+    MastodonAPIError,
     _boost_status_json,
     _build_status_maps,
     _maybe_bearer,
     _require_bearer,
     _status_json,
 )
+from app.utils.filter import _load_user_filters, _timeline_filter
 
 router = APIRouter()
 
@@ -65,17 +65,17 @@ def home_timeline(
     filter_ctx = _load_user_filters(db, user)
     posts = _timeline_filter(posts, db, user, "home", following_ids, filter_ctx)
 
-    _liked_ids = set(r[0] for r in db.query(Like.post_id).filter(
+    _liked_ids = {r[0] for r in db.query(Like.post_id).filter(
         Like.user_id == user.id,
         or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
         Like.post_id.in_([p.id for p in posts])
-    ).all()) if posts else set()
-    _boosted_ids = set(r[0] for r in db.query(Boost.post_id).filter(
+    ).all()} if posts else set()
+    _boosted_ids = {r[0] for r in db.query(Boost.post_id).filter(
         Boost.user_id == user.id, Boost.post_id.in_([p.id for p in posts])
-    ).all()) if posts else set()
-    _bookmarked_ids = set(r[0] for r in db.query(Bookmark.post_id).filter(
+    ).all()} if posts else set()
+    _bookmarked_ids = {r[0] for r in db.query(Bookmark.post_id).filter(
         Bookmark.user_id == user.id, Bookmark.post_id.in_([p.id for p in posts])
-    ).all()) if posts else set()
+    ).all()} if posts else set()
 
     following_set = set(following_ids)
 
@@ -163,17 +163,17 @@ def public_timeline(
     _bookmarked_ids = set()
     if viewer:
         post_ids = [p.id for p in posts]
-        _liked_ids = set(r[0] for r in db.query(Like.post_id).filter(
+        _liked_ids = {r[0] for r in db.query(Like.post_id).filter(
             Like.user_id == viewer.id,
             or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
             Like.post_id.in_(post_ids)
-        ).all()) if post_ids else set()
-        _boosted_ids = set(r[0] for r in db.query(Boost.post_id).filter(
+        ).all()} if post_ids else set()
+        _boosted_ids = {r[0] for r in db.query(Boost.post_id).filter(
             Boost.user_id == viewer.id, Boost.post_id.in_(post_ids)
-        ).all()) if post_ids else set()
-        _bookmarked_ids = set(r[0] for r in db.query(Bookmark.post_id).filter(
+        ).all()} if post_ids else set()
+        _bookmarked_ids = {r[0] for r in db.query(Bookmark.post_id).filter(
             Bookmark.user_id == viewer.id, Bookmark.post_id.in_(post_ids)
-        ).all()) if post_ids else set()
+        ).all()} if post_ids else set()
 
     _original_map = _load_posts_by_id(db, [p.boost_of_id for p in posts])
 
@@ -251,17 +251,17 @@ def hashtag_timeline(
     if viewer:
         post_ids = [p.id for p in posts]
         if post_ids:
-            _liked_ids = set(r[0] for r in db.query(Like.post_id).filter(
+            _liked_ids = {r[0] for r in db.query(Like.post_id).filter(
                 Like.user_id == viewer.id,
                 or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
                 Like.post_id.in_(post_ids)
-            ).all())
-            _boosted_ids = set(r[0] for r in db.query(Boost.post_id).filter(
+            ).all()}
+            _boosted_ids = {r[0] for r in db.query(Boost.post_id).filter(
                 Boost.user_id == viewer.id, Boost.post_id.in_(post_ids)
-            ).all())
-            _bookmarked_ids = set(r[0] for r in db.query(Bookmark.post_id).filter(
+            ).all()}
+            _bookmarked_ids = {r[0] for r in db.query(Bookmark.post_id).filter(
                 Bookmark.user_id == viewer.id, Bookmark.post_id.in_(post_ids)
-            ).all())
+            ).all()}
 
     maps = _build_status_maps(posts, db, viewer)
     result = []
@@ -278,7 +278,7 @@ def hashtag_timeline(
 # ---------------------------------------------------------------------------
 @router.get("/v1/tags/{tag}")
 def get_tag(tag: str, request: Request, db: SASession = Depends(get_db)):
-    viewer = _maybe_bearer(request, db)
+    _maybe_bearer(request, db)
     tag_obj = db.query(Tag).filter(Tag.name == tag.lower()).first()
     if not tag_obj:
         raise MastodonAPIError(status_code=404, detail="Record not found")

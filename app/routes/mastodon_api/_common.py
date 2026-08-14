@@ -2,14 +2,15 @@
 import html
 import logging
 import re
-from datetime import timezone, UTC
+from datetime import UTC
 
 from fastapi import HTTPException, Request
-from sqlalchemy import func as sqlfunc, or_
+from sqlalchemy import func as sqlfunc
+from sqlalchemy import or_
 from sqlalchemy.orm import Session as SASession
 
-from app.models import User, Post, Follow, Like, Boost, MastodonAccessToken, UserMute, UserBlock, now
 from app.config.settings import BASE_URL
+from app.models import Boost, Follow, Like, MastodonAccessToken, Post, User, UserBlock, UserMute, now
 from app.utils.content_parser import _sanitize_html
 from app.utils.emoji import _load_emojis
 
@@ -77,22 +78,12 @@ def _maybe_bearer(request: Request, db: SASession) -> User | None:
 
 def _query_id_list(request: Request) -> list[str]:
     """Parse `id` / `id[]` query params (Mastodon apps send `id[]=1&id[]=2`)."""
-    result = []
-    for key in ("id", "id[]"):
-        for v in request.query_params.getlist(key):
-            if v:
-                result.append(v)
-    return result
+    return [v for key in ("id", "id[]") for v in request.query_params.getlist(key) if v]
 
 
 def _query_param_list(request: Request, name: str) -> list[str]:
     """Parse `name` / `name[]` query params (Mastodon apps use the `[]` suffix)."""
-    result = []
-    for key in (name, f"{name}[]"):
-        for v in request.query_params.getlist(key):
-            if v:
-                result.append(v)
-    return result
+    return [v for key in (name, f"{name}[]") for v in request.query_params.getlist(key) if v]
 
 
 def _visibility_to_mastodon(vis: str) -> str:
@@ -115,7 +106,7 @@ def _abs_url(value: str | None) -> str | None:
     """로컬 상대 경로를 절대 URL로 변환. 비어 있으면 None 반환."""
     if not value:
         return None
-    if value.startswith("http://") or value.startswith("https://"):
+    if value.startswith(("http://", "https://")):
         return value
     if value.startswith("//"):
         return f"https:{value}"
@@ -444,10 +435,7 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
             f'rel="nofollow noopener noreferrer" target="_blank">'
             f'{html.escape(_quote_url)}</a></p>'
         )
-        if content.strip().startswith("<"):
-            content = content + _quote_link
-        else:
-            content = f"<p>{content}</p>" + _quote_link
+        content = content + _quote_link if content.strip().startswith("<") else f"<p>{content}</p>" + _quote_link
 
     shortcode_pattern = re.compile(r':(\w+):')
     used_shortcodes = {sc.lower() for sc in shortcode_pattern.findall(content)}

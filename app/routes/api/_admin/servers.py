@@ -1,23 +1,32 @@
 """Remote-server federation admin endpoints (listing, search, mute/block/purge)."""
 
-import re
 import logging
+import re
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import APIRouter, Request, HTTPException
-from sqlalchemy import or_, func
+from fastapi import APIRouter, HTTPException, Request
+from sqlalchemy import func, or_
 
-from app.models import (
-    User, Post, Follow, Like, Boost, Vote, Bookmark, Notification,
-    FederationBlock, MutedServer, AdminLog,
-)
 from app.core.activitypub import _resolve_actor, _safe_httpx_get
 from app.core.auth import require_auth
+from app.db.database import get_session
+from app.models import (
+    AdminLog,
+    Bookmark,
+    Boost,
+    FederationBlock,
+    Follow,
+    Like,
+    MutedServer,
+    Notification,
+    Post,
+    User,
+    Vote,
+)
 from app.utils.http import validate_url
 from app.utils.log import log_admin_action
 from app.utils.storage import get_storage
-from app.db.database import get_session
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +113,7 @@ def api_admin_remote_server(domain: str, request: Request, offset: int = 0, limi
             else:
                 resp = httpx.get(f"https://{domain}", timeout=5)
                 is_reachable = resp.status_code < 500
-        except:
+        except Exception:
             is_reachable = False
 
         paged = domain_users[offset:offset + limit + 1]
@@ -243,29 +252,27 @@ def api_admin_federation_search(request: Request, q: str = ""):
                 func.lower(User.username).contains(q.lower()),
                 User.is_remote == False,
         ).limit(5).all()
-            for u in local:
-                results.append({
-                    "source": "local",
-                    "id": u.id,
-                    "username": u.username,
-                    "display_name": u.display_name,
-                    "profile_image": u.profile_image,
-                    "remote_url": None,
-                })
+            results.extend({
+                "source": "local",
+                "id": u.id,
+                "username": u.username,
+                "display_name": u.display_name,
+                "profile_image": u.profile_image,
+                "remote_url": None,
+            } for u in local)
             # Also search remote users by username
             remote = s.query(User).filter(
                 func.lower(User.username).contains(q.lower()),
                 User.is_remote == True,
             ).limit(10).all()
-            for u in remote:
-                results.append({
-                    "source": "remote_cached",
-                    "id": u.id,
-                    "username": u.username,
-                    "display_name": u.display_name,
-                    "profile_image": u.profile_image,
-                    "remote_url": u.remote_url,
-                })
+            results.extend({
+                "source": "remote_cached",
+                "id": u.id,
+                "username": u.username,
+                "display_name": u.display_name,
+                "profile_image": u.profile_image,
+                "remote_url": u.remote_url,
+            } for u in remote)
     return {"results": results}
 
 

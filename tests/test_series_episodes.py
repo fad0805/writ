@@ -1,7 +1,7 @@
 """Series (novel) and episode CRUD tests."""
 
 from app.db.database import get_session
-from app.models import Novel, Episode
+from app.models import Episode, Novel
 
 
 def _create_series(client, cookie, title="My Novel", **extra):
@@ -45,8 +45,8 @@ def test_series_listing_shows_published(client, auth_cookie):
 
 
 def test_my_series_lists_own_only(client, auth_cookie):
-    alice, alice_cookie = auth_cookie("alice")
-    bob, bob_cookie = auth_cookie("bob")
+    _alice, alice_cookie = auth_cookie("alice")
+    _bob, bob_cookie = auth_cookie("bob")
     _create_series(client, alice_cookie, title="Alice's")
     _create_series(client, bob_cookie, title="Bob's")
     r = client.get("/api/series/my", cookies=alice_cookie)
@@ -56,7 +56,7 @@ def test_my_series_lists_own_only(client, auth_cookie):
 
 
 def test_edit_series_by_author(client, auth_cookie):
-    alice, alice_cookie = auth_cookie("alice")
+    _alice, alice_cookie = auth_cookie("alice")
     novel_id = _create_series(client, alice_cookie, title="Before").json()["novel_id"]
     r = client.post(f"/api/series/{novel_id}/edit", data={"title": "After"}, cookies=alice_cookie)
     assert r.status_code == 200
@@ -65,14 +65,14 @@ def test_edit_series_by_author(client, auth_cookie):
 
 
 def test_edit_series_others_forbidden(client, auth_cookie):
-    alice, alice_cookie = auth_cookie("alice")
-    bob, bob_cookie = auth_cookie("bob")
+    _alice, alice_cookie = auth_cookie("alice")
+    _bob, bob_cookie = auth_cookie("bob")
     novel_id = _create_series(client, alice_cookie).json()["novel_id"]
     assert client.post(f"/api/series/{novel_id}/edit", data={"title": "Hacked"}, cookies=bob_cookie).status_code == 404
 
 
 def test_delete_series(client, auth_cookie):
-    alice, alice_cookie = auth_cookie("alice")
+    _alice, alice_cookie = auth_cookie("alice")
     novel_id = _create_series(client, alice_cookie).json()["novel_id"]
     r = client.post(f"/api/series/{novel_id}/delete", cookies=alice_cookie)
     assert r.status_code == 200
@@ -81,7 +81,7 @@ def test_delete_series(client, auth_cookie):
 
 
 def test_create_episode(client, auth_cookie):
-    alice, alice_cookie = auth_cookie("alice")
+    _alice, alice_cookie = auth_cookie("alice")
     novel_id = _create_series(client, alice_cookie).json()["novel_id"]
     r = client.post(
         f"/api/series/{novel_id}/episodes/new",
@@ -97,7 +97,7 @@ def test_create_episode(client, auth_cookie):
 
 
 def test_create_episode_requires_content(client, auth_cookie):
-    alice, alice_cookie = auth_cookie("alice")
+    _alice, alice_cookie = auth_cookie("alice")
     novel_id = _create_series(client, alice_cookie).json()["novel_id"]
     r = client.post(
         f"/api/series/{novel_id}/episodes/new",
@@ -108,8 +108,8 @@ def test_create_episode_requires_content(client, auth_cookie):
 
 
 def test_create_episode_requires_own_series(client, auth_cookie):
-    alice, alice_cookie = auth_cookie("alice")
-    bob, bob_cookie = auth_cookie("bob")
+    _alice, alice_cookie = auth_cookie("alice")
+    _bob, bob_cookie = auth_cookie("bob")
     novel_id = _create_series(client, alice_cookie).json()["novel_id"]
     r = client.post(
         f"/api/series/{novel_id}/episodes/new",
@@ -120,7 +120,7 @@ def test_create_episode_requires_own_series(client, auth_cookie):
 
 
 def test_get_episode(client, auth_cookie):
-    alice, alice_cookie = auth_cookie("alice")
+    _alice, alice_cookie = auth_cookie("alice")
     novel_id = _create_series(client, alice_cookie).json()["novel_id"]
     ep_id = client.post(
         f"/api/series/{novel_id}/episodes/new",

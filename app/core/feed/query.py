@@ -1,8 +1,8 @@
 """Feed DB query and paginated filtering."""
 import logging
 
-from sqlalchemy import desc, or_, and_
-from sqlalchemy.orm import Session, Load
+from sqlalchemy import and_, desc, or_
+from sqlalchemy.orm import Load, Session
 
 from app.models import Post
 from app.utils.filter import _timeline_filter

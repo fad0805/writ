@@ -2,16 +2,16 @@
 
 import re
 
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 from sqlalchemy import desc, or_
 from sqlalchemy.orm import joinedload, selectinload
 
-from app.models import Novel, Episode, Post
+from app.core.auth import require_auth
+from app.db.database import get_session
+from app.models import Episode, Novel, Post
+from app.routes.api._novels import _apply_latest_activity_order, _novel_json
 from app.utils.datetime import _fmt_dt
 from app.utils.log import log_admin_action
-from app.routes.api._novels import _novel_json, _apply_latest_activity_order
-from app.db.database import get_session
-from app.core.auth import require_auth
 
 router = APIRouter()
 
@@ -34,35 +34,34 @@ def api_admin_content_search(request: Request, q: str = "", mode: str = "series"
                 "id": ep.id, "title": ep.title, "number": ep.episode_number, "is_published": ep.is_published,
                 "created_at": _fmt_dt(ep.created_at), "novel_id": ep.novel_id,
             } for ep in episodes]}
+        novels_q = s.query(Novel).options(selectinload(Novel.author))
+        if re.match(r'^\d+$', query):
+            novels_q = novels_q.filter(
+                or_(Novel.title.ilike(like), Novel.id == int(query))
+            )
+        elif re.match(r'^[a-f0-9]{6,16}$', query):
+            novels_q = novels_q.filter(
+                or_(Novel.title.ilike(like), Novel.number == query)
+            )
         else:
-            novels_q = s.query(Novel).options(selectinload(Novel.author))
-            if re.match(r'^\d+$', query):
-                novels_q = novels_q.filter(
-                    or_(Novel.title.ilike(like), Novel.id == int(query))
-                )
-            elif re.match(r'^[a-f0-9]{6,16}$', query):
-                novels_q = novels_q.filter(
-                    or_(Novel.title.ilike(like), Novel.number == query)
-                )
-            else:
-                novels_q = novels_q.filter(Novel.title.ilike(like))
-            novels = _apply_latest_activity_order(novels_q, s).limit(50).all()
-            novel_ids = [n.id for n in novels]
-            episodes = s.query(Episode).filter(
-                Episode.novel_id.in_(novel_ids)
-            ).order_by(desc(Episode.created_at)).all()
-            ep_map: dict[int, list] = {}
-            for ep in episodes:
-                ep_map.setdefault(ep.novel_id, []).append({
-                    "id": ep.id, "title": ep.title, "number": ep.episode_number, "is_published": ep.is_published,
-                    "created_at": _fmt_dt(ep.created_at), "novel_id": ep.novel_id,
-                })
-            result = []
-            for n in novels:
-                nj = _novel_json(n, s)
-                nj["episodes"] = ep_map.get(n.id, [])
-                result.append(nj)
-            return {"novels": result, "episodes": []}
+            novels_q = novels_q.filter(Novel.title.ilike(like))
+        novels = _apply_latest_activity_order(novels_q, s).limit(50).all()
+        novel_ids = [n.id for n in novels]
+        episodes = s.query(Episode).filter(
+            Episode.novel_id.in_(novel_ids)
+        ).order_by(desc(Episode.created_at)).all()
+        ep_map: dict[int, list] = {}
+        for ep in episodes:
+            ep_map.setdefault(ep.novel_id, []).append({
+                "id": ep.id, "title": ep.title, "number": ep.episode_number, "is_published": ep.is_published,
+                "created_at": _fmt_dt(ep.created_at), "novel_id": ep.novel_id,
+            })
+        result = []
+        for n in novels:
+            nj = _novel_json(n, s)
+            nj["episodes"] = ep_map.get(n.id, [])
+            result.append(nj)
+        return {"novels": result, "episodes": []}
 
 @router.post("/admin/novels/{novel_id}/toggle-sensitive")
 def api_admin_toggle_novel_sensitive(request: Request, novel_id: int):
@@ -71,7 +70,8 @@ def api_admin_toggle_novel_sensitive(request: Request, novel_id: int):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         n = s.query(Novel).get(novel_id)
-        if not n: raise HTTPException(status_code=404, detail="Novel not found")
+        if not n:
+            raise HTTPException(status_code=404, detail="Novel not found")
         new_val = not (n.is_sensitive or False)
         s.query(Novel).filter_by(id=novel_id).update(
             {"is_sensitive": new_val}, synchronize_session=False
@@ -89,7 +89,8 @@ def api_admin_set_novel_visibility(request: Request, novel_id: int, visibility: 
         raise HTTPException(status_code=400, detail="Invalid visibility")
     with get_session() as s:
         n = s.query(Novel).get(novel_id)
-        if not n: raise HTTPException(status_code=404, detail="Novel not found")
+        if not n:
+            raise HTTPException(status_code=404, detail="Novel not found")
         is_published = visibility != "private"
         s.query(Novel).filter_by(id=novel_id).update(
             {"visibility": visibility, "is_published": is_published},
@@ -106,7 +107,8 @@ def api_admin_toggle_episode_publish(request: Request, episode_id: int):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         ep = s.query(Episode).get(episode_id)
-        if not ep: raise HTTPException(status_code=404, detail="Episode not found")
+        if not ep:
+            raise HTTPException(status_code=404, detail="Episode not found")
         new_val = not ep.is_published
         s.query(Episode).filter_by(id=episode_id).update(
             {"is_published": new_val}, synchronize_session=False

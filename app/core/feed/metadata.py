@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import User, Post, Like, Boost, Vote, Bookmark
+from app.models import Bookmark, Boost, Like, Post, User, Vote
 from app.utils.emoji import _load_emojis
 
 
@@ -108,8 +108,8 @@ def _load_post_metadata(
         Like.user_id == user.id, Like.post_id.in_(post_ids)
     ).all()
 
-    _liked_ids = {l.post_id for l in _all_likes}
-    _my_reaction_map = {l.post_id: l.reaction for l in _all_likes if l.reaction}
+    _liked_ids = {like.post_id for like in _all_likes}
+    _my_reaction_map = {like.post_id: like.reaction for like in _all_likes if like.reaction}
 
     _boosted_ids = {b.post_id for b in session.query(Boost.post_id).filter(
         Boost.user_id == user.id, Boost.post_id.in_(post_ids)

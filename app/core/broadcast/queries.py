@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from app.models import Post, Follow, User
+from app.models import Follow, Post, User
 
 
 def _load_follower_ids(session: Session, author_id: int) -> set[int]:

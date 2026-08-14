@@ -1,14 +1,12 @@
+import contextlib
 import re
-import datetime
-
 from urllib.parse import urlparse
 
 from sqlalchemy import func
 
-from app.models import Like, Boost, Bookmark, User, Vote, Post, Follow
+from app.models import Bookmark, Boost, Follow, Like, Post, User, Vote
 from app.utils.datetime import _fmt_dt
 from app.utils.emoji import _load_emojis
-
 
 # 좋아요/부스트/답글 카운트와 리액션 집계를 세션(요청) 단위로 배치 조회하는 캐시.
 # lazy="selectin" 컬렉션(p.likes/p.boosts/p.replies)을 통째로 로드하지 않고,
@@ -128,7 +126,7 @@ def _post_json(p, session, user, tl_type=None,
             existing_boosted_by = result.get("boosted_by") or []
             booster_json = _user_json(p.author)
             if not any(b.get("id") == booster_json["id"] for b in existing_boosted_by if b):
-                existing_boosted_by = list(existing_boosted_by) + [booster_json]
+                existing_boosted_by = [*list(existing_boosted_by), booster_json]
             result["boosted_by"] = existing_boosted_by
             result["boost_of_id"] = p.boost_of_id
             if user and _boosted_ids is not None:
@@ -136,8 +134,7 @@ def _post_json(p, session, user, tl_type=None,
             if not _skip_emojis:
                 result["_emojis"] = _merge_boost_emojis(result.get("_emojis") or [], session, existing_boosted_by)
             return result
-        else:
-            return {"id": p.id, "is_deleted": True, "boosted_by": [_user_json(p.author)], "boost_of_id": p.boost_of_id}
+        return {"id": p.id, "is_deleted": True, "boosted_by": [_user_json(p.author)], "boost_of_id": p.boost_of_id}
     if user:
         if _liked_ids is not None:
             liked = p.id in _liked_ids
@@ -167,10 +164,7 @@ def _post_json(p, session, user, tl_type=None,
             my_reaction = _my_reaction_map.get(p.id)
         else:
             my_reaction = session.query(Like.reaction).filter_by(user_id=user.id, post_id=p.id).scalar()
-    if _reactions_map is not None:
-        reactions = _reactions_map.get(p.id, {})
-    else:
-        reactions = _post_reactions(session, p.id)
+    reactions = _reactions_map.get(p.id, {}) if _reactions_map is not None else _post_reactions(session, p.id)
     if _mentioned_users_map is not None and p.id in _mentioned_users_map:
         mentioned_handles = _mentioned_users_map[p.id]
     elif p.mentioned_user_ids:
@@ -184,9 +178,9 @@ def _post_json(p, session, user, tl_type=None,
                 mentioned_handles.append(u.username)
     else:
         # content에서 @handle@domain 패턴 파싱
-        mentioned_handles = list(set(
+        mentioned_handles = list({
             f"{m.group(1)}@{m.group(2)}" for m in re.finditer(r'@([a-zA-Z0-9_]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', p.content or "")
-        ))
+        })
 
     quoted_post = None
     if p.quote_of_id and _quote_depth < 2:
@@ -391,10 +385,8 @@ def _user_json(u):
 def _reply_context(p, session=None, user=None, tl_type=None, _following_ids=None):
     parent = p.parent if hasattr(p, 'parent') else None
     if not parent and p.in_reply_to_ap_id and session:
-        try:
+        with contextlib.suppress(Exception):
             parent = session.query(Post).filter_by(ap_id=p.in_reply_to_ap_id).first()
-        except Exception:
-            pass
     if not parent or parent.is_deleted:
         return None
     if tl_type == "home" and user and parent.author_id != user.id:

@@ -1,11 +1,11 @@
 """Interaction endpoints — follow, DM, notification, mute/block, like, boost, bookmark, vote, react, pin."""
 import logging
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
-from app.models import User, Post
-from app.db.database import get_session
 from app.core.auth import require_active_auth
+from app.db.database import get_session
+from app.models import Post, User
 
 logger = logging.getLogger("writ.api.pins")
 

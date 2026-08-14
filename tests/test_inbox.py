@@ -6,12 +6,11 @@ inboxes fail validate_url's SSRF guard, so the Accept delivery early-returns).
 """
 
 import base64
-import hashlib
 import email.utils
+import hashlib
 import json
 
-
-from app.core.activitypub._inbound import handle_inbox, _mark_activity_processed, _is_activity_processed
+from app.core.activitypub._inbound import _is_activity_processed, _mark_activity_processed, handle_inbox
 from app.db.database import get_session
 from app.models import Follow
 from app.utils.crypto import sign_string

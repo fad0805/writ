@@ -1,14 +1,12 @@
-import os
-import logging
+import contextlib
 import datetime
+import logging
 
 from sqlalchemy.exc import IntegrityError
 
-from app.config.settings import BASE_URL
 from app.db.database import get_session
-from app.models import User, Post, Follow, RemoteMedia, ProcessedActivity
+from app.models import Follow, Post, ProcessedActivity, RemoteMedia, User
 from app.utils.storage import get_storage
-from app.utils.http import validated_get, WRIT_USER_AGENT
 
 logger = logging.getLogger("writ.activitypub")
 
@@ -19,10 +17,8 @@ def _cleanup_expired_media():
         with get_session() as s:
             items = s.query(RemoteMedia).filter(RemoteMedia.expires_at < datetime.datetime.now(datetime.UTC)).all()
             for item in items:
-                try:
+                with contextlib.suppress(Exception):
                     storage.delete(item.local_url)
-                except Exception:
-                    pass
                 s.delete(item)
             s.commit()
     except Exception as e:

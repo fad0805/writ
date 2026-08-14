@@ -1,27 +1,31 @@
 """URL/remote-content resolution endpoints extracted from _core.py and _posts.py."""
-import re
 import logging
+import re
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Novel, Episode
-from app.serializers import _post_json, _user_json
-from app.utils.to_ap_serializer import to_ap_note
 from app.core.activitypub import (
-    _resolve_actor, _background_fetch_outbox, _fetch_remote_post,
-    _get_instance_actor, _ap_fetch, _fetch_and_save_ap_object,
+    _ap_fetch,
+    _background_fetch_outbox,
+    _fetch_and_save_ap_object,
+    _fetch_remote_post,
+    _get_instance_actor,
+    _resolve_actor,
 )
+from app.core.auth import get_current_user, require_auth
 from app.core.federation import _check_fetch_domain_allowed
+from app.core.threads import spawn
 from app.core.visibility import _can_view
 from app.db.database import get_session
-from app.core.auth import require_auth, get_current_user
-from app.core.threads import spawn
-from app.routes.api._novels import _novel_json
+from app.models import Episode, Novel, Post, User
 from app.routes.api._episodes import _episode_json
+from app.routes.api._novels import _novel_json
+from app.serializers import _post_json, _user_json
+from app.utils.to_ap_serializer import to_ap_note
 
 logger = logging.getLogger("writ.api.resolve")
 
@@ -81,7 +85,7 @@ def api_fetch_series(request: Request, url: str = Form(...)):
 
 @resolve_router.post("/fetch-episode")
 def api_fetch_episode(request: Request, url: str = Form(...)):
-    user = get_current_user(request)
+    get_current_user(request)
     with get_session() as s:
         m = re.match(r"(?:https?://[^/]+)?/series/(\d+)/episodes/(\d+)", url)
         if m:

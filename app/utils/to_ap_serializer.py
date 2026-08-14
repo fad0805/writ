@@ -17,9 +17,10 @@ def _ap_datetime(dt):
 
 
 def to_ap_actor(user) -> dict:
-    tags = []
-    for ht in (getattr(user, 'profile_hashtags', None) or []):
-        tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={ht}", "name": f"#{ht}"})
+    tags = [
+        {"type": "Hashtag", "href": f"{BASE_URL}/explore?tag={ht}", "name": f"#{ht}"}
+        for ht in (getattr(user, 'profile_hashtags', None) or [])
+    ]
     result = {
         "@context": [
             "https://www.w3.org/ns/activitystreams",
@@ -78,7 +79,7 @@ def to_ap_actor(user) -> dict:
 
 
 def to_ap_note(post, session=None) -> dict:
-    from app.models import User, CustomEmoji
+    from app.models import CustomEmoji, User
     content = post.content
     tags = []
     mentioned_uris = []
@@ -103,12 +104,15 @@ def to_ap_note(post, session=None) -> dict:
                         content)
 
         if post.tag_list:
-            for t in post.tag_list:
-                tags.append({"type": "Hashtag", "href": f"{BASE_URL}/explore?q=#{quote(t.display_name)}", "name": f"#{t.display_name}"})
+            tags.extend(
+                {"type": "Hashtag", "href": f"{BASE_URL}/explore?q=#{quote(t.display_name)}", "name": f"#{t.display_name}"}
+                for t in post.tag_list
+            )
 
     # 2. 이모지 구축
-    from app.utils.emoji import _emoji_url
     from sqlalchemy import func
+
+    from app.utils.emoji import _emoji_url
     _emoji_pattern = re.compile(r':([a-zA-Z0-9_]{2,}):')
     _emoji_keywords = set(_emoji_pattern.findall(content))
     if _emoji_keywords:
@@ -189,9 +193,8 @@ def to_ap_note(post, session=None) -> dict:
         cc_list.append(followers_uri)
 
     # 본인에게 보내는 답글일 경우, to_list에 본인을 포함
-    if post.parent and post.parent.author_id == post.author_id:
-        if post.author.actor_uri().strip() not in to_list:
-            to_list.append(post.author.actor_uri().strip())
+    if post.parent and post.parent.author_id == post.author_id and post.author.actor_uri().strip() not in to_list:
+        to_list.append(post.author.actor_uri().strip())
 
     # 5. 미디어, 인용, 설문 처리
     if post.media_attachments:

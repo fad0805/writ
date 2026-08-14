@@ -1,13 +1,8 @@
-import json
-import datetime
 import logging
 
-from typing import Optional
-
-from app.config.settings import BASE_URL
 from app.db.database import get_session
-from app.models import User, Post, Follow
-from app.utils.to_ap_serializer import to_ap_note, to_ap_create
+from app.models import Follow, Post, User
+from app.utils.to_ap_serializer import to_ap_create, to_ap_note
 
 logger = logging.getLogger("writ.activitypub")
 
@@ -41,14 +36,13 @@ def get_outbox(username: str, page: int | None = None):
                 "next": f"{outbox_url}?page={page + 1}" if offset + 20 < total else None,
                 "prev": f"{outbox_url}?page={page - 1}" if page > 1 else None,
             }
-        else:
-            return {
-                "@context": "https://www.w3.org/ns/activitystreams",
-                "id": outbox_url,
-                "type": "OrderedCollection",
-                "totalItems": total,
-                "first": f"{outbox_url}?page=1",
-            }
+        return {
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": outbox_url,
+            "type": "OrderedCollection",
+            "totalItems": total,
+            "first": f"{outbox_url}?page=1",
+        }
 
 
 def get_followers(username: str, page: int | None = None):
@@ -80,14 +74,13 @@ def get_followers(username: str, page: int | None = None):
                 "partOf": url,
                 "orderedItems": items,
             }
-        else:
-            return {
-                "@context": "https://www.w3.org/ns/activitystreams",
-                "id": url,
-                "type": "OrderedCollection",
-                "totalItems": total,
-                "first": f"{url}?page=1",
-            }
+        return {
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": url,
+            "type": "OrderedCollection",
+            "totalItems": total,
+            "first": f"{url}?page=1",
+        }
 
 
 def get_following(username: str, page: int | None = None):
@@ -119,14 +112,13 @@ def get_following(username: str, page: int | None = None):
                 "partOf": url,
                 "orderedItems": items,
             }
-        else:
-            return {
-                "@context": "https://www.w3.org/ns/activitystreams",
-                "id": url,
-                "type": "OrderedCollection",
-                "totalItems": total,
-                "first": f"{url}?page=1",
-            }
+        return {
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": url,
+            "type": "OrderedCollection",
+            "totalItems": total,
+            "first": f"{url}?page=1",
+        }
 
 
 def get_featured(username: str, page: int | None = None):
@@ -168,11 +160,10 @@ def get_featured(username: str, page: int | None = None):
                 "next": f"{featured_url}?page={page + 1}" if offset + 20 < total else None,
                 "prev": f"{featured_url}?page={page - 1}" if page > 1 else None,
             }
-        else:
-            return {
-                "@context": "https://www.w3.org/ns/activitystreams",
-                "id": featured_url,
-                "type": "OrderedCollection",
-                "totalItems": total,
-                "first": f"{featured_url}?page=1",
-            }
+        return {
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "id": featured_url,
+            "type": "OrderedCollection",
+            "totalItems": total,
+            "first": f"{featured_url}?page=1",
+        }

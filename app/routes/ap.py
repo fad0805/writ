@@ -1,22 +1,35 @@
 import json
 import logging
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.config.settings import BASE_URL, DOMAIN, S3_ENABLED
 from app.core.activitypub import (
-    get_outbox, get_followers, get_following, get_featured,
-    verify_http_signature, _ap_post_visible, _validate_inbox_activity,
-    _is_activity_processed, _mark_activity_processed, _submit_inbox,
+    _ap_post_visible,
+    _is_activity_processed,
+    _mark_activity_processed,
+    _submit_inbox,
+    _validate_inbox_activity,
+    get_featured,
+    get_followers,
+    get_following,
+    get_outbox,
+    verify_http_signature,
 )
-from app.core.rate_limit import check_rate_limit, check_burst_limit, check_daily_limit
+from app.core.rate_limit import check_burst_limit, check_daily_limit, check_rate_limit
 from app.db.database import get_session
 from app.models import (
-    User, Follow, Post, Novel, Like, Boost, CustomEmoji,
+    Boost,
+    CustomEmoji,
+    Follow,
+    Like,
+    Novel,
+    Post,
+    User,
 )
-from app.utils.to_ap_serializer import to_ap_note, to_ap_create, to_ap_actor
 from app.utils.storage import get_storage
+from app.utils.to_ap_serializer import to_ap_actor, to_ap_create, to_ap_note
 
 logger = logging.getLogger(__name__)
 
@@ -103,9 +116,7 @@ def _check_collection_access(username: str) -> bool:
     """
     with get_session() as s:
         user = s.query(User).filter_by(username=username).first()
-        if not user or getattr(user, 'is_deactivated', False):
-            return False
-        return True
+        return not (not user or getattr(user, 'is_deactivated', False))
 
 
 @router.get("/users/{username}/outbox")
@@ -159,14 +170,14 @@ async def _parse_inbox_body(request: Request) -> tuple[bytes, dict]:
     """
     try:
         body = await request.body()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid body")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid body") from exc
     if len(body) > 1024 * 1024:
         raise HTTPException(status_code=413, detail="Request body too large")
     try:
         return body, json.loads(body)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON") from exc
 
 
 def _inbox_rate_guard(request: Request, actor_url: str):
@@ -432,7 +443,7 @@ def get_post_by_handle(request: Request, username: str, number: str):
 
 @router.get("/@{username}/series/{number}")
 def get_series_by_handle(request: Request, username: str, number: str):
-    accept = request.headers.get("Accept", "")
+    request.headers.get("Accept", "")
 
     with get_session() as session:
         user = session.query(User).filter_by(username=username, is_remote=False).first()

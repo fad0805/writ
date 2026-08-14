@@ -99,7 +99,7 @@ def test_direct_threads_group_both_directions(client, make_user, auth_cookie):
 
 
 def test_direct_threads_exclude_unrelated_dms(client, make_user, auth_cookie):
-    alice, alice_cookie = auth_cookie("alice")
+    _alice, alice_cookie = auth_cookie("alice")
     bob = make_user("bob")
     dave = make_user("dave")
 

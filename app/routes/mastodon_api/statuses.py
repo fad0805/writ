@@ -1,22 +1,23 @@
 """Mastodon status endpoints (/api/v1/statuses*, /api/v1/media)."""
+import contextlib
 import json
 import os
 import secrets
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
-from sqlalchemy import func as sqlfunc, or_
+from sqlalchemy import func as sqlfunc
+from sqlalchemy import or_
 from sqlalchemy.orm import Session as SASession
 
-from app.models import User, Post, Like, Boost, Bookmark, CustomEmoji, Follow
-from app.db.database import get_db
 from app.core.activitypub import _broadcast_update_actor
+from app.core.interactions import boost_post, like_post, react_post, unboost_post, unlike_post, unreact_post
 from app.core.threads import spawn
-from app.routes.api import _do_edit_post, _do_delete_post
-from app.core.interactions import like_post, unlike_post, boost_post, unboost_post, react_post, unreact_post
-from app.utils.emoji import _load_emojis
+from app.db.database import get_db
+from app.models import Bookmark, Boost, CustomEmoji, Follow, Like, Post, User
+from app.routes.api import _do_delete_post, _do_edit_post
 from app.routes.mastodon_api._common import (
-    MastodonAPIError,
     STAR_REACTION,
+    MastodonAPIError,
     _account_json,
     _build_account_counts_map,
     _build_status_maps,
@@ -26,6 +27,7 @@ from app.routes.mastodon_api._common import (
     _status_json,
     _visibility_from_mastodon,
 )
+from app.utils.emoji import _load_emojis
 
 router = APIRouter()
 
@@ -91,17 +93,17 @@ def get_statuses(
                 posts_map[post.id] = post
         except ValueError:
             continue
-    _liked_ids = set(r[0] for r in db.query(Like.post_id).filter(
+    _liked_ids = {r[0] for r in db.query(Like.post_id).filter(
         Like.user_id == viewer.id,
         or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
         Like.post_id.in_(post_ids)
-    ).all()) if viewer and post_ids else set()
-    _boosted_ids = set(r[0] for r in db.query(Boost.post_id).filter(
+    ).all()} if viewer and post_ids else set()
+    _boosted_ids = {r[0] for r in db.query(Boost.post_id).filter(
         Boost.user_id == viewer.id, Boost.post_id.in_(post_ids)
-    ).all()) if viewer and post_ids else set()
-    _bookmarked_ids = set(r[0] for r in db.query(Bookmark.post_id).filter(
+    ).all()} if viewer and post_ids else set()
+    _bookmarked_ids = {r[0] for r in db.query(Bookmark.post_id).filter(
         Bookmark.user_id == viewer.id, Bookmark.post_id.in_(post_ids)
-    ).all()) if viewer and post_ids else set()
+    ).all()} if viewer and post_ids else set()
     maps = _build_status_maps(list(posts_map.values()), db, viewer)
     result = []
     for sid in ids:
@@ -181,10 +183,8 @@ def _run_create_status(db, user, text, in_reply_to_id, sensitive, spoiler_text,
 
     poll_expires_minutes = 60
     if poll_expires:
-        try:
+        with contextlib.suppress(ValueError, TypeError):
             poll_expires_minutes = max(1, int(poll_expires) // 60)
-        except (ValueError, TypeError):
-            pass
 
     pj = _do_create_post(
         user.id, user.is_limited, getattr(user, 'is_sensitive', False),
@@ -269,9 +269,7 @@ def _visible_in_thread(post: Post, viewer: User | None, following_ids: set, db: 
     if v == "mention":
         if post.mentioned_user_ids and viewer.id in post.mentioned_user_ids:
             return True
-        if viewer.username and f"@{viewer.username}" in (post.content or ""):
-            return True
-        return False
+        return bool(viewer.username and f"@{viewer.username}" in (post.content or ""))
     return True
 
 
@@ -631,8 +629,8 @@ def favourited_by(
     likes = q.order_by(Like.id.desc()).limit(limit).all()
 
     viewer = _maybe_bearer(request, db)
-    counts = _build_account_counts_map({l.user_id for l in likes}, db)
-    return [_account_json(l.user, db, viewer, _counts=counts.get(l.user_id)) for l in likes]
+    counts = _build_account_counts_map({like.user_id for like in likes}, db)
+    return [_account_json(like.user, db, viewer, _counts=counts.get(like.user_id)) for like in likes]
 
 
 # ---------------------------------------------------------------------------
@@ -646,11 +644,11 @@ async def upload_media(
     description: str = Form(""),
     focus: str = Form(""),
 ):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
 
     from app.utils.upload import _validate_upload
 
-    ext, is_image, is_video, is_audio = _validate_upload(file, allow_video=True, allow_audio=True, label="미디어")
+    ext, _is_image, is_video, is_audio = _validate_upload(file, allow_video=True, allow_audio=True, label="미디어")
     upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "media")
     os.makedirs(upload_dir, exist_ok=True)
 

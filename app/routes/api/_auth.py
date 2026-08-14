@@ -1,25 +1,44 @@
 """Auth endpoints — login, register, password reset, email verification extracted from _core.py."""
-import re
+import contextlib
+import ipaddress
 import json
-import secrets
 import logging
+import re
+import secrets
+import smtplib
 import threading
 import time
-import ipaddress
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from email.mime.text import MIMEText
-import smtplib
 
-from fastapi import APIRouter, Request, Form, HTTPException, Depends
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.models import User, Notification, BlockedDomain, ServerSetting, LoginSession
+from app.config.settings import (
+    APP_ENV,
+    BASE_URL,
+    INITIAL_OWNER_PASSWORD,
+    SECRET_KEY,
+    SMTP_FROM,
+    SMTP_PASSWORD,
+    SMTP_PORT,
+    SMTP_SERVER,
+    SMTP_USER,
+)
+from app.core.auth import (
+    _decode_session_token,
+    create_session,
+    delete_session_by_key,
+    get_current_user,
+    get_session_key_from_cookie,
+    hash_password,
+    verify_password,
+)
+from app.db.database import get_db, get_session
+from app.models import BlockedDomain, LoginSession, Notification, ServerSetting, User
 from app.serializers import _user_json
-from app.config.settings import BASE_URL, SECRET_KEY, APP_ENV, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, INITIAL_OWNER_PASSWORD
-from app.db.database import get_session, get_db
-from app.core.auth import get_current_user, hash_password, verify_password, create_session, get_session_key_from_cookie, delete_session_by_key, _decode_session_token
-from app.utils.crypto import encrypt_key, generate_keypair, generate_csrf_token, validate_csrf_token
+from app.utils.crypto import encrypt_key, generate_csrf_token, generate_keypair, validate_csrf_token
 from app.utils.log import log_admin_action
 
 logger = logging.getLogger("writ.api.auth")
@@ -136,7 +155,7 @@ def _send_verification_email(u: User):
                 if SMTP_USER:
                     smtp.login(SMTP_USER, SMTP_PASSWORD or "")
                 smtp.send_message(msg)
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to send verification email to %s", u.email)
 
 
@@ -217,7 +236,7 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
         raise
     except Exception as exc:
         logger.exception("Login error")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @auth_router.post("/auth/register")
@@ -278,10 +297,8 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
         s.flush()
         user_id = user.id
 
-        try:
+        with contextlib.suppress(Exception):
             _send_verification_email(user)
-        except Exception:
-            pass
         s.commit()
 
         log_admin_action(user_id, user.username, "register", ip_address=client_ip, details="first_user" if is_first else "email_required")
@@ -312,8 +329,7 @@ def api_verify_email(request: Request, token: str = Form(...)):
                 ))
 
         s.commit()
-        resp = JSONResponse({"ok": True, "email_verified": True})
-        return resp
+        return JSONResponse({"ok": True, "email_verified": True})
 
 
 @auth_router.post("/auth/resend-verification")

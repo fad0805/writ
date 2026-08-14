@@ -1,5 +1,6 @@
-import datetime
 import base64
+import contextlib
+import datetime
 import hashlib
 import json
 import logging
@@ -8,13 +9,13 @@ from urllib.parse import urlparse
 
 from sqlalchemy import or_
 
-from app.config.settings import SECRET_KEY, BASE_URL, ORPHAN_MEDIA_MIN_AGE_DAYS
-from app.core.activitypub import _deliver_sync, _send_delete_post, _resolve_actor, _get_instance_actor
+from app.config.settings import ORPHAN_MEDIA_MIN_AGE_DAYS, SECRET_KEY
+from app.core.activitypub import _deliver_sync, _get_instance_actor, _resolve_actor, _send_delete_post
 from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs
-from app.db.database import get_session, engine
-from app.models import User, PendingDelivery, Post, Like, Boost, Bookmark, Vote, Notification, RemoteMedia
-from app.utils.crypto import sign_string, decrypt_key
-from app.utils.storage import get_storage, LocalStorage
+from app.db.database import engine, get_session
+from app.models import Bookmark, Boost, Like, Notification, PendingDelivery, Post, RemoteMedia, User, Vote
+from app.utils.crypto import decrypt_key, sign_string
+from app.utils.storage import LocalStorage, get_storage
 
 logger = logging.getLogger(__name__)
 
@@ -226,12 +227,10 @@ def auto_delete_expired_posts():
                                 continue
                             if "dm" in exc and post.is_dm:
                                 continue
-                            if "liked" in exc:
-                                if s.query(Like).filter_by(user_id=u.id, post_id=post.id).first():
-                                    continue
-                            if "bookmarked" in exc:
-                                if s.query(Bookmark).filter_by(user_id=u.id, post_id=post.id).first():
-                                    continue
+                            if "liked" in exc and s.query(Like).filter_by(user_id=u.id, post_id=post.id).first():
+                                continue
+                            if "bookmarked" in exc and s.query(Bookmark).filter_by(user_id=u.id, post_id=post.id).first():
+                                continue
                             if "poll" in exc and post.poll_data:
                                 continue
                             if "media" in exc and post.media_attachments:
@@ -253,27 +252,21 @@ def auto_delete_expired_posts():
                                     storage = get_storage()
                                     for m in media:
                                         if isinstance(m, dict) and m.get("url"):
-                                            try:
+                                            with contextlib.suppress(Exception):
                                                 storage.delete(m["url"])
-                                            except Exception:
-                                                pass
                                 except Exception:
                                     pass
 
                             ap_id = post.ap_id or ""
                             if ap_id and ap_id.startswith("http"):
-                                try:
+                                with contextlib.suppress(Exception):
                                     _send_delete_post(post, u)
-                                except Exception:
-                                    pass
 
                             s.delete(post)
                             s.flush()
 
-                            try:
+                            with contextlib.suppress(Exception):
                                 broadcast_delete(post.id)
-                            except Exception:
-                                pass
                             deleted += 1
                         except Exception:
                             pass

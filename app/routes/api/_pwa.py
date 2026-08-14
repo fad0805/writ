@@ -1,18 +1,21 @@
 """PWA helpers and manifest/icon/favicon endpoints extracted from _misc.py."""
-import os
 import io
 import logging
+import os
 
 from fastapi import APIRouter, Request, Response
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from PIL import Image
 
 from app.utils.image import guard_image
+
 guard_image()
 
-from app.models import ServerSetting
+import contextlib
+
 from app.config.settings import BASE_URL
 from app.db.database import get_session
+from app.models import ServerSetting
 from app.utils.http import validated_get
 from app.utils.storage import LocalStorage, get_storage
 
@@ -77,19 +80,15 @@ def _save_favicon(source_url: str):
 
 
 def _delete_favicon():
-    try:
+    with contextlib.suppress(Exception):
         get_storage().delete("pwa/favicon.png")
-    except Exception:
-        pass
 
 
 def _delete_pwa_icons():
     storage = get_storage()
     for size in (192, 512):
-        try:
+        with contextlib.suppress(Exception):
             storage.delete(f"pwa/icon-{size}.png")
-        except Exception:
-            pass
 
 
 # ── PWA Routes ──

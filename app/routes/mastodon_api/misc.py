@@ -3,10 +3,9 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import or_
 from sqlalchemy.orm import Session as SASession
 
-from app.models import User, Like, Boost, Bookmark, Tag, CustomEmoji, UserMute, UserBlock
-from app.db.database import get_db
 from app.config.settings import BASE_URL
-from app.utils.emoji import _emoji_url
+from app.db.database import get_db
+from app.models import Bookmark, Boost, CustomEmoji, Like, Tag, User, UserBlock, UserMute
 from app.routes.mastodon_api._common import (
     STAR_REACTION,
     _account_json,
@@ -17,6 +16,7 @@ from app.routes.mastodon_api._common import (
     _status_json,
     _visibility_to_mastodon,
 )
+from app.utils.emoji import _emoji_url
 
 router = APIRouter()
 
@@ -45,7 +45,7 @@ def custom_emojis(db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 @router.get("/v1/followed_tags")
 def list_followed_tags(request: Request, db: SASession = Depends(get_db)):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     return []
 
 
@@ -54,7 +54,7 @@ def list_followed_tags(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 @router.get("/v1/filters")
 def list_filters(request: Request, db: SASession = Depends(get_db)):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     return []
 
 
@@ -63,7 +63,7 @@ def list_filters(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 @router.post("/v1/filters")
 async def create_filter(request: Request, db: SASession = Depends(get_db)):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     body = await request.json()
     return {
         "id": "1",
@@ -81,7 +81,7 @@ async def create_filter(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 @router.get("/v2/filters")
 def list_filters_v2(request: Request, db: SASession = Depends(get_db)):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     return []
 
 
@@ -110,7 +110,7 @@ def list_follow_requests(
     max_id: str | None = None,
     limit: int = Query(default=40, le=100),
 ):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     return []
 
 
@@ -160,15 +160,15 @@ def list_bookmarks(
 
     bookmarks = q.order_by(Bookmark.id.desc()).limit(limit).all()
 
-    _liked_ids = set(r[0] for r in db.query(Like.post_id).filter(
+    _liked_ids = {r[0] for r in db.query(Like.post_id).filter(
         Like.user_id == user.id,
         or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
         Like.post_id.in_([b.post_id for b in bookmarks])
-    ).all()) if bookmarks else set()
-    _boosted_ids = set(r[0] for r in db.query(Boost.post_id).filter(
+    ).all()} if bookmarks else set()
+    _boosted_ids = {r[0] for r in db.query(Boost.post_id).filter(
         Boost.user_id == user.id,
         Boost.post_id.in_([b.post_id for b in bookmarks])
-    ).all()) if bookmarks else set()
+    ).all()} if bookmarks else set()
 
     maps = _build_status_maps([bm.post for bm in bookmarks if bm.post], db, user)
     result = []
@@ -208,12 +208,12 @@ def list_favourites(
 
     likes = q.order_by(Like.id.desc()).limit(limit).all()
 
-    _boosted_ids = set(r[0] for r in db.query(Boost.post_id).filter(
+    _boosted_ids = {r[0] for r in db.query(Boost.post_id).filter(
         Boost.user_id == user.id,
-        Boost.post_id.in_([l.post_id for l in likes])
-    ).all()) if likes else set()
+        Boost.post_id.in_([like.post_id for like in likes])
+    ).all()} if likes else set()
 
-    maps = _build_status_maps([l.post for l in likes if l.post], db, user)
+    maps = _build_status_maps([like.post for like in likes if like.post], db, user)
     result = []
     for like in likes:
         if like.post and not like.post.is_deleted:
@@ -229,7 +229,7 @@ def list_favourites(
 # ---------------------------------------------------------------------------
 @router.get("/v1/lists")
 def list_lists(request: Request, db: SASession = Depends(get_db)):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     return []
 
 
@@ -242,7 +242,7 @@ def list_suggestions(
     db: SASession = Depends(get_db),
     limit: int = Query(default=40, le=100),
 ):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     return []
 
 
@@ -251,7 +251,7 @@ def list_suggestions(
 # ---------------------------------------------------------------------------
 @router.get("/v1/tags")
 def list_tags(request: Request, db: SASession = Depends(get_db)):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     return []
 
 
@@ -260,7 +260,7 @@ def list_tags(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 @router.get("/v1/featured_tags")
 def featured_tags(request: Request, db: SASession = Depends(get_db)):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     return []
 
 
@@ -269,7 +269,7 @@ def featured_tags(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 @router.get("/v1/domain_blocks")
 def domain_blocks(request: Request, db: SASession = Depends(get_db)):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     return []
 
 
@@ -278,7 +278,7 @@ def domain_blocks(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 @router.get("/v1/endorsements")
 def endorsements(request: Request, db: SASession = Depends(get_db)):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     return []
 
 
@@ -287,7 +287,7 @@ def endorsements(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 @router.get("/v1/markers")
 def get_markers(request: Request, db: SASession = Depends(get_db)):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     return {}
 
 
@@ -296,7 +296,7 @@ def get_markers(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 @router.post("/v1/markers")
 async def save_markers(request: Request, db: SASession = Depends(get_db)):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     return {}
 
 
@@ -305,7 +305,7 @@ async def save_markers(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 @router.post("/v1/push/subscription")
 async def create_push_subscription(request: Request, db: SASession = Depends(get_db)):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     body = await request.json()
     return {
         "id": "1",
@@ -320,7 +320,7 @@ async def create_push_subscription(request: Request, db: SASession = Depends(get
 # ---------------------------------------------------------------------------
 @router.get("/v1/push/subscription")
 def get_push_subscription(request: Request, db: SASession = Depends(get_db)):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     return {}
 
 
@@ -329,7 +329,7 @@ def get_push_subscription(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 @router.delete("/v1/push/subscription")
 def delete_push_subscription(request: Request, db: SASession = Depends(get_db)):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     return {}
 
 
@@ -338,7 +338,7 @@ def delete_push_subscription(request: Request, db: SASession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 @router.put("/v1/push/subscription")
 async def update_push_subscription(request: Request, db: SASession = Depends(get_db)):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     return {}
 
 
@@ -416,7 +416,7 @@ def list_conversations(
     max_id: str | None = None,
     limit: int = Query(default=20, le=100),
 ):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     return []
 
 
@@ -425,5 +425,5 @@ def list_conversations(
 # ---------------------------------------------------------------------------
 @router.get("/v1/scheduled_statuses")
 def list_scheduled(request: Request, db: SASession = Depends(get_db)):
-    user = _require_bearer(request, db)
+    _require_bearer(request, db)
     return []

@@ -5,9 +5,9 @@ the stored-XSS fix that rejects attribute-escape characters in remote Mention
 names (commit a1b2c3: _MENTION_NAME_RE guard).
 """
 from app.utils.content_parser import (
+    _MENTION_NAME_RE,
     extract_mentions_from_local,
     process_remote_post,
-    _MENTION_NAME_RE,
 )
 
 LOCAL = "localhost:3000"

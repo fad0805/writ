@@ -3,7 +3,7 @@ import logging
 import os
 import socket
 import time
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
@@ -111,7 +111,7 @@ def safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
         if len(resp.content) > max_size:
             return None
         return resp
-    except Exception as e:
+    except Exception:
         return None
     finally:
         client.close()

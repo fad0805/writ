@@ -1,17 +1,18 @@
 """Search and explore endpoints extracted from _core.py."""
+import contextlib
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Request, Query
-from sqlalchemy import desc, or_, and_, func
+from fastapi import APIRouter, Query, Request
+from sqlalchemy import and_, desc, func, or_
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Follow, Like, Boost, Bookmark, Novel, SeriesFollow, Tag
-from app.serializers import _post_json, _user_json
-from app.db.database import get_session
-from app.db.mention_resolver import _federation_allowed, _resolve_remote_user
 from app.core.auth import get_current_user
 from app.core.threads import spawn
-from app.routes.api._novels import _apply_latest_activity_order, _novel_json, _load_novel_meta
+from app.db.database import get_session
+from app.db.mention_resolver import _federation_allowed, _resolve_remote_user
+from app.models import Bookmark, Boost, Follow, Like, Novel, Post, SeriesFollow, Tag, User
+from app.routes.api._novels import _apply_latest_activity_order, _load_novel_meta, _novel_json
+from app.serializers import _post_json, _user_json
 from app.utils.filter import _timeline_filter
 
 search_router = APIRouter()
@@ -90,11 +91,11 @@ def api_explore(request: Request, limit: int = Query(20, le=100), offset: int = 
                 for orig in s.query(Post).options(selectinload(Post.author)).filter(Post.id.in_(boost_pointer_ids), Post.is_deleted == False).all():
                     _boost_originals[orig.id] = orig
         if user and post_ids:
-            _liked_ids = {l.post_id for l in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(post_ids)).all()}
-            _boosted_ids = {b.post_id for b in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(post_ids)).all()}
+            _liked_ids = {like.post_id for like in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(post_ids)).all()}
+            _boosted_ids = {boost.post_id for boost in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(post_ids)).all()}
             _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(post_ids)).all()}
-            for l in s.query(Like.post_id, Like.reaction).filter(Like.user_id == user.id, Like.post_id.in_(post_ids), Like.reaction.isnot(None)).all():
-                _my_reaction_map[l.post_id] = l.reaction
+            for like in s.query(Like.post_id, Like.reaction).filter(Like.user_id == user.id, Like.post_id.in_(post_ids), Like.reaction.isnot(None)).all():
+                _my_reaction_map[like.post_id] = like.reaction
             for pid, react, cnt in s.query(Like.post_id, func.coalesce(Like.reaction, "★"), func.count(Like.id)).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all():
                 if pid not in _reactions_map:
                     _reactions_map[pid] = {}
@@ -132,8 +133,12 @@ def api_explore(request: Request, limit: int = Query(20, le=100), offset: int = 
             ), s).limit(20).all()
             if novels:
                 novel_ids = [n.id for n in novels]
-                for nid, cnt in s.query(SeriesFollow.novel_id, func.count(SeriesFollow.id)).filter(SeriesFollow.novel_id.in_(novel_ids)).group_by(SeriesFollow.novel_id).all():
-                    _followers_map[nid] = cnt
+                _followers_map = dict(
+                    s.query(SeriesFollow.novel_id, func.count(SeriesFollow.id))
+                    .filter(SeriesFollow.novel_id.in_(novel_ids))
+                    .group_by(SeriesFollow.novel_id)
+                    .all()
+                )
             _novel_meta = _load_novel_meta(s, novels)
 
         return {
@@ -219,10 +224,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
 
             posts = q_posts.order_by(desc(Post.created_at)).limit(100).all()
 
-        if user:
-            posts = _timeline_filter(posts, s, user, "federated", following_ids)[:20]
-        else:
-            posts = posts[:20]
+        posts = _timeline_filter(posts, s, user, "federated", following_ids)[:20] if user else posts[:20]
 
         local_users = s.query(User).filter(
             User.is_remote == False,
@@ -245,9 +247,8 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
             at_parts = query.split("@", 1)
             if len(at_parts) == 2 and at_parts[0] and at_parts[1]:
                 handle, domain = at_parts[0].strip().lower(), at_parts[1].strip().lower()
-        if domain:
-            if not _federation_allowed(domain, s):
-                blocked_domain = domain
+        if domain and not _federation_allowed(domain, s):
+            blocked_domain = domain
 
         # If query is handle@domain and no remote match yet, try to resolve
         if handle and domain and not blocked_domain:
@@ -257,10 +258,8 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
             )
 
             if not already_found:
-                try:
+                with contextlib.suppress(Exception):
                     spawn(_resolve_remote_user, query)
-                except Exception:
-                    pass
 
         post_ids = {p.id for p in posts}
         for _p in posts:
@@ -298,11 +297,11 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 for p in posts:
                     _mentioned_users_map[p.id] = []
         if user and post_ids:
-            _liked_ids = {l.post_id for l in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(post_ids)).all()}
-            _boosted_ids = {b.post_id for b in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(post_ids)).all()}
+            _liked_ids = {like.post_id for like in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(post_ids)).all()}
+            _boosted_ids = {boost.post_id for boost in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(post_ids)).all()}
             _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(post_ids)).all()}
-            for l in s.query(Like.post_id, Like.reaction).filter(Like.user_id == user.id, Like.post_id.in_(post_ids), Like.reaction.isnot(None)).all():
-                _my_reaction_map[l.post_id] = l.reaction
+            for like in s.query(Like.post_id, Like.reaction).filter(Like.user_id == user.id, Like.post_id.in_(post_ids), Like.reaction.isnot(None)).all():
+                _my_reaction_map[like.post_id] = like.reaction
             for pid, react, cnt in s.query(Like.post_id, func.coalesce(Like.reaction, "★"), func.count(Like.id)).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all():
                 if pid not in _reactions_map:
                     _reactions_map[pid] = {}

@@ -2,8 +2,8 @@
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session as SASession
 
-from app.models import Notification
 from app.db.database import get_db
+from app.models import Notification
 from app.routes.mastodon_api._common import (
     _account_json,
     _ap_datetime,

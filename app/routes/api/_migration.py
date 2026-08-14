@@ -1,16 +1,17 @@
 """Account migration (이전) endpoints extracted from _settings.py."""
+import contextlib
 import json
 import logging
 from uuid import uuid4
 
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 
-from app.models import User, Novel, Follow, Notification
 from app.config.settings import BASE_URL, DOMAIN
-from app.core.activitypub import broadcast_to_followers, _fetch_actor_json_signed
+from app.core.activitypub import _fetch_actor_json_signed, broadcast_to_followers
+from app.core.auth import require_auth
 from app.db.database import get_session
 from app.db.mention_resolver import _resolve_remote_user
-from app.core.auth import require_auth
+from app.models import Follow, Notification, Novel, User
 from app.utils.log import log_admin_action
 
 logger = logging.getLogger("writ.api.migration")
@@ -147,10 +148,8 @@ def api_approve_migrate(request: Request, notification_id: int = Form(...)):
         if not n or n.notification_type != "moderation":
             raise HTTPException(status_code=404, detail="요청을 찾을 수 없습니다.")
         meta = {}
-        try:
+        with contextlib.suppress(json.JSONDecodeError):
             meta = json.loads(n.metadata_json or "{}")
-        except json.JSONDecodeError:
-            pass
         if meta.get("type") != "migrate_request":
             raise HTTPException(status_code=400, detail="잘못된 요청입니다.")
 

@@ -1,11 +1,10 @@
 """CSRF protection middleware tests — mounted explicitly on a dedicated app."""
 
 import pytest
-from fastapi import FastAPI
+from conftest import _build_app
 from fastapi.testclient import TestClient
 
 from app.middleware import CSRFProtectionMiddleware
-from conftest import _build_app
 
 
 @pytest.fixture(scope="module")
@@ -24,7 +23,7 @@ def test_post_without_csrf_token_rejected(csrf_client, auth_cookie):
 
 
 def test_post_with_invalid_csrf_token_rejected(csrf_client, auth_cookie):
-    alice, cookie = auth_cookie("alice")
+    _alice, cookie = auth_cookie("alice")
     r = csrf_client.post(
         "/api/posts",
         data={"content": "<p>x</p>"},
@@ -58,7 +57,7 @@ def test_auth_routes_are_exempt(csrf_client, auth_cookie):
 
 
 def test_csrf_token_requires_valid_session(csrf_client, auth_cookie, csrf_token):
-    alice, cookie = auth_cookie("alice")
+    alice, _cookie = auth_cookie("alice")
     r = csrf_client.post(
         "/api/posts",
         data={"content": "<p>x</p>"},

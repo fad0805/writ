@@ -1,5 +1,5 @@
-import time
 import threading
+import time
 from collections import defaultdict
 
 RATE_LIMIT_WINDOW = 60
@@ -37,7 +37,7 @@ def check_rate_limit(key: str) -> bool:
         pruned = [t for t in timestamps if t > window_start]
         if len(pruned) >= RATE_LIMIT_MAX:
             return False
-        _rate_limit_store[key] = pruned + [now]
+        _rate_limit_store[key] = [*pruned, now]
         return True
 
 
@@ -47,9 +47,7 @@ def check_burst_limit(key: str) -> bool:
     with _rate_limit_lock:
         timestamps = _rate_limit_store[key]
         recent = [t for t in timestamps if t > burst_start]
-        if len(recent) >= RATE_LIMIT_BURST:
-            return False
-        return True
+        return not len(recent) >= RATE_LIMIT_BURST
 
 
 def check_daily_limit(key: str) -> bool:
@@ -60,5 +58,5 @@ def check_daily_limit(key: str) -> bool:
         pruned = [t for t in timestamps if t > day_start]
         if len(pruned) >= RATE_LIMIT_DAILY:
             return False
-        _rate_limit_daily[key] = pruned + [now]
+        _rate_limit_daily[key] = [*pruned, now]
         return True

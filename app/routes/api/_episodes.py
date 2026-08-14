@@ -1,30 +1,30 @@
 """Episode, draft, and announce-post endpoints extracted from _series.py."""
-import os
 import json
-import secrets
 import logging
-from uuid import uuid4
+import os
+import secrets
 from datetime import datetime
+from uuid import uuid4
 
-from fastapi import APIRouter, Request, Form, HTTPException, UploadFile, File
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy import desc, func
 
-from app.models import Novel, Episode, EpisodeDraft, SeriesFollow, Post, Notification, EpisodeView
 from app.config.settings import BASE_URL
 from app.core.activitypub import broadcast_to_followers
-from app.utils.to_ap_serializer import to_ap_note
+from app.core.auth import get_current_user, require_active_auth
 from app.core.push import send_push_to_user
+from app.core.threads import spawn
 from app.core.timeline_stream import broadcast_notif_sound
 from app.db.database import get_session
-from app.core.auth import require_active_auth, get_current_user
-from app.core.threads import spawn
-from app.utils.upload import _validate_upload, MAX_AUDIO_SIZE
-from app.utils.datetime import _fmt_dt
-from app.utils.content_parser import process_post_content
-from app.utils.post import _sync_post_tags
-from app.utils.log import log_admin_action
-from app.utils.storage import get_storage
+from app.models import Episode, EpisodeDraft, EpisodeView, Notification, Novel, Post, SeriesFollow
 from app.routes.api._novels import _novel_json
+from app.utils.content_parser import process_post_content
+from app.utils.datetime import _fmt_dt
+from app.utils.log import log_admin_action
+from app.utils.post import _sync_post_tags
+from app.utils.storage import get_storage
+from app.utils.to_ap_serializer import to_ap_note
+from app.utils.upload import MAX_AUDIO_SIZE, _validate_upload
 
 logger = logging.getLogger("writ.api.episodes")
 
@@ -221,14 +221,13 @@ def api_get_episode(request: Request, novel_id: int, episode_id: int):
         ep_json = _episode_json(episode)
         if not is_mine:
             ep_json.pop("views", None)
-        result = {
+        return {
             "episode": ep_json,
             "novel": _novel_json(novel, s),
             "is_mine": is_mine,
             "prev_episode": _episode_json(prev_ep) if prev_ep else None,
             "next_episode": _episode_json(next_ep) if next_ep else None,
         }
-    return result
 
 
 @episodes_router.post("/series/{novel_id}/episodes/{episode_id}/edit")

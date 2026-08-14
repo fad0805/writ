@@ -1,12 +1,24 @@
-import datetime
 import uuid
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, JSON, Table, Index, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Table,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 
 from app.config.settings import BASE_URL
 from app.db.database import Base
-from app.utils.datetime import now, get_24hours_later
+from app.utils.datetime import get_24hours_later, now
+
 
 def generate_uuid():
     return str(uuid.uuid4())

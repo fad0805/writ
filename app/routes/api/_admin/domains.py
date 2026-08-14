@@ -1,13 +1,16 @@
 """Domain-level federation admin endpoints (blocked domains, federation blocks, allowed servers, mode)."""
 
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 
-from app.models import (
-    FederationBlock, AllowedServer, BlockedDomain, ServerSetting,
-)
 from app.core.auth import require_auth
-from app.utils.log import log_admin_action
 from app.db.database import get_session
+from app.models import (
+    AllowedServer,
+    BlockedDomain,
+    FederationBlock,
+    ServerSetting,
+)
+from app.utils.log import log_admin_action
 
 router = APIRouter()
 

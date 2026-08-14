@@ -3,15 +3,15 @@ import asyncio
 import datetime
 import logging
 
-from fastapi import APIRouter, Request, Query, Depends
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.core.feed import _get_feed
-from app.core.timeline_stream import add_stream, remove_stream, add_post_stream, remove_post_stream
-from app.db.database import get_session, get_db
 from app.core.auth import get_current_user, require_auth
+from app.core.feed import _get_feed
+from app.core.timeline_stream import add_post_stream, add_stream, remove_post_stream, remove_stream
 from app.core.visibility import _can_view
+from app.db.database import get_db, get_session
 from app.models import Post
 
 logger = logging.getLogger("writ.api.feed")

@@ -8,36 +8,35 @@ import logging
 
 from sqlalchemy.orm import selectinload
 
+from app.core.feed.aggregator import _aggregate_boost_groups
+from app.core.feed.broadcast import _broadcast_federation
+from app.core.feed.criteria import _build_feed_criteria
+from app.core.feed.metadata import (
+    _EMPTY_POST_METADATA,
+    PostMetadata,
+    _feed_used_emojis,
+    _load_boost_originals,
+    _load_post_metadata,
+)
+from app.core.feed.query import _fetch_filtered_posts, query_feed_posts
 from app.models import Post
 from app.serializers import _post_json
 from app.utils.filter import _load_user_filters
 
-from app.core.feed.criteria import _build_feed_criteria
-from app.core.feed.query import query_feed_posts, _fetch_filtered_posts
-from app.core.feed.metadata import (
-    PostMetadata,
-    _EMPTY_POST_METADATA,
-    _load_post_metadata,
-    _load_boost_originals,
-    _feed_used_emojis,
-)
-from app.core.feed.aggregator import _aggregate_boost_groups
-from app.core.feed.broadcast import _broadcast_federation
-
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "_get_feed",
+    "_EMPTY_POST_METADATA",
+    "PostMetadata",
+    "_aggregate_boost_groups",
     "_broadcast_federation",
     "_build_feed_criteria",
-    "query_feed_posts",
-    "_fetch_filtered_posts",
-    "PostMetadata",
-    "_EMPTY_POST_METADATA",
-    "_load_post_metadata",
-    "_load_boost_originals",
     "_feed_used_emojis",
-    "_aggregate_boost_groups",
+    "_fetch_filtered_posts",
+    "_get_feed",
+    "_load_boost_originals",
+    "_load_post_metadata",
+    "query_feed_posts",
 ]
 
 

@@ -1,5 +1,5 @@
 """Timeline criteria and visibility calculation."""
-from app.models import User, Follow
+from app.models import Follow, User
 
 
 def _build_feed_criteria(user, session, tl_type):
@@ -22,9 +22,7 @@ def _build_feed_criteria(user, session, tl_type):
 
     _visible_user_ids = {user.id} if user else set()
     visibility = ['mention', 'followers', 'home', 'public']
-    if tl_type == 'home' and _following_ids:
-        _visible_user_ids.update(_following_ids)
-    elif tl_type == 'social' and _following_ids:
+    if (tl_type == 'home' and _following_ids) or (tl_type == 'social' and _following_ids):
         _visible_user_ids.update(_following_ids)
     elif tl_type == 'local' and _local_ids:
         _visible_user_ids.update(_local_ids)

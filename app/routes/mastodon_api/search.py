@@ -3,9 +3,9 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import or_
 from sqlalchemy.orm import Session as SASession
 
-from app.models import User, Post, Tag
-from app.db.database import get_db
 from app.config.settings import BASE_URL
+from app.db.database import get_db
+from app.models import Post, Tag, User
 from app.routes.mastodon_api._common import (
     _account_json,
     _build_account_counts_map,

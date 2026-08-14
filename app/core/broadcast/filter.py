@@ -10,7 +10,7 @@ def _should_deliver_fast(user_id: int, tl_type: str, author_id: int, visibility:
         if visibility in ("public", "home", "followers"):
             return user_id in follower_ids
         return False
-    elif tl_type == "social":
+    if tl_type == "social":
         if user_id == author_id:
             return True
         if user_id in mentioned_set:
@@ -20,7 +20,6 @@ def _should_deliver_fast(user_id: int, tl_type: str, author_id: int, visibility:
         if visibility in ("home", "followers"):
             return user_id in follower_ids
         return False
-    elif tl_type == "local":
+    if tl_type == "local":
         return visibility == "public" and author_is_local
-    else:
-        return visibility == "public"
+    return visibility == "public"

@@ -1,12 +1,14 @@
 """Shared helpers for the interactions package."""
-import logging
 import json
-from datetime import datetime, timezone, UTC
+import logging
+from datetime import UTC, datetime
+
 from sqlalchemy import String, func, or_
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB
-from app.models import User, Post, Vote, Notification
-from app.utils.datetime import _fmt_dt
+
+from app.models import Notification, Post, Vote
+
 logger = logging.getLogger("writ.api.interactions")
 
 

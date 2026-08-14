@@ -1,5 +1,6 @@
-import json
 import asyncio
+import contextlib
+import json
 
 _main_loop: asyncio.AbstractEventLoop | None = None
 _event_queues: list[asyncio.Queue] = []
@@ -18,10 +19,8 @@ def _enqueue(q: asyncio.Queue, item: str):
     if _main_loop and _main_loop.is_running():
         _main_loop.call_soon_threadsafe(q.put_nowait, item)
     else:
-        try:
+        with contextlib.suppress(asyncio.QueueFull):
             q.put_nowait(item)
-        except asyncio.QueueFull:
-            pass
 
 def broadcast(event: str, data: dict):
     payload = f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
@@ -36,10 +35,8 @@ def add_queue(q: asyncio.Queue):
     _event_queues.append(q)
 
 def remove_queue(q: asyncio.Queue):
-    try:
+    with contextlib.suppress(ValueError):
         _event_queues.remove(q)
-    except ValueError:
-        pass
 
 def add_ws() -> tuple[int, asyncio.Queue]:
     global _ws_id_counter

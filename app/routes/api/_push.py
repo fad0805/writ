@@ -3,13 +3,13 @@ import base64
 import logging
 
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.serialization import load_pem_public_key, Encoding, PublicFormat
-from fastapi import APIRouter, Request, Form, HTTPException
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat, load_pem_public_key
+from fastapi import APIRouter, Form, HTTPException, Request
 
-from app.models import PushSubscription
+from app.core.auth import require_active_auth
 from app.core.push import _get_vapid_key
 from app.db.database import get_session
-from app.core.auth import require_active_auth
+from app.models import PushSubscription
 
 logger = logging.getLogger("writ.api.push")
 
@@ -28,8 +28,8 @@ def get_vapid_public_key():
             if isinstance(pub, ec.EllipticCurvePublicKey):
                 raw = pub.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
                 key = base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
-        except Exception:
-            raise HTTPException(500, "Web Push configuration error")
+        except Exception as exc:
+            raise HTTPException(500, "Web Push configuration error") from exc
     return {"publicKey": key}
 
 

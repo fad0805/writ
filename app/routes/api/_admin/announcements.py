@@ -2,15 +2,15 @@
 
 import json
 
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 from sqlalchemy import desc
 from sqlalchemy.orm import joinedload
 
-from app.models import Announcement, AnnouncementRead, AnnouncementVote
 from app.core.auth import require_auth
-from app.utils.log import log_admin_action
-from app.routes.api._announcements import _parse_dt_field, _is_announcement_active, _announcement_json
 from app.db.database import get_session
+from app.models import Announcement, AnnouncementRead, AnnouncementVote
+from app.routes.api._announcements import _announcement_json, _is_announcement_active, _parse_dt_field
+from app.utils.log import log_admin_action
 
 router = APIRouter()
 
@@ -31,8 +31,8 @@ def _build_announcement_poll(poll_options: str):
         return None
     try:
         opts = json.loads(poll_options)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid poll_options")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid poll_options") from exc
     if not isinstance(opts, list):
         raise HTTPException(status_code=400, detail="Invalid poll_options")
     texts = [str(o).strip() for o in opts if str(o).strip()]
@@ -89,7 +89,7 @@ def api_admin_edit_announcement(request: Request, announcement_id: int, title: s
         elif len(old_options) == len(new_poll["options"]) and [o.get("text") for o in old_options] == [o.get("text") for o in new_poll["options"]]:
             new_poll["options"] = [
                 {"text": o.get("text", ""), "votes_count": old.get("votes_count", 0)}
-                for o, old in zip(new_poll["options"], old_options)
+                for o, old in zip(new_poll["options"], old_options, strict=False)
             ]
             a.poll_data = new_poll
         else:

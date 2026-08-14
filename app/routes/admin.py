@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app.db.database import get_session
-from app.models import User, Post
 from app.core.auth import require_auth
+from app.db.database import get_session
+from app.models import Post, User
 from app.utils.log import log_admin_action
 
 router = APIRouter()

@@ -1,14 +1,14 @@
 "Server settings and admin log endpoints."
 
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 
-from app.models import ServerSetting, AdminLog
 from app.core.auth import require_auth
+from app.db.database import get_session
+from app.models import AdminLog, ServerSetting
+from app.routes.api._pwa import _delete_favicon, _delete_pwa_icons, _save_favicon, _save_pwa_icons
 from app.utils.datetime import _fmt_dt
 from app.utils.log import log_admin_action
 from app.utils.storage import get_storage
-from app.routes.api._pwa import _save_pwa_icons, _save_favicon, _delete_favicon, _delete_pwa_icons
-from app.db.database import get_session
 
 router = APIRouter()
 
@@ -53,9 +53,7 @@ def api_admin_update_settings(request: Request,
         if server_name.strip():
             settings.server_name = server_name[:20]
         settings.server_description = server_description[:500] if server_description else ""
-        if logo and settings.logo and logo != settings.logo:
-            storage.delete(settings.logo)
-        elif not logo and settings.logo:
+        if (logo and settings.logo and logo != settings.logo) or (not logo and settings.logo):
             storage.delete(settings.logo)
         if favicon and settings.favicon and favicon != settings.favicon:
             storage.delete(settings.favicon)

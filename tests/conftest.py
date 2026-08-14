@@ -10,17 +10,18 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.db.database import engine, init_db, Base, get_session
-from app.models import User, Post, Follow
-from app.routes.api import router as api_router
-from app.routes.mastodon_api import router as mastodon_api_router, oauth_router
+from app.core.auth import create_session, hash_password
+from app.db.database import Base, engine, get_session, init_db
+from app.middleware import LogRequestsMiddleware
+from app.models import Follow, Post, User
+from app.routes.admin import router as admin_router
 from app.routes.ap import router as ap_router
+from app.routes.api import router as api_router
+from app.routes.mastodon_api import oauth_router
+from app.routes.mastodon_api import router as mastodon_api_router
 from app.routes.nodeinfo import router as nodeinfo_router
 from app.routes.streaming import router as streaming_router
-from app.routes.admin import router as admin_router
-from app.middleware import LogRequestsMiddleware
-from app.core.auth import create_session, hash_password
-from app.utils.crypto import generate_keypair, generate_csrf_token
+from app.utils.crypto import generate_csrf_token, generate_keypair
 
 
 def _build_app():
@@ -64,7 +65,7 @@ def _reset_in_memory_limits():
     would otherwise accumulate across tests that share a single TestClient IP.
     """
     import app.routes.api._auth as auth_mod
-    from app.core.rate_limit import _rate_limit_store, _rate_limit_daily
+    from app.core.rate_limit import _rate_limit_daily, _rate_limit_store
 
     with auth_mod._auth_lock:
         auth_mod._auth_failures.clear()

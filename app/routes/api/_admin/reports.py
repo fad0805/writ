@@ -2,14 +2,14 @@
 
 import logging
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
-from app.models import Report, ServerRule, Post, Novel, Episode, User
 from app.core.activitypub import _send_flag
-from app.utils.datetime import _fmt_dt
-from app.utils.log import log_admin_action
 from app.core.auth import require_auth
 from app.db.database import get_session
+from app.models import Episode, Novel, Post, Report, ServerRule, User
+from app.utils.datetime import _fmt_dt
+from app.utils.log import log_admin_action
 
 logger = logging.getLogger(__name__)
 
@@ -196,5 +196,5 @@ def api_admin_forward_report(request: Request, report_id: int):
             _send_flag(reporter, report.target_type, target_obj, report.reason[:200], report.rule_ids or [])
         except Exception as e:
             logger.error("Failed to forward report %s: %s", report_id, e)
-            raise HTTPException(status_code=500, detail="Failed to forward report")
+            raise HTTPException(status_code=500, detail="Failed to forward report") from e
     return {"ok": True}

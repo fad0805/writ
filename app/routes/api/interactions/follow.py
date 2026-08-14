@@ -1,18 +1,16 @@
 """Interaction endpoints — follow, DM, notification, mute/block, like, boost, bookmark, vote, react, pin."""
+import contextlib
 import logging
-from uuid import uuid4
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
-from app.models import User, Follow, Notification
-from app.serializers import _user_json
-from app.config.settings import BASE_URL
 from app.core.activitypub import _resolve_actor, _send_accept, _send_reject
+from app.core.auth import require_active_auth, require_auth
 from app.core.relationship import follow_user, unfollow_user
-from app.db.database import get_session
-from app.core.auth import require_auth, require_active_auth
 from app.core.timeline_stream import broadcast_refresh_notifs
-
+from app.db.database import get_session
+from app.models import Follow, Notification, User
+from app.serializers import _user_json
 
 logger = logging.getLogger("writ.api.follow")
 
@@ -90,10 +88,8 @@ def api_remove_follower(request: Request, username: str):
         ).delete(synchronize_session=False)
         s.delete(follow)
         s.commit()
-        try:
+        with contextlib.suppress(Exception):
             broadcast_refresh_notifs(user.id)
-        except Exception:
-            pass
     return {"ok": True}
 
 @follow_router.get("/follow-requests")
@@ -120,10 +116,8 @@ def api_reject_follow(request: Request, username: str):
         ).delete()
         s.delete(target)
         s.commit()
-        try:
+        with contextlib.suppress(Exception):
             broadcast_refresh_notifs(user.id)
-        except Exception:
-            pass
         if follower_is_remote and follower:
             try:
                 follow_activity_id = f"{follower.actor_uri()}#follows/{user.id}"

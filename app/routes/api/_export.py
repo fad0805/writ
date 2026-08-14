@@ -1,17 +1,17 @@
 """Account data export/import endpoints extracted from _settings.py."""
-import re
-import json
-import io
 import csv
+import io
+import json
+import re
 import zipfile
 
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
-from app.models import User, Post, Follow, UserMute, UserBlock, Bookmark, KeywordMute, Novel, Episode, Notification
 from app.config.settings import BASE_URL
+from app.core.auth import require_active_auth, require_auth
 from app.db.database import get_session
-from app.core.auth import require_auth, require_active_auth
+from app.models import Bookmark, Episode, Follow, KeywordMute, Notification, Novel, Post, User, UserBlock, UserMute
 from app.routes.api._settings import _domain_from_actor
 
 export_router = APIRouter()
@@ -135,9 +135,10 @@ def api_export_data(request: Request):
             post = s.query(Post).get(bm.post_id)
             if post and not post.is_deleted:
                 bookmarks.append({"url": post.ap_id or f"{BASE_URL}/post/{post.id}", "created_at": str(bm.created_at)})
-        keyword_mutes = []
-        for kw in s.query(KeywordMute).filter_by(user_id=user.id).all():
-            keyword_mutes.append({"keyword": kw.keyword, "name": kw.name or "", "mode": kw.mode, "is_regex": kw.is_regex})
+        keyword_mutes = [
+            {"keyword": kw.keyword, "name": kw.name or "", "mode": kw.mode, "is_regex": kw.is_regex}
+            for kw in s.query(KeywordMute).filter_by(user_id=user.id).all()
+        ]
         return {"follows": follows, "mutes": mutes, "blocks": blocks, "bookmarks": bookmarks, "keyword_mutes": keyword_mutes}
 
 
@@ -147,25 +148,27 @@ def api_export_archive(request: Request):
     buf = io.BytesIO()
     with get_session() as s:
         posts = s.query(Post).filter_by(author_id=user.id, is_deleted=False).order_by(Post.created_at).all()
-        posts_data = []
-        for p in posts:
-            posts_data.append({
+        posts_data = [
+            {
                 "id": p.id, "content": p.content or "", "summary": p.summary or "",
                 "visibility": p.visibility, "created_at": str(p.created_at),
                 "media_attachments": p.media_attachments or [],
                 "poll_data": p.poll_data, "is_sensitive": p.is_sensitive,
-            })
+            }
+            for p in posts
+        ]
         novels = s.query(Novel).filter_by(author_id=user.id).order_by(Novel.created_at).all()
         novels_data = []
         for n in novels:
             eps = s.query(Episode).filter_by(novel_id=n.id).order_by(Episode.episode_number).all()
-            episodes_data = []
-            for e in eps:
-                episodes_data.append({
+            episodes_data = [
+                {
                     "episode_number": e.episode_number, "title": e.title,
                     "content": e.content, "summary": e.summary or "",
                     "is_published": e.is_published, "created_at": str(e.created_at),
-                })
+                }
+                for e in eps
+            ]
             novels_data.append({
                 "title": n.title, "description": n.description or "", "tags": n.tags or "",
                 "status": n.status, "visibility": n.visibility,
@@ -185,8 +188,8 @@ def api_import_data(request: Request, data: str = Form(...)):
     user = require_active_auth(request)
     try:
         payload = json.loads(data)
-    except Exception:
-        raise HTTPException(status_code=400, detail="잘못된 JSON 형식입니다.")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="잘못된 JSON 형식입니다.") from exc
     imported = {"follows": 0, "mutes": 0, "blocks": 0, "bookmarks": 0, "keyword_mutes": 0}
     with get_session() as s:
         for item in payload.get("follows", []):

@@ -2,14 +2,14 @@ import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlparse
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from urllib.parse import urlparse
 
+from app.core.activitypub import _get_instance_actor, _resolve_actor
 from app.db.database import get_session, username_prefix_like
-from app.core.activitypub import _resolve_actor, _get_instance_actor
-from app.models import User, FederationBlock, AllowedServer, ServerSetting
+from app.models import AllowedServer, FederationBlock, ServerSetting, User
 from app.utils.http import safe_fetch
 
 logger = logging.getLogger(__name__)
@@ -55,8 +55,7 @@ def _federation_allowed(domain: str, session: Session | None = None) -> bool:
         mode = settings.federation_mode or "blacklist"
         if mode == "whitelist":
             return session.query(AllowedServer).filter_by(domain=domain).first() is not None
-        else:
-            return session.query(FederationBlock).filter_by(domain=domain).first() is None
+        return session.query(FederationBlock).filter_by(domain=domain).first() is None
     except Exception:
         return False
 

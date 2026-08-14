@@ -1,26 +1,26 @@
 """Interaction endpoints — follow, DM, notification, mute/block, like, boost, bookmark, vote, react, pin."""
+import asyncio
+import contextlib
 import json
+import logging
 import re
 import time
-import logging
-import asyncio
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Request, Form, HTTPException, Query
+from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy import or_, and_, func, desc
+from sqlalchemy import and_, desc, func, or_
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Post, Like, Boost, Vote, Bookmark, Notification, ProfileNote
-from app.serializers import _user_json, _post_json
+from app.core.auth import get_current_user, require_auth
 from app.core.timeline_stream import add_notif_stream, remove_notif_stream
-from app.db.database import get_session
-from app.core.auth import require_auth, get_current_user
-from app.utils.datetime import _fmt_dt
-
 from app.core.visibility import _can_view
-from app.routes.api.interactions._common import _json_array_has_user, _generate_poll_end_notifications
+from app.db.database import get_session
+from app.models import Bookmark, Boost, Like, Notification, Post, ProfileNote, User, Vote
+from app.routes.api.interactions._common import _generate_poll_end_notifications, _json_array_has_user
+from app.serializers import _post_json, _user_json
+from app.utils.datetime import _fmt_dt
 
 logger = logging.getLogger("writ.api.notify")
 
@@ -56,11 +56,10 @@ def api_direct_conversation(request: Request, other_id: int):
                     and_(Post.author_id == other_id, _contains_self),
                 ),
             ).order_by(Post.created_at).all()
-        result = {
+        return {
             "other_user": _user_json(other),
             "messages": [_post_json(p, s, user) for p in conv_posts],
         }
-    return result
 
 
 @notify_router.get("/notifications/direct-threads")
@@ -87,7 +86,7 @@ def api_direct_threads(request: Request):
                         if tid == user.id and (p.author_id == user.id):
                             other_id = user.id
                             break
-                        elif tid != user.id:
+                        if tid != user.id:
                             other_id = tid
                             break
             elif user.id in mu:
@@ -101,7 +100,7 @@ def api_direct_threads(request: Request):
             if other_id is not None:
                 author_map[other_id]["all_msgs"].append(p)
         result = []
-        for aid, data in author_map.items():
+        for data in author_map.values():
             u = data["user"]
             sorted_msgs = sorted(data["all_msgs"], key=lambda x: x.created_at or datetime.min, reverse=True)
             previews = []
@@ -152,15 +151,15 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
         _mentioned_users_map = {}
 
         if user and notif_post_ids:
-            _liked_ids = {l.post_id for l in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids)).all()}
-            _boosted_ids = {b.post_id for b in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(notif_post_ids)).all()}
+            _liked_ids = {like.post_id for like in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids)).all()}
+            _boosted_ids = {boost.post_id for boost in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(notif_post_ids)).all()}
             _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(notif_post_ids)).all()}
 
             for v in s.query(Vote.post_id, Vote.option_index).filter(Vote.user_id == user.id, Vote.post_id.in_(notif_post_ids)).all():
                 _vote_map[v.post_id] = v.option_index
 
-            for l in s.query(Like.post_id, Like.reaction).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids), Like.reaction.isnot(None)).all():
-                _my_reaction_map[l.post_id] = l.reaction
+            for like in s.query(Like.post_id, Like.reaction).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids), Like.reaction.isnot(None)).all():
+                _my_reaction_map[like.post_id] = like.reaction
 
             for pid, react, cnt in s.query(Like.post_id, func.coalesce(Like.reaction, "★"), func.count(Like.id)).filter(Like.post_id.in_(notif_post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all():
                 if pid not in _reactions_map:
@@ -192,15 +191,11 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
         for n in notifs:
             meta = {}
             if n.metadata_json:
-                try: meta = json.loads(n.metadata_json)
-                except: pass
-            if n.notification_type == "like":
-                if not meta.get("reaction") and n.post and n.from_user_id:
+                with contextlib.suppress(BaseException):
+                    meta = json.loads(n.metadata_json)
+            if n.notification_type == "like" and not meta.get("reaction") and n.post and n.from_user_id:
                     _like_row = s.query(Like.reaction).filter(Like.user_id == n.from_user_id, Like.post_id == n.post_id).first()
-                    if _like_row and _like_row[0]:
-                        meta = {"reaction": _like_row[0]}
-                    else:
-                        meta = {"reaction": "★"}
+                    meta = {"reaction": _like_row[0]} if _like_row and _like_row[0] else {"reaction": "★"}
             post = n.post
             item = {
                 "id": n.id,

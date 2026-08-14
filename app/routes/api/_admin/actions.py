@@ -1,22 +1,22 @@
 "User moderation/action admin endpoints."
 
-import os
 import json
+import logging
+import os
 import secrets
 import smtplib
 from email.mime.text import MIMEText
 
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 
-from app.models import User, Post, Notification
-from app.config.settings import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
-from app.core.activitypub import _resolve_actor, _fetch_remote_count
+from app.config.settings import SMTP_FROM, SMTP_PASSWORD, SMTP_PORT, SMTP_SERVER, SMTP_USER
+from app.core.activitypub import _fetch_remote_count, _resolve_actor
+from app.core.auth import hash_password, require_auth
 from app.core.timeline_stream import broadcast_refresh_notifs
-from app.core.auth import require_auth, hash_password
-from app.utils.log import log_admin_action
 from app.db.database import get_session
+from app.models import Notification, Post, User
+from app.utils.log import log_admin_action
 
-import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -163,9 +163,9 @@ def api_admin_refresh_profile(request: Request, user_id: int):
         return {"ok": True, "display_name": _name}
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
         logger.exception("Failed to refresh profile for user %s", user_id)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.post("/admin/users/suspend")
@@ -215,7 +215,8 @@ def api_admin_user_note(request: Request, user_id: int, note: str = Form("")):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         u = s.query(User).get(user_id)
-        if not u: raise HTTPException(status_code=404, detail="User not found")
+        if not u:
+            raise HTTPException(status_code=404, detail="User not found")
         _guard_target_role(user, u)
         u.moderation_note = note
         target_username = u.username
@@ -234,7 +235,8 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
         raise HTTPException(status_code=400, detail=f"Invalid action: {action}")
     with get_session() as s:
         u = s.query(User).get(user_id)
-        if not u: raise HTTPException(status_code=404, detail="User not found")
+        if not u:
+            raise HTTPException(status_code=404, detail="User not found")
         _guard_target_role(user, u)
 
         if action == "warning":
@@ -321,7 +323,7 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
                         if SMTP_USER:
                             smtp.login(SMTP_USER, SMTP_PASSWORD or "")
                         smtp.send_message(msg)
-            except Exception as e:
+            except Exception:
                 logger.exception("Failed to send moderation email to %s", u.email)
     return {"ok": True, "action": action}
 
@@ -333,7 +335,8 @@ def api_admin_toggle_sensitive(request: Request, user_id: int):
         raise HTTPException(status_code=403, detail="Forbidden")
     with get_session() as s:
         u = s.query(User).get(user_id)
-        if not u: raise HTTPException(status_code=404, detail="User not found")
+        if not u:
+            raise HTTPException(status_code=404, detail="User not found")
         _guard_target_role(user, u)
         u.is_sensitive = not u.is_sensitive
         s.commit()

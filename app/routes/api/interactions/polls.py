@@ -1,20 +1,20 @@
 """Interaction endpoints — follow, DM, notification, mute/block, like, boost, bookmark, vote, react, pin."""
+import contextlib
 import logging
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from uuid import uuid4
 
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 from sqlalchemy import func
 
-from app.models import Post, Vote
-from app.serializers import _post_json
 from app.config.settings import BASE_URL
-from app.core.activitypub import _post_to_inbox, _ap_fetch
-from app.db.database import get_session
+from app.core.activitypub import _ap_fetch, _post_to_inbox
 from app.core.auth import require_active_auth
 from app.core.threads import spawn
-
 from app.core.visibility import _can_view
+from app.db.database import get_session
+from app.models import Post, Vote
+from app.serializers import _post_json
 
 logger = logging.getLogger("writ.api.polls")
 
@@ -92,10 +92,8 @@ def api_vote_post(request: Request, post_id: int, option: int = Form(...)):
                 },
                 "to": [author_uri],
             }
-            try:
+            with contextlib.suppress(Exception):
                 _post_to_inbox(inbox, vote_activity, user)
-            except Exception:
-                pass
 
         spawn(_deliver_remote_vote)
     return {"ok": True, "post": post_json}

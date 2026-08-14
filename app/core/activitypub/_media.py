@@ -1,19 +1,21 @@
-import io
-import os
-import uuid
 import datetime
+import io
 import logging
+import uuid
 from urllib.parse import urlparse
 
 from PIL import Image, ImageOps, ImageSequence
 
 from app.utils.image import guard_image
+
 guard_image()
+
+import contextlib
 
 from app.db.database import get_session
 from app.models import RemoteMedia
+from app.utils.http import WRIT_USER_AGENT, safe_fetch, validate_url, validated_get
 from app.utils.storage import get_storage
-from app.utils.http import validate_url, safe_fetch, validated_get, WRIT_USER_AGENT
 
 logger = logging.getLogger("writ.activitypub")
 
@@ -118,7 +120,6 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
         new_url = None
 
         is_avatar = prefix == "avatars"
-        raw_ext = ext
         if ext in ("gif", "png") or "gif" in content_type_header or "png" in content_type_header:
             if is_avatar and ext != "gif" and "gif" not in content_type_header:
                 img = Image.open(io.BytesIO(data))
@@ -167,10 +168,8 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
                 new_url = storage.save(key, data, content_type_header or f"image/{ext}")
 
         if new_url and old_url:
-            try:
+            with contextlib.suppress(Exception):
                 storage.delete(old_url)
-            except Exception:
-                pass
 
         return new_url if new_url else image_url
 

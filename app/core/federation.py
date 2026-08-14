@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 from app.config.settings import DOMAIN
 from app.db.database import get_session
-from app.models import ServerSetting, FederationBlock, AllowedServer
+from app.models import AllowedServer, FederationBlock, ServerSetting
 
 # federation_allowed는 인바운드 처리·검색 등에서 도메인마다 DB를 두 번씩
 # 조회하는데, 짧은 TTL 캐시로 같은 도메인을 반복 조회할 때의 부하를 줄인다.

@@ -1,30 +1,47 @@
 """Account settings, password/email, media upload endpoints extracted from _settings.py."""
-import re
-import json
 import io
-from uuid import uuid4
+import json
+import re
 from urllib.parse import urlparse
+from uuid import uuid4
 
-from fastapi import APIRouter, Request, Form, HTTPException, UploadFile, File
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from PIL import Image, ImageOps
 from sqlalchemy import or_
 
 from app.utils.image import guard_image
+
 guard_image()
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Notification, Novel, Episode, SeriesFollow, SeriesNotice, SeriesMute, EpisodeView, PushSubscription, BlockedDomain
 from app.config.settings import BASE_URL
 from app.core.activitypub import _post_to_inbox
+from app.core.auth import delete_user_sessions, hash_password, require_active_auth, require_auth, verify_password
+from app.core.threads import spawn
 from app.core.timeline_stream import broadcast_refresh_notifs
 from app.db.database import get_session
-from app.core.auth import require_auth, require_active_auth, hash_password, verify_password, delete_user_sessions
-from app.core.threads import spawn
+from app.models import (
+    BlockedDomain,
+    Bookmark,
+    Boost,
+    Episode,
+    EpisodeView,
+    Follow,
+    Like,
+    Notification,
+    Novel,
+    Post,
+    PushSubscription,
+    SeriesFollow,
+    SeriesMute,
+    SeriesNotice,
+    User,
+    Vote,
+)
+from app.routes.api._auth import _send_verification_email
 from app.utils.log import log_admin_action
 from app.utils.storage import get_storage
-
-from app.utils.upload import _validate_upload, MAX_IMAGE_SIZE
-from app.routes.api._auth import _send_verification_email
+from app.utils.upload import MAX_IMAGE_SIZE, _validate_upload
 
 settings_router = APIRouter()
 
@@ -110,16 +127,16 @@ def api_settings_send_verification(request: Request):
 
 @settings_router.post("/media/upload")
 def api_upload_media(request: Request, file: UploadFile = File(...)):
-    user = require_active_auth(request)
+    require_active_auth(request)
     storage = get_storage()
-    ext, is_image, is_video, _ = _validate_upload(file, allow_video=True, max_size=MAX_IMAGE_SIZE, label="미디어")
+    ext, is_image, _is_video, _ = _validate_upload(file, allow_video=True, max_size=MAX_IMAGE_SIZE, label="미디어")
     name = f"{uuid4().hex}.webp" if is_image else f"{uuid4().hex}{ext}"
     key = f"media/{name}"
     if is_image:
         try:
             img = Image.open(io.BytesIO(file.file.read()))
-        except (Image.DecompressionBombError, ValueError, OSError):
-            raise HTTPException(status_code=400, detail="미디어 이미지 해상도가 너무 큽니다.")
+        except (Image.DecompressionBombError, ValueError, OSError) as exc:
+            raise HTTPException(status_code=400, detail="미디어 이미지 해상도가 너무 큽니다.") from exc
         img = ImageOps.exif_transpose(img)
         buf = io.BytesIO()
         img.save(buf, "WEBP", quality=85, lossless=(img.mode == "RGBA"))
@@ -172,11 +189,8 @@ def api_set_aliases(request: Request, aliases: str = Form("[]")):
         for alias in parsed[:]:
             uname = alias.split("@")[0] if "@" in alias else alias
             local = s.query(User).filter_by(username=uname, is_remote=False).first()
-            if local:
-                if local.id == user.id:
-                    parsed.remove(alias)
-                elif getattr(local, 'is_suspended', False) or getattr(local, 'is_deactivated', False):
-                    parsed.remove(alias)
+            if local and (local.id == user.id or getattr(local, 'is_suspended', False) or getattr(local, 'is_deactivated', False)):
+                parsed.remove(alias)
         db = s.query(User).filter_by(id=user.id).first()
         db.aliases = parsed
         s.commit()
@@ -231,8 +245,8 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
         if _my_post_ids:
             for b in s.query(Boost.user_id).filter(Boost.post_id.in_(_my_post_ids)).all():
                 _interacted.add(b.user_id)
-            for l in s.query(Like.user_id).filter(Like.post_id.in_(_my_post_ids)).all():
-                _interacted.add(l.user_id)
+            for like in s.query(Like.user_id).filter(Like.post_id.in_(_my_post_ids)).all():
+                _interacted.add(like.user_id)
             for r in s.query(Post.author_id).filter(Post.in_reply_to_id.in_(_my_post_ids)).all():
                 _interacted.add(r.author_id)
         _inboxes = {}

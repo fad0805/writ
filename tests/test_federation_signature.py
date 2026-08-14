@@ -5,13 +5,12 @@ by app/core/activitypub/_outbound.py) and asserts on accept/reject behavior.
 """
 
 import base64
-import hashlib
 import email.utils
+import hashlib
 
-import pytest
 from starlette.requests import Request
 
-from app.core.activitypub._signature import verify_http_signature, _validate_inbox_activity
+from app.core.activitypub._signature import _validate_inbox_activity, verify_http_signature
 from app.utils.crypto import sign_string
 
 SIGNED_HEADERS = "(request-target) date host digest"
@@ -72,7 +71,7 @@ def _signed_request(user, body, date=None):
 
 
 def test_missing_signature_header_rejected(make_user):
-    user = make_user("alice")
+    make_user("alice")
     body = b"{}"
     req = _make_request(INBOX_PATH, {"Date": email.utils.formatdate(usegmt=True), "Host": "localhost:3000"}, body)
     ok, actor = verify_http_signature(req, body, {"type": "Create"})

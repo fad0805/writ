@@ -3,12 +3,12 @@ import json
 from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, Request, WebSocket
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
+from app.core.auth import _decode_session_token
+from app.core.eventbus import add_queue, add_ws, remove_queue, remove_ws
 from app.db.database import get_session
 from app.models import MastodonAccessToken
-from app.core.auth import _decode_session_token
-from app.core.eventbus import add_queue, remove_queue, add_ws, remove_ws
 
 router = APIRouter()
 
@@ -55,10 +55,9 @@ async def websocket_stream(websocket: WebSocket):
             if not mat or mat.user_id is None:
                 await websocket.close(code=4001, reason="Unauthorized")
                 return
-    if token:
-        if _decode_session_token(token) is None:
-            await websocket.close(code=4001, reason="Unauthorized")
-            return
+    if token and _decode_session_token(token) is None:
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
     await websocket.accept()
     ws_id, ws_q = add_ws()
     try:

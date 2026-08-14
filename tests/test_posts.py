@@ -59,8 +59,8 @@ def test_get_post_detail(client, auth_cookie, make_post):
 
 
 def test_edit_post_requires_author(client, auth_cookie, make_post):
-    alice, alice_cookie = auth_cookie("alice")
-    bob, bob_cookie = auth_cookie("bob")
+    alice, _alice_cookie = auth_cookie("alice")
+    _bob, bob_cookie = auth_cookie("bob")
     post = make_post(alice, content="<p>original</p>")
     r = client.post(f"/api/posts/{post.id}/edit", data={"content": "<p>hacked</p>"}, cookies=bob_cookie)
     assert r.status_code == 403
@@ -87,7 +87,7 @@ def test_delete_post_marks_deleted(client, auth_cookie, make_post):
 
 def test_delete_post_others_forbidden(client, auth_cookie, make_post):
     alice, _ = auth_cookie("alice")
-    bob, bob_cookie = auth_cookie("bob")
+    _bob, bob_cookie = auth_cookie("bob")
     post = make_post(alice, content="<p>mine</p>")
     assert client.post(f"/api/posts/{post.id}/delete", cookies=bob_cookie).status_code == 403
 

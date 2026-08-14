@@ -3,10 +3,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func as sqlfunc
 from sqlalchemy.orm import Session as SASession
 
-from app.models import User, Post, Tag, ServerSetting, ServerRule, now
-from app.db.database import get_db
-from app.config.settings import BASE_URL, DOMAIN, SCHEME, MAX_POST_LENGTH
+from app.config.settings import BASE_URL, DOMAIN, MAX_POST_LENGTH, SCHEME
 from app.core.push import get_vapid_keys
+from app.db.database import get_db
+from app.models import Post, ServerRule, ServerSetting, Tag, User, now
 
 router = APIRouter()
 
@@ -15,7 +15,7 @@ def _abs_url(value: str | None) -> str | None:
     """로컬 상대 경로를 절대 URL로 변환. 비어 있으면 None 반환."""
     if not value:
         return None
-    if value.startswith("http://") or value.startswith("https://"):
+    if value.startswith(("http://", "https://")):
         return value
     if value.startswith("//"):
         return f"{SCHEME}:{value}"

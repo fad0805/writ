@@ -1,21 +1,24 @@
 import io
+import logging
 import os
 import re
 import uuid
-import logging
 from urllib.parse import urlparse
 
 from PIL import Image
 
 from app.utils.image import guard_image
+
 guard_image()
 
+import contextlib
+
+from app.config.settings import S3_ENABLED
 from app.db.database import get_session
 from app.models import CustomEmoji
-from app.config.settings import S3_ENABLED
-from app.utils.storage import get_storage
 from app.utils.emoji import EMOJI_DIR, _refresh_emoji_cache_forcibly
-from app.utils.http import validate_url, validated_get, WRIT_USER_AGENT
+from app.utils.http import WRIT_USER_AGENT, validate_url, validated_get
+from app.utils.storage import get_storage
 
 logger = logging.getLogger("writ.activitypub")
 
@@ -34,10 +37,7 @@ def _background_import_emoji(url: str, keyword: str, domain: str):
             _ext, _ct_save = "png", "image/png"
         else:
             _img = Image.open(io.BytesIO(_resp.content))
-            if _img.mode in ("RGBA", "P"):
-                _img = _img.convert("RGBA")
-            else:
-                _img = _img.convert("RGB")
+            _img = _img.convert("RGBA") if _img.mode in ("RGBA", "P") else _img.convert("RGB")
             _out = io.BytesIO()
             _img.save(_out, format="WEBP", quality=85)
             _ext, _ct_save = "webp", "image/webp"
@@ -62,10 +62,8 @@ def _process_emoji_tags(tags: list, session):
         return
     _storage = get_storage()
     if not S3_ENABLED:
-        try:
+        with contextlib.suppress(Exception):
             os.makedirs(EMOJI_DIR, exist_ok=True)
-        except Exception:
-            pass
     for tag in tags:
         if not isinstance(tag, dict) or tag.get("type") != "Emoji":
             continue
@@ -124,10 +122,8 @@ def _process_emoji_tags(tags: list, session):
 
             remote_dir = os.path.join(EMOJI_DIR, "remote")
             if not S3_ENABLED:
-                try:
+                with contextlib.suppress(Exception):
                     os.makedirs(remote_dir, exist_ok=True)
-                except Exception:
-                    pass
 
             if ext in ("gif", "png"):
                 file_name = f"{uuid.uuid4().hex}.{ext}"
@@ -138,10 +134,7 @@ def _process_emoji_tags(tags: list, session):
                 file_name = f"{uuid.uuid4().hex}.webp"
                 file_path = os.path.join(remote_dir, file_name)
                 img = Image.open(io.BytesIO(resp.content))
-                if img.mode in ("RGBA", "P"):
-                    img = img.convert("RGBA")
-                else:
-                    img = img.convert("RGB")
+                img = img.convert("RGBA") if img.mode in ("RGBA", "P") else img.convert("RGB")
                 if img.width > 66 or img.height > 66:
                     img = img.resize((img.width // 2, img.height // 2), Image.LANCZOS)
                 buf = io.BytesIO()
@@ -155,10 +148,8 @@ def _process_emoji_tags(tags: list, session):
                         f.write(data)
                 except Exception:
                     pass
-            try:
+            with contextlib.suppress(Exception):
                 _storage.save(f"emojis/remote/{file_name}", data, content_type)
-            except Exception:
-                pass
             emoji = CustomEmoji(
                 keyword=keyword,
                 file_name=file_name,

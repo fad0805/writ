@@ -1,15 +1,16 @@
 """Server-info, link-preview, and client-log endpoints extracted from _misc.py."""
-import re
+import contextlib
 import html
 import logging
+import re
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app.models import User, ServerSetting
-from app.db.database import get_session
 from app.core.auth import require_auth
+from app.db.database import get_session
+from app.models import ServerSetting, User
 from app.utils.http import validate_url, validated_get
 from app.utils.log import log_admin_action
 
@@ -94,10 +95,8 @@ def api_client_log(request: Request):
         details = data.get("details", "")
         ip = request.client.host if request.client else ""
         user = None
-        try:
+        with contextlib.suppress(HTTPException):
             user = require_auth(request)
-        except HTTPException:
-            pass
         log_admin_action(
             user_id=user.id if user else None,
             username=user.username if user else "anonymous",
@@ -106,6 +105,6 @@ def api_client_log(request: Request):
             ip_address=ip,
         )
         return {"ok": True}
-    except Exception as e:
+    except Exception:
         logger.exception("Client log error")
         return JSONResponse({"ok": False, "error": "Failed to save log"}, status_code=400)

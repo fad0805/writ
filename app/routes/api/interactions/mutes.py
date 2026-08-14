@@ -2,12 +2,12 @@
 import json
 import logging
 
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 
-from app.models import User, Follow, UserMute, UserBlock, SeriesMute, KeywordMute
-from app.core.relationship import mute_user, unmute_user, block_user, unblock_user
+from app.core.auth import require_active_auth, require_auth
+from app.core.relationship import block_user, mute_user, unblock_user, unmute_user
 from app.db.database import get_session
-from app.core.auth import require_auth, require_active_auth
+from app.models import KeywordMute, SeriesMute, User, UserBlock, UserMute
 from app.utils.datetime import _fmt_dt
 
 logger = logging.getLogger("writ.api.mutes")

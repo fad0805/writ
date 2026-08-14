@@ -1,29 +1,31 @@
 """User profile, search, and media endpoints extracted from _core.py."""
-import json
 import io
+import json
 import logging
-from uuid import uuid4
 from urllib.parse import urlparse
+from uuid import uuid4
 
-from fastapi import APIRouter, Request, Form, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from PIL import Image, ImageOps
-from sqlalchemy import desc, or_, func, select, text
+from sqlalchemy import desc, func, or_, select, text
 from sqlalchemy.orm import selectinload
 
 from app.utils.image import guard_image
+
 guard_image()
 
-from app.models import User, Post, Follow, Like, Boost, Vote, Bookmark, Novel, UserMute, UserBlock
-from app.serializers import _user_json, _post_json
-from app.core.activitypub import _resolve_actor, _broadcast_update_actor
-from app.db.database import get_session, username_prefix_like
-from app.core.auth import require_active_auth, get_current_user
-from app.core.threads import spawn
-from app.utils.storage import get_storage, _cleanup_avatars
+import contextlib
 
+from app.core.activitypub import _broadcast_update_actor, _resolve_actor
+from app.core.auth import get_current_user, require_active_auth
+from app.core.threads import spawn
 from app.core.visibility import _can_view
-from app.utils.upload import _validate_upload, MAX_AVATAR_SIZE
-from app.routes.api._novels import _novel_json, _apply_latest_activity_order, _load_novel_meta
+from app.db.database import get_session, username_prefix_like
+from app.models import Bookmark, Boost, Follow, Like, Novel, Post, User, UserBlock, UserMute, Vote
+from app.routes.api._novels import _apply_latest_activity_order, _load_novel_meta, _novel_json
+from app.serializers import _post_json, _user_json
+from app.utils.storage import _cleanup_avatars, get_storage
+from app.utils.upload import MAX_AVATAR_SIZE, _validate_upload
 
 logger = logging.getLogger("writ.api.users")
 
@@ -57,7 +59,7 @@ def api_users_autocomplete(request: Request, q: str = Query("")):
                     for mid in mids:
                         if isinstance(mid, int):
                             mentioned_ids.add(mid)
-        match_ids = {m.id for m in matches}
+        {m.id for m in matches}
         follows_mentioned = sorted(
             [m for m in matches if m.id in following_ids and m.id in mentioned_ids],
             key=lambda m: (m.display_name or m.username).lower()
@@ -86,10 +88,8 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         if len(parts) == 2:
             remote_user, remote_domain = parts
             actor_url = f"https://{remote_domain}/@{remote_user}"
-            try:
+            with contextlib.suppress(Exception):
                 spawn(_resolve_actor, actor_url)
-            except Exception:
-                pass
     with get_session() as s:
         profile = s.query(User).filter_by(username=username).first()
         if not profile:
@@ -206,15 +206,15 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                 _all_post_ids.add(_p.boost_of_id)
         _all_post_ids = list(_all_post_ids | set(profile.pinned_posts or []))
         if user and _all_post_ids:
-            _liked_ids = {l.post_id for l in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(_all_post_ids)).all()}
-            _boosted_ids = {b.post_id for b in s.query(Boost).filter(Boost.user_id == user.id, Boost.post_id.in_(_all_post_ids)).all()}
+            _liked_ids = {like.post_id for like in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(_all_post_ids)).all()}
+            _boosted_ids = {boost.post_id for boost in s.query(Boost).filter(Boost.user_id == user.id, Boost.post_id.in_(_all_post_ids)).all()}
             _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(_all_post_ids)).all()}
             _vote_map = {}
             for v in s.query(Vote).filter(Vote.user_id == user.id, Vote.post_id.in_(_all_post_ids)).all():
                 _vote_map[v.post_id] = v.option_index
             _my_reaction_map = {}
-            for l in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(_all_post_ids), Like.reaction.isnot(None)).all():
-                _my_reaction_map[l.post_id] = l.reaction
+            for like in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(_all_post_ids), Like.reaction.isnot(None)).all():
+                _my_reaction_map[like.post_id] = like.reaction
             _reactions_map = {}
             for pid, react, cnt in s.query(Like.post_id, func.coalesce(Like.reaction, "★"), func.count(Like.id)).filter(Like.post_id.in_(_all_post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all():
                 if pid not in _reactions_map:
@@ -248,11 +248,11 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         if _boost_pointer_ids:
             for _orig in s.query(Post).options(selectinload(Post.author)).filter(Post.id.in_(_boost_pointer_ids), Post.is_deleted == False).all():
                 _boost_originals[_orig.id] = _orig
-        _pj_kwargs = dict(_liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids,
-                          _vote_map=_vote_map, _my_reaction_map=_my_reaction_map,
-                          _reactions_map=_reactions_map,
-                          _mentioned_users_map=_mentioned_users_map,
-                          _boost_originals=_boost_originals)
+        _pj_kwargs = {"_liked_ids": _liked_ids, "_boosted_ids": _boosted_ids, "_bookmarked_ids": _bookmarked_ids,
+                          "_vote_map": _vote_map, "_my_reaction_map": _my_reaction_map,
+                          "_reactions_map": _reactions_map,
+                          "_mentioned_users_map": _mentioned_users_map,
+                          "_boost_originals": _boost_originals}
         _novel_meta = _load_novel_meta(s, novels)
         _pinned_novels = s.query(Novel).filter(Novel.id.in_(profile.pinned_series or [])).all() if profile.pinned_series else []
         _pinned_series_meta = _load_novel_meta(s, _pinned_novels)
@@ -363,8 +363,8 @@ def _save_profile_image(user_id: int, file: UploadFile, prefix: str, max_size: t
     key = f"{prefix}/local/u{user_id}_{uuid4().hex[:8]}.webp"
     try:
         img = Image.open(file.file)
-    except (Image.DecompressionBombError, ValueError, OSError):
-        raise HTTPException(status_code=400, detail="프로필 이미지 해상도가 너무 큽니다.")
+    except (Image.DecompressionBombError, ValueError, OSError) as exc:
+        raise HTTPException(status_code=400, detail="프로필 이미지 해상도가 너무 큽니다.") from exc
     img = ImageOps.exif_transpose(img)
     if max_size[0] == max_size[1]:
         size = min(img.size)

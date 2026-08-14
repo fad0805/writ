@@ -15,7 +15,7 @@ def _poll_data():
 
 
 def test_vote_on_poll(client, auth_cookie, make_post):
-    alice, alice_cookie = auth_cookie("alice")
+    alice, _alice_cookie = auth_cookie("alice")
     bob, bob_cookie = auth_cookie("bob")
     post = make_post(alice, poll_data=_poll_data())
     r = client.post(f"/api/posts/{post.id}/vote", data={"option": "0"}, cookies=bob_cookie)
@@ -28,7 +28,7 @@ def test_vote_on_poll(client, auth_cookie, make_post):
 
 
 def test_vote_changes_option(client, auth_cookie, make_post):
-    alice, alice_cookie = auth_cookie("alice")
+    alice, _alice_cookie = auth_cookie("alice")
     bob, bob_cookie = auth_cookie("bob")
     post = make_post(alice, poll_data=_poll_data())
     client.post(f"/api/posts/{post.id}/vote", data={"option": "0"}, cookies=bob_cookie)
@@ -40,16 +40,16 @@ def test_vote_changes_option(client, auth_cookie, make_post):
 
 
 def test_vote_invalid_option(client, auth_cookie, make_post):
-    alice, alice_cookie = auth_cookie("alice")
-    bob, bob_cookie = auth_cookie("bob")
+    alice, _alice_cookie = auth_cookie("alice")
+    _bob, bob_cookie = auth_cookie("bob")
     post = make_post(alice, poll_data=_poll_data())
     r = client.post(f"/api/posts/{post.id}/vote", data={"option": "5"}, cookies=bob_cookie)
     assert r.status_code == 400
 
 
 def test_vote_on_non_poll_post(client, auth_cookie, make_post):
-    alice, alice_cookie = auth_cookie("alice")
-    bob, bob_cookie = auth_cookie("bob")
+    alice, _alice_cookie = auth_cookie("alice")
+    _bob, bob_cookie = auth_cookie("bob")
     post = make_post(alice, content="<p>no poll here</p>")
     assert client.post(f"/api/posts/{post.id}/vote", data={"option": "0"}, cookies=bob_cookie).status_code == 404
 
@@ -61,7 +61,7 @@ def test_vote_requires_auth(client, make_user, make_post):
 
 
 def test_unvote(client, auth_cookie, make_post):
-    alice, alice_cookie = auth_cookie("alice")
+    alice, _alice_cookie = auth_cookie("alice")
     bob, bob_cookie = auth_cookie("bob")
     post = make_post(alice, poll_data=_poll_data())
     client.post(f"/api/posts/{post.id}/vote", data={"option": "0"}, cookies=bob_cookie)
