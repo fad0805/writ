@@ -6,6 +6,7 @@ names (commit a1b2c3: _MENTION_NAME_RE guard).
 """
 from app.utils.content_parser import (
     _MENTION_NAME_RE,
+    _sanitize_html,
     extract_mentions_from_local,
     process_remote_post,
 )
@@ -127,3 +128,16 @@ def test_remote_img_with_attrs_is_kept():
     }
     html = process_remote_post('<p><img src="https://example.com/a.png" alt="a"></p>', post)
     assert '<img src="https://example.com/a.png" alt="a">' in html
+
+
+def test_remote_plain_tag_is_preserved():
+    # Misskey wraps unparsed text in <plain>; the tag must survive sanitization
+    # and serialization so hashtags/URLs inside stay as plain text.
+    post = {
+        "id": "https://madost.one/notes/1",
+        "attributedTo": "https://madost.one/users/x",
+        "tag": [],
+    }
+    raw = "<p><plain>#해시태그처럼 보이는 텍스트 https://x.com/a</plain></p>"
+    html = process_remote_post(_sanitize_html(raw), post)
+    assert "<plain>#해시태그처럼 보이는 텍스트 https://x.com/a</plain>" in html

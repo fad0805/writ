@@ -57,7 +57,7 @@ def _sanitize_html(html: str) -> str:
     # ActivityPub(마스토돈, 미스키 등)에서 흔히 사용하는 안전한 태그 목록
     allowed_tags = {
         "a", "p", "del", "br", "span", "b", "i", "strong", "em",
-        "ul", "ol", "li", "blockquote", "code", "pre", "img"
+        "ul", "ol", "li", "blockquote", "code", "pre", "img", "plain"
     }
     # 각 태그별로 허용할 속성 (XSS 방지를 위해 href는 https/http만 허용)
     allowed_attributes = {
@@ -111,7 +111,7 @@ def _serialize_html(soup):
             return f"<img{attrs_str}>"
         if node.name == "br":
             return "<br>"
-        if node.name in ("blockquote", "strong", "em", "b", "i", "code", "pre", "del", "span"):
+        if node.name in ("blockquote", "strong", "em", "b", "i", "code", "pre", "del", "span", "plain"):
             children_str = "".join(_to_html(c) for c in list(node.children))
             return f"<{node.name}>{children_str}</{node.name}>"
         if node.name in ("ul", "ol"):

@@ -12,7 +12,7 @@ export function formatRelative(iso: string, now: number = Date.now()): string {
 
 export function rewriteLinks(text: string): string {
   const protectedTags: string[] = [];
-  text = text.replace(/<a\b[^>]*>[\s\S]*?<\/a>/gi, (m) => {
+  text = text.replace(/<(a|plain)\b[^>]*>[\s\S]*?<\/\1>/gi, (m) => {
     protectedTags.push(m);
     return `\x00LINK_${protectedTags.length - 1}\x00`;
   });
