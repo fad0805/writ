@@ -183,8 +183,9 @@ function getRenderData(emojis: CustomEmoji[]) {
     const uniq: CustomEmoji[] = [];
     for (const e of emojis) {
       if (!e || !e.keyword || !e.url) continue;
-      if (seen.has(e.keyword)) continue;
-      seen.add(e.keyword);
+      const lowerKw = e.keyword.toLowerCase();
+      if (seen.has(lowerKw)) continue;
+      seen.add(lowerKw);
       const safeUrl = e.url.replace(/"/g, "%22").replace(/</g, "%3C").replace(/>/g, "%3E");
       if (!safeUrl.startsWith("https:") && !safeUrl.startsWith("/")) continue;
       uniq.push({ ...e, url: safeUrl });
@@ -194,7 +195,7 @@ function getRenderData(emojis: CustomEmoji[]) {
     const emojiByKeyword = new Map<string, CustomEmoji>();
     for (const e of uniq) {
       parts.push(e.keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-      emojiByKeyword.set(e.keyword, e);
+      emojiByKeyword.set(e.keyword.toLowerCase(), e);
     }
     data = { re: parts.length > 0 ? new RegExp(`:(${parts.join("|")}):`, "gi") : null, emojiByKeyword };
     renderCache.set(emojis, data);
@@ -208,7 +209,7 @@ export function renderCustomEmojis(html: string, emojis: CustomEmoji[], size?: n
   const { re, emojiByKeyword } = getRenderData(emojis);
   if (!re) return html;
   return html.replace(re, (match, kw: string) => {
-    const emoji = emojiByKeyword.get(kw);
+    const emoji = emojiByKeyword.get(kw.toLowerCase());
     if (!emoji) return match;
     const kwAttr = emoji.keyword.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     return `<img src="${emoji.url}" alt=":${kwAttr}:" title=":${kwAttr}:" class="custom-emoji" width="${sz}" height="${sz}" style="width:${sz}px;height:${sz}px;vertical-align:middle;display:inline-block;object-fit:contain">`;
