@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import time
+from typing import cast
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.backends import default_backend
@@ -53,10 +54,13 @@ def get_private_key(user, secret: str) -> str:
 
 
 def sign_string(text: str, private_key_pem: str) -> str:
-    private_key = serialization.load_pem_private_key(
-        private_key_pem.encode("utf-8"),
-        password=None,
-        backend=default_backend(),
+    private_key = cast(
+        rsa.RSAPrivateKey,
+        serialization.load_pem_private_key(
+            private_key_pem.encode("utf-8"),
+            password=None,
+            backend=default_backend(),
+        ),
     )
     signature = private_key.sign(
         text.encode("utf-8"),
@@ -68,9 +72,12 @@ def sign_string(text: str, private_key_pem: str) -> str:
 
 def verify_signature(text: str, signature_b64: str, public_key_pem: str) -> bool:
     try:
-        public_key = serialization.load_pem_public_key(
-            public_key_pem.encode("utf-8"),
-            backend=default_backend(),
+        public_key = cast(
+            rsa.RSAPublicKey,
+            serialization.load_pem_public_key(
+                public_key_pem.encode("utf-8"),
+                backend=default_backend(),
+            ),
         )
         signature = base64.b64decode(signature_b64)
         # Try PKCS1v15 first (most common), fall back to PSS

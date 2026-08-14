@@ -86,7 +86,7 @@ def _migrate_out_to_remote(request: Request, user, target_handle: str):
     remote = _resolve_remote_user(target_handle)
     if not remote:
         raise HTTPException(status_code=404, detail="대상 계정을 찾을 수 없습니다.")
-    new_actor_url = remote.remote_url or ""
+    new_actor_url = str(remote.remote_url or "")
 
     actor_data = _fetch_actor_json_signed(new_actor_url, user)
     known_as = actor_data.get("alsoKnownAs", []) if isinstance(actor_data, dict) else []
@@ -133,7 +133,7 @@ def _migrate_out_to_remote(request: Request, user, target_handle: str):
 
     log_admin_action(
         user.id, user.username, "account_migrated_remote",
-        target_username=remote.username if remote.username else target_handle,
+        target_username=str(remote.username or target_handle),
         ip_address=request.client.host if request.client else "",
     )
     logger.info("Move: local %s moved out to %s (%d local followers repointed)", user.username, new_actor_url, moved_local)

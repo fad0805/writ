@@ -120,7 +120,7 @@ def _check_collection_access(username: str) -> bool:
 
 
 @router.get("/users/{username}/outbox")
-def user_outbox(username: str, page: int = None):
+def user_outbox(username: str, page: int | None = None):
     if not _check_collection_access(username):
         raise HTTPException(status_code=404, detail="Not found")
     result = get_outbox(username, page)
@@ -130,7 +130,7 @@ def user_outbox(username: str, page: int = None):
 
 
 @router.get("/users/{username}/followers")
-def user_followers(username: str, page: int = None):
+def user_followers(username: str, page: int | None = None):
     if not _check_collection_access(username):
         raise HTTPException(status_code=404, detail="Not found")
     result = get_followers(username, page)
@@ -140,7 +140,7 @@ def user_followers(username: str, page: int = None):
 
 
 @router.get("/users/{username}/following")
-def user_following(username: str, page: int = None):
+def user_following(username: str, page: int | None = None):
     if not _check_collection_access(username):
         raise HTTPException(status_code=404, detail="Not found")
     result = get_following(username, page)
@@ -150,7 +150,7 @@ def user_following(username: str, page: int = None):
 
 
 @router.get("/users/{username}/featured")
-def user_featured(username: str, page: int = None):
+def user_featured(username: str, page: int | None = None):
     if not _check_collection_access(username):
         raise HTTPException(status_code=404, detail="Not found")
     result = get_featured(username, page)

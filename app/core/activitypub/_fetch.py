@@ -51,7 +51,7 @@ def _fetch_ap_json(url, headers=None, timeout=10, _depth=0):
         return None
 
 
-def _fetch_actor_json_signed(actor_url: str, sign_as=None) -> dict:
+def _fetch_actor_json_signed(actor_url: str, sign_as=None) -> dict | None:
     """Fetch a remote actor document with an HTTP signature.
 
     Some servers (e.g. Mastodon) return 401 for unsigned actor requests, so we
@@ -438,7 +438,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: User | 
                 emoji_s.commit()
             session.commit()
             if _pinned_ap_ids is not None:
-                _sync_remote_pinned_posts(user.id, _pinned_ap_ids, sign_as)
+                _sync_remote_pinned_posts(user.id, _pinned_ap_ids, sign_as)  # type: ignore[arg-type]
         return user
 
 
@@ -470,6 +470,11 @@ def _retry_fetch_reply(post_id: int, in_reply_to_ap_id: str, attempt: int = 0):
         except Exception as e:
             logger.error("[RETRY-REPLY] failed post_id=%s err=%s", post_id, e, exc_info=True)
     spawn(_worker)
+
+
+def _extract_og_title(html: str) -> str:
+    match = re.search(r"<title>([^<]*)</title>", html, re.I)
+    return match.group(1) if match else ""
 
 
 def _fetch_remote_post(url: str, signer: User, session, _depth=0):
@@ -725,7 +730,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     published = obj.get("published", "")
     if published:
         with contextlib.suppress(Exception):
-            post.created_at = datetime.datetime.fromisoformat(published.replace("Z", "+00:00"))
+            post.created_at = datetime.datetime.fromisoformat(published.replace("Z", "+00:00"))  # type: ignore[assignment]
     session.add(post)
     try:
         session.flush()
@@ -752,7 +757,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
                     if not _m:
                         _m = re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', _html, re.I)
                     return _m.group(1) if _m else ""
-                _og_title = _og("title") or (re.search(r'<title>([^<]*)</title>', _html, re.I).group(1) if re.search(r'<title>([^<]*)</title>', _html, re.I) else "")
+                _og_title = _og("title") or _extract_og_title(_html)
                 _og_desc = _og("description")
                 _og_img = _og("image")
                 if _og_img and _og_img.startswith("/"):
@@ -761,7 +766,7 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
                 if _og_img and not validate_url(_og_img):
                     _og_img = ""
                 if _og_title:
-                    post.link_preview = {"url": _url, "title": html.unescape(_og_title[:200]), "description": html.unescape(_og_desc[:400]) if _og_desc else "", "image": _og_img or ""}
+                    post.link_preview = {"url": _url, "title": html.unescape(_og_title[:200]), "description": html.unescape(_og_desc[:400]) if _og_desc else "", "image": _og_img or ""}  # type: ignore[assignment]
         except Exception:
             pass
 
