@@ -1,23 +1,17 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { api, User, PostData } from "@/lib/api";
+import { api, PostData } from "@/lib/api";
 import Icon from "@/components/Icon";
 import { useRouter } from "next/navigation";
 import TextareaHighlight from "./TextareaHighlight";
 import EmojiPicker from "./EmojiPicker";
-import MiniPostCard from "./MiniPostCard";
-import { getCustomEmojis, CustomEmoji } from "@/lib/emojis";
 import { useAuth } from "@/lib/auth";
-import { useInlineAutocomplete, useSeriesSearch } from "@/hooks/useAutocomplete";
+import { useComposerAutocomplete } from "@/hooks/useComposerAutocomplete";
+import ComposerMedia from "./ComposerMedia";
+import ComposerLinkPreview from "./ComposerLinkPreview";
+import ComposerPoll from "./ComposerPoll";
 
 const MAX_LENGTH = 500;
-
-const MENTION_PREV_CHAR = /\s/;
-const MENTION_WORD_END = /@[a-zA-Z_][a-zA-Z0-9_]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?/g;
-const EMOJI_PREV_CHAR = /[\s:]/;
-const EMOJI_WORD_END = /[\s:]/;
-const HASHTAG_PREV_CHAR = /\s/;
-const HASHTAG_WORD_END = /[\s#]/;
 
 export default function PostForm({ parentId, onDone, placeholder, initialContent, initialVisibility, shareUrl, parentSummary, initialSummary, initialMedia }: { parentId?: number; onDone?: (post?: PostData) => void; placeholder?: string; initialContent?: string; initialVisibility?: string; shareUrl?: string; parentSummary?: string | null; initialSummary?: string | null; initialMedia?: { url: string; type: string; alt?: string }[] }) {
   const draftKey = `draft_${parentId || "new"}`;
@@ -42,76 +36,23 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const router = useRouter();
 
-  const searchMentions = useCallback(async (q: string) => (await api.autocomplete(q)).users, []);
-  const searchEmojis = useCallback(async (q: string) => {
-    const all = await getCustomEmojis();
-    const lq = q.toLowerCase();
-    return all.filter(e => e.category !== "remote" && (e.keyword.startsWith(lq) || (e.aliases || []).some(a => a.startsWith(lq))));
-  }, []);
-  const searchHashtags = useCallback(async (q: string) => {
-    const res = await fetch(`/api/search/tags?q=${encodeURIComponent(q)}`, { credentials: "include" });
-    if (res.ok) {
-      const d = await res.json();
-      return d.tags?.map((t: { name: string }) => t.name) || [];
-    }
-    return [];
-  }, []);
-
+  const autocomplete = useComposerAutocomplete({ content, setContent, taRef, shareUrl });
   const {
-    query: emojiQuery,
-    results: emojiResults,
-    idx: emojiIdx,
-    pos: emojiPos,
-    setIdx: setEmojiIdx,
-    setResults: setEmojiResults,
-    detect: detectEmoji,
-    insert: emojiInsert,
-    onKeyDown: emojiOnKeyDown,
-  } = useInlineAutocomplete<CustomEmoji>({
-    trigger: ":",
-    prevCharRegex: EMOJI_PREV_CHAR,
-    wordEndRegex: EMOJI_WORD_END,
-    search: searchEmojis,
-    content,
-    setContent,
-    taRef,
-  });
-
-  const {
-    results: mentionUsers,
-    idx: mentionIdx,
-    pos: mentionPos,
-    setIdx: setMentionIdx,
-    detect: detectMention,
-    insert: mentionInsert,
-    onKeyDown: mentionOnKeyDown,
-  } = useInlineAutocomplete<User>({
-    trigger: "@",
-    prevCharRegex: MENTION_PREV_CHAR,
-    wordEndRegex: MENTION_WORD_END,
-    search: searchMentions,
-    content,
-    setContent,
-    taRef,
-  });
-
-  const {
-    results: hashtagResults,
-    idx: hashtagIdx,
-    pos: hashtagPos,
-    setIdx: setHashtagIdx,
-    detect: detectHashtag,
-    insert: hashtagInsert,
-    onKeyDown: hashtagOnKeyDown,
-  } = useInlineAutocomplete<string>({
-    trigger: "#",
-    prevCharRegex: HASHTAG_PREV_CHAR,
-    wordEndRegex: HASHTAG_WORD_END,
-    search: searchHashtags,
-    content,
-    setContent,
-    taRef,
-  });
+    emoji: { results: emojiResults, idx: emojiIdx, pos: emojiPos, setIdx: setEmojiIdx, onKeyDown: emojiOnKeyDown, detect: detectEmoji },
+    mention: { results: mentionUsers, idx: mentionIdx, pos: mentionPos, setIdx: setMentionIdx, onKeyDown: mentionOnKeyDown, detect: detectMention },
+    hashtag: { results: hashtagResults, idx: hashtagIdx, pos: hashtagPos, setIdx: setHashtagIdx, onKeyDown: hashtagOnKeyDown, detect: detectHashtag },
+    series: { show: showSeriesSearch, query: seriesSearchQ, results: seriesResults, idx: seriesIdx, pos: seriesPos, setQuery: setSeriesSearchQ, setIdx: setSeriesIdx, inputRef: seriesSearchRef, detect: detectSeries, insert: insertSeries, onKeyDown: seriesOnKeyDown },
+    linkPreview,
+    setLinkPreview,
+    linkPreviewLoading,
+    quoteUrl,
+    setQuoteUrl,
+    quotePost,
+    setQuotePost,
+    insertEmoji,
+    insertMention,
+    insertHashtag,
+  } = autocomplete;
   const mediaIdRef = useRef(0);
   const [mediaItems, setMediaItems] = useState<{ id: number; url: string; type: string; file?: File; alt?: string; preview?: string }[]>(() =>
     (initialMedia || []).map((m, i) => ({ id: -(i + 1), url: m.url, type: m.type || "image", alt: m.alt || "" }))
@@ -128,85 +69,6 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [pollExpiresIn, setPollExpiresIn] = useState(1440);
   const pollLastRef = useRef<HTMLInputElement>(null);
   const [altModalIdx, setAltModalIdx] = useState<number | null>(null);
-  const {
-    show: showSeriesSearch,
-    query: seriesSearchQ,
-    results: seriesResults,
-    idx: seriesIdx,
-    pos: seriesPos,
-    setQuery: setSeriesSearchQ,
-    setIdx: setSeriesIdx,
-    inputRef: seriesSearchRef,
-    detect: detectSeries,
-    insert: insertSeries,
-    handleKeyDown: seriesOnKeyDown,
-  } = useSeriesSearch({ content, setContent, taRef });
-  const [linkPreview, setLinkPreview] = useState<{ url: string; title: string; description: string; image: string } | null>(null);
-  const [linkPreviewLoading, setLinkPreviewLoading] = useState(false);
-  const linkPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastUrlRef = useRef<string | null>(null);
-  const quoteTiedToContentRef = useRef(false);
-  const [quoteUrl, setQuoteUrl] = useState(shareUrl || "");
-  const [quotePost, setQuotePost] = useState<PostData | null>(null);
-
-  const resetForm = useCallback(() => {
-    setContent(""); setSummary(""); setPostSensitive(false); revokeMediaPreviews(mediaItems); setMediaItems([]); setShowPoll(false); setPollOptions(["", ""]); setPollExpiresIn(1440); setLinkPreview(null); setQuoteUrl(""); setQuotePost(null);
-  }, [mediaItems, revokeMediaPreviews]);
-
-  useEffect(() => {
-    if (shareUrl && !quotePost) {
-      const base = typeof window !== "undefined" ? window.location.origin : "";
-      const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      // 1. 기존 유저 포스트 패턴: /@유저아이디/숫자
-      const localMatch = base ? shareUrl.match(new RegExp(`^${escapedBase}/@([^/]+)/(\\d+)`)) : null;
-      // 2. 새 시리즈/에피소드 패턴: /series/숫자/episodes/숫자
-      const seriesEpisodeMatch = base ? shareUrl.match(new RegExp(`^${escapedBase}/series/(\\d+)/episodes/(\\d+)`)) : null;
-      // 3. 새 시리즈 by-number 패턴: /series/by-number/문자열/문자열
-      const seriesByNumberMatch = base ? shareUrl.match(new RegExp(`^${escapedBase}/series/by-number/([^/]+)/([^/]+)`)) : null;
-
-
-      (async () => {
-        let fetchUrl = "";
-        let isPostRequest = false;
-        const form = new FormData();
-        form.append("url", shareUrl);
-
-        if (localMatch) {
-          // 1. 기존 유저 포스트 GET 요청
-          fetchUrl = `/api/${localMatch[1]}/${localMatch[2]}`;
-        } else if (seriesEpisodeMatch) {
-          // 2. 시리즈 에피소드용 (만약 POST로 url을 넘기는 구조라면)
-          fetchUrl = "/api/fetch-episode";
-          isPostRequest = true;
-        } else if (seriesByNumberMatch) {
-          // 3. 시리즈 관련 POST 요청
-          fetchUrl = "/api/fetch-series";
-          isPostRequest = true;
-        } else {
-          // 4. 그 외 외부 페치 fallback
-          fetchUrl = "/api/fetch-post";
-          isPostRequest = true;
-        }
-
-        try {
-          const options: RequestInit = { credentials: "include" };
-          if (isPostRequest) {
-            options.method = "POST";
-            options.body = form;
-          }
-
-          const r = await fetch(fetchUrl, options);
-          if (r.ok) {
-            const data = await r.json();
-            setQuotePost(data);
-            return;
-          }
-        } catch (e) {
-          console.error("데이터 페치 실패:", e);
-        }
-      })();
-    }
-  }, [shareUrl, quotePost]);
 
   useEffect(() => {
     if (!showVisPicker) return;
@@ -229,116 +91,9 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     return () => clearTimeout(t);
   }, [content, summary, postSensitive, draftKey]);
 
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const key = (e as CustomEvent).detail?.key;
-      if (key === draftKey) resetForm();
-    };
-    window.addEventListener("writ:draft-cleared", handler);
-    return () => window.removeEventListener("writ:draft-cleared", handler);
-  }, [draftKey, resetForm]);
-
-  useEffect(() => {
-    const urlRegex = /https?:\/\/[^\s<>"')\]]+/i;
-    const match = content.match(urlRegex);
-    const url = match ? match[0].replace(/[.,;:!?)]+$/, "") : null;
-    if (lastUrlRef.current !== url) {
-      lastUrlRef.current = url;
-      if (linkPreviewTimerRef.current) clearTimeout(linkPreviewTimerRef.current);
-      setLinkPreview(null);
-      if (url) {
-        if (quoteUrl === url) return;
-        if (linkPreview && linkPreview.url === url && !quoteUrl) return;
-        quoteTiedToContentRef.current = true;
-        linkPreviewTimerRef.current = setTimeout(async () => {
-          setLinkPreviewLoading(true);
-
-          const base = typeof window !== "undefined" ? window.location.origin : "";
-          const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          const localMatch = base ? url.match(new RegExp(`^${escapedBase}/@([^/]+)/(\\d+)`)) : null;
-
-          let quoteResolved = false;
-
-          if (localMatch) {
-            setQuoteUrl(url);
-            try {
-              const r = await fetch(`/api/by-number/${localMatch[1]}/${localMatch[2]}`, { credentials: "include" });
-              if (r.ok) { setQuotePost(await r.json()); quoteResolved = true; }
-            } catch {}
-          }
-
-          if (!quoteResolved) {
-            const form = new FormData(); form.append("url", url);
-            try {
-              const r = await fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form });
-              if (r.ok) {
-                const d = await r.json();
-                if (d._emojis) { import("@/lib/emojis").then(m => m.injectEmojis(d._emojis)); }
-                setQuoteUrl(url); setQuotePost(d); quoteResolved = true;
-              }
-            } catch {}
-          }
-
-          if (!quoteResolved) {
-            setQuoteUrl(url);
-            setQuotePost(null);
-            try {
-              const data = await api.fetchLinkPreview(url);
-              if (data && data.title) setLinkPreview(data);
-            } catch {}
-          } else {
-            setLinkPreview(null);
-          }
-
-          setLinkPreviewLoading(false);
-        }, 300);
-        return () => { if (linkPreviewTimerRef.current) clearTimeout(linkPreviewTimerRef.current); };
-      }
-      if (quoteTiedToContentRef.current) {
-        quoteTiedToContentRef.current = false;
-        setQuoteUrl("");
-        setQuotePost(null);
-      }
-    }
-  }, [content, quoteUrl, linkPreview]);
-
   const totalLen = content.length + summary.length;
   const nearLimit = totalLen > MAX_LENGTH - 50 && totalLen <= MAX_LENGTH;
   const overLimit = totalLen > MAX_LENGTH;
-
-  // Close emoji picker on scroll/resize/click-outside/Escape
-  useEffect(() => {
-    if (!emojiQuery) return;
-    const close = () => setEmojiResults([]);
-    const keyHandler = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
-    document.addEventListener("keydown", keyHandler);
-    const clickHandler = (e: MouseEvent) => {
-      const popup = document.querySelector('.emoji-autocomplete');
-      if (popup && !popup.contains(e.target as Node)) close();
-    };
-    setTimeout(() => document.addEventListener("click", clickHandler), 0);
-    return () => {
-      document.removeEventListener("keydown", keyHandler);
-      document.removeEventListener("click", clickHandler);
-    };
-  }, [emojiQuery, setEmojiResults]);
-
-  const insertEmoji = (emo: CustomEmoji) => emojiInsert(emo.keyword, ": ");
-
-  const insertMention = (u: User) => {
-    let handle = u.username;
-    if (u.is_remote && u.remote_url) {
-      try {
-        const h = new URL(u.remote_url).hostname;
-        if (h) handle = `${u.username}@${h}`;
-      } catch {}
-    }
-    mentionInsert(handle);
-  };
-
-  const insertHashtag = (tag: string) => hashtagInsert(tag);
 
   const handleTaEvent = useCallback((e: React.KeyboardEvent | React.MouseEvent) => {
     const el = e.target as HTMLTextAreaElement;
@@ -454,72 +209,9 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     <form ref={formRef} onSubmit={handleSubmit} className={`relative ${overLimit ? "over-limit" : nearLimit ? "near-limit" : ""}`} onClick={(e) => e.stopPropagation()} onDragOver={handleDragOver} onDrop={handleDrop}>
       {mediaWarning && <div style={{ fontSize: "0.85em", color: "var(--danger)", marginBottom: 6, padding: "4px 8px", background: "var(--bg-tertiary)", borderRadius: 6 }}>{mediaWarning}</div>}
       {mediaItems.length > 0 && (
-        <div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-            {mediaItems.map((m, i) => (
-              <div key={m.id} draggable style={{ position: "relative", width: 80, height: 80 }}
-                onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(i)); (e.currentTarget as HTMLElement).style.opacity = "0.4"; }}
-                onDragEnd={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
-                onDragOver={(e) => { e.preventDefault(); }}
-                onDrop={(e) => { e.preventDefault(); const from = parseInt(e.dataTransfer.getData("text/plain")); const to = i; if (from !== to) { const c = [...mediaItems]; const [removed] = c.splice(from, 1); c.splice(to, 0, removed); setMediaItems(c); } }}
-              >
-                {m.type === "video" ? (
-                  <video src={m.preview || m.url} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6, pointerEvents: "none" }} />
-                ) : (
-                  <img src={m.preview || m.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6, pointerEvents: "none" }} />
-                )}
-                <span onClick={(e) => { e.stopPropagation(); setAltModalIdx(i); }} style={{ position: "absolute", bottom: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: m.alt ? "var(--accent)" : "var(--bg-secondary)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontStyle: "italic", cursor: "pointer", color: m.alt ? "#fff" : "var(--text-muted)" }} title="미디어 설명">a</span>
-                <span onClick={(e) => { e.stopPropagation(); revokeMediaPreviews(mediaItems.slice(i, i + 1)); setMediaItems(mediaItems.filter((_, j) => j !== i)); }} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "var(--danger)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer" }}>×</span>
-              </div>
-            ))}
-          </div>
-          {altModalIdx !== null && (
-            <div className="reply-modal-backdrop active" onClick={() => setAltModalIdx(null)}>
-              <div className="reply-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
-                <button className="reply-modal-close" onClick={() => setAltModalIdx(null)}>×</button>
-                <h3>미디어 설명</h3>
-                <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 8 }}>시각 장애인을 위한 미디어 설명을 입력해주세요. 화면 낭독기에 전달됩니다.</p>
-                <textarea
-                  value={mediaItems[altModalIdx]?.alt || ""}
-                  onChange={(e) => setMediaItems(prev => prev.map((item, j) => j === altModalIdx ? { ...item, alt: e.target.value } : item))}
-                  placeholder="예: 푸른 하늘 아래 펼쳐진 녹색 언덕 위에 서있는 사람"
-                  style={{ width: "100%", minHeight: 80, resize: "vertical", marginBottom: 8 }}
-                />
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <button onClick={() => setAltModalIdx(null)} className="btn btn-primary">확인</button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <ComposerMedia items={mediaItems} setItems={setMediaItems} altIdx={altModalIdx} setAltIdx={setAltModalIdx} revokePreviews={revokeMediaPreviews} />
       )}
-      {(quotePost || quoteUrl) && (
-        <div style={{ marginBottom: 8, padding: 10, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-tertiary)", position: "relative" }}>
-          {quotePost ? (
-            <MiniPostCard post={quotePost} />
-          ) : (
-            <div style={{ fontSize: 13, color: "var(--text-muted)" }}>게시글 불러오는 중...</div>
-          )}
-          <button type="button" onClick={() => { setQuoteUrl(""); setQuotePost(null); }} style={{ position: "absolute", top: 4, right: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 14, lineHeight: 1, zIndex: 2 }}>×</button>
-        </div>
-      )}
-      {(linkPreview || linkPreviewLoading) && !quoteUrl && (
-        <div style={{ marginBottom: 8, padding: 10, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-tertiary)", display: "flex", gap: 10, alignItems: "flex-start", position: "relative" }}>
-          {linkPreviewLoading && !linkPreview ? (
-            <div style={{ fontSize: 13, color: "var(--text-muted)" }}>링크 미리보기 불러오는 중...</div>
-          ) : linkPreview && (
-            <>
-              {linkPreview.image && <img src={linkPreview.image} alt="" style={{ width: 60, height: 60, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} onError={(e) => (e.target as HTMLElement).style.display = "none"} />}
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{linkPreview.title}</div>
-                {linkPreview.description && <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{linkPreview.description}</div>}
-                <a href={linkPreview.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3, textDecoration: "none" }}>{(() => { try { return new URL(linkPreview.url).hostname; } catch { return ""; } })()}</a>
-              </div>
-              <button type="button" onClick={() => setLinkPreview(null)} style={{ position: "absolute", top: 4, right: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>×</button>
-            </>
-          )}
-        </div>
-      )}
+      {(quotePost || quoteUrl) && <ComposerLinkPreview quotePost={quotePost} quoteUrl={quoteUrl} linkPreview={linkPreview} linkPreviewLoading={linkPreviewLoading} onClearQuote={() => { setQuoteUrl(""); setQuotePost(null); }} onClearPreview={() => setLinkPreview(null)} />}
       <div ref={wrapRef}>
         <TextareaHighlight
           value={content}
@@ -630,68 +322,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         {(postSensitive || !!summary) && <span style={{ color: "var(--text-secondary)", fontSize: 12 }}>{summary ? "CW 설정 시 자동 민감 처리됩니다" : "이 포스트의 모든 미디어가 블러 처리됩니다"}</span>}
       </div>
       {showPoll && (
-        <div style={{ marginBottom: 8, padding: 10, borderRadius: 8, background: "var(--bg-tertiary)" }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, color: "var(--text-secondary)" }}>투표</div>
-          {pollOptions.map((opt, i) => (
-            <div key={i} style={{ display: "flex", gap: 4, marginBottom: 4 }}>
-              <input
-                ref={i === pollOptions.length - 1 ? pollLastRef : undefined}
-                type="text" placeholder={`선택지 ${i + 1}`}
-                value={opt} maxLength={50}
-                onChange={(e) => {
-                  const next = [...pollOptions];
-                  next[i] = e.target.value;
-                  setPollOptions(next);
-                  // 마지막 칸에 내용이 생기면 빈 칸을 하나 추가하되, 포커스를 뺏지 않는다.
-                  // (포커스를 새 칸으로 옮기면 한 글자/자모마다 새 칸이 생기던 버그 방지)
-                  if (i === pollOptions.length - 1 && e.target.value.trim() && pollOptions.length < 10) {
-                    setPollOptions((prev) => prev.length < 10 && prev[prev.length - 1] !== "" ? [...prev, ""] : prev);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key !== "Enter" && e.key !== "Tab") return;
-                  if (e.key === "Tab" && e.shiftKey) {
-                    const prevInput = e.currentTarget.parentElement?.previousElementSibling?.querySelector<HTMLInputElement>("input");
-                    if (prevInput) { e.preventDefault(); prevInput.focus(); }
-                    return;
-                  }
-                  const nextInput = e.currentTarget.parentElement?.nextElementSibling?.querySelector<HTMLInputElement>("input");
-                  if (nextInput) {
-                    e.preventDefault();
-                    nextInput.focus();
-                  } else if (pollOptions[i].trim() && pollOptions.length < 10) {
-                    e.preventDefault();
-                    setPollOptions((prev) => [...prev, ""]);
-                    setTimeout(() => pollLastRef.current?.focus(), 0);
-                  } else if (e.key === "Enter") {
-                    e.preventDefault();
-                  }
-                }}
-                style={{ flex: 1, padding: "4px 8px", fontSize: 14, borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-secondary)" }}
-              />
-              {pollOptions.length > 2 && (
-                <button type="button" onClick={() => setPollOptions(pollOptions.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", fontSize: 16 }}>×</button>
-              )}
-            </div>
-          ))}
-          <div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center" }}>
-            {pollOptions.length < 10 && (
-              <button type="button" className="action-btn" onClick={() => { setPollOptions([...pollOptions, ""]); setTimeout(() => pollLastRef.current?.focus(), 0); }} style={{ fontSize: 12 }}>+ 선택지 추가</button>
-            )}
-            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>|</span>
-            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>마감</span>
-            <select value={pollExpiresIn} onChange={(e) => setPollExpiresIn(Number(e.target.value))} style={{ fontSize: 12, padding: "2px 4px", borderRadius: 4, border: "1px solid var(--border)", background: "var(--bg-secondary)" }}>
-              <option value={5}>5분</option>
-              <option value={30}>30분</option>
-              <option value={60}>1시간</option>
-              <option value={360}>6시간</option>
-              <option value={720}>12시간</option>
-              <option value={1440}>24시간</option>
-              <option value={4320}>3일</option>
-              <option value={10080}>7일</option>
-            </select>
-          </div>
-        </div>
+        <ComposerPoll options={pollOptions} setOptions={setPollOptions} expiresIn={pollExpiresIn} setExpiresIn={setPollExpiresIn} lastRef={pollLastRef} />
       )}
       <div className="reply-form-footer">
         <div className="vis-btn-wrap" style={{ position: "relative" }}>
