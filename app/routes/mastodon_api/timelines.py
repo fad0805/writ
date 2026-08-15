@@ -1,11 +1,12 @@
 """Mastodon timeline endpoints (/api/v1/timelines*, /api/v1/tags*)."""
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import String, cast, or_
+from sqlalchemy import String, and_, cast, or_
 from sqlalchemy.orm import Session as SASession
 
 from app.config.settings import BASE_URL
 from app.db.database import get_db
 from app.models import Bookmark, Boost, Follow, Like, Post, Tag, User
+from app.routes.api.interactions._common import _json_array_has_user
 from app.routes.mastodon_api._common import (
     STAR_REACTION,
     MastodonAPIError,
@@ -48,9 +49,19 @@ def home_timeline(
     following_ids.append(user.id)
 
     q = db.query(Post).filter(
-        Post.author_id.in_(following_ids),
         Post.is_deleted == False,
-        Post.visibility.in_(["public", "home", "followers"]),
+        or_(
+            # 팔로우 대상이 쓴 공개/비공개 글
+            and_(
+                Post.author_id.in_(following_ids),
+                Post.visibility.in_(["public", "home", "followers"]),
+            ),
+            # DM(direct)은 본인이 멘션된 글만 홈 타임라인에 노출 (작성자와 무관)
+            and_(
+                Post.visibility == "mention",
+                _json_array_has_user(Post.mentioned_user_ids, user.id),
+            ),
+        ),
     )
 
     if max_id:
@@ -99,8 +110,9 @@ def home_timeline(
                 if s:
                     result.append(s)
         else:
-            # Reply filtering: drop replies to posts by non-followed, non-self users (but always keep own posts)
-            if p.in_reply_to_id and p.author_id != user.id:
+            # Reply filtering: drop replies to posts by non-followed, non-self users
+            # (but always keep own posts and DMs the viewer is part of)
+            if p.in_reply_to_id and p.author_id != user.id and p.visibility != "mention":
                 parent = _parent_map.get(p.in_reply_to_id)
                 if parent and parent.author_id not in following_set and parent.author_id != user.id:
                     continue

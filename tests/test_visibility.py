@@ -77,3 +77,60 @@ def test_followers_post_does_not_appear_in_stranger_feed(client, auth_cookie, ma
     assert r.status_code == 200
     for post in r.json().get("posts", []):
         assert post["content"] != "<p>private to followers</p>"
+
+
+def _masto_oauth_header():
+    import secrets
+
+    from app.db.database import get_session
+    from app.models import MastodonAccessToken, MastodonApp
+
+    token = secrets.token_urlsafe(24)
+    with get_session() as s:
+        app = s.query(MastodonApp).first()
+        if not app:
+            app = MastodonApp(client_name="test-app", client_id=secrets.token_urlsafe(24), client_secret=secrets.token_urlsafe(24))
+            s.add(app)
+            s.flush()
+        s.add(MastodonAccessToken(access_token=token, app_id=app.id, scopes="read"))
+        s.commit()
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _masto_home(client, user):
+    from app.db.database import get_session
+    from app.models import MastodonAccessToken
+
+    token = _masto_oauth_header()["Authorization"].split(" ")[1]
+    with get_session() as s:
+        s.query(MastodonAccessToken).filter_by(access_token=token).update({"user_id": user.id})
+        s.commit()
+    return client.get("/api/v1/timelines/home", headers={"Authorization": f"Bearer {token}"})
+
+
+def test_mastodon_home_timeline_includes_mentioned_dm(client, auth_cookie, make_post):
+    alice, _ = auth_cookie("alice")
+    bob, _ = auth_cookie("bob")
+    # 팔로우 관계 없이도 alice→bob DM이 bob의 홈 타임라인에 보여야 한다
+    dm = make_post(alice, visibility="mention", mentioned_user_ids=[bob.id], is_dm=True,
+                   content="<p>DM to bob</p>")
+    r = _masto_home(client, bob)
+    assert r.status_code == 200
+    ids = [s["id"] for s in r.json()]
+    assert str(dm.id) in ids
+    # direct visibility로 변환되어야 한다
+    status = next(s for s in r.json() if s["id"] == str(dm.id))
+    assert status["visibility"] == "direct"
+
+
+def test_mastodon_home_timeline_hides_dm_for_non_participant(client, auth_cookie, make_post):
+    alice, _ = auth_cookie("alice")
+    bob, _ = auth_cookie("bob")
+    carol, _ = auth_cookie("carol")
+    dm = make_post(alice, visibility="mention", mentioned_user_ids=[carol.id], is_dm=True,
+                   content="<p>DM to carol</p>")
+    # bob은 alice가 만든 DM에 참여하지 않았으므로 보이면 안 된다
+    r = _masto_home(client, bob)
+    assert r.status_code == 200
+    ids = [s["id"] for s in r.json()]
+    assert str(dm.id) not in ids
