@@ -41,13 +41,18 @@ export default function FavoritesPage() {
     setLoadingMore(false);
   }, [offset, hasMore, loadingMore]);
 
+  const updatePost = useCallback((updated?: PostData) => {
+    if (!updated) { load(); return; }
+    setPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+  }, [load]);
+
   return (
     <>
       <h2><Icon name="star" /> 즐겨찾기</h2>
       {loading ? <p className="empty-state">로딩 중...</p> : (
         posts.length === 0 ? <p className="empty-state">즐겨찾기한 게시글이 없습니다.</p> : (
           <InfiniteScroll hasMore={hasMore} loadingMore={loadingMore} loadMore={loadMore}>
-            {posts.map((p) => <PostCard key={p.id} post={p} onUpdate={load} />)}
+            {posts.map((p) => <PostCard key={p.id} post={p} onUpdate={updatePost} />)}
           </InfiniteScroll>
         )
       )}
