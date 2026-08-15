@@ -82,7 +82,7 @@ def api_explore(request: Request, limit: int = Query(20, le=100), offset: int = 
                 post_ids.add(_p.boost_of_id)
         _liked_ids = _boosted_ids = _bookmarked_ids = set()
         _my_reaction_map = {}
-        _reactions_map = {}
+        _reactions_map: dict = {}
         _mentioned_users_map = {}
         _boost_originals = {}
         if post_ids:
@@ -267,7 +267,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                 post_ids.add(_p.boost_of_id)
         _liked_ids = _boosted_ids = _bookmarked_ids = set()
         _my_reaction_map = {}
-        _reactions_map = {}
+        _reactions_map: dict = {}
         _mentioned_users_map = {}
         _boost_originals = {}
         if post_ids:
@@ -309,7 +309,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
 
         _novel_meta = _load_novel_meta(s, novels)
 
-        result = {
+        result: dict = {
             "posts": [_post_json(p, s, user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids, _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map, _mentioned_users_map=_mentioned_users_map, _boost_originals=_boost_originals) for p in posts],
             "novels": [_novel_json(n, s, _episode_meta=_novel_meta) for n in novels],
             "users": [_user_json(u) for u in all_users],

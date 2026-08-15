@@ -44,12 +44,12 @@ def get_status(status_id: str, request: Request, db: SASession = Depends(get_db)
     if not viewer:
         s = _status_json(post, db, None)
     else:
-        _liked_ids = {post.id} if db.query(Like).filter(
+        _liked_ids = {int(post.id)} if db.query(Like).filter(
             Like.user_id == viewer.id, Like.post_id == post.id,
             or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
         ).first() else set()
-        _boosted_ids = {post.id} if db.query(Boost).filter_by(user_id=viewer.id, post_id=post.id).first() else set()
-        _bookmarked_ids = {post.id} if db.query(Bookmark).filter_by(user_id=viewer.id, post_id=post.id).first() else set()
+        _boosted_ids = {int(post.id)} if db.query(Boost).filter_by(user_id=viewer.id, post_id=post.id).first() else set()
+        _bookmarked_ids = {int(post.id)} if db.query(Bookmark).filter_by(user_id=viewer.id, post_id=post.id).first() else set()
         s = _status_json(post, db, viewer, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids)
     if s is None:
         raise MastodonAPIError(status_code=404, detail="Record not found")
@@ -84,13 +84,13 @@ def get_statuses(
     viewer = _maybe_bearer(request, db)
     ids = id or _query_id_list(request)
     post_ids = []
-    posts_map = {}
+    posts_map: dict[int, Post] = {}
     for sid in ids:
         try:
             post = db.query(Post).filter_by(id=int(sid), is_deleted=False).first()
             if post:
-                post_ids.append(post.id)
-                posts_map[post.id] = post
+                post_ids.append(int(post.id))
+                posts_map[int(post.id)] = post
         except ValueError:
             continue
     _liked_ids = {r[0] for r in db.query(Like.post_id).filter(
@@ -288,7 +288,7 @@ def get_status_context(status_id: str, request: Request, db: SASession = Depends
 
     ancestors = []
     current = post.parent
-    ancestor_posts = []
+    ancestor_posts: list[Post] = []
     while current and not current.is_deleted and len(ancestor_posts) < 40:
         ancestor_posts.append(current)
         current = current.parent
@@ -333,9 +333,9 @@ def favourite_status(status_id: str, request: Request, db: SASession = Depends(g
     if not post or post.is_deleted:
         raise MastodonAPIError(status_code=404, detail="Record not found")
 
-    like_post(db, user, post.id)
+    like_post(db, user, int(post.id))
 
-    return _status_json(post, db, viewer=user, _liked_ids={post.id})
+    return _status_json(post, db, viewer=user, _liked_ids={int(post.id)})
 
 
 # ---------------------------------------------------------------------------
@@ -348,7 +348,7 @@ def unfavourite_status(status_id: str, request: Request, db: SASession = Depends
     if not post or post.is_deleted:
         raise MastodonAPIError(status_code=404, detail="Record not found")
 
-    unlike_post(db, user, post.id)
+    unlike_post(db, user, int(post.id))
 
     return _status_json(post, db, viewer=user, _liked_ids=set())
 
@@ -363,9 +363,9 @@ def reblog_status(status_id: str, request: Request, db: SASession = Depends(get_
     if not post or post.is_deleted:
         raise MastodonAPIError(status_code=404, detail="Record not found")
 
-    boost_post(db, user, post.id)
+    boost_post(db, user, int(post.id))
 
-    return _status_json(post, db, viewer=user, _boosted_ids={post.id})
+    return _status_json(post, db, viewer=user, _boosted_ids={int(post.id)})
 
 
 # ---------------------------------------------------------------------------
@@ -378,7 +378,7 @@ def unreblog_status(status_id: str, request: Request, db: SASession = Depends(ge
     if not post or post.is_deleted:
         raise MastodonAPIError(status_code=404, detail="Record not found")
 
-    unboost_post(db, user, post.id)
+    unboost_post(db, user, int(post.id))
 
     return _status_json(post, db, viewer=user, _boosted_ids=set())
 
@@ -400,7 +400,9 @@ def bookmark_status(status_id: str, request: Request, db: SASession = Depends(ge
         db.commit()
 
     post = db.query(Post).filter_by(id=int(status_id)).first()
-    return _status_json(post, db, viewer=user, _bookmarked_ids={post.id})
+    if not post or post.is_deleted:
+        raise MastodonAPIError(status_code=404, detail="Record not found")
+    return _status_json(post, db, viewer=user, _bookmarked_ids={int(post.id)})
 
 
 # ---------------------------------------------------------------------------
@@ -419,6 +421,8 @@ def unbookmark_status(status_id: str, request: Request, db: SASession = Depends(
         db.commit()
 
     post = db.query(Post).filter_by(id=int(status_id)).first()
+    if not post or post.is_deleted:
+        raise MastodonAPIError(status_code=404, detail="Record not found")
     return _status_json(post, db, viewer=user, _bookmarked_ids=set())
 
 
@@ -444,11 +448,11 @@ def react_to_status(status_id: str, name: str, request: Request, db: SASession =
     if not emoji_row or (emoji_row.domain and emoji_row.domain.strip()):
         raise MastodonAPIError(status_code=400, detail="Remote emojis cannot be used as reactions")
 
-    react_post(db, user, post.id, name)
+    react_post(db, user, int(post.id), name)
 
-    _liked_ids = {post.id} if name.strip(":") == STAR_REACTION else set()
-    _boosted_ids = {post.id} if db.query(Boost).filter_by(user_id=user.id, post_id=post.id).first() else set()
-    _bookmarked_ids = {post.id} if db.query(Bookmark).filter_by(user_id=user.id, post_id=post.id).first() else set()
+    _liked_ids = {int(post.id)} if name.strip(":") == STAR_REACTION else set()
+    _boosted_ids = {int(post.id)} if db.query(Boost).filter_by(user_id=user.id, post_id=post.id).first() else set()
+    _bookmarked_ids = {int(post.id)} if db.query(Bookmark).filter_by(user_id=user.id, post_id=post.id).first() else set()
     return _status_json(post, db, viewer=user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids)
 
 
@@ -467,14 +471,14 @@ def unreact_to_status(status_id: str, name: str, request: Request, db: SASession
     if not name.endswith(":"):
         name = f"{name}:"
 
-    unreact_post(db, user, post.id, name)
+    unreact_post(db, user, int(post.id), name)
 
-    _liked_ids = {post.id} if db.query(Like).filter(
+    _liked_ids = {int(post.id)} if db.query(Like).filter(
         Like.user_id == user.id, Like.post_id == post.id,
         or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
     ).first() else set()
-    _boosted_ids = {post.id} if db.query(Boost).filter_by(user_id=user.id, post_id=post.id).first() else set()
-    _bookmarked_ids = {post.id} if db.query(Bookmark).filter_by(user_id=user.id, post_id=post.id).first() else set()
+    _boosted_ids = {int(post.id)} if db.query(Boost).filter_by(user_id=user.id, post_id=post.id).first() else set()
+    _bookmarked_ids = {int(post.id)} if db.query(Bookmark).filter_by(user_id=user.id, post_id=post.id).first() else set()
     return _status_json(post, db, viewer=user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids)
 
 
@@ -555,7 +559,7 @@ def pin_status(status_id: str, request: Request, db: SASession = Depends(get_db)
             raise MastodonAPIError(status_code=422, detail="Maximum of 5 pinned posts")
         pinned.append(post.id)
         db.query(User).filter_by(id=user.id).update({"pinned_posts": pinned})
-    post.is_pinned = True
+    post.is_pinned = True  # type: ignore[assignment]
     db.commit()
     spawn(_broadcast_update_actor, user)
     return _status_json(post, db, viewer=user)
@@ -574,7 +578,7 @@ def unpin_status(status_id: str, request: Request, db: SASession = Depends(get_d
     if post.id in pinned:
         pinned.remove(post.id)
         db.query(User).filter_by(id=user.id).update({"pinned_posts": pinned})
-    post.is_pinned = False
+    post.is_pinned = False  # type: ignore[assignment]
     db.commit()
     spawn(_broadcast_update_actor, user)
     return _status_json(post, db, viewer=user)
@@ -601,8 +605,8 @@ def reblogged_by(
     boosts = q.order_by(Boost.id.desc()).limit(limit).all()
 
     viewer = _maybe_bearer(request, db)
-    counts = _build_account_counts_map({b.user_id for b in boosts}, db)
-    return [_account_json(b.user, db, viewer, _counts=counts.get(b.user_id)) for b in boosts]
+    counts = _build_account_counts_map({int(b.user_id) for b in boosts}, db)
+    return [_account_json(b.user, db, viewer, _counts=counts.get(int(b.user_id))) for b in boosts]
 
 
 # ---------------------------------------------------------------------------
@@ -629,8 +633,8 @@ def favourited_by(
     likes = q.order_by(Like.id.desc()).limit(limit).all()
 
     viewer = _maybe_bearer(request, db)
-    counts = _build_account_counts_map({like.user_id for like in likes}, db)
-    return [_account_json(like.user, db, viewer, _counts=counts.get(like.user_id)) for like in likes]
+    counts = _build_account_counts_map({int(like.user_id) for like in likes}, db)
+    return [_account_json(like.user, db, viewer, _counts=counts.get(int(like.user_id))) for like in likes]
 
 
 # ---------------------------------------------------------------------------

@@ -149,7 +149,7 @@ def api_create_emoji(
             "file_name": emoji.file_name,
             "category": emoji.category or "",
             "aliases": emoji.aliases or [],
-            "url": _emoji_url(emoji.file_name, emoji.domain or "", emoji.category or ""),
+            "url": _emoji_url(str(emoji.file_name), str(emoji.domain or ""), str(emoji.category or "")),
         }
 
 
@@ -216,7 +216,7 @@ def api_copy_emoji(request: Request, emoji_id: int):
         s.add(copy)
         s.commit()
         _refresh_emoji_cache_forcibly(s)
-        return {"ok": True, "emoji": {"id": copy.id, "keyword": copy.keyword, "file_name": copy.file_name, "category": copy.category, "aliases": copy.aliases or [], "url": _emoji_url(copy.file_name, "", copy.category or ""), "source_url": copy.source_url or "", "domain": copy.domain or ""}}
+        return {"ok": True, "emoji": {"id": copy.id, "keyword": copy.keyword, "file_name": copy.file_name, "category": copy.category, "aliases": copy.aliases or [], "url": _emoji_url(str(copy.file_name), "", str(copy.category or "")), "source_url": copy.source_url or "", "domain": copy.domain or ""}}
 
 
 @emoji_router.delete("/emojis/{emoji_id}")

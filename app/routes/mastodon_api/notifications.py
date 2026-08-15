@@ -74,17 +74,17 @@ def list_notifications(
 
     notif_posts = [n.post for n in notifs if n.post and not n.post.is_deleted]
     maps = _build_status_maps(notif_posts, db, user)
-    from_ids = {n.from_user_id for n in notifs if n.from_user_id}
+    from_ids = {int(n.from_user_id) for n in notifs if n.from_user_id}
     from_counts = _build_account_counts_map(from_ids, db)
 
     result = []
     for n in notifs:
-        item = {
+        item: dict = {
             "id": str(n.id),
-            "type": _NOTIF_TYPE_MAP_RESPONSE.get(n.notification_type, n.notification_type),
+            "type": _NOTIF_TYPE_MAP_RESPONSE.get(str(n.notification_type), str(n.notification_type)),
             "created_at": _ap_datetime(n.created_at),
             "account": _account_json(n.from_user, db, viewer=user,
-                                     _counts=from_counts.get(n.from_user_id)) if n.from_user else _account_json(user, db),
+                                     _counts=from_counts.get(int(n.from_user_id))) if n.from_user else _account_json(user, db),
         }
         if n.post and not n.post.is_deleted:
             item["status"] = _status_json(n.post, db, viewer=user, **maps)
@@ -102,7 +102,7 @@ def dismiss_notification(notification_id: str, request: Request, db: SASession =
     user = _require_bearer(request, db)
     n = db.query(Notification).filter_by(id=int(notification_id), user_id=user.id).first()
     if n:
-        n.is_read = True
+        n.is_read = True  # type: ignore[assignment]
         db.commit()
     return {}
 

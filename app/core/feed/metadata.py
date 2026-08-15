@@ -108,8 +108,8 @@ def _load_post_metadata(
         Like.user_id == user.id, Like.post_id.in_(post_ids)
     ).all()
 
-    _liked_ids = {like.post_id for like in _all_likes}
-    _my_reaction_map = {like.post_id: like.reaction for like in _all_likes if like.reaction}
+    _liked_ids = {int(like.post_id) for like in _all_likes}
+    _my_reaction_map = {int(like.post_id): str(like.reaction) for like in _all_likes if like.reaction}
 
     _boosted_ids = {b.post_id for b in session.query(Boost.post_id).filter(
         Boost.user_id == user.id, Boost.post_id.in_(post_ids)
@@ -119,7 +119,7 @@ def _load_post_metadata(
         Bookmark.user_id == user.id, Bookmark.post_id.in_(post_ids)
     ).all()}
 
-    _vote_map = {v.post_id: v.option_index for v in session.query(Vote).filter(
+    _vote_map = {int(v.post_id): int(v.option_index) for v in session.query(Vote).filter(
         Vote.user_id == user.id, Vote.post_id.in_(post_ids)
     ).all()}
 
@@ -159,24 +159,24 @@ def _load_post_metadata(
     all_mentioned_ids = {
         uid
         for p in posts
-        for uid in (p.mentioned_user_ids or [])
+        for uid in list(p.mentioned_user_ids or [])
     }
 
     _mentioned_users_map: dict[int, list[str]] = {}
     if all_mentioned_ids:
         users = session.query(User).filter(User.id.in_(all_mentioned_ids)).all()
         _mentioned_users = {
-            u.id: (
-                f"{u.username.split('@')[0]}@{urlparse(u.remote_url).hostname}"
+            int(u.id): (
+                f"{u.username.split('@')[0]}@{urlparse(str(u.remote_url)).hostname}"
                 if u.is_remote and u.remote_url
-                else u.username
+                else str(u.username)
             )
             for u in users
         }
         for p in posts:
-            _mentioned_users_map[p.id] = [
+            _mentioned_users_map[int(p.id)] = [
                 _mentioned_users[mid]
-                for mid in (p.mentioned_user_ids or [])
+                for mid in (int(m) for m in list(p.mentioned_user_ids or []))
                 if mid in _mentioned_users
             ]
 

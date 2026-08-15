@@ -3,6 +3,7 @@ import html
 import logging
 import re
 from datetime import UTC
+from typing import Any
 
 from fastapi import HTTPException, Request
 from sqlalchemy import func as sqlfunc
@@ -137,7 +138,7 @@ def _account_json(user: User, db: SASession, viewer: User | None = None,
         follower_count = 0
         following_count = 0
 
-    acct = user.display_handle or user.username
+    acct = str(user.display_handle or user.username)
     if acct.count('@') > 1:
         parts = acct.split('@')
         acct = f"{parts[0]}@{parts[1]}"
@@ -148,8 +149,8 @@ def _account_json(user: User, db: SASession, viewer: User | None = None,
     else:
         username = user.username
 
-    display_name = user.display_name or ""
-    _summary_sanitized = _sanitize_html(user.summary or "")
+    display_name = str(user.display_name or "")
+    _summary_sanitized = _sanitize_html(str(user.summary or ""))
     note_html = f"<p>{_summary_sanitized}</p>" if _summary_sanitized else "<p></p>"
     source_note = re.sub(r'<[^>]*>', '', _summary_sanitized)
 
@@ -186,10 +187,10 @@ def _account_json(user: User, db: SASession, viewer: User | None = None,
         "created_at": _ap_datetime(user.created_at),
         "note": note_html,
         "url": user.profile_url or (user.remote_url if user.is_remote else f"{BASE_URL}/@{username}"),
-        "avatar": _abs_url(user.profile_image) or f"{BASE_URL}/default-avatar.png",
-        "avatar_static": _abs_url(user.profile_image) or f"{BASE_URL}/default-avatar.png",
-        "header": _abs_url(user.header_image) or f"{BASE_URL}/default-header.png",
-        "header_static": _abs_url(user.header_image) or f"{BASE_URL}/default-header.png",
+        "avatar": _abs_url(str(user.profile_image)) or f"{BASE_URL}/default-avatar.png",
+        "avatar_static": _abs_url(str(user.profile_image)) or f"{BASE_URL}/default-avatar.png",
+        "header": _abs_url(str(user.header_image)) or f"{BASE_URL}/default-header.png",
+        "header_static": _abs_url(str(user.header_image)) or f"{BASE_URL}/default-header.png",
         "followers_count": follower_count,
         "following_count": following_count,
         "statuses_count": statuses_count,
@@ -201,7 +202,7 @@ def _account_json(user: User, db: SASession, viewer: User | None = None,
         "fields": [],
         "source": {
             "note": source_note,
-            "privacy": _visibility_to_mastodon(user.default_visibility),
+            "privacy": _visibility_to_mastodon(str(user.default_visibility)),
             "sensitive": bool(user.is_sensitive),
             "language": "ko",
             "fields": [],
@@ -227,50 +228,50 @@ def _account_json(user: User, db: SASession, viewer: User | None = None,
     return account
 
 
-def _build_account_counts_map(user_ids: set, db: SASession) -> dict:
+def _build_account_counts_map(user_ids: set[int], db: SASession) -> dict[int, tuple[int, int, int]]:
     """Precompute (followers, following, statuses) counts for a set of user ids in 3 queries."""
-    user_ids = list(user_ids)
-    if not user_ids:
+    uid_list = list(user_ids)
+    if not uid_list:
         return {}
-    fw = dict(db.query(Follow.following_id, sqlfunc.count(Follow.id)).filter(
-        Follow.following_id.in_(user_ids), Follow.accepted == True
-    ).group_by(Follow.following_id).all())
-    fg = dict(db.query(Follow.follower_id, sqlfunc.count(Follow.id)).filter(
-        Follow.follower_id.in_(user_ids), Follow.accepted == True
-    ).group_by(Follow.follower_id).all())
-    st = dict(db.query(Post.author_id, sqlfunc.count(Post.id)).filter(
-        Post.author_id.in_(user_ids), Post.is_deleted == False
-    ).group_by(Post.author_id).all())
-    return {uid: (fw.get(uid, 0), fg.get(uid, 0), st.get(uid, 0)) for uid in user_ids}
+    fw = {fid: cnt for fid, cnt in db.query(Follow.following_id, sqlfunc.count(Follow.id)).filter(  # noqa: C416
+        Follow.following_id.in_(uid_list), Follow.accepted == True
+    ).group_by(Follow.following_id).all()}
+    fg = {fid: cnt for fid, cnt in db.query(Follow.follower_id, sqlfunc.count(Follow.id)).filter(  # noqa: C416
+        Follow.follower_id.in_(uid_list), Follow.accepted == True
+    ).group_by(Follow.follower_id).all()}
+    st = {aid: cnt for aid, cnt in db.query(Post.author_id, sqlfunc.count(Post.id)).filter(  # noqa: C416
+        Post.author_id.in_(uid_list), Post.is_deleted == False
+    ).group_by(Post.author_id).all()}
+    return {uid: (fw.get(uid, 0), fg.get(uid, 0), st.get(uid, 0)) for uid in uid_list}
 
 
 def _build_status_maps(posts: list, db: SASession, viewer: User | None = None) -> dict:
     """Precompute all per-post / per-author counts and lookups for a status list (~10 queries total)."""
-    maps = {
+    maps: dict = {
         "_replies_map": {}, "_reblogs_map": {}, "_favs_map": {},
         "_reactions_map": {}, "_my_reactions_map": {},
         "_users_map": {}, "_username_map": {}, "_author_counts": {},
         "_quotes_map": {}, "_parents_map": {},
     }
-    post_ids = [p.id for p in posts]
+    post_ids = [int(p.id) for p in posts]
     if not post_ids:
         return maps
 
-    author_ids = {p.author_id for p in posts}
-    mention_ids = set()
+    author_ids = {int(p.author_id) for p in posts}
+    mention_ids: set[int] = set()
     for p in posts:
-        mention_ids.update(p.mentioned_user_ids or [])
+        mention_ids.update(int(m) for m in (p.mentioned_user_ids or []))
 
-    maps["_replies_map"] = dict(db.query(Post.in_reply_to_id, sqlfunc.count(Post.id)).filter(
+    maps["_replies_map"] = {pid: cnt for pid, cnt in db.query(Post.in_reply_to_id, sqlfunc.count(Post.id)).filter(  # noqa: C416
         Post.in_reply_to_id.in_(post_ids), Post.is_deleted == False
-    ).group_by(Post.in_reply_to_id).all())
-    maps["_reblogs_map"] = dict(db.query(Boost.post_id, sqlfunc.count(Boost.id)).filter(
+    ).group_by(Post.in_reply_to_id).all()}
+    maps["_reblogs_map"] = {pid: cnt for pid, cnt in db.query(Boost.post_id, sqlfunc.count(Boost.id)).filter(  # noqa: C416
         Boost.post_id.in_(post_ids)
-    ).group_by(Boost.post_id).all())
-    maps["_favs_map"] = dict(db.query(Like.post_id, sqlfunc.count(Like.id)).filter(
+    ).group_by(Boost.post_id).all()}
+    maps["_favs_map"] = {pid: cnt for pid, cnt in db.query(Like.post_id, sqlfunc.count(Like.id)).filter(  # noqa: C416
         Like.post_id.in_(post_ids),
         or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
-    ).group_by(Like.post_id).all())
+    ).group_by(Like.post_id).all()}
 
     rows = db.query(Like.post_id, sqlfunc.coalesce(Like.reaction, "★"), sqlfunc.count(Like.id), sqlfunc.min(Like.id)).filter(
         Like.post_id.in_(post_ids)
@@ -340,13 +341,13 @@ def _relationship_json(user: User, target: User, db: SASession) -> dict:
 
 
 def _status_json(post: Post, db: SASession, viewer: User | None = None,
-                 _boosted_ids: set = None, _liked_ids: set = None,
-                 _bookmarked_ids: set = None, _replies_map: dict = None,
-                 _reblogs_map: dict = None, _favs_map: dict = None,
-                 _reactions_map: dict = None, _my_reactions_map: dict = None,
-                 _users_map: dict = None, _username_map: dict = None,
-                 _author_counts: dict = None, _quotes_map: dict = None,
-                 _parents_map: dict = None) -> dict:
+                 _boosted_ids: set[int] | None = None, _liked_ids: set[int] | None = None,
+                 _bookmarked_ids: set[int] | None = None, _replies_map: dict | None = None,
+                 _reblogs_map: dict | None = None, _favs_map: dict | None = None,
+                 _reactions_map: dict | None = None, _my_reactions_map: dict | None = None,
+                 _users_map: dict | None = None, _username_map: dict | None = None,
+                 _author_counts: dict | None = None, _quotes_map: dict | None = None,
+                 _parents_map: dict | None = None) -> dict | None:
     if post.is_deleted:
         return None
 
@@ -358,7 +359,7 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
     if not _can_view(post, viewer, db):
         return None
 
-    content = post.content or ""
+    content = str(post.content or "")
 
     all_emojis = _load_emojis(db)
 
@@ -414,11 +415,11 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
             _qp = db.query(Post).filter_by(id=post.quote_of_id).first()
         if _qp and not _qp.is_deleted:
             if _qp.author and _qp.author.is_remote:
-                _quote_url = _qp.remote_url or _qp.ap_id or ""
+                _quote_url = str(_qp.remote_url or _qp.ap_id or "")
             else:
-                _quote_url = _qp.ap_id or f"{BASE_URL}/@{_qp.author.username}/{_qp.id}"
+                _quote_url = str(_qp.ap_id or f"{BASE_URL}/@{_qp.author.username}/{_qp.id}")
     if not _quote_url:
-        _quote_url = post.quote_of_ap_id or ""
+        _quote_url = str(post.quote_of_ap_id or "")
     if _quote_url:
         # 본문에 인용 대상 URL이 텍스트 링크로 남아있으면 제거 (RE: 줄과 중복 렌더링 방지)
         content = re.sub(
@@ -471,8 +472,8 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         "in_reply_to_id": str(post.in_reply_to_id) if post.in_reply_to_id else None,
         "in_reply_to_account_id": None,
         "sensitive": bool(post.is_sensitive),
-        "spoiler_text": _sanitize_html(post.summary or ""),
-        "visibility": _visibility_to_mastodon(post.visibility),
+        "spoiler_text": _sanitize_html(str(post.summary or "")),
+        "visibility": _visibility_to_mastodon(str(post.visibility)),
         "language": "ko",
         "uri": post.ap_id or f"{BASE_URL}/posts/{post.id}",
         "url": post.remote_url or post.ap_id or f"{BASE_URL}/@{author.username}/{post.id}" if author.is_remote else f"{BASE_URL}/@{author.username}/{post.id}",
@@ -492,7 +493,7 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         "media_attachments": [],
         "mentions": [
             {"id": str(mid), "username": mu.username.split("@")[0], "url": mu.profile_url or (mu.remote_url if mu.is_remote else f"{BASE_URL}/@{mu.username.split('@')[0]}"), "acct": mu.username}
-            for mid in (post.mentioned_user_ids or [])
+            for mid in (int(m) for m in list(post.mentioned_user_ids or []))
             if (mu := (_users_map.get(mid) if _users_map is not None else db.query(User).filter_by(id=mid).first()))
         ],
         "tags": [],
@@ -516,7 +517,7 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
             status["in_reply_to_account_id"] = str(_parent.author_id)
 
     if post.media_attachments:
-        for m in post.media_attachments:
+        for m in list(post.media_attachments):
             if not isinstance(m, dict):
                 continue
             status["media_attachments"].append({
@@ -573,12 +574,16 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         status["reblogged"] = post.id in _boosted_ids
         status["bookmarked"] = post.id in _bookmarked_ids
 
+    reaction_rows: list[tuple[Any, Any]] = []
     if _reactions_map is not None:
         reaction_rows = [(r[0], r[1]) for r in sorted(_reactions_map.get(post.id, []), key=lambda r: r[2])]
     else:
-        reaction_rows = db.query(
-            sqlfunc.coalesce(Like.reaction, "★"), sqlfunc.count(Like.id)
-        ).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(sqlfunc.min(Like.id)).all()
+        reaction_rows = [
+            (r[0], r[1])
+            for r in db.query(
+                sqlfunc.coalesce(Like.reaction, "★"), sqlfunc.count(Like.id)
+            ).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(sqlfunc.min(Like.id)).all()
+        ]
     my_reaction = None
     if viewer:
         if _my_reactions_map is not None:
@@ -616,7 +621,7 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
 
 
 def _boost_status_json(boost_post: Post, original: Post, db: SASession,
-                       viewer: User | None = None, **kwargs) -> dict:
+                       viewer: User | None = None, **kwargs) -> dict | None:
     inner = _status_json(original, db, viewer, **kwargs)
     if inner is None:
         return None

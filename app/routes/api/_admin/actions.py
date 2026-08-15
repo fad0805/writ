@@ -27,8 +27,8 @@ _ROLE_PRIORITY = {"user": 0, "moderator": 1, "admin": 2, "owner": 3}
 
 def _guard_target_role(actor: User, target: User):
     """등급이 같거나 높은 대상 계정(오너/관리자/중재자)에 대한 관리 행위를 차단한다."""
-    actor_rank = _ROLE_PRIORITY.get(actor.role or "user", 0)
-    target_rank = _ROLE_PRIORITY.get(target.role or "user", 0)
+    actor_rank = _ROLE_PRIORITY.get(str(actor.role or "user"), 0)
+    target_rank = _ROLE_PRIORITY.get(str(target.role or "user"), 0)
     if target_rank >= actor_rank:
         raise HTTPException(status_code=403, detail="상위 또는 동급 계정은 관리할 수 없습니다.")
 

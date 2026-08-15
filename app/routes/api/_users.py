@@ -200,11 +200,11 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
         show_follows = user and (profile.id == user.id or profile.follow_list_visibility != "private")
         followers = s.query(Follow).filter_by(following_id=profile.id, accepted=True).order_by(desc(Follow.created_at)).limit(20).all() if show_follows else []
         following = s.query(Follow).filter_by(follower_id=profile.id, accepted=True).order_by(desc(Follow.created_at)).limit(20).all() if show_follows else []
-        _all_post_ids = {p.id for p in posts}
+        _all_post_ids_set: set[int] = {int(p.id) for p in posts}
         for _p in posts:
             if _p.boost_of_id:
-                _all_post_ids.add(_p.boost_of_id)
-        _all_post_ids = list(_all_post_ids | set(profile.pinned_posts or []))
+                _all_post_ids_set.add(int(_p.boost_of_id))
+        _all_post_ids = list(_all_post_ids_set | {int(pp) for pp in list(profile.pinned_posts or [])})
         if user and _all_post_ids:
             _liked_ids = {like.post_id for like in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(_all_post_ids)).all()}
             _boosted_ids = {boost.post_id for boost in s.query(Boost).filter(Boost.user_id == user.id, Boost.post_id.in_(_all_post_ids)).all()}
@@ -215,7 +215,7 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             _my_reaction_map = {}
             for like in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(_all_post_ids), Like.reaction.isnot(None)).all():
                 _my_reaction_map[like.post_id] = like.reaction
-            _reactions_map = {}
+            _reactions_map: dict = {}
             for pid, react, cnt in s.query(Like.post_id, func.coalesce(Like.reaction, "★"), func.count(Like.id)).filter(Like.post_id.in_(_all_post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all():
                 if pid not in _reactions_map:
                     _reactions_map[pid] = {}

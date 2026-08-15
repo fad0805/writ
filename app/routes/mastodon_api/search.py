@@ -33,7 +33,7 @@ def search_v2(
 ):
     viewer = _maybe_bearer(request, db)
 
-    result = {"accounts": [], "statuses": [], "hashtags": []}
+    result: dict = {"accounts": [], "statuses": [], "hashtags": []}
 
     if not q:
         return result
@@ -48,8 +48,8 @@ def search_v2(
                 User.display_name.ilike(f"%{query_lower}%"),
             )
         ).limit(limit).all()
-        counts = _build_account_counts_map({u.id for u in users}, db)
-        result["accounts"] = [_account_json(u, db, viewer, _counts=counts.get(u.id)) for u in users]
+        counts = _build_account_counts_map({int(u.id) for u in users}, db)
+        result["accounts"] = [_account_json(u, db, viewer, _counts=counts.get(int(u.id))) for u in users]
 
     if not type or type == "statuses":
         posts = db.query(Post).filter(

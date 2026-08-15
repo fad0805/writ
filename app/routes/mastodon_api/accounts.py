@@ -171,7 +171,7 @@ def get_account_statuses(
     viewer = _maybe_bearer(request, db)
 
     if pinned:
-        pinned_ids: list[int] = target_user.pinned_posts or []
+        pinned_ids = [int(pid) for pid in list(target_user.pinned_posts or [])]
         if not pinned_ids:
             return []
         q = db.query(Post).filter(
@@ -257,8 +257,8 @@ def get_account_followers(
 
     follows = q.order_by(Follow.id.desc()).limit(limit).all()
     viewer = _maybe_bearer(request, db)
-    counts = _build_account_counts_map({f.follower_id for f in follows}, db)
-    return [_account_json(f.follower, db, viewer, _counts=counts.get(f.follower_id)) for f in follows]
+    counts = _build_account_counts_map({int(f.follower_id) for f in follows}, db)
+    return [_account_json(f.follower, db, viewer, _counts=counts.get(int(f.follower_id))) for f in follows]
 
 
 # ---------------------------------------------------------------------------
@@ -282,8 +282,8 @@ def get_account_following(
 
     follows = q.order_by(Follow.id.desc()).limit(limit).all()
     viewer = _maybe_bearer(request, db)
-    counts = _build_account_counts_map({f.following_id for f in follows}, db)
-    return [_account_json(f.following, db, viewer, _counts=counts.get(f.following_id)) for f in follows]
+    counts = _build_account_counts_map({int(f.following_id) for f in follows}, db)
+    return [_account_json(f.following, db, viewer, _counts=counts.get(int(f.following_id))) for f in follows]
 
 
 # ---------------------------------------------------------------------------

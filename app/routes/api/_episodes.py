@@ -131,7 +131,7 @@ def api_create_episode(request: Request, novel_id: int, title: str = Form(...), 
             )
             s.add(post)
             s.flush()
-            post.ap_id = f"{BASE_URL}/@{user.username}/{ep_post_number}"
+            post.ap_id = f"{BASE_URL}/@{user.username}/{ep_post_number}"  # type: ignore[assignment]
             _sync_post_tags(post, s)
             s.flush()
             try:
@@ -294,7 +294,7 @@ def api_edit_episode(request: Request, novel_id: int, episode_id: int,
             )
             s.add(post)
             s.flush()
-            post.ap_id = f"{BASE_URL}/@{user.username}/{ep_post_number}"
+            post.ap_id = f"{BASE_URL}/@{user.username}/{ep_post_number}"  # type: ignore[assignment]
             _sync_post_tags(post, s)
             s.flush()
             try:
@@ -367,7 +367,7 @@ def api_save_draft(request: Request, novel_id: int, title: str = Form(""), summa
             draft = EpisodeDraft(user_id=user.id, novel_id=novel_id)
             s.add(draft)
             s.flush()
-            draft_id = draft.id
+            draft_id = int(draft.id)
         draft.title = title
         draft.summary = summary
         draft.content = content

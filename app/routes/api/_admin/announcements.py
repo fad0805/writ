@@ -58,7 +58,7 @@ def api_admin_create_announcement(request: Request, title: str = Form(...), cont
         s.commit()
         s.refresh(a)
         result = dict(_announcement_json(a), active=_is_announcement_active(a))
-    log_admin_action(user.id, user.username, "create_announcement", target_type="announcement", target_id=a.id, details=a.title, ip_address=request.client.host if request.client else "")
+    log_admin_action(user.id, user.username, "create_announcement", target_type="announcement", target_id=int(a.id), details=str(a.title), ip_address=request.client.host if request.client else "")
     return result
 
 

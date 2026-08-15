@@ -147,7 +147,7 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
         _liked_ids = _boosted_ids = _bookmarked_ids = set()
         _vote_map = {}
         _my_reaction_map = {}
-        _reactions_map = {}
+        _reactions_map: dict = {}
         _mentioned_users_map = {}
 
         if user and notif_post_ids:

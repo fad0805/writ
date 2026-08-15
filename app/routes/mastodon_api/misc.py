@@ -32,8 +32,8 @@ def custom_emojis(db: SASession = Depends(get_db)):
     return [
         {
             "shortcode": e.keyword,
-            "url": e.source_url or _emoji_url(e.file_name, e.domain or "", e.category or ""),
-            "static_url": e.source_url or _emoji_url(e.file_name, e.domain or "", e.category or ""),
+            "url": e.source_url or _emoji_url(str(e.file_name), str(e.domain or ""), str(e.category or "")),
+            "static_url": e.source_url or _emoji_url(str(e.file_name), str(e.domain or ""), str(e.category or "")),
             "visible_in_picker": True,
             "category": e.category or "",
             "aliases": e.aliases or [],
@@ -92,7 +92,7 @@ def list_filters_v2(request: Request, db: SASession = Depends(get_db)):
 def get_preferences(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     return {
-        "posting:default_visibility": _visibility_to_mastodon(user.default_visibility),
+        "posting:default_visibility": _visibility_to_mastodon(str(user.default_visibility)),
         "posting:default_sensitive": False,
         "posting:default_language": "ko",
         "reading:expand_media": "default",
@@ -121,8 +121,8 @@ def list_follow_requests(
 def list_blocks(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     rows = db.query(UserBlock).filter(UserBlock.user_id == user.id).order_by(UserBlock.created_at.desc()).all()
-    counts = _build_account_counts_map({m.target_user_id for m in rows}, db)
-    return [_account_json(m.target_user, db, viewer=user, _counts=counts.get(m.target_user_id)) for m in rows]
+    counts = _build_account_counts_map({int(m.target_user_id) for m in rows}, db)
+    return [_account_json(m.target_user, db, viewer=user, _counts=counts.get(int(m.target_user_id))) for m in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -132,8 +132,8 @@ def list_blocks(request: Request, db: SASession = Depends(get_db)):
 def list_mutes(request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     rows = db.query(UserMute).filter(UserMute.user_id == user.id).order_by(UserMute.created_at.desc()).all()
-    counts = _build_account_counts_map({m.target_user_id for m in rows}, db)
-    return [_account_json(m.target_user, db, viewer=user, _counts=counts.get(m.target_user_id)) for m in rows]
+    counts = _build_account_counts_map({int(m.target_user_id) for m in rows}, db)
+    return [_account_json(m.target_user, db, viewer=user, _counts=counts.get(int(m.target_user_id))) for m in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +175,7 @@ def list_bookmarks(
     for bm in bookmarks:
         if bm.post and not bm.post.is_deleted:
             s = _status_json(bm.post, db, viewer=user, _liked_ids=_liked_ids,
-                             _boosted_ids=_boosted_ids, _bookmarked_ids={bm.post_id}, **maps)
+                             _boosted_ids=_boosted_ids, _bookmarked_ids={int(bm.post_id)}, **maps)
             if s:
                 result.append(s)
     return result
@@ -217,7 +217,7 @@ def list_favourites(
     result = []
     for like in likes:
         if like.post and not like.post.is_deleted:
-            s = _status_json(like.post, db, viewer=user, _liked_ids={like.post_id},
+            s = _status_json(like.post, db, viewer=user, _liked_ids={int(like.post_id)},
                              _boosted_ids=_boosted_ids, **maps)
             if s:
                 result.append(s)
@@ -402,8 +402,8 @@ def get_directory(
     if local:
         q = q.filter(User.is_remote == False)
     users = q.order_by(User.updated_at.desc()).limit(limit).all()
-    counts = _build_account_counts_map({u.id for u in users}, db)
-    return [_account_json(u, db, viewer, _counts=counts.get(u.id)) for u in users]
+    counts = _build_account_counts_map({int(u.id) for u in users}, db)
+    return [_account_json(u, db, viewer, _counts=counts.get(int(u.id))) for u in users]
 
 
 # ---------------------------------------------------------------------------

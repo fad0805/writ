@@ -124,12 +124,12 @@ RESERVED_HANDLES = frozenset({
 def _send_verification_email(u: User):
     if not SMTP_SERVER:
         if APP_ENV == "development":
-            u.email_verified = True
+            u.email_verified = True  # type: ignore[assignment]
             return
         logger.warning("SMTP not configured — email %s left unverified", u.email)
         return
     token = secrets.token_urlsafe(32)
-    u.verification_token = token
+    u.verification_token = token  # type: ignore[assignment]
     verify_url = f"{BASE_URL}/verify-email?token={token}"
     try:
         msg = MIMEText(
@@ -140,7 +140,7 @@ def _send_verification_email(u: User):
         )
         msg["Subject"] = "[WRIT] 이메일 인증을 완료해 주세요"
         msg["From"] = SMTP_FROM or "noreply@writ.local"
-        msg["To"] = u.email
+        msg["To"] = u.email  # type: ignore[assignment]
         port = SMTP_PORT or 587
         if port == 465:
             with smtplib.SMTP_SSL(SMTP_SERVER, port, timeout=10) as smtp:
@@ -295,7 +295,7 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
         # 원시 XFF 헤더를 그대로 recent_ips에 기록하지 않는다.
         client_ip = _get_client_ip(request)
         if client_ip:
-            user.recent_ips = [client_ip]
+            user.recent_ips = [client_ip]  # type: ignore[assignment]
         s.flush()
         user_id = user.id
 
@@ -303,7 +303,7 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
             _send_verification_email(user)
         s.commit()
 
-        log_admin_action(user_id, user.username, "register", ip_address=client_ip, details="first_user" if is_first else "email_required")
+        log_admin_action(int(user_id), str(user.username), "register", ip_address=client_ip, details="first_user" if is_first else "email_required")
 
         return {"email_sent": True}
 
