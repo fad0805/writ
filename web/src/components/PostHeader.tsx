@@ -10,12 +10,14 @@ const VIS_ICONS: Record<string, string> = {
   public: "globe", home: "home", followers: "lock", mention: "mail",
 };
 
-export default function PostHeader({ post, mergedEmojiList, timeStr, postHref }: {
+export default function PostHeader({ post, mergedEmojiList, timeStr, postHref, timeHref }: {
   post: PostData;
   mergedEmojiList: CustomEmoji[];
   timeStr: string;
   postHref: string;
+  timeHref?: string;
 }) {
+  const finalTimeHref = timeHref || postHref;
   return (
     <div className="post-header">
       <Link href={`/@${post.author.username}`} className="post-author-avatar-link no-underline" onClick={(e) => e.stopPropagation()}>
@@ -33,7 +35,7 @@ export default function PostHeader({ post, mergedEmojiList, timeStr, postHref }:
         <span className={`vis-badge vis-${post.visibility}`}>
           <Icon name={VIS_ICONS[post.visibility] || "globe"} />
         </span>
-        {timeStr ? <Link href={postHref} className="no-underline" style={{ color: "inherit" }}>{timeStr}</Link> : null}
+        {timeStr ? <Link href={finalTimeHref} className="no-underline" style={{ color: "inherit" }}>{timeStr}</Link> : null}
       </span>
     </div>
   );

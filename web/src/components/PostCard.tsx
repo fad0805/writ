@@ -397,6 +397,9 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
     ? (post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.boost_of_id}`)
     : (post.number ? `/@${post.author.username}/${post.number}` : `/post/${post.id}`);
 
+  // 상세 페이지(current)에서 리모트 글의 작성시간을 누르면 원본(리모트) 링크로 이동
+  const timeHref = current && post.author.is_remote && remoteUrl ? remoteUrl : postHref;
+
   const handleTogglePin = () => {
     const newPinned = !pinned;
     setPinned(newPinned);
@@ -454,7 +457,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
             <Icon name="mention" size={12} /> <Link href={`/@${mentionBy.username}`}><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(mentionBy.display_name || mentionBy.username, mergedEmojiList, 14)) }} /></Link>님이 멘션
           </div>
         )}
-        <PostHeader post={post} mergedEmojiList={mergedEmojiList} timeStr={timeStr} postHref={postHref} />
+        <PostHeader post={post} mergedEmojiList={mergedEmojiList} timeStr={timeStr} postHref={postHref} timeHref={timeHref} />
         {!hideContext && post.reply_context && (
           <ReplyContextBox post={post} mergedEmojiList={mergedEmojiList} />
         )}
