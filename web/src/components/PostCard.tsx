@@ -53,6 +53,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
   const [revealedSensitive, setRevealedSensitive] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const quoteAttemptedUrlRef = useRef<string | null>(null);
+  const remoteQuoteAttemptedRef = useRef<string | null>(null);
 
   const targetId = post.boost_of_id || post.id;
 
@@ -94,6 +95,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
       postIdRef.current = post.id;
       setBoosted(post.boosted);
       setBookmarked(post.bookmarked);
+      remoteQuoteAttemptedRef.current = null;
     }
   }, [post.id, post.boosted, post.bookmarked]);
   useEffect(() => {
@@ -206,6 +208,25 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
             if (d) { if (d._emojis) injectEmojis(d._emojis); setQuotedPost(d); }
           })
           .finally(() => setLoadingQuote(false));
+      } else {
+        // 원격 인용(quote-inline / RE: 링크) 감지 → 리모트 포스트를 인용 카드로 로드
+        const remoteQuoteMatch = rawContent.match(/<span[^>]*class="[^"]*quote-inline[^"]*"[^>]*>\s*RE:\s*<a\b[^>]*\bhref="([^"]+)"[^>]*>/i)
+          || rawContent.match(/\bRE:\s*<a\b[^>]*\bhref="([^"]+)"[^>]*>/i)
+          || rawContent.match(/\bRE:\s*(https?:\/\/[^\s<>"')\]]+)/i);
+        if (remoteQuoteMatch && !loadingQuote && !quotedPost && !remoteQuoteAttemptedRef.current) {
+          remoteQuoteAttemptedRef.current = remoteQuoteMatch[1];
+          setLoadingQuote(true);
+          const form = new FormData(); form.append("url", remoteQuoteMatch[1]);
+          getQuote(`url:${remoteQuoteMatch[1]}`, () =>
+            fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form })
+              .then(r => { if (r.ok) return r.json(); throw new Error(); })
+              .catch(() => null)
+          )
+            .then(d => {
+              if (d && d.id) { if (d._emojis) injectEmojis(d._emojis); setQuotedPost(d); }
+            })
+            .finally(() => setLoadingQuote(false));
+        }
       }
     }
   }, [post, loadingQuote, quotedPost]);
@@ -442,7 +463,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
             <summary onClick={(e) => e.stopPropagation()} dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.summary, mergedEmojiList)) }} />
             <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
             {(post.media_attachments?.length ?? 0) > 0 && mediaGallery(postSensitive)}
-            {post.link_preview && !post.quote_of_id && !post.quote_of_ap_id && !seriesMatch && !episodeMatch && <LinkPreviewCard lp={post.link_preview} />}
+            {post.link_preview && !post.quote_of_id && !post.quote_of_ap_id && !quotedPost && !seriesMatch && !episodeMatch && <LinkPreviewCard lp={post.link_preview} />}
           </details>
         ) : (() => {
           const textOnly = (post.content || "").replace(/<[^>]+>/g, "").replace(/&[^;]+;/g, "x");
@@ -467,7 +488,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
         {post.poll_data && <PollBox post={post} targetId={targetId} readonly={readonly} onUpdate={onUpdate} />}
         {loadingQuote && <div className="empty-small loading-small">인용 불러오는 중...</div>}
         <QuotedCard quotedPost={quotedPost} quotedSeries={quotedSeries} quotedEpisode={quotedEpisode} onNavigate={(href) => router.push(href)} />
-        {!post.summary && post.link_preview && !post.quote_of_id && !post.quote_of_ap_id && !seriesMatch && !episodeMatch && <LinkPreviewCard lp={post.link_preview} />}
+        {!post.summary && post.link_preview && !post.quote_of_id && !post.quote_of_ap_id && !quotedPost && !seriesMatch && !episodeMatch && <LinkPreviewCard lp={post.link_preview} />}
         {reactions && Object.keys(reactions).length > 0 && currentUser?.enable_reactions !== false && (
           <ReactionsRow reactions={reactions} myReaction={myReaction} onToggle={handleToggleReaction} targetId={targetId} emojiMap={reactionEmojiMap} localEmojiMap={localReactionEmojiMap} />
         )}

@@ -422,6 +422,10 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
     if _quote_url:
         # 본문에 인용 대상 URL이 텍스트 링크로 남아있으면 제거 (RE: 줄과 중복 렌더링 방지)
         content = re.sub(
+            r'<span[^>]*class="[^"]*quote-inline[^"]*"[^>]*>\s*RE:\s*<a\b[^>]*\bhref="[^"]*"[^>]*>.*?</a>\s*</span>',
+            '', content, flags=re.I | re.S
+        )
+        content = re.sub(
             r'[\s\n]*RE:[\s\n]*(?:<a[^>]*?>.*?</a>|https?://[^\s<>]*)',
             '', content, flags=re.I | re.S
         )
