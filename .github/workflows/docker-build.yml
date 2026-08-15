@@ -33,7 +33,11 @@ jobs:
 
       - name: Lint (ruff)
         run: |
-          ruff check app/ tests/ --select W,UP,RUF100,F821,F811,F541,F822
+          ruff check app/ tests/
+
+      - name: Typecheck (mypy)
+        run: |
+          mypy app/
 
       - name: Test (pytest)
         run: |
