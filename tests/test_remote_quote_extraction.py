@@ -1,20 +1,20 @@
 """Remote quote post (인용) 추출 회귀 테스트.
 
-https://writ.daydream.ink/post/55869 처럼 마스토돈 포크(quote 지원)에서
-넘어온 인용 글의 인용 URL이 quote_of_ap_id로 감지되어야 하고, 본문에 남은
-RE:/quote-inline 링크가 제거되어 인용 카드로 렌더링될 수 있어야 한다.
+마스토돈 포크(quote 지원)에서 넘어온 인용 글의 인용 URL이 quote_of_ap_id로
+감지되어야 하고, 본문에 남은 RE:/quote-inline 링크가 제거되어 인용 카드로
+렌더링될 수 있어야 한다.
 """
 
 from app.core.activitypub._fetch import _extract_quote_url, _strip_quote_link
 
-QUOTED_AP_ID = "https://sharlayan.in/users/nose2k/statuses/117097837889628434"
-QUOTED_WEB_URL = "https://sharlayan.in/@nose2k/117097837889628434"
+QUOTED_AP_ID = "https://masto.example/users/alice/statuses/123456789012345678"
+QUOTED_WEB_URL = "https://masto.example/@alice/123456789012345678"
 
-# 마스토돈 4.7.0-0495d+shrn (Sharlayan 포크) Note 객체의 실제 형태
+# 마스토돈 포크(quote 지원) Note 객체의 실제 형태
 MASTODON_NOTE_QUOTE_FIELD = {
-    "id": "https://sharlayan.in/users/nose2k/statuses/117097852410535313",
+    "id": "https://masto.example/users/alice/statuses/123456789012345679",
     "type": "Note",
-    "attributedTo": "https://sharlayan.in/users/nose2k",
+    "attributedTo": "https://masto.example/users/alice",
     "quote": QUOTED_AP_ID,
     "_misskey_quote": QUOTED_AP_ID,
     "quote_uri": QUOTED_AP_ID,
