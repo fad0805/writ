@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.config.settings import BASE_URL
 from app.core.activitypub._emoji import _background_import_emoji, _process_emoji_tags
-from app.core.activitypub._fetch import _extract_quote_url, _fetch_remote_post, _resolve_actor, _retry_fetch_reply
+from app.core.activitypub._fetch import _extract_og_title, _fetch_remote_post, _resolve_actor, _retry_fetch_reply
 from app.core.activitypub._media import _cache_remote_media
 from app.core.activitypub._outbound import _send_accept
 from app.core.activitypub._utils import _get_instance_actor
@@ -386,8 +386,8 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             sys.stdout.flush()
             if existing:
                 if existing.poll_data and poll_data:
-                    for new_opt in poll_data.get("options", []):
-                        for old_opt in existing.poll_data.get("options", []):
+                    for new_opt in list(poll_data.get("options", [])):
+                        for old_opt in list(existing.poll_data.get("options", [])):
                             if old_opt.get("text") == new_opt.get("text"):
                                 old_opt["votes_count"] = new_opt.get("votes_count", 0)
                                 break
@@ -446,20 +446,20 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     for _vid in _voter_ids:
                         broadcast_refresh_notifs(_vid)
                     if poll_post.author_id != actor_id:
-                        send_push_to_user(poll_post.author_id, "vote", actor_username, poll_post.id)
-                        broadcast_notif_sound(poll_post.author_id)
+                        send_push_to_user(int(poll_post.author_id), "vote", str(actor_username), int(poll_post.id))
+                        broadcast_notif_sound(int(poll_post.author_id))
                     broadcast_post({
-                        "id": poll_post.id,
+                        "id": int(poll_post.id),
                         "type": "update",
                         "poll_data": poll_post.poll_data,
                         "_emojis": _broadcast_emoji_list(session),
-                    }, poll_post.author_id, poll_post.visibility or "public", False)
+                    }, int(poll_post.author_id), str(poll_post.visibility or "public"), False)
                     return (200, "voted")
 
             # Parse mentions ONLY from AP tag array (No regex body parsing)
             mentioned_hrefs = set()
             mentioned_names = set()
-            _actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
+            _actor_domain = urlparse(str(actor.remote_url)).hostname if actor.remote_url else ""
 
             for tag in (obj.get("tag", []) or []):
                 if isinstance(tag, dict) and tag.get("type") == "Mention":
@@ -547,7 +547,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                                 _seen_ids.add(u.id)
 
             logger.debug("[_handle_create MENTION RESULT] mentioned_ids=%s (from hrefs=%s, names=%s)", mentioned_ids, mentioned_hrefs, mentioned_names)
-            actor_domain = urlparse(actor.remote_url).hostname if actor.remote_url else ""
+            actor_domain = urlparse(str(actor.remote_url)).hostname if actor.remote_url else ""
             if actor_domain:
                 mute_entry = session.query(MutedServer).filter_by(domain=actor_domain).first()
                 if mute_entry and mute_entry.muted and visibility == "public":
@@ -675,7 +675,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                             if not _m:
                                 _m = re.search(f'<meta[^>]+content="([^"]*)"[^>]+property="og:{n}"', _html_lp, re.I)
                             return _m.group(1) if _m else ""
-                        _og_title_lp = _og_lp("title") or (re.search(r'<title>([^<]*)</title>', _html_lp, re.I).group(1) if re.search(r'<title>([^<]*)</title>', _html_lp, re.I) else "")
+                        _og_title_lp = _og_lp("title") or _extract_og_title(_html_lp)
                         _og_desc_lp = _og_lp("description")
                         _og_img_lp = _og_lp("image")
                         if _og_img_lp and _og_img_lp.startswith("/"):
@@ -714,7 +714,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             published = obj.get("published", "")
             if published:
                 with contextlib.suppress(Exception):
-                    post.created_at = datetime.datetime.fromisoformat(published.replace("Z", "+00:00"))
+                    post.created_at = datetime.datetime.fromisoformat(published.replace("Z", "+00:00"))  # type: ignore[assignment]
             if quote_of_ap_id and post.content:
                 post.content = re.sub(
                     r'<span[^>]*class="[^"]*quote-inline[^"]*"[^>]*>\s*RE:\s*<a\b[^>]*\bhref="[^"]*"[^>]*>.*?</a>\s*</span>',
@@ -722,29 +722,28 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 )
                 post.content = re.sub(
                     r'^[\s\n]*RE:\s*<a[^>]*>[^<]*</a>\s*[\n\s]*',
-                    '', post.content, count=1, flags=re.I
-                )
+                    '', str(post.content), count=1, flags=re.I
+                )  # type: ignore[assignment]
                 post.content = re.sub(
                     r'^[\s\n]*RE:\s*https?://\S+\s*[\n\s]*',
-                    '', post.content, count=1, flags=re.I
-                )
+                    '', str(post.content), count=1, flags=re.I
+                )  # type: ignore[assignment]
                 post.content = re.sub(
                     r'\s*RE:\s*https?://\S+\s*$',
-                    '', post.content, count=1, flags=re.I
-                )
+                    '', str(post.content), count=1, flags=re.I
+                )  # type: ignore[assignment]
                 post.content = re.sub(
                     r'\s*RE:\s*<a[^>]*>[^<]*</a>\s*$',
-                    '', post.content, count=1, flags=re.I
-                )
-                post.content = re.sub(r'\n{3,}', '\n\n', post.content)
+                    '', str(post.content), count=1, flags=re.I
+                )  # type: ignore[assignment]
             if link_preview:
-                post.link_preview = link_preview
+                post.link_preview = link_preview  # type: ignore[assignment]
             session.add(post)
             session.flush()
 
             # Background retry if remote parent not found
             if in_reply_to and not reply_to_post_id:
-                _retry_fetch_reply(post.id, in_reply_to)
+                _retry_fetch_reply(int(post.id), in_reply_to)
 
             # Resolve and set hashtag tags
             tag_list = []
@@ -801,18 +800,18 @@ def _handle_create(activity: dict) -> tuple[int, str]:
             _push_notified = set()
             if reply_to_post and reply_to_post.author_id != actor_id and reply_to_post.author_id not in _push_notified:
                 _push_notified.add(reply_to_post.author_id)
-                send_push_to_user(reply_to_post.author_id, "mention", actor_username, post.id)
-                broadcast_notif_sound(reply_to_post.author_id)
+                send_push_to_user(int(reply_to_post.author_id), "mention", str(actor_username), int(post.id))
+                broadcast_notif_sound(int(reply_to_post.author_id))
             for _mu_id in mentioned_ids:
                 if _mu_id != actor_id and _mu_id not in _push_notified:
                     _push_notified.add(_mu_id)
-                    send_push_to_user(_mu_id, "mention", actor_username, post.id)
+                    send_push_to_user(_mu_id, "mention", str(actor_username), int(post.id))
                     broadcast_notif_sound(_mu_id)
             for f in followers:
                 if not f.follower.is_remote and f.follower.id != actor_id and f.follower.id not in _push_notified:
                     _push_notified.add(f.follower.id)
-                    send_push_to_user(f.follower.id, "post", actor_username, post.id)
-                    broadcast_notif_sound(f.follower.id)
+                    send_push_to_user(int(f.follower.id), "post", str(actor_username), int(post.id))
+                    broadcast_notif_sound(int(f.follower.id))
             broadcast_refresh_notifs()
             try:
                 broadcast("new_post", {"post_id": post.id, "author_id": actor_id})
@@ -883,7 +882,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     "quote_of_ap_id": post.quote_of_ap_id or "",
                     "_emojis": _broadcast_emojis,
                 }
-                broadcast_post(post_json, actor_id, visibility)
+                broadcast_post(post_json, int(actor_id), visibility)
             except Exception as e:
                 logger.error("timeline broadcast failed: %s", e, exc_info=True)
 
@@ -1014,9 +1013,9 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             )
             session.add(n)
             session.commit()
-            send_push_to_user(post.author_id, "like", actor_username, post.id)
-            broadcast_notif_sound(post.author_id)
-            broadcast_refresh_notifs(post.author_id)
+            send_push_to_user(int(post.author_id), "like", str(actor_username), int(post.id))
+            broadcast_notif_sound(int(post.author_id))
+            broadcast_refresh_notifs(int(post.author_id))
             _reactions = {}
             for _react, _cnt in session.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
                 _reactions[_react or "★"] = _cnt
@@ -1052,12 +1051,12 @@ def _handle_vote(activity: dict) -> tuple[int, str]:
     if not post or not post.poll_data:
         return (200, "OK")
 
-    actor_id = ''
+    actor_id: int | str = ''
     try:
         actor = _resolve_actor(actor_url, sign_as=_sign_as)
         if not actor:
             return (404, "Actor not found")
-        actor_id = actor.id
+        actor_id = int(actor.id)
     except Exception as e:
         logger.error("Failed to resolve actor %s: %s", actor_url, e, exc_info=True)
         return (404, "Actor not found")
@@ -1230,8 +1229,8 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
 
         # 5. 커밋 이후 외부 연동 (푸시 및 스트리밍) 처리
         if not existing_n:
-            send_push_to_user(post.author_id, "boost", actor_username, post.id)
-            broadcast_notif_sound(post.author_id)
+            send_push_to_user(int(post.author_id), "boost", str(actor_username), int(post.id))
+            broadcast_notif_sound(int(post.author_id))
 
         try:
             def _safe_user_json(u):
@@ -1297,7 +1296,7 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
                     "mentioned_user_ids": [],
                     "quote_of_id": post.quote_of_id or None, "quote_of_ap_id": post.quote_of_ap_id or "",
                     "_emojis": _broadcast_emojis,
-                }, actor_id, post.visibility or "public")
+                }, int(actor_id), str(post.visibility or "public"))
             except Exception as e:
                 logger.error("Failed to broadcast remote boost timeline: %s", e, exc_info=True)
         except Exception as e:

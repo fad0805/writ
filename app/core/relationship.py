@@ -31,9 +31,9 @@ def follow_user(db: Session, user: User, target: User):
                 notification_type="follow_request" if not accepted else "follow"
             ))
         db.commit()
-        broadcast_refresh_notifs(target.id)
-        send_push_to_user(target.id, "follow" if accepted else "follow_request", user.username)
-        broadcast_notif_sound(target.id)
+        broadcast_refresh_notifs(int(target.id))
+        send_push_to_user(int(target.id), "follow" if accepted else "follow_request", str(user.username))
+        broadcast_notif_sound(int(target.id))
 
     if target.is_remote and target.inbox_url:
         follow_activity = {
@@ -49,7 +49,7 @@ def follow_user(db: Session, user: User, target: User):
             follow_rec.activity_id = follow_activity["id"]
             db.commit()
         try:
-            _post_to_inbox(target.inbox_url, follow_activity, user)
+            _post_to_inbox(str(target.inbox_url), follow_activity, user)
         except Exception as e:
             logger.error("Failed to send follow to remote inbox: %s", e, exc_info=True)
 
@@ -67,7 +67,7 @@ def unfollow_user(db: Session, user: User, target: User):
         ).delete(synchronize_session=False)
         db.commit()
         with contextlib.suppress(Exception):
-            broadcast_refresh_notifs(target.id)
+            broadcast_refresh_notifs(int(target.id))
         if target.is_remote and target.inbox_url:
             follow_activity_id = f"{user.actor_uri()}#follows/{target.id}"
             undo = {
@@ -83,7 +83,7 @@ def unfollow_user(db: Session, user: User, target: User):
                 },
             }
             try:
-                _post_to_inbox(target.inbox_url, undo, user)
+                _post_to_inbox(str(target.inbox_url), undo, user)
             except Exception as e:
                 logger.error("Failed to send Undo Follow: %s", e, exc_info=True)
 
@@ -93,8 +93,8 @@ def mute_user(db: Session, user: User, target: User, duration: int = 0, hide_not
         return
     existing = db.query(UserMute).filter_by(user_id=user.id, target_user_id=target.id).first()
     if existing:
-        existing.duration = duration
-        existing.hide_notifications = hide_notifications
+        existing.duration = duration  # type: ignore[assignment]
+        existing.hide_notifications = hide_notifications  # type: ignore[assignment]
     else:
         db.add(UserMute(user_id=user.id, target_user_id=target.id, duration=duration, hide_notifications=hide_notifications))
     db.commit()
@@ -126,7 +126,7 @@ def block_user(db: Session, user: User, target: User):
             "object": target.remote_url,
         }
         try:
-            _post_to_inbox(target.shared_inbox_url or target.inbox_url, block_activity, user)
+            _post_to_inbox(str(target.shared_inbox_url or target.inbox_url), block_activity, user)
         except Exception as e:
             logger.error("Failed to send Block: %s", e, exc_info=True)
 
@@ -150,7 +150,7 @@ def unblock_user(db: Session, user: User, target: User):
             },
         }
         try:
-            _post_to_inbox(target.shared_inbox_url or target.inbox_url, undo_activity, user)
+            _post_to_inbox(str(target.shared_inbox_url or target.inbox_url), undo_activity, user)
         except Exception as e:
             logger.error("Failed to send Undo Block: %s", e, exc_info=True)
 

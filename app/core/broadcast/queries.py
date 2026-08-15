@@ -4,9 +4,9 @@ from app.models import Follow, Post, User
 
 
 def _load_follower_ids(session: Session, author_id: int) -> set[int]:
-    return {f.follower_id for f in session.query(Follow).filter_by(
+    return {int(f.follower_id) for f in session.query(Follow).filter_by(
         following_id=author_id, accepted=True
-    ).all()}  # type: ignore[misc]
+    ).all()}
 
 
 def _load_author_is_local(session: Session, author_id: int) -> bool:
@@ -28,7 +28,7 @@ def _load_stream_users(session: Session, streams: dict[int, dict]) -> tuple[set[
     stream_users: dict[int, User] = {}
     if all_stream_uids:
         for u in session.query(User).filter(User.id.in_(all_stream_uids)).all():
-            stream_users[u.id] = u  # type: ignore[index]
+            stream_users[int(u.id)] = u
 
     return home_uids, stream_users
 
@@ -40,7 +40,7 @@ def _load_home_follow_map(session: Session, home_uids: set[int]) -> dict[int, se
             Follow.follower_id.in_(home_uids),
             Follow.accepted == True
         ).all():
-            home_follows.setdefault(f.follower_id, set()).add(f.following_id)  # type: ignore[index]
+            home_follows.setdefault(int(f.follower_id), set()).add(int(f.following_id))
     return home_follows
 
 

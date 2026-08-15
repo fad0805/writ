@@ -91,11 +91,12 @@ def _add_boost_notif(db: Session, post: Post, user: User, post_id: int):
 
 def _notify_author(db: Session, post: Post, user: User, post_id: int, kind: str):
     """Push + sound notification for the post author about a like/boost."""
-    if post.author_id == user.id:
+    author_id = int(post.author_id)
+    if author_id == user.id:
         return
-    broadcast_refresh_notifs(post.author_id)
-    send_push_to_user(post.author_id, kind, user.username, post_id)
-    broadcast_notif_sound(post.author_id)
+    broadcast_refresh_notifs(author_id)
+    send_push_to_user(author_id, kind, str(user.username), post_id)
+    broadcast_notif_sound(author_id)
 
 
 def _dedupe_like(db: Session, user: User, post_id: int):
@@ -125,8 +126,8 @@ def _delete_like(db: Session, user: User, post: Post, match_reaction: str | None
         from_user_id=user.id, notification_type="like", post_id=post.id
     ).delete()
     db.commit()
-    broadcast_reaction_update(post.id, _get_reactions(db, post.id))
-    broadcast_refresh_notifs(post.author_id)
+    broadcast_reaction_update(int(post.id), _get_reactions(db, int(post.id)))
+    broadcast_refresh_notifs(int(post.author_id))
     return removed_reaction, removed_ap_id
 
 
@@ -157,8 +158,8 @@ def like_post(db: Session, user: User, post_id: int, reaction: str = "★"):
         like_id = f"{BASE_URL}/likes/{uuid.uuid4()}"
         like_rec = existing or db.query(Like).filter_by(user_id=user.id, post_id=post_id).first()
         if like_rec:
-            like_rec.ap_id = like_id
-            like_rec.reaction = reaction
+            like_rec.ap_id = like_id  # type: ignore[assignment]
+            like_rec.reaction = reaction  # type: ignore[assignment]
             db.commit()
         _react = reaction or "★"
         is_custom = _react != "★"
@@ -204,7 +205,7 @@ def boost_post(db: Session, user: User, post_id: int):
     if not post or not _can_view(post, user, db):
         return
     post = _resolve_boost_target(db, post)
-    post_id = post.id
+    post_id = int(post.id)
     if post.visibility == "mention" or (post.author_id != user.id and post.visibility == "followers"):
         return
 
@@ -227,9 +228,9 @@ def boost_post(db: Session, user: User, post_id: int):
         try:
             _boosts_count = db.query(Boost).filter_by(post_id=post_id).count()
             broadcast_post({
-                "id": post.id, "type": "update",
+                "id": int(post.id), "type": "update",
                 "boosts_count": _boosts_count,
-            }, post.author_id, post.visibility or "public")
+            }, int(post.author_id), str(post.visibility or "public"))
         except Exception as e:
             logger.error("Failed to broadcast boost update: %s", e, exc_info=True)
 
@@ -241,7 +242,7 @@ def boost_post(db: Session, user: User, post_id: int):
         if post.author.is_remote and author_inbox:
             boost_rec = db.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
             if boost_rec:
-                boost_rec.ap_id = announce_id
+                boost_rec.ap_id = announce_id  # type: ignore[assignment]
                 db.commit()
 
         announce = {
@@ -268,7 +269,7 @@ def unboost_post(db: Session, user: User, post_id: int):
     if not post:
         return
     post = _resolve_boost_target(db, post)
-    post_id = post.id
+    post_id = int(post.id)
 
     existing = db.query(Boost).filter_by(user_id=user.id, post_id=post_id).first()
     announce_id = existing.ap_id if existing and existing.ap_id else ""
@@ -288,13 +289,13 @@ def unboost_post(db: Session, user: User, post_id: int):
             except Exception as e:
                 logger.error("Failed to broadcast boost pointer delete: %s", e, exc_info=True)
         if post.author_id != user.id:
-            broadcast_refresh_notifs(post.author_id)
+            broadcast_refresh_notifs(int(post.author_id))
         try:
             broadcast_post({
                 "id": post_id, "type": "update",
                 "boosts_count": remaining,
                 "boosted_by": [],
-            }, post.author_id, post.visibility or "public")
+            }, int(post.author_id), str(post.visibility or "public"))
         except Exception as e:
             logger.error("Failed to broadcast unboost update: %s", e, exc_info=True)
 
@@ -342,13 +343,13 @@ def react_post(db: Session, user: User, post_id: int, emoji: str):
     is_new = existing is None
 
     if existing:
-        existing.reaction = emoji
+        existing.reaction = emoji  # type: ignore[assignment]
         existing_notif = db.query(Notification).filter_by(
             user_id=post_author_id, from_user_id=user.id, notification_type="like", post_id=post_id
         ).first() if post_author_id != user.id else None
         if existing_notif:
             _notif_meta = {"reaction": emoji} if emoji else {}
-            existing_notif.metadata_json = json.dumps(_notif_meta) if _notif_meta else ""
+            existing_notif.metadata_json = json.dumps(_notif_meta) if _notif_meta else ""  # type: ignore[assignment]
     else:
         try:
             db.add(Like(user_id=user.id, post_id=post_id, reaction=emoji))
@@ -370,7 +371,7 @@ def react_post(db: Session, user: User, post_id: int, emoji: str):
             if not _emoji_row:
                 _emoji_row = db.query(CustomEmoji).filter_by(keyword=_kw).first()
             if _emoji_row and _emoji_row.file_name:
-                _emoji_img = _emoji_url(_emoji_row.file_name, _emoji_row.domain or "", _emoji_row.category or "")
+                _emoji_img = _emoji_url(str(_emoji_row.file_name), str(_emoji_row.domain or ""), str(_emoji_row.category or ""))
                 if not _emoji_img.startswith("http"):
                     _emoji_img = f"{BASE_URL}{_emoji_img}"
                 if _emoji_img:
