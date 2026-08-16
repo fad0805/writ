@@ -18,15 +18,22 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
   const panStart = useRef({ x: 0, y: 0 });
   const panOrigin = useRef({ x: 0, y: 0 });
   const swipeStartX = useRef(0);
+  const zoomRef = useRef(1);
+  const panRef = useRef({ x: 0, y: 0 });
+  const imgRef = useRef<HTMLImageElement>(null);
   const onCloseRef = useRef(onClose);
   const onIndexChangeRef = useRef(onIndexChange);
   onCloseRef.current = onClose;
   onIndexChangeRef.current = onIndexChange;
+  zoomRef.current = zoom;
+  panRef.current = pan;
 
   useEffect(() => {
     if (index < 0) return;
     setZoom(1);
     setPan({ x: 0, y: 0 });
+    zoomRef.current = 1;
+    panRef.current = { x: 0, y: 0 };
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onCloseRef.current();
       else if (e.key === "ArrowLeft" && index > 0) onIndexChangeRef.current(index - 1);
@@ -36,12 +43,30 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
     return () => { window.removeEventListener("keydown", handler); };
   }, [index, media.length]);
 
+  const applyZoom = useCallback((target: number, focal: { x: number; y: number }) => {
+    const z2 = Math.min(5, Math.max(0.5, target));
+    const z1 = zoomRef.current;
+    if (z1 === z2) return;
+    const rect = imgRef.current?.getBoundingClientRect();
+    if (rect) {
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const k = z2 / z1;
+      panRef.current = {
+        x: k * panRef.current.x + (1 - k) * (focal.x - cx),
+        y: k * panRef.current.y + (1 - k) * (focal.y - cy),
+      };
+      setPan(panRef.current);
+    }
+    zoomRef.current = z2;
+    setZoom(z2);
+  }, []);
+
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const delta = e.deltaY > 0 ? -0.15 : 0.15;
-    setZoom((z) => Math.min(5, Math.max(0.5, z + delta)));
-  }, []);
+    applyZoom(zoomRef.current + (e.deltaY > 0 ? -0.15 : 0.15), { x: e.clientX, y: e.clientY });
+  }, [applyZoom]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 2) {
@@ -53,15 +78,17 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
         x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
         y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
       };
+      panStart.current = { ...lastTouchCenter.current };
+      panOrigin.current = { ...panRef.current };
       setIsPinching(true);
-    } else if (e.touches.length === 1 && zoom > 1) {
+    } else if (e.touches.length === 1 && zoomRef.current > 1) {
       setIsPanning(true);
       panStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      panOrigin.current = { ...pan };
+      panOrigin.current = { ...panRef.current };
     } else if (e.touches.length === 1) {
       swipeStartX.current = e.touches[0].clientX;
     }
-  }, [zoom, pan]);
+  }, []);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 2) {
@@ -69,21 +96,30 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       const dist = Math.hypot(dx, dy);
+      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      if (isPinching) {
+        panRef.current = {
+          x: panRef.current.x + (cx - lastTouchCenter.current.x),
+          y: panRef.current.y + (cy - lastTouchCenter.current.y),
+        };
+        setPan(panRef.current);
+      }
       if (lastTouchDist.current > 0) {
-        const scale = dist / lastTouchDist.current;
-        setZoom((z) => Math.min(5, Math.max(0.5, z * scale)));
+        applyZoom(zoomRef.current * (dist / lastTouchDist.current), { x: cx, y: cy });
       }
       lastTouchDist.current = dist;
+      lastTouchCenter.current = { x: cx, y: cy };
     } else if (e.touches.length === 1 && isPanning) {
       e.preventDefault();
       const dx = e.touches[0].clientX - panStart.current.x;
       const dy = e.touches[0].clientY - panStart.current.y;
       setPan({ x: panOrigin.current.x + dx, y: panOrigin.current.y + dy });
     }
-  }, []);
+  }, [isPinching, applyZoom]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (swipeStartX.current !== 0 && zoom <= 1) {
+    if (swipeStartX.current !== 0 && zoomRef.current <= 1) {
       const dx = e.changedTouches[0].clientX - swipeStartX.current;
       if (Math.abs(dx) > 60) {
         if (dx > 0 && index > 0) onIndexChange(index - 1);
@@ -92,16 +128,27 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
     }
     swipeStartX.current = 0;
     lastTouchDist.current = 0;
-    setIsPanning(false);
-    setIsPinching(false);
-  }, [zoom, index, media.length, onIndexChange]);
+    if (e.touches.length === 1 && zoomRef.current > 1) {
+      const t = e.touches[0];
+      setIsPanning(true);
+      panStart.current = { x: t.clientX, y: t.clientY };
+      panOrigin.current = { ...panRef.current };
+    } else {
+      setIsPanning(false);
+    }
+    if (e.touches.length < 2) setIsPinching(false);
+  }, [index, media.length, onIndexChange]);
 
-  const handleDblClick = useCallback(() => {
-    setZoom((z) => {
-      if (z > 1) { setPan({ x: 0, y: 0 }); return 1; }
-      return 2;
-    });
-  }, []);
+  const handleDblClick = useCallback((e: React.MouseEvent) => {
+    if (zoomRef.current > 1) {
+      setZoom(1);
+      zoomRef.current = 1;
+      setPan({ x: 0, y: 0 });
+      panRef.current = { x: 0, y: 0 };
+    } else {
+      applyZoom(2, { x: e.clientX, y: e.clientY });
+    }
+  }, [applyZoom]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (zoom > 1) {
@@ -147,7 +194,7 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
         {m.type === "video" ? (
           <video src={m.url} controls style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: 8 }} />
         ) : (
-          <img src={m.url} alt={m.alt || ""} draggable={false} onDoubleClick={handleDblClick} style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: zoom > 1 ? 0 : 8, objectFit: "contain", transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transition: isPanning || isPinching ? "none" : "transform 0.15s ease", userSelect: "none" }} />
+          <img ref={imgRef} src={m.url} alt={m.alt || ""} draggable={false} onDoubleClick={handleDblClick} style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: zoom > 1 ? 0 : 8, objectFit: "contain", transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transition: isPanning || isPinching ? "none" : "transform 0.15s ease", userSelect: "none" }} />
         )}
       </div>
     </div>
