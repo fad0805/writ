@@ -65,6 +65,25 @@ interface StreamPostData extends PostData {
   type?: "delete" | "update";
 }
 
+// 서버의 like/unlike가 별(★) 리액션으로 처리되므로, 좋아요 토글 시
+// liked/likes_count 뿐 아니라 reactions(my_reaction 포함)도 함께 반영한다.
+function applyLike(p: PostData, like: boolean): PostData {
+  const reactions = { ...(p.reactions || {}) };
+  const myReact = p.my_reaction;
+  if (like) {
+    if (myReact && myReact !== "★") {
+      if ((reactions[myReact] || 0) <= 1) delete reactions[myReact];
+      else reactions[myReact] -= 1;
+    }
+    reactions["★"] = (reactions["★"] || 0) + 1;
+    return { ...p, liked: true, my_reaction: "★", reactions, likes_count: Math.max(0, (p.likes_count || 0) + 1) };
+  }
+  const emoji = myReact || "★";
+  if ((reactions[emoji] || 0) <= 1) delete reactions[emoji];
+  else reactions[emoji] -= 1;
+  return { ...p, liked: false, my_reaction: null, reactions, likes_count: Math.max(0, (p.likes_count || 0) - 1) };
+}
+
 export default function TimelinePage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -405,9 +424,9 @@ export default function TimelinePage() {
         if (e.key === "f") {
           e.preventDefault();
           const next = !sp.liked;
-          setPosts((prev) => prev.map((p) => p.id === sp.id ? { ...p, liked: next, likes_count: Math.max(0, (p.likes_count || 0) + (next ? 1 : -1)) } : p));
+          setPosts((prev) => prev.map((p) => p.id === sp.id ? applyLike(p, next) : p));
           (next ? api.like(targetId) : api.unlike(targetId)).catch(() => {
-            setPosts((prev) => prev.map((p) => p.id === sp.id ? { ...p, liked: !next, likes_count: Math.max(0, (p.likes_count || 0) + (next ? -1 : 1)) } : p));
+            setPosts((prev) => prev.map((p) => p.id === sp.id ? applyLike(p, !next) : p));
           });
           return;
         }
