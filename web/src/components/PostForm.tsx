@@ -149,6 +149,10 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   const [quoteUrl, setQuoteUrl] = useState(shareUrl || "");
   const [quotePost, setQuotePost] = useState<PostData | null>(null);
 
+  const resetForm = useCallback(() => {
+    setContent(""); setSummary(""); setPostSensitive(false); revokeMediaPreviews(mediaItems); setMediaItems([]); setShowPoll(false); setPollOptions(["", ""]); setPollExpiresIn(1440); setLinkPreview(null); setQuoteUrl(""); setQuotePost(null);
+  }, [mediaItems, revokeMediaPreviews]);
+
   useEffect(() => {
     if (shareUrl && !quotePost) {
       const base = typeof window !== "undefined" ? window.location.origin : "";
@@ -224,6 +228,15 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     }, 500);
     return () => clearTimeout(t);
   }, [content, summary, postSensitive, draftKey]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const key = (e as CustomEvent).detail?.key;
+      if (key === draftKey) resetForm();
+    };
+    window.addEventListener("writ:draft-cleared", handler);
+    return () => window.removeEventListener("writ:draft-cleared", handler);
+  }, [draftKey, resetForm]);
 
   useEffect(() => {
     const urlRegex = /https?:\/\/[^\s<>"')\]]+/i;
@@ -427,8 +440,9 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
         if (urlMatch) shareUrlFinal = urlMatch[0].replace(/[.,;:!?)]+$/, "");
       }
       const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrlFinal, media_attachments: JSON.stringify(uploaded), is_sensitive: postSensitive, poll_options: opts.length >= 2 ? JSON.stringify(opts) : "", poll_expires_in: pollExpiresIn, link_preview: linkPreview ? JSON.stringify(linkPreview) : "" });
-      setContent(""); setSummary(""); setPostSensitive(false); revokeMediaPreviews(mediaItems); setMediaItems([]); setShowPoll(false); setPollOptions(["", ""]); setPollExpiresIn(1440); setLinkPreview(null); setQuoteUrl(""); setQuotePost(null);
+      resetForm();
       if (typeof localStorage !== "undefined") localStorage.removeItem(draftKey);
+      window.dispatchEvent(new CustomEvent("writ:draft-cleared", { detail: { key: draftKey } }));
       if (onDone) onDone(result);
       else router.refresh();
     } catch (err: unknown) { alert(err instanceof Error ? err.message : "오류가 발생했습니다"); }
