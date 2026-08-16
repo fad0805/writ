@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { isStaff } from "@/lib/permissions";
 import Icon from "@/components/Icon";
 import AdminNav from "@/components/AdminNav";
 import { sanitizePost } from "@/lib/sanitize";
@@ -33,7 +34,7 @@ export default function AdminReportsPage() {
   const [actionMsg, setActionMsg] = useState("");
 
   useEffect(() => {
-    if (!authLoading && user?.role !== "admin" && user?.role !== "moderator" && user?.role !== "owner") {
+    if (!authLoading && !isStaff(user)) {
       router.push("/timeline/home");
     }
   }, [user, authLoading, router]);
@@ -68,14 +69,14 @@ export default function AdminReportsPage() {
   };
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
-  if (!user || (user.role !== "admin" && user.role !== "moderator" && user.role !== "owner")) return null;
+  if (!user || !isStaff(user)) return null;
 
   return (
     <>
       <div className="page-header">
         <h2><Icon name="settings" /> 서버 관리</h2>
       </div>
-      <AdminNav current="reports" />
+      <AdminNav current="reports" user={user} />
       <div style={{ marginBottom: 16, display: "flex", gap: 8 }}>
         {["pending", "resolved", "dismissed"].map((s) => (
           <button key={s} className={`btn btn-small ${filterStatus === s ? "btn-primary" : "btn-outline"}`} onClick={() => setFilterStatus(s)}>

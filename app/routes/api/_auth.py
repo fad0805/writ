@@ -35,6 +35,7 @@ from app.core.auth import (
     hash_password,
     verify_password,
 )
+from app.core.permissions import get_user_permissions
 from app.db.database import get_db, get_session
 from app.models import BlockedDomain, LoginSession, Notification, ServerSetting, User
 from app.serializers import _user_json
@@ -165,6 +166,7 @@ def api_me(request: Request, s: Session = Depends(get_db)):
     if not user:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
     result = _user_json(user)
+    result["permissions"] = get_user_permissions(user)
     _settings = ServerSetting.get(s)
     if _settings.enable_reactions is False:
         result["enable_reactions"] = False

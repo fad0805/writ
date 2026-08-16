@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { isStaff } from "@/lib/permissions";
 import Icon from "@/components/Icon";
 import AdminNav from "@/components/AdminNav";
 import { CustomEmoji, invalidateEmojiCache } from "@/lib/emojis";
@@ -46,7 +47,7 @@ export default function AdminEmojiPage() {
   };
 
   useEffect(() => {
-    if (!authLoading && user?.role !== "admin" && user?.role !== "moderator" && user?.role !== "owner") {
+    if (!authLoading && !isStaff(user)) {
       router.push("/timeline/home");
     }
   }, [user, authLoading, router]);
@@ -68,14 +69,14 @@ export default function AdminEmojiPage() {
   }, []);
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
-  if (!user || (user.role !== "admin" && user.role !== "moderator" && user.role !== "owner")) return null;
+  if (!user || !isStaff(user)) return null;
 
   return (
     <>
       <div className="page-header">
         <h2><Icon name="settings" /> 서버 관리</h2>
       </div>
-      <AdminNav current="emojis" />
+      <AdminNav current="emojis" user={user} />
 
       <div className="hm-bottom-28">
         <h3 className="hm-bottom-16 section-toggle" onClick={() => setShowUpload(!showUpload)}>

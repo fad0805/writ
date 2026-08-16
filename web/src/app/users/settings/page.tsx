@@ -7,6 +7,7 @@ import Avatar from "@/components/Avatar";
 import VisibilitySelector from "@/components/VisibilitySelector";
 import SettingsNav from "@/components/SettingsNav";
 import { useAuth } from "@/lib/auth";
+import { isStaff } from "@/lib/permissions";
 import { isPushSupported, getPermissionState, subscribePush, unsubscribePush, isSubscribed } from "@/lib/push";
 import { isNotifSoundEnabled, setNotifSoundEnabled } from "@/components/NotifSound";
 
@@ -153,7 +154,7 @@ export default function SettingsPage() {
           </div>
           <p className="form-help">비공개로 설정하면 다른 사용자가 회원님의 팔로워/팔로잉 목록을 볼 수 없으며 숫자가 0으로 표시됩니다.</p>
         </div>
-        {(user?.role === "admin" || user?.role === "moderator" || user?.role === "owner") && (
+        {(isStaff(user)) && (
           <div className="form-group">
             <label>
               <input type="checkbox" checked={showBadge} onChange={(e) => setShowBadge(e.target.checked)} />

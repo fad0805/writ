@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { isStaff } from "@/lib/permissions";
 import Icon from "@/components/Icon";
 import AdminNav from "@/components/AdminNav";
 import { sanitizePost } from "@/lib/sanitize";
@@ -73,7 +74,7 @@ export default function ReportDetailPage() {
   };
 
   useEffect(() => {
-    if (!authLoading && user?.role !== "admin" && user?.role !== "moderator" && user?.role !== "owner") {
+    if (!authLoading && !isStaff(user)) {
       router.push("/timeline/home");
     }
   }, [user, authLoading, router]);
@@ -133,7 +134,7 @@ export default function ReportDetailPage() {
   };
 
   if (authLoading || loading) return <div className="empty-state">로딩 중...</div>;
-  if (!user || (user.role !== "admin" && user.role !== "moderator" && user.role !== "owner")) return null;
+  if (!user || !isStaff(user)) return null;
   if (!report) return <div className="empty-state">신고를 찾을 수 없습니다.</div>;
 
   const target = report.target;
@@ -149,7 +150,7 @@ export default function ReportDetailPage() {
         <h2><Icon name="settings" /> 서버 관리</h2>
         <Link href="/admin/reports" className="btn btn-small btn-outline">목록</Link>
       </div>
-      <AdminNav current="reports" />
+      <AdminNav current="reports" user={user} />
 
       {msg && <p style={{ color: "var(--text-secondary)", marginBottom: 12, fontSize: 14 }}>{msg}</p>}
 

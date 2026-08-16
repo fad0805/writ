@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
+import { isStaff } from "@/lib/permissions";
 import { useRouter, usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import Icon from "./Icon";
@@ -155,7 +156,7 @@ export default function MobileNav() {
             <Link href="/users/settings" className="mobile-more-item">
               <Icon name="settings" /> <span>설정 관리</span>
             </Link>
-            {(user.role === "admin" || user.role === "moderator" || user.role === "owner") && (
+            {isStaff(user) && (
               <Link href="/admin" className="mobile-more-item">
                 <Icon name="shield" /> <span>서버 관리</span>
               </Link>

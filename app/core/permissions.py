@@ -105,6 +105,13 @@ def is_staff(user) -> bool:
     return bool(get_role_permissions(user.role or "user"))
 
 
+def get_user_permissions(user) -> list[str]:
+    """Sorted permission list for a user (owner = every permission)."""
+    if getattr(user, "role", "user") == "owner":
+        return sorted(PERMISSION_CATALOG.keys())
+    return sorted(get_role_permissions(user.role or "user"))
+
+
 def require_permission(request: Request, permission: str):
     user = require_auth(request)
     if not has_permission(user, permission):

@@ -8,6 +8,7 @@ import SharePostModal from "@/components/SharePostModal";
 import Link from "next/link";
 import { hashColor } from "@/lib/avatar";
 import { useAuth } from "@/lib/auth";
+import { can, PERMS } from "@/lib/permissions";
 
 const STATUS_LABELS: Record<string, string> = { ongoing: "연재중", hiatus: "휴재", discontinued: "연재중단", completed: "완결" };
 const STATUS_ICONS: Record<string, string> = { ongoing: "edit", hiatus: "moon", discontinued: "x", completed: "check" };
@@ -186,7 +187,7 @@ export default function NovelDetailPage() {
               <span className="pinned-notice-icon"><Icon name="pin_filled" /></span>
               <span className="pinned-notice-title">{n.title}</span>
               <span className="pinned-notice-date">{n.created_at ? new Date(n.created_at).toISOString().slice(0, 10) : ""}</span>
-              {(user?.role === "admin" || user?.role === "moderator" || user?.role === "owner") && (
+              {(can(user, PERMS.contentManage)) && (
                 <button className="action-btn text-muted" onClick={async (ev) => {
                   ev.stopPropagation();
                   if (!confirm(`공지 "${n.title}"를 삭제하시겠습니까?`)) return;
@@ -215,12 +216,12 @@ export default function NovelDetailPage() {
                 <span>{e.created_at ? new Date(e.created_at).toISOString().slice(0, 10) : ""}</span>
               </div>
             </div>
-            {(isMine || user?.role === "admin" || user?.role === "moderator" || user?.role === "owner") && (
+            {(isMine || can(user, PERMS.contentManage)) && (
               <div className="episode-actions-row">
                 {isMine && <button className="action-btn" onClick={(ev) => { ev.stopPropagation(); router.push(`/series/${novel.id}/episodes/${e.id}/edit`); }}>
                   <Icon name="edit" />
                 </button>}
-                {(isMine || user?.role === "admin" || user?.role === "moderator" || user?.role === "owner") && <button className="action-btn text-muted" onClick={async (ev) => {
+                {(isMine || can(user, PERMS.contentManage)) && <button className="action-btn text-muted" onClick={async (ev) => {
                   ev.stopPropagation();
                   if (!confirm("정말 삭제하시겠습니까?")) return;
                   try { await fetch(`/api/series/${novel.id}/episodes/${e.id}/delete`, { method: "POST", credentials: "include" }); window.location.reload(); } catch {}

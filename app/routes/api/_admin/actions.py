@@ -15,7 +15,7 @@ from app.core.auth import hash_password
 from app.core.permissions import require_permission
 from app.core.timeline_stream import broadcast_refresh_notifs
 from app.db.database import get_session
-from app.models import Notification, Post, User
+from app.models import Notification, Post, Role, User
 from app.utils.log import log_admin_action
 
 logger = logging.getLogger(__name__)
@@ -73,7 +73,10 @@ def api_admin_change_email(request: Request, user_id: int, email: str = Form(...
 def api_admin_change_role(request: Request, user_id: int, role: str = Form("user")):
     user = require_permission(request, "users.admin")
     if role not in ("user", "moderator", "admin", "owner"):
-        raise HTTPException(status_code=400, detail="Invalid role")
+        with get_session() as s:
+            exists = s.query(Role).filter_by(name=role).first()
+        if not exists:
+            raise HTTPException(status_code=400, detail="Invalid role")
     with get_session() as s:
         u = s.query(User).get(user_id)
         if not u:

@@ -1,26 +1,44 @@
 "use client";
 import Link from "next/link";
-import Icon from "./Icon";
+import { can, PERMS, PermUser } from "@/lib/permissions";
 
-export default function AdminNav({ current }: { current: "dashboard" | "reports" | "users" | "emojis" | "settings" | "federation" | "moderation-log" | "blocked-domains" | "rules" | "content" | "announcements" | "roles" }) {
+type CurrentKey = "dashboard" | "reports" | "users" | "emojis" | "settings" | "federation" | "moderation-log" | "blocked-domains" | "rules" | "content" | "announcements" | "roles";
+
+type Tab = { key: CurrentKey; href: string; label: string; perm: string };
+
+const MOD_TABS: Tab[] = [
+  { key: "users", href: "/admin/users", label: "유저 관리", perm: PERMS.usersManage },
+  { key: "reports", href: "/admin/reports", label: "신고 관리", perm: PERMS.reportsManage },
+  { key: "federation", href: "/admin/federation", label: "연합", perm: PERMS.federationManage },
+  { key: "blocked-domains", href: "/admin/blocked-domains", label: "도메인 차단", perm: PERMS.domainsManage },
+  { key: "rules", href: "/admin/rules", label: "규칙", perm: PERMS.rulesManage },
+  { key: "moderation-log", href: "/admin/moderation-log", label: "중재 기록", perm: PERMS.logView },
+  { key: "content", href: "/admin/content", label: "콘텐츠 관리", perm: PERMS.contentManage },
+  { key: "announcements", href: "/admin/announcements", label: "공지사항", perm: PERMS.announcementsManage },
+  { key: "roles", href: "/admin/roles", label: "역할", perm: PERMS.rolesManage },
+];
+
+const ADMIN_TABS: Tab[] = [
+  { key: "settings", href: "/admin/settings", label: "서버 정보", perm: PERMS.settingsManage },
+  { key: "emojis", href: "/admin/emojis", label: "커스텀 이모지", perm: PERMS.emojisManage },
+];
+
+export default function AdminNav({ current, user }: { current: CurrentKey; user?: PermUser | null }) {
+  const modTabs = MOD_TABS.filter(t => can(user, t.perm));
+  const adminTabs = ADMIN_TABS.filter(t => can(user, t.perm));
   return (
     <>
       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", marginBottom: 6 }}>중재</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
-        <Link href="/admin/users" className={`btn btn-small ${current === "users" ? "btn-primary" : "btn-outline"}`}>유저 관리</Link>
-        <Link href="/admin/reports" className={`btn btn-small ${current === "reports" ? "btn-primary" : "btn-outline"}`}>신고 관리</Link>
-        <Link href="/admin/federation" className={`btn btn-small ${current === "federation" ? "btn-primary" : "btn-outline"}`}>연합</Link>
-        <Link href="/admin/blocked-domains" className={`btn btn-small ${current === "blocked-domains" ? "btn-primary" : "btn-outline"}`}>도메인 차단</Link>
-        <Link href="/admin/rules" className={`btn btn-small ${current === "rules" ? "btn-primary" : "btn-outline"}`}>규칙</Link>
-        <Link href="/admin/moderation-log" className={`btn btn-small ${current === "moderation-log" ? "btn-primary" : "btn-outline"}`}>중재 기록</Link>
-        <Link href="/admin/content" className={`btn btn-small ${current === "content" ? "btn-primary" : "btn-outline"}`}>콘텐츠 관리</Link>
-        <Link href="/admin/announcements" className={`btn btn-small ${current === "announcements" ? "btn-primary" : "btn-outline"}`}>공지사항</Link>
+        {modTabs.map(t => (
+          <Link key={t.key} href={t.href} className={`btn btn-small ${current === t.key ? "btn-primary" : "btn-outline"}`}>{t.label}</Link>
+        ))}
       </div>
       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", marginBottom: 6 }}>관리</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
-        <Link href="/admin/settings" className={`btn btn-small ${current === "settings" ? "btn-primary" : "btn-outline"}`}>서버 정보</Link>
-        <Link href="/admin/emojis" className={`btn btn-small ${current === "emojis" ? "btn-primary" : "btn-outline"}`}>커스텀 이모지</Link>
-        <Link href="/admin/roles" className={`btn btn-small ${current === "roles" ? "btn-primary" : "btn-outline"}`}>역할</Link>
+        {adminTabs.map(t => (
+          <Link key={t.key} href={t.href} className={`btn btn-small ${current === t.key ? "btn-primary" : "btn-outline"}`}>{t.label}</Link>
+        ))}
       </div>
     </>
   );

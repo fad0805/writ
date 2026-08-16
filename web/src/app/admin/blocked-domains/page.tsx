@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { isStaff } from "@/lib/permissions";
 import Icon from "@/components/Icon";
 import AdminNav from "@/components/AdminNav";
 
@@ -21,7 +22,7 @@ export default function AdminBlockedDomainsPage() {
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
-    if (!authLoading && user?.role !== "admin" && user?.role !== "moderator" && user?.role !== "owner") {
+    if (!authLoading && !isStaff(user)) {
       router.push("/timeline/home");
     }
   }, [user, authLoading, router]);
@@ -67,12 +68,12 @@ export default function AdminBlockedDomainsPage() {
   };
 
   if (authLoading || loading) return <div className="empty-state">로딩 중...</div>;
-  if (!user || (user.role !== "admin" && user.role !== "moderator" && user.role !== "owner")) return null;
+  if (!user || !isStaff(user)) return null;
 
   return (
     <>
       <div className="page-header"><h2><Icon name="settings" /> 서버 관리</h2></div>
-      <AdminNav current="blocked-domains" />
+      <AdminNav current="blocked-domains" user={user} />
       {msg && <p style={{ marginBottom: 12, color: "var(--accent)", fontWeight: 600 }}>{msg}</p>}
 
       <form onSubmit={handleAdd} className="novel-form" style={{ marginBottom: 20 }}>

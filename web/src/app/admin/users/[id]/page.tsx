@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { isStaff, can, PERMS } from "@/lib/permissions";
 import Icon from "@/components/Icon";
 import AdminNav from "@/components/AdminNav";
 import { getCustomEmojis, renderCustomEmojis, CustomEmoji } from "@/lib/emojis";
@@ -50,6 +51,7 @@ export default function AdminUserDetailPage() {
   const [newEmail, setNewEmail] = useState("");
   const [showChangeRole, setShowChangeRole] = useState(false);
   const [newRole, setNewRole] = useState("user");
+  const [roles, setRoles] = useState<{ name: string; label: string }[]>([]);
   const [msg, setMsg] = useState("");
   const [resetPwResult, setResetPwResult] = useState("");
   const [noteText, setNoteText] = useState("");
@@ -58,6 +60,16 @@ export default function AdminUserDetailPage() {
   const [modMessage, setModMessage] = useState("");
   const [modEmail, setModEmail] = useState(false);
   const [logs, setLogs] = useState<ModLog[]>([]);
+
+  const fetchRoles = async () => {
+    try {
+      const res = await fetch("/api/admin/roles", { credentials: "include" });
+      if (res.ok) {
+        const d = await res.json();
+        setRoles(d.roles || []);
+      }
+    } catch {}
+  };
 
   const load = async () => {
     const [userRes, logsRes] = await Promise.all([
@@ -74,11 +86,12 @@ export default function AdminUserDetailPage() {
       const d = await logsRes.json();
       setLogs(d.logs || []);
     }
+    fetchRoles();
     setLoading(false);
   };
 
   useEffect(() => {
-    if (!authLoading && me?.role !== "admin" && me?.role !== "moderator" && me?.role !== "owner")
+    if (!authLoading && !isStaff(me))
       router.push("/timeline/home");
   }, [me, authLoading, router]);
 
@@ -102,6 +115,7 @@ export default function AdminUserDetailPage() {
           const d = await logsRes.json();
           if (!cancelled) setLogs(d.logs || []);
         }
+        if (!cancelled) fetchRoles();
         if (!cancelled) setLoading(false);
       })();
       return () => { cancelled = true; };
@@ -118,13 +132,23 @@ export default function AdminUserDetailPage() {
     load();
   };
 
+  const roleLabel = (roleName: string) => {
+    const r = roles.find(x => x.name === roleName);
+    if (r) return r.label;
+    if (roleName === "owner") return "오너";
+    if (roleName === "admin") return "관리자";
+    if (roleName === "moderator") return "조율자";
+    return "유저";
+  };
+  const customRoles = roles.filter(r => !["owner", "admin", "moderator", "user"].includes(r.name));
+
   if (authLoading || loading) return <div className="empty-state">로딩 중...</div>;
   if (!u) return <div className="empty-state">사용자를 찾을 수 없습니다.</div>;
 
   return (
     <>
       <div className="page-header"><h2><Icon name="settings" /> 서버 관리</h2></div>
-      <AdminNav current="users" />
+      <AdminNav current="users" user={me} />
 
       {msg && <div className="empty-state" style={{ background: "var(--accent)", color: "#fff", padding: "10px 16px", borderRadius: 8, marginBottom: 12 }}>{msg}</div>}
 
@@ -163,7 +187,7 @@ export default function AdminUserDetailPage() {
           { label: "팔로잉", value: u.following_count, icon: "user" },
           { label: "시리즈", value: u.novels_count, icon: "book" },
           { label: "상태", value: u.is_deceased ? "고인" : u.is_suspended ? "정지" : u.is_frozen ? "동결" : u.is_limited ? "제한" : "활성", icon: u.is_deceased ? "block" : u.is_suspended ? "block" : u.is_frozen ? "block" : u.is_limited ? "block" : "check" },
-          { label: "역할", value: u.role === "owner" ? "오너" : u.role === "admin" ? "관리자" : u.role === "moderator" ? "조율자" : "유저", icon: "shield" },
+          { label: "역할", value: roleLabel(u.role), icon: "shield" },
         ].map((c, i) => (
           <div key={i} className="admin-counter-card">
             <Icon name={c.icon} size={20} />
@@ -213,9 +237,9 @@ export default function AdminUserDetailPage() {
             </tr>
             <tr>
               <td className="label">역할</td>
-              <td className="value">{u.role === "owner" ? "오너" : u.role === "admin" ? "관리자" : u.role === "moderator" ? "조율자" : "유저"}</td>
+              <td className="value">{roleLabel(u.role)}</td>
               <td className="action">
-                {(me?.role === "admin" || me?.role === "owner") && <button onClick={() => setShowChangeRole(!showChangeRole)} className="btn btn-small btn-outline text-xs admin-action-btn-eq">변경</button>}
+                {(can(me, PERMS.usersAdmin)) && <button onClick={() => { setNewRole(u.role); setShowChangeRole(!showChangeRole); }} className="btn btn-small btn-outline text-xs admin-action-btn-eq">변경</button>}
               </td>
             </tr>
             {showChangeRole && (
@@ -224,6 +248,9 @@ export default function AdminUserDetailPage() {
                   <div className="flex-row gap-8">
                     <select value={newRole} onChange={e => setNewRole(e.target.value)} className="cw-input">
                       <option value="user">유저</option><option value="moderator">조율자</option><option value="admin">관리자</option><option value="owner">오너</option>
+                      {customRoles.map(r => (
+                        <option key={r.name} value={r.name}>{r.label}</option>
+                      ))}
                     </select>
                     <button onClick={() => { act(`/api/admin/users/${u.id}/change-role`, { role: newRole }); setShowChangeRole(false); }} className="btn btn-primary btn-small">저장</button>
                   </div>

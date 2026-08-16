@@ -126,6 +126,7 @@ export interface User {
   email?: string;
   email_verified?: boolean;
   role?: string;
+  permissions?: string[];
   default_visibility?: string;
   episode_default_visibility?: string;
   display_handle?: string;

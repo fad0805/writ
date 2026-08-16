@@ -3,6 +3,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api, NoticeData, NovelData } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { can, PERMS } from "@/lib/permissions";
 import Icon from "@/components/Icon";
 import Link from "next/link";
 import { sanitizePost } from "@/lib/sanitize";
@@ -49,7 +50,7 @@ export default function NoticeDetailPage() {
           {notice.created_at ? new Date(notice.created_at).toISOString().slice(0, 10) : ""}
         </p>
         <div className="notice-content" dangerouslySetInnerHTML={{ __html: sanitizePost(notice.content) }}></div>
-        {(isMine || user?.role === "admin" || user?.role === "moderator" || user?.role === "owner") && (
+        {(isMine || can(user, PERMS.contentManage)) && (
           <div className="form-actions" style={{ marginTop: 24 }}>
             {isMine && <Link href={`/series/${novelId}/notices/${noticeId}/edit`} className="btn">편집</Link>}
             <button type="button" onClick={async () => {

@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
+import { isStaff } from "@/lib/permissions";
 import { useRouter, usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import Icon from "./Icon";
@@ -316,7 +317,7 @@ export default function Sidebar() {
         <NavItem href="/users/settings" active={isActive("/users/settings")}>
           <Icon name="settings_solid" /> 설정 관리
         </NavItem>
-        {(user.role === "admin" || user.role === "moderator" || user.role === "owner") && (
+        {isStaff(user) && (
           <NavItem href="/admin" active={isActive("/admin")}>
             <Icon name="settings" /> 서버 관리
           </NavItem>

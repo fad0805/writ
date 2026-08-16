@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { isStaff } from "@/lib/permissions";
 import Icon from "@/components/Icon";
 import AdminNav from "@/components/AdminNav";
 
@@ -26,7 +27,7 @@ export default function AdminContentPage() {
   const [searchMode, setSearchMode] = useState<"series" | "episode">("series");
 
   useEffect(() => {
-    if (!authLoading && user?.role !== "admin" && user?.role !== "moderator" && user?.role !== "owner") {
+    if (!authLoading && !isStaff(user)) {
       router.push("/timeline/home");
     }
   }, [user, authLoading, router]);
@@ -83,14 +84,14 @@ export default function AdminContentPage() {
   };
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
-  if (!user || (user.role !== "admin" && user.role !== "moderator" && user.role !== "owner")) return null;
+  if (!user || !isStaff(user)) return null;
 
   return (
     <>
       <div className="page-header">
         <h2><Icon name="book" /> 서버 관리</h2>
       </div>
-      <AdminNav current="content" />
+      <AdminNav current="content" user={user} />
 
       <div className="form-group">
         <label>시리즈 / 에피소드 검색</label>

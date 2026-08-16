@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { api, NoticeData, NovelData } from "@/lib/api";
 import Icon from "@/components/Icon";
 import { useAuth } from "@/lib/auth";
+import { can, PERMS } from "@/lib/permissions";
 import Link from "next/link";
 
 export default function NoticesPage() {
@@ -71,7 +72,7 @@ export default function NoticesPage() {
             </span>
             <span className="notice-date">{n.created_at ? new Date(n.created_at).toISOString().slice(0, 10) : ""}</span>
           </div>
-          {(isMine || user?.role === "admin" || user?.role === "moderator" || user?.role === "owner") && (
+          {(isMine || can(user, PERMS.contentManage)) && (
             <div className="notice-actions">
               {isMine && <button className="action-btn" onClick={() => togglePin(n)} title={n.is_pinned ? "고정 해제" : "고정 (최대 3개)"} style={{ color: n.is_pinned ? "var(--danger)" : undefined }}>
                 <Icon name={n.is_pinned ? "pin_filled" : "pin"} />

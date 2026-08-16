@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { isStaff, can, PERMS } from "@/lib/permissions";
 import Icon from "@/components/Icon";
 import AdminNav from "@/components/AdminNav";
 import Link from "next/link";
@@ -107,7 +108,7 @@ export default function RemoteServerDetailPage() {
   };
 
   useEffect(() => {
-    if (!authLoading && user?.role !== "admin" && user?.role !== "moderator" && user?.role !== "owner") {
+    if (!authLoading && !isStaff(user)) {
       router.push("/timeline/home");
     }
   }, [user, authLoading, router]);
@@ -170,18 +171,18 @@ export default function RemoteServerDetailPage() {
     }
   };
 
-  const isMod = user?.role === "moderator";
-  const isAdmin = user?.role === "admin" || user?.role === "owner";
+  const isMod = can(user, PERMS.federationManage);
+  const isAdmin = can(user, PERMS.federationMode);
 
   if (authLoading || loading) return <div className="empty-state">로딩 중...</div>;
-  if (!user || (user.role !== "admin" && user.role !== "moderator" && user.role !== "owner")) return null;
-  if (error) return <><div className="page-header"><h2><Icon name="settings" /> 서버 관리</h2></div><AdminNav current="federation" /><div className="empty-state">{error}</div></>;
+  if (!user || !isStaff(user)) return null;
+  if (error) return <><div className="page-header"><h2><Icon name="settings" /> 서버 관리</h2></div><AdminNav current="federation" user={user} /><div className="empty-state">{error}</div></>;
   if (!server) return null;
 
   return (
     <>
       <div className="page-header"><h2><Icon name="settings" /> 서버 관리</h2></div>
-      <AdminNav current="federation" />
+      <AdminNav current="federation" user={user} />
 
       <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 20 }}>
         <img

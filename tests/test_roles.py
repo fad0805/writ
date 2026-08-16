@@ -78,3 +78,94 @@ def test_owner_bypasses_permission_checks(client, auth_cookie):
     assert r.status_code == 200
     assert client.get("/api/admin/reports", cookies=owner_cookie).status_code == 200
     assert client.get("/api/admin/roles", cookies=owner_cookie).status_code == 200
+
+
+def test_create_role(client, auth_cookie):
+    _, cookie = auth_cookie("boss", role="admin")
+    r = client.post("/api/admin/roles", json={"name": "helper", "label": "도우미", "permissions": ["reports.manage"]}, cookies=cookie)
+    assert r.status_code == 200
+    assert r.json()["role"]["name"] == "helper"
+    assert r.json()["role"]["permissions"] == ["reports.manage"]
+    names = {role["name"] for role in client.get("/api/admin/roles", cookies=cookie).json()["roles"]}
+    assert "helper" in names
+
+
+def test_create_role_rejects_duplicate_and_builtin(client, auth_cookie):
+    _, cookie = auth_cookie("boss", role="admin")
+    assert client.post("/api/admin/roles", json={"name": "moderator", "label": "중복"}, cookies=cookie).status_code == 400
+    client.post("/api/admin/roles", json={"name": "helper", "label": "도우미"}, cookies=cookie)
+    assert client.post("/api/admin/roles", json={"name": "helper", "label": "도우미2"}, cookies=cookie).status_code == 400
+
+
+def test_create_role_rejects_bad_name(client, auth_cookie):
+    _, cookie = auth_cookie("boss", role="admin")
+    for bad in ["", "1abc", "has space", "ab!c", "a" * 16]:
+        assert client.post("/api/admin/roles", json={"name": bad, "label": "x"}, cookies=cookie).status_code == 400
+    assert client.post("/api/admin/roles", json={"name": "ok_role", "label": ""}, cookies=cookie).status_code == 400
+
+
+def test_create_role_normalizes_lowercase(client, auth_cookie):
+    _, cookie = auth_cookie("boss", role="admin")
+    r = client.post("/api/admin/roles", json={"name": "Helper", "label": "도우미"}, cookies=cookie)
+    assert r.status_code == 200
+    assert r.json()["role"]["name"] == "helper"
+
+
+def test_delete_role(client, auth_cookie):
+    _, cookie = auth_cookie("boss", role="admin")
+    client.post("/api/admin/roles", json={"name": "helper", "label": "도우미"}, cookies=cookie)
+    r = client.delete("/api/admin/roles/helper", cookies=cookie)
+    assert r.status_code == 200
+    names = {role["name"] for role in client.get("/api/admin/roles", cookies=cookie).json()["roles"]}
+    assert "helper" not in names
+
+
+def test_delete_builtin_role_rejected(client, auth_cookie):
+    _, cookie = auth_cookie("boss", role="admin")
+    for name in ("owner", "admin", "moderator", "user"):
+        assert client.delete(f"/api/admin/roles/{name}", cookies=cookie).status_code == 400
+
+
+def test_delete_role_in_use_rejected(client, auth_cookie, make_user):
+    _, cookie = auth_cookie("boss", role="admin")
+    client.post("/api/admin/roles", json={"name": "helper", "label": "도우미"}, cookies=cookie)
+    target = make_user("alice")
+    r = client.post(f"/api/admin/users/{target.id}/change-role", data={"role": "helper"}, cookies=cookie)
+    assert r.status_code == 200
+    r = client.delete("/api/admin/roles/helper", cookies=cookie)
+    assert r.status_code == 400
+    names = {role["name"] for role in client.get("/api/admin/roles", cookies=cookie).json()["roles"]}
+    assert "helper" in names
+
+
+def test_custom_role_assignable_via_change_role(client, auth_cookie):
+    _, cookie = auth_cookie("boss", role="admin")
+    client.post("/api/admin/roles", json={"name": "helper", "label": "도우미", "permissions": ["reports.manage"]}, cookies=cookie)
+    mod, mod_cookie = auth_cookie("alice")
+    r = client.post(f"/api/admin/users/{mod.id}/change-role", data={"role": "helper"}, cookies=cookie)
+    assert r.status_code == 200
+    assert client.get("/api/admin/reports", cookies=mod_cookie).status_code == 200
+
+
+def test_me_returns_permissions(client, auth_cookie):
+    _, cookie = auth_cookie("boss", role="admin")
+    d = client.get("/api/auth/me", cookies=cookie).json()
+    assert "permissions" in d
+    assert "reports.manage" in d["permissions"]
+
+
+def test_me_permissions_follow_custom_role(client, auth_cookie):
+    _, cookie = auth_cookie("boss", role="admin")
+    client.post("/api/admin/roles", json={"name": "helper", "label": "도우미", "permissions": ["reports.manage"]}, cookies=cookie)
+    user, ucookie = auth_cookie("alice")
+    client.post(f"/api/admin/users/{user.id}/change-role", data={"role": "helper"}, cookies=cookie)
+    d = client.get("/api/auth/me", cookies=ucookie).json()
+    assert d["permissions"] == ["reports.manage"]
+
+
+def test_me_owner_gets_all_permissions(client, auth_cookie):
+    _, cookie = auth_cookie("own", role="owner")
+    d = client.get("/api/auth/me", cookies=cookie).json()
+    assert "users.admin" in d["permissions"]
+    assert "federation.mode" in d["permissions"]
+    assert "roles.manage" in d["permissions"]

@@ -5,6 +5,7 @@ import AdminNav from "@/components/AdminNav";
 import Icon from "@/components/Icon";
 import { Announcement, toInputValue, fmtAnnouncementTime } from "@/lib/announcements";
 import { useAuth } from "@/lib/auth";
+import { isStaff } from "@/lib/permissions";
 
 export default function AdminAnnouncementsPage() {
   const router = useRouter();
@@ -30,7 +31,7 @@ export default function AdminAnnouncementsPage() {
   }, []);
 
   useEffect(() => {
-    if (!authLoading && user?.role !== "admin" && user?.role !== "moderator" && user?.role !== "owner") {
+    if (!authLoading && !isStaff(user)) {
       router.push("/timeline/home");
     }
   }, [user, authLoading, router]);
@@ -89,7 +90,7 @@ export default function AdminAnnouncementsPage() {
   };
 
   if (authLoading) return <p className="empty-state">로딩 중...</p>;
-  if (!user || (user.role !== "admin" && user.role !== "moderator" && user.role !== "owner")) return null;
+  if (!user || !isStaff(user)) return null;
   if (loading) return <p className="empty-state">로딩 중...</p>;
 
   return (
@@ -97,7 +98,7 @@ export default function AdminAnnouncementsPage() {
       <div className="page-header">
         <h2><Icon name="settings" /> 서버 관리</h2>
       </div>
-      <AdminNav current="announcements" />
+      <AdminNav current="announcements" user={user} />
       {!showNew && (
         <button className="btn btn-primary btn-small" style={{ marginBottom: 12 }} onClick={() => { setShowNew(true); setEditingId(null); resetForm(); }}>
           새 공지사항
