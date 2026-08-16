@@ -40,8 +40,11 @@ export default function AccountSwitcher({ open, onClose }: { open: boolean; onCl
       if (modalRef.current && !modalRef.current.contains(e.target as Node)) onClose();
     };
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") { onClose(); return; }
       if (e.key === "Backspace") {
+        const t = e.target as HTMLElement | null;
+        const tag = t?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return;
         e.preventDefault();
         onClose();
       }
@@ -155,7 +158,7 @@ export default function AccountSwitcher({ open, onClose }: { open: boolean; onCl
             <form onSubmit={handleAddLogin}>
               <div className="form-group">
                 <label>사용자 이름 또는 이메일</label>
-                <input value={addUsername} onChange={(e) => setAddUsername(e.target.value)} placeholder="username 또는 email@example.com" required />
+                <input autoFocus value={addUsername} onChange={(e) => setAddUsername(e.target.value)} placeholder="username 또는 email@example.com" required />
               </div>
               <div className="form-group">
                 <label>비밀번호</label>
