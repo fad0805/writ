@@ -14,24 +14,27 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
   const lastTouchDist = useRef(0);
   const lastTouchCenter = useRef({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
+  const [isPinching, setIsPinching] = useState(false);
   const panStart = useRef({ x: 0, y: 0 });
   const panOrigin = useRef({ x: 0, y: 0 });
   const swipeStartX = useRef(0);
+  const onCloseRef = useRef(onClose);
+  const onIndexChangeRef = useRef(onIndexChange);
+  onCloseRef.current = onClose;
+  onIndexChangeRef.current = onIndexChange;
 
   useEffect(() => {
     if (index < 0) return;
-    const resetId = setTimeout(() => {
-      setZoom(1);
-      setPan({ x: 0, y: 0 });
-    }, 0);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      else if (e.key === "ArrowLeft" && index > 0) onIndexChange(index - 1);
-      else if (e.key === "ArrowRight" && index < media.length - 1) onIndexChange(index + 1);
+      if (e.key === "Escape") onCloseRef.current();
+      else if (e.key === "ArrowLeft" && index > 0) onIndexChangeRef.current(index - 1);
+      else if (e.key === "ArrowRight" && index < media.length - 1) onIndexChangeRef.current(index + 1);
     };
     window.addEventListener("keydown", handler);
-    return () => { clearTimeout(resetId); window.removeEventListener("keydown", handler); };
-  }, [index, media.length, onClose, onIndexChange]);
+    return () => { window.removeEventListener("keydown", handler); };
+  }, [index, media.length]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
@@ -50,6 +53,7 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
         x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
         y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
       };
+      setIsPinching(true);
     } else if (e.touches.length === 1 && zoom > 1) {
       setIsPanning(true);
       panStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -89,6 +93,7 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
     swipeStartX.current = 0;
     lastTouchDist.current = 0;
     setIsPanning(false);
+    setIsPinching(false);
   }, [zoom, index, media.length, onIndexChange]);
 
   const handleDblClick = useCallback(() => {
@@ -142,7 +147,7 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
         {m.type === "video" ? (
           <video src={m.url} controls style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: 8 }} />
         ) : (
-          <img src={m.url} alt={m.alt || ""} draggable={false} onDoubleClick={handleDblClick} style={{ maxWidth: zoom > 1 ? "none" : "100%", maxHeight: zoom > 1 ? "none" : "85vh", borderRadius: zoom > 1 ? 0 : 8, objectFit: "contain", transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transition: isPanning ? "none" : "transform 0.15s ease", userSelect: "none" }} />
+          <img src={m.url} alt={m.alt || ""} draggable={false} onDoubleClick={handleDblClick} style={{ maxWidth: zoom > 1 ? "none" : "100%", maxHeight: zoom > 1 ? "none" : "85vh", borderRadius: zoom > 1 ? 0 : 8, objectFit: "contain", transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transition: isPanning || isPinching ? "none" : "transform 0.15s ease", userSelect: "none" }} />
         )}
       </div>
     </div>
