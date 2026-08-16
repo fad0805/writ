@@ -473,27 +473,24 @@ input[type="text"].explore-search-input:focus {
 .composer-collapse-bar {
   display: flex;
   justify-content: center;
-  margin-top: -20px;
-  margin-bottom: 8px;
-}
-.composer-collapse-bar.collapsed {
-  margin-top: 0;
-}
-.composer-collapse-btn {
+  align-items: center;
+  width: 100%;
   background: none;
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 0 8px;
   margin: 0;
+  margin-top: -20px;
+  margin-bottom: 8px;
+  padding: 4px 0;
   line-height: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
+  border-radius: 6px;
   transition: background 0.2s, color 0.2s;
 }
-.composer-collapse-btn:hover {
+.composer-collapse-bar.collapsed {
+  margin-top: 0;
+}
+.composer-collapse-bar:hover {
   background: var(--bg-tertiary);
   color: var(--accent);
 }

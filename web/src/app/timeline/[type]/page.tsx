@@ -530,17 +530,15 @@ export default function TimelinePage() {
           />
         </div>
       )}
-      <div className={`composer-collapse-bar post-form-desktop${composerCollapsed ? " collapsed" : ""}`}>
-        <button
-          type="button"
-          className="composer-collapse-btn"
-          onClick={() => setComposerCollapsed((v) => !v)}
-          title={composerCollapsed ? "작성창 펼치기" : "작성창 접기"}
-          aria-label={composerCollapsed ? "작성창 펼치기" : "작성창 접기"}
-        >
-          <Icon name={composerCollapsed ? "chevron_down" : "chevron_up"} size={16} />
-        </button>
-      </div>
+      <button
+        type="button"
+        className={`composer-collapse-bar post-form-desktop${composerCollapsed ? " collapsed" : ""}`}
+        onClick={() => setComposerCollapsed((v) => !v)}
+        title={composerCollapsed ? "작성창 펼치기" : "작성창 접기"}
+        aria-label={composerCollapsed ? "작성창 펼치기" : "작성창 접기"}
+      >
+        <Icon name={composerCollapsed ? "chevron_down" : "chevron_up"} size={16} />
+      </button>
       <div className="timeline-tabs">
         {TABS.map((t) => (
           <Link
