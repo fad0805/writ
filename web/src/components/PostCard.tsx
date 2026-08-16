@@ -93,10 +93,10 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
   useEffect(() => {
     if (postIdRef.current !== post.id) {
       postIdRef.current = post.id;
-      setBoosted(post.boosted);
-      setBookmarked(post.bookmarked);
       remoteQuoteAttemptedRef.current = null;
     }
+    setBoosted(post.boosted);
+    setBookmarked(post.bookmarked);
   }, [post.id, post.boosted, post.bookmarked]);
   useEffect(() => {
     setBoostsCount(post.boosts_count);

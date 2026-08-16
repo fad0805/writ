@@ -10,15 +10,11 @@ export function useReactions(post: PostData, targetId: number) {
   const [myReactionOverride, setMyReactionOverride] = useState<string | null | undefined>(undefined);
   const myReaction = myReactionOverride !== undefined ? myReactionOverride : (post.my_reaction || null);
 
-  const postIdRef = useRef(post.id);
   useEffect(() => {
-    if (postIdRef.current !== post.id) {
-      postIdRef.current = post.id;
-      setLiked(post.liked);
-      setLikesCount(post.likes_count);
-      setReactions(post.reactions || {});
-      setMyReactionOverride(post.my_reaction || null);
-    }
+    setLiked(post.liked);
+    setLikesCount(post.likes_count);
+    setReactions(post.reactions || {});
+    setMyReactionOverride(undefined);
   }, [post.id, post.liked, post.likes_count, post.reactions, post.my_reaction]);
   const reactionsRef = useRef(post.reactions || {});
   useEffect(() => {
