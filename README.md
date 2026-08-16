@@ -47,6 +47,8 @@ docker compose up -d
 
 기본적으로 Docker Compose를 사용하여 실행합니다.
 
+자세한 설치·운영 방법은 [서버 운영 문서](docs/)를 참고하세요.
+
 ---
 
 ## 설치 (Installation)
