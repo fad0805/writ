@@ -133,3 +133,29 @@ def test_deletes_related_rows(client, make_user, make_post):
         assert s.query(Like).filter_by(post_id=post.id).first() is None
         assert s.query(Bookmark).filter_by(post_id=post.id).first() is None
         assert s.query(Notification).filter_by(post_id=post.id).first() is None
+
+
+def test_bookmarked_exception_full_flow(client, auth_cookie, make_post):
+    """설정 API 저장 → 워커 실행 경로 검증: 작성자 본인이 북마크한 글만 보호되고,
+    다른 유저가 북마크한 글은 삭제된다."""
+    alice, alice_cookie = auth_cookie("alice")
+    bob, _ = auth_cookie("bob")
+    r = client.post("/api/settings/update", data={
+        "post_lifetime": "7",
+        "post_lifetime_exceptions": '["bookmarked"]',
+    }, cookies=alice_cookie)
+    assert r.status_code == 200
+
+    own_bookmarked = _age(make_post(alice), 30)
+    other_bookmarked = _age(make_post(alice), 30)
+    plain = _age(make_post(alice), 30)
+    with get_session() as s:
+        s.add(Bookmark(user_id=alice.id, post_id=own_bookmarked.id))
+        s.add(Bookmark(user_id=bob.id, post_id=other_bookmarked.id))
+        s.commit()
+
+    assert _run_auto_delete_once() == 2
+    ids = _post_ids()
+    assert own_bookmarked.id in ids
+    assert other_bookmarked.id not in ids
+    assert plain.id not in ids

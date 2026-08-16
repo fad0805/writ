@@ -84,12 +84,16 @@ export default function AutoDeleteSettingsPage() {
           </p>
         </div>
 
-        {postLifetime > 0 && (
-          <div className="form-group">
-            <label>삭제 예외</label>
-            <p className="form-help" style={{ marginBottom: 8, color: "var(--text-secondary)" }}>
-              선택한 항목에 해당하는 게시물은 자동 삭제에서 제외됩니다.
+        <div className="form-group">
+          <label>삭제 예외</label>
+          <p className="form-help" style={{ marginBottom: 8, color: "var(--text-secondary)" }}>
+            선택한 항목에 해당하는 게시물은 자동 삭제에서 제외됩니다.
+          </p>
+          {postLifetime === 0 && (
+            <p className="form-help" style={{ marginBottom: 8, color: "var(--text-muted)", fontSize: "0.85em" }}>
+              자동 삭제가 꺼져 있어도 예외 설정은 저장됩니다. 기간을 선택하면 바로 적용됩니다.
             </p>
+          )}
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {EXCEPTIONS.map((ex) => (
                 <label key={ex.key} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "6px 10px", borderRadius: 6, background: exceptions.includes(ex.key) ? "color-mix(in srgb, var(--accent) 10%, transparent)" : "var(--bg-tertiary)", border: `1px solid ${exceptions.includes(ex.key) ? "var(--accent)" : "var(--border)"}`, transition: "all 0.15s" }}>
@@ -99,8 +103,7 @@ export default function AutoDeleteSettingsPage() {
                 </label>
               ))}
             </div>
-          </div>
-        )}
+        </div>
 
         <div className="form-actions">
           <button type="submit" disabled={submitting} className="btn btn-primary">설정 저장</button>
