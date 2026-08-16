@@ -14,6 +14,8 @@ __pycache__
 
 uploads/*
 !uploads/.gitkeep
+app/uploads/*
+!app/uploads/.gitkeep
 static/uploads/*
 
 .DS_Store

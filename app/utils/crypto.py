@@ -101,7 +101,7 @@ def verify_signature(text: str, signature_b64: str, public_key_pem: str) -> bool
         return False
 
 
-CSRF_EXEMPT_PREFIXES = ("/.well-known/", "/nodeinfo", "/webfinger", "/static/", "/uploads/", "/api/auth/", "/api/push/", "/api/v1/", "/api/oauth/", "/oauth/", "/inbox", "/outbox")
+CSRF_EXEMPT_PREFIXES = ("/.well-known/", "/nodeinfo", "/webfinger", "/static/", "/uploads/", "/api/auth/", "/api/push/", "/api/v1/", "/api/v2/", "/api/oauth/", "/oauth/", "/inbox", "/outbox")
 CSRF_EXEMPT_EXACT = ("/users/", "/posts/", "/activities/", "/@/")
 CSRF_EXEMPT_METHODS = ("GET", "HEAD", "OPTIONS")
 

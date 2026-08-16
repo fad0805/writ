@@ -634,8 +634,9 @@ def favourited_by(
 
 
 # ---------------------------------------------------------------------------
-# POST /api/v1/media
+# POST /api/v1/media, /api/v2/media
 # ---------------------------------------------------------------------------
+@router.post("/v2/media")
 @router.post("/v1/media")
 async def upload_media(
     request: Request,
