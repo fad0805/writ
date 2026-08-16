@@ -39,10 +39,10 @@ def api_list_emojis(limit: int = Query(30, le=10000), offset: int = Query(0), q:
                     CustomEmoji.category.ilike(f"%{q}%"),
                 )
             )
-        if category != "remote":
-            query = query.filter(CustomEmoji.category != "remote")
-        elif category == "remote":
+        if category == "remote":
             query = query.filter(CustomEmoji.category == "remote")
+        elif category == "local":
+            query = query.filter(CustomEmoji.category != "remote")
         total = query.count()
         emojis = query.order_by(desc(CustomEmoji.created_at)).offset(offset).limit(limit).all()
         result = [
