@@ -6,7 +6,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from sqlalchemy import desc, or_
 from sqlalchemy.orm import joinedload, selectinload
 
-from app.core.auth import require_auth
+from app.core.permissions import require_permission
 from app.db.database import get_session
 from app.models import Episode, Novel, Post
 from app.routes.api._novels import _apply_latest_activity_order, _novel_json
@@ -18,9 +18,7 @@ router = APIRouter()
 
 @router.get("/admin/content/search")
 def api_admin_content_search(request: Request, q: str = "", mode: str = "series"):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "content.manage")
     if not q.strip():
         return {"novels": [], "episodes": []}
     with get_session() as s:
@@ -65,9 +63,7 @@ def api_admin_content_search(request: Request, q: str = "", mode: str = "series"
 
 @router.post("/admin/novels/{novel_id}/toggle-sensitive")
 def api_admin_toggle_novel_sensitive(request: Request, novel_id: int):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "content.manage")
     with get_session() as s:
         n = s.query(Novel).get(novel_id)
         if not n:
@@ -82,9 +78,7 @@ def api_admin_toggle_novel_sensitive(request: Request, novel_id: int):
 
 @router.post("/admin/novels/{novel_id}/set-visibility")
 def api_admin_set_novel_visibility(request: Request, novel_id: int, visibility: str = Form("public")):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "content.manage")
     if visibility not in ("public", "unlisted", "private"):
         raise HTTPException(status_code=400, detail="Invalid visibility")
     with get_session() as s:
@@ -102,9 +96,7 @@ def api_admin_set_novel_visibility(request: Request, novel_id: int, visibility: 
 
 @router.post("/admin/episodes/{episode_id}/toggle-publish")
 def api_admin_toggle_episode_publish(request: Request, episode_id: int):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "content.manage")
     with get_session() as s:
         ep = s.query(Episode).get(episode_id)
         if not ep:
@@ -119,9 +111,7 @@ def api_admin_toggle_episode_publish(request: Request, episode_id: int):
 
 @router.post("/admin/posts/{post_id}/set-cw")
 def api_admin_set_post_cw(request: Request, post_id: int, summary: str = Form("")):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "content.manage")
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id).first()
         if not post:
@@ -140,9 +130,7 @@ def api_admin_set_post_cw(request: Request, post_id: int, summary: str = Form(""
 
 @router.post("/admin/posts/{post_id}/remove-cw")
 def api_admin_remove_post_cw(request: Request, post_id: int):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "content.manage")
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id).first()
         if not post:

@@ -66,16 +66,21 @@ def _reset_in_memory_limits():
     """
     import app.routes.api._auth as auth_mod
     from app.core.rate_limit import _rate_limit_daily, _rate_limit_store
+    from app.core.permissions import _ROLE_PERM_CACHE, _ROLE_PERM_CACHE_TIME
 
     with auth_mod._auth_lock:
         auth_mod._auth_failures.clear()
     _rate_limit_store.clear()
     _rate_limit_daily.clear()
+    _ROLE_PERM_CACHE.clear()
+    _ROLE_PERM_CACHE_TIME.clear()
     yield
     with auth_mod._auth_lock:
         auth_mod._auth_failures.clear()
     _rate_limit_store.clear()
     _rate_limit_daily.clear()
+    _ROLE_PERM_CACHE.clear()
+    _ROLE_PERM_CACHE_TIME.clear()
 
 
 @pytest.fixture

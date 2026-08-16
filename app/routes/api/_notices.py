@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Form, HTTPException, Request
 
 from app.core.auth import require_auth
+from app.core.permissions import has_permission
 from app.db.database import get_session
 from app.models import Novel, SeriesNotice
 from app.utils.datetime import _fmt_dt
@@ -77,7 +78,7 @@ def api_delete_notice(request: Request, novel_id: int, notice_id: int):
         notice = s.query(SeriesNotice).filter_by(id=notice_id, novel_id=novel_id).first()
         if not notice:
             raise HTTPException(status_code=404, detail="Notice not found")
-        if notice.novel.author_id != user.id and user.role not in ("admin", "moderator", "owner"):
+        if notice.novel.author_id != user.id and not has_permission(user, "content.manage"):
             raise HTTPException(status_code=404, detail="Notice not found")
         s.delete(notice)
         s.commit()

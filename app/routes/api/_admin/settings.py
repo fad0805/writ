@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Form, HTTPException, Request
 
-from app.core.auth import require_auth
+from app.core.permissions import require_permission
 from app.db.database import get_session
 from app.models import AdminLog, ServerSetting
 from app.routes.api._pwa import _delete_favicon, _delete_pwa_icons, _save_favicon, _save_pwa_icons
@@ -15,9 +15,7 @@ router = APIRouter()
 
 @router.get("/admin/settings")
 def api_admin_get_settings(request: Request):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "settings.manage")
     with get_session() as s:
         settings = ServerSetting.get(s)
         return {
@@ -42,9 +40,7 @@ def api_admin_update_settings(request: Request,
                                admin_ids: str = Form(""),
                                admin_email: str = Form(""),
                                enable_reactions: bool = Form(False)):
-    user = require_auth(request)
-    if user.role not in ("admin", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "settings.manage")
     if len(server_name) > 20:
         raise HTTPException(status_code=400, detail="서버명은 20자 이하여야 합니다.")
     with get_session() as s:
@@ -82,9 +78,7 @@ def api_admin_update_settings(request: Request,
 
 @router.get("/admin/logs")
 def api_admin_logs(request: Request, action: str = "", target_type: str = "", target_username: str = "", target_id: int = 0, offset: int = 0, limit: int = 50):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "log.view")
     with get_session() as s:
         q = s.query(AdminLog).order_by(AdminLog.created_at.desc())
         if action:

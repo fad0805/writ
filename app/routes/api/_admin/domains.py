@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Form, HTTPException, Request
 
-from app.core.auth import require_auth
+from app.core.permissions import require_permission
 from app.db.database import get_session
 from app.models import (
     AllowedServer,
@@ -17,9 +17,7 @@ router = APIRouter()
 
 @router.get("/admin/blocked-domains")
 def api_admin_list_blocked_domains(request: Request):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "domains.manage")
     with get_session() as s:
         domains = s.query(BlockedDomain).order_by(BlockedDomain.created_at.desc()).all()
         return {"domains": [{
@@ -32,9 +30,7 @@ def api_admin_list_blocked_domains(request: Request):
 
 @router.post("/admin/block-domain")
 def api_admin_block_domain(request: Request, domain: str = Form(...)):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "domains.manage")
     domain = domain.strip().lower()
     if not domain or "." not in domain:
         raise HTTPException(status_code=400, detail="Invalid domain")
@@ -50,9 +46,7 @@ def api_admin_block_domain(request: Request, domain: str = Form(...)):
 
 @router.delete("/admin/block-domain/{domain}")
 def api_admin_unblock_domain(request: Request, domain: str):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "domains.manage")
     domain = domain.strip().lower()
     with get_session() as s:
         bd = s.query(BlockedDomain).filter_by(domain=domain).first()
@@ -66,9 +60,7 @@ def api_admin_unblock_domain(request: Request, domain: str):
 
 @router.get("/admin/federation-blocks")
 def api_admin_list_federation_blocks(request: Request):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "domains.manage")
     with get_session() as s:
         blocks = s.query(FederationBlock).order_by(FederationBlock.created_at.desc()).all()
         return {"blocks": [{"id": b.id, "domain": b.domain, "reason": b.reason or "", "created_by": b.created_by.username if b.created_by else "", "created_at": str(b.created_at) if b.created_at else ""} for b in blocks]}
@@ -76,9 +68,7 @@ def api_admin_list_federation_blocks(request: Request):
 
 @router.post("/admin/federation-block")
 def api_admin_add_federation_block(request: Request, domain: str = Form(...), reason: str = Form("")):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "domains.manage")
     domain = domain.strip().lower()
     if not domain or "." not in domain:
         raise HTTPException(status_code=400, detail="Invalid domain")
@@ -96,9 +86,7 @@ def api_admin_add_federation_block(request: Request, domain: str = Form(...), re
 
 @router.delete("/admin/federation-block/{domain}")
 def api_admin_remove_federation_block(request: Request, domain: str):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "domains.manage")
     domain = domain.strip().lower()
     with get_session() as s:
         b = s.query(FederationBlock).filter_by(domain=domain).first()
@@ -112,9 +100,7 @@ def api_admin_remove_federation_block(request: Request, domain: str):
 
 @router.get("/admin/allowed-servers")
 def api_admin_list_allowed_servers(request: Request):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "domains.manage")
     with get_session() as s:
         servers = s.query(AllowedServer).order_by(AllowedServer.created_at.desc()).all()
         return {"servers": [{"id": sv.id, "domain": sv.domain, "created_by": sv.created_by.username if sv.created_by else "", "created_at": str(sv.created_at) if sv.created_at else ""} for sv in servers]}
@@ -122,9 +108,7 @@ def api_admin_list_allowed_servers(request: Request):
 
 @router.post("/admin/allowed-server")
 def api_admin_add_allowed_server(request: Request, domain: str = Form(...)):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "domains.manage")
     domain = domain.strip().lower()
     if not domain or "." not in domain:
         raise HTTPException(status_code=400, detail="Invalid domain")
@@ -142,9 +126,7 @@ def api_admin_add_allowed_server(request: Request, domain: str = Form(...)):
 
 @router.delete("/admin/allowed-server/{domain}")
 def api_admin_remove_allowed_server(request: Request, domain: str):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "domains.manage")
     domain = domain.strip().lower()
     with get_session() as s:
         sv = s.query(AllowedServer).filter_by(domain=domain).first()
@@ -158,9 +140,7 @@ def api_admin_remove_allowed_server(request: Request, domain: str):
 
 @router.post("/admin/federation-mode")
 def api_admin_set_federation_mode(request: Request, mode: str = Form(...)):
-    user = require_auth(request)
-    if user.role not in ("admin", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "federation.mode")
     if mode not in ("whitelist", "blacklist"):
         raise HTTPException(status_code=400, detail="Invalid mode")
     with get_session() as s:
@@ -174,9 +154,7 @@ def api_admin_set_federation_mode(request: Request, mode: str = Form(...)):
 
 @router.get("/admin/federation-mode")
 def api_admin_get_federation_mode(request: Request):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "domains.manage")
     with get_session() as s:
         settings = ServerSetting.get(s)
         return {"mode": settings.federation_mode or "blacklist"}

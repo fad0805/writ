@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import String
 
-from app.core.auth import require_auth
+from app.core.permissions import require_permission
 from app.db.database import get_session
 from app.models import Follow, Novel, Post, User
 from app.serializers import _user_json
@@ -15,9 +15,7 @@ router = APIRouter()
 
 @router.get("/admin/stats")
 def api_admin_stats(request: Request):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "users.manage")
     with get_session() as s:
         users = s.query(User).filter_by(is_remote=False).count()
         posts = s.query(Post).filter_by(is_deleted=False).count()
@@ -30,9 +28,7 @@ def api_admin_users(request: Request, location: str = Query("local"), status: st
                      role: str = Query("all"), sort: str = Query("newest"),
                      q: str = Query(""), username_q: str = Query(""), name_q: str = Query(""),
                      email_q: str = Query(""), ip_q: str = Query(""), domain_q: str = Query("")):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "users.manage")
     with get_session() as s:
         qb = s.query(User)
         if location == "local":
@@ -102,9 +98,7 @@ def api_admin_users(request: Request, location: str = Query("local"), status: st
 
 @router.get("/admin/users/{user_id}")
 def api_admin_user_detail(request: Request, user_id: int):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "users.manage")
     with get_session() as s:
         u = s.query(User).get(user_id)
         if not u:

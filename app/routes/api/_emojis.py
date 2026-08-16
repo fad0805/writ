@@ -17,7 +17,7 @@ guard_image()
 import contextlib
 
 from app.config.settings import S3_ENABLED
-from app.core.auth import require_auth
+from app.core.permissions import require_permission
 from app.db.database import get_session
 from app.models import CustomEmoji
 from app.utils.emoji import EMOJI_DIR, _emoji_url, _refresh_emoji_cache_forcibly
@@ -69,9 +69,7 @@ def api_create_emoji(
     aliases: str = Form(""),
     image: UploadFile = File(...),
 ):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "emojis.manage")
     if not keyword.strip():
         raise HTTPException(status_code=400, detail="Keyword is required")
     keyword = keyword.strip().lower().replace(" ", "_")
@@ -157,9 +155,7 @@ def api_create_emoji(
 
 @emoji_router.patch("/emojis/{emoji_id}")
 def api_update_emoji(request: Request, emoji_id: int, category: str = Form(""), keyword: str = Form(""), aliases: str = Form("")):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "emojis.manage")
     with get_session() as s:
         emoji = s.query(CustomEmoji).get(emoji_id)
         if not emoji:
@@ -181,9 +177,7 @@ def api_update_emoji(request: Request, emoji_id: int, category: str = Form(""), 
 
 @emoji_router.post("/emojis/{emoji_id}/copy")
 def api_copy_emoji(request: Request, emoji_id: int):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "emojis.manage")
     with get_session() as s:
         src = s.query(CustomEmoji).get(emoji_id)
         if not src:
@@ -227,9 +221,7 @@ def api_copy_emoji(request: Request, emoji_id: int):
 
 @emoji_router.delete("/emojis/{emoji_id}")
 def api_delete_emoji(request: Request, emoji_id: int):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "emojis.manage")
     with get_session() as s:
         emoji = s.query(CustomEmoji).get(emoji_id)
         if not emoji:

@@ -12,6 +12,7 @@ from app.config.settings import BASE_URL
 from app.core.activitypub import _build_reactions, _fetch_remote_post, _send_delete_post, broadcast_to_followers
 from app.core.auth import get_current_user, require_active_auth
 from app.core.broadcast import broadcast_post
+from app.core.permissions import has_permission
 from app.core.threads import spawn
 from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs
 from app.core.visibility import _can_view
@@ -355,7 +356,7 @@ def api_delete_post(request: Request, post_id: int, keep_media: bool = Form(Fals
         post = s.query(Post).filter_by(id=post_id).first()
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
-        if post.author_id != user.id and not user.is_admin:
+        if post.author_id != user.id and not has_permission(user, "content.manage"):
             raise HTTPException(status_code=403, detail="Cannot delete this post")
         _do_delete_post(s, post, user, cascade=True, keep_media=keep_media)
     return {"ok": True}

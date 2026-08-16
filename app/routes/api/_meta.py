@@ -9,6 +9,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app.core.auth import require_auth
+from app.core.permissions import is_staff
 from app.db.database import get_session
 from app.models import ServerSetting, User
 from app.utils.http import validate_url, validated_get
@@ -66,7 +67,7 @@ def _resolve_admin_users(s, admin_ids_str: str):
 def api_server_info(request: Request):
     from app.core.auth import get_current_user
     user = get_current_user(request)
-    is_admin = bool(user and user.role in ("admin", "moderator", "owner"))
+    is_admin = bool(user and is_staff(user))
     with get_session() as s:
         settings = ServerSetting.get(s)
         admins = _resolve_admin_users(s, settings.admin_ids or "")

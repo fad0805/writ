@@ -111,6 +111,17 @@ class User(Base):
         return f"{BASE_URL}/users/{self.username}/featured"
 
 
+class Role(Base):
+    __tablename__ = "roles"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(16), unique=True, nullable=False, index=True)
+    label = Column(String(50), default="")
+    permissions = Column(JSON, default=list)
+
+    created_at = Column(DateTime(timezone=True), default=now)
+    updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
+
 
 class Follow(Base):
     __tablename__ = "follows"

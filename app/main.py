@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config.settings import CORS_ORIGINS
 from app.core.activitypub import _cleanup_expired_media, _cleanup_remote_data
+from app.core.permissions import ensure_default_roles
 from app.core.push import init_vapid_keys
 from app.core.workers import auto_delete_expired_posts, cleanup_orphan_media, delivery_worker, refresh_remote_profiles
 from app.middleware import CSRFProtectionMiddleware, LogRequestsMiddleware
@@ -29,6 +30,8 @@ logger = logging.getLogger("writ.app")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    with suppress(Exception):
+        ensure_default_roles()
     with suppress(Exception):
         _cleanup_avatars()
     with suppress(Exception):

@@ -5,7 +5,7 @@ import json
 from fastapi import APIRouter, Form, HTTPException, Request
 from sqlalchemy import func
 
-from app.core.auth import require_auth
+from app.core.permissions import require_permission
 from app.db.database import get_session
 from app.models import ServerRule
 
@@ -14,9 +14,7 @@ router = APIRouter()
 
 @router.get("/admin/rules")
 def api_admin_list_rules(request: Request):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "rules.manage")
     with get_session() as s:
         rules = s.query(ServerRule).order_by(ServerRule.sort_order).all()
         return [{"id": r.id, "title": r.title, "description": r.description, "sort_order": r.sort_order} for r in rules]
@@ -24,9 +22,7 @@ def api_admin_list_rules(request: Request):
 
 @router.post("/admin/rules/new")
 def api_admin_create_rule(request: Request, title: str = Form(...), description: str = Form("")):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "rules.manage")
     with get_session() as s:
         max_order = s.query(func.max(ServerRule.sort_order)).scalar() or 0
         rule = ServerRule(title=title, description=description, sort_order=max_order + 1)
@@ -37,9 +33,7 @@ def api_admin_create_rule(request: Request, title: str = Form(...), description:
 
 @router.post("/admin/rules/{rule_id}/edit")
 def api_admin_edit_rule(request: Request, rule_id: int, title: str = Form(...), description: str = Form("")):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "rules.manage")
     with get_session() as s:
         rule = s.query(ServerRule).get(rule_id)
         if not rule:
@@ -52,9 +46,7 @@ def api_admin_edit_rule(request: Request, rule_id: int, title: str = Form(...), 
 
 @router.post("/admin/rules/{rule_id}/delete")
 def api_admin_delete_rule(request: Request, rule_id: int):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "rules.manage")
     with get_session() as s:
         rule = s.query(ServerRule).get(rule_id)
         if not rule:
@@ -66,9 +58,7 @@ def api_admin_delete_rule(request: Request, rule_id: int):
 
 @router.post("/admin/rules/reorder")
 def api_admin_reorder_rules(request: Request, rule_ids: str = Form(...)):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "rules.manage")
     ids = []
     try:
         ids = json.loads(rule_ids)

@@ -1,23 +1,17 @@
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app.core.auth import require_auth
+from app.core.permissions import require_permission
 from app.db.database import get_session
 from app.models import Post, User
 from app.utils.log import log_admin_action
 
 router = APIRouter()
 
-def require_admin(request: Request):
-    user = require_auth(request)
-    if not user.is_admin:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    return user
-
 
 @router.post("/admin/users/{user_id}/delete")
 def admin_delete_user(request: Request, user_id: int):
-    admin = require_admin(request)
+    admin = require_permission(request, "users.admin")
     if admin.id == user_id:
         raise HTTPException(status_code=400, detail="자기 자신을 삭제할 수 없습니다")
 
@@ -38,7 +32,7 @@ def admin_delete_user(request: Request, user_id: int):
 
 @router.post("/admin/posts/{post_id}/delete")
 def admin_delete_post(request: Request, post_id: int):
-    admin = require_admin(request)
+    admin = require_permission(request, "content.manage")
 
     with get_session() as session:
         post = session.query(Post).filter_by(id=post_id).first()

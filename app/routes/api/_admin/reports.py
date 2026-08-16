@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 
 from app.core.activitypub import _send_flag
-from app.core.auth import require_auth
+from app.core.permissions import require_permission
 from app.db.database import get_session
 from app.models import Episode, Novel, Post, Report, ServerRule, User
 from app.utils.datetime import _fmt_dt
@@ -18,9 +18,7 @@ router = APIRouter()
 
 @router.get("/admin/reports")
 def api_admin_list_reports(request: Request, status: str = "pending", target_type: str = "", offset: int = 0, limit: int = 50):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "reports.manage")
     with get_session() as s:
         q = s.query(Report)
         if status in ("pending", "resolved", "dismissed"):
@@ -81,9 +79,7 @@ def api_admin_list_reports(request: Request, status: str = "pending", target_typ
 
 @router.get("/admin/reports/{report_id}")
 def api_admin_get_report(request: Request, report_id: int):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "reports.manage")
     with get_session() as s:
         r = s.query(Report).get(report_id)
         if not r:
@@ -143,9 +139,7 @@ def api_admin_get_report(request: Request, report_id: int):
 
 @router.post("/admin/reports/{report_id}/resolve")
 def api_admin_resolve_report(request: Request, report_id: int):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "reports.manage")
     with get_session() as s:
         report = s.query(Report).get(report_id)
         if not report:
@@ -160,9 +154,7 @@ def api_admin_resolve_report(request: Request, report_id: int):
 
 @router.post("/admin/reports/{report_id}/dismiss")
 def api_admin_dismiss_report(request: Request, report_id: int):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "reports.manage")
     with get_session() as s:
         report = s.query(Report).get(report_id)
         if not report:
@@ -177,9 +169,7 @@ def api_admin_dismiss_report(request: Request, report_id: int):
 
 @router.post("/admin/reports/{report_id}/forward")
 def api_admin_forward_report(request: Request, report_id: int):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "reports.manage")
     with get_session() as s:
         report = s.query(Report).get(report_id)
         if not report:

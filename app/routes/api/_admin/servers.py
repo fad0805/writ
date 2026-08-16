@@ -5,11 +5,11 @@ import re
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from sqlalchemy import func, or_
 
 from app.core.activitypub import _resolve_actor, _safe_httpx_get
-from app.core.auth import require_auth
+from app.core.permissions import require_permission
 from app.db.database import get_session
 from app.models import (
     AdminLog,
@@ -53,9 +53,7 @@ def _domain_users(s, domain):
 
 @router.get("/admin/remote-servers")
 def api_admin_remote_servers(request: Request):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "federation.manage")
     with get_session() as s:
         remote_users = s.query(User).filter(User.is_remote == True).all()
         domains = set()
@@ -69,9 +67,7 @@ def api_admin_remote_servers(request: Request):
 
 @router.get("/admin/remote-server/{domain:path}")
 def api_admin_remote_server(domain: str, request: Request, offset: int = 0, limit: int = 20):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "federation.manage")
     with get_session() as s:
         candidates = s.query(User).filter(
             User.is_remote == True,
@@ -147,9 +143,7 @@ def api_admin_remote_server(domain: str, request: Request, offset: int = 0, limi
 
 @router.get("/admin/federation-search")
 def api_admin_federation_search(request: Request, q: str = ""):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "federation.manage")
     q = q.strip()
     logger.info("federation-search q=%r", q)
     if not q:
@@ -278,9 +272,7 @@ def api_admin_federation_search(request: Request, q: str = ""):
 
 @router.post("/admin/remote-server/{domain:path}/block")
 def api_admin_remote_server_block(domain: str, request: Request):
-    user = require_auth(request)
-    if user.role not in ("admin", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "federation.mode")
     with get_session() as s:
         existing = s.query(FederationBlock).filter_by(domain=domain).first()
         if not existing:
@@ -292,9 +284,7 @@ def api_admin_remote_server_block(domain: str, request: Request):
 
 @router.post("/admin/remote-server/{domain:path}/unblock")
 def api_admin_remote_server_unblock(domain: str, request: Request):
-    user = require_auth(request)
-    if user.role not in ("admin", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "federation.mode")
     with get_session() as s:
         s.query(FederationBlock).filter_by(domain=domain).delete()
         s.commit()
@@ -304,9 +294,7 @@ def api_admin_remote_server_unblock(domain: str, request: Request):
 
 @router.post("/admin/remote-server/{domain:path}/mute")
 def api_admin_remote_server_mute(domain: str, request: Request):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "federation.manage")
     with get_session() as s:
         mute = s.query(MutedServer).filter_by(domain=domain).first()
         if not mute:
@@ -328,9 +316,7 @@ def api_admin_remote_server_mute(domain: str, request: Request):
 
 @router.post("/admin/remote-server/{domain:path}/unmute")
 def api_admin_remote_server_unmute(domain: str, request: Request):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "federation.manage")
     with get_session() as s:
         mute = s.query(MutedServer).filter_by(domain=domain).first()
         if mute:
@@ -352,9 +338,7 @@ def api_admin_remote_server_unmute(domain: str, request: Request):
 
 @router.post("/admin/remote-server/{domain:path}/media-mute")
 def api_admin_remote_server_media_mute(domain: str, request: Request):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "federation.manage")
     with get_session() as s:
         mute = s.query(MutedServer).filter_by(domain=domain).first()
         if not mute:
@@ -371,9 +355,7 @@ def api_admin_remote_server_media_mute(domain: str, request: Request):
 
 @router.post("/admin/remote-server/{domain:path}/unmedia-mute")
 def api_admin_remote_server_unmedia_mute(domain: str, request: Request):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "federation.manage")
     with get_session() as s:
         mute = s.query(MutedServer).filter_by(domain=domain).first()
         if mute:
@@ -392,9 +374,7 @@ def api_admin_remote_server_unmedia_mute(domain: str, request: Request):
 
 @router.post("/admin/remote-server/{domain:path}/purge")
 def api_admin_remote_server_purge(domain: str, request: Request):
-    user = require_auth(request)
-    if user.role not in ("admin", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "federation.mode")
     storage = get_storage()
     with get_session() as s:
         users = _domain_users(s, domain)

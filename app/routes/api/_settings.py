@@ -17,6 +17,7 @@ guard_image()
 from app.config.settings import BASE_URL
 from app.core.activitypub import _post_to_inbox
 from app.core.auth import delete_user_sessions, hash_password, require_active_auth, require_auth, verify_password
+from app.core.permissions import has_permission
 from app.core.threads import spawn
 from app.core.timeline_stream import broadcast_refresh_notifs
 from app.db.database import get_session
@@ -82,7 +83,7 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
                 db.post_lifetime_exceptions = exc
         except Exception:
             pass
-        if user.role in ("admin", "moderator", "owner"):
+        if has_permission(user, "content.manage"):
             db.show_badge = show_badge
         s.commit()
     return {"ok": True}
@@ -222,7 +223,7 @@ def api_reactivate_account(request: Request):
 @settings_router.post("/settings/delete-account")
 def api_delete_account(request: Request, password: str = Form(...), confirm: str = Form(...)):
     user = require_auth(request)
-    if user.is_admin:
+    if user.role in ("admin", "owner"):
         raise HTTPException(status_code=400, detail="관리자 계정은 탈퇴할 수 없습니다.")
     if confirm != user.username:
         raise HTTPException(status_code=400, detail=f"확인을 위해 '{user.username}'을(를) 입력하세요.")

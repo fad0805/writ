@@ -12,6 +12,7 @@ from sqlalchemy import desc, func
 from app.config.settings import BASE_URL
 from app.core.activitypub import broadcast_to_followers
 from app.core.auth import get_current_user, require_active_auth
+from app.core.permissions import has_permission
 from app.core.push import send_push_to_user
 from app.core.threads import spawn
 from app.core.timeline_stream import broadcast_notif_sound
@@ -322,7 +323,7 @@ def api_delete_episode(request: Request, novel_id: int, episode_id: int):
         episode = s.query(Episode).filter_by(id=episode_id, novel_id=novel_id).first()
         if not episode:
             raise HTTPException(status_code=404, detail="Episode not found")
-        if episode.novel.author_id != user.id and user.role not in ("admin", "moderator", "owner"):
+        if episode.novel.author_id != user.id and not has_permission(user, "content.manage"):
             raise HTTPException(status_code=404, detail="Episode not found")
         if episode.novel.author_id != user.id:
             log_admin_action(user.id, user.username, "delete_episode", target_type="episode", target_id=episode_id, target_username=episode.novel.author.username if episode.novel else "", details=episode.title, ip_address=request.client.host if request.client else "")

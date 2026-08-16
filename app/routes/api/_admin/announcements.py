@@ -6,7 +6,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from sqlalchemy import desc
 from sqlalchemy.orm import joinedload
 
-from app.core.auth import require_auth
+from app.core.permissions import require_permission
 from app.db.database import get_session
 from app.models import Announcement, AnnouncementRead, AnnouncementVote
 from app.routes.api._announcements import _announcement_json, _is_announcement_active, _parse_dt_field
@@ -17,9 +17,7 @@ router = APIRouter()
 
 @router.get("/admin/announcements")
 def api_admin_list_announcements(request: Request):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "announcements.manage")
     with get_session() as s:
         items = s.query(Announcement).options(joinedload(Announcement.created_by)).order_by(desc(Announcement.created_at)).all()
         return [dict(_announcement_json(a), active=_is_announcement_active(a)) for a in items]
@@ -44,9 +42,7 @@ def _build_announcement_poll(poll_options: str):
 @router.post("/admin/announcements/new")
 def api_admin_create_announcement(request: Request, title: str = Form(...), content: str = Form(...),
                                   starts_at: str = Form(""), ends_at: str = Form(""), poll_options: str = Form("")):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "announcements.manage")
     if not title.strip():
         raise HTTPException(status_code=400, detail="Title is required")
     with get_session() as s:
@@ -69,9 +65,7 @@ def api_admin_create_announcement(request: Request, title: str = Form(...), cont
 @router.post("/admin/announcements/{announcement_id}/edit")
 def api_admin_edit_announcement(request: Request, announcement_id: int, title: str = Form(...), content: str = Form(...),
                                 starts_at: str = Form(""), ends_at: str = Form(""), poll_options: str = Form("")):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "announcements.manage")
     with get_session() as s:
         a = s.query(Announcement).get(announcement_id)
         if not a:
@@ -104,9 +98,7 @@ def api_admin_edit_announcement(request: Request, announcement_id: int, title: s
 
 @router.post("/admin/announcements/{announcement_id}/delete")
 def api_admin_delete_announcement(request: Request, announcement_id: int):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "announcements.manage")
     with get_session() as s:
         a = s.query(Announcement).get(announcement_id)
         if not a:

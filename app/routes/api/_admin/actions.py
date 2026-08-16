@@ -11,7 +11,8 @@ from fastapi import APIRouter, Form, HTTPException, Request
 
 from app.config.settings import SMTP_FROM, SMTP_PASSWORD, SMTP_PORT, SMTP_SERVER, SMTP_USER
 from app.core.activitypub import _fetch_remote_count, _resolve_actor
-from app.core.auth import hash_password, require_auth
+from app.core.auth import hash_password
+from app.core.permissions import require_permission
 from app.core.timeline_stream import broadcast_refresh_notifs
 from app.db.database import get_session
 from app.models import Notification, Post, User
@@ -34,9 +35,7 @@ def _guard_target_role(actor: User, target: User):
 
 @router.post("/admin/users/{user_id}/reset-password")
 def api_admin_reset_password(request: Request, user_id: int):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "users.manage")
     new_pass = secrets.token_hex(8)
     salt, hsh = hash_password(new_pass)
     with get_session() as s:
@@ -55,9 +54,7 @@ def api_admin_reset_password(request: Request, user_id: int):
 
 @router.post("/admin/users/{user_id}/change-email")
 def api_admin_change_email(request: Request, user_id: int, email: str = Form(...)):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "users.manage")
     with get_session() as s:
         u = s.query(User).get(user_id)
         if not u:
@@ -74,9 +71,7 @@ def api_admin_change_email(request: Request, user_id: int, email: str = Form(...
 
 @router.post("/admin/users/{user_id}/change-role")
 def api_admin_change_role(request: Request, user_id: int, role: str = Form("user")):
-    user = require_auth(request)
-    if user.role not in ("admin", "owner"):
-        raise HTTPException(status_code=403, detail="Only admins can change roles")
+    user = require_permission(request, "users.admin")
     if role not in ("user", "moderator", "admin", "owner"):
         raise HTTPException(status_code=400, detail="Invalid role")
     with get_session() as s:
@@ -95,9 +90,7 @@ def api_admin_change_role(request: Request, user_id: int, role: str = Form("user
 
 @router.post("/admin/users/{user_id}/verify-email")
 def api_admin_verify_email(request: Request, user_id: int):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "users.manage")
     with get_session() as s:
         u = s.query(User).get(user_id)
         if not u:
@@ -112,9 +105,7 @@ def api_admin_verify_email(request: Request, user_id: int):
 
 @router.post("/admin/users/{user_id}/remove-avatar")
 def api_admin_remove_avatar(request: Request, user_id: int):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "users.manage")
     with get_session() as s:
         u = s.query(User).get(user_id)
         if not u:
@@ -134,9 +125,7 @@ def api_admin_remove_avatar(request: Request, user_id: int):
 
 @router.post("/admin/users/{user_id}/refresh-profile")
 def api_admin_refresh_profile(request: Request, user_id: int):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "users.manage")
     with get_session() as s:
         u = s.query(User).get(user_id)
         if not u:
@@ -170,9 +159,7 @@ def api_admin_refresh_profile(request: Request, user_id: int):
 
 @router.post("/admin/users/suspend")
 def api_admin_suspend_users(request: Request, user_ids: str = Form(...)):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "users.manage")
     ids = [int(i) for i in user_ids.split(",") if i.strip()]
     ip = request.client.host if request.client else ""
     with get_session() as s:
@@ -190,9 +177,7 @@ def api_admin_suspend_users(request: Request, user_ids: str = Form(...)):
 
 @router.post("/admin/users/unsuspend")
 def api_admin_unsuspend_users(request: Request, user_ids: str = Form(...)):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "users.manage")
     ids = [int(i) for i in user_ids.split(",") if i.strip()]
     ip = request.client.host if request.client else ""
     with get_session() as s:
@@ -210,9 +195,7 @@ def api_admin_unsuspend_users(request: Request, user_ids: str = Form(...)):
 
 @router.post("/admin/users/{user_id}/note")
 def api_admin_user_note(request: Request, user_id: int, note: str = Form("")):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "users.manage")
     with get_session() as s:
         u = s.query(User).get(user_id)
         if not u:
@@ -227,9 +210,7 @@ def api_admin_user_note(request: Request, user_id: int, note: str = Form("")):
 
 @router.post("/admin/users/{user_id}/moderate")
 def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), send_email: bool = Form(False), message: str = Form("")):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "users.manage")
     valid_actions = ("warning", "freeze", "unfreeze", "sensitive", "unsensitive", "limit", "unlimit", "suspend", "unsuspend", "deceased", "undeceased")
     if action not in valid_actions:
         raise HTTPException(status_code=400, detail=f"Invalid action: {action}")
@@ -330,9 +311,7 @@ def api_admin_moderate(request: Request, user_id: int, action: str = Form(...), 
 
 @router.post("/admin/users/{user_id}/toggle-sensitive")
 def api_admin_toggle_sensitive(request: Request, user_id: int):
-    user = require_auth(request)
-    if user.role not in ("admin", "moderator", "owner"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    user = require_permission(request, "users.manage")
     with get_session() as s:
         u = s.query(User).get(user_id)
         if not u:
