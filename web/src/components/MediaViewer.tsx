@@ -147,7 +147,7 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
         {m.type === "video" ? (
           <video src={m.url} controls style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: 8 }} />
         ) : (
-          <img src={m.url} alt={m.alt || ""} draggable={false} onDoubleClick={handleDblClick} style={{ maxWidth: zoom > 1 ? "none" : "100%", maxHeight: zoom > 1 ? "none" : "85vh", borderRadius: zoom > 1 ? 0 : 8, objectFit: "contain", transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transition: isPanning || isPinching ? "none" : "transform 0.15s ease", userSelect: "none" }} />
+          <img src={m.url} alt={m.alt || ""} draggable={false} onDoubleClick={handleDblClick} style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: zoom > 1 ? 0 : 8, objectFit: "contain", transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transition: isPanning || isPinching ? "none" : "transform 0.15s ease", userSelect: "none" }} />
         )}
       </div>
     </div>
