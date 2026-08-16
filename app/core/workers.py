@@ -189,11 +189,94 @@ def refresh_remote_profiles():
         time.sleep(CHECK_INTERVAL_SECONDS)
 
 
-def auto_delete_expired_posts():
-    """Hard-delete expired posts daily at 3 AM server time.
-    Checks CPU and DB load before and during execution; aborts if too busy.
-    Uses user.post_lifetime (days) + post.created_at to determine expiry."""
+def _run_auto_delete_once() -> int:
+    """Auto-delete의 실제 실행 단위: 만료된 글을 찾아 하드 삭제하고 삭제 수를 반환한다.
 
+    Checks CPU/DB load before and during execution; aborts if too busy.
+    Uses user.post_lifetime (days) + post.created_at to determine expiry."""
+    deleted = 0
+    _autodel_notif_users = set()
+    with get_session() as s:
+        now = datetime.datetime.now(datetime.UTC)
+        users_with_lifetime = s.query(User).filter(
+            User.post_lifetime > 0,
+            User.is_remote == False,
+        ).all()
+        for u in users_with_lifetime:
+            exc = u.post_lifetime_exceptions or []
+            cutoff = now - datetime.timedelta(days=u.post_lifetime)
+            expired = s.query(Post).filter(
+                Post.author_id == u.id,
+                Post.is_deleted == False,
+                Post.created_at <= cutoff,
+            ).all()
+            for post in expired:
+                if _server_busy():
+                    logger.info("Auto-delete: server busy mid-run, stopping at %d", deleted)
+                    break
+                try:
+                    if "pinned" in exc and post.is_pinned:
+                        continue
+                    if "dm" in exc and post.is_dm:
+                        continue
+                    if "liked" in exc and s.query(Like).filter_by(user_id=u.id, post_id=post.id).first():
+                        continue
+                    if "bookmarked" in exc and s.query(Bookmark).filter_by(user_id=u.id, post_id=post.id).first():
+                        continue
+                    if "poll" in exc and post.poll_data:
+                        continue
+                    if "media" in exc and post.media_attachments:
+                        continue
+                    for _n in s.query(Notification.user_id).filter(Notification.post_id == post.id).distinct().all():
+                        _autodel_notif_users.add(_n[0])
+                    s.query(Notification).filter(Notification.post_id == post.id).delete()
+                    s.query(Like).filter(Like.post_id == post.id).delete()
+                    s.query(Boost).filter(Boost.post_id == post.id).delete()
+                    s.query(Bookmark).filter(Bookmark.post_id == post.id).delete()
+                    s.query(Vote).filter(Vote.post_id == post.id).delete()
+                    s.query(Post).filter(Post.boost_of_id == post.id).update(
+                        {Post.boost_of_id: None}, synchronize_session=False
+                    )
+
+                    media = list(post.media_attachments or [])
+                    if media:
+                        try:
+                            storage = get_storage()
+                            for m in media:
+                                if isinstance(m, dict) and m.get("url"):
+                                    with contextlib.suppress(Exception):
+                                        storage.delete(m["url"])
+                        except Exception:
+                            pass
+
+                    ap_id = post.ap_id or ""
+                    if ap_id and ap_id.startswith("http"):
+                        with contextlib.suppress(Exception):
+                            _send_delete_post(post, u)
+
+                    s.delete(post)
+                    s.flush()
+
+                    with contextlib.suppress(Exception):
+                        broadcast_delete(post.id)
+                    deleted += 1
+                except Exception:
+                    pass
+            if _server_busy():
+                break
+        if deleted:
+            s.commit()
+            logger.info("Auto-deleted %d expired posts", deleted)
+            try:
+                for _uid in _autodel_notif_users:
+                    broadcast_refresh_notifs(_uid)
+            except Exception:
+                pass
+    return deleted
+
+
+def auto_delete_expired_posts():
+    """Hard-delete expired posts daily at 3 AM server time."""
     time.sleep(min(_next_3am(), 300))
     while True:
         try:
@@ -201,85 +284,9 @@ def auto_delete_expired_posts():
                 logger.info("Auto-delete: server busy, skipping")
                 time.sleep(1800)
                 continue
-
-            with get_session() as s:
-                now = datetime.datetime.now(datetime.UTC)
-                users_with_lifetime = s.query(User).filter(
-                    User.post_lifetime > 0,
-                    User.is_remote == False,
-                ).all()
-                deleted = 0
-                _autodel_notif_users = set()
-                for u in users_with_lifetime:
-                    exc = u.post_lifetime_exceptions or []
-                    cutoff = now - datetime.timedelta(days=u.post_lifetime)
-                    expired = s.query(Post).filter(
-                        Post.author_id == u.id,
-                        Post.is_deleted == False,
-                        Post.created_at <= cutoff,
-                    ).all()
-                    for post in expired:
-                        if _server_busy():
-                            logger.info("Auto-delete: server busy mid-run, stopping at %d", deleted)
-                            break
-                        try:
-                            if "pinned" in exc and post.is_pinned:
-                                continue
-                            if "dm" in exc and post.is_dm:
-                                continue
-                            if "liked" in exc and s.query(Like).filter_by(user_id=u.id, post_id=post.id).first():
-                                continue
-                            if "bookmarked" in exc and s.query(Bookmark).filter_by(user_id=u.id, post_id=post.id).first():
-                                continue
-                            if "poll" in exc and post.poll_data:
-                                continue
-                            if "media" in exc and post.media_attachments:
-                                continue
-                            for _n in s.query(Notification.user_id).filter(Notification.post_id == post.id).distinct().all():
-                                _autodel_notif_users.add(_n[0])
-                            s.query(Notification).filter(Notification.post_id == post.id).delete()
-                            s.query(Like).filter(Like.post_id == post.id).delete()
-                            s.query(Boost).filter(Boost.post_id == post.id).delete()
-                            s.query(Bookmark).filter(Bookmark.post_id == post.id).delete()
-                            s.query(Vote).filter(Vote.post_id == post.id).delete()
-                            s.query(Post).filter(Post.boost_of_id == post.id).update(
-                                {Post.boost_of_id: None}, synchronize_session=False
-                            )
-
-                            media = list(post.media_attachments or [])
-                            if media:
-                                try:
-                                    storage = get_storage()
-                                    for m in media:
-                                        if isinstance(m, dict) and m.get("url"):
-                                            with contextlib.suppress(Exception):
-                                                storage.delete(m["url"])
-                                except Exception:
-                                    pass
-
-                            ap_id = post.ap_id or ""
-                            if ap_id and ap_id.startswith("http"):
-                                with contextlib.suppress(Exception):
-                                    _send_delete_post(post, u)
-
-                            s.delete(post)
-                            s.flush()
-
-                            with contextlib.suppress(Exception):
-                                broadcast_delete(post.id)
-                            deleted += 1
-                        except Exception:
-                            pass
-                    if _server_busy():
-                        break
-                if deleted:
-                    s.commit()
-                    logger.info("Auto-deleted %d expired posts", deleted)
-                    try:
-                        for _uid in _autodel_notif_users:
-                            broadcast_refresh_notifs(_uid)
-                    except Exception:
-                        pass
+            deleted = _run_auto_delete_once()
+            if deleted:
+                logger.info("Auto-delete cycle finished, deleted %d posts", deleted)
         except Exception as e:
             logger.error("Auto-delete worker error: %s", e, exc_info=True)
         time.sleep(_next_3am() + 60)
