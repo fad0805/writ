@@ -470,6 +470,34 @@ input[type="text"].explore-search-input:focus {
   font-size: 1em;
 }
 
+.composer-collapse-bar {
+  display: flex;
+  justify-content: center;
+  margin-top: -20px;
+  margin-bottom: 8px;
+}
+.composer-collapse-bar.collapsed {
+  margin-top: 0;
+}
+.composer-collapse-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 8px;
+  margin: 0;
+  line-height: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.2s, color 0.2s;
+}
+.composer-collapse-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent);
+}
+
 textarea {
   width: 100%;
   padding: 12px;

@@ -91,6 +91,9 @@ export default function TimelinePage() {
   const [rewriteInitialSummary, setRewriteInitialSummary] = useState<string | undefined>(undefined);
   const [rewriteMedia, setRewriteMedia] = useState<{ url: string; type: string; alt?: string }[]>([]);
   const [rewriteInitialMedia, setRewriteInitialMedia] = useState<{ url: string; type: string; alt?: string }[]>([]);
+  const [composerCollapsed, setComposerCollapsed] = useState(
+    () => typeof localStorage !== "undefined" && localStorage.getItem("writ:timeline-composer-collapsed") === "1"
+  );
 
   const totalLoadedRef = useRef(0);
   const cursorRef = useRef<string | null>(null);
@@ -266,6 +269,10 @@ export default function TimelinePage() {
     }
     setLoadingMore(false);
   }, [tlType, hasMore, loadingMore, setCache]);
+
+  useEffect(() => {
+    if (typeof localStorage !== "undefined") localStorage.setItem("writ:timeline-composer-collapsed", composerCollapsed ? "1" : "0");
+  }, [composerCollapsed]);
 
   useEffect(() => { load(); }, [load, user?.id]);
 
@@ -505,21 +512,34 @@ export default function TimelinePage() {
 
   return (
     <>
-      <div className="post-form post-form-desktop">
-        <PostForm
-          key={rewriteContent !== null ? rewriteContent : "main"}
-          onDone={(newPost) => {
-            if (newPost) addOrUpdatePost(newPost);
-            setRewriteContent(null);
-            setRewriteVisibility(undefined);
-            setRewriteSummary(undefined);
-            setRewriteMedia([]);
-          }}
-          initialContent={rewriteContent ?? undefined}
-          initialVisibility={rewriteVisibility}
-          initialSummary={rewriteSummary}
-          initialMedia={rewriteMedia}
-        />
+      {!composerCollapsed && (
+        <div className="post-form post-form-desktop">
+          <PostForm
+            key={rewriteContent !== null ? rewriteContent : "main"}
+            onDone={(newPost) => {
+              if (newPost) addOrUpdatePost(newPost);
+              setRewriteContent(null);
+              setRewriteVisibility(undefined);
+              setRewriteSummary(undefined);
+              setRewriteMedia([]);
+            }}
+            initialContent={rewriteContent ?? undefined}
+            initialVisibility={rewriteVisibility}
+            initialSummary={rewriteSummary}
+            initialMedia={rewriteMedia}
+          />
+        </div>
+      )}
+      <div className={`composer-collapse-bar post-form-desktop${composerCollapsed ? " collapsed" : ""}`}>
+        <button
+          type="button"
+          className="composer-collapse-btn"
+          onClick={() => setComposerCollapsed((v) => !v)}
+          title={composerCollapsed ? "작성창 펼치기" : "작성창 접기"}
+          aria-label={composerCollapsed ? "작성창 펼치기" : "작성창 접기"}
+        >
+          <Icon name={composerCollapsed ? "chevron_down" : "chevron_up"} size={16} />
+        </button>
       </div>
       <div className="timeline-tabs">
         {TABS.map((t) => (
@@ -599,6 +619,7 @@ export default function TimelinePage() {
                           is_deleted: false,
                         });
                       } else {
+                        setComposerCollapsed(false);
                         setRewriteContent(content);
                         setRewriteVisibility(visibility);
                         setRewriteSummary(summary);
