@@ -34,13 +34,25 @@ export default function MediaViewer({ media, index, onIndexChange, onClose }: {
     setPan({ x: 0, y: 0 });
     zoomRef.current = 1;
     panRef.current = { x: 0, y: 0 };
+
+    // 모바일 백 버튼 처리: 브라우저 히스토리에 모달 상태를 push하고
+    // popstate(백 버튼) 발생 시 모달만 닫는다.
+    window.history.pushState({ mediaViewer: true }, "");
+
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onCloseRef.current();
       else if (e.key === "ArrowLeft" && index > 0) onIndexChangeRef.current(index - 1);
       else if (e.key === "ArrowRight" && index < media.length - 1) onIndexChangeRef.current(index + 1);
     };
+
+    const handlePopState = () => { onCloseRef.current(); };
+
     window.addEventListener("keydown", handler);
-    return () => { window.removeEventListener("keydown", handler); };
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("keydown", handler);
+      window.removeEventListener("popstate", handlePopState);
+    };
   }, [index, media.length]);
 
   const applyZoom = useCallback((target: number, focal: { x: number; y: number }) => {
