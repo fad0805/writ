@@ -48,7 +48,7 @@ def _validate_media_url(url: str) -> bool:
     if parsed.scheme == "javascript" or parsed.scheme == "data":
         return False
     path = parsed.path.lower()
-    allowed_ext = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".webm"}
+    allowed_ext = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".webm", ".mp3", ".m4a", ".aac", ".wav", ".flac", ".ogg"}
     ext = os.path.splitext(path)[1]
     return ext in allowed_ext
 

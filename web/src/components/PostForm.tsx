@@ -129,8 +129,8 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
 
   const _isAllowedFile = (f: File) => {
     const ext = f.name.split(".").pop()?.toLowerCase() || "";
-    const allowedExts = ["jpg", "jpeg", "png", "gif", "webp", "ico", "mp4", "webm"];
-    return allowedExts.includes(ext) && (f.type.startsWith("image/") || f.type === "video/mp4" || f.type === "video/webm");
+    const allowedExts = ["jpg", "jpeg", "png", "gif", "webp", "ico", "mp4", "webm", "mp3", "m4a", "aac", "wav", "flac", "ogg"];
+    return allowedExts.includes(ext) && (f.type.startsWith("image/") || f.type.startsWith("audio/") || f.type === "video/mp4" || f.type === "video/webm");
   };
 
   const handleMediaFiles = useCallback((files: File[]) => {
@@ -138,15 +138,18 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     for (const f of files) {
       if (!_isAllowedFile(f)) continue;
       const isVideo = f.type === "video/mp4" || f.type === "video/webm";
+      const isAudio = f.type.startsWith("audio/");
       if (f.size > 26214400 && isVideo) { setMediaWarning("비디오는 25MB를 초과할 수 없습니다."); continue; }
+      if (f.size > 20 * 1024 * 1024 && isAudio) { setMediaWarning("오디오는 20MB를 초과할 수 없습니다."); continue; }
       if (isVideo && mediaItems.some(m => m.type === "video")) continue;
+      if (isAudio && mediaItems.some(m => m.type === "audio")) continue;
       if (mediaItems.length >= 4) break;
-      const id = ++mediaIdRef.current; setMediaItems(prev => [...prev, { id, url: "", type: isVideo ? "video" : "image", file: f, preview: URL.createObjectURL(f) }]);
+      const id = ++mediaIdRef.current; setMediaItems(prev => [...prev, { id, url: "", type: isVideo ? "video" : isAudio ? "audio" : "image", file: f, preview: URL.createObjectURL(f) }]);
     }
   }, [mediaItems]);
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    const files = Array.from(e.clipboardData.files).filter(f => f.type.startsWith("image/") || f.type === "video/mp4" || f.type === "video/webm");
+    const files = Array.from(e.clipboardData.files).filter(f => f.type.startsWith("image/") || f.type.startsWith("audio/") || f.type === "video/mp4" || f.type === "video/webm");
     if (files.length > 0) { e.preventDefault(); handleMediaFiles(files); }
   }, [handleMediaFiles]);
 
@@ -154,7 +157,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/") || f.type === "video/mp4" || f.type === "video/webm");
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/") || f.type.startsWith("audio/") || f.type === "video/mp4" || f.type === "video/webm");
     if (files.length > 0) handleMediaFiles(files);
   }, [handleMediaFiles]);
 
@@ -357,7 +360,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           <button type="button" className="action-btn" onClick={(e) => { e.stopPropagation(); mediaInputRef.current?.click(); }} title="미디어 첨부" disabled={mediaUploading || mediaItems.length >= 4}>
             <Icon name="image" />
           </button>
-          <input ref={mediaInputRef} type="file" accept="image/*,video/mp4,video/webm" multiple hidden onChange={async (e) => {
+          <input ref={mediaInputRef} type="file" accept="image/*,video/mp4,video/webm,audio/*" multiple hidden onChange={async (e) => {
             e.stopPropagation();
             const files = Array.from(e.target.files || []);
             handleMediaFiles(files);

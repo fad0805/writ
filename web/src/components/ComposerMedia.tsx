@@ -1,4 +1,5 @@
 "use client";
+import AudioPlayer from "./AudioPlayer";
 
 export default function ComposerMedia({ items, setItems, altIdx, setAltIdx, revokePreviews }: {
   items: { id: number; url: string; type: string; file?: File; alt?: string; preview?: string }[];
@@ -19,6 +20,10 @@ export default function ComposerMedia({ items, setItems, altIdx, setAltIdx, revo
           >
             {m.type === "video" ? (
               <video src={m.preview || m.url} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6, pointerEvents: "none" }} />
+            ) : m.type === "audio" ? (
+              <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#1a1a2e", borderRadius: 6, padding: 4 }}>
+                <AudioPlayer src={m.preview || m.url} />
+              </div>
             ) : (
               <img src={m.preview || m.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6, pointerEvents: "none" }} />
             )}

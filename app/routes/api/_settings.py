@@ -130,7 +130,7 @@ def api_settings_send_verification(request: Request):
 def api_upload_media(request: Request, file: UploadFile = File(...)):
     require_active_auth(request)
     storage = get_storage()
-    ext, is_image, _is_video, _ = _validate_upload(file, allow_video=True, max_size=MAX_IMAGE_SIZE, label="미디어")
+    ext, is_image, _is_video, is_audio = _validate_upload(file, allow_video=True, allow_audio=True, max_size=MAX_IMAGE_SIZE, label="미디어")
     name = f"{uuid4().hex}.webp" if is_image else f"{uuid4().hex}{ext}"
     key = f"media/{name}"
     if is_image:
@@ -146,7 +146,7 @@ def api_upload_media(request: Request, file: UploadFile = File(...)):
     else:
         storage.save(key, file.file.read())
         url = storage.url(key)
-    return {"url": url, "type": "image" if is_image else "video"}
+    return {"url": url, "type": "image" if is_image else "audio" if is_audio else "video"}
 
 
 @settings_router.post("/settings/change-password")
