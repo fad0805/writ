@@ -10,6 +10,12 @@ WORKDIR /app
 
 COPY package*.json ./
 RUN npm ci
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then \
+        npm install --no-save --force lightningcss-linux-arm64-musl; \
+    elif [ "$ARCH" = "x86_64" ]; then \
+        npm install --no-save --force lightningcss-linux-x64-musl; \
+    fi
 
 COPY . .
 RUN npm run build
