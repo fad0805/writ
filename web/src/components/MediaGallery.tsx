@@ -1,4 +1,5 @@
 "use client";
+import AudioPlayer from "./AudioPlayer";
 export type MediaItem = { url: string; type: string; alt?: string };
 
 export default function MediaGallery({ media, sensitive, revealed, onReveal, onHide, onOpen }: {
@@ -22,6 +23,11 @@ export default function MediaGallery({ media, sensitive, revealed, onReveal, onH
                 {blurred && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 6, zIndex: 1 }} />}
                 <video src={m.url} controls style={{ width: "100%", maxHeight: 400, borderRadius: 6, objectFit: "contain", background: "#000", filter: blurred ? "blur(20px)" : "none" }} />
               </div>
+            ) : m.type === "audio" ? (
+              <div key={i} style={{ position: "relative", padding: "12px 8px", background: "#1a1a2e", borderRadius: 6 }}>
+                {blurred && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 6, zIndex: 1 }} />}
+                <AudioPlayer src={m.url} />
+              </div>
             ) : (
               <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", background: "#000", borderRadius: 6 }}>
                 {blurred && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 6, zIndex: 1 }} />}
@@ -38,6 +44,11 @@ export default function MediaGallery({ media, sensitive, revealed, onReveal, onH
               <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", background: "#000", borderRadius: 6 }}>
                 {blurred && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 6, zIndex: 1 }} />}
                 <video src={m.url} controls style={{ width: "100%", height: "100%", borderRadius: 6, objectFit: "cover", background: "#000", filter: blurred ? "blur(20px)" : "none" }} />
+              </div>
+            ) : m.type === "audio" ? (
+              <div key={i} style={{ position: "relative", padding: "12px 8px", background: "#1a1a2e", borderRadius: 6, height: "100%", display: "flex", alignItems: "center" }}>
+                {blurred && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 6, zIndex: 1 }} />}
+                <AudioPlayer src={m.url} />
               </div>
             ) : (
               <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", background: "#000", borderRadius: 6 }}>
