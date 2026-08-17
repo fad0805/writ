@@ -158,6 +158,20 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
     if (files.length > 0) handleMediaFiles(files);
   }, [handleMediaFiles]);
 
+  const resetForm = useCallback(() => {
+    setContent("");
+    setSummary("");
+    setPostSensitive(false);
+    revokeMediaPreviews(mediaItems);
+    setMediaItems([]);
+    setShowPoll(false);
+    setPollOptions(["", ""]);
+    setPollExpiresIn(1440);
+    setLinkPreview(null);
+    setQuoteUrl("");
+    setQuotePost(null);
+  }, [mediaItems, revokeMediaPreviews]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (overLimit) {
