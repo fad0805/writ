@@ -391,8 +391,10 @@ export default function TimelinePage() {
       if (e.key === ".") {
         e.preventDefault();
         if (selIdx >= 0 && currentPosts[selIdx]) {
-          const post = currentPosts[selIdx];
-          cardRefs.current.get(String(post.id))?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          const first = currentPosts[0];
+          setSelectedId(first.id);
+          selectedIdRef.current = first.id;
+          cardRefs.current.get(String(first.id))?.scrollIntoView({ behavior: "smooth", block: "nearest" });
         } else {
           const scroller = document.querySelector(".main-content");
           if (scroller) scroller.scrollTo({ top: 0, behavior: "smooth" });
