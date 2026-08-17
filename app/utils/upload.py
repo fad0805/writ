@@ -28,7 +28,7 @@ def _validate_upload(file: UploadFile, *, allow_video: bool = True, allow_audio:
         raise HTTPException(status_code=400, detail=f"{label}: 이미지 MIME 타입이 올바르지 않습니다")
     if is_video and ct not in VIDEO_MIME_TYPES:
         raise HTTPException(status_code=400, detail=f"{label}: 비디오 MIME 타입이 올바르지 않습니다")
-    if is_audio and not any(ct.startswith(p) for p in AUDIO_MIME_TYPES) and ct not in AUDIO_MIME_TYPES:
+    if is_audio and ct and ct != "application/octet-stream" and not any(ct.startswith(p) for p in AUDIO_MIME_TYPES) and ct not in AUDIO_MIME_TYPES:
         raise HTTPException(status_code=400, detail=f"{label}: 오디오 MIME 타입이 올바르지 않습니다")
     file.file.seek(0, 2)
     size = file.file.tell()
