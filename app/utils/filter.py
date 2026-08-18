@@ -127,12 +127,25 @@ def should_deliver_post(post, session: Session, user, tl_type: str,
     if filter_ctx:
         if post.author_id in filter_ctx["hidden_ids"]:
             return False
+        # 부스트된 글의 원글 작성자도 차단/뮤트 대상이면 숨김
+        _boost_orig = None
+        if is_boosted and post.boost_of_id:
+            if "boost_originals" in filter_ctx:
+                _boost_orig = filter_ctx["boost_originals"].get(post.boost_of_id)
+            if _boost_orig and _boost_orig.author_id in filter_ctx["hidden_ids"]:
+                return False
         if post.novel_id and post.novel_id in filter_ctx["muted_series_ids"]:
+            return False
+        if _boost_orig and _boost_orig.novel_id and _boost_orig.novel_id in filter_ctx["muted_series_ids"]:
             return False
         if filter_ctx["parsed_kw"]:
             content_lower = (post.content or "").lower()
             if _match_keyword_mute(content_lower, filter_ctx["parsed_kw"]):
                 return False
+            if _boost_orig:
+                orig_content_lower = (_boost_orig.content or "").lower()
+                if _match_keyword_mute(orig_content_lower, filter_ctx["parsed_kw"]):
+                    return False
 
     # --- 2. 멘션 체크 (대원칙 1: 나한테 온 멘션은 무조건 통과) ---
     # mentioned_user_ids만 사용 (content 정규식은 텍스트 참조까지 잡아서 너무 넓음)
