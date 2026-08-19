@@ -13,19 +13,9 @@ export default function MediaGallery({ media, sensitive, revealed, onReveal, onH
   const n = media.length;
   const single = n === 1;
 
-  // 이미지 수에 따른 동적 그리드 계산
-  // 전체 컨테이너는landscape 비율(16:9)을 유지
-  const getGridConfig = (count: number) => {
-    if (count === 1) return { columns: 1, rows: 1 };
-    if (count === 2) return { columns: 2, rows: 1 };
-    if (count <= 4) return { columns: 2, rows: 2 };
-    if (count <= 6) return { columns: 3, rows: 2 };
-    if (count <= 9) return { columns: 3, rows: 3 };
-    if (count <= 12) return { columns: 4, rows: 3 };
-    return { columns: 4, rows: 4 };
-  };
-
-  const gridConfig = getGridConfig(n);
+  const cols = n <= 1 ? 1 : n <= 2 ? 2 : n <= 4 ? 2 : n <= 6 ? 3 : n <= 9 ? 3 : n <= 12 ? 4 : 4;
+  const remainder = n % cols;
+  const spanIndex = remainder > 0 && n > 1 ? Math.floor(n / cols) * cols - 1 : -1;
 
   return (
     <div style={{ position: "relative", marginTop: 8, overflow: "hidden", borderRadius: 8 }}>
@@ -56,7 +46,7 @@ export default function MediaGallery({ media, sensitive, revealed, onReveal, onH
           className="post-media-grid" 
           style={{ 
             display: "grid", 
-            gridTemplateColumns: `repeat(${gridConfig.columns}, 1fr)`, 
+            gridTemplateColumns: `repeat(${cols}, 1fr)`, 
             gridAutoRows: "1fr",
             aspectRatio: "16/9",
             gap: 2 
@@ -64,18 +54,27 @@ export default function MediaGallery({ media, sensitive, revealed, onReveal, onH
         >
           {media.slice(0, 16).map((m: MediaItem, i: number) => {
             const blurred = sensitive && !revealed;
+            const isSpan = i === spanIndex;
+            const cellStyle: React.CSSProperties = {
+              position: "relative",
+              lineHeight: 0,
+              overflow: "hidden",
+              background: "#000",
+              borderRadius: 4,
+              ...(isSpan ? { gridRow: "span 2" } : {}),
+            };
             return m.type === "video" ? (
-              <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", background: "#000", borderRadius: 4 }}>
+              <div key={i} style={cellStyle}>
                 {blurred && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 4, zIndex: 1 }} />}
                 <video src={m.url} controls style={{ width: "100%", height: "100%", objectFit: "cover", background: "#000", borderRadius: 4, filter: blurred ? "blur(20px)" : "none" }} />
               </div>
             ) : m.type === "audio" ? (
-              <div key={i} style={{ position: "relative", padding: "12px 8px", background: "#1a1a2e", height: "100%", display: "flex", alignItems: "center", borderRadius: 4 }}>
+              <div key={i} style={{ ...cellStyle, padding: "12px 8px", display: "flex", alignItems: "center" }}>
                 {blurred && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 4, zIndex: 1 }} />}
                 <AudioPlayer src={m.url} />
               </div>
             ) : (
-              <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", background: "#000", borderRadius: 4 }}>
+              <div key={i} style={cellStyle}>
                 {blurred && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 4, zIndex: 1 }} />}
                 <img src={m.url} alt={m.alt || ""} style={{ width: "100%", height: "100%", objectFit: "cover", background: "#000", borderRadius: 4, cursor: blurred ? "default" : "pointer", filter: blurred ? "blur(20px)" : "none" }} onClick={(e) => { if (!blurred) { e.stopPropagation(); onOpen(i); } }} />
               </div>
