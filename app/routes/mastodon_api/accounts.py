@@ -6,7 +6,9 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import String, cast
 from sqlalchemy.orm import Session as SASession
 
+from app.core.activitypub._outbound import _broadcast_update_actor
 from app.core.relationship import block_user, follow_user, mute_user, unblock_user, unfollow_user, unmute_user
+from app.core.threads import spawn
 from app.db.database import get_db
 from app.models import Follow, Post, User, now
 from app.routes.mastodon_api._common import (
@@ -106,6 +108,7 @@ async def update_credentials(request: Request, db: SASession = Depends(get_db)):
     user.updated_at = now()
     db.commit()
     db.refresh(user)
+    spawn(_broadcast_update_actor, user)
     return _account_json(user, db, viewer=user)
 
 

@@ -89,6 +89,13 @@ def broadcast_notif_sound(target_user_id: int):
         broadcast_notif(json.dumps({"event": "notif", "sound": True}), target_user_id)
 
 
+def broadcast_profile_update(user_id: int):
+    """Broadcast a profile update event to all connected timeline streams."""
+    payload = json.dumps({"type": "profile_update", "user_id": user_id})
+    for info in list(_streams.values()):
+        _enqueue(info["queue"], payload)
+
+
 _post_streams: dict[int, dict] = {}
 _post_counter = 0
 

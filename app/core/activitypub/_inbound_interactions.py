@@ -23,6 +23,7 @@ from app.core.threads import spawn
 from app.core.timeline_stream import (
     broadcast_delete,
     broadcast_notif_sound,
+    broadcast_profile_update,
     broadcast_reaction_update,
     broadcast_refresh_notifs,
 )
@@ -684,7 +685,14 @@ def _handle_update(activity: dict) -> tuple[int, str]:
         obj_type = object_data.get("type", "")
         obj_id = object_data.get("id", "")
         if obj_type in ("Person", "Service"):
-            _resolve_actor(obj_id, force_refresh=True)
+            with get_session() as _s:
+                _signer = _get_instance_actor(_s)
+            refreshed_actor = _resolve_actor(obj_id, force_refresh=True, sign_as=_signer)
+            if refreshed_actor:
+                try:
+                    broadcast_profile_update(refreshed_actor.id)
+                except Exception:
+                    pass
         elif obj_type in ("Note", "Question"):
             with get_session() as session:
                 post = session.query(Post).filter_by(ap_id=obj_id).first()

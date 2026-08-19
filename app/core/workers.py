@@ -140,10 +140,10 @@ def refresh_remote_profiles():
 
     Refreshes a small batch of the least-recently-refreshed remote users, but
     only when the server is idle. Each user is re-attempted at most once every
-    ~3 days, so remote profile changes get picked up over time without load."""
-    REFRESH_STALE_SECONDS = 3 * 24 * 3600
+    ~24 hours, so remote profile changes get picked up over time without load."""
+    REFRESH_STALE_SECONDS = 24 * 3600  # 24시간마다 갱신 시도
     CHECK_INTERVAL_SECONDS = 3600
-    BATCH_SIZE = 15
+    BATCH_SIZE = 50
 
     time.sleep(300)  # give the server time to boot
     while True:
