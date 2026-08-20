@@ -654,7 +654,7 @@ async def upload_media(
     from app.utils.upload import _validate_upload
 
     ext, _is_image, is_video, is_audio = _validate_upload(file, allow_video=True, allow_audio=True, label="미디어")
-    upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "media")
+    upload_dir = os.path.join("uploads", "media")
     os.makedirs(upload_dir, exist_ok=True)
 
     filename = f"{secrets.token_urlsafe(16)}{ext}"
