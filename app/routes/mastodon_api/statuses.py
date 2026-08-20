@@ -169,8 +169,10 @@ def _run_create_status(db, user, text, in_reply_to_id, sensitive, spoiler_text,
 
     media_attachments_json = "[]"
     if media_ids:
+        from app.utils.storage import get_storage as _get_storage
+        _storage = _get_storage()
         media_attachments_json = json.dumps([
-            {"url": f"/uploads/media/{mid}", "type": "image", "alt": ""}
+            {"url": _storage.url(mid), "type": "image", "alt": ""}
             for mid in media_ids[:4]
         ])
 
@@ -652,20 +654,15 @@ async def upload_media(
     _require_bearer(request, db)
 
     from app.utils.upload import _validate_upload
+    from app.utils.storage import get_storage
 
     ext, _is_image, is_video, is_audio = _validate_upload(file, allow_video=True, allow_audio=True, label="미디어")
-    upload_dir = os.path.join("uploads", "media")
-    os.makedirs(upload_dir, exist_ok=True)
 
-    filename = f"{secrets.token_urlsafe(16)}{ext}"
-    filepath = os.path.join(upload_dir, filename)
-
-    with open(filepath, "wb") as f:
-        while True:
-            chunk = file.file.read(1024 * 1024)
-            if not chunk:
-                break
-            f.write(chunk)
+    storage = get_storage()
+    key = f"media/{secrets.token_urlsafe(16)}{ext}"
+    data = await file.read()
+    content_type = file.content_type or "application/octet-stream"
+    url = storage.save(key, data, content_type)
 
     media_type = "image"
     if is_video:
@@ -674,12 +671,12 @@ async def upload_media(
         media_type = "audio"
 
     return {
-        "id": filename,
+        "id": key,
         "type": media_type,
-        "url": f"/uploads/media/{filename}",
-        "preview_url": f"/uploads/media/{filename}",
+        "url": url,
+        "preview_url": url,
         "remote_url": None,
-        "text_url": f"/uploads/media/{filename}",
+        "text_url": url,
         "meta": {},
         "description": description,
         "blurhash": None,
