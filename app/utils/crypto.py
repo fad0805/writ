@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import time
+from functools import lru_cache
 from typing import cast
 
 from cryptography.fernet import Fernet
@@ -9,7 +10,11 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
-from app.config.settings import SECRET_KEY
+from app.config.settings import KEY_ENCRYPTION_SALT, SECRET_KEY
+
+# PBKDF2 반복 횟수. Fernet 암호화는 사용자 AP 개인키처럼 저빈도 경로에서만
+# 호출되므로 이 정도 비용은 감수할 만하다(오프라인 무차별 대입 비용 상승).
+_PBKDF2_ITERATIONS = 200_000
 
 
 def generate_keypair():
@@ -30,23 +35,51 @@ def generate_keypair():
     return priv_pem, pub_pem
 
 
-def _fernet(secret: str) -> Fernet:
-    key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
-    return Fernet(key)
+def _derive_key(secret: str, salt: str) -> bytes:
+    if salt:
+        digest = hashlib.pbkdf2_hmac("sha256", secret.encode(), salt.encode(), _PBKDF2_ITERATIONS)
+    else:
+        # 레거시 체계: 솔트 없는 sha256 단일 파생 (기존 배포본 호환용)
+        digest = hashlib.sha256(secret.encode()).digest()
+    return base64.urlsafe_b64encode(digest)
+
+
+@lru_cache(maxsize=8)
+def _fernet_for(secret: str, salt: str) -> Fernet:
+    # 서명 경로에서 매 요청 복호화가 일어나므로 PBKDF2 반복을 캐시로 절약한다.
+    return Fernet(_derive_key(secret, salt))
+
+
+def _fernet_candidates(secret: str) -> list[Fernet]:
+    """복호화 시도 순서: 현재 설정 체계 우선, 레거시 폴백."""
+    return [_fernet_for(secret, salt) for salt in dict.fromkeys([KEY_ENCRYPTION_SALT, ""])]
 
 
 def encrypt_key(plaintext: str, secret: str) -> str:
-    return _fernet(secret).encrypt(plaintext.encode()).decode()
+    return _fernet_for(secret, KEY_ENCRYPTION_SALT).encrypt(plaintext.encode()).decode()
 
 
 def decrypt_key(ciphertext: str, secret: str) -> str:
-    try:
-        return _fernet(secret).decrypt(ciphertext.encode()).decode()
-    except Exception as exc:
-        # 레거시 평문 PEM이면 그대로 반환 (역호환)
-        if ciphertext.strip().startswith("-----BEGIN"):
-            return ciphertext
-        raise ValueError("Failed to decrypt private key (SECRET_KEY mismatch or corrupted key)") from exc
+    last_exc: Exception | None = None
+    for fernet in _fernet_candidates(secret):
+        try:
+            return fernet.decrypt(ciphertext.encode()).decode()
+        except Exception as exc:  # 체계별 시도가 필요한 구조 (현재→레거시 폴백)
+            last_exc = exc
+    # 레거시 평문 PEM이면 그대로 반환 (역호환)
+    if ciphertext.strip().startswith("-----BEGIN"):
+        return ciphertext
+    raise ValueError("Failed to decrypt private key (SECRET_KEY mismatch or corrupted key)") from last_exc
+
+
+def reencrypt_private_key(ciphertext: str, *, old_secret: str, old_salt: str, new_secret: str, new_salt: str) -> str:
+    """키 순환용: 구 시크릿/솔트 조합으로 복호화해 신 조합으로 다시 암호화한다.
+
+    SECRET_KEY 교체 절차: 1) 구 시크릿으로 이 함수를 통해 모든 사용자 개인키를
+    신 시크릿 조합으로 재암호화 2) 환경변수 교체 후 재시작.
+    """
+    plaintext = Fernet(_derive_key(old_secret, old_salt)).decrypt(ciphertext.encode()).decode()
+    return Fernet(_derive_key(new_secret, new_salt)).encrypt(plaintext.encode()).decode()
 
 
 def get_private_key(user, secret: str) -> str:

@@ -34,6 +34,12 @@ if not _secret_key:
 SECRET_KEY: str = _secret_key
 SESSION_EXPIRE_DAYS = 30
 
+# 사용자 AP 개인키 암호화 전용 솔트. 미설정 시 레거시 체계(솔트 없는
+# sha256 단일 파생)로 동작해 기존 배포본과 호환된다. 설정하면 신규
+# 암호화는 PBKDF2(솔트+반복) 체계를 쓰고, 복호화는 두 체계를 모두
+# 시도한다. 순환 방법은 app/utils/crypto.py의 reencrypt_private_key 참고.
+KEY_ENCRYPTION_SALT: str = os.environ.get("KEY_ENCRYPTION_SALT", "")
+
 # ActivityPub
 ACTIVITYPUB_NS = "https://www.w3.org/ns/activitystreams"
 PUBLIC_URI = "https://www.w3.org/ns/activitystreams#Public"
