@@ -295,7 +295,7 @@ def get_markers(request: Request, db: SASession = Depends(get_db)):
 # POST /api/v1/markers (stub)
 # ---------------------------------------------------------------------------
 @router.post("/v1/markers")
-async def save_markers(request: Request, db: SASession = Depends(get_db)):
+def save_markers(request: Request, db: SASession = Depends(get_db)):
     _require_bearer(request, db)
     return {}
 
@@ -337,7 +337,7 @@ def delete_push_subscription(request: Request, db: SASession = Depends(get_db)):
 # PUT /api/v1/push/subscription (stub)
 # ---------------------------------------------------------------------------
 @router.put("/v1/push/subscription")
-async def update_push_subscription(request: Request, db: SASession = Depends(get_db)):
+def update_push_subscription(request: Request, db: SASession = Depends(get_db)):
     _require_bearer(request, db)
     return {}
 

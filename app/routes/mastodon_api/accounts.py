@@ -293,7 +293,7 @@ def get_account_following(
 # POST /api/v1/accounts/:id/follow
 # ---------------------------------------------------------------------------
 @router.post("/v1/accounts/{account_id}/follow")
-async def follow_account(account_id: str, request: Request, db: SASession = Depends(get_db)):
+def follow_account(account_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     target = db.query(User).filter_by(id=int(account_id)).first()
     if not target:
@@ -310,7 +310,7 @@ async def follow_account(account_id: str, request: Request, db: SASession = Depe
 # POST /api/v1/accounts/:id/unfollow
 # ---------------------------------------------------------------------------
 @router.post("/v1/accounts/{account_id}/unfollow")
-async def unfollow_account(account_id: str, request: Request, db: SASession = Depends(get_db)):
+def unfollow_account(account_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     target = db.query(User).filter_by(id=int(account_id)).first()
     if not target:
@@ -325,7 +325,7 @@ async def unfollow_account(account_id: str, request: Request, db: SASession = De
 # POST /api/v1/accounts/:id/mute
 # ---------------------------------------------------------------------------
 @router.post("/v1/accounts/{account_id}/mute")
-async def mute_account(account_id: str, request: Request, db: SASession = Depends(get_db),
+def mute_account(account_id: str, request: Request, db: SASession = Depends(get_db),
                        notifications: bool = False):
     user = _require_bearer(request, db)
     target = db.query(User).filter_by(id=int(account_id)).first()
@@ -343,7 +343,7 @@ async def mute_account(account_id: str, request: Request, db: SASession = Depend
 # POST /api/v1/accounts/:id/unmute
 # ---------------------------------------------------------------------------
 @router.post("/v1/accounts/{account_id}/unmute")
-async def unmute_account(account_id: str, request: Request, db: SASession = Depends(get_db)):
+def unmute_account(account_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     target = db.query(User).filter_by(id=int(account_id)).first()
     if not target:
@@ -358,7 +358,7 @@ async def unmute_account(account_id: str, request: Request, db: SASession = Depe
 # POST /api/v1/accounts/:id/block
 # ---------------------------------------------------------------------------
 @router.post("/v1/accounts/{account_id}/block")
-async def block_account(account_id: str, request: Request, db: SASession = Depends(get_db)):
+def block_account(account_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     target = db.query(User).filter_by(id=int(account_id)).first()
     if not target:
@@ -375,7 +375,7 @@ async def block_account(account_id: str, request: Request, db: SASession = Depen
 # POST /api/v1/accounts/:id/unblock
 # ---------------------------------------------------------------------------
 @router.post("/v1/accounts/{account_id}/unblock")
-async def unblock_account(account_id: str, request: Request, db: SASession = Depends(get_db)):
+def unblock_account(account_id: str, request: Request, db: SASession = Depends(get_db)):
     user = _require_bearer(request, db)
     target = db.query(User).filter_by(id=int(account_id)).first()
     if not target:

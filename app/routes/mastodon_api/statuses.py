@@ -1,10 +1,10 @@
 """Mastodon status endpoints (/api/v1/statuses*, /api/v1/media)."""
 import contextlib
 import json
-import os
 import secrets
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import func as sqlfunc
 from sqlalchemy import or_
 from sqlalchemy.orm import Session as SASession
@@ -151,7 +151,6 @@ async def create_status(request: Request, db: SASession = Depends(get_db)):
         poll_options = form.get("poll[options]")
         poll_expires = form.get("poll[expires_in]")
 
-    from fastapi.concurrency import run_in_threadpool
     return await run_in_threadpool(_run_create_status,
         db, user, text, in_reply_to_id, sensitive, spoiler_text,
         visibility, language, media_ids, poll_options, poll_expires,
@@ -653,8 +652,8 @@ async def upload_media(
 ):
     _require_bearer(request, db)
 
-    from app.utils.upload import _validate_upload
     from app.utils.storage import get_storage
+    from app.utils.upload import _validate_upload
 
     ext, _is_image, is_video, is_audio = _validate_upload(file, allow_video=True, allow_audio=True, label="미디어")
 
@@ -662,7 +661,8 @@ async def upload_media(
     key = f"media/{secrets.token_urlsafe(16)}{ext}"
     data = await file.read()
     content_type = file.content_type or "application/octet-stream"
-    url = storage.save(key, data, content_type)
+    # boto3 업로드/디스크 쓰기는 블로킹 I/O라 이벤트 루프에서 직접 하면 안 된다.
+    url = await run_in_threadpool(storage.save, key, data, content_type)
 
     media_type = "image"
     if is_video:
