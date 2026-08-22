@@ -149,6 +149,11 @@ def api_by_number(request: Request, username: str, number: str):
             raise HTTPException(status_code=404, detail="Post not found")
         # ActivityPub 요청 → AP JSON 반환
         if "application/activity+json" in accept or "application/ld+json" in accept:
+            from app.routes.ap import _tombstone
+            if post.is_deleted:
+                # 삭제된 글 전문 노출 금지: Tombstone으로 응답
+                return JSONResponse(content=_tombstone(post), status_code=410,
+                                    media_type="application/activity+json")
             if post.visibility not in ("public", "unlisted", "home"):
                 raise HTTPException(status_code=403, detail="Not authorized")
             return JSONResponse(content=to_ap_note(post), media_type="application/activity+json")

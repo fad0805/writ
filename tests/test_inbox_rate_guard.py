@@ -28,17 +28,16 @@ def test_pre_signature_guard_is_ip_keyed_only():
     assert all(k.startswith(("ip:", "daily:ip:")) for k in new_keys)
 
 
-def test_actor_guard_only_runs_post_verification():
-    """actor 가드는 신원 확인된 actor에만 적용되고 임의 문자열도 검증 후라 안전하다.
+def test_actor_guard_is_trusted_noop():
+    """서명 검증 통과한 신뢰 상대(actor)는 리밋이 걸리지 않아야 한다.
 
-    여기서는 함수가 actor 키만 사용함을 확인한다.
+    정상 페더레이션 트래픽(바이럴 like/boost 폭주, 백필)까지 429로 막으면
+    안 되므로, 검증된 actor는 일일/버스트 한도를 적용하지 않는다.
     """
     before = set(rate_limit._rate_limit_store) | set(rate_limit._rate_limit_daily)
     ap_mod._inbox_rate_guard_actor("https://remote.example/users/bob")
     after = set(rate_limit._rate_limit_store) | set(rate_limit._rate_limit_daily)
-    new_keys = after - before
-    assert new_keys
-    assert all(k.startswith(("actor:", "daily:actor:")) for k in new_keys)
+    assert not (after - before), "트러스티드 actor는 저장소 키를 만들지 않는다"
 
 
 def test_ip_guard_blocks_flood_from_same_ip(monkeypatch):

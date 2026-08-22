@@ -188,7 +188,8 @@ def _inbox_rate_guard_ip(request: Request):
     요청 본문의 actor 문자열은 서명 검증 전까지는 위조 가능하므로 키로 쓰면
     무작위 actor로 저장소 키를 무한 생성해 eviction/sweep을 강제하는 공격이
     된다. 소켓 피어 IP는 (TCP 한정) 위조가 불가능하므로 이 단계에서는 IP만
-    본다. actor 기준 제한은 검증 성공 후 _inbox_rate_guard_actor가 담당.
+    본다. 서명 통과한 신뢰 상대(_inbox_rate_guard_actor)에게는 리밋을 걸지
+    않으므로, 이 IP 가드가 인박스의 실질적인 스팸/플러드 방어 역할을 한다.
     """
     client_ip = request.client.host if request.client else ""
     if not client_ip:
@@ -201,14 +202,14 @@ def _inbox_rate_guard_ip(request: Request):
 
 
 def _inbox_rate_guard_actor(actor_url: str):
-    """서명 검증 성공 후 가드: 신원이 확인된 actor 기준 제한."""
-    if not actor_url:
-        return
-    if not check_daily_limit(f"daily:actor:{actor_url}"):
-        raise HTTPException(status_code=429, detail="Daily limit exceeded")
-    actor_key = f"actor:{actor_url}"
-    if not check_rate_limit(actor_key) or not check_burst_limit(actor_key):
-        raise HTTPException(status_code=429, detail="Too many requests")
+    """서명 검증 성공 후 가드.
+
+    HTTP 서명(HMAC)까지 검증을 통과한 actor는 신뢰된 페더레이션 상대이다.
+    이 단계에서 일일/버스트 한도를 적용하면 바이럴 포스트의 like/boost 폭주나
+    백필 같은 정상 트래픽마저 429로 거부하게 된다. 따라서 검증 통과자에게는
+    액션 단위 리밋을 걸지 않는다. 위조/무서명 요청은 검증 전에 실패(401)하므로,
+    실제 스팸·플러드는 _inbox_rate_guard_ip의 IP 한도가 이미 막는다.
+    """
 
 
 async def _verify_signature_async(request: Request, body: bytes, activity: dict):
@@ -344,16 +345,31 @@ def get_create_activity(request: Request, post_id: int):
                             media_type="application/activity+json")
 
 
+def _tombstone(post: Post) -> dict:
+    """삭제된 객체의 AS2 Tombstone 표현 (410 Gone과 함께 반환)."""
+    return {
+        "@context": "https://www.w3.org/ns/activitystreams",
+        "id": post.ap_id or f"{BASE_URL}/posts/{post.id}",
+        "type": "Tombstone",
+        "formerType": "Note",
+    }
+
+
 @router.get("/posts/{post_id}")
 def get_post(request: Request, post_id: int):
     accept = request.headers.get("Accept", "")
 
     with get_session() as session:
-        post = session.query(Post).filter_by(id=post_id, is_deleted=False).first()
+        post = session.query(Post).filter_by(id=post_id).first()
         if not post:
             raise HTTPException(status_code=404, detail="Not found")
 
         if "application/activity+json" in accept or "application/ld+json" in accept:
+            if post.is_deleted:
+                # 삭제된 글의 전문을 재노출하지 않는다: Tombstone으로 응답해
+                # 원격 서버가 캐시를 폐기하도록 유도한다.
+                return JSONResponse(content=_tombstone(post), status_code=410,
+                                    media_type="application/activity+json")
             if not _ap_post_visible(post, request, session):
                 raise HTTPException(status_code=404, detail="Not found")
             return JSONResponse(content=to_ap_note(post),
@@ -461,7 +477,7 @@ def get_post_by_handle(request: Request, username: str, number: str):
 
         if "application/activity+json" in accept or "application/ld+json" in accept:
             if post.is_deleted:
-                return JSONResponse(content=to_ap_note(post),
+                return JSONResponse(content=_tombstone(post), status_code=410,
                                     media_type="application/activity+json")
             if not _ap_post_visible(post, request, session):
                 raise HTTPException(status_code=404, detail="Not found")
