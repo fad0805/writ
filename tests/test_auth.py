@@ -92,6 +92,21 @@ def test_logout_clears_session(client, auth_cookie):
     assert client.get("/api/auth/me", cookies=cookie).status_code == 401
 
 
+def test_legacy_user_id_cookie_rejected(client, make_user):
+    """DB 세션 행 없이 user_id만 담은 구버전 쿠키는 서명이 유효해도 인증되지 않아야 한다.
+
+    비밀번호 변경 등으로 delete_user_sessions()가 세션 행을 모두 지우면,
+    레거시 폴백이 남아 있을 때 해당 쿠키가 무효화를 우회하는 문제가 있었다.
+    """
+    import time
+
+    from app.core.auth import _sign_session_key
+
+    user = make_user("legacysession")
+    legacy_cookie = {"session": _sign_session_key(str(user.id), int(time.time()) + 3600)}
+    assert client.get("/api/auth/me", cookies=legacy_cookie).status_code == 401
+
+
 def test_switch_requires_login(client, auth_cookie):
     _alice, alice_cookie = auth_cookie("alice")
     _bob, bob_cookie = auth_cookie("bob")

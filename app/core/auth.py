@@ -80,12 +80,6 @@ def get_current_user(request: Request):
                 ls.last_active = now
                 session.commit()
             return session.query(User).filter_by(id=ls.user_id, is_remote=False).first()
-        # Backward compat: old cookies encode user_id as the first field
-        try:
-            user_id = int(session_key)
-            return session.query(User).filter_by(id=user_id, is_remote=False).first()
-        except (ValueError, TypeError):
-            pass
     return None
 
 
