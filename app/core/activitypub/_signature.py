@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 from fastapi import Request
 
 from app.config.settings import BASE_URL, DOMAIN
-from app.core.activitypub._fetch import _resolve_actor
+from app.core.activitypub._actor_resolver import _resolve_actor
 from app.db.database import get_session
 from app.models import Follow, User
 from app.utils.crypto import verify_signature
