@@ -61,7 +61,7 @@ export default function AccountSwitcher({ open, onClose }: { open: boolean; onCl
     setSwitching(account.user_id);
     setSwitchError("");
     try {
-      await api.switchAccount(account.session_token);
+      await api.switchAccount(account.user_id);
       setActiveAccountId(account.user_id);
       await refresh();
       onClose();
@@ -93,13 +93,12 @@ export default function AccountSwitcher({ open, onClose }: { open: boolean; onCl
     setAddError("");
     try {
       const result = await api.login(addUsername, addPassword);
-      if (result.user && result.session_token) {
+      if (result.user) {
         storeAccount({
           user_id: result.user.id,
           username: result.user.username,
           display_name: result.user.display_name,
           avatar: result.user.avatar || "",
-          session_token: result.session_token,
         });
         setActiveAccountId(result.user.id);
       }

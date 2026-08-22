@@ -464,6 +464,9 @@ class LoginSession(Base):
     session_key = Column(String(64), unique=True, nullable=False, index=True)
     ip_address = Column(String(45), default="")
     user_agent = Column(Text, default="")
+    # 이 세션에서 비밀번호 재입력 없이 전환할 수 있는 계정 id 목록 (계정 연결).
+    # 토큰을 클라이언트에 저장하지 않고 서버가 전환 허용 여부를 판정한다.
+    linked_user_ids = Column(JSON, default=list)
     last_active = Column(DateTime(timezone=True), default=now)
     created_at = Column(DateTime(timezone=True), default=now)
 

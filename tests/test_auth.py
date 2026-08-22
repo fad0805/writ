@@ -107,15 +107,96 @@ def test_legacy_user_id_cookie_rejected(client, make_user):
     assert client.get("/api/auth/me", cookies=legacy_cookie).status_code == 401
 
 
-def test_switch_requires_login(client, auth_cookie):
+def test_switch_requires_csrf(client, auth_cookie):
     _alice, alice_cookie = auth_cookie("alice")
-    _bob, bob_cookie = auth_cookie("bob")
-    # Switch from bob's session requires an active session cookie AND a valid CSRF token.
-    assert client.get("/api/auth/me", cookies=bob_cookie).status_code == 200
-    # No CSRF header -> rejected before the session check.
+    # No CSRF header -> rejected before anything else.
+    r = client.post(
+        "/api/auth/switch",
+        data={"target_user_id": "999"},
+        cookies=alice_cookie,
+    )
+    assert r.status_code == 403
+
+
+def test_switch_rejects_unlinked_account(client, auth_cookie):
+    from app.utils.crypto import generate_csrf_token
+
+    alice, _alice_cookie = auth_cookie("alice")
+    bob, bob_cookie = auth_cookie("bob")
+    carol, _carol_cookie = auth_cookie("carol")
+    # bob's session has no linked accounts: switching to alice/carol is denied.
+    for target in (alice, carol):
+        r = client.post(
+            "/api/auth/switch",
+            data={"target_user_id": str(target.id)},
+            cookies=bob_cookie,
+            headers={"X-CSRF-Token": generate_csrf_token(bob.id)},
+        )
+        assert r.status_code == 403
+
+
+def test_login_while_logged_in_links_accounts_and_enables_switch(client, auth_cookie):
+    from app.utils.crypto import generate_csrf_token
+
+    alice, alice_cookie = auth_cookie("alice")
+    bob, _bob_cookie = auth_cookie("bob")
+    # Add-account flow: while holding alice's session, log in as bob.
+    r = client.post(
+        "/api/auth/login",
+        data={"username": "bob", "password": "test-password"},
+        cookies=alice_cookie,
+    )
+    assert r.status_code == 200
+    bob_linked_cookie = dict(r.cookies)
+    # Switch back to alice with no stored token — only the cookie + CSRF + user id.
+    r = client.post(
+        "/api/auth/switch",
+        data={"target_user_id": str(alice.id)},
+        cookies=bob_linked_cookie,
+        headers={"X-CSRF-Token": generate_csrf_token(bob.id)},
+    )
+    assert r.status_code == 200
+    assert r.json()["username"] == "alice"
+    me = client.get("/api/auth/me", cookies=dict(r.cookies))
+    assert me.status_code == 200
+    assert me.json()["id"] == alice.id
+
+
+def test_switch_response_contains_no_session_token(client, make_user):
+    """전환 응답과 로그인 응답은 토큰을 노출하지 않는다(클라이언트 저장 금지)."""
+    from app.core.auth import create_session
+    from app.utils.crypto import generate_csrf_token
+
+    alice = make_user("alice")
+    bob = make_user("bob")
+    alice_token = create_session(alice.id)
+    r = client.post(
+        "/api/auth/login",
+        data={"username": "bob", "password": "test-password"},
+        cookies={"session": alice_token},
+    )
+    assert "session_token" not in r.json()
+    bob_linked_cookie = dict(r.cookies)
+    r = client.post(
+        "/api/auth/switch",
+        data={"target_user_id": str(alice.id)},
+        cookies=bob_linked_cookie,
+        headers={"X-CSRF-Token": generate_csrf_token(bob.id)},
+    )
+    assert r.status_code == 200
+    assert "session_token" not in r.json()
+
+
+def test_old_session_token_body_is_not_accepted(client, auth_cookie):
+    """구 프로토콜(session_token 폼 필드)은 더 이상 스위치로 이어지지 않는다."""
+    from app.utils.crypto import generate_csrf_token
+
+    alice, alice_cookie = auth_cookie("alice")
+    # 유효한 세션+CSRF여도 구 필드만으로는 target_user_id가 없어 422로 거부된다.
     r = client.post(
         "/api/auth/switch",
         data={"session_token": "garbage"},
         cookies=alice_cookie,
+        headers={"X-CSRF-Token": generate_csrf_token(alice.id)},
     )
-    assert r.status_code == 403
+    assert r.status_code == 422

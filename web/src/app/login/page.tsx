@@ -29,13 +29,12 @@ function LoginForm() {
     setLoading(true); setError("");
     try {
       const result = await api.login(username, password);
-      if (result.user && result.session_token) {
+      if (result.user) {
         storeAccount({
           user_id: result.user.id,
           username: result.user.username,
           display_name: result.user.display_name,
           avatar: result.user.avatar || "",
-          session_token: result.session_token,
         });
         setActiveAccountId(result.user.id);
       }

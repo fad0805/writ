@@ -27,12 +27,12 @@ from app.config.settings import (
     SMTP_USER,
 )
 from app.core.auth import (
-    _decode_session_token,
     create_session,
     delete_session_by_key,
     get_current_user,
     get_session_key_from_cookie,
     hash_password,
+    session_key_from_token,
     verify_password,
 )
 from app.core.permissions import get_user_permissions
@@ -220,6 +220,23 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
                 raise HTTPException(status_code=403, detail="이메일 인증이 필요합니다. 가입 시 등록한 이메일에서 인증을 완료해 주세요.")
             user_agent = request.headers.get("user-agent", "")
             token = create_session(db_user.id, ip_address=client_ip, user_agent=user_agent)
+            # 이미 유효한 세션으로 로그인하면 두 계정을 서로 연결한다.
+            # 이후 전환은 클라이언트 저장 토큰 없이 linked set으로 검증한다.
+            prev_key = get_session_key_from_cookie(request)
+            new_key = session_key_from_token(token)
+            if prev_key and new_key and prev_key != new_key:
+                with get_session() as ls_s:
+                    prev_ls = ls_s.query(LoginSession).filter_by(session_key=prev_key).first()
+                    if prev_ls and prev_ls.user_id != db_user.id:
+                        linked_prev = set(prev_ls.linked_user_ids or [])
+                        linked_prev.add(db_user.id)
+                        prev_ls.linked_user_ids = sorted(linked_prev)
+                        new_ls = ls_s.query(LoginSession).filter_by(session_key=new_key).first()
+                        if new_ls:
+                            linked_new = set(new_ls.linked_user_ids or [])
+                            linked_new.add(prev_ls.user_id)
+                            new_ls.linked_user_ids = sorted(linked_new)
+                    ls_s.commit()
             if client_ip:
                 ips = db_user.recent_ips or []
                 ips = [ip for ip in ips if ip != client_ip]
@@ -228,7 +245,6 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
                 s.commit()
             log_admin_action(db_user.id, db_user.username, "login", ip_address=client_ip)
             user_json = _user_json(db_user)
-            user_json["session_token"] = token
             resp = JSONResponse(user_json)
             secure = APP_ENV != "development"
             resp.set_cookie(key="session", value=token, max_age=30*86400, httponly=True, samesite="lax", path="/", secure=secure)
@@ -422,33 +438,48 @@ def api_logout(request: Request):
 
 
 @auth_router.post("/auth/switch")
-def api_switch_account(request: Request, session_token: str = Form(...)):
-    """Accept a stored session token and set it as the active session cookie."""
-    # Require an active session so a stolen token can't be replayed from another browser.
-    if not get_current_user(request):
+def api_switch_account(request: Request, target_user_id: int = Form(...)):
+    """현재 세션에 연결된(linked) 계정으로 전환한다.
+
+    클라이언트는 토큰을 저장하지 않고 user_id만 보낸다. 서버가 현재 세션의
+    linked_user_ids로 전환 허용 여부를 판정하고 새 세션 쿠키를 발급한다.
+    """
+    current_user = get_current_user(request)
+    if not current_user:
         raise HTTPException(status_code=401, detail="로그인 상태에서만 계정 전환이 가능합니다.")
     csrf_token = request.headers.get("X-CSRF-Token", "")
     if not validate_csrf_token(csrf_token, request.cookies.get("session", "")):
         raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
-    decoded = _decode_session_token(session_token)
-    if not decoded:
-        raise HTTPException(status_code=401, detail="Invalid session token")
-    session_key, _ = decoded
+    session_key = get_session_key_from_cookie(request)
+    if not session_key:
+        raise HTTPException(status_code=401, detail="Invalid session")
     with get_session() as s:
         ls = s.query(LoginSession).filter_by(session_key=session_key).first()
         if not ls:
             raise HTTPException(status_code=401, detail="Session not found")
-        user = s.query(User).filter_by(id=ls.user_id, is_remote=False).first()
-        if not user:
+        linked = set(ls.linked_user_ids or [])
+        if target_user_id == current_user.id or target_user_id not in linked:
+            raise HTTPException(status_code=403, detail="연결되지 않은 계정입니다. 해당 계정으로 먼저 로그인해 주세요.")
+        target = s.query(User).filter_by(id=target_user_id, is_remote=False).first()
+        if not target:
             raise HTTPException(status_code=401, detail="User not found")
-        if getattr(user, 'is_frozen', False):
+        if getattr(target, 'is_frozen', False):
             raise HTTPException(status_code=403, detail="계정이 동결되었습니다.")
-        if getattr(user, 'is_suspended', False):
+        if getattr(target, 'is_suspended', False):
             raise HTTPException(status_code=403, detail="계정이 정지되었습니다.")
-    user_json = _user_json(user)
-    user_json["session_token"] = session_token
+        # 전환 후에도 기존 연결을 유지한다: 연결 목록 + 직전 계정 - 대상 계정
+        new_linked = sorted((linked | {current_user.id}) - {target.id})
+        client_ip = _get_client_ip(request)
+        new_token = create_session(
+            target.id,
+            ip_address=client_ip,
+            user_agent=request.headers.get("user-agent", ""),
+            linked_user_ids=new_linked,
+        )
+        log_admin_action(target.id, target.username, "login", details=f"switched from {current_user.username}", ip_address=client_ip)
+    user_json = _user_json(target)
     resp = JSONResponse(user_json)
     secure = APP_ENV != "development"
-    resp.set_cookie(key="session", value=session_token, max_age=30*86400, httponly=True, samesite="lax", path="/", secure=secure)
-    resp.set_cookie(key="csrf_token", value=generate_csrf_token(user.id), max_age=3600, httponly=False, samesite="lax", path="/", secure=secure)
+    resp.set_cookie(key="session", value=new_token, max_age=30*86400, httponly=True, samesite="lax", path="/", secure=secure)
+    resp.set_cookie(key="csrf_token", value=generate_csrf_token(target.id), max_age=3600, httponly=False, samesite="lax", path="/", secure=secure)
     return resp

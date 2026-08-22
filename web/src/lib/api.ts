@@ -3,7 +3,6 @@ export interface StoredAccount {
   username: string;
   display_name: string;
   avatar: string;
-  session_token: string;
 }
 
 const ACCOUNTS_KEY = "writ_accounts";
@@ -12,7 +11,17 @@ const ACTIVE_ACCOUNT_KEY = "writ_active_account";
 export function getStoredAccounts(): StoredAccount[] {
   if (typeof localStorage === "undefined") return [];
   try {
-    return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || "[]");
+    const accounts = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || "[]") as StoredAccount[];
+    let sanitized = false;
+    for (const account of accounts) {
+      const legacy = account as unknown as Record<string, unknown>;
+      if ("session_token" in legacy) {
+        delete legacy.session_token;
+        sanitized = true;
+      }
+    }
+    if (sanitized) localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+    return accounts;
   } catch {
     return [];
   }
@@ -380,7 +389,7 @@ export const api = {
   autocomplete: (q: string) => request<{ users: User[] }>(`/api/search/users?q=${encodeURIComponent(q)}`),
 
   // Auth actions
-  login: async (username: string, password: string): Promise<{ ok: boolean; user?: User; session_token?: string }> => {
+  login: async (username: string, password: string): Promise<{ ok: boolean; user?: User }> => {
     const params = new URLSearchParams();
     params.append("username", username);
     params.append("password", password);
@@ -395,11 +404,11 @@ export const api = {
       throw new Error(body.detail || body.error || "Login failed");
     }
     const data = await res.json();
-    return { ok: true, user: data as User, session_token: data.session_token };
+    return { ok: true, user: data as User };
   },
-  switchAccount: async (sessionToken: string): Promise<{ ok: boolean; user?: User }> => {
+  switchAccount: async (targetUserId: number): Promise<{ ok: boolean; user?: User }> => {
     const params = new URLSearchParams();
-    params.append("session_token", sessionToken);
+    params.append("target_user_id", String(targetUserId));
     const csrf = getCsrfToken();
     const headers: Record<string, string> = { "Content-Type": "application/x-www-form-urlencoded" };
     if (csrf) headers["X-CSRF-Token"] = csrf;

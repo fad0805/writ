@@ -47,7 +47,12 @@ def _decode_session_token(token: str):
         return None
 
 
-def create_session(user_id: int, ip_address: str = "", user_agent: str = "") -> str:
+def create_session(
+    user_id: int,
+    ip_address: str = "",
+    user_agent: str = "",
+    linked_user_ids: list[int] | None = None,
+) -> str:
     session_key = secrets.token_urlsafe(32)
     expires = int(time.time()) + SESSION_EXPIRE_DAYS * 86400
     with get_session() as s:
@@ -56,6 +61,7 @@ def create_session(user_id: int, ip_address: str = "", user_agent: str = "") -> 
             session_key=session_key,
             ip_address=ip_address,
             user_agent=user_agent,
+            linked_user_ids=list(linked_user_ids) if linked_user_ids else [],
         )
         s.add(ls)
         s.commit()
@@ -87,6 +93,11 @@ def get_session_key_from_cookie(request: Request) -> str | None:
     token = request.cookies.get("session")
     if not token:
         return None
+    decoded = _decode_session_token(token)
+    return decoded[0] if decoded else None
+
+
+def session_key_from_token(token: str) -> str | None:
     decoded = _decode_session_token(token)
     return decoded[0] if decoded else None
 
