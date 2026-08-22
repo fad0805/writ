@@ -1,5 +1,6 @@
 import secrets
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -12,10 +13,30 @@ from app.routes.api._auth import _check_auth_rate_limit, _get_client_ip, _record
 
 router = APIRouter()
 
+# RFC 6749 권고에 따른 인증 코드 유효 기간 (10분)
+AUTH_CODE_TTL_SECONDS = 600
+
 
 def _form_text(form: dict[str, Any], key: str, default: str = "") -> str:
     val = form.get(key)
     return val if isinstance(val, str) else default
+
+
+def _registered_redirect_uris(app_obj: MastodonApp) -> list[str]:
+    uris = [u.strip() for u in (app_obj.redirect_uris or "").split("\n") if u.strip()]
+    return uris or ["urn:ietf:wg:oauth:2.0:oob"]
+
+
+def _authorization_code_expired(created_at) -> bool:
+    """created_at이 UTC now 대비 AUTH_CODE_TTL_SECONDS를 넘었는지 확인한다.
+
+    PostgreSQL은 timezone-aware 값을 돌려주지만 SQLite 드라이버는 naive UTC를
+    돌려줄 수 있어, naive면 UTC로 간주해 비교한다.
+    """
+    if not created_at:
+        return True
+    ca = created_at if created_at.tzinfo else created_at.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - ca).total_seconds() > AUTH_CODE_TTL_SECONDS
 
 
 def _do_authorize(client_id: str, redirect_uri: str, response_type: str, scope: str, state: str, username: str, password: str, client_ip: str):
@@ -29,6 +50,15 @@ def _do_authorize(client_id: str, redirect_uri: str, response_type: str, scope: 
         app_obj = db.query(MastodonApp).filter_by(client_id=client_id).first()
         if not app_obj:
             return JSONResponse({"error": "Invalid client_id"}, status_code=400)
+
+        if not redirect_uri:
+            redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
+        # 등록되지 않은 redirect_uri로 인증 코드가 발급되는 것을 차단한다 (RFC 6749 §3.1.2)
+        if redirect_uri not in _registered_redirect_uris(app_obj):
+            return JSONResponse(
+                {"error": "invalid_request", "error_description": "Redirect URI is not registered for this client"},
+                status_code=400,
+            )
 
         user = db.query(User).filter(
             User.is_remote == False,
@@ -160,14 +190,16 @@ async def oauth_token(request: Request):
             auth_code = db.query(MastodonAuthorizationCode).filter_by(
                 code=code, used=False, app_id=app_obj.id
             ).first()
-            if not auth_code:
+            if not auth_code or _authorization_code_expired(auth_code.created_at):
                 return JSONResponse({"error": "invalid_grant"}, status_code=400)
+            # authorize 요청에 redirect_uri가 포함되어 저장되므로, 교환 시 반드시 동일해야 한다 (RFC 6749 §4.1.3)
             requested_redirect = body.get("redirect_uri", "")
-            if requested_redirect and requested_redirect != auth_code.redirect_uri:
+            if not requested_redirect or requested_redirect != auth_code.redirect_uri:
                 return JSONResponse({"error": "invalid_grant"}, status_code=400)
             auth_code.used = True
             db.commit()
-            scope = body.get("scope", auth_code.scopes or "read write push")
+            # 토큰 스코프는 승인된(auth_code) 스코프로 고정 — 교환 시 확대를 차단한다 (RFC 6749 §4.1.4)
+            scope = auth_code.scopes or "read write"
             token = secrets.token_urlsafe(48)
             mat = MastodonAccessToken(app_id=app_obj.id, user_id=auth_code.user_id, access_token=token, scopes=scope)
             db.add(mat)
