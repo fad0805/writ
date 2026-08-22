@@ -182,17 +182,33 @@ async def _parse_inbox_body(request: Request) -> tuple[bytes, dict]:
         raise HTTPException(status_code=400, detail="Invalid JSON") from exc
 
 
-def _inbox_rate_guard(request: Request, actor_url: str):
-    """Apply daily/rate/burst limits keyed by actor and client IP."""
+def _inbox_rate_guard_ip(request: Request):
+    """서명 검증 전 가드: IP 기준으로만 제한한다.
+
+    요청 본문의 actor 문자열은 서명 검증 전까지는 위조 가능하므로 키로 쓰면
+    무작위 actor로 저장소 키를 무한 생성해 eviction/sweep을 강제하는 공격이
+    된다. 소켓 피어 IP는 (TCP 한정) 위조가 불가능하므로 이 단계에서는 IP만
+    본다. actor 기준 제한은 검증 성공 후 _inbox_rate_guard_actor가 담당.
+    """
     client_ip = request.client.host if request.client else ""
-    actor_key = f"actor:{actor_url}" if actor_url else ""
-    ip_key = f"ip:{client_ip}" if client_ip else ""
-    daily_key = f"daily:{actor_key or ip_key}"
-    if not check_daily_limit(daily_key):
+    if not client_ip:
+        return
+    ip_key = f"ip:{client_ip}"
+    if not check_daily_limit(f"daily:{ip_key}"):
         raise HTTPException(status_code=429, detail="Daily limit exceeded")
-    for rk in [actor_key, ip_key]:
-        if rk and (not check_rate_limit(rk) or not check_burst_limit(rk)):
-            raise HTTPException(status_code=429, detail="Too many requests")
+    if not check_rate_limit(ip_key) or not check_burst_limit(ip_key):
+        raise HTTPException(status_code=429, detail="Too many requests")
+
+
+def _inbox_rate_guard_actor(actor_url: str):
+    """서명 검증 성공 후 가드: 신원이 확인된 actor 기준 제한."""
+    if not actor_url:
+        return
+    if not check_daily_limit(f"daily:actor:{actor_url}"):
+        raise HTTPException(status_code=429, detail="Daily limit exceeded")
+    actor_key = f"actor:{actor_url}"
+    if not check_rate_limit(actor_key) or not check_burst_limit(actor_key):
+        raise HTTPException(status_code=429, detail="Too many requests")
 
 
 async def _verify_signature_async(request: Request, body: bytes, activity: dict):
@@ -211,11 +227,12 @@ async def shared_inbox(request: Request):
     actor_url = activity.get("actor", "")
     if isinstance(actor_url, list):
         actor_url = actor_url[0]
-    _inbox_rate_guard(request, actor_url)
+    _inbox_rate_guard_ip(request)
 
     ok, _remote_actor = await _verify_signature_async(request, body, activity)
     if not ok:
         return JSONResponse({"status": "error", "message": "Invalid signature"}, status_code=401)
+    _inbox_rate_guard_actor(actor_url)
     err = _validate_inbox_activity(activity)
     if err:
         return JSONResponse({"status": "error", "message": err[1]}, status_code=err[0])
@@ -244,7 +261,7 @@ async def user_inbox(request: Request, username: str):
     activity_id = activity.get("id", "")
     if _is_activity_processed(activity_id):
         return JSONResponse({"status": "ok", "message": "Already processed"}, status_code=200)
-    _inbox_rate_guard(request, actor_url)
+    _inbox_rate_guard_ip(request)
 
     to_list = activity.get("to", [])
     if isinstance(to_list, str):
@@ -264,6 +281,7 @@ async def user_inbox(request: Request, username: str):
     ok, _remote_actor = await _verify_signature_async(request, body, activity)
     if not ok:
         return JSONResponse({"status": "error", "message": "Invalid signature"}, status_code=401)
+    _inbox_rate_guard_actor(actor_url)
 
     err = _validate_inbox_activity(activity)
     if err:

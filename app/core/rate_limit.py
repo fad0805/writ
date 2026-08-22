@@ -1,3 +1,17 @@
+"""인프로세스 슬라이딩 윈도우 레이트 리밋.
+
+한계(문서화): 저장소가 프로세스 로컬 dict이므로 uvicorn/gunicorn 워커를
+N개로 띄우면 실효 한도도 N배가 된다(키 분산 + 카운터 비공유). 단일
+인스턴스 소규모 배포를 전제로 하며, 수평 확장 시 Redis 등 공유 저장소로
+교체해야 정확한 한도가 유지된다. 인터페이스(check_* 함수)는 유지되므로
+내부 구현만 바꾸면 된다.
+
+메모리 상한: 키 1만 개 초과 시 만료 키 스윕(_SWEEP_THRESHOLD). 과거에는
+위조 가능한 actor 문자열이 키로 쓰여 이 스윕을 강제하는 공격이 가능했지만,
+인박스 가드는 서명 검증 전 IP 기준 / 검증 후 actor 기준으로 분리되어
+(app/routes/ap.py _inbox_rate_guard_ip/_actor) 위조 키 생성이 차단됐다.
+"""
+
 import threading
 import time
 from collections import defaultdict
