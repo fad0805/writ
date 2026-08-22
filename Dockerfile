@@ -22,7 +22,7 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PATH="/usr/local/bin:/usr/local/sbin:$PATH" \
+    PATH="/install/bin:/usr/local/bin:/usr/local/sbin:$PATH" \
     PYTHONPATH="/install/lib/python3.12/site-packages:/app"
 
 WORKDIR /app
