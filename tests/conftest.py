@@ -65,8 +65,9 @@ def _reset_in_memory_limits():
     would otherwise accumulate across tests that share a single TestClient IP.
     """
     import app.routes.api._auth as auth_mod
-    from app.core.rate_limit import _rate_limit_daily, _rate_limit_store
     from app.core.permissions import _ROLE_PERM_CACHE, _ROLE_PERM_CACHE_TIME
+    from app.core.rate_limit import _rate_limit_daily, _rate_limit_store
+    from app.utils.filter import _filters_cache
 
     with auth_mod._auth_lock:
         auth_mod._auth_failures.clear()
@@ -74,6 +75,7 @@ def _reset_in_memory_limits():
     _rate_limit_daily.clear()
     _ROLE_PERM_CACHE.clear()
     _ROLE_PERM_CACHE_TIME.clear()
+    _filters_cache.clear()
     yield
     with auth_mod._auth_lock:
         auth_mod._auth_failures.clear()
@@ -81,6 +83,7 @@ def _reset_in_memory_limits():
     _rate_limit_daily.clear()
     _ROLE_PERM_CACHE.clear()
     _ROLE_PERM_CACHE_TIME.clear()
+    _filters_cache.clear()
 
 
 @pytest.fixture

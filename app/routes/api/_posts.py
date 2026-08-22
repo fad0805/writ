@@ -21,6 +21,7 @@ from app.db.mention_resolver import resolve_handles_to_ids
 from app.models import Bookmark, Boost, Like, Notification, Post, User, Vote
 from app.serializers import _post_json
 from app.utils.content_parser import extract_mentions, process_post_content
+from app.utils.filter import _load_user_filters
 from app.utils.post import _get_descendant_ids, _sync_post_tags
 from app.utils.storage import get_storage
 from app.utils.to_ap_serializer import to_ap_note
@@ -45,6 +46,14 @@ def _fetch_remote_parent_json(url, user_id):
         return _post_json(remote_parent, s, user)
 
 
+def _visible_in_thread(p, user, session, hidden_ids):
+    """스레드 상세에 표시 가능한지: 가시성 + 차단/뮤트 + 자기 글 허용."""
+    if not _can_view(p, user, session):
+        return False
+    # 내가 차단·뮤트했거나 나를 차단한 작성자면 숨김 (단, 내 글이면 항상 표시)
+    return not (user and hidden_ids and p.author_id in hidden_ids and p.author_id != user.id)
+
+
 @posts_router.get("/posts/{post_id}")
 def api_get_post(request: Request, post_id: int):
     # --- [추가 시작] ActivityPub 전용 inbox 처리 ---
@@ -63,7 +72,12 @@ def api_get_post(request: Request, post_id: int):
 
     user = get_current_user(request)
     fetch_remote_url = None
+    hidden_ids = None
     with get_session() as s:
+        if user:
+            _fctx = _load_user_filters(s, user)
+            if _fctx:
+                hidden_ids = _fctx["hidden_ids"]
         post = s.query(Post).options(
             selectinload(Post.author),
             selectinload(Post.parent).selectinload(Post.author),
@@ -96,7 +110,7 @@ def api_get_post(request: Request, post_id: int):
             _reply_liked_ids = {r[0] for r in s.query(Like.post_id).filter(Like.user_id == user.id, Like.post_id.in_(reply_id_set)).all()}
             _reply_boosted_ids = {r[0] for r in s.query(Boost.post_id).filter(Boost.user_id == user.id, Boost.post_id.in_(reply_id_set)).all()}
             _reply_bookmarked_ids = {r[0] for r in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(reply_id_set)).all()}
-        result["replies"] = [_post_json(r, s, user, _liked_ids=_reply_liked_ids, _boosted_ids=_reply_boosted_ids, _bookmarked_ids=_reply_bookmarked_ids) for r in descendants if _can_view(r, user, s)]
+        result["replies"] = [_post_json(r, s, user, _liked_ids=_reply_liked_ids, _boosted_ids=_reply_boosted_ids, _bookmarked_ids=_reply_bookmarked_ids) for r in descendants if _visible_in_thread(r, user, s, hidden_ids)]
         result["has_more_replies"] = offset + limit < len(descendant_ids)
 
         ancestors = []
@@ -133,12 +147,12 @@ def api_get_post(request: Request, post_id: int):
 
                 for aid in sliced_ids:
                     p = sliced_map.get(aid)
-                    if p and _can_view(p, user, s):
+                    if p and _visible_in_thread(p, user, s, hidden_ids):
                         ancestors.append(_post_json(p, s, user, _liked_ids=_anc_liked, _boosted_ids=_anc_boosted, _bookmarked_ids=_anc_bookmarked))
 
             if not ancestors and not sliced_ids and post.in_reply_to_ap_id:
                 parent = s.query(Post).filter_by(ap_id=post.in_reply_to_ap_id).first()
-                if parent and _can_view(parent, user, s):
+                if parent and _visible_in_thread(parent, user, s, hidden_ids):
                     ancestors = [_post_json(parent, s, user)]
                 else:
                     fetch_remote_url = post.in_reply_to_ap_id
