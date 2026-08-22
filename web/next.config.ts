@@ -13,10 +13,7 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-          {
-            key: "Content-Security-Policy",
-            value: "default-src 'self'; img-src 'self' data: blob: https: http:; media-src 'self' data: blob: https: http:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; connect-src 'self' https: http://localhost:* ws://localhost:*; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
-          },
+          // CSP는 web/src/middleware.ts에서 요청 단위 nonce와 함께 설정한다.
         ],
       },
     ];

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
@@ -68,7 +69,9 @@ export const viewport = {
   themeColor: "#689f38",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // 미들웨어가 발급한 요청 단위 nonce. CSP script-src 'nonce-...'와 짝을 이룬다.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="ko" suppressHydrationWarning>
       <body suppressHydrationWarning>
@@ -86,7 +89,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <DeactivatedRedirect />
           <CsrfInit />
         </AuthProvider>
-        <script dangerouslySetInnerHTML={{
+        <script nonce={nonce} dangerouslySetInnerHTML={{
           __html: `
             if ('serviceWorker' in navigator) {
               navigator.serviceWorker.register('/sw.js').catch(function() {});
