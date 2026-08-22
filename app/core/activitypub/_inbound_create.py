@@ -9,7 +9,13 @@ from urllib.parse import urlparse
 
 from app.config.settings import BASE_URL
 from app.core.activitypub._emoji import _process_emoji_tags
-from app.core.activitypub._fetch import _extract_og_title, _fetch_remote_post, _resolve_actor, _retry_fetch_reply
+from app.core.activitypub._fetch import (
+    _extract_og_title,
+    _extract_quote_url,
+    _fetch_remote_post,
+    _resolve_actor,
+    _retry_fetch_reply,
+)
 from app.core.activitypub._inbound_common import _broadcast_emoji_list
 from app.core.activitypub._media import _cache_remote_media
 from app.core.activitypub._utils import _get_instance_actor
@@ -382,25 +388,9 @@ def _handle_create(activity: dict) -> tuple[int, str]:
         quote_of_ap_id = ""
         quote_of_id = None
         if isinstance(obj, dict):
-            quote_url = (
-                obj.get("quote")
-                or obj.get("quoteUrl")
-                or obj.get("quoteUri")
-                or obj.get("_misskey_quote")
-                or ""
-            )
-            if not quote_url and isinstance(obj.get("tag"), list):
-                for _tag in obj["tag"]:
-                    if not isinstance(_tag, dict):
-                        continue
-                    if _tag.get("type") == "Quote":
-                        quote_url = _tag.get("href") or _tag.get("id") or ""
-                    elif _tag.get("type") == "Link" and _tag.get("rel") == "https://misskey-hub.net/ns#_misskey_quote":
-                        quote_url = _tag.get("href") or ""
-                    if quote_url:
-                        break
+            quote_url = _extract_quote_url(obj, content)
             try:
-                _q_fields = {k: obj.get(k) for k in ("quote", "quoteUrl", "quoteUri", "_misskey_quote") if obj.get(k)}
+                _q_fields = {k: obj.get(k) for k in ("quote", "quoteUrl", "quoteUri", "quote_uri", "_misskey_quote") if obj.get(k)}
                 if quote_url:
                     logger.debug("[_handle_create QUOTE] post_id=%s url=%s fields=%s", post_id, quote_url, _q_fields)
             except Exception:

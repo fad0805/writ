@@ -24,6 +24,70 @@ from app.utils.urls import extract_remote_url
 
 logger = logging.getLogger("writ.activitypub")
 
+_QUOTE_FIELD_KEYS = ("quote", "quoteUrl", "quoteUri", "quote_uri", "_misskey_quote")
+
+
+def _extract_quote_url(obj, content=""):
+    """AP Note 객체에서 인용(quote) 대상 URL을 추출한다.
+
+    FEP-044f(Mastodon) / Misskey / Firefish 호환 필드와 tag 배열, 그리고
+    일부 구현이 본문 HTML에만 인용 링크(RE: <a> / quote-inline span)를
+    심어 보내는 경우까지 폴백으로 처리한다.
+    """
+    if not isinstance(obj, dict):
+        return ""
+    quote_url = ""
+    for key in _QUOTE_FIELD_KEYS:
+        val = obj.get(key)
+        if isinstance(val, str) and val.startswith("http"):
+            quote_url = val
+            break
+    if not quote_url and isinstance(obj.get("tag"), list):
+        for _tag in obj["tag"]:
+            if not isinstance(_tag, dict):
+                continue
+            if _tag.get("type") == "Quote":
+                quote_url = _tag.get("href") or _tag.get("id") or ""
+            elif _tag.get("type") == "Link" and _tag.get("rel") == "https://misskey-hub.net/ns#_misskey_quote":
+                quote_url = _tag.get("href") or ""
+            if quote_url:
+                break
+    if not quote_url:
+        for content2 in (content, obj.get("content") if isinstance(obj.get("content"), str) else ""):
+            if not content2:
+                continue
+            m = re.search(r'<span[^>]*class="[^"]*quote-inline[^"]*"[^>]*>\s*RE:\s*<a\b[^>]*\bhref="([^"]+)"', content2, re.I)
+            if not m:
+                m = re.search(r'\bRE:\s*<a\b[^>]*\bhref="([^"]+)"', content2, re.I)
+            if not m:
+                m = re.search(r'\bRE:\s*(https?://[^\s<>"\']+)', content2, re.I)
+            if m:
+                quote_url = html.unescape(m.group(1))
+                break
+    return quote_url if isinstance(quote_url, str) else ""
+
+
+def _strip_quote_link(content, quote_url):
+    """본문 content에서 인용 링크(RE: <a> / quote-inline span / 순수 URL)를 제거한다."""
+    if not content or not quote_url:
+        return content
+    esc = re.escape(quote_url)
+    content = re.sub(
+        r'<span[^>]*class="[^"]*quote-inline[^"]*"[^>]*>\s*RE:\s*<a\b[^>]*\bhref="[^"]*"[^>]*>.*?</a>\s*</span>',
+        '', content, flags=re.I | re.S
+    )
+    content = re.sub(
+        r'\bRE:\s*<a\b[^>]*\bhref="' + esc + r'"[^>]*>.*?</a>',
+        '', content, flags=re.I | re.S
+    )
+    content = re.sub(
+        r'<a\b[^>]*\bhref="' + esc + r'"[^>]*>.*?</a>',
+        '', content, flags=re.I | re.S
+    )
+    content = content.replace(quote_url, "")
+    content = re.sub(r'\n{3,}', '\n\n', content)
+    return content.strip()
+
 
 def _retry_fetch_reply(post_id: int, in_reply_to_ap_id: str, attempt: int = 0):
     """Background: fetch remote parent and link to local post. Max 5 attempts with increasing delay."""

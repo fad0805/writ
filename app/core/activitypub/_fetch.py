@@ -14,9 +14,11 @@ from app.core.activitypub._fetch_post import (  # noqa: F401
     _ap_fetch,
     _background_fetch_outbox,
     _extract_og_title,
+    _extract_quote_url,
     _fetch_and_save_ap_object,
     _fetch_remote_post,
     _retry_fetch_reply,
+    _strip_quote_link,
 )
 
 logger = logging.getLogger("writ.activitypub")
