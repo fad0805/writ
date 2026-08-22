@@ -28,7 +28,8 @@ if DATABASE_URL.startswith("sqlite"):
             cur.execute("PRAGMA synchronous=NORMAL")
             cur.close()
         except Exception:
-            pass
+            # WAL/busy_timeout 실패는 SQLite 잠금 경합 문제의 직접 원인이 되므로 기록한다.
+            logger.warning("SQLite PRAGMA 설정 실패", exc_info=True)
 else:
     engine = create_engine(
         DATABASE_URL,
@@ -71,10 +72,9 @@ class _SessionScope:
     def __enter__(self) -> Session:
         return self._sess
 
-    def __exit__(self, exc_type, exc, tb) -> bool:
+    def __exit__(self, exc_type, exc, tb) -> None:
         if self._owned:
             self._sess.close()
-        return False
 
 
 def get_session() -> _SessionScope:

@@ -116,18 +116,27 @@ def _send_flag(reporter: User, target_type: str, target_obj, reason: str, rule_i
         raise ValueError(f"No inbox for {author.actor_uri()}")
 
 
-def _deliver_sync(inbox_url: str, body: bytes, headers: dict) -> bool:
+def _deliver_sync_with_error(inbox_url: str, body: bytes, headers: dict) -> tuple[bool, str]:
+    """전달 시도. 실패 원인을 문자열로 함께 반환해 last_error 기록에 쓴다."""
+    last_error = ""
     for attempt in range(3):
         try:
             resp = httpx.post(inbox_url, content=body, headers=headers, timeout=15)
             if resp.is_success:
-                return True
+                return True, ""
+            last_error = f"HTTP {resp.status_code}"
             if resp.status_code in (400, 401, 403, 404, 405, 410, 422):
-                return False
-        except Exception:
+                return False, last_error
+        except Exception as e:
+            last_error = f"{type(e).__name__}: {e}"
             if attempt < 2:
                 time.sleep(2 ** attempt)
-    return False
+    return False, last_error or "unknown error"
+
+
+def _deliver_sync(inbox_url: str, body: bytes, headers: dict) -> bool:
+    ok, _error = _deliver_sync_with_error(inbox_url, body, headers)
+    return ok
 
 
 def _post_to_inbox(inbox_url: str, activity: dict, sender: User):

@@ -10,7 +10,12 @@ from urllib.parse import urlparse
 from sqlalchemy import or_
 
 from app.config.settings import ORPHAN_MEDIA_MIN_AGE_DAYS, SECRET_KEY
-from app.core.activitypub import _deliver_sync, _get_instance_actor, _resolve_actor, _send_delete_post
+from app.core.activitypub import (
+    _deliver_sync_with_error,
+    _get_instance_actor,
+    _resolve_actor,
+    _send_delete_post,
+)
 from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs
 from app.db.database import engine, get_session
 from app.models import Bookmark, Boost, Like, Notification, PendingDelivery, Post, RemoteMedia, User, Vote
@@ -76,7 +81,7 @@ def delivery_worker():
                         "Digest": f"SHA-256={digest}",
                         "Host": parsed.netloc,
                     }
-                    ok = _deliver_sync(it["inbox_url"], body, headers)
+                    ok, deliver_error = _deliver_sync_with_error(it["inbox_url"], body, headers)
                     with get_session() as s2:
                         if ok:
                             s2.query(PendingDelivery).filter_by(id=it["id"]).delete()
@@ -84,9 +89,10 @@ def delivery_worker():
                             row = s2.query(PendingDelivery).get(it["id"])
                             if row:
                                 row.attempts += 1
+                                # 실제 실패 원인을 남긴다(과거에는 재시도 한도 메시지로 덮어써 원인 추적이 불가능했다).
+                                row.last_error = (deliver_error or "unknown error")[:500]
                                 if row.attempts >= 7:
                                     row.status = "failed"
-                                row.last_error = "Max retries reached"
                         s2.commit()
                 except Exception as e:
                     with get_session() as s2:
@@ -261,7 +267,8 @@ def _run_auto_delete_once() -> int:
                         broadcast_delete(post.id)
                     deleted += 1
                 except Exception:
-                    pass
+                    # 개별 글 실패가 전체 워커를 죽이지는 않되, 원인은 반드시 남긴다.
+                    logger.error("Auto-delete failed for post %s", post.id, exc_info=True)
             if _server_busy():
                 break
         if deleted:

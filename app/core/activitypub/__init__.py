@@ -62,6 +62,7 @@ from app.core.activitypub._outbound import (
     _author_inbox,
     _broadcast_update_actor,
     _deliver_sync,
+    _deliver_sync_with_error,
     _fanout_to_followers,
     _post_to_inbox,
     _post_to_inboxes,
