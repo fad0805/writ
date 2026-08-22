@@ -27,6 +27,6 @@ WRIT는 Docker Compose로 실행되며, 세 개의 컨테이너로 구성됩니�
 
 - **web** — 사용자에게 보이는 웹 UI입니다. 호스트에는 `3000`번 포트만 열려 있습니다.
 - **api** — ActivityPub 연합, REST API, 백그라운드 워커를 실행합니다. 호스트에 직접 노출되지 않으며 `web`을 통해 접근합니다.
-- **db** — PostgreSQL 데이터베이스입니다. 마이그레이션(alembic)은 api 컨테이너가 시작될 때 자동으로 실행됩니다.
+- **db** — PostgreSQL 데이터베이스입니다. 자체 헬스체크(`pg_isready`)를 제공하며, api는 이 통과 후 시작해 마이그레이션(alembic)을 자동 실행합니다.
 
 역방향 프록시(Nginx 등)는 반드시 **web(3000)**을 바라보게 설정해야 합니다. `/.well-known/*`, `/users/*`, `/posts/*`, `/nodeinfo/*`, `/inbox` 등 연합(Federation)용 경로도 `web`이 api로 중계합니다.

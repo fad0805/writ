@@ -54,6 +54,7 @@ docker compose up -d
 - 새 코드에 DB 마이그레이션이 포함되어 있다면 api 컨테이너 시작 시 `alembic upgrade head`가 자동으로 실행됩니다.
 - 업데이트 전 백업을 권장합니다.
 - `.env.production.sample`이 변경됐다면 새 환경 변수가 있는지 비교해 `.env.production`에 반영하세요.
+- 여러 계정을 등록해 전환하던 사용자가 있다면, 업데이트 후 각 계정으로 한 번씩 다시 로그인해야 전환 목록이 재구성됩니다. (계정 전환이 브라우저 저장 토큰 대신 서버 측 검증으로 바뀌었으며, 구 토큰은 클라이언트에서 자동 삭제됩니다.)
 
 ## 로그
 
@@ -116,11 +117,13 @@ curl -s https://<도메인>/nodeinfo/2.0
 
 ### 마이그레이션 실패로 서버가 뜨지 않는다
 
-api 시작 시 `alembic upgrade head`가 실패해도 컬럼 안전성 검사를 거친 뒤 서버는 계속 실행됩니다. 로그를 확인하세요.
+api 시작 시 `alembic upgrade head`가 실패하면 스키마 불일치 상태로 기동하는 것을 막기 위해 api가 즉시 종료됩니다. `restart: unless-stopped` 정책에 따라 계속 재시도되므로, 원인을 해결하기 전에는 api가 뜨지 않는 것이 정상입니다.
 
 ```bash
 docker compose logs api | grep -i -E "error|alembic|migration"
 ```
+
+원인 예시: DB 미기동(db 컨테이너 헬스체크 확인), `DATABASE_URL` 불일치, 디스크 부족, 손상된 마이그레이션 체인. 복구가 어려우면 [백업](#백업)으로 DB를 복원한 뒤 다시 시도하세요.
 
 ### 상태 확인
 

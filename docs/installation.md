@@ -73,7 +73,7 @@ docker compose ps          # 세 컨테이너가 모두 running 상태여야 함
 docker compose logs -f api # 마이그레이션과 서버 시작 로그 확인
 ```
 
-api 컨테이너가 시작될 때 `alembic upgrade head`(DB 마이그레이션)가 자동 실행됩니다. 실패 시 별도 컬럼 안전성 검사를 수행하고 서버를 계속 띄웁니다.
+api 컨테이너가 시작될 때 `alembic upgrade head`(DB 마이그레이션)가 자동 실행됩니다. api는 db 컨테이너의 헬스체크(pg_isready)가 통과한 뒤에 시작되며, 마이그레이션이 실패하면 스키마 불일치 상태로 서비스하는 것을 막기 위해 즉시 종료합니다. 이후 compose의 재시작 정책(`restart: unless-stopped`)에 따라 재시도됩니다.
 
 ## 5단계. 첫 계정(관리자) 생성
 
