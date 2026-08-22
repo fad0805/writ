@@ -1,6 +1,6 @@
 "Users listing/detail/stats admin endpoints."
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import String
@@ -43,7 +43,7 @@ def api_admin_users(request: Request, location: str = Query("local"), status: st
             qb = qb.filter(User.email_verified == False, User.is_remote == False)
         elif status == "inactive":
             # no recent activity > 30 days (local only)
-            cutoff = datetime.utcnow() - timedelta(days=30)
+            cutoff = datetime.now(UTC) - timedelta(days=30)
             qb = qb.filter(User.is_remote == False, User.created_at < cutoff)
         if role == "admin":
             qb = qb.filter(User.role.in_(["admin", "owner"]))

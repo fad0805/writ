@@ -36,6 +36,7 @@ class User(Base):
     email = Column(String(255), unique=True, default="")
     email_verified = Column(Boolean, default=False)
     verification_token = Column(String(128), default="")
+    verification_token_expires_at = Column(DateTime(timezone=True), nullable=True)
     reset_token = Column(String(128), default="")
     reset_token_expires_at = Column(DateTime(timezone=True), nullable=True)
     recent_ips = Column(JSON, default=list)

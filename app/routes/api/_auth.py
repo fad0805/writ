@@ -8,7 +8,7 @@ import secrets
 import smtplib
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from email.mime.text import MIMEText
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -27,6 +27,7 @@ from app.config.settings import (
     SMTP_USER,
 )
 from app.core.auth import (
+    _PBKDF2_ITERATIONS,
     create_session,
     delete_session_by_key,
     delete_user_sessions,
@@ -132,6 +133,7 @@ def _send_verification_email(u: User):
         return
     token = secrets.token_urlsafe(32)
     u.verification_token = token  # type: ignore[assignment]
+    u.verification_token_expires_at = datetime.now(UTC) + timedelta(hours=24)  # type: ignore[assignment]
     verify_url = f"{BASE_URL}/verify-email?token={token}"
     try:
         msg = MIMEText(
@@ -196,7 +198,10 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
             if not db_user:
                 log_admin_action(None, username, "login_failed", details="user_not_found", ip_address=client_ip)
                 _record_auth_failure(client_ip)
-                raise HTTPException(status_code=401, detail="Invalid credentials")
+                # 타이밍 공격 방어: 유저 존재 여부가 노출되지 않게 더미 해시도 가상으로 검증한다.
+                verify_password(password, f"{_PBKDF2_ITERATIONS}:deadbeefdeadbeef:0")
+                # 유저 존재를 구분해주지 않도록 wrong_password와 같은 메시지 사용
+                raise HTTPException(status_code=401, detail="아이디 또는 비밀번호가 틀렸습니다.")
             if getattr(db_user, 'is_frozen', False):
                 log_admin_action(db_user.id, db_user.username, "login_blocked", details="frozen", ip_address=client_ip)
                 raise HTTPException(status_code=403, detail="계정이 동결되었습니다.")
@@ -211,11 +216,11 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
                 raise HTTPException(status_code=403, detail="비활성화된 계정입니다.")
             stored = db_user.password_hash
             if ":" not in stored:
-                raise HTTPException(status_code=401, detail="Invalid credentials")
+                raise HTTPException(status_code=401, detail="아이디 또는 비밀번호가 틀렸습니다.")
             if not verify_password(password, stored):
                 log_admin_action(db_user.id, db_user.username, "login_failed", details="wrong_password", ip_address=client_ip)
                 _record_auth_failure(client_ip)
-                raise HTTPException(status_code=401, detail="비밀번호가 틀렸습니다.")
+                raise HTTPException(status_code=401, detail="아이디 또는 비밀번호가 틀렸습니다.")
             if not db_user.email_verified:
                 log_admin_action(db_user.id, db_user.username, "login_blocked", details="email_not_verified", ip_address=client_ip)
                 raise HTTPException(status_code=403, detail="이메일 인증이 필요합니다. 가입 시 등록한 이메일에서 인증을 완료해 주세요.")
@@ -336,8 +341,21 @@ def api_verify_email(request: Request, token: str = Form(...)):
         if not u:
             raise HTTPException(status_code=400, detail="유효하지 않거나 이미 만료된 인증 토큰입니다.")
 
+        expires = u.verification_token_expires_at
+        now = datetime.now(UTC)
+        if expires:
+            # SQLite는 timezone=True여도 naive로 반환한다 → UTC aware로 정규화
+            if expires.tzinfo is None:
+                expires = expires.replace(tzinfo=UTC)
+            if now > expires:
+                u.verification_token = ""
+                u.verification_token_expires_at = None
+                s.commit()
+                raise HTTPException(status_code=400, detail="인증 토큰이 만료되었습니다. 인증 이메일을 다시 요청해 주세요.")
+
         u.email_verified = True
         u.verification_token = ""
+        u.verification_token_expires_at = None
 
         if u.role != "owner":
             admins = s.query(User).filter(User.role.in_(["admin", "moderator", "owner"])).all()
@@ -356,6 +374,9 @@ def api_verify_email(request: Request, token: str = Form(...)):
 
 @auth_router.post("/auth/resend-verification")
 def api_resend_verification(request: Request, email: str = Form(...)):
+    client_ip = _get_client_ip(request)
+    if not _check_auth_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
     with get_session() as s:
         u = s.query(User).filter_by(email=email, email_verified=False).first()
         if not u:
@@ -376,7 +397,7 @@ def api_forgot_password(request: Request, email: str = Form(...)):
             return {"ok": True}
         token = secrets.token_urlsafe(32)
         u.reset_token = token
-        u.reset_token_expires_at = datetime.utcnow() + timedelta(hours=1)
+        u.reset_token_expires_at = datetime.now(UTC) + timedelta(hours=1)
         s.commit()
         reset_url = f"{BASE_URL}/reset-password?token={token}"
         try:
@@ -415,11 +436,16 @@ def api_reset_password(request: Request, token: str = Form(...), password: str =
         u = s.query(User).filter_by(reset_token=token, is_remote=False).first()
         if not u:
             raise HTTPException(status_code=400, detail="유효하지 않거나 만료된 토큰입니다.")
-        if u.reset_token_expires_at and datetime.utcnow() > u.reset_token_expires_at:
-            u.reset_token = ""
-            u.reset_token_expires_at = None
-            s.commit()
-            raise HTTPException(status_code=400, detail="유효하지 않거나 만료된 토큰입니다.")
+        if u.reset_token_expires_at:
+            # SQLite는 timezone=True여도 naive로 반환한다 → UTC aware로 정규화
+            _exp = u.reset_token_expires_at
+            if _exp.tzinfo is None:
+                _exp = _exp.replace(tzinfo=UTC)
+            if datetime.now(UTC) > _exp:
+                u.reset_token = ""
+                u.reset_token_expires_at = None
+                s.commit()
+                raise HTTPException(status_code=400, detail="유효하지 않거나 만료된 토큰입니다.")
         u.password_hash = hash_password(password)
         u.reset_token = ""
         u.reset_token_expires_at = None

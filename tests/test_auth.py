@@ -220,3 +220,52 @@ def test_old_session_token_body_is_not_accepted(client, auth_cookie):
         headers={"X-CSRF-Token": generate_csrf_token(alice.id)},
     )
     assert r.status_code == 422
+
+
+def test_verify_email_expired_token_rejected(client, make_user):
+    """만료된 이메일 인증 토큰은 거부되고, 유효한 토큰은 인증된다."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.db.database import get_session
+    from app.models import User
+
+    import secrets
+
+    user = make_user("verifyexp")
+    token = secrets.token_urlsafe(32)
+    with get_session() as s:
+        u = s.query(User).filter_by(id=user.id).first()
+        u.email_verified = False
+        u.verification_token = token
+        u.verification_token_expires_at = datetime.now(UTC) - timedelta(hours=1)
+        s.commit()
+
+    r = client.post("/api/auth/verify-email", data={"token": token})
+    assert r.status_code == 400
+
+    with get_session() as s:
+        u = s.query(User).filter_by(id=user.id).first()
+        assert u.email_verified is False
+        assert u.verification_token == ""
+
+    # 유효한 토큰이면 인증 성공
+    fresh_token = secrets.token_urlsafe(32)
+    with get_session() as s:
+        u = s.query(User).filter_by(id=user.id).first()
+        u.verification_token = fresh_token
+        u.verification_token_expires_at = datetime.now(UTC) + timedelta(hours=1)
+        s.commit()
+    r = client.post("/api/auth/verify-email", data={"token": fresh_token})
+    assert r.status_code == 200
+    assert r.json()["email_verified"] is True
+
+
+def test_resend_verification_rate_limited(client, make_user):
+    """인증 대기 계정에 대한 재발송은 5회 실패 rate limit을 따른다."""
+    make_user("resent")
+    r = client.post("/api/auth/resend-verification", data={"email": "resent@test.local"})
+    assert r.status_code == 200 or r.status_code == 400  # SMTP 없으면 처리되어 200
+    for _ in range(8):
+        client.post("/api/auth/login", data={"username": "resent", "password": "wrong"})
+    r = client.post("/api/auth/resend-verification", data={"email": "x@test.local"})
+    assert r.status_code == 429
