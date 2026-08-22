@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 ARG API_HOST=http://api:8000
 ENV API_HOST=${API_HOST}
@@ -8,13 +8,20 @@ ENV BASE_URL=${BASE_URL}
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN rm -f package-lock.json && npm install
+# package-lock.json을 존중하는 npm ci로 결정적 빌드를 보장한다.
+COPY package.json package-lock.json ./
+RUN npm ci
 
 COPY . .
 RUN npm run build
 
-FROM node:20-alpine AS runner
+# runner에는 런타임 의존성만 담는다(빌드 도구체인/devDeps 제외).
+FROM node:22-alpine AS deps-prod
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -22,9 +29,9 @@ ENV API_HOST=http://api:8000
 
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/next.config.ts ./
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=deps-prod /app/node_modules ./node_modules
+COPY --from=deps-prod /app/package.json ./package.json
 COPY start.sh ./start.sh
 RUN chmod +x start.sh
 
