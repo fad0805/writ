@@ -12,8 +12,9 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import object_session, relationship
 
 from app.config.settings import BASE_URL
 from app.db.database import Base
@@ -207,32 +208,35 @@ class Post(Base):
     replies = relationship("Post", back_populates="parent", foreign_keys=[in_reply_to_id], lazy="selectin")
     boost_of = relationship("Post", foreign_keys=[boost_of_id], remote_side=[id], lazy="noload")
     quote_of = relationship("Post", foreign_keys=[quote_of_id], remote_side=[id], lazy="noload")
-    likes = relationship("Like", back_populates="post", cascade="all, delete-orphan", lazy="selectin")
-    boosts = relationship("Boost", back_populates="post", cascade="all, delete-orphan", lazy="selectin")
+    # likes/boosts/replies는 지연 로딩이 기본. 인기 글의 Like 수만큼 ORM
+    # 객체가 매 조회마다 메모리로 올라오는 selectin 폭탄을 막는다.
+    # 카운트는 아래 *_count 프로퍼티(서브쿼리) 또는 serializers의 배치
+    # 집계(_post_counts)를 사용한다. 일괄 로딩이 필요한 경로에서만
+    # selectinload()를 명시한다.
+    likes = relationship("Like", back_populates="post", cascade="all, delete-orphan", lazy="select")
+    boosts = relationship("Boost", back_populates="post", cascade="all, delete-orphan", lazy="select")
     votes = relationship("Vote", back_populates="post", cascade="all, delete-orphan", lazy="noload")
     novel = relationship("Novel", foreign_keys=[novel_id], lazy="selectin")
     episode = relationship("Episode", foreign_keys=[episode_id], lazy="selectin")
 
+    def _scalar_count(self, column_model, *filters):
+        s = object_session(self)
+        if s is None or self.id is None:
+            return 0
+        return s.query(func.count(column_model.id)).filter(*filters).scalar() or 0
+
     @property
     def likes_count(self):
-        try:
-            return len(self.likes) if self.likes is not None else 0
-        except Exception:
-            return 0
+        return self._scalar_count(Like, Like.post_id == self.id)
 
     @property
     def boosts_count(self):
-        try:
-            return len(self.boosts) if self.boosts is not None else 0
-        except Exception:
-            return 0
+        return self._scalar_count(Boost, Boost.post_id == self.id)
 
     @property
     def replies_count(self):
-        try:
-            return sum(1 for r in self.replies if not r.is_deleted) if self.replies is not None else 0
-        except Exception:
-            return 0
+        # 삭제된 답글 제외 — serializers._load_counts_batch와 동일 조건
+        return self._scalar_count(Post, Post.in_reply_to_id == self.id, Post.is_deleted == False)
 
 
 class Vote(Base):
