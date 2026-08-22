@@ -75,6 +75,7 @@ from app.core.activitypub._outbound import (
 )
 from app.core.activitypub._signature import (
     _ap_post_visible,
+    _sig_executor,
     _validate_inbox_activity,
     verify_http_signature,
 )

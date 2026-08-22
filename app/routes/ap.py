@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 
@@ -9,6 +10,7 @@ from app.core.activitypub import (
     _ap_post_visible,
     _is_activity_processed,
     _mark_activity_processed,
+    _sig_executor,
     _submit_inbox,
     _validate_inbox_activity,
     get_featured,
@@ -193,6 +195,16 @@ def _inbox_rate_guard(request: Request, actor_url: str):
             raise HTTPException(status_code=429, detail="Too many requests")
 
 
+async def _verify_signature_async(request: Request, body: bytes, activity: dict):
+    """서명 검증을 전용 풀에서 실행한다.
+
+    검증은 DB 조회와 알 수 없는 액터 키 네트워크 페치를 포함해 블로킹될 수 있어,
+    이벤트 루프에서 직접 호출하면 서버 전체가 멈춘다.
+    """
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_sig_executor, verify_http_signature, request, body, activity)
+
+
 @router.post("/inbox")
 async def shared_inbox(request: Request):
     body, activity = await _parse_inbox_body(request)
@@ -201,7 +213,7 @@ async def shared_inbox(request: Request):
         actor_url = actor_url[0]
     _inbox_rate_guard(request, actor_url)
 
-    ok, _remote_actor = verify_http_signature(request, body, activity)
+    ok, _remote_actor = await _verify_signature_async(request, body, activity)
     if not ok:
         return JSONResponse({"status": "error", "message": "Invalid signature"}, status_code=401)
     err = _validate_inbox_activity(activity)
@@ -249,7 +261,7 @@ async def user_inbox(request: Request, username: str):
         return JSONResponse({"status": "error", "message": "Not addressed to this user"}, status_code=403)
 
     request.state.sign_as_user = user
-    ok, _remote_actor = verify_http_signature(request, body, activity)
+    ok, _remote_actor = await _verify_signature_async(request, body, activity)
     if not ok:
         return JSONResponse({"status": "error", "message": "Invalid signature"}, status_code=401)
 
