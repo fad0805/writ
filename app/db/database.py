@@ -52,11 +52,40 @@ def get_db():
         sess.close()
 
 
-def get_session():
+class _SessionScope:
+    """`with get_session() as s:`용 컨텍스트 매니저.
+
+    요청 스코프 공유 세션(Depends(get_db)가 만든 것)을 빌려 쓸 때는 블록
+    종료 시 닫지 않는다 — 과거에는 공유 세션을 그대로 반환해 `with` 종료가
+    요청 세션을 mid-flight에 닫아버려, 이후 로드된 ORM 객체가 detach되는
+    문제가 있었다. 직접 생성한 세션(워커/스크립트 경로)만 소유하며 종료 시
+    닫는다.
+    """
+
+    __slots__ = ("_owned", "_sess")
+
+    def __init__(self, sess: Session, owned: bool):
+        self._sess = sess
+        self._owned = owned
+
+    def __enter__(self) -> Session:
+        return self._sess
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        if self._owned:
+            self._sess.close()
+        return False
+
+
+def get_session() -> _SessionScope:
+    """요청 컨텍스트면 요청 세션을 공유하고, 아니면 새 세션을 만든다.
+
+    반드시 `with get_session() as s:` 형태로 사용한다.
+    """
     sess = _request_session.get()
     if sess is not None:
-        return sess
-    return Session(engine, expire_on_commit=False)
+        return _SessionScope(sess, owned=False)
+    return _SessionScope(Session(engine, expire_on_commit=False), owned=True)
 
 
 def username_prefix_like(col, prefix):
