@@ -157,20 +157,43 @@ def verify_http_signature(request: Request, body: bytes, activity: dict) -> tupl
         except Exception:
             pass
 
+    now = datetime.datetime.now(datetime.UTC)
+    freshness_ok = False
     date_header = request.headers.get("Date", "")
     if date_header:
         try:
             date_tuple = email.utils.parsedate_tz(date_header)
             if date_tuple:
-                date_dt = datetime.datetime.fromtimestamp(email.utils.mktime_tz(date_tuple), tz=datetime.UTC)
-                now = datetime.datetime.now(datetime.UTC)
-                diff = abs((now - date_dt).total_seconds())
-                if diff > 300:
-                    logger.debug("[SIG] date_freshness FAIL diff=%s", diff)
+                date_dt = datetime.datetime.fromtimestamp(
+                    email.utils.mktime_tz(date_tuple), tz=datetime.UTC)
+                if abs((now - date_dt).total_seconds()) <= 300:
+                    freshness_ok = True
+                else:
+                    logger.debug("[SIG] date_freshness FAIL diff=%s",
+                                 abs((now - date_dt).total_seconds()))
                     return (False, None)
         except (ValueError, TypeError, OverflowError):
             logger.debug("[SIG] date_parse FAIL")
             return (False, None)
+    # hs2019 `created` 파라미터: Date 대신 사용되는 신선도 기준
+    created_param = params.get("created", "")
+    if created_param:
+        try:
+            created_ts = float(created_param)
+            created_dt = datetime.datetime.fromtimestamp(created_ts, tz=datetime.UTC)
+            if abs((now - created_dt).total_seconds()) <= 300:
+                freshness_ok = True
+            else:
+                logger.debug("[SIG] created_freshness FAIL diff=%s",
+                             abs((now - created_dt).total_seconds()))
+                return (False, None)
+        except (ValueError, TypeError, OverflowError, OSError):
+            logger.debug("[SIG] created_parse FAIL")
+            return (False, None)
+    # replay 방어: 신선도 기준(Date 또는 hs2019 created)이 전무하면 거부
+    if not freshness_ok:
+        logger.debug("[SIG] freshness FAIL (no Date/created)")
+        return (False, None)
 
     path = request.url.path
     date = request.headers.get("Date", "")

@@ -151,6 +151,99 @@ def test_stale_date_rejected(make_user):
     assert ok is False
 
 
+def test_missing_freshness_rejected(make_user):
+    """Replay 방어: Date 및 hs2019 created 신선도 기준이 전무하면 거부."""
+    user = make_user("bob")
+    body = b'{"type":"Create"}'
+    actor_uri = user.actor_uri()
+    # hs2019 `created` 없이 `headers`에서도 date를 제외해야 하지만, Date 헤더부터 제거한다.
+    digest = "SHA-256=" + base64.b64encode(hashlib.sha256(body).digest()).decode()
+    host = "localhost:3000"
+    signed_lines = [
+        "(request-target): post /inbox",
+        f"host: {host}",
+        f"digest: {digest}",
+    ]
+    signed_string = "\n".join(signed_lines)
+    sig = sign_string(signed_string, user.private_key)
+    signature_header = (
+        f'keyId="{actor_uri}#main-key",algorithm="rsa-sha256",'
+        f'headers="(request-target) host digest",signature="{sig}"'
+    )
+    headers = {
+        "Host": host,
+        "Digest": digest,
+        "Signature": signature_header,
+    }
+    req = _make_request(INBOX_PATH, headers, body)
+    ok, _ = verify_http_signature(req, body, {"type": "Create", "actor": actor_uri})
+    assert ok is False
+
+
+def test_hs2019_created_param_timestamp_accepted(make_user):
+    """hs2019 `created` 파라미터가 신선하면 Date 없이도 통과해야 한다."""
+    import time as _time
+    user = make_user("carol")
+    body = b'{"type":"Create"}'
+    actor_uri = user.actor_uri()
+    created = str(int(_time.time()))
+    digest = "SHA-256=" + base64.b64encode(hashlib.sha256(body).digest()).decode()
+    host = "localhost:3000"
+    signed_lines = [
+        "(request-target): post /inbox",
+        f"host: {host}",
+        f"digest: {digest}",
+        f"(request-created): {created}",
+    ]
+    signed_string = "\n".join(signed_lines)
+    sig = sign_string(signed_string, user.private_key)
+    signature_header = (
+        f'keyId="{actor_uri}#main-key",algorithm="rsa-sha256",'
+        f'headers="(request-target) host digest (request-created)",'
+        f'created="{created}",signature="{sig}"'
+    )
+    headers = {
+        "Host": host,
+        "Digest": digest,
+        "Signature": signature_header,
+    }
+    req = _make_request(INBOX_PATH, headers, body)
+    ok, _ = verify_http_signature(req, body, {"type": "Create", "actor": actor_uri})
+    assert ok is True
+
+
+def test_stale_created_param_rejected(make_user):
+    """hs2019 `created` 파라미터가 오래됐으면 Date 없이는 거부해야 한다."""
+    import time as _time
+    user = make_user("dave")
+    body = b'{"type":"Create"}'
+    actor_uri = user.actor_uri()
+    created = str(int(_time.time()) - 7200)
+    digest = "SHA-256=" + base64.b64encode(hashlib.sha256(body).digest()).decode()
+    host = "localhost:3000"
+    signed_lines = [
+        "(request-target): post /inbox",
+        f"host: {host}",
+        f"digest: {digest}",
+        f"(request-created): {created}",
+    ]
+    signed_string = "\n".join(signed_lines)
+    sig = sign_string(signed_string, user.private_key)
+    signature_header = (
+        f'keyId="{actor_uri}#main-key",algorithm="rsa-sha256",'
+        f'headers="(request-target) host digest (request-created)",'
+        f'created="{created}",signature="{sig}"'
+    )
+    headers = {
+        "Host": host,
+        "Digest": digest,
+        "Signature": signature_header,
+    }
+    req = _make_request(INBOX_PATH, headers, body)
+    ok, _ = verify_http_signature(req, body, {"type": "Create", "actor": actor_uri})
+    assert ok is False
+
+
 def test_signature_bind_check_rejects_actor_spoofing(make_user):
     """The signer's keyId must match activity.actor — spoofing must fail."""
     user = make_user("alice")
