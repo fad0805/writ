@@ -90,14 +90,14 @@ def make_user():
 
     def _make(username, role="user"):
         counter[0] += 1
-        salt, hval = hash_password("test-password")
+        pwd_hash = hash_password("test-password")
         priv, pub = generate_keypair()
         with get_session() as s:
             u = User(
                 username=username,
                 display_name=username,
                 email=f"{username}@test.local",
-                password_hash=f"{salt}:{hval}",
+                password_hash=pwd_hash,
                 private_key=priv,
                 public_key=pub,
                 is_remote=False,

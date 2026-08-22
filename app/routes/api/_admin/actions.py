@@ -37,13 +37,13 @@ def _guard_target_role(actor: User, target: User):
 def api_admin_reset_password(request: Request, user_id: int):
     user = require_permission(request, "users.manage")
     new_pass = secrets.token_hex(8)
-    salt, hsh = hash_password(new_pass)
+    pwd_hash = hash_password(new_pass)
     with get_session() as s:
         u = s.query(User).get(user_id)
         if not u:
             raise HTTPException(status_code=404, detail="User not found")
         _guard_target_role(user, u)
-        u.password_hash = salt + ":" + hsh
+        u.password_hash = pwd_hash
         target_username = u.username
         s.commit()
     from app.core.auth import delete_user_sessions

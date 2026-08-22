@@ -210,8 +210,7 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
             stored = db_user.password_hash
             if ":" not in stored:
                 raise HTTPException(status_code=401, detail="Invalid credentials")
-            salt, hval = stored.split(":", 1)
-            if not verify_password(password, salt, hval):
+            if not verify_password(password, stored):
                 log_admin_action(db_user.id, db_user.username, "login_failed", details="wrong_password", ip_address=client_ip)
                 _record_auth_failure(client_ip)
                 raise HTTPException(status_code=401, detail="비밀번호가 틀렸습니다.")
@@ -291,14 +290,14 @@ def api_register(request: Request, username: str = Form(...), password: str = Fo
         is_first = user_count == 0
         if is_first and INITIAL_OWNER_PASSWORD and password != INITIAL_OWNER_PASSWORD:
             raise HTTPException(status_code=400, detail="초기 관리자 암호가 일치하지 않습니다.")
-        salt, pwd_hash = hash_password(password)
+        pwd_hash = hash_password(password)
         priv_key, pub_key = generate_keypair()
         email_verified = APP_ENV == "development"
         user = User(
             username=username,
             display_name=display_name or display_handle,
             display_handle=display_handle,
-            password_hash=salt + ":" + pwd_hash,
+            password_hash=pwd_hash,
             private_key=encrypt_key(priv_key, SECRET_KEY), public_key=pub_key,
             is_remote=False,
             role="owner" if is_first else "user",
@@ -416,8 +415,7 @@ def api_reset_password(request: Request, token: str = Form(...), password: str =
             u.reset_token_expires_at = None
             s.commit()
             raise HTTPException(status_code=400, detail="유효하지 않거나 만료된 토큰입니다.")
-        salt, hval = hash_password(password)
-        u.password_hash = f"{salt}:{hval}"
+        u.password_hash = hash_password(password)
         u.reset_token = ""
         u.reset_token_expires_at = None
         s.commit()

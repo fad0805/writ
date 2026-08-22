@@ -159,13 +159,11 @@ def api_settings_change_password(request: Request, current_password: str = Form(
         stored = db.password_hash
         if ":" not in stored:
             raise HTTPException(status_code=400, detail="Invalid credentials")
-        salt, hval = stored.split(":", 1)
-        if not verify_password(current_password, salt, hval):
+        if not verify_password(current_password, stored):
             raise HTTPException(status_code=400, detail="Current password is incorrect")
-        if verify_password(new_password, salt, hval):
+        if verify_password(new_password, stored):
             raise HTTPException(status_code=400, detail="New password must be different from current password")
-        new_salt, new_hsh = hash_password(new_password)
-        db.password_hash = new_salt + ":" + new_hsh
+        db.password_hash = hash_password(new_password)
         s.commit()
     from app.core.auth import delete_user_sessions
     delete_user_sessions(user.id)
@@ -232,8 +230,7 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
         stored = db.password_hash
         if ":" not in stored:
             raise HTTPException(status_code=400, detail="비밀번호 확인 실패")
-        salt, hval = stored.split(":", 1)
-        if not verify_password(password, salt, hval):
+        if not verify_password(password, stored):
             raise HTTPException(status_code=400, detail="비밀번호가 올바르지 않습니다.")
 
         _actor_uri = db.actor_uri()

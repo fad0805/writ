@@ -73,8 +73,7 @@ def _do_authorize(client_id: str, redirect_uri: str, response_type: str, scope: 
         if getattr(user, "is_suspended", False):
             return JSONResponse({"error": "Account suspended"}, status_code=403)
 
-        salt, hval = user.password_hash.split(":", 1)
-        if not verify_password(password, salt, hval):
+        if not verify_password(password, user.password_hash):
             _record_auth_failure(client_ip)
             return JSONResponse({"error": "Invalid username or password"}, status_code=401)
 
@@ -172,8 +171,7 @@ async def oauth_token(request: Request):
             if not user or not user.password_hash:
                 _record_auth_failure(client_ip)
                 return JSONResponse({"error": "invalid_grant"}, status_code=400)
-            salt = user.password_hash[:32]
-            if not verify_password(password, salt, user.password_hash):
+            if not verify_password(password, user.password_hash):
                 _record_auth_failure(client_ip)
                 return JSONResponse({"error": "invalid_grant"}, status_code=400)
             if user.is_suspended:

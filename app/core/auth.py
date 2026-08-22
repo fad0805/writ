@@ -11,17 +11,43 @@ from app.config.settings import SECRET_KEY, SESSION_EXPIRE_DAYS
 from app.db.database import get_session
 from app.models import LoginSession, User
 
-
-def hash_password(password: str, salt: str | None = None) -> tuple[str, str]:
-    if salt is None:
-        salt = secrets.token_hex(16)
-    h = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100000)
-    return salt, h.hex()
+_PBKDF2_ITERATIONS = 600_000
+_LEGACY_PBKDF2_ITERATIONS = 100_000
 
 
-def verify_password(password: str, salt: str, hashed: str) -> bool:
-    _, h = hash_password(password, salt)
-    return hmac.compare_digest(h, hashed)
+def hash_password(password: str, iterations: int = _PBKDF2_ITERATIONS) -> str:
+    """Return a self-describing password hash: ``<iterations>:<salt>:<digest>``.
+
+    반복 수를 해시에 내장해, 이후 반복 수를 올려도 기존 해시에 대한 검증이
+    깨지지 않는다(레거시 2-파트 salt:digest 형식과 자동 호환).
+    """
+    salt = secrets.token_hex(16)
+    h = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), iterations)
+    return f"{iterations}:{salt}:{h.hex()}"
+
+
+def verify_password(password: str, stored: str) -> bool:
+    """Verify a stored password hash, auto-detecting the PBKDF2 iteration count.
+
+    ``stored``는 신규 3-파트 ``iterations:salt:digest`` 또는 레거시
+    ``salt:digest``(100k 반복)를 모두 지원한다.
+    """
+    parts = stored.split(":")
+    if len(parts) == 3:
+        iter_str, salt, digest = parts
+        try:
+            iterations = int(iter_str)
+        except ValueError:
+            return False
+    elif len(parts) == 2 and parts[0] and parts[1]:
+        salt, digest = parts
+        iterations = _LEGACY_PBKDF2_ITERATIONS
+    else:
+        return False
+    if iterations <= 0:
+        return False
+    h = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), iterations)
+    return hmac.compare_digest(h.hex(), digest)
 
 
 def _sign_session_key(session_key: str, expires: int) -> str:
