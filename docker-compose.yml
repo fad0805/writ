@@ -7,6 +7,14 @@ services:
     volumes:
       - ./db_data:/var/lib/postgresql/data
     restart: unless-stopped
+    # api의 alembic 마이그레이션이 DB 기동 직후 접속 실패하지 않도록
+    # 접속 가능 상태를 명시적으로 확인한다 ($$로 compose 치환 회피).
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-postgres}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
     security_opt:
       - no-new-privileges:true
 
@@ -22,7 +30,8 @@ services:
       - ./static:/app/static
       - ./logs:/app/logs
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     restart: unless-stopped
     read_only: true
     tmpfs:
@@ -50,7 +59,8 @@ services:
       - ./logs:/app/logs
     command: ./start.sh
     depends_on:
-      - api
+      api:
+        condition: service_started
     restart: unless-stopped
     read_only: true
     tmpfs:
