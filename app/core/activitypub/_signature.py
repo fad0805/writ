@@ -10,11 +10,12 @@ from urllib.parse import urlparse
 
 from fastapi import Request
 
-from app.config.settings import BASE_URL, DOMAIN
+from app.config.settings import BASE_URL
 from app.core.activitypub._actor_resolver import _resolve_actor
 from app.db.database import get_session
 from app.models import Follow, User
 from app.utils.crypto import verify_signature
+from app.utils.http import normalize_host
 
 logger = logging.getLogger("writ.activitypub")
 
@@ -197,9 +198,7 @@ def verify_http_signature(request: Request, body: bytes, activity: dict) -> tupl
 
     path = request.url.path
     date = request.headers.get("Date", "")
-    host_header = request.headers.get("Host", "")
-    if host_header in ("api:8000", "localhost:8000") or host_header.startswith("172."):
-        host_header = DOMAIN
+    host_header = normalize_host(request)
     digest_val = request.headers.get("Digest", "")
     signed_parts = {
         "(request-target)": f"post {path}",

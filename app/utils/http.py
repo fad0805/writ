@@ -39,6 +39,18 @@ _DNS_CACHE_TTL = 60.0
 _DNS_CACHE_MAX = 4096
 
 
+def normalize_host(request) -> str:
+    """Host 헤더를 공개 도메인으로 정규화한다.
+
+    도커 내부 주소(api:8000/localhost:8000/172.x)가 Host로 오면 CSRF/서명
+    검증이 깨질 수 있어, 설정된 DOMAIN으로 치환한다.
+    """
+    host_header = request.headers.get("Host", "")
+    if host_header in ("api:8000", "localhost:8000") or host_header.startswith("172."):
+        return DOMAIN
+    return host_header
+
+
 def _dns_resolves_private(host: str) -> bool:
     """Return True if any resolved address of `host` is in a private subnet."""
     now = time.time()

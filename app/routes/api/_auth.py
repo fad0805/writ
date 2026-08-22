@@ -124,6 +124,25 @@ RESERVED_HANDLES = frozenset({
 })
 
 
+def _send_smtp(msg):
+    """SMTP 전송 공통 블록 (STARTTLS/SSL 분기). 실패 시 caller가 예외 처리한다."""
+    port = SMTP_PORT or 587
+    if port == 465:
+        with smtplib.SMTP_SSL(SMTP_SERVER, port, timeout=10) as smtp:
+            if SMTP_USER:
+                smtp.login(SMTP_USER, SMTP_PASSWORD or "")
+            smtp.send_message(msg)
+    else:
+        with smtplib.SMTP(SMTP_SERVER, port, timeout=10) as smtp:
+            smtp.ehlo()
+            if smtp.has_extn("STARTTLS"):
+                smtp.starttls()
+                smtp.ehlo()
+            if SMTP_USER:
+                smtp.login(SMTP_USER, SMTP_PASSWORD or "")
+            smtp.send_message(msg)
+
+
 def _send_verification_email(u: User):
     if not SMTP_SERVER:
         if APP_ENV == "development":
@@ -145,21 +164,7 @@ def _send_verification_email(u: User):
         msg["Subject"] = "[WRIT] 이메일 인증을 완료해 주세요"
         msg["From"] = SMTP_FROM or "noreply@writ.local"
         msg["To"] = u.email  # type: ignore[assignment]
-        port = SMTP_PORT or 587
-        if port == 465:
-            with smtplib.SMTP_SSL(SMTP_SERVER, port, timeout=10) as smtp:
-                if SMTP_USER:
-                    smtp.login(SMTP_USER, SMTP_PASSWORD or "")
-                smtp.send_message(msg)
-        else:
-            with smtplib.SMTP(SMTP_SERVER, port, timeout=10) as smtp:
-                smtp.ehlo()
-                if smtp.has_extn("STARTTLS"):
-                    smtp.starttls()
-                    smtp.ehlo()
-                if SMTP_USER:
-                    smtp.login(SMTP_USER, SMTP_PASSWORD or "")
-                smtp.send_message(msg)
+        _send_smtp(msg)
     except Exception:
         logger.exception("Failed to send verification email to %s", u.email)
 
@@ -413,18 +418,7 @@ def api_forgot_password(request: Request, email: str = Form(...)):
             msg["Subject"] = "[WRIT] 비밀번호 재설정"
             msg["From"] = SMTP_FROM or "noreply@writ.local"
             msg["To"] = u.email
-            port = SMTP_PORT or 587
-            if port == 465:
-                with smtplib.SMTP_SSL(SMTP_SERVER, port, timeout=10) as smtp:
-                    if SMTP_USER:
-                        smtp.login(SMTP_USER, SMTP_PASSWORD or "")
-                    smtp.send_message(msg)
-            else:
-                with smtplib.SMTP(SMTP_SERVER, port, timeout=10) as smtp:
-                    smtp.starttls()
-                    if SMTP_USER:
-                        smtp.login(SMTP_USER, SMTP_PASSWORD or "")
-                    smtp.send_message(msg)
+            _send_smtp(msg)
         except Exception:
             logger.exception("Failed to send password reset email to %s", u.email)
     return {"ok": True}

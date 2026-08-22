@@ -7,7 +7,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from app.config.logging import _request_logger
-from app.config.settings import APP_ENV, DOMAIN
+from app.config.settings import APP_ENV
 from app.utils.crypto import (
     CSRF_EXEMPT_EXACT,
     CSRF_EXEMPT_METHODS,
@@ -16,6 +16,7 @@ from app.utils.crypto import (
     generate_csrf_token,
     validate_csrf_token,
 )
+from app.utils.http import normalize_host
 
 logger = logging.getLogger("writ.middleware")
 
@@ -46,9 +47,7 @@ class CSRFProtectionMiddleware(BaseHTTPMiddleware):
         if APP_ENV == "development":
             pass
         else:
-            host_header = request.headers.get("Host", "")
-            if host_header in ("api:8000", "localhost:8000") or host_header.startswith("172."):
-                host_header = DOMAIN
+            host_header = normalize_host(request)
             origin = request.headers.get("Origin", "")
             referer = request.headers.get("Referer", "")
             if origin:
