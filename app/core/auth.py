@@ -50,6 +50,21 @@ def verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(h.hex(), digest)
 
 
+def needs_password_rehash(stored: str) -> bool:
+    """True if the stored hash uses the legacy 100k format and should be upgraded.
+
+    신규 3-파트(600k) 형식이거나 형식이 잘못된 경우 False를 반환한다.
+    로그인 성공 후 이 값이 참이면 새 600k 해시로 덮어써 점진 강화한다.
+    """
+    parts = stored.split(":")
+    if len(parts) == 3:
+        try:
+            return int(parts[0]) != _PBKDF2_ITERATIONS
+        except ValueError:
+            return False
+    return len(parts) == 2 and bool(parts[0]) and bool(parts[1])
+
+
 def _sign_session_key(session_key: str, expires: int) -> str:
     payload = f"{session_key}:{expires}"
     sig = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()

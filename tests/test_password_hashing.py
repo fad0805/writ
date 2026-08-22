@@ -6,6 +6,7 @@ from app.core.auth import (
     _LEGACY_PBKDF2_ITERATIONS,
     _PBKDF2_ITERATIONS,
     hash_password,
+    needs_password_rehash,
     verify_password,
 )
 
@@ -45,3 +46,14 @@ def test_malformed_stored_rejected():
     assert not verify_password("pass123", "0:salt:digest")
     assert not verify_password("pass123", "abc:1:2:3")
     assert not verify_password("pass123", "garbage:salt:digest")
+
+
+def test_needs_rehash_flags_legacy_and_partial():
+    salt = "aa" * 16
+    digest = "ab" * 32
+    legacy = f"{salt}:{digest}"
+    assert needs_password_rehash(legacy)
+    assert not needs_password_rehash(hash_password("x"))
+    assert not needs_password_rehash(f"{_PBKDF2_ITERATIONS}:{salt}:{digest}")
+    assert not needs_password_rehash("")
+    assert not needs_password_rehash("nonsense")

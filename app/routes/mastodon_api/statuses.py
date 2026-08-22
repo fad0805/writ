@@ -15,6 +15,7 @@ from app.core.threads import spawn
 from app.db.database import get_db
 from app.models import Bookmark, Boost, CustomEmoji, Follow, Like, Post, User
 from app.routes.api import _do_delete_post, _do_edit_post
+from app.routes.api._post_create import _do_create_post
 from app.routes.mastodon_api._common import (
     STAR_REACTION,
     MastodonAPIError,
@@ -28,6 +29,8 @@ from app.routes.mastodon_api._common import (
     _visibility_from_mastodon,
 )
 from app.utils.emoji import _load_emojis
+from app.utils.storage import get_storage
+from app.utils.upload import _validate_upload
 
 router = APIRouter()
 
@@ -159,8 +162,6 @@ async def create_status(request: Request, db: SASession = Depends(get_db)):
 
 def _run_create_status(db, user, text, in_reply_to_id, sensitive, spoiler_text,
                         visibility, language, media_ids, poll_options, poll_expires):
-    from app.routes.api._post_create import _do_create_post
-
     if not text and not media_ids:
         raise MastodonAPIError(status_code=422, detail="Validation failed: Text can't be blank")
 
@@ -168,8 +169,7 @@ def _run_create_status(db, user, text, in_reply_to_id, sensitive, spoiler_text,
 
     media_attachments_json = "[]"
     if media_ids:
-        from app.utils.storage import get_storage as _get_storage
-        _storage = _get_storage()
+        _storage = get_storage()
         media_attachments_json = json.dumps([
             {"url": _storage.url(mid), "type": "image", "alt": ""}
             for mid in media_ids[:4]
@@ -651,9 +651,6 @@ async def upload_media(
     focus: str = Form(""),
 ):
     _require_bearer(request, db)
-
-    from app.utils.storage import get_storage
-    from app.utils.upload import _validate_upload
 
     ext, _is_image, is_video, is_audio = _validate_upload(file, allow_video=True, allow_audio=True, label="미디어")
 

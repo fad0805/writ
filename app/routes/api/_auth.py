@@ -29,9 +29,11 @@ from app.config.settings import (
 from app.core.auth import (
     create_session,
     delete_session_by_key,
+    delete_user_sessions,
     get_current_user,
     get_session_key_from_cookie,
     hash_password,
+    needs_password_rehash,
     session_key_from_token,
     verify_password,
 )
@@ -241,7 +243,10 @@ def api_login(request: Request, username: str = Form(...), password: str = Form(
                 ips = [ip for ip in ips if ip != client_ip]
                 ips.insert(0, client_ip)
                 db_user.recent_ips = ips[:10]
-                s.commit()
+            # 레거시 100k 해시로 로그인한 계정은 이 기회에 600k로 점진 강화
+            if needs_password_rehash(stored):
+                db_user.password_hash = hash_password(password)
+            s.commit()
             log_admin_action(db_user.id, db_user.username, "login", ip_address=client_ip)
             user_json = _user_json(db_user)
             resp = JSONResponse(user_json)
@@ -419,7 +424,6 @@ def api_reset_password(request: Request, token: str = Form(...), password: str =
         u.reset_token = ""
         u.reset_token_expires_at = None
         s.commit()
-    from app.core.auth import delete_user_sessions
     delete_user_sessions(u.id)
     return {"ok": True, "password_reset": True}
 

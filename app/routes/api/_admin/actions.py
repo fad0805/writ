@@ -11,7 +11,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 
 from app.config.settings import SMTP_FROM, SMTP_PASSWORD, SMTP_PORT, SMTP_SERVER, SMTP_USER
 from app.core.activitypub import _fetch_remote_count, _resolve_actor
-from app.core.auth import hash_password
+from app.core.auth import delete_user_sessions, hash_password
 from app.core.permissions import require_permission
 from app.core.timeline_stream import broadcast_refresh_notifs
 from app.db.database import get_session
@@ -46,7 +46,6 @@ def api_admin_reset_password(request: Request, user_id: int):
         u.password_hash = pwd_hash
         target_username = u.username
         s.commit()
-    from app.core.auth import delete_user_sessions
     delete_user_sessions(user_id)
     log_admin_action(user.id, user.username, "reset_password", target_type="user", target_id=user_id, target_username=target_username, ip_address=request.client.host if request.client else "")
     return {"ok": True, "new_password": new_pass}

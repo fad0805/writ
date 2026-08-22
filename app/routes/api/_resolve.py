@@ -22,10 +22,10 @@ from app.core.threads import spawn
 from app.core.visibility import _can_view
 from app.db.database import get_session
 from app.models import Episode, Novel, Post, User
-from app.routes.api._episodes import _episode_json
+from app.routes.api._episode_serializer import _episode_json
 from app.routes.api._novels import _novel_json
 from app.serializers import _post_json, _user_json
-from app.utils.to_ap_serializer import to_ap_note
+from app.utils.to_ap_serializer import ap_tombstone, to_ap_note
 
 logger = logging.getLogger("writ.api.resolve")
 
@@ -149,10 +149,9 @@ def api_by_number(request: Request, username: str, number: str):
             raise HTTPException(status_code=404, detail="Post not found")
         # ActivityPub 요청 → AP JSON 반환
         if "application/activity+json" in accept or "application/ld+json" in accept:
-            from app.routes.ap import _tombstone
             if post.is_deleted:
                 # 삭제된 글 전문 노출 금지: Tombstone으로 응답
-                return JSONResponse(content=_tombstone(post), status_code=410,
+                return JSONResponse(content=ap_tombstone(post), status_code=410,
                                     media_type="application/activity+json")
             if post.visibility not in ("public", "unlisted", "home"):
                 raise HTTPException(status_code=403, detail="Not authorized")

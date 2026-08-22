@@ -1,19 +1,33 @@
+import datetime
 import os
 import re
 from urllib.parse import quote, urlparse
 
+from sqlalchemy import func
+
 from app.config.settings import BASE_URL
 from app.db.database import get_session
+from app.models import CustomEmoji, User
 from app.utils.alias import alias_to_actor_urls
+from app.utils.emoji import _emoji_url
 
 
 def _ap_datetime(dt):
-    import datetime
     if dt is None:
         return ""
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=datetime.UTC)
     return dt.astimezone(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def ap_tombstone(post) -> dict:
+    """삭제된 포스트의 AS2 Tombstone 표현 (410 Gone과 함께 반환)."""
+    return {
+        "@context": "https://www.w3.org/ns/activitystreams",
+        "id": post.ap_id or f"{BASE_URL}/posts/{post.id}",
+        "type": "Tombstone",
+        "formerType": "Note",
+    }
 
 
 def to_ap_actor(user) -> dict:
@@ -79,7 +93,6 @@ def to_ap_actor(user) -> dict:
 
 
 def to_ap_note(post, session=None) -> dict:
-    from app.models import CustomEmoji, User
     content = post.content
     tags = []
     mentioned_uris = []
@@ -110,9 +123,6 @@ def to_ap_note(post, session=None) -> dict:
             )
 
     # 2. 이모지 구축
-    from sqlalchemy import func
-
-    from app.utils.emoji import _emoji_url
     _emoji_pattern = re.compile(r':([a-zA-Z0-9_]{2,}):')
     _emoji_keywords = set(_emoji_pattern.findall(content))
     if _emoji_keywords:

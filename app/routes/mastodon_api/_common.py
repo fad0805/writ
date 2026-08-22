@@ -11,6 +11,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session as SASession
 
 from app.config.settings import BASE_URL
+from app.core.visibility import _can_view
 from app.models import Boost, Follow, Like, MastodonAccessToken, Post, User, UserBlock, UserMute, now
 from app.utils.content_parser import _sanitize_html
 from app.utils.emoji import _load_emojis
@@ -355,7 +356,6 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
     if not author or author.is_suspended:
         return None
 
-    from app.core.visibility import _can_view
     if not _can_view(post, viewer, db):
         return None
 

@@ -18,6 +18,7 @@ from app.core.threads import spawn
 from app.core.timeline_stream import broadcast_notif_sound
 from app.db.database import get_session
 from app.models import Episode, EpisodeDraft, EpisodeView, Notification, Novel, Post, SeriesFollow
+from app.routes.api._episode_serializer import _episode_json
 from app.routes.api._novels import _novel_json
 from app.utils.content_parser import process_post_content
 from app.utils.datetime import _fmt_dt
@@ -30,30 +31,6 @@ from app.utils.upload import MAX_AUDIO_SIZE, _validate_upload
 logger = logging.getLogger("writ.api.episodes")
 
 episodes_router = APIRouter()
-
-
-def _episode_json(e, summary_only=False):
-    d = {
-        "id": e.id,
-        "novel_id": e.novel_id,
-        "episode_number": e.episode_number,
-        "title": e.title,
-        "summary": e.summary or "",
-        "comment": e.comment or "",
-        "audio_url": e.audio_url or "",
-        "view_mode": getattr(e, "view_mode", "text"),
-        "comic_view_mode": getattr(e, "comic_view_mode", "paged"),
-        "image_urls": getattr(e, "image_urls", []) or [],
-        "reading_direction": getattr(e, "reading_direction", None) or "ltr",
-        "views": e.views or 0,
-        "is_published": e.is_published,
-        "page_mode": getattr(e, "page_mode", False),
-        "created_at": _fmt_dt(e.created_at),
-        "updated_at": _fmt_dt(e.updated_at),
-    }
-    if not summary_only:
-        d["content"] = e.content
-    return d
 
 
 def _build_announce_post_content(novel, episode_number, episode_title, episode_id, summary="", announce_comment=""):

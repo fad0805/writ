@@ -8,8 +8,8 @@ import traceback
 from urllib.parse import urlparse
 
 from app.config.settings import SECRET_KEY
+from app.core.activitypub._actor_resolver import _resolve_actor
 from app.core.activitypub._emoji import _process_emoji_tags
-from app.core.activitypub._fetch_actor import _resolve_actor
 from app.core.activitypub._fetch_http import _safe_httpx_get
 from app.core.activitypub._media import _cache_remote_media
 from app.core.activitypub._utils import _get_instance_actor

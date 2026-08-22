@@ -7,6 +7,8 @@ can advertise them via `alsoKnownAs` and verify incoming/outgoing Move activitie
 import logging
 import time
 
+from app.core.activitypub._fetch import _safe_httpx_get
+
 logger = logging.getLogger(__name__)
 
 _cache: dict[str, tuple[float, list[str]]] = {}
@@ -14,7 +16,6 @@ _TTL = 24 * 3600
 
 
 def _webfinger_actor_urls(handle: str, domain: str) -> list[str]:
-    from app.core.activitypub._fetch import _safe_httpx_get
     wf = _safe_httpx_get(
         f"https://{domain}/.well-known/webfinger?resource=acct:{handle}",
         timeout=5,

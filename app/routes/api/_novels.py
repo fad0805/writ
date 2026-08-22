@@ -14,6 +14,7 @@ guard_image()
 from app.core.auth import get_current_user, require_active_auth, require_auth
 from app.db.database import get_session
 from app.models import Episode, Novel, Post, SeriesFollow, SeriesNotice, Tag, User
+from app.routes.api._episode_serializer import _episode_json
 from app.serializers import _user_json
 from app.utils.datetime import _fmt_dt
 from app.utils.storage import get_storage
@@ -254,7 +255,6 @@ def api_get_novel(request: Request, novel_id: int):
             episodes = episodes.filter(Episode.is_published == True)
         episodes = episodes.order_by(Episode.episode_number).all()
         author = s.query(User).get(novel.author_id)
-        from app.routes.api._episodes import _episode_json  # circular-avoiding lazy import
         episode_list = [_episode_json(e, summary_only=True) for e in episodes]
         novel_json = _novel_json(novel, s)
         if not is_mine:

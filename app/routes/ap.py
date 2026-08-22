@@ -31,7 +31,7 @@ from app.models import (
     User,
 )
 from app.utils.storage import get_storage
-from app.utils.to_ap_serializer import to_ap_actor, to_ap_create, to_ap_note
+from app.utils.to_ap_serializer import ap_tombstone, to_ap_actor, to_ap_create, to_ap_note
 
 logger = logging.getLogger(__name__)
 
@@ -345,16 +345,6 @@ def get_create_activity(request: Request, post_id: int):
                             media_type="application/activity+json")
 
 
-def _tombstone(post: Post) -> dict:
-    """삭제된 객체의 AS2 Tombstone 표현 (410 Gone과 함께 반환)."""
-    return {
-        "@context": "https://www.w3.org/ns/activitystreams",
-        "id": post.ap_id or f"{BASE_URL}/posts/{post.id}",
-        "type": "Tombstone",
-        "formerType": "Note",
-    }
-
-
 @router.get("/posts/{post_id}")
 def get_post(request: Request, post_id: int):
     accept = request.headers.get("Accept", "")
@@ -368,7 +358,7 @@ def get_post(request: Request, post_id: int):
             if post.is_deleted:
                 # 삭제된 글의 전문을 재노출하지 않는다: Tombstone으로 응답해
                 # 원격 서버가 캐시를 폐기하도록 유도한다.
-                return JSONResponse(content=_tombstone(post), status_code=410,
+                return JSONResponse(content=ap_tombstone(post), status_code=410,
                                     media_type="application/activity+json")
             if not _ap_post_visible(post, request, session):
                 raise HTTPException(status_code=404, detail="Not found")
@@ -477,7 +467,7 @@ def get_post_by_handle(request: Request, username: str, number: str):
 
         if "application/activity+json" in accept or "application/ld+json" in accept:
             if post.is_deleted:
-                return JSONResponse(content=_tombstone(post), status_code=410,
+                return JSONResponse(content=ap_tombstone(post), status_code=410,
                                     media_type="application/activity+json")
             if not _ap_post_visible(post, request, session):
                 raise HTTPException(status_code=404, detail="Not found")

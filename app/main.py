@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.config.settings import CORS_ALLOW_CREDENTIALS, CORS_ORIGINS
-from app.core.activitypub import _cleanup_expired_media, _cleanup_remote_data
+from app.core.activitypub import _cleanup_expired_media, _cleanup_remote_data, _inbox_executor
 from app.core.permissions import ensure_default_roles
 from app.core.push import init_vapid_keys
 from app.core.workers import auto_delete_expired_posts, cleanup_orphan_media, delivery_worker, refresh_remote_profiles
@@ -18,6 +18,7 @@ from app.middleware import CSRFProtectionMiddleware, LogRequestsMiddleware
 from app.routes.admin import router as admin_router
 from app.routes.ap import router as ap_router
 from app.routes.api import router as api_router
+from app.routes.api._post_create import _post_create_executor
 from app.routes.mastodon_api import MastodonAPIError, oauth_router
 from app.routes.mastodon_api import router as mastodon_api_router
 from app.routes.nodeinfo import router as nodeinfo_router
@@ -48,8 +49,6 @@ async def lifespan(app: FastAPI):
     _cleanup_remote_data()
     yield
     # 대기열에 남은 작업을 취소해 종료/리로드 지연을 줄인다 (실행 중 작업은 그대로 마무리)
-    from app.core.activitypub import _inbox_executor
-    from app.routes.api._post_create import _post_create_executor
     _post_create_executor.shutdown(wait=False, cancel_futures=True)
     _inbox_executor.shutdown(wait=False, cancel_futures=True)
 

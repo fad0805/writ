@@ -165,7 +165,6 @@ def api_settings_change_password(request: Request, current_password: str = Form(
             raise HTTPException(status_code=400, detail="New password must be different from current password")
         db.password_hash = hash_password(new_password)
         s.commit()
-    from app.core.auth import delete_user_sessions
     delete_user_sessions(user.id)
     log_admin_action(user.id, user.username, "change_password", ip_address=request.client.host if request.client else "")
     return {"ok": True}
