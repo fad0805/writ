@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from app.config.settings import CORS_ORIGINS
+from app.config.settings import CORS_ALLOW_CREDENTIALS, CORS_ORIGINS
 from app.core.activitypub import _cleanup_expired_media, _cleanup_remote_data
 from app.core.permissions import ensure_default_roles
 from app.core.push import init_vapid_keys
@@ -84,10 +84,15 @@ def favicon(request: Request):
 
 app.add_middleware(CSRFProtectionMiddleware)
 app.add_middleware(LogRequestsMiddleware)
+if "*" in CORS_ORIGINS:
+    logger.warning(
+        "CORS_ORIGINS/BASE_URL이 설정되지 않아 모든 origin을 허용합니다. "
+        "credentials는 비활성화됩니다. 프로덕션에서는 BASE_URL 또는 CORS_ORIGINS를 설정하세요."
+    )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=CORS_ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
 )

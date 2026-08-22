@@ -58,7 +58,14 @@ if _cors_raw.strip():
 elif BASE_URL_ENV:
     CORS_ORIGINS = [BASE_URL]
 else:
+    # 설정이 없으면 와일드카드로 폴백하되, 임의 origin에 쿠키가 실려 보내지는
+    # 것을 막기 위해 credentials는 비활성화한다 (main.py에서 사용).
     CORS_ORIGINS = ["*"]
+
+# 명시적으로 origin을 설정한 경우에만 credentialed cross-origin 요청을 허용한다.
+# 와일드카드("*")와 allow_credentials=True 조합은 origin을 반영해 되돌려주는
+# 미들웨어 특성상 임의 사이트에 인증 정보 접근을 허용하게 된다.
+CORS_ALLOW_CREDENTIALS = bool(_cors_raw.strip() or BASE_URL_ENV)
 
 # File storage
 AVATAR_STORAGE_PATH = os.environ.get("AVATAR_STORAGE_PATH", "uploads/avatars")
