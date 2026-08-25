@@ -1,11 +1,12 @@
 "use client";
+import React from "react";
 import { PostData } from "@/lib/api";
 import { CustomEmoji, renderCustomEmojis } from "@/lib/emojis";
 import { sanitizeName, sanitizePost } from "@/lib/sanitize";
 import { rewriteLinks } from "@/lib/postContent";
 import Link from "next/link";
 
-export default function ReplyContextBox({ post, mergedEmojiList }: {
+export default React.memo(function ReplyContextBox({ post, mergedEmojiList }: {
   post: PostData;
   mergedEmojiList: CustomEmoji[];
 }) {
@@ -35,4 +36,4 @@ export default function ReplyContextBox({ post, mergedEmojiList }: {
       })() }} />
     </Link>
   );
-}
+});

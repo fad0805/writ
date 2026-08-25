@@ -1,3 +1,5 @@
+import React from "react";
+
 const ICONS: Record<string, string> = {
   home: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1V9.5z"/></svg>`,
   home_solid: `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"><path d="M12 3L2 9.5V20a1 1 0 001 1h6v-6h6v6h6a1 1 0 001-1V9.5L12 3z"/></svg>`,
@@ -59,11 +61,11 @@ const ICONS: Record<string, string> = {
   plus: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
 };
 
-export default function Icon({ name, size = 16, className = "", style, title }: { name: string; size?: number; className?: string; style?: React.CSSProperties; title?: string }) {
+export default React.memo(function Icon({ name, size = 16, className = "", style, title }: { name: string; size?: number; className?: string; style?: React.CSSProperties; title?: string }) {
   const svg = ICONS[name];
   if (!svg) return <span className={className}>?</span>;
   const sized = svg.replace(`width="16"`, `width="${size}"`).replace(`height="16"`, `height="${size}"`);
   return (
     <span className={`icon-wrap ${className}`} style={style} title={title} dangerouslySetInnerHTML={{ __html: sized }} />
   );
-}
+});

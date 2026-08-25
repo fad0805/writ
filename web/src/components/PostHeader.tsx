@@ -1,4 +1,5 @@
 "use client";
+import React from "react";
 import { PostData } from "@/lib/api";
 import { CustomEmoji, renderCustomEmojis } from "@/lib/emojis";
 import { sanitizeName } from "@/lib/sanitize";
@@ -10,7 +11,7 @@ const VIS_ICONS: Record<string, string> = {
   public: "globe", home: "home", followers: "lock", mention: "mail",
 };
 
-export default function PostHeader({ post, mergedEmojiList, timeStr, postHref, timeHref }: {
+export default React.memo(function PostHeader({ post, mergedEmojiList, timeStr, postHref, timeHref }: {
   post: PostData;
   mergedEmojiList: CustomEmoji[];
   timeStr: string;
@@ -39,4 +40,4 @@ export default function PostHeader({ post, mergedEmojiList, timeStr, postHref, t
       </span>
     </div>
   );
-}
+});

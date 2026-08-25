@@ -1,43 +1,27 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { PostData, api } from "@/lib/api";
 import { recordEmojiUsage } from "@/lib/emoji-usage";
 
 export function useReactions(post: PostData, targetId: number) {
-  const [liked, setLiked] = useState(post.liked);
-  const [likesCount, setLikesCount] = useState(post.likes_count);
-  const [reactions, setReactions] = useState<Record<string, number>>(post.reactions || {});
+  const [localLiked, setLocalLiked] = useState<boolean | undefined>(undefined);
+  const [localLikesCount, setLocalLikesCount] = useState<number | undefined>(undefined);
+  const [localReactions, setLocalReactions] = useState<Record<string, number> | undefined>(undefined);
   const [myReactionOverride, setMyReactionOverride] = useState<string | null | undefined>(undefined);
-  const myReaction = myReactionOverride !== undefined ? myReactionOverride : (post.my_reaction || null);
 
-  useEffect(() => {
-    setLiked(post.liked);
-    setLikesCount(post.likes_count);
-    setReactions(post.reactions || {});
-    setMyReactionOverride(undefined);
-  }, [post.id, post.liked, post.likes_count, post.reactions, post.my_reaction]);
-  const reactionsRef = useRef(post.reactions || {});
-  useEffect(() => {
-    if (reactionsRef.current !== post.reactions) {
-      reactionsRef.current = post.reactions || {};
-      setReactions(post.reactions || {});
-    }
-  }, [post.reactions]);
-  const likesCountRef = useRef(post.likes_count);
-  useEffect(() => {
-    if (likesCountRef.current !== post.likes_count) {
-      likesCountRef.current = post.likes_count;
-      setLikesCount(post.likes_count);
-    }
-  }, [post.likes_count]);
+  const liked = localLiked !== undefined ? localLiked : post.liked;
+  const likesCount = localLikesCount !== undefined ? localLikesCount : post.likes_count;
+  const baseReactions = useMemo(() => post.reactions || {}, [post.reactions]);
+  const reactions = localReactions !== undefined ? localReactions : baseReactions;
+  const myReaction = myReactionOverride !== undefined ? myReactionOverride : (post.my_reaction || null);
 
   const toggleLike = useCallback(() => {
     const next = !liked;
-    setLiked(next);
-    setLikesCount(Math.max(0, likesCount + (next ? 1 : -1)));
+    setLocalLiked(next);
+    setLocalLikesCount(Math.max(0, likesCount + (next ? 1 : -1)));
     (next ? api.like(targetId) : api.unlike(targetId)).catch(() => {
-      setLiked(!next);
-      setLikesCount(Math.max(0, likesCount + (next ? -1 : 1)));
+      setLocalLiked(!next);
+      setLocalLikesCount(Math.max(0, likesCount + (next ? -1 : 1)));
     });
   }, [liked, likesCount, targetId]);
 
@@ -48,22 +32,22 @@ export function useReactions(post: PostData, targetId: number) {
       else next[myReaction] -= 1;
     }
     next[emoji] = (next[emoji] || 0) + 1;
-    setReactions(next);
+    setLocalReactions(next);
     setMyReactionOverride(emoji);
-    setLiked(true);
-    setLikesCount(myReaction ? likesCount : likesCount + 1);
+    setLocalLiked(true);
+    setLocalLikesCount(myReaction ? likesCount : likesCount + 1);
     recordEmojiUsage(emoji);
     try { await api.react(targetId, emoji); } catch {}
   }, [reactions, myReaction, likesCount, targetId]);
 
   const unreact = useCallback(async (emoji: string) => {
     const next = { ...reactions };
-    if (next[emoji] <= 1) delete next[emoji];
+    if ((next[emoji] || 0) <= 1) delete next[emoji];
     else next[emoji] -= 1;
-    setReactions(next);
+    setLocalReactions(next);
     setMyReactionOverride(null);
-    setLiked(false);
-    setLikesCount(Math.max(0, likesCount - 1));
+    setLocalLiked(false);
+    setLocalLikesCount(Math.max(0, likesCount - 1));
     try { await api.unreact(targetId); } catch {}
   }, [reactions, likesCount, targetId]);
 

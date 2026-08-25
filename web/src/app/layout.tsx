@@ -2,16 +2,8 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
-import Sidebar from "@/components/Sidebar";
-import RightSidebar from "@/components/RightSidebar";
-import MobileNav from "@/components/MobileNav";
-import KeyboardShortcuts from "@/components/KeyboardShortcuts";
-import NotifSound from "@/components/NotifSound";
-import AnnouncementToast from "@/components/AnnouncementToast";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import DeactivatedRedirect from "@/components/DeactivatedRedirect";
-import CsrfInit from "@/components/CsrfInit";
-import ScrollRestoration from "@/components/ScrollRestoration";
+import ClientProviders from "@/components/ClientProviders";
 
 // 요청 호스트 기준으로 og:image 를 해석해, 빌드 시점 BASE_URL 없이도 정확한 og 태그를 서빙한다.
 // (정적 프리렌더 시 metadataBase 기본값인 localhost:3000으로 굳는 문제 방지)
@@ -76,18 +68,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="ko" suppressHydrationWarning>
       <body suppressHydrationWarning>
         <AuthProvider>
-          <div className="layout" id="app-layout">
-            <Sidebar />
-            <main className="main-content"><ErrorBoundary>{children}</ErrorBoundary></main>
-            <RightSidebar />
-          </div>
-          <MobileNav />
-          <KeyboardShortcuts />
-          <ScrollRestoration />
-          <NotifSound />
-          <AnnouncementToast />
-          <DeactivatedRedirect />
-          <CsrfInit />
+          <ClientProviders>
+            <ErrorBoundary>{children}</ErrorBoundary>
+          </ClientProviders>
         </AuthProvider>
         <script nonce={nonce} dangerouslySetInnerHTML={{
           __html: `

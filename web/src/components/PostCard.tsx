@@ -13,9 +13,6 @@ import { useNow } from "@/hooks/useNow";
 import { buildPostContentHtml } from "@/lib/postContent";
 import { WindowWithGlobals } from "@/lib/windowGlobals";
 import Icon from "./Icon";
-import MediaViewer from "./MediaViewer";
-import EditModal from "./EditModal";
-import ReplyModal from "./ReplyModal";
 import PostHeader from "./PostHeader";
 import ReplyContextBox from "./ReplyContextBox";
 import MediaGallery from "./MediaGallery";
@@ -24,8 +21,13 @@ import PollBox from "./PollBox";
 import QuotedCard, { QuotedSeries, QuotedEpisode } from "./QuotedCard";
 import ReactionsRow from "./ReactionsRow";
 import PostActions from "./PostActions";
-import ReportModal from "./ReportModal";
-import RewriteModal from "./RewriteModal";
+import dynamic from "next/dynamic";
+
+const MediaViewer = dynamic(() => import("./MediaViewer"), { ssr: false });
+const EditModal = dynamic(() => import("./EditModal"), { ssr: false });
+const ReplyModal = dynamic(() => import("./ReplyModal"), { ssr: false });
+const ReportModal = dynamic(() => import("./ReportModal"), { ssr: false });
+const RewriteModal = dynamic(() => import("./RewriteModal"), { ssr: false });
 
 const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onReply, onRewrite, current, hideContext, selected, readonly, mentionBy }: { post: PostData; onUpdate?: (updated?: PostData) => void; onDelete?: () => void; onReply?: (newPost?: PostData) => void; onRewrite?: (content: string, visibility: string, summary: string, replyTo?: ReplyContext | null, media?: { url: string; type: string; alt?: string }[]) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean; mentionBy?: User | null }) {
   const router = useRouter();

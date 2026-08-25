@@ -1,6 +1,7 @@
 "use client";
+import React from "react";
 import { WindowWithGlobals } from "@/lib/windowGlobals";
-export default function LinkPreviewCard({ lp }: { lp: { url: string; title: string; description: string; image: string } }) {
+export default React.memo(function LinkPreviewCard({ lp }: { lp: { url: string; title: string; description: string; image: string } }) {
   const isLocalLink = (() => { try { return new URL(lp.url).hostname === window.location.hostname; } catch { return false; } })();
   const lpImage = isLocalLink ? ((window as WindowWithGlobals).__serverLogo || lp.image) : lp.image;
   return (
@@ -13,4 +14,4 @@ export default function LinkPreviewCard({ lp }: { lp: { url: string; title: stri
       </div>
     </a>
   );
-}
+});

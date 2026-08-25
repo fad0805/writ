@@ -1,4 +1,5 @@
 "use client";
+import React from "react";
 import { PostData, NovelData, User, EpisodeData } from "@/lib/api";
 import MiniPostCard from "./MiniPostCard";
 import ClickableCover from "./ClickableCover";
@@ -9,7 +10,7 @@ import { WindowWithGlobals } from "@/lib/windowGlobals";
 export type QuotedSeries = { type: "series"; novel: NovelData; author: User };
 export type QuotedEpisode = { type: "episode"; episode: EpisodeData; novel: NovelData; author: User };
 
-export default function QuotedCard({ quotedPost, quotedSeries, quotedEpisode, onNavigate }: {
+export default React.memo(function QuotedCard({ quotedPost, quotedSeries, quotedEpisode, onNavigate }: {
   quotedPost: PostData | null;
   quotedSeries: QuotedSeries | null;
   quotedEpisode: QuotedEpisode | null;
@@ -64,4 +65,4 @@ export default function QuotedCard({ quotedPost, quotedSeries, quotedEpisode, on
       )}
     </>
   );
-}
+});

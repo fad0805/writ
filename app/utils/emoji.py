@@ -3,7 +3,7 @@ import os
 import shutil
 import time
 
-from sqlalchemy import case, desc
+from sqlalchemy import case
 
 from app.config.settings import S3_ENABLED
 from app.models import CustomEmoji
@@ -76,13 +76,12 @@ def _load_emojis(session):
     now = time.time()
     if _emoji_cache["data"] is not None and now - _emoji_cache["ts"] < _EMOJI_CACHE_TTL:
         return _emoji_cache["data"]
-    emojis = session.query(CustomEmoji).order_by(desc(CustomEmoji.created_at)).all()
     emojis = session.query(CustomEmoji).order_by(
         case(
             (CustomEmoji.category == "remote", 1),
             else_=0
         ),
-        CustomEmoji.created_at.desc() # 동일 조건 내에서는 최신순 정렬
+        CustomEmoji.created_at.desc()
     ).all()
     result = [
         {

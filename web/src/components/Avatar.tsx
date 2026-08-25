@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import React, { useState } from "react";
 import { avatarColor } from "@/lib/avatar";
 import type { User } from "@/lib/api";
 
@@ -9,7 +9,7 @@ type Props = {
   style?: React.CSSProperties;
 };
 
-export default function Avatar({ user, className, style }: Props) {
+export default React.memo(function Avatar({ user, className, style }: Props) {
   const [imgError, setImgError] = useState<string | null>(null);
 
   if (user.avatar && imgError !== user.avatar) {
@@ -20,4 +20,4 @@ export default function Avatar({ user, className, style }: Props) {
       {(user.display_name || user.username)[0]}
     </div>
   );
-}
+});

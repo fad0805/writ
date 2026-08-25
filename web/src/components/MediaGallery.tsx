@@ -1,8 +1,9 @@
 "use client";
+import React from "react";
 import AudioPlayer from "./AudioPlayer";
 export type MediaItem = { url: string; type: string; alt?: string };
 
-export default function MediaGallery({ media, sensitive, revealed, onReveal, onHide, onOpen }: {
+export default React.memo(function MediaGallery({ media, sensitive, revealed, onReveal, onHide, onOpen }: {
   media: MediaItem[];
   sensitive: boolean;
   revealed: boolean;
@@ -92,4 +93,4 @@ export default function MediaGallery({ media, sensitive, revealed, onReveal, onH
       )}
     </div>
   );
-}
+});

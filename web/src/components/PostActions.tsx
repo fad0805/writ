@@ -1,10 +1,11 @@
 "use client";
+import React from "react";
 import { PostData, User } from "@/lib/api";
 import Icon from "./Icon";
 import EmojiPicker from "./EmojiPicker";
 import ShareButton from "@/components/ShareButton";
 
-export default function PostActions({ post, currentUser, liked, likesCount, myReaction, boosted, boostsCount, bookmarked, pinned, showMoreActions, remoteUrl, onReply, onToggleLike, onToggleBoost, onToggleBookmark, onReact, onToggleMore, onTogglePin, onEdit, onRewrite, onDelete, onReport }: {
+export default React.memo(function PostActions({ post, currentUser, liked, likesCount, myReaction, boosted, boostsCount, bookmarked, pinned, showMoreActions, remoteUrl, onReply, onToggleLike, onToggleBoost, onToggleBookmark, onReact, onToggleMore, onTogglePin, onEdit, onRewrite, onDelete, onReport }: {
   post: PostData;
   currentUser: User | null;
   liked: boolean;
@@ -94,4 +95,4 @@ export default function PostActions({ post, currentUser, liked, likesCount, myRe
       )}
     </div>
   );
-}
+});

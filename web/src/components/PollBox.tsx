@@ -1,17 +1,17 @@
 "use client";
-import { useState } from "react";
+import React, { useState } from "react";
 import { PostData, api } from "@/lib/api";
 import { formatRelative } from "@/lib/postContent";
 import { useNow } from "@/hooks/useNow";
 import Icon from "./Icon";
 
-export default function PollBox({ post, targetId, readonly, onUpdate }: {
+export default React.memo(function PollBox({ post, targetId, readonly, onUpdate }: {
   post: PostData;
   targetId: number;
   readonly?: boolean;
   onUpdate?: (updated?: PostData) => void;
 }) {
-  const now = useNow(1000);
+  const now = useNow(10000);
   const [showPollResults, setShowPollResults] = useState(false);
   const [pollRefreshing, setPollRefreshing] = useState(false);
   const [pollData, setPollData] = useState(post.poll_data);
@@ -103,4 +103,4 @@ export default function PollBox({ post, targetId, readonly, onUpdate }: {
       </div>
     </div>
   );
-}
+});

@@ -2,7 +2,9 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import NewPostModal from "./NewPostModal";
+import dynamic from "next/dynamic";
+
+const NewPostModal = dynamic(() => import("./NewPostModal"), { ssr: false });
 
 export default function KeyboardShortcuts() {
   const router = useRouter();

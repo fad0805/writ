@@ -1,10 +1,10 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { User, api } from "@/lib/api";
 import Icon from "./Icon";
 import Avatar from "./Avatar";
 
-export default function ReactionsRow({ reactions, myReaction, onToggle, targetId, emojiMap, localEmojiMap }: {
+export default React.memo(function ReactionsRow({ reactions, myReaction, onToggle, targetId, emojiMap, localEmojiMap }: {
   reactions: Record<string, number>;
   myReaction: string | null;
   onToggle: (emoji: string) => void;
@@ -113,4 +113,4 @@ export default function ReactionsRow({ reactions, myReaction, onToggle, targetId
       )}
     </>
   );
-}
+});
