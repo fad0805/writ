@@ -7,9 +7,9 @@ import DeactivatedRedirect from "@/components/DeactivatedRedirect";
 import CsrfInit from "@/components/CsrfInit";
 import ScrollRestoration from "@/components/ScrollRestoration";
 
-const RightSidebar = dynamic(() => import("@/components/RightSidebar"), { loading: () => null, ssr: false });
-const MobileNav = dynamic(() => import("@/components/MobileNav"), { loading: () => null, ssr: false });
-const KeyboardShortcuts = dynamic(() => import("@/components/KeyboardShortcuts"), { loading: () => null, ssr: false });
+const RightSidebar = dynamic(() => import("@/components/RightSidebar"), { loading: () => null });
+const MobileNav = dynamic(() => import("@/components/MobileNav"), { loading: () => null });
+const KeyboardShortcuts = dynamic(() => import("@/components/KeyboardShortcuts"), { loading: () => null });
 
 export default function ClientProviders({ children }: { children: React.ReactNode }) {
   return (
