@@ -11,6 +11,7 @@ export function useEditorInit({value, onChange}: {value: string; onChange: (html
   })
 
   const onChangeRef = useRef(onChange);
+  const lastEmittedRef = useRef<string | null>(null);
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -20,7 +21,9 @@ export function useEditorInit({value, onChange}: {value: string; onChange: (html
     if (!editor) return;
 
     const handler = ({editor}: {editor: Editor}) => {
-      onChangeRef.current(editor.getHTML())
+      const html = editor.getHTML();
+      lastEmittedRef.current = html;
+      onChangeRef.current(html);
     }
     editor.on("update", handler);
 
@@ -32,6 +35,9 @@ export function useEditorInit({value, onChange}: {value: string; onChange: (html
   useEffect(() => {
     if (!editor || value === undefined) return;
     const incoming = value || "";
+    // 값이 에디터 자체에서 나온 것과 동일하면 동기화하지 않는다.
+    // setContent는 커서를 문서 맨 앞으로 이동시키므로 외부 변경일 때만 적용해야 한다.
+    if (lastEmittedRef.current === incoming) return;
     if (editor.getHTML() !== incoming) {
       editor.commands.setContent(incoming, { emitUpdate: false });
     }
