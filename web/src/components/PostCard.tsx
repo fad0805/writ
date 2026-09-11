@@ -468,6 +468,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
             <summary onClick={(e) => e.stopPropagation()} dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.summary, mergedEmojiList)) }} />
             <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
             {(post.media_attachments?.length ?? 0) > 0 && mediaGallery(postSensitive)}
+            {post.poll_data && <PollBox post={post} targetId={targetId} readonly={readonly} onUpdate={onUpdate} />}
             {post.link_preview && !post.quote_of_id && !post.quote_of_ap_id && !quotedPost && !seriesMatch && !episodeMatch && <LinkPreviewCard lp={post.link_preview} />}
           </details>
         ) : (() => {
@@ -490,7 +491,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
           );
         })()}
         {!post.summary && (post.media_attachments?.length ?? 0) > 0 && mediaGallery(postSensitive)}
-        {post.poll_data && <PollBox post={post} targetId={targetId} readonly={readonly} onUpdate={onUpdate} />}
+        {!post.summary && post.poll_data && <PollBox post={post} targetId={targetId} readonly={readonly} onUpdate={onUpdate} />}
         {loadingQuote && <div className="empty-small loading-small">인용 불러오는 중...</div>}
         <QuotedCard quotedPost={quotedPost} quotedSeries={quotedSeries} quotedEpisode={quotedEpisode} onNavigate={(href) => router.push(href)} />
         {!post.summary && post.link_preview && !post.quote_of_id && !post.quote_of_ap_id && !quotedPost && !seriesMatch && !episodeMatch && <LinkPreviewCard lp={post.link_preview} />}
