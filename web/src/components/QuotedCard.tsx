@@ -10,14 +10,28 @@ import { WindowWithGlobals } from "@/lib/windowGlobals";
 export type QuotedSeries = { type: "series"; novel: NovelData; author: User };
 export type QuotedEpisode = { type: "episode"; episode: EpisodeData; novel: NovelData; author: User };
 
-export default React.memo(function QuotedCard({ quotedPost, quotedSeries, quotedEpisode, onNavigate }: {
+export default React.memo(function QuotedCard({ quotedPost, quotedSeries, quotedEpisode, hiddenQuoteUrl, onNavigate }: {
   quotedPost: PostData | null;
   quotedSeries: QuotedSeries | null;
   quotedEpisode: QuotedEpisode | null;
+  hiddenQuoteUrl: string | null;
   onNavigate: (href: string) => void;
 }) {
   return (
     <>
+      {hiddenQuoteUrl && (
+        <div className="my-8">
+          <div className="quoted-series" role="link" onClick={(e) => { e.stopPropagation(); onNavigate(hiddenQuoteUrl); }}>
+            <div className="bg-tertiary" style={{ width: 64, height: 64, minWidth: 64, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Icon name="block" />
+            </div>
+            <div className="mini-post-content">
+              <div className="mini-post-cw"><Icon name="link" /> 차단/뮤트한 사용자의 글</div>
+              <div className="text-sm text-muted">클릭하여 링크로 열기</div>
+            </div>
+          </div>
+        </div>
+      )}
       {quotedPost && <div className="my-8"><MiniPostCard post={quotedPost} /></div>}
       {quotedSeries && (
         <div className="quoted-series" onClick={(e) => { e.stopPropagation(); onNavigate(`/series/${quotedSeries.novel.id}`); }}>

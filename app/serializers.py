@@ -8,6 +8,7 @@ from app.core.visibility import _can_view
 from app.models import Bookmark, Boost, Follow, Like, Post, User, Vote
 from app.utils.datetime import _fmt_dt
 from app.utils.emoji import _load_emojis
+from app.utils.filter import _load_user_filters
 
 # 좋아요/부스트/답글 카운트와 리액션 집계를 세션(요청) 단위로 배치 조회하는 캐시.
 # lazy="selectin" 컬렉션(p.likes/p.boosts/p.replies)을 통째로 로드하지 않고,
@@ -86,7 +87,7 @@ def _post_json(p, session, user, tl_type=None,
                _liked_ids=None, _boosted_ids=None, _bookmarked_ids=None,
                _vote_map=None, _my_reaction_map=None, _reactions_map=None,
                _mentioned_users_map=None, _boost_originals=None, _skip_emojis=False,
-               _quote_depth=0, _following_ids=None, _counts_map=None):
+               _quote_depth=0, _following_ids=None, _counts_map=None, _hidden_ids=None):
     if not p:
         return None
     if p.is_deleted:
@@ -109,6 +110,7 @@ def _post_json(p, session, user, tl_type=None,
             "mentioned_user_ids": [], "mentioned_handles": [],
             "link_preview": None, "is_deleted": True,
             "quote_of_id": None, "quote_of_ap_id": "",
+            "quote_hidden": False, "quote_hidden_url": "",
             "boost_of_id": p.boost_of_id,
             "quoted_post": None,
         }
@@ -122,7 +124,8 @@ def _post_json(p, session, user, tl_type=None,
                                 _vote_map, _my_reaction_map, _reactions_map,
                                 _mentioned_users_map, _boost_originals,
                                 _skip_emojis=_skip_emojis, _quote_depth=_quote_depth,
-                                _following_ids=_following_ids, _counts_map=_counts_map)
+                                _following_ids=_following_ids, _counts_map=_counts_map,
+                                _hidden_ids=_hidden_ids)
             result["id"] = p.id
             existing_boosted_by = result.get("boosted_by") or []
             booster_json = _user_json(p.author)
@@ -184,9 +187,21 @@ def _post_json(p, session, user, tl_type=None,
         })
 
     quoted_post = None
+    quote_hidden = False
+    quote_hidden_url = ""
     if p.quote_of_id and _quote_depth < 2:
         _qp = session.query(Post).filter_by(id=p.quote_of_id, is_deleted=False).first()
         if _qp and _can_view(_qp, user, session):
+            # 차단/뮤트한 사용자(또는 나를 차단한 사용자)의 글이 인용되면 본문을 노출하지 않고
+            # 링크만 남긴다. hidden_ids 계산은 TTL 캐시(_load_user_filters)로 1회만 수행된다.
+            if user is not None:
+                if _hidden_ids is None:
+                    _fctx = _load_user_filters(session, user)
+                    _hidden_ids = _fctx["hidden_ids"] if _fctx else set()
+                if _qp.author_id != user.id and _qp.author_id in _hidden_ids:
+                    quote_hidden = True
+                    quote_hidden_url = f"/post/{_qp.id}"
+            if not quote_hidden:
                 quoted_post = _post_json(
                     _qp, session, user, None,
                     _liked_ids=_liked_ids, _boosted_ids=_boosted_ids,
@@ -198,6 +213,7 @@ def _post_json(p, session, user, tl_type=None,
                     _quote_depth=_quote_depth + 1,
                     _following_ids=_following_ids,
                     _counts_map=_counts_map,
+                    _hidden_ids=_hidden_ids,
                 )
 
     if _counts_map is not None:
@@ -242,6 +258,8 @@ def _post_json(p, session, user, tl_type=None,
         "link_preview": p.link_preview or None,
         "quote_of_id": p.quote_of_id or None,
         "quote_of_ap_id": p.quote_of_ap_id or "",
+        "quote_hidden": quote_hidden,
+        "quote_hidden_url": quote_hidden_url,
         "boost_of_id": p.boost_of_id,
         "quoted_post": quoted_post,
         **(({}) if _skip_emojis else {"_emojis": _post_used_emojis(p, session, reactions)}),

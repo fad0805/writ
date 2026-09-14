@@ -235,7 +235,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
 
   // Handle stored quote reference from ActivityPub (quote_of_id / quote_of_ap_id)
   useEffect(() => {
-    if (quotedPost || quotedSeries || quotedEpisode || loadingQuote) return;
+    if (post.quote_hidden || quotedPost || quotedSeries || quotedEpisode || loadingQuote) return;
     const embedded = post.quoted_post;
     if (embedded && embedded.id && embedded.author) {
       if (embedded._emojis) injectEmojis(embedded._emojis);
@@ -493,7 +493,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
         {!post.summary && (post.media_attachments?.length ?? 0) > 0 && mediaGallery(postSensitive)}
         {!post.summary && post.poll_data && <PollBox post={post} targetId={targetId} readonly={readonly} onUpdate={onUpdate} />}
         {loadingQuote && <div className="empty-small loading-small">인용 불러오는 중...</div>}
-        <QuotedCard quotedPost={quotedPost} quotedSeries={quotedSeries} quotedEpisode={quotedEpisode} onNavigate={(href) => router.push(href)} />
+        <QuotedCard quotedPost={quotedPost} quotedSeries={quotedSeries} quotedEpisode={quotedEpisode} hiddenQuoteUrl={post.quote_hidden ? (post.quote_hidden_url || null) : null} onNavigate={(href) => router.push(href)} />
         {!post.summary && post.link_preview && !post.quote_of_id && !post.quote_of_ap_id && !quotedPost && !seriesMatch && !episodeMatch && <LinkPreviewCard lp={post.link_preview} />}
         {reactions && Object.keys(reactions).length > 0 && currentUser?.enable_reactions !== false && (
           <ReactionsRow reactions={reactions} myReaction={myReaction} onToggle={handleToggleReaction} targetId={targetId} emojiMap={reactionEmojiMap} localEmojiMap={localReactionEmojiMap} />

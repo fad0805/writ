@@ -197,6 +197,8 @@ export interface PostData {
   boost_of_id?: number | null;
   quote_of_id?: number | null;
   quote_of_ap_id?: string;
+  quote_hidden?: boolean;
+  quote_hidden_url?: string;
   quoted_post?: PostData | null;
   _emojis?: { keyword: string; file_name: string; url: string; aliases: string[] }[];
 }
