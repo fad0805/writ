@@ -73,11 +73,13 @@ def api_get_post(request: Request, post_id: int):
     user = get_current_user(request)
     fetch_remote_url = None
     hidden_ids = None
+    blocked_user_ids = None
     with get_session() as s:
         if user:
             _fctx = _load_user_filters(s, user)
             if _fctx:
                 hidden_ids = _fctx["hidden_ids"]
+                blocked_user_ids = _fctx["blocked_user_ids"]
         post = s.query(Post).options(
             selectinload(Post.author),
             selectinload(Post.parent).selectinload(Post.author),
@@ -86,6 +88,8 @@ def api_get_post(request: Request, post_id: int):
             raise HTTPException(status_code=404, detail="Post not found")
         if not _can_view(post, user, s):
             raise HTTPException(status_code=403, detail="Cannot view this post")
+        if user and blocked_user_ids and post.author_id != user.id and post.author_id in blocked_user_ids:
+            raise HTTPException(status_code=404, detail="Post not found")
         result = _post_json(post, s, user)
 
         limit = min(int(request.query_params.get("reply_limit", 5)), 50)

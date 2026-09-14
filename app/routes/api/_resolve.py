@@ -25,6 +25,7 @@ from app.models import Episode, Novel, Post, User
 from app.routes.api._episode_serializer import _episode_json
 from app.routes.api._novels import _novel_json
 from app.serializers import _post_json, _user_json
+from app.utils.filter import _load_user_filters
 from app.utils.to_ap_serializer import ap_tombstone, to_ap_note
 
 logger = logging.getLogger("writ.api.resolve")
@@ -160,6 +161,10 @@ def api_by_number(request: Request, username: str, number: str):
         user = get_current_user(request)
         if not _can_view(post, user, s):
             raise HTTPException(status_code=404, detail="Post not found")
+        if user and post.author_id != user.id:
+            _fctx = _load_user_filters(s, user)
+            if _fctx and post.author_id in _fctx["blocked_user_ids"]:
+                raise HTTPException(status_code=404, detail="Post not found")
         return _post_json(post, s, user)
 
 

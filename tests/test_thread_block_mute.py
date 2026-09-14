@@ -59,7 +59,7 @@ def test_muted_author_reply_hidden_from_thread(client, auth_cookie, make_post):
 
 
 def test_own_reply_visible_even_when_self_blocked(client, auth_cookie, make_post):
-    """내가 차단 대상인 상대 스레드에서도, 내 답글은 항상 보여야 한다."""
+    """나를 차단한 상대의 루트 글은 404로 숨겨지지만, 내 답글은 상세 주소로 항상 보여야 한다."""
     me, me_cookie = auth_cookie("alice")
     root_author, _c = auth_cookie("bob")
     root = make_post(root_author, content="<p>root</p>")
@@ -69,10 +69,16 @@ def test_own_reply_visible_even_when_self_blocked(client, auth_cookie, make_post
     with get_session() as s:
         block_user(s, root_author, me)
 
-    r = _thread(client, root.id, me_cookie)
+    # 차단한 상대의 루트 글 상세는 숨김
+    r_root = _thread(client, root.id, me_cookie)
+    assert r_root.status_code == 404
+
+    # 내 답글은 상세 주소로 접근 가능하며, 차단 상대의 부모는 ancestors에서 숨김
+    r = _thread(client, my_reply.id, me_cookie)
     assert r.status_code == 200
-    reply_ids = [p["id"] for p in r.json()["replies"]]
-    assert my_reply.id in reply_ids
+    assert r.json()["id"] == my_reply.id
+    anc_ids = [p["id"] for p in r.json()["ancestors"]]
+    assert root.id not in anc_ids
 
 
 def test_unrelated_reply_visible(client, auth_cookie, make_post):
@@ -151,3 +157,70 @@ def test_followed_author_quote_contents_visible(client, auth_cookie, make_post):
     assert body["quote_hidden"] is False
     assert body["quoted_post"] is not None
     assert body["quoted_post"]["id"] == quoted.id
+
+
+def test_blocked_author_post_hidden_on_detail_url(client, auth_cookie, make_post):
+    """내가 차단한 유저의 글은 상세 주소로 들어가도 404로 숨겨져야 한다."""
+    me, me_cookie = auth_cookie("alice")
+    blocker_target, _c = auth_cookie("bob")
+    post = make_post(blocker_target, content="<p>blocked post</p>")
+
+    with get_session() as s:
+        block_user(s, me, blocker_target)
+
+    r = _thread(client, post.id, me_cookie)
+    assert r.status_code == 404
+
+
+def test_blocker_of_me_post_hidden_on_detail_url(client, auth_cookie, make_post):
+    """나를 차단한 유저의 글도 상세 주소에서 404로 숨겨져야 한다."""
+    me, me_cookie = auth_cookie("alice")
+    blocker, _c = auth_cookie("bob")
+    post = make_post(blocker, content="<p>blocker post</p>")
+
+    with get_session() as s:
+        block_user(s, blocker, me)
+
+    r = _thread(client, post.id, me_cookie)
+    assert r.status_code == 404
+
+
+def test_muted_author_post_visible_on_detail_url(client, auth_cookie, make_post):
+    """뮤트한 유저의 글은 상세 주소에서 여전히 볼 수 있어야 한다(뮤트 제외)."""
+    me, me_cookie = auth_cookie("alice")
+    muted_target, _c = auth_cookie("bob")
+    post = make_post(muted_target, content="<p>muted post</p>")
+
+    with get_session() as s:
+        mute_user(s, me, muted_target)
+
+    r = _thread(client, post.id, me_cookie)
+    assert r.status_code == 200
+    assert r.json()["id"] == post.id
+
+
+def test_own_post_visible_when_blocked_by_author(client, auth_cookie, make_post):
+    """내 글은 작성자가 나를 차단했더라도 상세 주소에서 보여야 한다."""
+    me, me_cookie = auth_cookie("alice")
+    blocker, _c = auth_cookie("bob")
+    my_post = make_post(me, content="<p>my post</p>")
+
+    with get_session() as s:
+        block_user(s, blocker, me)
+
+    r = _thread(client, my_post.id, me_cookie)
+    assert r.status_code == 200
+    assert r.json()["id"] == my_post.id
+
+
+def test_blocked_author_post_hidden_on_by_number(client, auth_cookie, make_post):
+    """차단한 유저의 글은 by-number 상세 주소로도 404로 숨겨져야 한다."""
+    me, me_cookie = auth_cookie("alice")
+    blocker_target, _c = auth_cookie("bob")
+    post = make_post(blocker_target, content="<p>blocked post</p>")
+
+    with get_session() as s:
+        block_user(s, me, blocker_target)
+
+    r = client.get(f"/api/by-number/{blocker_target.username}/{post.number}", cookies=me_cookie)
+    assert r.status_code == 404

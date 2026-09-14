@@ -17,6 +17,7 @@ _FILTERS_CACHE_MAX = 8192
 def _copy_filter_ctx(ctx: dict) -> dict:
     return {
         "hidden_ids": set(ctx["hidden_ids"]),
+        "blocked_user_ids": set(ctx["blocked_user_ids"]),
         "muted_series_ids": set(ctx["muted_series_ids"]),
         "parsed_kw": list(ctx["parsed_kw"]),
         "boost_hidden_ids": set(ctx["boost_hidden_ids"]),
@@ -57,6 +58,8 @@ def _load_user_filters(session: Session, user):
             parsed_kw.append(("text", None, kw.mode, keywords))
     ctx = {
         "hidden_ids": hidden_ids,
+        # 차단/차단당한 사용자만 (뮤트 제외) — 상세 주소 접근 차단 등에 사용
+        "blocked_user_ids": blocked_ids | blocked_by_ids,
         "muted_series_ids": muted_series_ids,
         "parsed_kw": parsed_kw,
         "boost_hidden_ids": boost_hidden_ids,
