@@ -5,6 +5,13 @@ type Listener = () => void;
 
 const registry = new Map<number, { listeners: Set<Listener>; id: ReturnType<typeof setInterval> | null }>();
 
+let visPaused = false;
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    visPaused = document.hidden;
+  });
+}
+
 function start(ms: number) {
   let bucket = registry.get(ms);
   if (!bucket) {
@@ -13,6 +20,7 @@ function start(ms: number) {
   }
   if (bucket.id !== null) return;
   bucket.id = setInterval(() => {
+    if (visPaused) return;
     for (const fn of bucket.listeners) fn();
   }, ms);
 }
@@ -27,9 +35,10 @@ function stop(ms: number) {
   }
 }
 
-export function useNow(intervalMs = 10000): number {
+export function useNow(intervalMs = 10000, enabled = true): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
+    if (!enabled) return;
     const listener = () => setNow(Date.now());
     const bucket = registry.get(intervalMs);
     if (bucket) bucket.listeners.add(listener);
@@ -40,6 +49,6 @@ export function useNow(intervalMs = 10000): number {
       b?.listeners.delete(listener);
       stop(intervalMs);
     };
-  }, [intervalMs]);
+  }, [intervalMs, enabled]);
   return now;
 }

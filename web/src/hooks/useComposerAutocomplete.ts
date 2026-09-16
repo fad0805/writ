@@ -244,6 +244,8 @@ export function useComposerAutocomplete(params: {
     };
     setTimeout(() => document.addEventListener("click", clickHandler), 0);
     return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
       document.removeEventListener("keydown", keyHandler);
       document.removeEventListener("click", clickHandler);
     };

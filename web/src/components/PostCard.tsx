@@ -373,7 +373,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
     }
   };
 
-  const nowTime = useNow();
+  const nowTime = useNow(10000, post.created_at ? Date.now() - new Date(post.created_at).getTime() < 86400000 : false);
   const timeStr = post.created_at ? (() => {
     const t = new Date(post.created_at).getTime();
     const diff = nowTime - t;
