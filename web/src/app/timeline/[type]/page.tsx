@@ -1,7 +1,7 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { api, PostData, accountSnapshot } from "@/lib/api";
+import { api, PostData, accountSnapshot, ReplyContext } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import PostCard from "@/components/PostCard";
 import PostForm from "@/components/PostForm";
@@ -9,6 +9,7 @@ import ReplyModal from "@/components/ReplyModal";
 import InfiniteScroll from "@/components/InfiniteScroll";
 import Icon from "@/components/Icon";
 import { injectEmojis } from "@/lib/emojis";
+import { capPosts, pruneDeletedIds } from "@/lib/timeline";
 import Link from "next/link";
 
 const LIMIT = 20;
@@ -255,7 +256,7 @@ export default function TimelinePage() {
       const existingIds = new Set(prev.map((p) => p.id));
       const fresh = newPosts.filter((p) => !existingIds.has(p.id));
       if (fresh.length === 0) return prev;
-      const next = [...fresh, ...prev];
+      const next = capPosts([...fresh, ...prev]);
       if (c) setCache(tlType, { ...c, posts: next, cursor: c.cursor, ts: Date.now() });
       return next;
     });
@@ -278,7 +279,7 @@ export default function TimelinePage() {
         cursorRef.current = data.cursor ?? null;
         setHasMore(newHasMore);
         setPosts((prev) => {
-          const next = [...prev, ...data.posts];
+          const next = capPosts([...prev, ...data.posts]);
           setCache(_tl, { posts: next, hasMore: newHasMore, cursor: cursorRef.current, ts: Date.now() });
           return next;
         });
@@ -288,6 +289,71 @@ export default function TimelinePage() {
     }
     setLoadingMore(false);
   }, [tlType, hasMore, loadingMore, setCache]);
+
+  const markDeleted = useCallback((id: number) => {
+    deletedIds.current.add(id);
+    pruneDeletedIds(deletedIds.current);
+  }, []);
+
+  const handleDelete = useCallback((p: PostData) => {
+    markDeleted(p.id);
+    if (selectedIdRef.current === p.id) {
+      const idx = filteredPostsRef.current.findIndex((x) => x.id === p.id);
+      const remaining = filteredPostsRef.current.filter((x) => x.id !== p.id);
+      const repl = remaining[Math.min(Math.max(idx, 0), remaining.length - 1)];
+      setSelectedId(repl ? repl.id : null);
+    }
+    setPosts((prev) => {
+      const next = prev.filter((x) => x.id !== p.id);
+      const c = timelineCache.current[tlType];
+      if (c) setCache(tlType, { ...c, posts: next, ts: Date.now() });
+      return next;
+    });
+  }, [tlType, setCache, markDeleted]);
+
+  const handleUpdate = useCallback((p: PostData, updated?: PostData) => {
+    if (updated) addOrUpdatePost(updated);
+    else api.getPost(p.id).then(addOrUpdatePost).catch(console.error);
+  }, [addOrUpdatePost]);
+
+  const handleReply = useCallback((newPost?: PostData) => {
+    if (newPost) addOrUpdatePost(newPost);
+  }, [addOrUpdatePost]);
+
+  const handleRewrite = useCallback((
+    content: string,
+    visibility: string,
+    summary: string,
+    replyTo?: ReplyContext | null,
+    media?: { url: string; type: string; alt?: string }[],
+  ) => {
+    if (replyTo) {
+      setRewriteInitialContent(content);
+      setRewriteInitialSummary(summary);
+      setRewriteInitialMedia(media || []);
+      setReplyPost({
+        id: replyTo.id,
+        number: replyTo.number,
+        content: replyTo.content,
+        author: replyTo.author,
+        visibility: replyTo.visibility,
+        summary: "",
+        created_at: null,
+        ap_id: "",
+        likes_count: 0, boosts_count: 0, replies_count: 0,
+        liked: false, boosted: false, bookmarked: false, is_mine: false,
+        reply_context: null,
+        is_deleted: false,
+      });
+    } else {
+      setComposerCollapsed(false);
+      setRewriteContent(content);
+      setRewriteVisibility(visibility);
+      setRewriteSummary(summary);
+      setRewriteMedia(media || []);
+      setShowComposer(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof localStorage !== "undefined") localStorage.setItem("writ:timeline-composer-collapsed", composerCollapsed ? "1" : "0");
@@ -478,6 +544,7 @@ export default function TimelinePage() {
         if (newPost._emojis) injectEmojis(newPost._emojis);
         if (deletedIds.current.has(newPost.id)) return;
         if (newPost.type === "delete") {
+          markDeleted(newPost.id);
           if (selectedIdRef.current === newPost.id) {
             const idx = filteredPostsRef.current.findIndex((p) => p.id === newPost.id);
             const remaining = filteredPostsRef.current.filter((p) => p.id !== newPost.id);
@@ -518,7 +585,7 @@ export default function TimelinePage() {
     };
     es.onerror = () => {};
     return () => { es?.close(); };
-  }, [tlType, user?.id, setCache, prependPosts]);
+  }, [tlType, user?.id, setCache, prependPosts, markDeleted]);
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
   if (!user) return <div className="empty-state">로그인이 필요합니다</div>;
@@ -585,59 +652,10 @@ export default function TimelinePage() {
                 >
                   <PostCard
                     post={p}
-                    onDelete={() => {
-                      deletedIds.current.add(p.id);
-                      if (selectedIdRef.current === p.id) {
-                        const idx = filteredPostsRef.current.findIndex((x) => x.id === p.id);
-                        const remaining = filteredPostsRef.current.filter((x) => x.id !== p.id);
-                        const repl = remaining[Math.min(Math.max(idx, 0), remaining.length - 1)];
-                        setSelectedId(repl ? repl.id : null);
-                      }
-                      setPosts((prev) => {
-                        const next = prev.filter((x) => x.id !== p.id);
-                        const c = timelineCache.current[tlType];
-                        if (c) setCache(tlType, { ...c, posts: next, ts: Date.now() });
-                        return next;
-                      });
-                    }}
-                    onUpdate={(updated) => {
-                      if (updated) {
-                        addOrUpdatePost(updated);
-                      } else {
-                        api.getPost(p.id).then(addOrUpdatePost).catch(console.error);
-                      }
-                    }}
-                    onReply={(newPost) => {
-                      if (newPost) addOrUpdatePost(newPost);
-                    }}
-                    onRewrite={(content, visibility, summary, replyTo, media) => {
-                      if (replyTo) {
-                        setRewriteInitialContent(content);
-                        setRewriteInitialSummary(summary);
-                        setRewriteInitialMedia(media || []);
-                        setReplyPost({
-                          id: replyTo.id,
-                          number: replyTo.number,
-                          content: replyTo.content,
-                          author: replyTo.author,
-                          visibility: replyTo.visibility,
-                          summary: "",
-                          created_at: null,
-                          ap_id: "",
-                          likes_count: 0, boosts_count: 0, replies_count: 0,
-                          liked: false, boosted: false, bookmarked: false, is_mine: false,
-                          reply_context: null,
-                          is_deleted: false,
-                        });
-                      } else {
-                        setComposerCollapsed(false);
-                        setRewriteContent(content);
-                        setRewriteVisibility(visibility);
-                        setRewriteSummary(summary);
-                        setRewriteMedia(media || []);
-                        setShowComposer(true);
-                      }
-                    }}
+                    onDelete={handleDelete}
+                    onUpdate={handleUpdate}
+                    onReply={handleReply}
+                    onRewrite={handleRewrite}
                     selected={i === selectedIdx}
                   />
                 </div>

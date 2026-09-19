@@ -2,7 +2,7 @@
 import { PostData, User, ReplyContext, api } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { injectEmojis, renderCustomEmojis, useEmojiList, CustomEmoji } from "@/lib/emojis";
 import { sanitizePost, sanitizeName } from "@/lib/sanitize";
 import { installCodeCopyButtons } from "@/lib/codeCopy";
@@ -29,7 +29,7 @@ const ReplyModal = dynamic(() => import("./ReplyModal"), { ssr: false });
 const ReportModal = dynamic(() => import("./ReportModal"), { ssr: false });
 const RewriteModal = dynamic(() => import("./RewriteModal"), { ssr: false });
 
-const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onReply, onRewrite, current, hideContext, selected, readonly, mentionBy }: { post: PostData; onUpdate?: (updated?: PostData) => void; onDelete?: () => void; onReply?: (newPost?: PostData) => void; onRewrite?: (content: string, visibility: string, summary: string, replyTo?: ReplyContext | null, media?: { url: string; type: string; alt?: string }[]) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean; mentionBy?: User | null }) {
+const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onReply, onRewrite, current, hideContext, selected, readonly, mentionBy }: { post: PostData; onUpdate?: (post: PostData, updated?: PostData) => void; onDelete?: (post: PostData) => void; onReply?: (newPost?: PostData) => void; onRewrite?: (content: string, visibility: string, summary: string, replyTo?: ReplyContext | null, media?: { url: string; type: string; alt?: string }[]) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean; mentionBy?: User | null }) {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const [showReply, setShowReply] = useState(false);
@@ -141,8 +141,8 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
       alert("삭제에 실패했습니다. 다시 시도해주세요.");
       return;
     }
-    if (onDelete) onDelete();
-    else if (onUpdate) onUpdate();
+    if (onDelete) onDelete(post);
+    else if (onUpdate) onUpdate(post);
     else if (current) router.back();
   };
 
@@ -421,8 +421,8 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
       alert("삭제에 실패했습니다. 다시 시도해주세요.");
       return;
     }
-    if (onDelete) onDelete();
-    else if (onUpdate) onUpdate();
+    if (onDelete) onDelete(post);
+    else if (onUpdate) onUpdate(post);
     if (onRewrite) onRewrite(stripped, post.visibility, post.summary || "", post.reply_context, media);
     else { setRewriteContent(stripped); setRewriteSummary(post.summary || ""); setRewriteMedia(media); setShowRewrite(true); }
   };
@@ -438,6 +438,10 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
     if (myReaction === emoji) unreact(emoji);
     else reactTo(emoji);
   };
+
+  const handlePollUpdate = useCallback((updated?: PostData) => {
+    onUpdate?.(post, updated);
+  }, [onUpdate, post]);
 
   if (!post || !post.author) return null;
 
@@ -468,7 +472,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
             <summary onClick={(e) => e.stopPropagation()} dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.summary, mergedEmojiList)) }} />
             <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
             {(post.media_attachments?.length ?? 0) > 0 && mediaGallery(postSensitive)}
-            {post.poll_data && <PollBox post={post} targetId={targetId} readonly={readonly} onUpdate={onUpdate} />}
+            {post.poll_data && <PollBox post={post} targetId={targetId} readonly={readonly} onUpdate={handlePollUpdate} />}
             {post.link_preview && !post.quote_of_id && !post.quote_of_ap_id && !quotedPost && !seriesMatch && !episodeMatch && <LinkPreviewCard lp={post.link_preview} />}
           </details>
         ) : (() => {
@@ -491,7 +495,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
           );
         })()}
         {!post.summary && (post.media_attachments?.length ?? 0) > 0 && mediaGallery(postSensitive)}
-        {!post.summary && post.poll_data && <PollBox post={post} targetId={targetId} readonly={readonly} onUpdate={onUpdate} />}
+        {!post.summary && post.poll_data && <PollBox post={post} targetId={targetId} readonly={readonly} onUpdate={handlePollUpdate} />}
         {loadingQuote && <div className="empty-small loading-small">인용 불러오는 중...</div>}
         <QuotedCard quotedPost={quotedPost} quotedSeries={quotedSeries} quotedEpisode={quotedEpisode} hiddenQuoteUrl={post.quote_hidden ? (post.quote_hidden_url || null) : null} onNavigate={(href) => router.push(href)} />
         {!post.summary && post.link_preview && !post.quote_of_id && !post.quote_of_ap_id && !quotedPost && !seriesMatch && !episodeMatch && <LinkPreviewCard lp={post.link_preview} />}
@@ -526,7 +530,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
         )}
       </div>
       {!readonly && showReply && <ReplyModal post={post} onClose={() => setShowReply(false)} onDone={(newPost) => { setShowReply(false); if (onReply) onReply(newPost); }} />}
-      {!readonly && showEdit && <EditModal post={post} onClose={() => setShowEdit(false)} onDone={(updated) => { setShowEdit(false); if (onUpdate) onUpdate(updated); }} />}
+      {!readonly && showEdit && <EditModal post={post} onClose={() => setShowEdit(false)} onDone={(updated) => { setShowEdit(false); if (onUpdate) onUpdate(post, updated); }} />}
       {!readonly && showReport && <ReportModal post={post} onClose={() => setShowReport(false)} />}
       {viewerIndex >= 0 && (post.media_attachments?.length ?? 0) > 0 && (
         <MediaViewer
@@ -537,7 +541,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
         />
       )}
       {!readonly && showRewrite && (
-        <RewriteModal post={post} initialContent={rewriteContent ?? undefined} initialSummary={rewriteSummary} initialVisibility={post.visibility} initialMedia={rewriteMedia} onClose={closeRewrite} onDone={() => { if (onUpdate) onUpdate(); }} />
+        <RewriteModal post={post} initialContent={rewriteContent ?? undefined} initialSummary={rewriteSummary} initialVisibility={post.visibility} initialMedia={rewriteMedia} onClose={closeRewrite} onDone={() => { if (onUpdate) onUpdate(post); }} />
       )}
     </>
   );
