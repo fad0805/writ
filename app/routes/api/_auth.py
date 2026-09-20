@@ -80,6 +80,19 @@ def _get_auth_backoff_seconds(ip: str) -> int:
         return 0
     return _AUTH_FAIL_BACKOFF_BASE * (2 ** min(count - _AUTH_FAIL_MAX, 6))
 
+def clear_auth_failures(ips: list[str]):
+    """해당 IP들의 로그인 실패 기록을 제거해 IP 잠금을 푼다.
+
+    관리자가 암호를 초기화하는 등 계정 접근을 재허용하는 상황에서 호출해,
+    사용자가 최근 사용한 IP의 레이트리밋(429)이 남아 로그인이 막히지 않게 한다.
+    인메모리 카운터이므로 언락 후 실패를 다시 쌓으면 잠금이 다시 적용된다.
+    """
+    if not ips:
+        return
+    with _auth_lock:
+        for ip in ips:
+            _auth_failures.pop(ip, None)
+
 
 _PRIVATE_PEER_SUBNETS = [
     ipaddress.ip_network("127.0.0.0/8"),

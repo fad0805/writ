@@ -16,6 +16,7 @@ from app.core.permissions import require_permission
 from app.core.timeline_stream import broadcast_refresh_notifs
 from app.db.database import get_session
 from app.models import Notification, Post, Role, User
+from app.routes.api._auth import clear_auth_failures
 from app.utils.log import log_admin_action
 
 logger = logging.getLogger(__name__)
@@ -45,9 +46,13 @@ def api_admin_reset_password(request: Request, user_id: int):
         _guard_target_role(user, u)
         u.password_hash = pwd_hash
         target_username = u.username
+        known_ips = list(u.recent_ips or [])
         s.commit()
+    # 계정이 최근 사용한 IP의 로그인 실패 잠금을 풀어, 초기화한 암호로 바로 로그인 가능하게 한다.
+    if known_ips:
+        clear_auth_failures(known_ips)
     delete_user_sessions(user_id)
-    log_admin_action(user.id, user.username, "reset_password", target_type="user", target_id=user_id, target_username=target_username, ip_address=request.client.host if request.client else "")
+    log_admin_action(user.id, user.username, "reset_password", target_type="user", target_id=user_id, target_username=target_username, details=f"unlocked {len(known_ips)} ip(s)", ip_address=request.client.host if request.client else "")
     return {"ok": True, "new_password": new_pass}
 
 

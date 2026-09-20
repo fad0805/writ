@@ -106,6 +106,27 @@ def test_login_rate_limits_after_5_failures(client, make_user):
     assert r.status_code == 429
 
 
+def test_admin_password_reset_unlocks_locked_ip(client, auth_cookie, make_user):
+    """관리자 암호 초기화 시 해당 계정이 최근 사용한 IP의 로그인 잠금(429)이 풀린다."""
+    _admin, admin_cookie = auth_cookie("boss", role="admin")
+    alice = make_user("alice")
+    # 평소 alice가 이 IP(테스트 클라이언트)로 성공 로그인했던 것으로 가정
+    with get_session() as s:
+        u = s.query(User).get(alice.id)
+        u.recent_ips = ["testclient"]
+        s.commit()
+    # 5회 실패로 IP 잠금 → 올바른 암호로도 차단(429)
+    for _ in range(5):
+        client.post("/api/auth/login", data={"username": "alice", "password": "wrong"})
+    r = client.post("/api/auth/login", data={"username": "alice", "password": "test-password"})
+    assert r.status_code == 429
+    # 관리자가 암호 초기화 → 해당 IP의 실패 기록이 지워져 잠금 해제
+    r = client.post(f"/api/admin/users/{alice.id}/reset-password", cookies=admin_cookie)
+    assert r.status_code == 200
+    r = client.post("/api/auth/login", data={"username": "alice", "password": "test-password"})
+    assert r.status_code == 401  # 429가 아니라 패스워드 검증까지 진행됨(초기화된 새 암호와 다르므로 401)
+
+
 def test_me_requires_auth(client):
     assert client.get("/api/auth/me").status_code == 401
 
