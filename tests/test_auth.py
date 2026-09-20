@@ -2,6 +2,7 @@
 
 import hashlib
 import time
+from datetime import UTC, datetime, timedelta
 
 from app.core.auth import (
     _LEGACY_PBKDF2_ITERATIONS,
@@ -125,6 +126,32 @@ def test_admin_password_reset_unlocks_locked_ip(client, auth_cookie, make_user):
     assert r.status_code == 200
     r = client.post("/api/auth/login", data={"username": "alice", "password": "test-password"})
     assert r.status_code == 401  # 429가 아니라 패스워드 검증까지 진행됨(초기화된 새 암호와 다르므로 401)
+
+
+def test_self_password_reset_unlocks_locked_ip(client, make_user):
+    """사용자가 비밀번호 찾기로 재설정을 완료하면 해당 IP의 로그인 잠금(429)이 풀린다.
+
+    비밀번호 찾기 요청(forgot-password)도 실패 카운터를 소모하므로,
+    재설정을 완료해도 카운터가 그대로면 새 암호로 로그인할 수 없는 문제가 있었다.
+    """
+    alice = make_user("alice")
+    # 실패 시도로 IP 잠금 → 올바른 암호로도 차단(429)
+    for _ in range(5):
+        client.post("/api/auth/login", data={"username": "alice", "password": "wrong"})
+    r = client.post("/api/auth/login", data={"username": "alice", "password": "test-password"})
+    assert r.status_code == 429
+    # 비밀번호 찾기 흐름: 이메일 링크에 해당하는 reset token을 지급받은 상황
+    token = "reset-token-abc"
+    with get_session() as s:
+        u = s.query(User).get(alice.id)
+        u.reset_token = token
+        u.reset_token_expires_at = datetime.now(UTC) + timedelta(hours=1)
+        s.commit()
+    r = client.post("/api/auth/reset-password", data={"token": token, "password": "new-password-1"})
+    assert r.status_code == 200
+    # 그 직후 새 암호로 로그인 → 429 없이 바로 성공
+    r = client.post("/api/auth/login", data={"username": "alice", "password": "new-password-1"})
+    assert r.status_code == 200
 
 
 def test_me_requires_auth(client):

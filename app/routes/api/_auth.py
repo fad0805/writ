@@ -439,6 +439,8 @@ def api_forgot_password(request: Request, email: str = Form(...)):
 
 @auth_router.post("/auth/reset-password")
 def api_reset_password(request: Request, token: str = Form(...), password: str = Form(...)):
+    client_ip = _get_client_ip(request)
+    known_ips = [client_ip] if client_ip else []
     with get_session() as s:
         u = s.query(User).filter_by(reset_token=token, is_remote=False).first()
         if not u:
@@ -456,8 +458,11 @@ def api_reset_password(request: Request, token: str = Form(...), password: str =
         u.password_hash = hash_password(password)
         u.reset_token = ""
         u.reset_token_expires_at = None
+        known_ips += list(u.recent_ips or [])
         s.commit()
     delete_user_sessions(u.id)
+    # 재설정을 완료한 IP(및 계정의 최근 IP)의 로그인 실패 잠금을 풀어 새 암호로 바로 로그인 가능하게 한다.
+    clear_auth_failures(known_ips)
     return {"ok": True, "password_reset": True}
 
 
