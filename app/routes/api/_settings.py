@@ -20,6 +20,7 @@ from app.core.auth import delete_user_sessions, hash_password, require_active_au
 from app.core.permissions import has_permission
 from app.core.threads import spawn
 from app.core.timeline_stream import broadcast_refresh_notifs
+from app.core.workers import _run_auto_delete_once
 from app.db.database import get_session
 from app.models import (
     BlockedDomain,
@@ -86,6 +87,15 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
         if has_permission(user, "content.manage"):
             db.show_badge = show_badge
         s.commit()
+
+    # "변경 즉시 반영" 문구와 동일하게, 3 AM 워커를 기다리는 대신 설정 저장 시점의
+    # post_lifetime으로 만료 글 정리를 백그라운드(스폰드 스레드)에서 즉시 한 번 실행한다.
+    # _run_auto_delete_once는 주기 워커와 완전히 같은 함수라 로직이 어긋나지 않고,
+    # 커밋 이후에 실행되어 SQLite 락을 오래 잡지 않는다. post_lifetime > 0일 때만 —
+    # 0이면 삭제 대상이 없으므로 낭비를 피한다. 부하가 높으면 건너뛰고 다음 사이클로
+    # 미뤄지므로 실패해도 문제없다.
+    if post_lifetime > 0:
+        spawn(_run_auto_delete_once)
     return {"ok": True}
 
 
