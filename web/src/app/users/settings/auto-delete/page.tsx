@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Icon from "@/components/Icon";
 import SettingsNav from "@/components/SettingsNav";
+import { api } from "@/lib/api";
 
 const EXCEPTIONS = [
   { key: "pinned", label: "고정된 게시물", icon: "pin" },
@@ -21,14 +22,11 @@ export default function AutoDeleteSettingsPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    fetch("/api/me", { credentials: "include" })
-      .then((r) => r.json())
-      .then((u) => {
-        setPostLifetime(u.post_lifetime || 0);
-        setExceptions(u.post_lifetime_exceptions || []);
-        setLoading(false);
-      })
-      .catch(() => router.push("/login"));
+    api.me().then((u) => {
+      setPostLifetime(u.post_lifetime || 0);
+      setExceptions(u.post_lifetime_exceptions || []);
+      setLoading(false);
+    }).catch(() => router.push("/login"));
   }, [router]);
 
   const toggleException = (key: string) => {
