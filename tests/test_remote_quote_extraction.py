@@ -116,3 +116,17 @@ def test_extract_quote_normalizes_re_prefix_with_br():
     stripped = _strip_quote_link(content, url)
     assert QUOTED_WEB_URL not in stripped
     assert "당근빵" in stripped
+
+
+def test_strip_serialized_quote_inline_span():
+    # _sanitize_html → process_remote_post를 거쳐 저장되는 실제 형태 (rel 속성 + \n)
+    content = (
+        "당근빵 이제 잎모양 종이도 안 끼워주는구나...\n"
+        f'<span class="quote-inline">RE: <a href="{QUOTED_WEB_URL}" '
+        f'rel="noopener noreferrer">link</a></span>'
+    )
+    stripped = _strip_quote_link(content, QUOTED_WEB_URL)
+    assert "quote-inline" not in stripped
+    assert "RE:" not in stripped
+    assert QUOTED_WEB_URL not in stripped
+    assert "당근빵" in stripped

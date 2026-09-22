@@ -1,5 +1,5 @@
 """Shared helpers and serializers for the Mastodon-compatible API package."""
-import html
+
 import logging
 import re
 from datetime import UTC
@@ -403,8 +403,20 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         content
     )
 
-    # 인용(quote) 게시글: Mastodon 앱은 quote 필드를 렌더링하지 않으므로
-    # 인용 대상 링크를 "RE: <url>" 형식으로 본문에 붙여 클릭 가능하게 만든다.
+    # 인용(quote) 게시글: 본문에 남아 있는 인용 링크(RE: / quote-inline span / 인용 URL)를 제거.
+    # — 인용 카드(로컬 웹) 또는 raw 본문에 RE:/링크가 중복 노출되지 않도록 한다.
+    content = re.sub(
+        r'<span[^>]*class="[^"]*quote-inline[^"]*"[^>]*>\s*RE:\s*<a\b[^>]*\bhref="[^"]*"[^>]*>.*?</a>\s*</span>',
+        '', content, flags=re.I | re.S
+    )
+    content = re.sub(
+        r'<span[^>]*class="[^"]*quote-inline[^"]*"[^>]*>.*?</span>',
+        '', content, flags=re.I | re.S
+    )
+    content = re.sub(
+        r'[\s\n]*RE:[\s\n]*(?:<a[^>]*?>.*?</a>|https?://[^\s<>]*)',
+        '', content, flags=re.I | re.S
+    )
     _quote_url = ""
     if post.quote_of_id:
         if _quotes_map is not None:
@@ -423,24 +435,10 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
     if _quote_url:
         # 본문에 인용 대상 URL이 텍스트 링크로 남아있으면 제거 (RE: 줄과 중복 렌더링 방지)
         content = re.sub(
-            r'<span[^>]*class="[^"]*quote-inline[^"]*"[^>]*>\s*RE:\s*<a\b[^>]*\bhref="[^"]*"[^>]*>.*?</a>\s*</span>',
-            '', content, flags=re.I | re.S
-        )
-        content = re.sub(
-            r'[\s\n]*RE:[\s\n]*(?:<a[^>]*?>.*?</a>|https?://[^\s<>]*)',
-            '', content, flags=re.I | re.S
-        )
-        content = re.sub(
             r'<a\b[^>]*?\bhref="' + re.escape(_quote_url) + r'"[^>]*>.*?</a>',
             '', content, flags=re.I | re.S
         )
         content = re.sub(re.escape(_quote_url), '', content)
-        _quote_link = (
-            f'<p>RE: <a href="{html.escape(_quote_url, quote=True)}" '
-            f'rel="nofollow noopener noreferrer" target="_blank">'
-            f'{html.escape(_quote_url)}</a></p>'
-        )
-        content = content + _quote_link if content.strip().startswith("<") else f"<p>{content}</p>" + _quote_link
 
     shortcode_pattern = re.compile(r':(\w+):')
     used_shortcodes = {sc.lower() for sc in shortcode_pattern.findall(content)}

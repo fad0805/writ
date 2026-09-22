@@ -46,8 +46,9 @@ export function buildPostContentHtml(post: PostData, emojiList: CustomEmoji[]): 
     new Map(emojiList.map(e => [e.keyword, e])).values()
   );
 
-  // Strip "RE: https://..." from quote posts
-  html = html.replace(/(?:<span[^>]*>)?[\s\n]*RE:[\s\n]*(?:<a[^>]*>.*?<\/a>|https?:\/\/[^\s<>]+)[\s\n]*(?:<\/span>)?(?:[\s\n]*<br\s*\/?>)*/gi, '');
+  // 인용 링크(RE: <a>/URL, quote-inline span)를 본문에서 완전히 제거 — 인용 카드와 중복 렌더링 방지
+  html = html.replace(/<span[^>]*class="[^"]*quote-inline[^"]*"[^>]*>[\s\S]*?<\/span>/gi, '');
+  html = html.replace(/(?:<span[^>]*>)?[\s\n]*RE:[\s\n]*(?:<a[^>]*>[\s\S]*?<\/a>|https?:\/\/[^\s<>]+)[\s\n]*(?:<\/span>)?(?:[\s\n]*<br\s*\/?>)*/gi, '');
 
   // 인용(quote) 대상 URL이 본문에 텍스트 링크로 남아있으면 제거 (인용 카드와 중복 렌더링 방지)
   if (post.quote_of_id || post.quote_of_ap_id) {

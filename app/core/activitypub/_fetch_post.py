@@ -308,8 +308,8 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
             if parent:
                 in_reply_to_id = parent.id
 
-    # 💡 [해결] 원격 오브젝트에서 인용 URL(quoteUrl) 추출 및 연동 처리
-    quote_url = obj.get("quoteUrl", "")
+    # 💡 [해결] 원격 오브젝트에서 인용 URL(quote) 추출 및 연동 처리
+    quote_url = _extract_quote_url(obj, content)
     quote_id = None
     if quote_url:
         quoted_post = session.query(Post).filter_by(ap_id=quote_url).first()
@@ -318,6 +318,8 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
             quoted_post = _fetch_remote_post(quote_url, signer, session, _depth + 1)
         if quoted_post:
             quote_id = quoted_post.id
+        # 본문에 남은 인용 링크(RE: / quote-inline span / 인용 URL) 제거 — 인용 카드와 중복 렌더링 방지
+        content = _strip_quote_link(content, quote_url)
 
     _process_emoji_tags(obj.get("tag", []), session)
     session.flush()

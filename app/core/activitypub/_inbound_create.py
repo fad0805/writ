@@ -15,6 +15,7 @@ from app.core.activitypub._fetch import (
     _fetch_remote_post,
     _resolve_actor,
     _retry_fetch_reply,
+    _strip_quote_link,
 )
 from app.core.activitypub._inbound_common import _broadcast_emoji_list
 from app.core.activitypub._media import _cache_remote_media
@@ -465,22 +466,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 with contextlib.suppress(Exception):
                     post.created_at = datetime.datetime.fromisoformat(published.replace("Z", "+00:00"))  # type: ignore[assignment]
             if quote_of_ap_id and post.content:
-                post.content = re.sub(
-                    r'^[\s\n]*RE:\s*<a[^>]*>[^<]*</a>\s*[\n\s]*',
-                    '', str(post.content), count=1, flags=re.I
-                )  # type: ignore[assignment]
-                post.content = re.sub(
-                    r'^[\s\n]*RE:\s*https?://\S+\s*[\n\s]*',
-                    '', str(post.content), count=1, flags=re.I
-                )  # type: ignore[assignment]
-                post.content = re.sub(
-                    r'\s*RE:\s*https?://\S+\s*$',
-                    '', str(post.content), count=1, flags=re.I
-                )  # type: ignore[assignment]
-                post.content = re.sub(
-                    r'\s*RE:\s*<a[^>]*>[^<]*</a>\s*$',
-                    '', str(post.content), count=1, flags=re.I
-                )  # type: ignore[assignment]
+                post.content = _strip_quote_link(str(post.content), str(quote_of_ap_id))
             if link_preview:
                 post.link_preview = link_preview  # type: ignore[assignment]
             session.add(post)
