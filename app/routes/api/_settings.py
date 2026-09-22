@@ -49,43 +49,74 @@ settings_router = APIRouter()
 
 
 @settings_router.post("/settings/update")
-def api_update_settings(request: Request, default_visibility: str = Form("public"),
-                        episode_default_visibility: str = Form("public"),
-                        is_locked: bool = Form(False),
-                        show_badge: bool = Form(False),
-                        is_bot: bool = Form(False),
-                        follow_list_visibility: str = Form("public"),
-                        enable_reactions: bool = Form(True),
-                        post_lifetime: int = Form(0),
-                        post_lifetime_exceptions: str = Form("[]")):
+def api_update_settings(request: Request,
+                        default_visibility: str | None = Form(None),
+                        episode_default_visibility: str | None = Form(None),
+                        is_locked: str | None = Form(None),
+                        show_badge: str | None = Form(None),
+                        is_bot: str | None = Form(None),
+                        follow_list_visibility: str | None = Form(None),
+                        enable_reactions: str | None = Form(None),
+                        post_lifetime: int | None = Form(None),
+                        post_lifetime_exceptions: str | None = Form(None)):
+    """설정 저장. 요청에 포함된 필드만 갱신한다.
+
+    이 엔드포인트는 기본 설정 페이지와 자동 삭제 페이지가 함께 사용한다.
+    각 페이지는 자신의 폼 필드만 담아 보내므로, 안 온 필드를 Form 기본값
+    ("public"/False/True/0)으로 채우면 다른 쪽 설정이 매번 리셋된다.
+    (예: 자동 삭제 저장 시 default_visibility가 public으로, 기본 설정 저장
+    시 post_lifetime이 0으로 초기화됨) None이면 아무것도 건드리지 않는다.
+
+    bool 필드는 웹 체크박스가 체크 해제 시 빈 문자열("")을 보내므로
+    str | None로 받아 수동 파싱한다 (FastAPI bool | None은 ""을 422로 거부).
+    """
     user = require_auth(request)
     valid_post = ("public", "home", "followers", "mention")
-    if default_visibility not in valid_post:
-        default_visibility = "public"
-    if episode_default_visibility not in valid_post:
-        episode_default_visibility = "public"
-    if follow_list_visibility not in ("public", "private"):
-        follow_list_visibility = "public"
     valid_lifetimes = [0, 7, 14, 30, 60, 90, 180, 365, 730]
-    if post_lifetime not in valid_lifetimes:
-        post_lifetime = 0
+
+    def _b(v: str | None) -> bool | None:
+        if v is None:
+            return None
+        return v.strip().lower() in ("1", "true", "on", "yes")
+
     with get_session() as s:
         db = s.query(User).filter_by(id=user.id).first()
-        db.default_visibility = default_visibility
-        db.episode_default_visibility = episode_default_visibility
-        db.is_locked = is_locked
-        db.is_bot = is_bot
-        db.follow_list_visibility = follow_list_visibility
-        db.enable_reactions = enable_reactions
-        db.post_lifetime = post_lifetime
-        try:
-            exc = json.loads(post_lifetime_exceptions)
-            if isinstance(exc, list):
-                db.post_lifetime_exceptions = exc
-        except Exception:
-            pass
-        if has_permission(user, "content.manage"):
-            db.show_badge = show_badge
+        if default_visibility is not None:
+            if default_visibility not in valid_post:
+                default_visibility = "public"
+            db.default_visibility = default_visibility
+        if episode_default_visibility is not None:
+            if episode_default_visibility not in valid_post:
+                episode_default_visibility = "public"
+            db.episode_default_visibility = episode_default_visibility
+        _is_locked = _b(is_locked)
+        if _is_locked is not None:
+            db.is_locked = _is_locked
+        _is_bot = _b(is_bot)
+        if _is_bot is not None:
+            db.is_bot = _is_bot
+        if follow_list_visibility is not None:
+            if follow_list_visibility not in ("public", "private"):
+                follow_list_visibility = "public"
+            db.follow_list_visibility = follow_list_visibility
+        _enable_reactions = _b(enable_reactions)
+        if _enable_reactions is not None:
+            db.enable_reactions = _enable_reactions
+        if post_lifetime is not None:
+            if post_lifetime not in valid_lifetimes:
+                post_lifetime = 0
+            db.post_lifetime = post_lifetime
+        if post_lifetime_exceptions is not None:
+            try:
+                exc = json.loads(post_lifetime_exceptions)
+                if isinstance(exc, list):
+                    db.post_lifetime_exceptions = exc
+            except Exception:
+                pass
+        _show_badge = _b(show_badge)
+        if _show_badge is not None and has_permission(user, "content.manage"):
+            db.show_badge = _show_badge
+        effective_lifetime = db.post_lifetime
         s.commit()
 
     # "변경 즉시 반영" 문구와 동일하게, 3 AM 워커를 기다리는 대신 설정 저장 시점의
@@ -93,8 +124,8 @@ def api_update_settings(request: Request, default_visibility: str = Form("public
     # _run_auto_delete_once는 주기 워커와 완전히 같은 함수라 로직이 어긋나지 않고,
     # 커밋 이후에 실행되어 SQLite 락을 오래 잡지 않는다. post_lifetime > 0일 때만 —
     # 0이면 삭제 대상이 없으므로 낭비를 피한다. 부하가 높으면 건너뛰고 다음 사이클로
-    # 미뤄지므로 실패해도 문제없다.
-    if post_lifetime > 0:
+    # 미뤄지므로 실패해도 문제없다. (요청에 post_lifetime이 없으면 DB의 실제 값을 쓴다)
+    if (effective_lifetime or 0) > 0:
         spawn(_run_auto_delete_once)
     return {"ok": True}
 

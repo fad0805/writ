@@ -159,3 +159,58 @@ def test_bookmarked_exception_full_flow(client, auth_cookie, make_post):
     assert own_bookmarked.id in ids
     assert other_bookmarked.id not in ids
     assert plain.id not in ids
+
+
+def test_settings_update_keeps_fields_that_were_not_sent(client, auth_cookie):
+    """/api/settings/update는 기본 설정 페이지와 자동 삭제 페이지가 공유한다.
+
+    각 페이지는 자신의 폼 필드만 보내므로, 안 온 필드를 기본값("public"/False/0)으로
+    덮어쓰면 반대쪽 설정이 리셋된다. 요청에 포함된 필드만 갱신되어야 한다.
+    (회귀: 자동 삭제 저장 → default_visibility가 public으로 초기화되던 버그)
+    """
+    alice, alice_cookie = auth_cookie("alice")
+    with get_session() as s:
+        u = s.query(User).filter_by(id=alice.id).first()
+        u.default_visibility = "followers"
+        u.episode_default_visibility = "home"
+        u.is_locked = True
+        u.is_bot = True
+        u.follow_list_visibility = "private"
+        u.enable_reactions = False
+        u.post_lifetime = 0
+        s.commit()
+
+    # 자동 삭제 페이지가 보내는 필드만 전송
+    r = client.post("/api/settings/update", data={
+        "post_lifetime": "7",
+        "post_lifetime_exceptions": '["pinned","bookmarked"]',
+    }, cookies=alice_cookie)
+    assert r.status_code == 200
+
+    with get_session() as s:
+        u = s.query(User).filter_by(id=alice.id).first()
+        assert u.default_visibility == "followers"          # 리셋되면 안 됨
+        assert u.episode_default_visibility == "home"
+        assert u.is_locked is True
+        assert u.is_bot is True
+        assert u.follow_list_visibility == "private"
+        assert u.enable_reactions is False
+        assert u.post_lifetime == 7
+        assert u.post_lifetime_exceptions == ["pinned", "bookmarked"]
+
+    # 반대 방향: 기본 설정 페이지처럼 공개 설정만 전송 → post_lifetime 유지
+    r = client.post("/api/settings/update", data={
+        "default_visibility": "followers",
+        "is_locked": "true",
+        "is_bot": "",
+        "follow_list_visibility": "private",
+        "enable_reactions": "true",
+    }, cookies=alice_cookie)
+    assert r.status_code == 200
+
+    with get_session() as s:
+        u = s.query(User).filter_by(id=alice.id).first()
+        assert u.default_visibility == "followers"
+        assert u.is_locked is True
+        assert u.post_lifetime == 7                    # 리셋되면 안 됨
+        assert u.post_lifetime_exceptions == ["pinned", "bookmarked"]
