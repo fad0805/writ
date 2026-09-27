@@ -20,9 +20,9 @@ RATE_LIMIT_WINDOW = 60
 # 인박스로 몰려드는 페더레이션 트래픽은 같은 IP(상대 인스턴스 서버)에서 대량으로
 # 들어온다. 아래 제한은 "위조/플러드"만 걸러내는 DoS 가드 수준으로 잡으며, 정상
 # 인스턴스의 일상 동기화(백필, like/boost 폭주, 팔로우 폭풍)는 걸리지 않는다.
-RATE_LIMIT_MAX = 300
-RATE_LIMIT_BURST = 100
-RATE_LIMIT_DAILY = 5000
+RATE_LIMIT_MAX = 600
+RATE_LIMIT_BURST = 200
+RATE_LIMIT_DAILY = 10_000
 _rate_limit_store: dict[str, list[float]] = defaultdict(list)
 _rate_limit_daily: dict[str, list[float]] = defaultdict(list)
 _rate_limit_lock = threading.Lock()
