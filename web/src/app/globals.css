@@ -5439,3 +5439,64 @@ input[type="checkbox"] {
     width: 100%;
   }
 }
+
+/* ── Live stream disconnect banner ── */
+.live-stream-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 2px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--danger);
+  border-left: 4px solid var(--danger);
+  color: var(--text-primary);
+  font-size: 0.9em;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14);
+  animation: live-stream-banner-in 0.25s ease-out;
+}
+
+.live-stream-banner-icon {
+  color: var(--danger);
+  flex-shrink: 0;
+  animation: live-stream-banner-spin 1.2s linear infinite;
+}
+
+.live-stream-banner strong {
+  color: var(--danger);
+}
+
+.live-stream-banner-refresh {
+  margin-left: auto;
+  flex-shrink: 0;
+  background: var(--danger);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 0.85em;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.live-stream-banner-refresh:hover {
+  background: var(--danger-hover);
+}
+
+@keyframes live-stream-banner-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes live-stream-banner-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 768px) {
+  .live-stream-banner {
+    font-size: 0.85em;
+    margin: 6px 10px;
+  }
+}

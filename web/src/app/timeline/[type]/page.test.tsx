@@ -77,8 +77,19 @@ class MockEventSource {
   static instances: MockEventSource[] = [];
   onmessage: ((ev: { data: string }) => void) | null = null;
   onerror: (() => void) | null = null;
+  private listeners = new Map<string, Set<(ev?: unknown) => void>>();
   constructor(public url: string) {
     MockEventSource.instances.push(this);
+  }
+  addEventListener(type: string, cb: (ev?: unknown) => void) {
+    if (!this.listeners.has(type)) this.listeners.set(type, new Set());
+    this.listeners.get(type)!.add(cb);
+  }
+  removeEventListener(type: string, cb: (ev?: unknown) => void) {
+    this.listeners.get(type)?.delete(cb);
+  }
+  fire(type: string) {
+    for (const cb of this.listeners.get(type) || []) cb();
   }
   close() {}
 }
@@ -116,11 +127,15 @@ function makePost(id: number, content = `content-${id}`): PostData {
   };
 }
 
+function timelineEs(): MockEventSource {
+  const es = MockEventSource.instances.find((i) => i.url.startsWith("/api/timeline/stream"));
+  if (!es) throw new Error("no timeline EventSource created");
+  return es;
+}
+
 function pushSse(data: unknown) {
-  const es = MockEventSource.instances[0];
-  if (!es) throw new Error("no EventSource created");
   act(() => {
-    es.onmessage?.({ data: JSON.stringify(data) });
+    timelineEs().onmessage?.({ data: JSON.stringify(data) });
   });
 }
 
@@ -182,5 +197,32 @@ describe("TimelinePage", () => {
     const cards = screen.getAllByTestId("pc");
     expect(cards).toHaveLength(MAX_TL_POSTS);
     expect(cards[0]).toHaveTextContent(String(total + 3));
+  });
+
+  it("shows a disconnect banner while SSE is down and hides it on reconnect", async () => {
+    vi.mocked(api.timeline).mockResolvedValueOnce({
+      posts: [makePost(1), makePost(2)],
+      has_more: false,
+      cursor: null,
+      timeline_type: "home",
+    });
+    render(<TimelinePage />);
+    await screen.findAllByTestId("pc");
+
+    expect(screen.queryByRole("status")).toBeNull();
+
+    act(() => {
+      timelineEs().fire("error");
+    });
+
+    const banner = screen.getByRole("status");
+    expect(banner.textContent).toContain("실시간");
+    expect(banner.textContent).toContain("연결이 끊겼어요");
+
+    act(() => {
+      timelineEs().fire("open");
+    });
+
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });

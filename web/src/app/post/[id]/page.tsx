@@ -3,6 +3,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api, PostData } from "@/lib/api";
 import PostCard from "@/components/PostCard";
+import StreamStatusBanner from "@/components/StreamStatusBanner";
+import { trackStream, untrackStream } from "@/lib/streamStatus";
 
 function ThreadNode({ post, depth = 0, onDelete }: { post: PostData; depth?: number; onDelete?: () => void }) {
   return (
@@ -111,6 +113,7 @@ export default function PostDetailPage() {
     try {
       es = new EventSource(`/api/posts/${post.id}/stream`);
     } catch { return; }
+    trackStream(es);
     es.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
@@ -121,7 +124,7 @@ export default function PostDetailPage() {
       } catch {}
     };
     es.onerror = () => {};
-    return () => { es?.close(); };
+    return () => { es?.close(); untrackStream(es); };
   }, [post?.id]);
 
   const loadMore = useCallback(async () => {
@@ -200,6 +203,7 @@ export default function PostDetailPage() {
 
   return (
     <>
+      <StreamStatusBanner />
       {loadingAncestors && <p className="empty-state">위쪽 불러오는 중...</p>}
       {hasMoreAncestors && <div ref={topSentinelRef} className="sentinel" style={{ height: 1 }} />}
       {ancestors.filter((a) => !a.is_deleted).map((a) => (

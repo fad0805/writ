@@ -1,5 +1,17 @@
+import { useSyncExternalStore } from "react";
+
+export type StreamStatus = "open" | "down";
+
 const handlers = new Set<(raw: string) => void>();
+const statusHandlers = new Set<() => void>();
 let es: EventSource | null = null;
+let currentStatus: StreamStatus = "open";
+
+function setStatus(status: StreamStatus) {
+  if (status === currentStatus) return;
+  currentStatus = status;
+  for (const h of statusHandlers) h();
+}
 
 function ensureStream() {
   if (es) return;
@@ -7,7 +19,8 @@ function ensureStream() {
   es.onmessage = (event) => {
     for (const h of handlers) h(event.data);
   };
-  es.onerror = () => {};
+  es.onerror = () => setStatus("down");
+  es.onopen = () => setStatus("open");
 }
 
 export function onNotificationStream(cb: (raw: string) => void): () => void {
@@ -20,4 +33,20 @@ export function onNotificationStream(cb: (raw: string) => void): () => void {
       es = null;
     }
   };
+}
+
+function subscribeStatus(cb: () => void) {
+  ensureStream();
+  statusHandlers.add(cb);
+  return () => {
+    statusHandlers.delete(cb);
+  };
+}
+
+function getStatus(): StreamStatus {
+  return currentStatus;
+}
+
+export function useNotificationStreamStatus(): StreamStatus {
+  return useSyncExternalStore(subscribeStatus, getStatus, getStatus);
 }

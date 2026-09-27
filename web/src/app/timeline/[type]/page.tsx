@@ -7,6 +7,8 @@ import PostCard from "@/components/PostCard";
 import PostForm from "@/components/PostForm";
 import ReplyModal from "@/components/ReplyModal";
 import InfiniteScroll from "@/components/InfiniteScroll";
+import StreamStatusBanner from "@/components/StreamStatusBanner";
+import { trackStream, untrackStream } from "@/lib/streamStatus";
 import Icon from "@/components/Icon";
 import { injectEmojis } from "@/lib/emojis";
 import { capPosts, pruneDeletedIds } from "@/lib/timeline";
@@ -538,6 +540,7 @@ export default function TimelinePage() {
     try {
       es = new EventSource(`/api/timeline/stream?type=${tlType}`);
     } catch { return; }
+    trackStream(es);
     es.onmessage = (event) => {
       try {
         const newPost: StreamPostData = JSON.parse(event.data);
@@ -584,7 +587,7 @@ export default function TimelinePage() {
       }
     };
     es.onerror = () => {};
-    return () => { es?.close(); };
+    return () => { es?.close(); untrackStream(es); };
   }, [tlType, user?.id, setCache, prependPosts, markDeleted]);
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
@@ -630,6 +633,7 @@ export default function TimelinePage() {
           </Link>
         ))}
       </div>
+      <StreamStatusBanner />
       <div className="feed">
         {error ? (
           <p className="empty-state">오류: {error}</p>
