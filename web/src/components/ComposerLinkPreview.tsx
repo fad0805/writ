@@ -1,11 +1,11 @@
 "use client";
 import MiniPostCard from "./MiniPostCard";
-import { PostData } from "@/lib/api";
+import { LinkPreview, PostData } from "@/lib/api";
 
 export default function ComposerLinkPreview({ quotePost, quoteUrl, linkPreview, linkPreviewLoading, onClearQuote, onClearPreview }: {
   quotePost: PostData | null;
   quoteUrl: string;
-  linkPreview: { url: string; title: string; description: string; image: string } | null;
+  linkPreview: LinkPreview | null;
   linkPreviewLoading: boolean;
   onClearQuote: () => void;
   onClearPreview: () => void;
@@ -28,11 +28,11 @@ export default function ComposerLinkPreview({ quotePost, quoteUrl, linkPreview, 
             <div style={{ fontSize: 13, color: "var(--text-muted)" }}>링크 미리보기 불러오는 중...</div>
           ) : linkPreview && (
             <>
-              {linkPreview.image && <img src={linkPreview.image} alt="" style={{ width: 60, height: 60, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} onError={(e) => (e.target as HTMLElement).style.display = "none"} />}
+              {linkPreview.image && <img src={linkPreview.image} alt="" style={linkPreview.kind === "video" ? { width: 90, height: "auto", aspectRatio: "16 / 9", borderRadius: 6, objectFit: "cover", flexShrink: 0 } : { width: 60, height: 60, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} onError={(e) => (e.target as HTMLElement).style.display = "none"} />}
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{linkPreview.title}</div>
                 {linkPreview.description && <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{linkPreview.description}</div>}
-                <a href={linkPreview.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3, textDecoration: "none" }}>{(() => { try { return new URL(linkPreview.url).hostname; } catch { return ""; } })()}</a>
+                <a href={linkPreview.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3, textDecoration: "none" }}>{linkPreview.site_name || (() => { try { return new URL(linkPreview.url).hostname; } catch { return ""; } })()}</a>
               </div>
               <button type="button" onClick={onClearPreview} style={{ position: "absolute", top: 4, right: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>×</button>
             </>

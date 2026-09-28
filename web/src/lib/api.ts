@@ -162,6 +162,15 @@ export interface PollData {
   expires_at: string | null;
 }
 
+export interface LinkPreview {
+  url: string;
+  title: string;
+  description: string;
+  image: string;
+  site_name?: string;
+  kind?: "video" | string;
+}
+
 export interface PostData {
   id: number;
   number: string;
@@ -190,7 +199,7 @@ export interface PostData {
   reactions?: Record<string, number>;
   my_reaction?: string | null;
   mentioned_handles?: string[];
-  link_preview?: { url: string; title: string; description: string; image: string } | null;
+  link_preview?: LinkPreview | null;
   media_attachments?: { url: string; type: string; alt?: string }[];
   is_sensitive?: boolean;
   is_deleted?: boolean;
@@ -488,5 +497,5 @@ export const api = {
     return res.json();
   },
   fetchLinkPreview: (url: string) =>
-    formRequest<{ url: string; title: string; description: string; image: string }>("/api/link-preview", { url }),
+    formRequest<LinkPreview>("/api/link-preview", { url }),
 };

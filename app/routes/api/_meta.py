@@ -1,9 +1,10 @@
 """Server-info, link-preview, and client-log endpoints extracted from _misc.py."""
 import contextlib
 import html
+import json
 import logging
 import re
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -22,15 +23,85 @@ meta_router = APIRouter()
 
 # ── Link Preview ──
 
+_YOUTUBE_HOSTS = {
+    "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com",
+    "youtube-nocookie.com", "www.youtube-nocookie.com",
+    "youtu.be", "www.youtu.be",
+}
+_YOUTUBE_PATH_PREFIXES = ("embed", "live", "shorts", "v")
+_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+
+def _youtube_video_url(url: str) -> str:
+    """YouTube/watch·youtu.be·shorts·live·embed URL → canonical watch URL. 없으면 빈 문자열."""
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return ""
+    host = (parsed.hostname or "").lower()
+    if host not in _YOUTUBE_HOSTS:
+        return ""
+    parts = [p for p in parsed.path.split("/") if p]
+    if host in ("youtu.be", "www.youtu.be"):
+        video_id = parts[0] if parts else ""
+    elif parts and parts[0] in _YOUTUBE_PATH_PREFIXES:
+        video_id = parts[1] if len(parts) > 1 else ""
+    else:
+        try:
+            video_id = parse_qs(parsed.query).get("v", [""])[0]
+        except ValueError:
+            video_id = ""
+    if not _VIDEO_ID_RE.match(video_id):
+        return ""
+    return f"https://www.youtube.com/watch?v={video_id}"
+
+
+def _youtube_preview(url: str):
+    """oEmbed로 제목·채널명·썸네일을 가져온다.
+
+    watch 페이지는 1.3MB 넘고 OG 스캔의 1MB 상한(_meta.py의 max_size)에 걸려
+    제목/썸네일을 못 얻는다. 채널명은 어차피 OG 태그에 없으니 oEmbed를 쓴다.
+    """
+    video_url = _youtube_video_url(url)
+    if not video_url:
+        return None
+    oembed_url = "https://www.youtube.com/oembed?" + urlencode({"url": video_url, "format": "json"})
+    resp = validated_get(oembed_url, timeout=10, max_size=256 * 1024)
+    if not resp or resp.status_code != 200:
+        return None
+    try:
+        data = json.loads(resp.text)
+    except ValueError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    title = (data.get("title") or "").strip()
+    if not title:
+        return None
+    video_id = video_url.rsplit("=", 1)[1]
+    return {
+        "url": video_url,
+        "title": title[:200],
+        "description": "",
+        # oEmbed의 thumbnail_url은 4:3 레터박스(hqdefault)라 16:9로 바꿔 쓴다
+        "image": f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg",
+        "site_name": (data.get("author_name") or "").strip()[:100],
+        "kind": "video",
+    }
+
+
 @meta_router.post("/link-preview")
 def api_link_preview(request: Request, url: str = Form(...)):
     require_auth(request)
     parsed = urlparse(url)
     domain = parsed.netloc
     result = {"url": url, "title": domain, "description": "", "image": ""}
+    if not validate_url(url):
+        return result
+    yt = _youtube_preview(url)
+    if yt:
+        return yt
     try:
-        if not validate_url(url):
-            return result
         resp = validated_get(url, timeout=10, max_size=1024 * 1024)
         if resp and resp.status_code == 200:
             html_text = resp.text
