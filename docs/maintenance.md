@@ -40,7 +40,7 @@ tar czf writ-files-$(date +%F).tar.gz uploads data static
 
 미디어가 많다면 `rsync`로 증분 백업을 권장합니다.
 
-> 자동 삭제/미디어 정리 워커가 매일 3시에 실행되므로, 백업 주기를 3시 기준으로 잡으면 삭제 직전 상태를 보존할 수 있습니다.
+> 미디어 정리 워커가 매일 3시에 실행되므로, 백업 주기를 3시 기준으로 잡으면 정리 직전 상태를 보존할 수 있습니다. 자동 삭제 워커는 1시간 주기(`AUTO_DELETE_INTERVAL_SECONDS`)로 도는 탓에 삭제 시점이 하루에 한 번으로 고정되지 않습니다.
 
 ## 업데이트
 
@@ -81,7 +81,7 @@ api 컨테이너 안에서 함께 실행되는 작업들입니다.
 | 워커 | 주기 | 작업 |
 |------|------|------|
 | delivery worker | 30초 | 연합 서버로의 활동 전달(PendingDelivery). 최대 7회 재시도. |
-| auto-delete | 매일 3시 | 만료된 글 하드 삭제 (기간 설정한 사용자 대상). 서버 부하 시 건너뜀. |
+| auto-delete | 1시간 (`AUTO_DELETE_INTERVAL_SECONDS`) | 만료된 글 하드 삭제 (기간 설정한 사용자 대상). 서버 부하 시 해당 주기 건너뛰고 다음 주기에 이어서 처리. |
 | orphan media cleanup | 매일 3시 | 참조가 없는 `uploads/media/` 파일 정리 (`ORPHAN_MEDIA_MIN_AGE_DAYS` 기준). |
 | remote profile refresh | 매시간 | 원격 사용자 프로필(아바타, 소개 등) 갱신. 서버가 한가할 때만, 사용자당 3일 간격. |
 

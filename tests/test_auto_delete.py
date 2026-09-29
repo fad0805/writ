@@ -7,9 +7,86 @@ waiting for the 3 AM schedule.
 
 import datetime
 
-from app.core.workers import _run_auto_delete_once
+import pytest
+
+import app.core.workers as workers_mod
+from app.core.workers import _get_cpu_percent, _run_auto_delete_once
 from app.db.database import get_session
 from app.models import Bookmark, Like, Notification, Post, User
+
+
+@pytest.fixture(autouse=True)
+def _not_busy(monkeypatch):
+    """개발기/CI CPU 부하에 따라 자동삭제가 중간에 끊기면 테스트가 흔들린다.
+    삭제 로직 자체만 검증하므로 부하 판정은 0으로 고정한다."""
+    workers_mod._cpu_cache = None
+    monkeypatch.setattr(workers_mod, "_get_cpu_percent", lambda: 0.0)
+
+
+def test_cpu_probe_is_cached(monkeypatch):
+    """/proc/stat 두 읽기 사이에 1초를 자므로, 측정 결과를 TTL 동안 재사용한다.
+
+    (회귀: 캐시가 없으면 자동삭제가 글마다 1초씩 잠들어 1건/초로 느려진다.
+    프로덕션(Linux)에서만 /proc/stat이 있어 그 slowdown이 발현됐다)
+    """
+    workers_mod._cpu_cache = None
+    sleeps = []
+
+    class _FakeProc:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def readline(self):
+            # parts[0]=cpu, parts[1..3]=user/nice/system, parts[4]=idle
+            return "cpu  100 0 100 700  100 0 0 0\n"
+
+    monkeypatch.setattr("builtins.open", lambda *a, **k: _FakeProc())
+    monkeypatch.setattr(workers_mod.time, "sleep", lambda s: sleeps.append(s))
+
+    for _ in range(5):
+        _get_cpu_percent()
+
+    # 5번 호출 → 실제 측정은 1번뿐(두 번째 이후는 캐시 적중)
+    assert len(sleeps) == 1, f"CPU 측정이 {len(sleeps)}번 실행됨 (캐시 미작동)"
+    assert workers_mod._cpu_cache is not None
+
+
+def test_cpu_probe_returns_value(monkeypatch):
+    workers_mod._cpu_cache = None
+    lines = iter([
+        "cpu  100 0 100 700  0 0 0 0\n",
+        "cpu  150 0 100 750  0 0 0 0\n",
+    ])
+
+    class _FakeProc:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def readline(self):
+            return next(lines)
+
+    monkeypatch.setattr("builtins.open", lambda *a, **k: _FakeProc())
+    monkeypatch.setattr(workers_mod.time, "sleep", lambda s: None)
+    # idle 700→750 (idle_d=50), total 900→1000 (total_d=100) → 50% idle → 50% used
+    assert _get_cpu_percent() == 50.0
+
+
+def test_cpu_probe_survives_missing_proc_stat(monkeypatch):
+    """macOS 등 /proc이 없으면 조용히 0을 돌려주고 캐시한다."""
+    workers_mod._cpu_cache = None
+
+    def _boom(*a, **k):
+        raise FileNotFoundError("/proc/stat")
+
+    monkeypatch.setattr("builtins.open", _boom)
+    assert _get_cpu_percent() == 0.0
+    assert workers_mod._cpu_cache is not None
 
 
 def _age(post, days):
@@ -214,3 +291,99 @@ def test_settings_update_keeps_fields_that_were_not_sent(client, auth_cookie):
         assert u.is_locked is True
         assert u.post_lifetime == 7                    # 리셋되면 안 됨
         assert u.post_lifetime_exceptions == ["pinned", "bookmarked"]
+
+
+# ── 워커 스케줄 ──
+# auto_delete_expired_posts()는 무한 루프라, 주기 대기(interval sleep)에서
+# 예외를 던져 한 주기만 돌린 뒤 관찰한다.
+
+class _StopLoop(Exception):
+    pass
+
+
+def _run_one_cycle(monkeypatch, busy, pass_results, max_sleeps=8):
+    """워커를 한 주기만 돌리고 (패스별 삭제수, sleep 인자들)을 돌려준다.
+
+    종료 신호는 '주기 대기'지만, 스케줄이 이전 구현(매일 3시)으로 되돌아가면
+    그 sleep이 영영 오지 않아 루프가 끝나지 않는다. sleep 횟수 상한도 같이 두어
+    그런 회귀는 멈추지 않고 실패하도록 한다."""
+    workers_mod._cpu_cache = None
+    monkeypatch.setattr(workers_mod, "_server_busy", lambda: busy)
+
+    calls = []
+    results = list(pass_results)
+
+    def _fake_pass():
+        calls.append(1)
+        return results.pop(0) if results else 0
+
+    monkeypatch.setattr(workers_mod, "_run_auto_delete_once", _fake_pass)
+
+    sleeps = []
+    interval = workers_mod.AUTO_DELETE_INTERVAL_SECONDS
+
+    def _sleep(seconds):
+        sleeps.append(seconds)
+        if seconds == interval or len(sleeps) >= max_sleeps:  # 주기 대기 = 주기 종료
+            raise _StopLoop
+
+    monkeypatch.setattr(workers_mod.time, "sleep", _sleep)
+    with pytest.raises(_StopLoop):
+        workers_mod.auto_delete_expired_posts()
+    return len(calls), sleeps
+
+
+def test_auto_delete_interval_default_is_frequent():
+    """하루 한 번(3시) 스케줄로 되돌아가지 않도록 기본 주기를 고정한다."""
+    from app.config.settings import AUTO_DELETE_INTERVAL_SECONDS
+
+    assert 0 < AUTO_DELETE_INTERVAL_SECONDS <= 3600
+
+
+def test_worker_repeats_passes_until_nothing_left(monkeypatch):
+    """0건이 나올 때까지 패스를 반복해 백로그를 비운다."""
+    passes, sleeps = _run_one_cycle(monkeypatch, busy=False, pass_results=[3, 2, 0])
+    assert passes == 3
+    # 패스 사이에만 쿨다운이 있고, 마지막에 주기 대기 1회
+    assert sleeps[-1] == workers_mod.AUTO_DELETE_INTERVAL_SECONDS
+    assert all(s != workers_mod.AUTO_DELETE_INTERVAL_SECONDS for s in sleeps[:-1])
+
+
+def test_worker_stops_after_single_pass_when_nothing_expired(monkeypatch):
+    """만료된 글이 없으면 패스를 1번만 돌고 다음 주기로 넘어간다."""
+    passes, _ = _run_one_cycle(monkeypatch, busy=False, pass_results=[0])
+    assert passes == 1
+
+
+def test_worker_busy_cycle_reschedules_on_interval(monkeypatch):
+    """부하로 건너뛰어도 1800초 하드코딩이 아니라 정상 주기로 재예약한다.
+
+    (회귀: 예전엔 busy면 sleep(1800)+continue로 스케줄이 3시에서 밀려났다)
+    """
+    passes, sleeps = _run_one_cycle(monkeypatch, busy=True, pass_results=[])
+    assert passes == 0, "부하 상태에서 삭제 패스를 돌리면 안 됨"
+    assert 1800 not in sleeps
+    assert sleeps[-1] == workers_mod.AUTO_DELETE_INTERVAL_SECONDS
+
+
+def test_worker_survives_pass_exception(monkeypatch):
+    """패스에서 예외가 나도 워커가 죽지 않고 다음 주기로 넘어간다."""
+    workers_mod._cpu_cache = None
+    monkeypatch.setattr(workers_mod, "_server_busy", lambda: False)
+
+    def _boom():
+        raise RuntimeError("pass failed")
+
+    monkeypatch.setattr(workers_mod, "_run_auto_delete_once", _boom)
+    interval = workers_mod.AUTO_DELETE_INTERVAL_SECONDS
+    sleeps = []
+
+    def _sleep(seconds):
+        sleeps.append(seconds)
+        if seconds == interval or len(sleeps) >= 8:
+            raise _StopLoop
+
+    monkeypatch.setattr(workers_mod.time, "sleep", _sleep)
+    with pytest.raises(_StopLoop):
+        workers_mod.auto_delete_expired_posts()
+    assert sleeps[-1] == interval

@@ -64,6 +64,7 @@ def _reset_in_memory_limits():
     (app.core.rate_limit) are module-level dicts keyed by client IP, so they
     would otherwise accumulate across tests that share a single TestClient IP.
     """
+    import app.core.workers as workers_mod
     import app.routes.api._auth as auth_mod
     from app.core.permissions import _ROLE_PERM_CACHE, _ROLE_PERM_CACHE_TIME
     from app.core.rate_limit import _rate_limit_daily, _rate_limit_store
@@ -76,6 +77,7 @@ def _reset_in_memory_limits():
     _ROLE_PERM_CACHE.clear()
     _ROLE_PERM_CACHE_TIME.clear()
     _filters_cache.clear()
+    workers_mod._cpu_cache = None
     yield
     with auth_mod._auth_lock:
         auth_mod._auth_failures.clear()
@@ -84,6 +86,7 @@ def _reset_in_memory_limits():
     _ROLE_PERM_CACHE.clear()
     _ROLE_PERM_CACHE_TIME.clear()
     _filters_cache.clear()
+    workers_mod._cpu_cache = None
 
 
 @pytest.fixture

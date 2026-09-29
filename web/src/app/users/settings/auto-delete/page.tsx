@@ -75,10 +75,10 @@ export default function AutoDeleteSettingsPage() {
             <option value={730}>2년</option>
           </select>
           <p className="form-help" style={{ marginTop: 8, color: "var(--text-secondary)" }}>
-            설정한 기간이 지난 모든 게시물이 자동으로 삭제됩니다. 변경 즉시 반영되며, 기존 글도 새 설정 기준으로 적용됩니다.
+            설정한 기간이 지난 게시물은 서버가 주기적으로 정리합니다. 서버가 바쁘면 다음 주기로 넘어가며, 설정을 저장하면 곧바로 한 번 실행됩니다.
           </p>
           <p className="form-help" style={{ color: "var(--text-muted)", fontSize: "0.85em" }}>
-            자동 삭제 작업은 서버가 한가한 새벽 시간에 백그라운드에서 돌아가기 때문에, 설정 후 바로 삭제되지 않을 수 있습니다.
+            만료 시점부터 실제 삭제까지 최대 1시간 정도 걸릴 수 있습니다.
           </p>
         </div>
 

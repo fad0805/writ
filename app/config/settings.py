@@ -1,7 +1,12 @@
+import logging
 import os
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
+
+# 설정 모듈은 로깅 설정(app.config.logging)보다 먼저 import된다. handler가 없는
+# 시점의 warning은 logging.lastResort가 stderr로 내보내 컨테이너 로그에 남는다.
+logger = logging.getLogger("writ.config")
 
 # Load environment files
 _app_env = os.environ.get("APP_ENV", "development")
@@ -33,6 +38,30 @@ if not _secret_key:
     raise RuntimeError("SECRET_KEY environment variable is required")
 SECRET_KEY: str = _secret_key
 SESSION_EXPIRE_DAYS = 30
+
+
+def _bounded_int_env(name: str, default: int, minimum: int, maximum: int) -> int:
+    """정수 환경변수를 읽고 [minimum, maximum] 범위를 보장한다.
+
+    값이 잘못되면 조용히 통과해 백그라운드 워커가 죽거나(파싱 실패) 무한 루프에
+    들어가므로(주기 0) 기본값/경계값으로 되돌리고 기동 로그에 남긴다.
+    """
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("%s=%r is not an integer; falling back to default %d", name, raw, default)
+        return default
+    if value < minimum:
+        logger.warning("%s=%d is below minimum %d; clamped to %d", name, value, minimum, minimum)
+        return minimum
+    if value > maximum:
+        logger.warning("%s=%d is above maximum %d; clamped to %d", name, value, maximum, maximum)
+        return maximum
+    return value
+
 
 # 사용자 AP 개인키 암호화 전용 솔트. 미설정 시 레거시 체계(솔트 없는
 # sha256 단일 파생)로 동작해 기존 배포본과 호환된다. 설정하면 신규
@@ -79,6 +108,15 @@ AVATAR_URL_PREFIX = os.environ.get("AVATAR_URL_PREFIX", "/uploads/avatars")
 
 # Orphan media cleanup (days; files older than this with no DB reference get removed by the daily worker)
 ORPHAN_MEDIA_MIN_AGE_DAYS = int(os.environ.get("ORPHAN_MEDIA_MIN_AGE_DAYS", "7"))
+
+# Auto-delete worker interval (seconds). 만료된 글 하드 삭제 주기.
+# 예전엔 하루 한 번(3시)만 돌았는데, 그때 서버가 바쁘면 남은 글은 다음 날까지
+# 갇혔다. 주기를 짧게 두면 부하로 미루더라도 다음 주기에 이어서 처리된다.
+_AUTO_DELETE_MIN_SECONDS = 60
+_AUTO_DELETE_MAX_SECONDS = 86400
+AUTO_DELETE_INTERVAL_SECONDS = _bounded_int_env(
+    "AUTO_DELETE_INTERVAL_SECONDS", 3600, _AUTO_DELETE_MIN_SECONDS, _AUTO_DELETE_MAX_SECONDS
+)
 
 # Initial owner password (optional - if set, first registration must use this password)
 INITIAL_OWNER_PASSWORD = os.environ.get("INITIAL_OWNER_PASSWORD", "")

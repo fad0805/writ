@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 from sqlalchemy import or_
 
-from app.config.settings import ORPHAN_MEDIA_MIN_AGE_DAYS, SECRET_KEY
+from app.config.settings import AUTO_DELETE_INTERVAL_SECONDS, ORPHAN_MEDIA_MIN_AGE_DAYS, SECRET_KEY
 from app.core.activitypub import (
     _deliver_sync_with_error,
     _get_instance_actor,
@@ -107,7 +107,21 @@ def delivery_worker():
             logger.error("Delivery worker error: %s", e, exc_info=True)
 
 
-def _get_cpu_percent():
+_CPU_PROBE_INTERVAL = 10.0
+_cpu_cache: tuple[float, float] | None = None
+
+
+def _get_cpu_percent() -> float:
+    """CPU 사용률(%). /proc/stat 두 읽기 사이에 1초를 자야 해서 결과를 캐시한다.
+
+    측정 자체가 1초짜리 대기로부다. 자동삭제는 글 한 건마다 `_server_busy()`를
+    부르므로 캐시 없이 두면 삭제 속도가 순수 sleep 때문에 1건/초로 묶인다.
+    (회귀: 프로덕션(Linux)에서만 /proc/stat이 있어 1초 대기가 발현됐다)
+    """
+    global _cpu_cache
+    now = time.time()
+    if _cpu_cache is not None and _cpu_cache[0] > now:
+        return _cpu_cache[1]
     try:
         with open("/proc/stat") as f:
             parts = f.readline().split()
@@ -118,13 +132,13 @@ def _get_cpu_percent():
             parts = f.readline().split()
         idle2 = int(parts[4])
         total2 = sum(int(x) for x in parts[1:])
-        idle_d = idle2 - idle1
         total_d = total2 - total1
-        if total_d == 0:
-            return 0
-        return (1 - idle_d / total_d) * 100
+        idle_d = idle2 - idle1
+        value = (1 - idle_d / total_d) * 100 if total_d else 0.0
     except Exception:
-        return 0
+        value = 0.0
+    _cpu_cache = (time.time() + _CPU_PROBE_INTERVAL, value)
+    return value
 
 
 def _server_busy():
@@ -199,8 +213,12 @@ def _run_auto_delete_once() -> int:
     """Auto-delete의 실제 실행 단위: 만료된 글을 찾아 하드 삭제하고 삭제 수를 반환한다.
 
     Checks CPU/DB load before and during execution; aborts if too busy.
-    Uses user.post_lifetime (days) + post.created_at to determine expiry."""
+    Uses user.post_lifetime (days) + post.created_at to determine expiry.
+    삭제는 COMMIT_BATCH 건마다 커밋해, 대상이 많아도 쓰기 트랜잭션이 한 번에
+    다 묶이지 않게 하고 중간에 죽어도 진행 상황이 남게 한다."""
+    COMMIT_BATCH = 200
     deleted = 0
+    since_commit = 0
     _autodel_notif_users = set()
     with get_session() as s:
         now = datetime.datetime.now(datetime.UTC)
@@ -266,6 +284,10 @@ def _run_auto_delete_once() -> int:
                     with contextlib.suppress(Exception):
                         broadcast_delete(post.id)
                     deleted += 1
+                    since_commit += 1
+                    if since_commit >= COMMIT_BATCH:
+                        s.commit()
+                        since_commit = 0
                 except Exception:
                     # 개별 글 실패가 전체 워커를 죽이지는 않되, 원인은 반드시 남긴다.
                     logger.error("Auto-delete failed for post %s", post.id, exc_info=True)
@@ -283,20 +305,38 @@ def _run_auto_delete_once() -> int:
 
 
 def auto_delete_expired_posts():
-    """Hard-delete expired posts daily at 3 AM server time."""
-    time.sleep(min(_next_3am(), 300))
+    """Hard-delete expired posts every AUTO_DELETE_INTERVAL_SECONDS.
+
+    예전엔 하루 한 번(3시)만 돌았다. 서버가 그때 바쁘면 패스가 0건으로 끊기고
+    남은 글은 다음 날까지 갇혔다. 주기적으로 돌리면 부하로 미루더라도 다음 주기에
+    이어서 처리된다.
+
+    한 주기 안에서는 0건이 나올 때까지 반복해 백로그를 비운다. 영구 실패하는 글
+    하나가 있어도 0이 안 나오므로 MAX_PASSES로 상한을 둔다. 패스 간 대기
+    (PASS_COOLDOWN)로 DB에 연속 부하를 주지 않는다.
+    """
+    MAX_PASSES = 24
+    PASS_COOLDOWN = 30
+
+    time.sleep(min(AUTO_DELETE_INTERVAL_SECONDS, 300))
     while True:
         try:
             if _server_busy():
-                logger.info("Auto-delete: server busy, skipping")
-                time.sleep(1800)
-                continue
-            deleted = _run_auto_delete_once()
-            if deleted:
-                logger.info("Auto-delete cycle finished, deleted %d posts", deleted)
+                logger.info("Auto-delete: server busy, skipping this cycle")
+            else:
+                total = 0
+                for attempt in range(MAX_PASSES):
+                    deleted = _run_auto_delete_once()
+                    if not deleted:
+                        break
+                    total += deleted
+                    if attempt + 1 < MAX_PASSES:
+                        time.sleep(PASS_COOLDOWN)
+                if total:
+                    logger.info("Auto-delete cycle finished, deleted %d posts", total)
         except Exception as e:
             logger.error("Auto-delete worker error: %s", e, exc_info=True)
-        time.sleep(_next_3am() + 60)
+        time.sleep(AUTO_DELETE_INTERVAL_SECONDS)
 
 
 def cleanup_orphan_media():
