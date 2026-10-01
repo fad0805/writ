@@ -690,7 +690,7 @@ def _handle_update(activity: dict) -> tuple[int, str]:
             refreshed_actor = _resolve_actor(obj_id, force_refresh=True, sign_as=_signer)
             if refreshed_actor:
                 try:
-                    broadcast_profile_update(refreshed_actor.id)
+                    broadcast_profile_update(refreshed_actor.id, refreshed_actor.profile_image or "")
                 except Exception:
                     pass
         elif obj_type in ("Note", "Question"):

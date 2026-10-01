@@ -8,7 +8,8 @@ import { MAX_TL_POSTS } from "@/lib/timeline";
 
 const h = vi.hoisted(() => {
   const renders: number[] = [];
-  return { renders };
+  const avatars: { id: number; authorId: number; avatar: string }[] = [];
+  return { renders, avatars };
 });
 
 vi.mock("next/navigation", () => ({
@@ -54,8 +55,9 @@ vi.mock("@/lib/api", async (importOriginal) => {
 
 vi.mock("@/components/PostCard", async () => {
   const React = await import("react");
-  const MockPostCard = ({ post }: { post: { id: number } }) => {
+  const MockPostCard = ({ post }: { post: { id: number; author?: { id: number; avatar: string } } }) => {
     h.renders.push(post.id);
+    h.avatars.push({ id: post.id, authorId: post.author?.id ?? 0, avatar: post.author?.avatar ?? "" });
     return React.createElement("div", { "data-testid": "pc" }, String(post.id));
   };
   return { default: React.memo(MockPostCard) };
@@ -96,7 +98,7 @@ class MockEventSource {
 
 vi.stubGlobal("EventSource", MockEventSource);
 
-function makePost(id: number, content = `content-${id}`): PostData {
+function makePost(id: number, content = `content-${id}`, authorId = 1): PostData {
   return {
     id,
     number: String(id),
@@ -107,7 +109,7 @@ function makePost(id: number, content = `content-${id}`): PostData {
     visibility: "public",
     created_at: "2026-01-01T00:00:00Z",
     author: {
-      id: 1,
+      id: authorId,
       username: "me",
       display_name: "Me",
       avatar: "",
@@ -142,6 +144,7 @@ function pushSse(data: unknown) {
 beforeEach(() => {
   MockEventSource.instances = [];
   h.renders.length = 0;
+  h.avatars.length = 0;
   sessionStorage.clear();
   localStorage.clear();
   vi.mocked(api.timeline).mockReset();
@@ -197,6 +200,47 @@ describe("TimelinePage", () => {
     const cards = screen.getAllByTestId("pc");
     expect(cards).toHaveLength(MAX_TL_POSTS);
     expect(cards[0]).toHaveTextContent(String(total + 3));
+  });
+
+  it("swaps in the new author avatar when a remote profile_update arrives", async () => {
+    vi.mocked(api.timeline).mockResolvedValueOnce({
+      posts: [makePost(1, "c1", 7), makePost(2, "c2", 8)],
+      has_more: false,
+      cursor: null,
+      timeline_type: "home",
+    });
+    render(<TimelinePage />);
+    await screen.findAllByTestId("pc");
+
+    pushSse({ type: "profile_update", user_id: 7, avatar: "/uploads/avatars/remote/new.png" });
+
+    // 방금 렌더된 값으로 판정한다 (같은 post가 다시 렌더될 수 있음)
+    const latest = new Map<number, { authorId: number; avatar: string }>();
+    for (const a of h.avatars) latest.set(a.id, { authorId: a.authorId, avatar: a.avatar });
+    expect(latest.get(1)).toEqual({ authorId: 7, avatar: "/uploads/avatars/remote/new.png" });
+    // 다른 작성자는 그대로여야 한다
+    expect(latest.get(2)).toEqual({ authorId: 8, avatar: "" });
+    // 글이 새로 추가되지는 않는다
+    expect(screen.getAllByTestId("pc")).toHaveLength(2);
+  });
+
+  it("never treats an event without a post id as a new post", async () => {
+    vi.mocked(api.timeline).mockResolvedValueOnce({
+      posts: [makePost(1), makePost(2)],
+      has_more: false,
+      cursor: null,
+      timeline_type: "home",
+    });
+    render(<TimelinePage />);
+    await screen.findAllByTestId("pc");
+
+    // 글 id가 없는 이벤트는 전부 무시되어야 한다 (가짜 글이 렌더 크래시를 낸다)
+    pushSse({ type: "profile_update", user_id: 7 });
+    pushSse({ event: "notif", unread: 3 });
+    pushSse({ type: "something_new" });
+
+    expect(screen.getAllByTestId("pc")).toHaveLength(2);
+    expect(screen.queryByText("undefined")).toBeNull();
   });
 
   it("shows a disconnect banner while SSE is down and hides it on reconnect", async () => {

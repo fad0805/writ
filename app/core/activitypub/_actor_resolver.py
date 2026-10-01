@@ -9,6 +9,7 @@ _fetch_actor의 랩퍼가 반환된 user.pending_pinned_ap_ids로 수행한다.
 import datetime
 import logging
 import re
+import threading
 import time
 import uuid
 from urllib.parse import urlparse
@@ -17,6 +18,7 @@ from app.config.settings import BASE_URL, SECRET_KEY
 from app.core.activitypub._emoji import _process_emoji_tags
 from app.core.activitypub._fetch_http import _fetch_ap_json
 from app.core.activitypub._media import _save_remote_avatar, _save_remote_image
+from app.core.threads import spawn
 from app.db.database import get_session
 from app.models import User
 from app.utils.crypto import encrypt_key, generate_keypair, get_private_key, sign_string
@@ -24,6 +26,64 @@ from app.utils.http import WRIT_USER_AGENT, safe_fetch, validated_get
 from app.utils.urls import parse_username_from_url
 
 logger = logging.getLogger("writ.activitypub")
+
+# DB에 이미 있는 원격 유저는 HTTP를 아예 치지 않고 그대로 반환한다(무조건 캐시).
+# 이러면 아바타/-bio 변경이 refresh_remote_profiles 워커(24시간 게이트 + 시간당
+# 50건)까지 발견되지 않아, 인기가 적은 계정은 사흘 넘게 낡은 프로필을 보여준다.
+# 대신 TTL이 지난 행을 만나면 요청을 막지 않고 백그라운드로 한 번 물어본다.
+_ACTOR_REFRESH_TTL_SECONDS = 3600
+_revalidating: set[str] = set()
+_revalidating_lock = threading.Lock()
+
+
+def _is_stale(user: User, ttl: int = _ACTOR_REFRESH_TTL_SECONDS) -> bool:
+    """DB 행의 마지막 갱신이 TTL을 넘었는지. updated_at이 없으면 낡은 것으로 본다."""
+    stamp = getattr(user, "updated_at", None)
+    if stamp is None:
+        return True
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=datetime.UTC)
+    return datetime.datetime.now(datetime.UTC) - stamp >= datetime.timedelta(seconds=ttl)
+
+
+def _revalidate_actor(actor_url: str, sign_as: User | None = None) -> None:
+    """백그라운드 재검증. 같은 URL 동시 재검증은 막고, 성공 여부와 무관하게
+    updated_at을 갱신해 죽은 원격 서버를 요청마다 계속 두드리지 않게 한다."""
+    try:
+        _resolve_actor(actor_url, force_refresh=True, sign_as=sign_as)
+    except Exception as e:
+        logger.debug("actor revalidate failed %s: %s", actor_url, e)
+    finally:
+        try:
+            with get_session() as s:
+                u = s.query(User).filter_by(remote_url=actor_url).first()
+                if u:
+                    u.updated_at = datetime.datetime.now(datetime.UTC)  # type: ignore[assignment]
+                    s.commit()
+        except Exception:
+            pass
+
+
+def _spawn_revalidation(actor_url: str, sign_as: User | None = None) -> None:
+    """TTL이 지난 행이면 백그라운드 재검증을 예약한다(요청 경로는 막지 않는다).
+
+    스레드를 직접 띄우지 않고 공유 풀(spawn)을 쓴다. 타임라인을 새로고침하면
+    만료된 원격 유저가 한 번에 여러 명 걸릴 수 있어, 요청마다 스레드를 만들면
+    아바타 다운로드가 한꺼번에 몰린다. 같은 URL은 in-flight 동안 중복 예약하지 않는다.
+    """
+    with _revalidating_lock:
+        if actor_url in _revalidating:
+            return
+        _revalidating.add(actor_url)
+
+    def _run() -> None:
+        try:
+            _revalidate_actor(actor_url, sign_as)
+        finally:
+            with _revalidating_lock:
+                _revalidating.discard(actor_url)
+
+    spawn(_run)
 
 
 def _extract_custom_fields(attachment: list) -> list:
@@ -152,6 +212,10 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: User | 
     with get_session() as session:
         user = session.query(User).filter_by(remote_url=actor_url).first()
         if user and not force_refresh:
+            # 캐시를 바로 돌려주고 갱신은 백그라운드로 넘긴다(요청 지연 없음).
+            # lightweight 경로는 아바타를 다시 받지 못하므로 재검증해도 소용없다.
+            if not lightweight and _is_stale(user):
+                _spawn_revalidation(actor_url, sign_as)
             return user
         # Fallback: normalize /@username -> /users/username
         if not user:
@@ -160,6 +224,8 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: User | 
                 alt_url = f"{p.scheme}://{p.netloc}/users/{p.path.split('/@')[-1]}"
                 user = session.query(User).filter_by(remote_url=alt_url).first()
                 if user and not force_refresh:
+                    if not lightweight and _is_stale(user):
+                        _spawn_revalidation(actor_url, sign_as)
                     return user
 
     # Convert web URL /@username to AP URL /users/username before fetching

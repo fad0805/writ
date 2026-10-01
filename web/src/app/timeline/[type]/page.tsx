@@ -65,7 +65,9 @@ function saveTimelineCache(userId: number, cache: Record<string, TimelineCacheEn
 }
 
 interface StreamPostData extends PostData {
-  type?: "delete" | "update";
+  type?: "delete" | "update" | "profile_update";
+  user_id?: number;
+  avatar?: string;
 }
 
 // 서버의 like/unlike가 별(★) 리액션으로 처리되므로, 좋아요 토글 시
@@ -577,6 +579,24 @@ export default function TimelinePage() {
           });
           return;
         }
+        if (newPost.type === "profile_update") {
+          // 원격 유저의 아바타가 바뀌었다. 이 이벤트는 post가 아니므로 글 목록에
+          // 넣으면 안 되고(넣으면 author 없는 가짜 글이 렌더 크래시를 낸다),
+          // 이미 캐시된 글의 작성자 아바타만 갈아끼운다.
+          if (newPost.avatar) {
+            const avatar = newPost.avatar;
+            const uid = newPost.user_id;
+            setPosts((prev) => {
+              const next = prev.map((p) => (p.author?.id === uid ? { ...p, author: { ...p.author, avatar } } : p));
+              const c = timelineCache.current[tlType];
+              if (c) setCache(tlType, { ...c, posts: next, ts: Date.now() });
+              return next;
+            });
+          }
+          return;
+        }
+        // 위에서 처리하지 못한 이벤트를 글로 취급하지 않는다.
+        if (typeof newPost.id !== "number") return;
         if (emojiPickerOpenRef.current) {
           pendingPostsRef.current = [...pendingPostsRef.current, newPost];
           return;

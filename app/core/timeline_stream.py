@@ -89,9 +89,13 @@ def broadcast_notif_sound(target_user_id: int):
         broadcast_notif(json.dumps({"event": "notif", "sound": True}), target_user_id)
 
 
-def broadcast_profile_update(user_id: int):
-    """Broadcast a profile update event to all connected timeline streams."""
-    payload = json.dumps({"type": "profile_update", "user_id": user_id})
+def broadcast_profile_update(user_id: int, avatar: str = ""):
+    """Broadcast a profile update event to all connected timeline streams.
+
+    avatar를 같이 실어 보내는 이유: 이 이벤트를 받은 타임라인은 이미 새 아바타
+    URL을 알고 있으므로, 글마다 작성자 정보를 다시 조회할 필요가 없다.
+    """
+    payload = json.dumps({"type": "profile_update", "user_id": user_id, "avatar": avatar})
     for info in list(_streams.values()):
         _enqueue(info["queue"], payload)
 
