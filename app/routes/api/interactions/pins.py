@@ -28,6 +28,10 @@ def api_pin_post(request: Request, post_id: int):
             raise HTTPException(status_code=400, detail="최대 5개까지 고정할 수 있습니다.")
         pinned.append(post_id)
         s.query(User).filter_by(id=user.id).update({"pinned_posts": pinned})
+        # Post.is_pinned도 세운다. 프로필 렌더는 User.pinned_posts를 보지만
+        # 자동삭제 예외("고정된 게시물")는 Post.is_pinned를 보므로, 둘 중 하나만
+        # 갱신하면 고정글이 삭제된다. (마스토돈 API statuses.py와 동일하게 유지)
+        post.is_pinned = True  # type: ignore[assignment]
         s.commit()
     return {"ok": True}
 
@@ -36,9 +40,12 @@ def api_pin_post(request: Request, post_id: int):
 def api_unpin_post(request: Request, post_id: int):
     user = require_active_auth(request)
     with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id).first()
         pinned = list(user.pinned_posts or [])
         if post_id in pinned:
             pinned.remove(post_id)
             s.query(User).filter_by(id=user.id).update({"pinned_posts": pinned})
-            s.commit()
+        if post:
+            post.is_pinned = False  # type: ignore[assignment]
+        s.commit()
     return {"ok": True}

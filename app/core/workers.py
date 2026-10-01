@@ -228,6 +228,10 @@ def _run_auto_delete_once() -> int:
         ).all()
         for u in users_with_lifetime:
             exc = u.post_lifetime_exceptions or []
+            # 핀은 User.pinned_posts(프로필 렌더용)와 Post.is_pinned(마스토돈 API
+            # 노출용) 두 곳에 있고, 웹 UI 핀 버그 때문에 예전 데이터는 한쪽만
+            # 채워져 있을 수 있다. 예외 판정은 두 신호를 모두 본다.
+            pinned_ids = {int(pid) for pid in (u.pinned_posts or []) if str(pid).isdigit()}
             cutoff = now - datetime.timedelta(days=u.post_lifetime)
             expired = s.query(Post).filter(
                 Post.author_id == u.id,
@@ -239,7 +243,7 @@ def _run_auto_delete_once() -> int:
                     logger.info("Auto-delete: server busy mid-run, stopping at %d", deleted)
                     break
                 try:
-                    if "pinned" in exc and post.is_pinned:
+                    if "pinned" in exc and (post.is_pinned or post.id in pinned_ids):
                         continue
                     if "dm" in exc and post.is_dm:
                         continue

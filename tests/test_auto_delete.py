@@ -387,3 +387,52 @@ def test_worker_survives_pass_exception(monkeypatch):
     with pytest.raises(_StopLoop):
         workers_mod.auto_delete_expired_posts()
     assert sleeps[-1] == interval
+
+
+# ── 고정(핀) 예외 ──
+
+def test_web_pin_endpoint_marks_post_pinned(client, auth_cookie, make_post):
+    """웹 UI 고정 엔드포인트가 Post.is_pinned를 세워야 자동삭제 예외가 먹는다.
+
+    (회귀: /api/pin/post/{id}가 User.pinned_posts만 갱신하고 is_pinned는 안 세웠다.
+    그래서 프로필에는 고정으로 보이는데 자동삭제 워커는 False로 보고 지워버렸다)
+    """
+    alice, alice_cookie = auth_cookie("alice")
+    _set_lifetime(alice, 7, exceptions=["pinned"])
+    post = _age(make_post(alice), 30)
+
+    r = client.post(f"/api/pin/post/{post.id}", cookies=alice_cookie)
+    assert r.status_code == 200
+    with get_session() as s:
+        assert s.query(Post).filter_by(id=post.id).first().is_pinned is True
+
+    assert _run_auto_delete_once() == 0
+    assert post.id in _post_ids()
+
+
+def test_web_unpin_endpoint_clears_post_pinned(client, auth_cookie, make_post):
+    alice, alice_cookie = auth_cookie("alice")
+    post = make_post(alice)
+    client.post(f"/api/pin/post/{post.id}", cookies=alice_cookie)
+    r = client.post(f"/api/unpin/post/{post.id}", cookies=alice_cookie)
+    assert r.status_code == 200
+    with get_session() as s:
+        assert s.query(Post).filter_by(id=post.id).first().is_pinned is False
+
+
+def test_pinned_posts_list_protects_post(client, auth_cookie, make_post):
+    """is_pinned가 비어 있어도 User.pinned_posts에 있으면 삭제에서 제외한다.
+
+    웹 UI 핀 버그로 is_pinned가 세어지지 않은 기존 데이터도 보호돼야 하므로,
+    워커는 두 신호를 모두 본다.
+    """
+    alice, _alice_cookie = auth_cookie("alice")
+    _set_lifetime(alice, 7, exceptions=["pinned"])
+    post = _age(make_post(alice), 30)
+    with get_session() as s:
+        u = s.query(User).filter_by(id=alice.id).first()
+        u.pinned_posts = [post.id]
+        s.commit()
+
+    assert _run_auto_delete_once() == 0
+    assert post.id in _post_ids()
