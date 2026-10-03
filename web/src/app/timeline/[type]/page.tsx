@@ -179,6 +179,42 @@ export default function TimelinePage() {
     };
   }, [flushCache]);
 
+  // 캐시가 있어도 곧바로 배경에서 재검증한다. 캐시를 그대로 신뢰하면
+  // 상세→뒤로가기(또는 탭 전환)로 5분 이내에 다시 마운트할 때 옛 타임라인이
+  // 계속 보인다. 그사이 타임라인 SSE는 닫혀 있어서 도착한 글을 하나도 못 받고,
+  // 캐시가 살아 있는 동안엔 갱신이 일어나지 않아 놓친 글이 방치된다.
+  const revalidateInBackground = useCallback(async () => {
+    const snapshot = accountSnapshot();
+    try {
+      const data = await api.timeline(tlType, LIMIT);
+      if (accountSnapshot() !== snapshot || tlTypeRef.current !== tlType) return;
+      if (data._emojis) injectEmojis(data._emojis);
+      const current = timelineCache.current[tlType]?.posts ?? [];
+      if (current.length === 0) {
+        setPosts(data.posts);
+        setHasMore(data.has_more);
+        totalLoadedRef.current = data.posts.length;
+        cursorRef.current = data.cursor ?? null;
+        setCache(tlType, { posts: data.posts, hasMore: data.has_more, cursor: cursorRef.current, ts: Date.now() });
+        return;
+      }
+      // 조회 결과에 있는 글은 서버 값으로 덮고, 나머지(페이지네이션으로 더
+      // 내려온 글, 재검증 중 SSE로 들어온 글)는 그대로 둔다. 서버 첫 페이지에
+      // 있는데 우리 목록에 없는 글만 앞에 보충한다 — 상세→뒤로가기로 놓친 글은
+      // 대체로 여기서 복구된다. cursor/hasMore는 이미 더 내려간 상태일 수 있어
+      // 덮어쓰지 않는다.
+      const fetchedById = new Map(data.posts.map((p) => [p.id, p]));
+      const have = new Set(current.map((p) => p.id));
+      const missing = data.posts.filter((p) => !have.has(p.id));
+      const merged = capPosts([...missing, ...current.map((p) => fetchedById.get(p.id) ?? p)]);
+      const c = timelineCache.current[tlType];
+      setPosts(merged);
+      setCache(tlType, { posts: merged, hasMore: c?.hasMore ?? data.has_more, cursor: cursorRef.current, ts: Date.now() });
+    } catch {
+      // 재검증이 실패하면 이미 그린 캐시를 그대로 둔다(빈 화면으로 덮지 않는다)
+    }
+  }, [tlType, setCache]);
+
   const load = useCallback(async (force = false) => {
     const uid = accountSnapshot();
     if (uid && cacheLoadedRef.current !== uid) {
@@ -205,6 +241,7 @@ export default function TimelinePage() {
       cursorRef.current = cached.cursor;
       setLoading(false);
       setError("");
+      void revalidateInBackground();
       return;
     }
     const loadId = ++loadIdRef.current;
@@ -225,7 +262,7 @@ export default function TimelinePage() {
       setError(e instanceof Error ? e.message : "불러오기 실패");
     }
     setLoading(false);
-  }, [tlType, setCache]);
+  }, [tlType, setCache, revalidateInBackground]);
 
   const addOrUpdatePost = useCallback((newPost: PostData) => {
     const c = timelineCache.current[tlType];

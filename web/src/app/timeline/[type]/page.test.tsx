@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import type { PostData } from "@/lib/api";
 import { api } from "@/lib/api";
@@ -141,6 +141,17 @@ function pushSse(data: unknown) {
   });
 }
 
+// 상세→뒤로가기를 흉내낸다: 타임라인을 떠났다가 5분 이내로 다시 마운트될 때
+// 쓰이는 sessionStorage 캐시를 심는다. accountSnapshot()는 1로 mock되어 있다.
+function seedTimelineCache(entries: Record<string, { posts: PostData[]; hasMore?: boolean; cursor?: string | null }>) {
+  const now = Date.now();
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(entries)) {
+    out[k] = { posts: v.posts, hasMore: v.hasMore ?? false, cursor: v.cursor ?? null, ts: now };
+  }
+  sessionStorage.setItem("writ:tl-cache:v3:1", JSON.stringify(out));
+}
+
 beforeEach(() => {
   MockEventSource.instances = [];
   h.renders.length = 0;
@@ -241,6 +252,65 @@ describe("TimelinePage", () => {
 
     expect(screen.getAllByTestId("pc")).toHaveLength(2);
     expect(screen.queryByText("undefined")).toBeNull();
+  });
+
+  it("revalidates a cached timeline in the background so back-navigation is not stale", async () => {
+    // 캐시에는 글 1만 있다. 상세 페이지에 있는 동안 글 2, 3이 도착했다.
+    seedTimelineCache({ home: { posts: [makePost(1)] } });
+    vi.mocked(api.timeline).mockResolvedValue({
+      posts: [makePost(3), makePost(2), makePost(1)],
+      has_more: false,
+      cursor: null,
+      timeline_type: "home",
+    });
+
+    render(<TimelinePage />);
+    // 캐시가 먼저 그려진다 (빠른 첫 페인트, 스피너 없음)
+    expect((await screen.findAllByTestId("pc")).map((c) => c.textContent)).toEqual(["1"]);
+
+    // 곧바로 재검증되어 놓친 글이 앞에 보충된다
+    await waitFor(() => expect(screen.getAllByTestId("pc")).toHaveLength(3));
+    expect(screen.getAllByTestId("pc").map((c) => c.textContent)).toEqual(["3", "2", "1"]);
+  });
+
+  it("keeps showing the cached timeline when background revalidation fails", async () => {
+    seedTimelineCache({ home: { posts: [makePost(1), makePost(2)] } });
+    vi.mocked(api.timeline).mockRejectedValue(new Error("offline"));
+
+    render(<TimelinePage />);
+    expect((await screen.findAllByTestId("pc")).map((c) => c.textContent)).toEqual(["1", "2"]);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // 실패해도 이미 그린 캐시가 빈 화면으로 덮이지 않는다
+    expect(screen.getAllByTestId("pc").map((c) => c.textContent)).toEqual(["1", "2"]);
+  });
+
+  it("does not drop posts that arrived over SSE while revalidating", async () => {
+    seedTimelineCache({ home: { posts: [makePost(1)] } });
+    type TimelineResponse = Awaited<ReturnType<typeof api.timeline>>;
+    let release: (v: TimelineResponse) => void = () => {};
+    vi.mocked(api.timeline).mockReturnValue(
+      new Promise<TimelineResponse>((res) => {
+        release = res;
+      }),
+    );
+
+    render(<TimelinePage />);
+    expect((await screen.findAllByTestId("pc")).map((c) => c.textContent)).toEqual(["1"]);
+
+    // 재검증이 떠 있는 동안 SSE로 글 2가 들어온다
+    act(() => {
+      pushSse(makePost(2, "sse-arrival"));
+    });
+    expect(screen.getAllByTestId("pc").map((c) => c.textContent)).toEqual(["2", "1"]);
+
+    // 이제 재검증이 끝난다. 서버 첫 페이지에 글 1만 있어도 SSE로 온 글 2는 살아 있어야 한다
+    await act(async () => {
+      release({ posts: [makePost(1)], has_more: false, cursor: null, timeline_type: "home" });
+    });
+    expect(screen.getAllByTestId("pc").map((c) => c.textContent)).toEqual(["2", "1"]);
   });
 
   it("shows a disconnect banner while SSE is down and hides it on reconnect", async () => {
