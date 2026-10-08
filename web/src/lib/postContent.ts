@@ -46,23 +46,7 @@ export function buildPostContentHtml(post: PostData, emojiList: CustomEmoji[]): 
     new Map(emojiList.map(e => [e.keyword, e])).values()
   );
 
-  // 인용 링크(RE: <a>/URL, quote-inline span)를 본문에서 완전히 제거 — 인용 카드와 중복 렌더링 방지
-  html = html.replace(/<span[^>]*class="[^"]*quote-inline[^"]*"[^>]*>[\s\S]*?<\/span>/gi, '');
-  html = html.replace(/(?:<span[^>]*>)?[\s\n]*RE:[\s\n]*(?:<a[^>]*>[\s\S]*?<\/a>|https?:\/\/[^\s<>]+)[\s\n]*(?:<\/span>)?(?:[\s\n]*<br\s*\/?>)*/gi, '');
-
-  // 인용(quote) 대상 URL이 본문에 텍스트 링크로 남아있으면 제거 (인용 카드와 중복 렌더링 방지)
-  if (post.quote_of_id || post.quote_of_ap_id) {
-    const quoteUrls = new Set([
-      post.quote_of_ap_id,
-      post.quoted_post?.url,
-      post.quoted_post?.ap_id,
-    ].filter((u): u is string => Boolean(u)));
-    for (const qUrl of quoteUrls) {
-      const esc = qUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      html = html.replace(new RegExp(`<a\\b[^>]*?\\bhref="${esc}"[^>]*>[\\s\\S]*?<\\/a>`, "gi"), "");
-      html = html.replace(new RegExp(esc, "g"), "");
-    }
-  }
+  // 앱에서만 인용 URL을 보여주기 위해 본문에서 인용 링크/마크업 제거하지 않음
 
   // 본문에서 series, episode 접두사 라인을 앞뒤 공백/줄바꿈 포함하여 완전히 삭제
   html = html.replace(/(?:<br\s*\/?>|\n|^)\s*(?:series|episode):\s*(?:<a[^>]*>.*?<\/a>|https?:\/\/[^\s<>]+)\s*(?:<br\s*\/?>|\n|$)/gi, '\n');

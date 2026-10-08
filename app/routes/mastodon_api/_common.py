@@ -615,6 +615,48 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
             "static_url": emoji_static_url,
         })
 
+    # Add quoted_status for Mastodon API compatibility
+    quoted_status_obj = None
+    if post.quote_of_id:
+        _qp = None
+        if _quotes_map is not None:
+            _qp = _quotes_map.get(post.quote_of_id)
+        if _qp is None:
+            _qp = db.query(Post).filter_by(id=post.quote_of_id).first()
+        if _qp and not _qp.is_deleted and _can_view(_qp, viewer, db):
+            quoted_status_obj = _status_json(_qp, db, viewer,
+                                             _boosted_ids=_boosted_ids, _liked_ids=_liked_ids,
+                                             _bookmarked_ids=_bookmarked_ids, _replies_map=_replies_map,
+                                             _reblogs_map=_reblogs_map, _favs_map=_favs_map,
+                                             _reactions_map=_reactions_map, _my_reactions_map=_my_reactions_map,
+                                             _users_map=_users_map, _username_map=_username_map,
+                                             _author_counts=_author_counts, _quotes_map=_quotes_map,
+                                             _parents_map=_parents_map)
+    elif post.quote_of_ap_id:
+        # Try to find quoted post by ap_id in maps or db
+        _qp = None
+        if _quotes_map is not None:
+            for q in _quotes_map.values():
+                if q.ap_id == post.quote_of_ap_id or (q.remote_url == post.quote_of_ap_id):
+                    _qp = q
+                    break
+        if _qp is None:
+            _qp = db.query(Post).filter_by(ap_id=post.quote_of_ap_id).first()
+            if not _qp:
+                _qp = db.query(Post).filter_by(remote_url=post.quote_of_ap_id).first()
+        if _qp and not _qp.is_deleted and _can_view(_qp, viewer, db):
+            quoted_status_obj = _status_json(_qp, db, viewer,
+                                             _boosted_ids=_boosted_ids, _liked_ids=_liked_ids,
+                                             _bookmarked_ids=_bookmarked_ids, _replies_map=_replies_map,
+                                             _reblogs_map=_reblogs_map, _favs_map=_favs_map,
+                                             _reactions_map=_reactions_map, _my_reactions_map=_my_reactions_map,
+                                             _users_map=_users_map, _username_map=_username_map,
+                                             _author_counts=_author_counts, _quotes_map=_quotes_map,
+                                             _parents_map=_parents_map)
+    if quoted_status_obj is not None:
+        status["quoted_status"] = quoted_status_obj
+        status["quote"] = quoted_status_obj  # some clients may expect 'quote'
+
     return status
 
 
