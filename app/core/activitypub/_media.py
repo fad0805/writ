@@ -46,7 +46,8 @@ def _cache_remote_media(remote_url: str) -> str:
             is_apng = (orig_ext == "png" and b"acTL" in data)
             is_custom_emoji = "custom_emojis" in remote_url
 
-            if is_apng or is_custom_emoji:
+            # Preserve animated GIFs as original to keep them animated
+            if is_apng or is_custom_emoji or orig_ext == "gif":
                 logger.info("Preserving original animated/emoji media without processing: %s", remote_url)
             else:
                 try:
@@ -57,18 +58,8 @@ def _cache_remote_media(remote_url: str) -> str:
                     out = io.BytesIO()
 
                     if is_animated:
-                        frames = []
-                        durations = []
-                        for frame in ImageSequence.Iterator(img):
-                            frames.append(frame.convert("RGBA"))
-                            durations.append(frame.info.get("duration", 100))
-
-                        if any(f.width > max_dim or f.height > max_dim for f in frames):
-                            ratio = min(max_dim / max(f.width for f in frames), max_dim / max(f.height for f in frames))
-                            frames = [f.resize((int(f.width * ratio), int(f.height * ratio)), Image.Resampling.LANCZOS) for f in frames]
-                        frames[0].save(out, format="WEBP", save_all=True, append_images=frames[1:], duration=durations, loop=0, quality=85)
-                        data = out.getvalue()
-                        ext = "webp"
+                        # For non-GIF animated formats (e.g., animated WebP from remote), preserve original
+                        logger.info("Preserving original animated media: %s", remote_url)
                     else:
                         if img.width > max_dim or img.height > max_dim:
                             ratio = min(max_dim / img.width, max_dim / img.height)
