@@ -103,7 +103,13 @@ def _do_create_post(
         mentioned_ids.append(dm_target_id)
     mentioned_ids = list(set(mentioned_ids))
 
-    if not content_html.strip() and not poll_options:
+    try:
+        media_list_check = json.loads(media_attachments) if media_attachments else []
+    except Exception:
+        media_list_check = []
+    has_media = isinstance(media_list_check, list) and len(media_list_check) > 0
+
+    if not content_html.strip() and not poll_options and not has_media:
         raise HTTPException(status_code=400, detail="Content cannot be empty")
     total_len = len(content) + len(summary)
     if total_len > MAX_POST_LENGTH:
