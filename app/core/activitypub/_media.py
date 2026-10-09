@@ -46,9 +46,41 @@ def _cache_remote_media(remote_url: str) -> str:
             is_apng = (orig_ext == "png" and b"acTL" in data)
             is_custom_emoji = "custom_emojis" in remote_url
 
-            # Preserve animated GIFs as original to keep them animated
-            if is_apng or is_custom_emoji or orig_ext == "gif":
+            # Preserve APNG/custom emojis as original; convert animated GIFs to animated WebP for better compatibility
+            if is_apng or is_custom_emoji:
                 logger.info("Preserving original animated/emoji media without processing: %s", remote_url)
+            elif orig_ext == "gif":
+                try:
+                    img: Image.Image = Image.open(io.BytesIO(data))
+                    img = ImageOps.exif_transpose(img) or img
+                    is_animated = getattr(img, "is_animated", False) or (img.format == "GIF")
+                    if not is_animated:
+                        # static GIF -> convert to WebP/PNG as before
+                        max_dim = 2048
+                        if img.width > max_dim or img.height > max_dim:
+                            ratio = min(max_dim / img.width, max_dim / img.height)
+                            img = img.resize((int(img.width * ratio), int(img.height * ratio)), Image.Resampling.LANCZOS)
+                        out = io.BytesIO()
+                        img.save(out, format="WEBP", quality=85)
+                        data = out.getvalue()
+                        ext = "webp"
+                    else:
+                        # animated GIF -> convert to animated WebP
+                        max_dim = 2048
+                        frames = []
+                        durations = []
+                        for frame in ImageSequence.Iterator(img):
+                            frames.append(frame.convert("RGBA"))
+                            durations.append(frame.info.get("duration", 100))
+                        if any(f.width > max_dim or f.height > max_dim for f in frames):
+                            ratio = min(max_dim / max(f.width for f in frames), max_dim / max(f.height for f in frames))
+                            frames = [f.resize((int(f.width * ratio), int(f.height * ratio)), Image.Resampling.LANCZOS) for f in frames]
+                        out = io.BytesIO()
+                        frames[0].save(out, format="WEBP", save_all=True, append_images=frames[1:], duration=durations, loop=0, quality=85)
+                        data = out.getvalue()
+                        ext = "webp"
+                except Exception as img_err:
+                    logger.error("GIF processing failed, fallback to original bytes: %s", img_err, exc_info=True)
             else:
                 try:
                     img: Image.Image = Image.open(io.BytesIO(data))
