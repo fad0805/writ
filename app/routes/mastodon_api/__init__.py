@@ -11,6 +11,7 @@ from app.routes.mastodon_api.instance import router as instance_router
 from app.routes.mastodon_api.misc import router as misc_router
 from app.routes.mastodon_api.notifications import router as notifications_router
 from app.routes.mastodon_api.oauth import router as oauth_router
+from app.routes.mastodon_api.polls import router as polls_router
 from app.routes.mastodon_api.search import router as search_router
 from app.routes.mastodon_api.statuses import router as statuses_router
 from app.routes.mastodon_api.timelines import router as timelines_router
@@ -23,6 +24,7 @@ router.include_router(statuses_router)
 router.include_router(notifications_router)
 router.include_router(search_router)
 router.include_router(instance_router)
+router.include_router(polls_router)
 router.include_router(misc_router)
 
 # NOTE: oauth_router is intentionally NOT merged into `router` (which is mounted

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session as SASession
 
 from app.config.settings import BASE_URL
 from app.core.visibility import _can_view
-from app.models import Boost, Follow, Like, MastodonAccessToken, Post, User, UserBlock, UserMute, now
+from app.models import Boost, Follow, Like, MastodonAccessToken, Post, User, UserBlock, UserMute, Vote, now
 from app.utils.content_parser import _sanitize_html
 from app.utils.emoji import _load_emojis
 
@@ -542,6 +542,13 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         pd = post.poll_data
         options = pd.get("options", [])
         total_votes = sum(o.get("votes_count", 0) for o in options)
+        own_votes = []
+        voted = False
+        if viewer:
+            v = db.query(Vote).filter_by(user_id=viewer.id, post_id=post.id).first()
+            if v:
+                voted = True
+                own_votes = [v.option_index]
         status["poll"] = {
             "id": str(post.id),
             "expires_at": pd.get("expires_at"),
@@ -549,16 +556,16 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
             "multiple": pd.get("multiple", False),
             "votes_count": total_votes,
             "voters_count": total_votes,
-            "voted": False,
-            "own_votes": [],
+            "voted": voted,
+            "own_votes": own_votes,
             "options": [{"title": o.get("text", ""), "votes_count": o.get("votes_count", 0)} for o in options],
-        "emojis": [{
-            "shortcode": e["keyword"],
-            "url": e["url"],
-            "static_url": e["url"],
-            "visible_in_picker": True,
-            "category": e.get("category", ""),
-        } for e in post_emojis],
+            "emojis": [{
+                "shortcode": e["keyword"],
+                "url": e["url"],
+                "static_url": e["url"],
+                "visible_in_picker": True,
+                "category": e.get("category", ""),
+            } for e in post_emojis],
         }
 
     if viewer:
