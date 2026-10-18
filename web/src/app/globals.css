@@ -1787,7 +1787,7 @@ input[type="checkbox"] {
   overflow: hidden;
 }
 .episode-body p { margin: 0 0 5px; padding: 0; white-space: pre-wrap; text-indent: 1em; }
-.episode-body p:empty { min-height: 0.8em; margin: 0; padding: 0; }
+.episode-body p:empty { height: 0.5em; min-height: 0.5em; margin: 0; padding: 0; }
 .episode-body h2 { font-size: 1.2em; margin: 20px 0 8px; }
 .episode-body h3 { font-size: 1.1em; margin: 16px 0 6px; }
 .episode-body blockquote {
