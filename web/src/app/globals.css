@@ -1788,7 +1788,12 @@ input[type="checkbox"] {
 }
 .episode-body p { margin: 0 0 5px; padding: 0; white-space: pre-wrap; text-indent: 1em; }
 .episode-body p:empty + p { margin-top: -0.5em; }
-.episode-body p + p:empty { margin-top: 0; }
+.episode-body p:empty {
+  min-height: calc(1.8em * 1);
+  line-height: 1.8;
+  margin: 0;
+  padding: 0;
+}
 .episode-body h2 { font-size: 1.2em; margin: 20px 0 8px; }
 .episode-body h3 { font-size: 1.1em; margin: 16px 0 6px; }
 .episode-body blockquote {
