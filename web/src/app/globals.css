@@ -1787,6 +1787,7 @@ input[type="checkbox"] {
   overflow: hidden;
 }
 .episode-body p { margin: 0 0 5px; padding: 0; white-space: pre-wrap; text-indent: 1em; }
+.episode-body p:empty { min-height: 1.2em; margin-bottom: 5px; }
 .episode-body h2 { font-size: 1.2em; margin: 20px 0 8px; }
 .episode-body h3 { font-size: 1.1em; margin: 16px 0 6px; }
 .episode-body blockquote {
@@ -1942,6 +1943,7 @@ input[type="checkbox"] {
   overflow: hidden;
 }
 .episode-editor-content .ProseMirror p { margin: 0 0 5px; padding: 0; text-indent: 1em; }
+.episode-editor-content .ProseMirror p:empty::before { content: "\00a0"; }
 .episode-editor-content .ProseMirror h2 { font-size: 1.3em; margin: 16px 0 8px; }
 .episode-editor-content .ProseMirror h3 { font-size: 1.1em; margin: 12px 0 6px; }
 .episode-editor-content .ProseMirror blockquote {
