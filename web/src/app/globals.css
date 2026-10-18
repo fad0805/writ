@@ -825,8 +825,10 @@ input:focus {
   font-size: 1em;
 }
 .post-content ul {
-  padding: 0 inherit;
+  padding-left: 16px;
+  margin: 2px 0;
 }
+.post-content li { margin: 2px 0; }
 .code-copy-btn {
   position: absolute;
   top: 6px;
@@ -1793,7 +1795,8 @@ input[type="checkbox"] {
   color: var(--text-muted);
   margin: 10px 0;
 }
-.episode-body ul, .episode-body ol { padding-left: 20px; margin: 8px 0; }
+.episode-body ul, .episode-body ol { padding-left: 20px; margin: 2px 0; }
+.episode-body li { margin: 2px 0; }
 .episode-body hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 .episode-body img { max-width: 100%; height: auto; }
 .episode-body s, .episode-body strike { text-decoration: line-through; }
