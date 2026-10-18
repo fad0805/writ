@@ -1,18 +1,18 @@
 import { SIZES } from "@/const/const";
 import { EDITOR_EXTENSIONS } from "@/const/extensions";
-import { createDocument, Editor } from "@tiptap/core";
+import { Editor } from "@tiptap/core";
 import { useEditor } from "@tiptap/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 export function useEditorInit({value, onChange}: {value: string; onChange: (html: string) => void}) {
-  const [initialContent] = useState(() => value || "");
   const editor = useEditor({
     extensions: EDITOR_EXTENSIONS,
-    content: initialContent,
+    content: value || "",
   })
 
   const onChangeRef = useRef(onChange);
   const lastEmittedRef = useRef<string | null>(null);
+
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -33,25 +33,7 @@ export function useEditorInit({value, onChange}: {value: string; onChange: (html
     }
   }, [editor])
 
-  useEffect(() => {
-    if (!editor || value === undefined) return;
-    const incoming = value || "";
-
-    // 에디터 자신이 방출한 값이 그대로 돌아온 round-trip이면 무시한다.
-    if (lastEmittedRef.current === incoming) return;
-
-    // 직렬화 문자열이 아니라 문서 구조 자체를 비교한다.
-    // getHTML 문자열 비교는 속성 순서/빈 문단 등 정규화 차이로 오탐할 수 있다.
-    // setContent는 커서를 문서 맨 앞으로 강제 이동시키므로 동일 문서엔 호출하지 않는다.
-    try {
-      const parsed = createDocument(incoming, editor.schema);
-      if (editor.state.doc.eq(parsed)) return;
-    } catch {
-      // 파싱 실패 시 아래 setContent가 에러 처리 없이 대체
-    }
-
-    editor.commands.setContent(incoming, { emitUpdate: false });
-  }, [editor, value])
+  // value prop 변경 시 setContent를 호출하지 않음 (타이핑 중 커서 튐 방지)
 
   return editor;
 }
