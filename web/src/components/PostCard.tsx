@@ -55,7 +55,9 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
   const [revealedSensitive, setRevealedSensitive] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const quoteAttemptedUrlRef = useRef<string | null>(null);
+  const contentQuoteAttemptedRef = useRef<string | null>(null);
   const remoteQuoteAttemptedRef = useRef<string | null>(null);
+  const quoteRefAttemptedRef = useRef<string | null>(null);
 
   const targetId = post.boost_of_id || post.id;
 
@@ -95,7 +97,9 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
   useEffect(() => {
     if (postIdRef.current !== post.id) {
       postIdRef.current = post.id;
+      contentQuoteAttemptedRef.current = null;
       remoteQuoteAttemptedRef.current = null;
+      quoteRefAttemptedRef.current = null;
     }
     setBoosted(post.boosted);
     setBookmarked(post.bookmarked);
@@ -196,13 +200,20 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
     // 확장: 본문에서 로컬 포스트 URL 감지 → quote_of_id가 없을 때 자동 로드
     // NOTE: 로컬 변수로 시리즈/에피소드 매칭 여부 판단 (클로저 stale 방지)
     const hasSeriesEpisodeMatch = !!(seriesMatches || episodeMatches || epUrl || serUrl);
-    if (!post.quote_of_id && !post.quote_of_ap_id && !hasSeriesEpisodeMatch) {
+    // 서버가 이미 차단/뮤트한 인용으로 판단했다면 본문의 URL로 우회 로드하지 않는다.
+    // (QuotedCard가 숨김 플레이스홀더를 즉시 렌더)
+    if (!post.quote_hidden && !post.quote_of_id && !post.quote_of_ap_id && !hasSeriesEpisodeMatch) {
       const localPostMatch = rawContent.match(new RegExp(`https?://${baseDomain}/@([^/]+)/(\\d+)`, "i"));
       if (localPostMatch && !loadingQuote && !quotedPost) {
-        setLoadingQuote(true);
         const username = localPostMatch[1];
         const number = localPostMatch[2];
-        getQuote(`bynum:${username}/${number}`, () =>
+        const quoteKey = `bynum:${username}/${number}`;
+        // 실패한 URL은 다시 시도하지 않는다. loadingQuote가 꺼질 때마다
+        // 이펙트가 재실행되므로 가드가 없으면 무한 로딩이 된다.
+        if (contentQuoteAttemptedRef.current === quoteKey) return;
+        contentQuoteAttemptedRef.current = quoteKey;
+        setLoadingQuote(true);
+        getQuote(quoteKey, () =>
           fetch(`/api/by-number/${username}/${number}`, { credentials: "include" })
             .then(r => { if (r.ok) return r.json(); throw new Error(); })
         )
@@ -244,15 +255,20 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
     }
     const qid = post.quote_of_id;
     const qApId = post.quote_of_ap_id;
+    const quoteKey = qid ? `id:${qid}` : qApId ? `url:${qApId}` : null;
+    if (!quoteKey) return;
+    // 같은 인용을 한 번 실패한 뒤 loadingQuote가 꺼질 때 이펙트가 다시 돌아
+    // 무한 재시도하는 것을 막는다. 인용 참조가 바뀌면 새 키로 다시 시도한다.
+    if (quoteRefAttemptedRef.current === quoteKey) return;
+    quoteRefAttemptedRef.current = quoteKey;
+    setLoadingQuote(true);
     if (qid) {
-      setLoadingQuote(true);
-      getQuote(`id:${qid}`, () => api.getPost(qid, 0, 0, 0, 0).catch(() => null))
+      getQuote(quoteKey, () => api.getPost(qid, 0, 0, 0, 0).catch(() => null))
         .then(d => { if (d) { if (d._emojis) injectEmojis(d._emojis); setQuotedPost(d); } })
         .finally(() => setLoadingQuote(false));
     } else if (qApId) {
-      setLoadingQuote(true);
       const form = new FormData(); form.append("url", qApId);
-      getQuote(`url:${qApId}`, () =>
+      getQuote(quoteKey, () =>
         fetch("/api/fetch-post", { method: "POST", credentials: "include", body: form })
           .then(r => { if (r.ok) return r.json(); throw new Error(); })
           .catch(() => null)

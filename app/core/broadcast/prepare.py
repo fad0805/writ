@@ -33,6 +33,31 @@ def _sanitize_post_payload(
     return json.dumps(post_json, default=str), mentioned_ids, parent_author_id, reply_ctx
 
 
+def _quote_payload_for_viewer(
+    post_json: dict,
+    payload: str,
+    hidden: bool,
+    quote_post_id: int | None,
+) -> str:
+    """Return a payload whose quote visibility matches the receiving viewer.
+
+    Timeline broadcasts build one JSON payload for every stream, but quote
+    hiding depends on each viewer's block/mute list. Re-serialize only when
+    the viewer-specific state differs from the payload we already have.
+    """
+    if bool(post_json.get("quote_hidden")) == hidden:
+        return payload
+
+    data = dict(post_json)
+    data["quote_hidden"] = hidden
+    if hidden:
+        data["quote_hidden_url"] = f"/post/{quote_post_id}" if quote_post_id else ""
+        data["quoted_post"] = None
+    else:
+        data["quote_hidden_url"] = ""
+    return json.dumps(data, default=str)
+
+
 def _resolve_parent_author(
         post_json: dict,
         post_id: int | None,

@@ -1,7 +1,11 @@
 import logging
 
 from app.core.broadcast.filter import _should_deliver_fast
-from app.core.broadcast.prepare import _resolve_parent_author, _sanitize_post_payload
+from app.core.broadcast.prepare import (
+    _quote_payload_for_viewer,
+    _resolve_parent_author,
+    _sanitize_post_payload,
+)
 from app.core.broadcast.queries import (
     _load_author_is_local,
     _load_follower_ids,
@@ -52,6 +56,24 @@ def broadcast_post(
                 if _orig:
                     _boost_originals[_orig.id] = _orig
 
+            # 인용 대상 작성자ID. 스트림 페이로드는 한 번만 직렬화되므로
+            # 시청자별 차단/뮤트 여부는 전달 직전에 다시 계산한다.
+            _quote_post_id = None
+            _quote_author_id = None
+            if post_json.get("type") != "update":
+                _quote_of_id = post_json.get("quote_of_id") or (
+                    _db_post.quote_of_id if _db_post else None)
+                _quote_of_ap_id = post_json.get("quote_of_ap_id") or (
+                    (_db_post.quote_of_ap_id if _db_post else "") or "")
+                _quoted = None
+                if _quote_of_id:
+                    _quoted = s.query(Post).filter_by(id=_quote_of_id).first()
+                elif _quote_of_ap_id:
+                    _quoted = s.query(Post).filter_by(ap_id=_quote_of_ap_id).first()
+                if _quoted is not None and not _quoted.is_deleted:
+                    _quote_post_id = int(_quoted.id)
+                    _quote_author_id = int(_quoted.author_id)
+
             _filter_cache: dict[int, dict | None] = {}
 
             for _, info in list(_streams.items()):
@@ -71,7 +93,20 @@ def broadcast_post(
                     following_set = home_follows.get(uid, set()) | {uid}
                     if _db_post and not should_deliver_post(_db_post, s, viewer, tl, following_set, _filter_cache[uid]):
                         continue
-                _enqueue(info["queue"], payload)
+
+                viewer_payload = payload
+                if _quote_author_id is not None:
+                    if uid not in _filter_cache:
+                        _filter_cache[uid] = _load_user_filters(s, stream_users.get(uid))
+                    ctx = _filter_cache[uid]
+                    quote_hidden = bool(
+                        ctx
+                        and uid != _quote_author_id
+                        and _quote_author_id in ctx.get("hidden_ids", ())
+                    )
+                    viewer_payload = _quote_payload_for_viewer(
+                        post_json, payload, quote_hidden, _quote_post_id)
+                _enqueue(info["queue"], viewer_payload)
 
     except Exception as e:
         logger.error(f"BROADCAST_POST ERROR: {e}", exc_info=True)

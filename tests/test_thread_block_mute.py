@@ -1,6 +1,13 @@
 """스레드(포스트 상세)에서 차단/뮤트 상대의 답글·부모 숨김 검증."""
 
+import json
+from unittest.mock import patch
+
+import pytest
+
+from app.core.broadcast import broadcast_post
 from app.core.relationship import block_user, mute_user
+from app.core.timeline_stream import _streams
 from app.db.database import get_session
 from app.models import Post
 
@@ -142,7 +149,7 @@ def test_muted_author_quote_hidden_with_link(client, auth_cookie, make_post):
 
 def test_followed_author_quote_contents_visible(client, auth_cookie, make_post):
     """차단/뮤트 대상이 아닌 인용글은 기존대로 본문이 노출된다."""
-    me, me_cookie = auth_cookie("alice")
+    _me, me_cookie = auth_cookie("alice")
     target, _c = auth_cookie("bob")
     quoter, _c = auth_cookie("carol")
     quoted = make_post(target, content="<p>normal quote target</p>")
@@ -224,3 +231,103 @@ def test_blocked_author_post_hidden_on_by_number(client, auth_cookie, make_post)
 
     r = client.get(f"/api/by-number/{blocker_target.username}/{post.number}", cookies=me_cookie)
     assert r.status_code == 404
+
+
+def _stream_quote_post_json(quoting, quoted, **overrides):
+    payload = {
+        "id": quoting.id,
+        "number": quoting.number,
+        "content": quoting.content,
+        "summary": quoting.summary or "",
+        "visibility": quoting.visibility,
+        "created_at": quoting.created_at.isoformat(),
+        "author": {
+            "id": quoting.author_id,
+            "username": "quoter",
+            "display_name": "quoter",
+        },
+        "quote_of_id": quoted.id,
+        "quote_of_ap_id": quoted.ap_id or "",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _capture_broadcast_payloads(post_json, author_id, visibility, streams):
+    payloads: dict[object, dict] = {}
+    saved = dict(_streams)
+    _streams.clear()
+    _streams.update(streams)
+    try:
+        with patch(
+            "app.core.broadcast.delivery._enqueue",
+            side_effect=lambda queue, payload: payloads.__setitem__(queue, json.loads(payload)),
+        ):
+            broadcast_post(post_json, author_id, visibility)
+    finally:
+        _streams.clear()
+        _streams.update(saved)
+    return payloads
+
+
+@pytest.mark.parametrize("relationship", ["block", "mute"])
+def test_streamed_quote_hidden_for_filtered_viewer(
+        relationship, auth_cookie, make_post):
+    """SSE로 들어온 글의 인용 작성자가 차단/뮤트 대상이면 숨김 플래그를 실어 보낸다."""
+    me, _c = auth_cookie("alice")
+    filtered, _c = auth_cookie("bob")
+    quoter, _c = auth_cookie("carol")
+    other, _c = auth_cookie("dave")
+    quoted = make_post(filtered, content="<p>filtered quote</p>")
+    quoting = make_post(quoter, content="<p>quoting post</p>")
+
+    with get_session() as s:
+        if relationship == "block":
+            block_user(s, me, filtered)
+        else:
+            mute_user(s, me, filtered)
+        _set_quote(s, s.query(Post).filter_by(id=quoting.id).one(), quoted)
+
+    payloads = _capture_broadcast_payloads(
+        _stream_quote_post_json(quoting, quoted),
+        quoting.author_id,
+        "public",
+        {
+            "me": {"queue": "me", "user_id": me.id, "tl_type": "local"},
+            "other": {"queue": "other", "user_id": other.id, "tl_type": "local"},
+        },
+    )
+
+    assert payloads["me"]["quote_hidden"] is True
+    assert payloads["me"]["quoted_post"] is None
+    assert payloads["me"]["quote_hidden_url"] == f"/post/{quoted.id}"
+    # 필터 대상이 아닌 시청자에게는 숨김 처리를 하지 않는다.
+    assert payloads["other"].get("quote_hidden", False) is False
+
+
+def test_streamed_quote_unhidden_for_non_filtered_viewer(
+        auth_cookie, make_post):
+    """작성자 기준으로 숨겨진 페이로드라도 시청자가 차단/뮤트 대상이 아니면 인용을 연다."""
+    viewer, _c = auth_cookie("alice")
+    quoted_author, _c = auth_cookie("bob")
+    quoter, _c = auth_cookie("carol")
+    quoted = make_post(quoted_author, content="<p>quote</p>")
+    quoting = make_post(quoter, content="<p>quoting post</p>")
+
+    with get_session() as s:
+        _set_quote(s, s.query(Post).filter_by(id=quoting.id).one(), quoted)
+
+    payloads = _capture_broadcast_payloads(
+        _stream_quote_post_json(
+            quoting, quoted,
+            quote_hidden=True,
+            quote_hidden_url=f"/post/{quoted.id}",
+            quoted_post=None,
+        ),
+        quoting.author_id,
+        "public",
+        {"viewer": {"queue": "viewer", "user_id": viewer.id, "tl_type": "local"}},
+    )
+
+    assert payloads["viewer"]["quote_hidden"] is False
+    assert payloads["viewer"]["quote_hidden_url"] == ""
