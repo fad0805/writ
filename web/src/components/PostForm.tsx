@@ -237,7 +237,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
           maxLength={MAX_LENGTH}
           cwLength={summary.length}
           rows={3}
-          required
+          required={mediaItems.length === 0}
           onKeyDown={handleKeyDown}
           onKeyUp={handleTaEvent}
           onMouseUp={handleTaEvent}

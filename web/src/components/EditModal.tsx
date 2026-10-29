@@ -89,7 +89,7 @@ export default function EditModal({ post, onClose, onDone }: { post: PostData; o
             onChange={(e) => setContent(e.target.value)}
             rows={10} // 글쓰기 편하게 rows를 조금 늘려주셔도 좋아요!
             placeholder="내용을 수정하세요..."
-            required
+            required={!hasMedia}
             onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { (e.target as HTMLElement).closest('form')?.requestSubmit(); } }}
           />
           <input
