@@ -181,7 +181,7 @@ def api_get_post(request: Request, post_id: int):
 
 
 def _do_edit_post(s, post, user, content, summary, visibility=None, is_sensitive=None):
-    if not content.strip():
+    if not content.strip() and not (post.media_attachments or []):
         raise HTTPException(status_code=400, detail="Content cannot be empty")
     if post.summary and post.summary.startswith("[관리자 강제] ") and not summary.startswith("[관리자 강제] "):
         raise HTTPException(status_code=403, detail="관리자가 강제한 CW는 수정할 수 없습니다")

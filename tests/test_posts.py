@@ -20,6 +20,19 @@ def test_create_post_empty_content_rejected(client, auth_cookie):
     assert r.status_code == 400
 
 
+def test_create_post_media_only_allowed(client, auth_cookie):
+    _, cookie = auth_cookie("alice")
+    r = client.post(
+        "/api/posts",
+        data={"content": "", "media_attachments": '[{"url": "/media/a.webp", "type": "image"}]'},
+        cookies=cookie,
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["content"] == ""
+    assert len(data["media_attachments"]) == 1
+
+
 def test_create_post_sanitizes_html(client, auth_cookie):
     _, cookie = auth_cookie("alice")
     r = client.post(
@@ -72,6 +85,18 @@ def test_edit_post_by_author(client, auth_cookie, make_post):
     r = client.post(f"/api/posts/{post.id}/edit", data={"content": "<p>edited</p>"}, cookies=alice_cookie)
     assert r.status_code == 200
     assert r.json()["content"] == "edited"
+
+
+def test_edit_post_media_only_allowed(client, auth_cookie, make_post):
+    alice, cookie = auth_cookie("alice")
+    post = make_post(alice, content="")
+    with get_session() as s:
+        db_post = s.get(Post, post.id)
+        db_post.media_attachments = [{"url": "/media/a.webp", "type": "image"}]
+        s.commit()
+    r = client.post(f"/api/posts/{post.id}/edit", data={"content": ""}, cookies=cookie)
+    assert r.status_code == 200
+    assert r.json()["content"] == ""
 
 
 def test_delete_post_marks_deleted(client, auth_cookie, make_post):

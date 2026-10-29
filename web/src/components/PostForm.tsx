@@ -185,7 +185,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       btn?.classList.add("over-limit-submit");
       return;
     }
-    if (!content.trim() || submitting) return;
+    if (submitting || (!content.trim() && mediaItems.length === 0)) return;
     setSubmitting(true);
     try {
       const uploaded = mediaItems.filter(m => !m.file).map(m => ({ url: m.url, type: m.type, alt: m.alt || "" }));

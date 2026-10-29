@@ -59,10 +59,11 @@ export default function EditModal({ post, onClose, onDone }: { post: PostData; o
   const [summary, setSummary] = useState(post.summary);
   const [submitting, setSubmitting] = useState(false);
   const forceCw = post.summary?.startsWith("[관리자 강제] ");
+  const hasMedia = (post.media_attachments?.length ?? 0) > 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim() || submitting) return;
+    if (submitting || (!content.trim() && !hasMedia)) return;
     if (forceCw) { alert("관리자가 강제한 CW는 수정할 수 없습니다"); return; }
     setSubmitting(true);
     try {
@@ -103,7 +104,7 @@ export default function EditModal({ post, onClose, onDone }: { post: PostData; o
           <div className="edit-modal-footer edit-modal-footer-flex">
             <EmojiPicker onEmoji={(e) => setContent(content + e + " ")} />
             <div className="flex-spacer" />
-            <button type="submit" disabled={submitting || !content.trim()} className="btn btn-primary">
+            <button type="submit" disabled={submitting || (!content.trim() && !hasMedia)} className="btn btn-primary">
               {submitting ? "..." : "수정"}
             </button>
           </div>
