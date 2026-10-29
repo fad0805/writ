@@ -384,8 +384,13 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
             });
           }} />
           <span className="char-count char-count-inline">{totalLen}/{MAX_LENGTH}</span>
-          <button type="submit" disabled={submitting || (!content.trim() && mediaItems.length === 0) || showSeriesSearch} className="btn btn-primary">
-            {submitting ? "..." : parentId ? "답글" : "게시"}
+          <button type="submit" disabled={submitting || (!content.trim() && mediaItems.length === 0) || showSeriesSearch} className="btn btn-primary" aria-busy={submitting}>
+            {submitting ? (
+              <>
+                <span className="btn-spinner" aria-hidden="true" />
+                {mediaUploading ? "업로드 중…" : parentId ? "등록 중…" : "게시 중…"}
+              </>
+            ) : parentId ? "답글" : "게시"}
           </button>
         </div>
       </div>

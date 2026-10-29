@@ -567,6 +567,15 @@ input:focus {
   opacity: 0.5;
   cursor: not-allowed;
 }
+.btn-spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
 .btn-outline {
   background: transparent;
   border: 1px solid var(--border);
