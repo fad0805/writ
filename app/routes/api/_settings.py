@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageSequence
 from sqlalchemy import or_
 
 from app.utils.image import guard_image
@@ -179,9 +179,25 @@ def api_upload_media(request: Request, file: UploadFile = File(...)):
             img: Image.Image = Image.open(io.BytesIO(file.file.read()))
         except (Image.DecompressionBombError, ValueError, OSError) as exc:
             raise HTTPException(status_code=400, detail="미디어 이미지 해상도가 너무 큽니다.") from exc
-        img = ImageOps.exif_transpose(img) or img
         buf = io.BytesIO()
-        img.save(buf, "WEBP", quality=85, lossless=(img.mode == "RGBA"))
+        if getattr(img, "is_animated", False) and getattr(img, "n_frames", 1) > 1:
+            frames: list[Image.Image] = []
+            durations: list[int] = []
+            for frame in ImageSequence.Iterator(img):
+                durations.append(frame.info.get("duration", 100) or 100)
+                frames.append(frame.convert("RGBA"))
+            frames[0].save(
+                buf,
+                "WEBP",
+                save_all=True,
+                append_images=frames[1:],
+                duration=durations,
+                loop=img.info.get("loop", 0) or 0,
+                quality=85,
+            )
+        else:
+            img = ImageOps.exif_transpose(img) or img
+            img.save(buf, "WEBP", quality=85, lossless=(img.mode == "RGBA"))
         storage.save(key, buf.getvalue())
         url = storage.url(key)
     else:
