@@ -16,7 +16,12 @@ export default React.memo(function MediaGallery({ media, sensitive, revealed, on
 
   const cols = n <= 1 ? 1 : n <= 2 ? 2 : n <= 4 ? 2 : n <= 6 ? 3 : n <= 9 ? 3 : n <= 12 ? 4 : 4;
   const remainder = n % cols;
-  const spanIndex = remainder > 0 && n > 1 ? Math.floor(n / cols) * cols - 1 : -1;
+  // 홀수 개일 때는 첫 이미지가 세로 두 칸을 차지하고, 짝수 개일 때는 마지막 빈칸을 채운다.
+  const spanIndex = remainder > 0 && n > 1
+    ? n % 2 === 1
+      ? 0
+      : Math.floor(n / cols) * cols - 1
+    : -1;
 
   return (
     <div style={{ position: "relative", marginTop: 8, overflow: "hidden", borderRadius: 8 }}>
