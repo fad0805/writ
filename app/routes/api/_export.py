@@ -17,6 +17,32 @@ from app.routes.api._settings import _domain_from_actor
 export_router = APIRouter()
 
 
+def _posts_for_export(s, user_id: int):
+    """Return (post, boost_pointer) pairs for a user's authored posts and boosts.
+
+    A boost row is only a pointer. For backups we want the boosted original's
+    content, but only while that original still exists and is not deleted.
+    """
+    rows = s.query(Post).filter_by(
+        author_id=user_id, is_deleted=False
+    ).order_by(Post.created_at).all()
+    result = []
+    seen_ids = set()
+    for row in rows:
+        target = row
+        pointer = None
+        if row.boost_of_id:
+            target = s.query(Post).filter_by(id=row.boost_of_id, is_deleted=False).first()
+            if not target:
+                continue
+            pointer = row
+        if target.id in seen_ids:
+            continue
+        seen_ids.add(target.id)
+        result.append((target, pointer))
+    return result
+
+
 @export_router.get("/settings/export/{export_type}")
 def api_export_account(request: Request, export_type: str):
     user = require_auth(request)
@@ -52,7 +78,7 @@ def api_export_account(request: Request, export_type: str):
             bookmarks = s.query(Bookmark).filter_by(user_id=user.id).all()
             for bm in bookmarks:
                 post = s.query(Post).get(bm.post_id)
-                if post:
+                if post and not post.is_deleted:
                     w.writerow([post.ap_id or f"{BASE_URL}/post/{post.id}", str(bm.created_at)])
         elif export_type == "keyword_mutes":
             w.writerow(["Keyword", "Whole word"])
@@ -72,10 +98,20 @@ def api_export_account(request: Request, export_type: str):
             for d in sorted(domains):
                 w.writerow([d])
         elif export_type == "posts":
-            w.writerow(["id", "content", "created_at"])
-            posts = s.query(Post).filter_by(author_id=user.id, is_deleted=False).all()
-            for p in posts:
-                w.writerow([p.id, p.content or "", str(p.created_at)])
+            w.writerow([
+                "id", "type", "content", "created_at",
+                "boosted_at", "boost_of_author", "boost_of_url",
+            ])
+            for post, pointer in _posts_for_export(s, user.id):
+                w.writerow([
+                    post.id,
+                    "boost" if pointer is not None else "post",
+                    post.content or "",
+                    str(post.created_at),
+                    str(pointer.created_at) if pointer is not None else "",
+                    post.author.username if pointer is not None else "",
+                    (post.ap_id or post.remote_url or "") if pointer is not None else "",
+                ])
         else:
             raise HTTPException(status_code=400, detail="Invalid type")
     return PlainTextResponse(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={export_type}.csv"})
@@ -89,7 +125,11 @@ def api_export_counts(request: Request):
         followers = s.query(Follow).filter_by(following_id=user.id, accepted=True).count()
         mutes = s.query(UserMute).filter_by(user_id=user.id).count()
         blocks = s.query(UserBlock).filter_by(user_id=user.id).count()
-        bookmarks = s.query(Bookmark).filter_by(user_id=user.id).count()
+        bookmarks = s.query(Bookmark).join(
+            Post, Bookmark.post_id == Post.id
+        ).filter(
+            Bookmark.user_id == user.id, Post.is_deleted == False
+        ).count()
         filters = s.query(KeywordMute).filter_by(user_id=user.id).count()
         domains = set()
         for b in s.query(UserBlock).filter_by(user_id=user.id).all():
@@ -147,16 +187,21 @@ def api_export_archive(request: Request):
     user = require_auth(request)
     buf = io.BytesIO()
     with get_session() as s:
-        posts = s.query(Post).filter_by(author_id=user.id, is_deleted=False).order_by(Post.created_at).all()
-        posts_data = [
-            {
-                "id": p.id, "content": p.content or "", "summary": p.summary or "",
-                "visibility": p.visibility, "created_at": str(p.created_at),
-                "media_attachments": p.media_attachments or [],
-                "poll_data": p.poll_data, "is_sensitive": p.is_sensitive,
-            }
-            for p in posts
-        ]
+        posts_data = []
+        for post, pointer in _posts_for_export(s, user.id):
+            is_boost = pointer is not None
+            posts_data.append({
+                "id": post.id,
+                "type": "boost" if is_boost else "post",
+                "boosted": is_boost,
+                "boosted_at": str(pointer.created_at) if is_boost else None,
+                "boost_of_author": post.author.username if is_boost else "",
+                "boost_of_url": (post.ap_id or post.remote_url or "") if is_boost else "",
+                "content": post.content or "", "summary": post.summary or "",
+                "visibility": post.visibility, "created_at": str(post.created_at),
+                "media_attachments": post.media_attachments or [],
+                "poll_data": post.poll_data, "is_sensitive": post.is_sensitive,
+            })
         novels = s.query(Novel).filter_by(author_id=user.id).order_by(Novel.created_at).all()
         novels_data = []
         for n in novels:
