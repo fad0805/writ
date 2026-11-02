@@ -280,21 +280,32 @@ def _handle_announce(activity: dict) -> tuple[int, str]:
         if post and post.boost_of_id:
             post = session.query(Post).get(post.boost_of_id)
         logger.debug("[ANNOUNCE] session2 post=%s", 'found id=' + str(post.id) if post else 'none')
-        if not post:
-            _local_signer = _get_instance_actor(session)
-            try:
-                post = _fetch_remote_post(object_url, _local_signer, session)
-                if post and post.boost_of_id:
+        if post and post.is_deleted:
+            logger.debug("[ANNOUNCE] post is deleted, returning early")
+            return (200, "OK")
+
+        # Announce는 "이 글을 다시 타임라인에 올린다"는 뜻이므로, 이미 DB에 있는
+        # 글이어도 최신 AP 오브젝트로 갱신한다. 예전에는 기존 행을 그대로 써서
+        # 원작성자가 수정한 내용이 재부스트 후에도 반영되지 않았다.
+        _local_signer = _get_instance_actor(session)
+        try:
+            refreshed_post = _fetch_remote_post(object_url, _local_signer, session)
+            if refreshed_post:
+                post = refreshed_post
+                if post.boost_of_id:
                     post = session.query(Post).get(post.boost_of_id)
-                logger.debug("[ANNOUNCE] fetch_remote_post result=%s", 'id=' + str(post.id) if post else 'None')
-            except Exception as e:
-                logger.warning("Announce: _fetch_remote_post failed for %s: %s", object_url, e)
-                logger.debug("[ANNOUNCE] fetch_remote_post EXCEPTION: %s", e)
-                post = None
+                session.commit()
+                logger.debug("[ANNOUNCE] refresh result=%s", 'id=' + str(post.id) if post else 'None')
+        except Exception as e:
+            logger.warning("Announce: _fetch_remote_post failed for %s: %s", object_url, e)
+            logger.debug("[ANNOUNCE] fetch_remote_post EXCEPTION: %s", e)
             if not post:
-                logger.warning("Announce: could not fetch remote post %s", object_url)
-                logger.debug("[ANNOUNCE] could not fetch remote post, returning early")
-                return (200, "OK")
+                post = None
+
+        if not post:
+            logger.warning("Announce: could not fetch remote post %s", object_url)
+            logger.debug("[ANNOUNCE] could not fetch remote post, returning early")
+            return (200, "OK")
 
         existing = session.query(Boost).filter_by(user_id=actor_id, post_id=post.id).first()
         if existing:
@@ -734,6 +745,10 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     _process_emoji_tags(object_data.get("tag", []), session)
                     session.commit()
                     _refresh_emoji_cache_forcibly(session)
+                    logger.info(
+                        "[REMOTE-EDIT] Update applied post id=%s ap_id=%s actor=%s",
+                        post.id, obj_id, actor_url,
+                    )
                     try:
                         _ua = post.author
                         broadcast_post({

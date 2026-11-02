@@ -124,8 +124,13 @@ def _extract_og_title(html: str) -> str:
     return match.group(1) if match else ""
 
 
-def _fetch_remote_post(url: str, signer: User, session, _depth=0):
-    """Fetch a remote AP object and save it as a Post. Returns the Post or None."""
+def _fetch_remote_post(url: str, signer: User, session, _depth=0, refresh_existing=True):
+    """Fetch a remote AP object and save it as a Post. Returns the Post or None.
+
+    If the post already exists, its mutable fields are refreshed from the fetched
+    object by default. This is what makes a re-fetch / re-announce pick up edits
+    instead of returning the stale row forever.
+    """
     if _depth > 3 or not url:
         return None
 
@@ -202,9 +207,14 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
         logger.warning("[FETCH-POST] id domain mismatch: requested %s, response claims %s", req_domain, resp_domain)
         return None
     existing = session.query(Post).filter_by(ap_id=ap_id).first()
-    if existing and not existing.is_deleted:
-        logger.debug("[FETCH-POST] existing post id=%s ap_id=%s", existing.id, ap_id)
-        return existing
+    if existing:
+        if existing.is_deleted:
+            logger.debug("[FETCH-POST] existing post is deleted id=%s ap_id=%s", existing.id, ap_id)
+            return existing
+        if not refresh_existing:
+            logger.debug("[FETCH-POST] existing post id=%s ap_id=%s (no refresh)", existing.id, ap_id)
+            return existing
+        logger.debug("[FETCH-POST] existing post id=%s ap_id=%s (refresh requested)", existing.id, ap_id)
 
     attributed_to = obj.get("attributedTo", "")
     if isinstance(attributed_to, list):
@@ -224,6 +234,14 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
     if not author:
         logger.debug("[FETCH-POST] author not found attributed_to=%s", attributed_to)
         return None
+
+    # A refresh must never change ownership of an existing AP id.
+    if existing and not existing.is_deleted and existing.author_id != author.id:
+        logger.warning(
+            "[FETCH-POST] attributedTo mismatch for existing post id=%s: db=%s remote=%s",
+            existing.id, existing.author_id, author.id,
+        )
+        return existing
 
     raw_content = obj.get("content", "") or ""
     if not raw_content:
@@ -360,6 +378,35 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0):
             media_list.append({"url": cached, "type": mtype})
 
     # 💡 Post 모델 생성 시 quote_id (또는 모델 설계에 맞춘 인용 필드명) 채워넣기
+    if existing and not existing.is_deleted:
+        old_content = existing.content
+        old_summary = existing.summary or ""
+        old_visibility = existing.visibility
+        existing.content = content
+        existing.summary = summary
+        existing.visibility = vis
+        existing.remote_url = remote_url
+        existing.in_reply_to_ap_id = in_reply_to_ap
+        existing.in_reply_to_id = in_reply_to_id
+        existing.quote_of_id = quote_id
+        existing.quote_of_ap_id = quote_url
+        existing.mentioned_user_ids = mentioned_ids
+        existing.media_attachments = media_list if media_list else None
+        existing.is_sensitive = bool(obj.get("sensitive", False) or _att_has_sensitive)
+        existing.tag_list = hashtag_list
+        # 부스트 포인터는 생성 시점의 공개범위를 복사하므로, 원글이 바뀌면 맞춰준다.
+        if existing.id is not None and old_visibility != vis:
+            session.query(Post).filter_by(boost_of_id=existing.id).update(
+                {"visibility": vis}, synchronize_session=False
+            )
+        session.flush()
+        if old_content != content or old_summary != existing.summary or old_visibility != vis:
+            logger.info(
+                "[REMOTE-EDIT] refreshed post id=%s ap_id=%s visibility=%s",
+                existing.id, ap_id, vis,
+            )
+        return existing
+
     post = Post(
         author_id=author.id,
         content=content,

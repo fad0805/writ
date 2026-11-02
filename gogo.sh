@@ -785,6 +785,176 @@ with get_session() as s:
         print(f"\nremote parent: {p.in_reply_to_ap_id}")
 PYEOF
 
+elif [ "$1" = "check-remote-edit" ]; then
+  post_arg="${2:-}"
+  if [ -z "$post_arg" ]; then
+    echo "사용법: ./gogo.sh check-remote-edit [post_id|ap_id]" >&2
+    exit 1
+  fi
+  docker compose exec -T -e POST_ARG="$post_arg" -e OWN_USER="$OWN_USER" api python3 <<'PYEOF'
+import os
+import sys
+
+from app.core.activitypub import _ap_fetch, _get_instance_actor
+from app.db.database import get_session
+from app.models import Boost, Follow, Post, User
+from app.utils.content_parser import _sanitize_html, process_post_content
+
+arg = os.environ.get("POST_ARG", "").strip()
+own_user = os.environ.get("OWN_USER", "").strip()
+
+
+def _lookup(s):
+    try:
+        return s.query(Post).get(int(arg))
+    except ValueError:
+        return s.query(Post).filter_by(ap_id=arg).first()
+
+
+def _content(obj):
+    raw = obj.get("content", "") or ""
+    if not raw:
+        cm = obj.get("contentMap")
+        if isinstance(cm, dict) and cm:
+            raw = next(iter(cm.values()), "")
+    return process_post_content(_sanitize_html(raw), obj)
+
+
+with get_session() as s:
+    post = _lookup(s)
+    if not post:
+        print("post not found")
+        sys.exit(1)
+    if post.boost_of_id:
+        print(f"boost pointer id={post.id} -> original id={post.boost_of_id}")
+        post = s.query(Post).get(post.boost_of_id)
+    if not post:
+        print("original post not found")
+        sys.exit(1)
+
+    author = post.author
+    print(f"post id={post.id} number={post.number} deleted={post.is_deleted}")
+    print(f"author={author.username if author else '?'} (remote={author.is_remote if author else '?'})")
+    print(f"author remote_url={author.remote_url if author else ''}")
+    print(f"ap_id={post.ap_id}")
+    print(f"local visibility={post.visibility} sensitive={post.is_sensitive}")
+    print(f"local media_count={len(post.media_attachments or [])}")
+
+    owner = None
+    if own_user:
+        owner = s.query(User).filter_by(username=own_user, is_remote=False).first()
+    if owner and author:
+        follow = s.query(Follow).filter_by(follower_id=owner.id, following_id=author.id).first()
+        print(f"{own_user} follows author={follow is not None} accepted={getattr(follow, 'accepted', None)}")
+        boost = s.query(Boost).filter_by(user_id=owner.id, post_id=post.id).first()
+        print(f"{own_user} boosted={boost is not None}")
+        pointers = s.query(Post).filter_by(author_id=owner.id, boost_of_id=post.id, is_deleted=False).all()
+        print(f"{own_user} boost_pointer_ids={[p.id for p in pointers]}")
+
+    if not post.ap_id or not post.ap_id.startswith("http"):
+        print("not a remote ActivityPub post")
+        sys.exit(1)
+
+    signer = owner or _get_instance_actor(s)
+    try:
+        data = _ap_fetch(post.ap_id, signer)
+    except Exception as e:
+        print(f"remote fetch failed: {e}")
+        sys.exit(1)
+    if not isinstance(data, dict):
+        print("remote fetch failed: empty response")
+        sys.exit(1)
+    obj = data.get("object", data)
+    if isinstance(obj, dict) and obj.get("type") in ("Create", "Announce"):
+        obj = obj.get("object", obj)
+    if not isinstance(obj, dict):
+        print("remote object is not a dict")
+        sys.exit(1)
+
+    remote_content = _content(obj)
+    remote_summary = obj.get("summary", "") or ""
+    remote_media = obj.get("attachment", []) or []
+    if isinstance(remote_media, dict):
+        remote_media = [remote_media]
+    print(f"remote type={obj.get('type')} id={obj.get('id')}")
+    print(f"remote visibility to={obj.get('to')} cc={obj.get('cc')}")
+    print(f"remote sensitive={obj.get('sensitive', False)} media_count={len(remote_media)}")
+    print(f"remote updated={obj.get('updated', '')}")
+    print(f"content same={post.content == remote_content}")
+    print(f"summary same={(post.summary or '') == remote_summary}")
+    print(f"media_count same={len(post.media_attachments or []) == len(remote_media)}")
+    print("--- local content ---")
+    print((post.content or "")[:500])
+    print("--- remote content ---")
+    print(remote_content[:500])
+PYEOF
+
+elif [ "$1" = "refresh-remote-post" ]; then
+  post_arg="${2:-}"
+  if [ -z "$post_arg" ]; then
+    echo "사용법: ./gogo.sh refresh-remote-post [post_id|ap_id]" >&2
+    exit 1
+  fi
+  docker compose exec -T -e POST_ARG="$post_arg" -e OWN_USER="$OWN_USER" api python3 <<'PYEOF'
+import os
+import sys
+
+from app.core.activitypub import _fetch_remote_post, _get_instance_actor
+from app.db.database import get_session
+from app.models import Post, User
+
+arg = os.environ.get("POST_ARG", "").strip()
+own_user = os.environ.get("OWN_USER", "").strip()
+
+
+def _lookup(s):
+    try:
+        return s.query(Post).get(int(arg))
+    except ValueError:
+        return s.query(Post).filter_by(ap_id=arg).first()
+
+
+with get_session() as s:
+    post = _lookup(s)
+    if not post:
+        print("post not found")
+        sys.exit(1)
+    if post.boost_of_id:
+        print(f"boost pointer id={post.id} -> original id={post.boost_of_id}")
+        post = s.query(Post).get(post.boost_of_id)
+    if not post:
+        print("original post not found")
+        sys.exit(1)
+    if not post.ap_id or not post.ap_id.startswith("http"):
+        print("not a remote ActivityPub post")
+        sys.exit(1)
+
+    before_content = post.content or ""
+    before_summary = post.summary or ""
+    before_visibility = post.visibility
+    before_media = len(post.media_attachments or [])
+
+    owner = s.query(User).filter_by(username=own_user, is_remote=False).first() if own_user else None
+    signer = owner or _get_instance_actor(s)
+    refreshed = _fetch_remote_post(post.ap_id, signer, s, refresh_existing=True)
+    if not refreshed:
+        print("refresh failed: remote fetch returned no post")
+        sys.exit(1)
+    s.commit()
+    s.refresh(refreshed)
+
+    print(f"post id={refreshed.id} ap_id={refreshed.ap_id}")
+    print(f"content changed={before_content != (refreshed.content or '')}")
+    print(f"summary changed={before_summary != (refreshed.summary or '')}")
+    print(f"visibility {before_visibility} -> {refreshed.visibility}")
+    print(f"media_count {before_media} -> {len(refreshed.media_attachments or [])}")
+    print(f"sensitive={refreshed.is_sensitive}")
+    print("--- before ---")
+    print(before_content[:500])
+    print("--- after ---")
+    print((refreshed.content or "")[:500])
+PYEOF
+
 elif [ "$1" = "check-custom-fields" ]; then
   actor_url="${2}"
   if [ -z "$actor_url" ]; then
@@ -1875,6 +2045,8 @@ else
   echo "  purge-deleted   - 스레드에 없는 삭제된 게시글 완전 제거 (댓글 있는 건 껍데기 유지)"
   echo "  purge-orphan    - 내용/부스트/답글/ap_id 없는 고아 포스트 삭제"
   echo "  purge-shadows   - 자기 도메인을 가리키는 그림자 원격 유저 삭제"
+  echo "  check-remote-edit - 원격 게시글과 로컬 내용을 비교 (Update 수신 여부 확인용). 예: ./gogo.sh check-remote-edit <post_id|ap_id>"
+  echo "  refresh-remote-post - 원격 게시글을 강제로 재조회해 수정내용 반영. 예: ./gogo.sh refresh-remote-post <post_id|ap_id>"
   echo "  check-custom-fields - 원격 액터의 attachment/custom_fields 확인 (예: ./gogo.sh check-custom-fields https://$PEER_DOMAIN/users/$OWN_USER)"
   echo "  check-create    - 포스트의 AP Create JSON 출력 (예: ./gogo.sh check-create 5371)"
   echo "  replay-mastodon - 받은 Create를 Mastodon 포맷으로 재전송 (예: ./gogo.sh replay-mastodon 5371 https://qdon.space/inbox)"
