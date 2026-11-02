@@ -46,6 +46,7 @@ from app.utils.content_parser import _sanitize_html, process_post_content
 from app.utils.crypto import generate_keypair
 from app.utils.emoji import _refresh_emoji_cache_forcibly
 from app.utils.http import WRIT_USER_AGENT, validated_get
+from app.utils.post_edit import record_post_edit
 from app.utils.urls import parse_username_from_url
 
 logger = logging.getLogger("writ.activitypub")
@@ -711,6 +712,10 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                     if post.author and post.author.remote_url != actor_url:
                         logger.warning("[AP] _handle_update REJECTED: actor %s does not own post %s", actor_url, obj_id)
                         return (403, "Actor does not own this post")
+                    old_content = post.content or ""
+                    old_summary = post.summary or ""
+                    old_visibility = post.visibility or "public"
+                    old_is_sensitive = bool(post.is_sensitive)
                     # Update content/summary
                     new_content = object_data.get("content", "")
                     if not new_content:
@@ -721,6 +726,8 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                         post.content = process_post_content(_sanitize_html(new_content), post)
                     if "summary" in object_data:
                         post.summary = object_data.get("summary", "")
+                    if "sensitive" in object_data:
+                        post.is_sensitive = bool(object_data.get("sensitive"))
                     # Update poll data
                     if post.poll_data:
                         one_of = object_data.get("oneOf") or object_data.get("anyOf") or []
@@ -743,6 +750,24 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                                 post.poll_data = {**post.poll_data, "options": new_options}
                     # Update emoji tags
                     _process_emoji_tags(object_data.get("tag", []), session)
+                    if (post.content or "") != old_content or (post.summary or "") != old_summary \
+                            or (post.visibility or "public") != old_visibility \
+                            or bool(post.is_sensitive) != old_is_sensitive:
+                        _edited_at = None
+                        _updated = object_data.get("updated")
+                        if isinstance(_updated, str) and _updated:
+                            try:
+                                _edited_at = datetime.datetime.fromisoformat(_updated.replace("Z", "+00:00"))
+                            except ValueError:
+                                pass
+                        record_post_edit(
+                            session, post,
+                            old_content=old_content,
+                            old_summary=old_summary,
+                            old_visibility=old_visibility,
+                            old_is_sensitive=old_is_sensitive,
+                            edited_at=_edited_at,
+                        )
                     session.commit()
                     _refresh_emoji_cache_forcibly(session)
                     logger.info(
@@ -758,6 +783,8 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                             "summary": post.summary or "",
                             "visibility": post.visibility or "public",
                             "created_at": post.created_at.isoformat() if post.created_at else "",
+                            "edited_at": post.edited_at.isoformat() if post.edited_at else None,
+                            "is_edited": bool(post.edited_at),
                             "author": {
                                 "id": _ua.id, "username": _ua.username,
                                 "display_name": _ua.display_name or _ua.username,

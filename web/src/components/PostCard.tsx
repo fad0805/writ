@@ -13,7 +13,7 @@ import { useNow } from "@/hooks/useNow";
 import { buildPostContentHtml } from "@/lib/postContent";
 import { WindowWithGlobals } from "@/lib/windowGlobals";
 import Icon from "./Icon";
-import PostHeader from "./PostHeader";
+import PostHeader, { PostEditHistoryModal } from "./PostHeader";
 import ReplyContextBox from "./ReplyContextBox";
 import MediaGallery from "./MediaGallery";
 import LinkPreviewCard from "./LinkPreviewCard";
@@ -34,6 +34,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
   const { user: currentUser } = useAuth();
   const [showReply, setShowReply] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [showEdits, setShowEdits] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [showRewrite, setShowRewrite] = useState(false);
   const [rewriteContent, setRewriteContent] = useState<string | null>(null);
@@ -479,7 +480,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
             <Icon name="mention" size={12} /> <Link href={`/@${mentionBy.username}`}><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(mentionBy.display_name || mentionBy.username, mergedEmojiList, 14)) }} /></Link>님이 멘션
           </div>
         )}
-        <PostHeader post={post} mergedEmojiList={mergedEmojiList} timeStr={timeStr} postHref={postHref} timeHref={timeHref} />
+        <PostHeader post={post} mergedEmojiList={mergedEmojiList} timeStr={timeStr} postHref={postHref} timeHref={timeHref} onShowEdits={() => setShowEdits(true)} />
         {!hideContext && post.reply_context && (
           <ReplyContextBox post={post} mergedEmojiList={mergedEmojiList} />
         )}
@@ -547,6 +548,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
       </div>
       {!readonly && showReply && <ReplyModal post={post} onClose={() => setShowReply(false)} onDone={(newPost) => { setShowReply(false); if (onReply) onReply(newPost); }} />}
       {!readonly && showEdit && <EditModal post={post} onClose={() => setShowEdit(false)} onDone={(updated) => { setShowEdit(false); if (onUpdate) onUpdate(post, updated); }} />}
+      {showEdits && <PostEditHistoryModal postId={targetId} onClose={() => setShowEdits(false)} />}
       {!readonly && showReport && <ReportModal post={post} onClose={() => setShowReport(false)} />}
       {viewerIndex >= 0 && (post.media_attachments?.length ?? 0) > 0 && (
         <MediaViewer

@@ -171,6 +171,8 @@ def to_ap_note(post, session=None) -> dict:
         "tag": tags,
         "to": [], "cc": []
     }
+    if getattr(post, "edited_at", None):
+        obj["updated"] = _ap_datetime(post.edited_at)
 
     # 4. 수신자 및 답글 관계 설정
     to_list = list(set(mentioned_uris))

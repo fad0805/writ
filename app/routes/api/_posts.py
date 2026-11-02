@@ -18,11 +18,13 @@ from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs
 from app.core.visibility import _can_view
 from app.db.database import get_session
 from app.db.mention_resolver import resolve_handles_to_ids
-from app.models import Bookmark, Boost, Like, Notification, Post, User, Vote
+from app.models import Bookmark, Boost, Like, Notification, Post, PostEdit, User, Vote
 from app.serializers import _post_json
 from app.utils.content_parser import extract_mentions, process_post_content
+from app.utils.datetime import _fmt_dt
 from app.utils.filter import _load_user_filters
 from app.utils.post import _get_descendant_ids, _sync_post_tags
+from app.utils.post_edit import record_post_edit
 from app.utils.storage import get_storage
 from app.utils.to_ap_serializer import to_ap_note
 
@@ -185,6 +187,10 @@ def _do_edit_post(s, post, user, content, summary, visibility=None, is_sensitive
         raise HTTPException(status_code=400, detail="Content cannot be empty")
     if post.summary and post.summary.startswith("[관리자 강제] ") and not summary.startswith("[관리자 강제] "):
         raise HTTPException(status_code=403, detail="관리자가 강제한 CW는 수정할 수 없습니다")
+    old_content = post.content or ""
+    old_summary = post.summary or ""
+    old_visibility = post.visibility or "public"
+    old_is_sensitive = bool(post.is_sensitive)
     new_content = content.replace('\r\n', '\n').replace('\r', '\n')
     post.content = process_post_content(new_content, post=post)
     # 수정 시 멘션 재추출 — mentioned_user_ids를 새 내용에 맞게 갱신
@@ -199,6 +205,15 @@ def _do_edit_post(s, post, user, content, summary, visibility=None, is_sensitive
     if is_sensitive is not None:
         post.is_sensitive = is_sensitive
     _sync_post_tags(post, s)
+    if (post.content or "") != old_content or (post.summary or "") != old_summary \
+            or (post.visibility or "public") != old_visibility or bool(post.is_sensitive) != old_is_sensitive:
+        record_post_edit(
+            s, post,
+            old_content=old_content,
+            old_summary=old_summary,
+            old_visibility=old_visibility,
+            old_is_sensitive=old_is_sensitive,
+        )
     s.commit()
 
     try:
@@ -210,6 +225,8 @@ def _do_edit_post(s, post, user, content, summary, visibility=None, is_sensitive
             "summary": post.summary or "",
             "visibility": post.visibility or "public",
             "created_at": post.created_at.isoformat() if post.created_at else "",
+            "edited_at": post.edited_at.isoformat() if post.edited_at else None,
+            "is_edited": bool(post.edited_at),
             "author": {
                 "id": _ua.id, "username": _ua.username,
                 "display_name": _ua.display_name or _ua.username,
@@ -280,6 +297,52 @@ def _do_edit_post(s, post, user, content, summary, visibility=None, is_sensitive
                 logger.error("Update federation failed: %s", e, exc_info=True)
 
         spawn(_send_update)
+
+
+@posts_router.get("/posts/{post_id}/edits")
+def api_get_post_edits(request: Request, post_id: int):
+    """게시글 수정 이력(과거 버전 + 현재 버전)을 반환한다."""
+    user = get_current_user(request)
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        target = post
+        if post.boost_of_id:
+            target = s.query(Post).filter_by(id=post.boost_of_id, is_deleted=False).first()
+            if not target:
+                raise HTTPException(status_code=404, detail="Post not found")
+        if not _can_view(target, user, s):
+            raise HTTPException(status_code=403, detail="Cannot view this post")
+
+        rows = s.query(PostEdit).filter_by(post_id=target.id).order_by(PostEdit.id).all()
+        versions = []
+        for idx, row in enumerate(rows):
+            versions.append({
+                "version": idx,
+                "content": row.content or "",
+                "summary": row.summary or "",
+                "visibility": row.visibility or "public",
+                "is_sensitive": bool(row.is_sensitive),
+                "created_at": _fmt_dt(row.created_at),
+                "is_current": False,
+            })
+        if target.edited_at:
+            versions.append({
+                "version": len(rows),
+                "content": target.content or "",
+                "summary": target.summary or "",
+                "visibility": target.visibility or "public",
+                "is_sensitive": bool(target.is_sensitive),
+                "created_at": _fmt_dt(target.edited_at),
+                "is_current": True,
+            })
+        versions.reverse()
+        return {
+            "post_id": target.id,
+            "edited_at": _fmt_dt(target.edited_at),
+            "versions": versions,
+        }
 
 
 @posts_router.post("/posts/{post_id}/edit")

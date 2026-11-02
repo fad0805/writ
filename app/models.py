@@ -203,6 +203,8 @@ class Post(Base):
     expires_at = Column(DateTime(timezone=True), nullable=True)
     tag_list = relationship("Tag", secondary=post_tags, lazy="selectin")
     created_at = Column(DateTime(timezone=True), default=now)
+    # 마지막 수정 시각. 수정 이력은 post_edits 테이블에 이전 버전으로 남는다.
+    edited_at = Column(DateTime(timezone=True), nullable=True)
 
     author = relationship("User", back_populates="posts", foreign_keys=[author_id], lazy="selectin")
     parent = relationship("Post", back_populates="replies", remote_side=[id], foreign_keys=[in_reply_to_id], lazy="selectin")
@@ -219,6 +221,8 @@ class Post(Base):
     votes = relationship("Vote", back_populates="post", cascade="all, delete-orphan", lazy="noload")
     novel = relationship("Novel", foreign_keys=[novel_id], lazy="selectin")
     episode = relationship("Episode", foreign_keys=[episode_id], lazy="selectin")
+    edits = relationship("PostEdit", back_populates="post", cascade="all, delete-orphan",
+                         lazy="noload", order_by="PostEdit.id")
 
     def _scalar_count(self, column_model, *filters):
         s = object_session(self)
@@ -238,6 +242,26 @@ class Post(Base):
     def replies_count(self):
         # 삭제된 답글 제외 — serializers._load_counts_batch와 동일 조건
         return self._scalar_count(Post, Post.in_reply_to_id == self.id, Post.is_deleted == False)
+
+
+class PostEdit(Base):
+    """게시글의 이전 버전 스냅샷.
+
+    수정할 때마다 '수정 직전' 버전을 한 행씩 남긴다. 현재 버전은 Post 본체에
+    있으므로 이 테이블에는 과거 버전만 저장한다. 작성 시각(created_at)은 해당
+    버전이 게시/수정된 시각이며, 정렬은 id 기준으로 안정적으로 처리한다.
+    """
+    __tablename__ = "post_edits"
+
+    id = Column(Integer, primary_key=True)
+    post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    summary = Column(String(512), default="")
+    visibility = Column(String(16), default="public", nullable=False)
+    is_sensitive = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+    post = relationship("Post", back_populates="edits", lazy="noload")
 
 
 class Vote(Base):

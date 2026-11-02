@@ -20,6 +20,7 @@ from app.serializers import _post_json
 from app.utils.content_parser import _sanitize_html, process_post_content
 from app.utils.crypto import get_private_key, sign_string
 from app.utils.http import WRIT_USER_AGENT, validate_url, validated_get
+from app.utils.post_edit import record_post_edit
 from app.utils.urls import extract_remote_url
 
 logger = logging.getLogger("writ.activitypub")
@@ -382,6 +383,8 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0, refresh_existi
         old_content = existing.content
         old_summary = existing.summary or ""
         old_visibility = existing.visibility
+        old_is_sensitive = bool(existing.is_sensitive)
+        new_is_sensitive = bool(obj.get("sensitive", False) or _att_has_sensitive)
         existing.content = content
         existing.summary = summary
         existing.visibility = vis
@@ -392,8 +395,23 @@ def _fetch_remote_post(url: str, signer: User, session, _depth=0, refresh_existi
         existing.quote_of_ap_id = quote_url
         existing.mentioned_user_ids = mentioned_ids
         existing.media_attachments = media_list if media_list else None
-        existing.is_sensitive = bool(obj.get("sensitive", False) or _att_has_sensitive)
+        existing.is_sensitive = new_is_sensitive
         existing.tag_list = hashtag_list
+        if old_content != content or old_summary != (existing.summary or "") \
+                or old_visibility != vis or old_is_sensitive != new_is_sensitive:
+            _updated = obj.get("updated")
+            _edited_at = None
+            if isinstance(_updated, str) and _updated:
+                with contextlib.suppress(Exception):
+                    _edited_at = datetime.datetime.fromisoformat(_updated.replace("Z", "+00:00"))
+            record_post_edit(
+                session, existing,
+                old_content=old_content,
+                old_summary=old_summary,
+                old_visibility=old_visibility or "public",
+                old_is_sensitive=old_is_sensitive,
+                edited_at=_edited_at,
+            )
         # 부스트 포인터는 생성 시점의 공개범위를 복사하므로, 원글이 바뀌면 맞춰준다.
         if existing.id is not None and old_visibility != vis:
             session.query(Post).filter_by(boost_of_id=existing.id).update(

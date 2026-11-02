@@ -782,6 +782,24 @@ input:focus {
   justify-content: flex-end;
 }
 
+.post-edited-badge {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.92em;
+  line-height: 1.35;
+  padding: 0 5px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.post-edited-badge:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
 .post-content {
   margin-bottom: 12px;
   line-height: 1.7;
@@ -3143,6 +3161,52 @@ input[type="checkbox"] {
   display: flex;
   justify-content: flex-end;
   margin-top: 15px;
+}
+
+/* ── Post edit history modal ── */
+.edit-history-modal {
+  max-width: 680px;
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(80vh, 720px);
+  overflow-y: auto;
+}
+.edit-history-version {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-top: 12px;
+  background: var(--bg-secondary);
+}
+.edit-history-version.current {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.edit-history-version-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 0.88em;
+}
+.edit-history-version-head span {
+  color: var(--text-dim);
+  font-size: 0.92em;
+  white-space: nowrap;
+}
+.edit-history-summary {
+  border-left: 3px solid var(--border);
+  padding-left: 10px;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 0.92em;
+}
+.edit-history-content {
+  line-height: 1.65;
+  word-wrap: break-word;
+}
+.edit-history-content img {
+  max-width: 100%;
+  height: auto;
 }
 
 /* ── Right sidebar extras ── */

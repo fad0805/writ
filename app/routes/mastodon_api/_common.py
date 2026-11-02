@@ -467,6 +467,7 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
     status = {
         "id": str(post.id),
         "created_at": _ap_datetime(post.created_at),
+        "edited_at": _ap_datetime(post.edited_at) if getattr(post, "edited_at", None) else None,
         "in_reply_to_id": str(post.in_reply_to_id) if post.in_reply_to_id else None,
         "in_reply_to_account_id": None,
         "sensitive": bool(post.is_sensitive),

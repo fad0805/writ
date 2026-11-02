@@ -180,6 +180,8 @@ export interface PostData {
   summary: string;
   visibility: string;
   created_at: string | null;
+  edited_at?: string | null;
+  is_edited?: boolean;
   author: User;
   likes_count: number;
   boosts_count: number;
@@ -210,6 +212,16 @@ export interface PostData {
   quote_hidden_url?: string;
   quoted_post?: PostData | null;
   _emojis?: { keyword: string; file_name: string; url: string; aliases: string[] }[];
+}
+
+export interface PostEditVersion {
+  version: number;
+  content: string;
+  summary: string;
+  visibility: string;
+  is_sensitive: boolean;
+  created_at: string | null;
+  is_current: boolean;
 }
 
 export interface ReplyContext {
@@ -322,6 +334,10 @@ export const api = {
   getPost: (id: number, reply_offset = 0, reply_limit = 5, ancestor_offset = 0, ancestor_limit = 20) =>
     request<PostData & { total_replies: number; has_more_replies: boolean; has_more_ancestors: boolean }>(
       `/api/posts/${id}?reply_offset=${reply_offset}&reply_limit=${reply_limit}&ancestor_offset=${ancestor_offset}&ancestor_limit=${ancestor_limit}`
+    ),
+  getPostEdits: (id: number) =>
+    request<{ post_id: number; edited_at: string | null; versions: PostEditVersion[] }>(
+      `/api/posts/${id}/edits`
     ),
   createPost: (data: { content: string; summary?: string; visibility?: string; parent_id?: number; share_url?: string; media_attachments?: string; is_sensitive?: boolean; poll_options?: string; poll_expires_in?: number; link_preview?: string }) =>
     formRequest<PostData>("/api/posts", data),

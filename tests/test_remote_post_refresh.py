@@ -10,7 +10,7 @@ the stale row forever.
 import app.core.activitypub._fetch_post as fetch_post
 import app.core.activitypub._inbound_interactions as inbound
 from app.db.database import get_session
-from app.models import Post, Tag, User
+from app.models import Post, PostEdit, Tag, User
 
 ACTOR_URL = "https://remote.example/users/carol"
 POST_URL = "https://remote.example/statuses/123"
@@ -109,6 +109,12 @@ def test_fetch_remote_post_refreshes_existing_row(make_user, monkeypatch):
         # 부스트 포인터는 원글의 공개범위 변경을 따라간다.
         assert s.query(Post).get(pointer_id).visibility == "followers"
         assert s.query(Tag).filter_by(name="updated").first() is not None
+        # 재조회로 내용이 바뀌면 이전 버전이 수정 이력에 남고 edited_at이 표시된다.
+        original = s.query(Post).get(post_id)
+        assert original.edited_at is not None
+        edits = s.query(PostEdit).filter_by(post_id=post_id).all()
+        assert len(edits) == 1
+        assert "old body" in edits[0].content
 
 
 def test_fetch_remote_post_can_skip_refresh(make_user, monkeypatch):
