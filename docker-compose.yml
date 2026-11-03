@@ -57,6 +57,9 @@ services:
       - internal_network
     volumes:
       - ./logs:/app/logs
+      # Next.js ISR/fetch 캐시는 런타임에 쓰기가 필요하다.
+      # read_only 루트fs를 유지하기 위해 캐시 경로만 named volume으로 분리한다.
+      - next_cache:/app/.next/cache
     command: ./start.sh
     depends_on:
       api:
@@ -74,3 +77,6 @@ networks:
   external_network:
   internal_network:
     internal: true
+
+volumes:
+  next_cache:

@@ -34,7 +34,12 @@ COPY --from=builder /app/package.json ./package.json
 COPY start.sh ./start.sh
 RUN chmod +x start.sh
 
-RUN addgroup -S writ && adduser -S writ -G writ
+# Next.js는 런타임(ISR/fetch/image 캐시)에 .next/cache에 써야 한다.
+# .next는 root 소유로 복사되므로 비루트 유저가 쓸 수 있도록 디렉터리를 만들고 소유권을 준다.
+# (읽기 전용 루트fs에서는 compose가 이 경로에 쓰기 가능한 볼륨을 마운트한다.)
+RUN addgroup -S writ && adduser -S writ -G writ \
+ && mkdir -p /app/.next/cache \
+ && chown -R writ:writ /app/.next/cache
 
 USER writ
 
