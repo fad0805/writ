@@ -240,6 +240,9 @@ export interface NotificationMetadata {
   is_author?: boolean;
   reaction?: string;
   type?: string;
+  status?: string;
+  job_id?: string;
+  size_bytes?: number;
   message?: string;
   novel_id?: number;
   episode_id?: number;

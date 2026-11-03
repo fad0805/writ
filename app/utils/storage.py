@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 import boto3
 
 from app.config.settings import (
+    BASE_URL,
     S3_ACCESS_KEY,
     S3_BUCKET,
     S3_ENABLED,
@@ -42,6 +43,11 @@ class StorageBackend(ABC):
     def url(self, key: str) -> str:
         ...
 
+    @abstractmethod
+    def key_from_url(self, url_or_key: str) -> str | None:
+        """Return a storage key for a URL/key, or None if it is not ours."""
+        ...
+
 
 class LocalStorage(StorageBackend):
     def __init__(self, base_dir: str = "uploads", url_prefix: str = "/uploads"):
@@ -74,6 +80,20 @@ class LocalStorage(StorageBackend):
 
     def url(self, key: str) -> str:
         return f"{self.url_prefix}/{key}"
+
+    def key_from_url(self, url_or_key: str) -> str | None:
+        if not url_or_key:
+            return None
+        if not url_or_key.startswith(("/", "http://", "https://")):
+            return url_or_key.lstrip("/")
+        parsed = urlparse(url_or_key)
+        if parsed.netloc and parsed.netloc != urlparse(BASE_URL).netloc:
+            # 다른 서버의 /uploads/... 경로를 이 서버의 같은 키로 오인하지 않는다.
+            return None
+        prefix = self.url_prefix + "/"
+        if parsed.path.startswith(prefix):
+            return parsed.path[len(prefix):]
+        return None
 
     def _extract_path(self, url_or_key: str) -> str | None:
         if url_or_key.startswith("/"):
@@ -147,6 +167,20 @@ class S3Storage(StorageBackend):
         if self.public_url != self.endpoint:
             return f"{self.public_url}/{key}"
         return f"{self.public_url}/{self.bucket}/{key}"
+
+    def key_from_url(self, url_or_key: str) -> str | None:
+        if not url_or_key:
+            return None
+        if not url_or_key.startswith(("http://", "https://")):
+            return url_or_key.lstrip("/")
+        parsed = urlparse(url_or_key)
+        allowed_hosts = {
+            urlparse(self.public_url).netloc,
+            urlparse(self.endpoint).netloc,
+        }
+        if parsed.netloc not in allowed_hosts:
+            return None
+        return self._url_to_key(url_or_key)
 
     def _url_to_key(self, url_or_key: str) -> str | None:
         if not url_or_key.startswith("http"):

@@ -21,6 +21,7 @@ static/uploads/*
 .DS_Store
 
 logs/
+data/archives/
 TODO.md
 
 

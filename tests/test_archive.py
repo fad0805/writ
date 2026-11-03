@@ -1,0 +1,176 @@
+"""Server-side account archive: profile, series, media, job notification."""
+
+import io
+import json
+import zipfile
+from datetime import timedelta
+
+from app.core.archive import run_archive_job, write_archive
+from app.db.database import get_session
+from app.models import Episode, Notification, Novel, Post, User
+from app.utils.storage import get_storage
+
+
+def test_archive_contains_profile_series_and_media(client, auth_cookie, make_post):
+    user, _cookie = auth_cookie("alice")
+    storage = get_storage()
+    keys = {
+        "avatar": "test_archive/avatar.webp",
+        "header": "test_archive/header.webp",
+        "post": "test_archive/post.webp",
+        "cover": "test_archive/cover.webp",
+        "episode": "test_archive/episode.webp",
+        "audio": "test_archive/audio.mp3",
+    }
+    payloads = {
+        "avatar": b"avatar-bytes",
+        "header": b"header-bytes",
+        "post": b"post-photo-bytes",
+        "cover": b"cover-bytes",
+        "episode": b"episode-image-bytes",
+        "audio": b"audio-bytes",
+    }
+    urls = {name: storage.save(key, payloads[name]) for name, key in keys.items()}
+    post = make_post(user, content="<p>with photo</p>")
+
+    try:
+        with get_session() as s:
+            db_user = s.query(User).get(user.id)
+            db_user.summary = "작가 소개"
+            db_user.profile_image = urls["avatar"]
+            db_user.header_image = urls["header"]
+            db_post = s.query(Post).get(post.id)
+            db_post.media_attachments = [{"url": urls["post"], "type": "image", "alt": "photo"}]
+            novel = Novel(author_id=user.id, title="연재", description="desc", cover_image=urls["cover"])
+            s.add(novel)
+            s.flush()
+            s.add(Episode(
+                novel_id=novel.id,
+                episode_number=1,
+                title="1화",
+                content="<p>episode</p>",
+                image_urls=[urls["episode"]],
+                audio_url=urls["audio"],
+            ))
+            s.commit()
+
+        buf = io.BytesIO()
+        write_archive(user.id, buf)
+        with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as z:
+            names = set(z.namelist())
+            profile = json.loads(z.read("profile.json"))
+            posts = json.loads(z.read("posts.json"))
+            novels = json.loads(z.read("novels.json"))
+            manifest = json.loads(z.read("manifest.json"))
+
+            assert profile["username"] == "alice"
+            assert profile["summary"] == "작가 소개"
+            assert profile["profile_image_archive"] in names
+            assert profile["header_image_archive"] in names
+            assert z.read(profile["profile_image_archive"]) == payloads["avatar"]
+            assert "password_hash" not in profile
+            assert "private_key" not in profile
+
+            post_entry = next(p for p in posts if p["id"] == post.id)
+            attachment = post_entry["media_attachments"][0]
+            assert attachment["url"] in names
+            assert attachment["original_url"] == urls["post"]
+            assert z.read(attachment["url"]) == payloads["post"]
+
+            novel_entry = novels[0]
+            assert novel_entry["cover_image_archive"] in names
+            episode_entry = novel_entry["episodes"][0]
+            assert episode_entry["image_urls"][0] in names
+            assert episode_entry["audio_url"] in names
+            assert z.read(episode_entry["audio_url"]) == payloads["audio"]
+
+            assert manifest["counts"]["media"] == 6
+            assert manifest["counts"]["novels"] == 1
+    finally:
+        for key in keys.values():
+            storage.delete(key)
+
+
+def test_archive_request_runs_in_background_and_notifies(client, auth_cookie, make_post, monkeypatch, tmp_path):
+    import app.core.archive as archive_module
+    import app.routes.api._export as export_module
+
+    monkeypatch.setattr(archive_module, "ARCHIVE_DIR", str(tmp_path))
+    monkeypatch.setattr(archive_module, "_notify_archive_ready", lambda *args, **kwargs: None)
+    monkeypatch.setattr(export_module, "spawn", lambda *args, **kwargs: None)
+
+    user, cookie = auth_cookie("bob")
+    make_post(user, content="<p>archive me</p>")
+
+    created = client.post("/api/settings/archive-request", cookies=cookie)
+    assert created.status_code == 200
+    job = created.json()["job"]
+    assert job["status"] == "pending"
+
+    duplicate = client.post("/api/settings/archive-request", cookies=cookie)
+    assert duplicate.status_code == 200
+    assert duplicate.json()["already_running"] is True
+
+    run_archive_job(job["id"])
+
+    status = client.get("/api/settings/archive-status", cookies=cookie).json()["job"]
+    assert status["status"] == "completed"
+    assert status["size_bytes"] > 0
+    assert status["download_url"].endswith(f"/{job['uuid']}")
+
+    with get_session() as s:
+        notif = s.query(Notification).filter_by(user_id=user.id, notification_type="archive").first()
+        assert notif is not None
+        meta = json.loads(notif.metadata_json)
+        assert meta["status"] == "completed"
+        assert meta["job_id"] == job["uuid"]
+
+    download = client.get(status["download_url"], cookies=cookie)
+    assert download.status_code == 200
+    assert download.headers["content-type"] == "application/zip"
+    with zipfile.ZipFile(io.BytesIO(download.content)) as z:
+        assert "profile.json" in z.namelist()
+        assert "posts.json" in z.namelist()
+
+
+def test_expired_archives_are_removed(client, auth_cookie, monkeypatch, tmp_path):
+    import app.core.archive as archive_module
+    from app.models import ArchiveJob
+    from app.utils.datetime import now
+
+    monkeypatch.setattr(archive_module, "ARCHIVE_DIR", str(tmp_path))
+    user, _cookie = auth_cookie("alice")
+    archive_file = tmp_path / "old.zip"
+    archive_file.write_bytes(b"old archive")
+    with get_session() as s:
+        s.add(ArchiveJob(
+            user_id=user.id,
+            status="completed",
+            file_path=str(archive_file),
+            created_at=now() - timedelta(days=8),
+        ))
+        s.commit()
+
+    removed = archive_module.cleanup_expired_archives()
+
+    assert removed == 1
+    assert not archive_file.exists()
+    with get_session() as s:
+        assert s.query(ArchiveJob).filter_by(user_id=user.id).count() == 0
+
+
+def test_archive_download_rejects_other_users(client, auth_cookie, monkeypatch, tmp_path):
+    import app.core.archive as archive_module
+    import app.routes.api._export as export_module
+
+    monkeypatch.setattr(archive_module, "ARCHIVE_DIR", str(tmp_path))
+    monkeypatch.setattr(archive_module, "_notify_archive_ready", lambda *args, **kwargs: None)
+    monkeypatch.setattr(export_module, "spawn", lambda *args, **kwargs: None)
+
+    _alice, alice_cookie = auth_cookie("alice")
+    _bob, bob_cookie = auth_cookie("bob")
+    job = client.post("/api/settings/archive-request", cookies=alice_cookie).json()["job"]
+    run_archive_job(job["id"])
+
+    response = client.get(f"/api/settings/archive-download/{job['uuid']}", cookies=bob_cookie)
+    assert response.status_code == 404

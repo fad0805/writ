@@ -1,9 +1,19 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Icon from "@/components/Icon";
 import SettingsNav from "@/components/SettingsNav";
 
 type ExportItem = { key: string; name: string; count: number; format: string };
+type ArchiveJob = {
+  id: number;
+  uuid: string;
+  status: "pending" | "processing" | "completed" | "failed";
+  size_bytes: number;
+  error: string;
+  created_at: string | null;
+  completed_at: string | null;
+  download_url: string;
+};
 
 export default function DataPage() {
   const [loading, setLoading] = useState(false);
@@ -11,6 +21,9 @@ export default function DataPage() {
   const [countsLoading, setCountsLoading] = useState(true);
   const [importResult, setImportResult] = useState<string>("");
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [archiveJob, setArchiveJob] = useState<ArchiveJob | null>(null);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [archiveError, setArchiveError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -20,6 +33,30 @@ export default function DataPage() {
       .catch(() => setItems([]))
       .finally(() => setCountsLoading(false));
   }, []);
+
+  const loadArchiveStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/settings/archive-status", { credentials: "include" });
+      if (!res.ok) return;
+      const d = await res.json();
+      setArchiveJob(d.job || null);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/settings/archive-status", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => { if (!cancelled) setArchiveJob(d.job || null); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!archiveJob || (archiveJob.status !== "pending" && archiveJob.status !== "processing")) return;
+    const timer = setInterval(loadArchiveStatus, 3000);
+    return () => clearInterval(timer);
+  }, [archiveJob, loadArchiveStatus]);
 
   const handleExportData = async (type: string) => {
     setLoading(true);
@@ -63,20 +100,33 @@ export default function DataPage() {
     }
   };
 
-  const handleExportArchive = async () => {
-    setLoading(true);
+  const handleRequestArchive = async () => {
+    setArchiveLoading(true);
+    setArchiveError("");
     try {
-      const res = await fetch("/api/settings/export-archive", { credentials: "include" });
-      if (!res.ok) { alert("아카이브 내보내기 실패"); setLoading(false); return; }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "writ_archive.zip";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch { alert("오류 발생"); }
-    setLoading(false);
+      const res = await fetch("/api/settings/archive-request", { method: "POST", credentials: "include" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setArchiveError(d.detail || "아카이브 요청에 실패했습니다.");
+        return;
+      }
+      setArchiveJob(d.job || null);
+    } catch {
+      setArchiveError("아카이브 요청 중 오류가 발생했습니다.");
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
+
+  const handleDownloadArchive = () => {
+    if (!archiveJob?.download_url) return;
+    window.location.href = archiveJob.download_url;
+  };
+
+  const formatBytes = (bytes: number) => {
+    if (!bytes) return "";
+    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))}KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
   };
 
   const handleImport = async () => {
@@ -122,9 +172,46 @@ export default function DataPage() {
           <button onClick={() => handleExportData("all")} disabled={loading} className="btn btn-primary" style={{ alignSelf: "flex-start" }}>
             전체 데이터 내보내기 (팔로우/뮤트/차단/북마크/키워드뮤트)
           </button>
-          <button onClick={handleExportArchive} disabled={loading} className="btn btn-outline" style={{ alignSelf: "flex-start" }}>
-            게시물/시리즈 아카이브 (ZIP)
-          </button>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {archiveJob?.status === "completed" ? (
+              <>
+                <p style={{ fontSize: 14, color: "var(--success)", margin: 0 }}>
+                  아카이브가 준비되었습니다{archiveJob.size_bytes ? ` (${formatBytes(archiveJob.size_bytes)})` : ""}.
+                </p>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button onClick={handleDownloadArchive} disabled={loading} className="btn btn-primary" style={{ alignSelf: "flex-start" }}>
+                    아카이브 다운로드 (ZIP)
+                  </button>
+                  <button onClick={handleRequestArchive} disabled={archiveLoading} className="btn btn-outline" style={{ alignSelf: "flex-start" }}>
+                    새로 만들기
+                  </button>
+                </div>
+                <p className="form-help" style={{ margin: 0 }}>
+                  생성 후 7일간 다운로드할 수 있으며, 이후 서버에서 자동 삭제됩니다.
+                </p>
+              </>
+            ) : archiveJob && (archiveJob.status === "pending" || archiveJob.status === "processing") ? (
+              <p style={{ fontSize: 14, color: "var(--accent)", margin: 0 }}>
+                서버에서 아카이브를 생성하고 있습니다. 완료되면 알림으로 알려드립니다.
+              </p>
+            ) : (
+              <>
+                <button onClick={handleRequestArchive} disabled={archiveLoading} className="btn btn-outline" style={{ alignSelf: "flex-start" }}>
+                  {archiveLoading ? "요청 중..." : "게시물/시리즈 아카이브 (ZIP)"}
+                </button>
+                <p className="form-help" style={{ margin: 0 }}>
+                  프로필 정보와 사진, 게시물, 시리즈/에피소드를 포함한 ZIP을 서버에서 생성합니다.
+                  완료되면 알림으로 알려드리며, 생성 후 7일간 다운로드할 수 있습니다.
+                </p>
+              </>
+            )}
+            {archiveJob?.status === "failed" && (
+              <p style={{ fontSize: 14, color: "var(--danger)", margin: 0 }}>
+                아카이브 생성에 실패했습니다{archiveJob.error ? `: ${archiveJob.error}` : ""}.
+              </p>
+            )}
+            {archiveError && <p style={{ fontSize: 14, color: "var(--danger)", margin: 0 }}>{archiveError}</p>}
+          </div>
         </div>
 
         <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 16 }}>

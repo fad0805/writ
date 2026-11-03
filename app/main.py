@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config.settings import CORS_ALLOW_CREDENTIALS, CORS_ORIGINS
 from app.core.activitypub import _cleanup_expired_media, _cleanup_remote_data, _inbox_executor
+from app.core.archive import recover_interrupted_archive_jobs
 from app.core.permissions import ensure_default_roles
 from app.core.push import init_vapid_keys
 from app.core.workers import auto_delete_expired_posts, cleanup_orphan_media, delivery_worker, refresh_remote_profiles
@@ -37,6 +38,8 @@ async def lifespan(app: FastAPI):
         _cleanup_avatars()
     with suppress(Exception):
         init_vapid_keys()
+    with suppress(Exception):
+        recover_interrupted_archive_jobs()
     t = threading.Thread(target=delivery_worker, daemon=True)
     t.start()
     t2 = threading.Thread(target=refresh_remote_profiles, daemon=True)

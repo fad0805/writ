@@ -16,6 +16,7 @@ guard_image()
 
 from app.config.settings import BASE_URL
 from app.core.activitypub import _post_to_inbox
+from app.core.archive import delete_user_archives
 from app.core.auth import delete_user_sessions, hash_password, require_active_auth, require_auth, verify_password
 from app.core.permissions import has_permission
 from app.core.threads import spawn
@@ -406,6 +407,7 @@ def api_delete_account(request: Request, password: str = Form(...), confirm: str
         user_id = db.id
         username = db.username
     delete_user_sessions(user_id)
+    delete_user_archives(user_id)
 
     log_admin_action(user_id, username, "delete_account_self", ip_address=request.client.host if request.client else "")
 

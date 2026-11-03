@@ -16,6 +16,7 @@ from app.core.activitypub import (
     _resolve_actor,
     _send_delete_post,
 )
+from app.core.archive import cleanup_expired_archives
 from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs
 from app.db.database import engine, get_session
 from app.models import Bookmark, Boost, Like, Notification, PendingDelivery, Post, RemoteMedia, User, Vote
@@ -361,6 +362,12 @@ def cleanup_orphan_media():
                 logger.info("Media cleanup: server busy, skipping")
                 time.sleep(1800)
                 continue
+
+            # 계정 아카이브는 저장소 종류와 무관하게 보관 기간이 지나면 삭제한다.
+            try:
+                cleanup_expired_archives()
+            except Exception:
+                logger.warning("Archive cleanup failed", exc_info=True)
 
             storage = get_storage()
             if not isinstance(storage, LocalStorage):

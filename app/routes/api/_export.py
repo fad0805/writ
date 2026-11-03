@@ -2,45 +2,28 @@
 import csv
 import io
 import json
+import os
 import re
-import zipfile
 
 from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import PlainTextResponse, StreamingResponse
+from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
+from sqlalchemy import desc
 
 from app.config.settings import BASE_URL
+from app.core.archive import (
+    _posts_for_export,
+    archive_job_json,
+    cleanup_user_archives,
+    run_archive_job,
+    write_archive,
+)
 from app.core.auth import require_active_auth, require_auth
+from app.core.threads import spawn
 from app.db.database import get_session
-from app.models import Bookmark, Episode, Follow, KeywordMute, Notification, Novel, Post, User, UserBlock, UserMute
+from app.models import ArchiveJob, Bookmark, Follow, KeywordMute, Post, User, UserBlock, UserMute
 from app.routes.api._settings import _domain_from_actor
 
 export_router = APIRouter()
-
-
-def _posts_for_export(s, user_id: int):
-    """Return (post, boost_pointer) pairs for a user's authored posts and boosts.
-
-    A boost row is only a pointer. For backups we want the boosted original's
-    content, but only while that original still exists and is not deleted.
-    """
-    rows = s.query(Post).filter_by(
-        author_id=user_id, is_deleted=False
-    ).order_by(Post.created_at).all()
-    result = []
-    seen_ids = set()
-    for row in rows:
-        target = row
-        pointer = None
-        if row.boost_of_id:
-            target = s.query(Post).filter_by(id=row.boost_of_id, is_deleted=False).first()
-            if not target:
-                continue
-            pointer = row
-        if target.id in seen_ids:
-            continue
-        seen_ids.add(target.id)
-        result.append((target, pointer))
-    return result
 
 
 @export_router.get("/settings/export/{export_type}")
@@ -184,45 +167,15 @@ def api_export_data(request: Request):
 
 @export_router.get("/settings/export-archive")
 def api_export_archive(request: Request):
+    """Synchronous compatibility download.
+
+    The settings UI requests a server-side job instead; this endpoint stays for
+    API clients and returns the exact same archive (profile + posts + series +
+    media).
+    """
     user = require_auth(request)
     buf = io.BytesIO()
-    with get_session() as s:
-        posts_data = []
-        for post, pointer in _posts_for_export(s, user.id):
-            is_boost = pointer is not None
-            posts_data.append({
-                "id": post.id,
-                "type": "boost" if is_boost else "post",
-                "boosted": is_boost,
-                "boosted_at": str(pointer.created_at) if is_boost else None,
-                "boost_of_author": post.author.username if is_boost else "",
-                "boost_of_url": (post.ap_id or post.remote_url or "") if is_boost else "",
-                "content": post.content or "", "summary": post.summary or "",
-                "visibility": post.visibility, "created_at": str(post.created_at),
-                "media_attachments": post.media_attachments or [],
-                "poll_data": post.poll_data, "is_sensitive": post.is_sensitive,
-            })
-        novels = s.query(Novel).filter_by(author_id=user.id).order_by(Novel.created_at).all()
-        novels_data = []
-        for n in novels:
-            eps = s.query(Episode).filter_by(novel_id=n.id).order_by(Episode.episode_number).all()
-            episodes_data = [
-                {
-                    "episode_number": e.episode_number, "title": e.title,
-                    "content": e.content, "summary": e.summary or "",
-                    "is_published": e.is_published, "created_at": str(e.created_at),
-                }
-                for e in eps
-            ]
-            novels_data.append({
-                "title": n.title, "description": n.description or "", "tags": n.tags or "",
-                "status": n.status, "visibility": n.visibility,
-                "is_sensitive": n.is_sensitive, "created_at": str(n.created_at),
-                "episodes": episodes_data,
-            })
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("posts.json", json.dumps(posts_data, ensure_ascii=False, indent=2))
-        zf.writestr("novels.json", json.dumps(novels_data, ensure_ascii=False, indent=2))
+    write_archive(user.id, buf)
     buf.seek(0)
     return StreamingResponse(buf, media_type="application/zip",
                              headers={"Content-Disposition": f"attachment; filename=writ_archive_{user.username}.zip"})
@@ -299,16 +252,57 @@ def api_import_data(request: Request, data: str = Form(...)):
 
 @export_router.post("/settings/archive-request")
 def api_archive_request(request: Request):
+    """Queue a server-side archive build.
+
+    The ZIP is generated in the background and the owner receives an in-app and
+    Web Push notification when it is ready. The file can be downloaded for
+    ARCHIVE_RETENTION_DAYS (7 days by default), then it is removed automatically.
+    """
     user = require_auth(request)
+    cleanup_user_archives(user.id)
     with get_session() as s:
-        admins = s.query(User).filter(User.role.in_(["admin", "moderator", "owner"])).all()
-        for admin in admins:
-            if admin.id == user.id:
-                continue
-            s.add(Notification(
-                user_id=admin.id, from_user_id=user.id,
-                notification_type="moderation",
-                metadata_json=json.dumps({"type": "archive_request", "user_id": user.id, "username": user.username}),
-            ))
+        active = s.query(ArchiveJob).filter(
+            ArchiveJob.user_id == user.id,
+            ArchiveJob.status.in_(["pending", "processing"]),
+        ).order_by(desc(ArchiveJob.created_at)).first()
+        if active:
+            return {"ok": True, "job": archive_job_json(active), "already_running": True}
+
+        job = ArchiveJob(user_id=user.id, status="pending")
+        s.add(job)
         s.commit()
-    return {"ok": True, "message": "아카이브 요청이 접수되었습니다."}
+        job_id = job.id
+        payload = archive_job_json(job)
+    spawn(run_archive_job, job_id)
+    return {"ok": True, "job": payload}
+
+
+@export_router.get("/settings/archive-status")
+def api_archive_status(request: Request):
+    user = require_auth(request)
+    cleanup_user_archives(user.id)
+    with get_session() as s:
+        job = s.query(ArchiveJob).filter_by(user_id=user.id).order_by(
+            desc(ArchiveJob.created_at), desc(ArchiveJob.id)
+        ).first()
+        return {"job": archive_job_json(job)}
+
+
+@export_router.get("/settings/archive-download/{job_uuid}")
+def api_archive_download(request: Request, job_uuid: str):
+    user = require_auth(request)
+    cleanup_user_archives(user.id)
+    with get_session() as s:
+        job = s.query(ArchiveJob).filter_by(uuid=job_uuid, user_id=user.id).first()
+        if not job:
+            raise HTTPException(status_code=404, detail="아카이브를 찾을 수 없습니다.")
+        if job.status != "completed" or not job.file_path:
+            raise HTTPException(status_code=409, detail="아카이브가 아직 준비되지 않았습니다.")
+        path = job.file_path
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="아카이브 파일이 삭제되었습니다.")
+    return FileResponse(
+        path,
+        media_type="application/zip",
+        filename=f"writ_archive_{user.username}.zip",
+    )

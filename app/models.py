@@ -473,6 +473,28 @@ class Notification(Base):
     post = relationship("Post", lazy="selectin")
 
 
+class ArchiveJob(Base):
+    """서버에서 생성하는 계정 아카이브 작업.
+
+    ZIP 파일은 공개 업로드 경로가 아닌 ARCHIVE_DIR에 저장하고, 완료되면
+    사용자 본인에게만 다운로드 엔드포인트를 제공한다.
+    """
+    __tablename__ = "archive_jobs"
+
+    id = Column(Integer, primary_key=True)
+    uuid = Column(String(36), default=generate_uuid, unique=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    status = Column(String(16), default="pending", nullable=False, index=True)  # pending, processing, completed, failed
+    file_path = Column(String(512), default="")
+    size_bytes = Column(Integer, default=0)
+    error = Column(Text, default="")
+    created_at = Column(DateTime(timezone=True), default=now)
+    updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User", lazy="selectin")
+
+
 class PushSubscription(Base):
     __tablename__ = "push_subscriptions"
 

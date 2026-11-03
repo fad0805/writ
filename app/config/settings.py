@@ -109,6 +109,11 @@ AVATAR_URL_PREFIX = os.environ.get("AVATAR_URL_PREFIX", "/uploads/avatars")
 # Orphan media cleanup (days; files older than this with no DB reference get removed by the daily worker)
 ORPHAN_MEDIA_MIN_AGE_DAYS = int(os.environ.get("ORPHAN_MEDIA_MIN_AGE_DAYS", "7"))
 
+# Account archive (posts/series + profile + media) is generated on the server
+# and stored outside the public uploads directory so download links stay private.
+ARCHIVE_DIR = os.environ.get("ARCHIVE_DIR", "data/archives")
+ARCHIVE_RETENTION_DAYS = _bounded_int_env("ARCHIVE_RETENTION_DAYS", 7, 1, 365)
+
 # Auto-delete worker interval (seconds). 만료된 글 하드 삭제 주기.
 # 예전엔 하루 한 번(3시)만 돌았는데, 그때 서버가 바쁘면 남은 글은 다음 날까지
 # 갇혔다. 주기를 짧게 두면 부하로 미루더라도 다음 주기에 이어서 처리된다.

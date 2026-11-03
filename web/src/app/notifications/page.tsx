@@ -38,6 +38,7 @@ const NOTIF_ICONS: Record<string, string> = {
   moderation: "shield_filled",
   new_episode: "book",
   poll_ended: "chart",
+  archive: "archive",
 };
 
 const TYPE_NAMES: Record<string, string> = { post: "게시글", novel: "시리즈", episode: "에피소드" };
@@ -47,6 +48,9 @@ interface NotificationMeta {
   reaction?: string;
   novel_title?: string;
   type?: string;
+  status?: string;
+  job_id?: string;
+  size_bytes?: number;
   target_type?: string;
   target_label?: string;
   action?: string;
@@ -90,6 +94,10 @@ const typeText = (t: string, meta?: NotificationMeta, emojiMap?: CustomEmoji[]) 
     if (meta?.type === "new_user") return `님이 가입했습니다`;
     const act = ACTION_NAMES[meta?.action || ""] || meta?.action || "중재";
     return `계정에 ${act} 조치가 적용되었습니다.`;
+  }
+  if (t === "archive") {
+    if (meta?.status === "failed") return "아카이브 생성에 실패했습니다";
+    return "아카이브가 준비되었습니다";
   }
   return "";
 };
@@ -311,9 +319,10 @@ export default function NotificationsPage() {
               else if (n.type === "moderation" && n.metadata?.type === "new_user") router.push(`/@${n.from_user?.username}`);
               else if (n.type === "mention" && n.post?.is_dm && n.from_user) router.push(`/direct/${n.from_user.id}`);
               else if (n.type === "new_episode" && n.metadata?.novel_id && n.metadata?.episode_id) router.push(`/series/${n.metadata.novel_id}/episodes/${n.metadata.episode_id}`);
+              else if (n.type === "archive") router.push("/users/settings/data");
             }}
-            style={{ cursor: ((n.type === "moderation" && (n.metadata?.type === "report" || n.metadata?.type === "new_user")) || (n.type === "mention" && n.post?.is_dm) || (n.type === "new_episode")) ? "pointer" : undefined }}>
-            <div className="notif-icon notif-icon-dynamic" style={{ color: n.type === "like" ? "#f1c40f" : n.type === "boost" ? "var(--accent)" : n.type === "follow" ? "#4fc3f7" : n.type === "new_episode" ? "#9b59b6" : (n.type === "moderation" && n.metadata?.type === "new_user") ? "#4fc3f7" : n.type === "moderation" ? "var(--danger)" : "var(--text-muted)", borderRadius: 8, overflow: "hidden", flexShrink: 0, cursor: n.from_user ? "pointer" : undefined }} onClick={n.from_user ? (e) => { e.stopPropagation(); router.push(`/@${n.from_user!.username}`); } : undefined}>
+            style={{ cursor: ((n.type === "moderation" && (n.metadata?.type === "report" || n.metadata?.type === "new_user")) || (n.type === "mention" && n.post?.is_dm) || n.type === "new_episode" || n.type === "archive") ? "pointer" : undefined }}>
+            <div className="notif-icon notif-icon-dynamic" style={{ color: n.type === "like" ? "#f1c40f" : n.type === "boost" ? "var(--accent)" : n.type === "follow" ? "#4fc3f7" : n.type === "new_episode" ? "#9b59b6" : n.type === "archive" ? "var(--accent)" : (n.type === "moderation" && n.metadata?.type === "new_user") ? "#4fc3f7" : n.type === "moderation" ? "var(--danger)" : "var(--text-muted)", borderRadius: 8, overflow: "hidden", flexShrink: 0, cursor: n.from_user && n.type !== "archive" ? "pointer" : undefined }} onClick={n.from_user && n.type !== "archive" ? (e) => { e.stopPropagation(); router.push(`/@${n.from_user!.username}`); } : undefined}>
               {n.from_user && (n.type === "like" || n.type === "boost" || n.type === "follow" || n.type === "follow_request" || n.type === "mention" || n.type === "new_episode" || n.type === "poll_ended" || (n.type === "moderation" && n.metadata?.type === "new_user") || (n.type === "moderation" && n.metadata?.type === "migrate_request")) ? (
                 <Avatar user={n.from_user} style={{ width: 40, height: 40, borderRadius: 8 }} />
               ) : (
@@ -355,6 +364,13 @@ export default function NotificationsPage() {
                 </div></>
               ) : n.type === "moderation" ? (
                 <><span className="font-bold" style={{ color: "var(--danger)" }}>{ACTION_NAMES[n.metadata?.action || ""] || n.metadata?.action || "중재"}</span> 조치가 적용되었습니다.</>
+              ) : n.type === "archive" ? (
+                <>
+                  {n.metadata?.status === "failed" ? "아카이브 생성에 실패했습니다." : "아카이브가 준비되었습니다."}
+                  {n.metadata?.status !== "failed" && (
+                    <Link href="/users/settings/data" className="notif-from-link"> 내려받기</Link>
+                  )}
+                </>
               ) : n.type === "poll_ended" ? (
                 <>회원님이 참여한 투표가 끝났습니다</>
               ) : (

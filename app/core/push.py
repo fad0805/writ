@@ -41,8 +41,9 @@ NOTIF_LABELS = {
     "post": ("새 포스트", "팔로우하는 사용자가 새 포스트를 작성했습니다"),
     "new_episode": ("새 에피소드", "팔로우하는 시리즈에 새 에피소드가 등록되었습니다"),
     "moderation": ("알림", "관리자에게서 알림이 있습니다"),
-    "poll_ended": ("투표 종료", "참여한 �표가 종료되었습니다"),
+    "poll_ended": ("투표 종료", "참여한 투표가 종료되었습니다"),
     "vote": ("투표", "회원님의 투표에 참여했습니다"),
+    "archive": ("아카이브", "아카이브가 준비되었습니다"),
 }
 
 
@@ -122,6 +123,8 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
                 return
 
             title, body = NOTIF_LABELS.get(notification_type, ("알림", "새 알림이 있습니다"))
+            if notification_type == "archive" and metadata and metadata.get("status") == "failed":
+                body = "아카이브 생성에 실패했습니다."
             if notification_type == "mention":
                 if from_username:
                     body = f"@{from_username}"
@@ -162,6 +165,8 @@ def _send_push_sync(user_id: int, notification_type: str, from_username: str, po
                 novel_id = metadata.get("novel_id")
                 if novel_id:
                     url = f"/series/{novel_id}"
+            elif notification_type == "archive":
+                url = "/users/settings/data"
 
             payload = json.dumps({
                 "title": f"WRIT — {title}",
