@@ -21,8 +21,8 @@ from app.models import (
     SeriesNotice,
     User,
 )
-from app.utils.media_urls import iter_upload_urls
-from app.utils.storage import get_storage
+from app.utils.media_urls import iter_content_media_urls
+from app.utils.storage import get_storage, media_key_candidates, resolve_media_key
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -85,13 +85,11 @@ def collect_referenced_media_keys(s: Session, storage: StorageBackend) -> set[st
     )
     for rows in content_sources:
         for (content,) in rows:
-            urls.update(iter_upload_urls(content))
+            urls.update(iter_content_media_urls(content))
 
     keys: set[str] = set()
     for url in urls:
-        key = storage.key_from_url(url)
-        if key:
-            keys.add(key.lstrip("/"))
+        keys.update(media_key_candidates(storage, url))
     return keys
 
 
@@ -101,7 +99,7 @@ def post_media_urls(post: Post, s: Session | None = None) -> set[str]:
     Passing a session also includes older edit-history content, so deleting a
     post does not leave media from previous versions behind.
     """
-    urls: set[str] = set(iter_upload_urls(post.content))
+    urls: set[str] = set(iter_content_media_urls(post.content))
     for item in post.media_attachments or []:
         if isinstance(item, dict) and item.get("url"):
             urls.add(item["url"])
@@ -109,13 +107,13 @@ def post_media_urls(post: Post, s: Session | None = None) -> set[str]:
             urls.add(item)
     if s is not None and post.id is not None:
         for (content,) in s.query(PostEdit.content).filter(PostEdit.post_id == post.id).all():
-            urls.update(iter_upload_urls(content))
+            urls.update(iter_content_media_urls(content))
     return urls
 
 
 def episode_media_urls(episode: Episode) -> set[str]:
     """Collect local-media URLs belonging to a series episode."""
-    urls: set[str] = set(iter_upload_urls(episode.content))
+    urls: set[str] = set(iter_content_media_urls(episode.content))
     for url in episode.image_urls or []:
         if isinstance(url, str) and url:
             urls.add(url)
@@ -126,7 +124,7 @@ def episode_media_urls(episode: Episode) -> set[str]:
 
 def content_media_urls(content: str | None) -> set[str]:
     """Collect local-media URLs embedded in a piece of HTML/text."""
-    return set(iter_upload_urls(content))
+    return set(iter_content_media_urls(content))
 
 
 def delete_media_urls_if_unreferenced(
@@ -147,10 +145,7 @@ def delete_media_urls_if_unreferenced(
     for url in urls:
         if not url:
             continue
-        key = storage.key_from_url(url)
-        if not key:
-            continue
-        key = key.lstrip("/")
+        key = resolve_media_key(storage, url)
         if key and key not in protected:
             keys.add(key)
 

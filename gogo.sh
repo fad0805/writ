@@ -772,6 +772,62 @@ delete_user_archives(user_id)
 print(f"완료: @{username} 아카이브 기록/파일 삭제 — 주 1회 제한이 초기화되었습니다.")
 PYEOF
 
+elif [ "$1" = "archive-debug" ]; then
+  archive_user="${2:-$OWN_USER}"
+  if [ -z "$archive_user" ]; then
+    echo "사용법: ./gogo.sh archive-debug [username]" >&2
+    echo "       username 생략 시 .env.production의 WRIT_USER 사용" >&2
+    exit 1
+  fi
+  docker compose exec -T -e ARCHIVE_USER="$archive_user" api python3 <<'PYEOF'
+import json
+import os
+import sys
+import tempfile
+import zipfile
+
+from app.core.archive import write_archive
+from app.db.database import get_session
+from app.models import Post, User
+from app.utils.media_refs import post_media_urls
+from app.utils.storage import get_storage, media_key_candidates, resolve_media_key
+
+username = os.environ.get("ARCHIVE_USER", "")
+with get_session() as s:
+    user = s.query(User).filter_by(username=username, is_remote=False).first()
+    if not user:
+        print(f"로컬 계정을 찾을 수 없습니다: {username}", file=sys.stderr)
+        sys.exit(1)
+    user_id = user.id
+    posts = s.query(Post).filter_by(author_id=user_id, is_deleted=False).all()
+    urls = set()
+    for post in posts:
+        urls.update(post_media_urls(post, s))
+    profile_urls = [user.profile_image, user.header_image]
+
+storage = get_storage()
+print(f"@{username} (user_id={user_id}) posts={len(posts)} storage={type(storage).__name__}")
+for url in profile_urls:
+    if url:
+        print(f"  profile media: {url} -> {resolve_media_key(storage, url)}")
+print(f"post media URLs: {len(urls)}")
+for url in sorted(urls):
+    candidates = media_key_candidates(storage, url)
+    print(f"  {url}")
+    print(f"    candidates={candidates} resolved={resolve_media_key(storage, url)}")
+
+with tempfile.NamedTemporaryFile(suffix=".zip") as tmp:
+    write_archive(user_id, tmp.name)
+    with zipfile.ZipFile(tmp.name) as z:
+        media = [name for name in z.namelist() if name.startswith("media/")]
+        print(f"ZIP media entries: {len(media)}")
+        for name in media:
+            print(f"  {name}")
+        posts_json = json.loads(z.read("posts.json"))
+        attached = sum(1 for post in posts_json if post.get("media_attachments"))
+        print(f"ZIP posts: {len(posts_json)}, with media_attachments: {attached}")
+PYEOF
+
 elif [ "$1" = "check-post" ]; then
   post_id="${2}"
   if [ -z "$post_id" ]; then
@@ -2077,6 +2133,7 @@ else
   echo "  purge-deleted   - 스레드에 없는 삭제된 게시글 완전 제거 (댓글 있는 건 껍데기 유지)"
   echo "  purge-orphan    - 내용/부스트/답글/ap_id 없는 고아 포스트 삭제"
   echo "  archive-reset   - 특정 계정의 아카이브 기록/파일 삭제로 주 1회 제한 초기화 (예: ./gogo.sh archive-reset $OWN_USER)"
+  echo "  archive-debug   - 특정 계정의 포스트 미디어 URL/저장소 해석 결과와 ZIP 포함 내역 출력 (예: ./gogo.sh archive-debug $OWN_USER)"
   echo "  purge-shadows   - 자기 도메인을 가리키는 그림자 원격 유저 삭제"
   echo "  check-remote-edit - 원격 게시글과 로컬 내용을 비교 (Update 수신 여부 확인용). 예: ./gogo.sh check-remote-edit <post_id|ap_id>"
   echo "  refresh-remote-post - 원격 게시글을 강제로 재조회해 수정내용 반영. 예: ./gogo.sh refresh-remote-post <post_id|ap_id>"

@@ -2,7 +2,7 @@ import logging
 import os
 import time
 from abc import ABC, abstractmethod
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 import boto3
 
@@ -203,6 +203,75 @@ def get_storage() -> StorageBackend:
             public_url=S3_PUBLIC_URL,
         )
     return LocalStorage(base_dir="uploads", url_prefix="/uploads")
+
+
+def media_key_candidates(storage: StorageBackend, url_or_key: str) -> list[str]:
+    """Return plausible storage keys for one media URL.
+
+    Older rows can contain absolute URLs for a previous domain/CDN, or a path
+    without the storage prefix (``/media/...``). The backend's normal
+    ``key_from_url`` only accepts its current host, so add path-based fallbacks
+    before giving up. Callers that protect files from cleanup should keep every
+    candidate; callers that read/delete a file should use ``resolve_media_key``.
+    """
+    if not url_or_key:
+        return []
+
+    candidates: list[str] = []
+
+    def _add(value: str | None) -> None:
+        if not value:
+            return
+        key = unquote(value).lstrip("/")
+        if not key or ".." in key.split("/"):
+            return
+        if key not in candidates:
+            candidates.append(key)
+
+    _add(storage.key_from_url(url_or_key))
+    path = urlparse(url_or_key).path if url_or_key.startswith(("http://", "https://")) else url_or_key
+
+    # Prefer the key without the public URL prefix (/uploads/media/x -> media/x)
+    # before trying the raw path, which would double the prefix on local storage.
+    uploads_marker = "uploads/"
+    if uploads_marker in path:
+        _add(path.split(uploads_marker, 1)[1])
+    if path.startswith(uploads_marker):
+        _add(path[len(uploads_marker):])
+
+    media_marker = "media/"
+    if media_marker in path:
+        _add(path[path.find(media_marker):])
+
+    _add(path)
+
+    url_prefix = getattr(storage, "url_prefix", "").lstrip("/")
+    if url_prefix:
+        prefix_marker = url_prefix + "/"
+        if prefix_marker in path:
+            _add(path.split(prefix_marker, 1)[1])
+        if path.startswith(prefix_marker):
+            _add(path[len(prefix_marker):])
+
+    bucket = getattr(storage, "bucket", "")
+    if bucket:
+        bucket_marker = bucket + "/"
+        if bucket_marker in path:
+            _add(path.split(bucket_marker, 1)[1])
+        if path.startswith(bucket_marker):
+            _add(path[len(bucket_marker):])
+    return candidates
+
+
+def resolve_media_key(storage: StorageBackend, url_or_key: str) -> str | None:
+    """Return the first candidate key that exists in the active storage."""
+    for key in media_key_candidates(storage, url_or_key):
+        try:
+            if storage.exists(key):
+                return key
+        except Exception:
+            continue
+    return None
 
 
 def _cleanup_avatars():

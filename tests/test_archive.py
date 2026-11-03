@@ -116,6 +116,70 @@ def test_archive_contains_profile_series_and_media(client, auth_cookie, make_pos
             storage.delete(key)
 
 
+def test_archive_resolves_legacy_media_urls(client, auth_cookie, make_post):
+    """Absolute URLs from an old host/CDN or without /uploads must still resolve."""
+    user, _cookie = auth_cookie("alice")
+    storage = get_storage()
+    keys = {
+        "attachment": "test_archive/legacy_attachment.webp",
+        "inline": "test_archive/legacy_inline.webp",
+    }
+    payloads = {
+        "attachment": b"legacy-attachment",
+        "inline": b"legacy-inline",
+    }
+    for name, key in keys.items():
+        storage.save(key, payloads[name])
+    old_host = "https://old.example.test"
+    attachment_url = f"{old_host}/uploads/{keys['attachment']}"
+    inline_url = f"https://cdn.example.test/{keys['inline']}"
+    post = make_post(user, content=f'<p>legacy</p><img src="{inline_url}">')
+    try:
+        with get_session() as s:
+            db_post = s.query(Post).get(post.id)
+            db_post.media_attachments = [{"url": attachment_url, "type": "image", "alt": ""}]
+            s.commit()
+
+        buf = io.BytesIO()
+        write_archive(user.id, buf)
+        with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as z:
+            names = set(z.namelist())
+            posts = json.loads(z.read("posts.json"))
+            entry = next(p for p in posts if p["id"] == post.id)
+            attachment = entry["media_attachments"][0]
+            assert attachment["url"] in names
+            assert z.read(attachment["url"]) == payloads["attachment"]
+            assert inline_url not in entry["content"]
+            inline_path = re.search(r'src="(media/[^"]+)"', entry["content"]).group(1)
+            assert inline_path in names
+            assert z.read(inline_path) == payloads["inline"]
+
+        from app.utils.media_refs import collect_referenced_media_keys
+        with get_session() as s:
+            used = collect_referenced_media_keys(s, storage)
+        assert keys["attachment"] in used
+        assert keys["inline"] in used
+    finally:
+        for key in keys.values():
+            storage.delete(key)
+
+
+def test_orphan_cleanup_protects_legacy_media_urls(client, auth_cookie, make_post):
+    from app.utils.media_refs import collect_referenced_media_keys
+
+    user, _cookie = auth_cookie("alice")
+    storage = get_storage()
+    key = "test_archive/legacy_cleanup.webp"
+    storage.save(key, b"legacy")
+    try:
+        make_post(user, content=f'<img src="https://old.example.test/uploads/{key}">')
+        with get_session() as s:
+            used = collect_referenced_media_keys(s, storage)
+        assert key in used
+    finally:
+        storage.delete(key)
+
+
 def test_orphan_cleanup_protects_media_embedded_in_content(client, auth_cookie, make_post):
     from app.utils.media_refs import collect_referenced_media_keys
 

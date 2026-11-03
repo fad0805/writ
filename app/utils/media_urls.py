@@ -16,10 +16,12 @@ _SRC_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Absolute or root-relative upload URLs. The host, if present, is validated by
-# the storage backend before anything is read or protected from cleanup.
+# Absolute or root-relative upload URLs. Older rows may use ``/media/...``
+# without the ``/uploads`` prefix, so both forms are recognized. The host, if
+# present, is resolved by the storage backend before anything is read or
+# protected from cleanup.
 _UPLOAD_URL_RE = re.compile(
-    r'(?:https?://[^\s"\'<>]+?)?/uploads/[^\s"\'<>()]+',
+    r'(?:https?://[^\s"\'<>]+?)?/(?:uploads/|media/)[^\s"\'<>()]+',
     re.IGNORECASE,
 )
 
@@ -31,6 +33,27 @@ def iter_upload_urls(value: str | None) -> Iterator[str]:
     for match in _UPLOAD_URL_RE.finditer(value):
         url = unescape(match.group(0)).rstrip(".,;:!?")
         if url:
+            yield url
+
+
+def iter_content_media_urls(value: str | None) -> Iterator[str]:
+    """Yield media URLs embedded in content, including non-/uploads src paths.
+
+    The editor normally writes ``/uploads/media/...``, but old rows may point
+    at a previous domain/CDN or use a path without the ``/uploads`` prefix.
+    Checking every ``src`` attribute keeps those files protected from cleanup.
+    """
+    if not value:
+        return
+    seen: set[str] = set()
+    for url in iter_upload_urls(value):
+        if url not in seen:
+            seen.add(url)
+            yield url
+    for match in _SRC_RE.finditer(value):
+        url = unescape(match.group("url")).rstrip(".,;:!?")
+        if url and url not in seen:
+            seen.add(url)
             yield url
 
 

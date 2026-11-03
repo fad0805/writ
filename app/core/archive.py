@@ -29,7 +29,7 @@ from app.db.database import get_session
 from app.models import ArchiveJob, Episode, Notification, Novel, Post, SeriesNotice, User
 from app.utils.datetime import _fmt_dt, now
 from app.utils.media_urls import rewrite_src_urls
-from app.utils.storage import get_storage
+from app.utils.storage import get_storage, media_key_candidates
 
 logger = logging.getLogger("writ.archive")
 
@@ -65,6 +65,7 @@ class _MediaCollector:
         self.zf = zf
         self.storage = get_storage()
         self.seen: dict[str, str] = {}
+        self.seen_keys: dict[str, str] = {}
         self.items: list[dict] = []
         self.missing: list[dict] = []
         self._counter = 0
@@ -75,19 +76,31 @@ class _MediaCollector:
         if url in self.seen:
             return self.seen[url]
 
-        key = self.storage.key_from_url(url)
-        if not key:
+        keys = media_key_candidates(self.storage, url)
+        if not keys:
+            logger.info("archive: media is not local (category=%s): %s", category, url)
             self.missing.append({"url": url, "category": category, "reason": "not_local"})
             return None
-        key = key.lstrip("/")
-        if not key or ".." in key.split("/"):
-            self.missing.append({"url": url, "category": category, "reason": "invalid_key"})
-            return None
 
-        try:
-            data = self.storage.get(key)
-        except Exception as exc:
-            logger.warning("archive: failed to read media %s: %s", url, exc)
+        data: bytes | None = None
+        used_key = ""
+        for key in keys:
+            if key in self.seen_keys:
+                self.seen[url] = self.seen_keys[key]
+                return self.seen[url]
+            try:
+                data = self.storage.get(key)
+                used_key = key
+                break
+            except Exception:
+                continue
+        if data is None:
+            logger.warning(
+                "archive: media unavailable (category=%s, tried=%s): %s",
+                category,
+                ",".join(keys),
+                url,
+            )
             self.missing.append({"url": url, "category": category, "reason": "unavailable"})
             return None
 
@@ -101,6 +114,7 @@ class _MediaCollector:
 
         self.zf.writestr(archive_path, data)
         self.seen[url] = archive_path
+        self.seen_keys[used_key] = archive_path
         self.items.append({
             "archive_path": archive_path,
             "original_url": url,
