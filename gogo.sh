@@ -740,6 +740,38 @@ with get_session() as s:
         print(f"deleted {deleted} orphan posts")
 PYEOF
 
+elif [ "$1" = "archive-reset" ]; then
+  archive_user="${2:-$OWN_USER}"
+  if [ -z "$archive_user" ]; then
+    echo "사용법: ./gogo.sh archive-reset [username]" >&2
+    echo "       username 생략 시 .env.production의 WRIT_USER 사용" >&2
+    exit 1
+  fi
+  confirm_dangerous "archive-reset $archive_user (아카이브 기록/파일 삭제)"
+  docker compose exec -T -e ARCHIVE_USER="$archive_user" api python3 <<'PYEOF'
+import os
+import sys
+
+from app.core.archive import delete_user_archives
+from app.db.database import get_session
+from app.models import ArchiveJob, User
+
+username = os.environ.get("ARCHIVE_USER", "")
+with get_session() as s:
+    user = s.query(User).filter_by(username=username, is_remote=False).first()
+    if not user:
+        print(f"로컬 계정을 찾을 수 없습니다: {username}", file=sys.stderr)
+        sys.exit(1)
+    user_id = user.id
+    jobs = s.query(ArchiveJob).filter_by(user_id=user_id).order_by(ArchiveJob.id).all()
+    print(f"@{username} (user_id={user_id}) 아카이브 작업 {len(jobs)}개")
+    for job in jobs:
+        print(f"  - {job.uuid} {job.status} completed_at={job.completed_at} file={job.file_path or '-'}")
+
+delete_user_archives(user_id)
+print(f"완료: @{username} 아카이브 기록/파일 삭제 — 주 1회 제한이 초기화되었습니다.")
+PYEOF
+
 elif [ "$1" = "check-post" ]; then
   post_id="${2}"
   if [ -z "$post_id" ]; then
@@ -2044,6 +2076,7 @@ else
   echo "  dedup-users     - 중복 리모트 유저 통합"
   echo "  purge-deleted   - 스레드에 없는 삭제된 게시글 완전 제거 (댓글 있는 건 껍데기 유지)"
   echo "  purge-orphan    - 내용/부스트/답글/ap_id 없는 고아 포스트 삭제"
+  echo "  archive-reset   - 특정 계정의 아카이브 기록/파일 삭제로 주 1회 제한 초기화 (예: ./gogo.sh archive-reset $OWN_USER)"
   echo "  purge-shadows   - 자기 도메인을 가리키는 그림자 원격 유저 삭제"
   echo "  check-remote-edit - 원격 게시글과 로컬 내용을 비교 (Update 수신 여부 확인용). 예: ./gogo.sh check-remote-edit <post_id|ap_id>"
   echo "  refresh-remote-post - 원격 게시글을 강제로 재조회해 수정내용 반영. 예: ./gogo.sh refresh-remote-post <post_id|ap_id>"
