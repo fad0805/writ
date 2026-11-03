@@ -19,8 +19,23 @@ from app.core.activitypub import (
 from app.core.archive import cleanup_expired_archives
 from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs
 from app.db.database import engine, get_session
-from app.models import Bookmark, Boost, Like, Notification, PendingDelivery, Post, RemoteMedia, User, Vote
+from app.models import (
+    Bookmark,
+    Boost,
+    Episode,
+    EpisodeDraft,
+    Like,
+    Notification,
+    PendingDelivery,
+    Post,
+    PostEdit,
+    RemoteMedia,
+    SeriesNotice,
+    User,
+    Vote,
+)
 from app.utils.crypto import decrypt_key, sign_string
+from app.utils.media_urls import iter_upload_urls
 from app.utils.storage import LocalStorage, get_storage
 
 logger = logging.getLogger(__name__)
@@ -344,12 +359,52 @@ def auto_delete_expired_posts():
         time.sleep(AUTO_DELETE_INTERVAL_SECONDS)
 
 
+def _collect_referenced_media_keys(s, storage) -> set[str]:
+    """Every storage key still referenced by a post, episode, notice or draft.
+
+    Attachments alone are not enough: the editor inserts images directly into
+    HTML (``<img src="/uploads/media/...">``), so those URLs must protect the
+    files from the orphan-media worker as well.
+    """
+    urls: set[str] = set()
+    for (attachments,) in s.query(Post.media_attachments).filter(Post.media_attachments.isnot(None)).all():
+        for item in attachments or []:
+            if isinstance(item, dict) and item.get("url"):
+                urls.add(item["url"])
+    for (local_url,) in s.query(RemoteMedia.local_url).all():
+        if local_url:
+            urls.add(local_url)
+    for (images,) in s.query(Episode.image_urls).filter(Episode.image_urls.isnot(None)).all():
+        for url in images or []:
+            if isinstance(url, str) and url:
+                urls.add(url)
+
+    content_sources = (
+        s.query(Post.content).filter(Post.is_deleted == False).all(),
+        s.query(PostEdit.content).join(Post, PostEdit.post_id == Post.id).filter(Post.is_deleted == False).all(),
+        s.query(Episode.content).filter(Episode.content.isnot(None)).all(),
+        s.query(SeriesNotice.content).filter(SeriesNotice.content.isnot(None)).all(),
+        s.query(EpisodeDraft.content).filter(EpisodeDraft.content.isnot(None)).all(),
+    )
+    for rows in content_sources:
+        for (content,) in rows:
+            urls.update(iter_upload_urls(content))
+
+    keys: set[str] = set()
+    for url in urls:
+        key = storage.key_from_url(url)
+        if key:
+            keys.add(key.lstrip("/"))
+    return keys
+
+
 def cleanup_orphan_media():
     """Reclaim local media files (uploads/media/) no longer referenced anywhere.
 
     '지우고 다시 쓰기'로 보존됐지만(keep_media=true) 새 글에 재첨부되지 않거나, 작성 중
     업로드만 하고 게시하지 않은 미디어가 고아로 남는다. 매일 3시에 저장소를 스캔해
-    (1) Post.media_attachments나 RemoteMedia.local_url에 존재하지 않고
+    (1) Post.media_attachments, HTML content(게시글/에피소드/공지/초안),
+        Episode.image_urls, 또는 RemoteMedia.local_url에 존재하지 않고
     (2) 생성(수정)된 지 임계 시간 이상 지난 파일을 삭제한다.
 
     원격 캐시 미디어(media/remote/)는 _cleanup_expired_media가 별도 관리하므로 제외하고,
@@ -375,24 +430,14 @@ def cleanup_orphan_media():
                 continue
 
             with get_session() as s:
-                used = set()
-                for (ma,) in s.query(Post.media_attachments).filter(Post.media_attachments.isnot(None)).all():
-                    if not ma:
-                        continue
-                    for m in ma:
-                        if isinstance(m, dict) and m.get("url"):
-                            used.add(m["url"])
-                for (lu,) in s.query(RemoteMedia.local_url).all():
-                    if lu:
-                        used.add(lu)
+                used = _collect_referenced_media_keys(s, storage)
 
             now = time.time()
             deleted = 0
             for key in storage.list_keys("media"):
                 if key.startswith("remote/"):
                     continue
-                url = storage.url(key)
-                if url in used:
+                if key in used:
                     continue
                 mtime = storage.mtime(key)
                 if mtime is not None and now - mtime > ORPHAN_MEDIA_MIN_AGE_DAYS * 24 * 3600:

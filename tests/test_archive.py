@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from app.core.archive import run_archive_job, write_archive
 from app.db.database import get_session
-from app.models import Episode, Notification, Novel, Post, User
+from app.models import Episode, Notification, Novel, Post, SeriesNotice, User
 from app.utils.storage import get_storage
 
 
@@ -18,20 +18,26 @@ def test_archive_contains_profile_series_and_media(client, auth_cookie, make_pos
         "avatar": "test_archive/avatar.webp",
         "header": "test_archive/header.webp",
         "post": "test_archive/post.webp",
+        "inline_post": "test_archive/inline_post.webp",
         "cover": "test_archive/cover.webp",
         "episode": "test_archive/episode.webp",
+        "inline_episode": "test_archive/inline_episode.webp",
+        "inline_notice": "test_archive/inline_notice.webp",
         "audio": "test_archive/audio.mp3",
     }
     payloads = {
         "avatar": b"avatar-bytes",
         "header": b"header-bytes",
         "post": b"post-photo-bytes",
+        "inline_post": b"inline-post-bytes",
         "cover": b"cover-bytes",
         "episode": b"episode-image-bytes",
+        "inline_episode": b"inline-episode-bytes",
+        "inline_notice": b"inline-notice-bytes",
         "audio": b"audio-bytes",
     }
     urls = {name: storage.save(key, payloads[name]) for name, key in keys.items()}
-    post = make_post(user, content="<p>with photo</p>")
+    post = make_post(user, content=f'<p>with photo</p><img src="{urls["inline_post"]}">')
 
     try:
         with get_session() as s:
@@ -48,9 +54,14 @@ def test_archive_contains_profile_series_and_media(client, auth_cookie, make_pos
                 novel_id=novel.id,
                 episode_number=1,
                 title="1화",
-                content="<p>episode</p>",
+                content=f'<p>episode</p><img src="{urls["inline_episode"]}">',
                 image_urls=[urls["episode"]],
                 audio_url=urls["audio"],
+            ))
+            s.add(SeriesNotice(
+                novel_id=novel.id,
+                title="공지",
+                content=f'<p>notice</p><img src="{urls["inline_notice"]}">',
             ))
             s.commit()
 
@@ -62,6 +73,7 @@ def test_archive_contains_profile_series_and_media(client, auth_cookie, make_pos
             posts = json.loads(z.read("posts.json"))
             novels = json.loads(z.read("novels.json"))
             manifest = json.loads(z.read("manifest.json"))
+            archived = {item["original_url"]: item["archive_path"] for item in manifest["media"]}
 
             assert profile["username"] == "alice"
             assert profile["summary"] == "작가 소개"
@@ -76,6 +88,9 @@ def test_archive_contains_profile_series_and_media(client, auth_cookie, make_pos
             assert attachment["url"] in names
             assert attachment["original_url"] == urls["post"]
             assert z.read(attachment["url"]) == payloads["post"]
+            assert urls["inline_post"] not in post_entry["content"]
+            assert archived[urls["inline_post"]] in post_entry["content"]
+            assert z.read(archived[urls["inline_post"]]) == payloads["inline_post"]
 
             novel_entry = novels[0]
             assert novel_entry["cover_image_archive"] in names
@@ -83,12 +98,50 @@ def test_archive_contains_profile_series_and_media(client, auth_cookie, make_pos
             assert episode_entry["image_urls"][0] in names
             assert episode_entry["audio_url"] in names
             assert z.read(episode_entry["audio_url"]) == payloads["audio"]
+            assert urls["inline_episode"] not in episode_entry["content"]
+            assert archived[urls["inline_episode"]] in episode_entry["content"]
+            assert z.read(archived[urls["inline_episode"]]) == payloads["inline_episode"]
+            assert urls["inline_notice"] not in novel_entry["notices"][0]["content"]
+            assert archived[urls["inline_notice"]] in novel_entry["notices"][0]["content"]
+            assert z.read(archived[urls["inline_notice"]]) == payloads["inline_notice"]
 
-            assert manifest["counts"]["media"] == 6
+            assert manifest["counts"]["media"] == 9
             assert manifest["counts"]["novels"] == 1
     finally:
         for key in keys.values():
             storage.delete(key)
+
+
+def test_orphan_cleanup_protects_media_embedded_in_content(client, auth_cookie, make_post):
+    from app.core.workers import _collect_referenced_media_keys
+
+    user, _cookie = auth_cookie("alice")
+    storage = get_storage()
+    key = "test_archive/inline_cleanup.webp"
+    series_key = "test_archive/series_cleanup.webp"
+    url = storage.save(key, b"inline")
+    series_url = storage.save(series_key, b"series")
+    try:
+        make_post(user, content=f'<p>keep inline media</p><img src="{url}">')
+        with get_session() as s:
+            novel = Novel(author_id=user.id, title="보호 테스트")
+            s.add(novel)
+            s.flush()
+            s.add(Episode(
+                novel_id=novel.id,
+                episode_number=1,
+                title="1화",
+                content="<p>comic</p>",
+                image_urls=[series_url],
+            ))
+            s.commit()
+        with get_session() as s:
+            used = _collect_referenced_media_keys(s, storage)
+        assert key in used
+        assert series_key in used
+    finally:
+        storage.delete(key)
+        storage.delete(series_key)
 
 
 def test_archive_request_runs_in_background_and_notifies(client, auth_cookie, make_post, monkeypatch, tmp_path):
@@ -131,6 +184,28 @@ def test_archive_request_runs_in_background_and_notifies(client, auth_cookie, ma
     with zipfile.ZipFile(io.BytesIO(download.content)) as z:
         assert "profile.json" in z.namelist()
         assert "posts.json" in z.namelist()
+
+
+def test_archive_can_only_be_created_once_per_week(client, auth_cookie, make_post, monkeypatch, tmp_path):
+    import app.core.archive as archive_module
+    import app.routes.api._export as export_module
+
+    monkeypatch.setattr(archive_module, "ARCHIVE_DIR", str(tmp_path))
+    monkeypatch.setattr(archive_module, "_notify_archive_ready", lambda *args, **kwargs: None)
+    monkeypatch.setattr(export_module, "spawn", lambda *args, **kwargs: None)
+
+    user, cookie = auth_cookie("carol")
+    make_post(user, content="<p>weekly archive</p>")
+    first = client.post("/api/settings/archive-request", cookies=cookie).json()["job"]
+    run_archive_job(first["id"])
+
+    second = client.post("/api/settings/archive-request", cookies=cookie)
+    assert second.status_code == 429
+    assert "일주일에 한 번" in second.json()["detail"]
+
+    status = client.get("/api/settings/archive-status", cookies=cookie).json()
+    assert status["job"]["status"] == "completed"
+    assert status["next_available_at"]
 
 
 def test_expired_archives_are_removed(client, auth_cookie, monkeypatch, tmp_path):

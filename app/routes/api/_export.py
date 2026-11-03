@@ -13,6 +13,7 @@ from app.config.settings import BASE_URL
 from app.core.archive import (
     _posts_for_export,
     archive_job_json,
+    archive_next_available_at,
     cleanup_user_archives,
     run_archive_job,
     write_archive,
@@ -22,6 +23,7 @@ from app.core.threads import spawn
 from app.db.database import get_session
 from app.models import ArchiveJob, Bookmark, Follow, KeywordMute, Post, User, UserBlock, UserMute
 from app.routes.api._settings import _domain_from_actor
+from app.utils.datetime import _fmt_dt
 
 export_router = APIRouter()
 
@@ -268,6 +270,13 @@ def api_archive_request(request: Request):
         if active:
             return {"ok": True, "job": archive_job_json(active), "already_running": True}
 
+        next_at = archive_next_available_at(user.id)
+        if next_at is not None:
+            raise HTTPException(
+                status_code=429,
+                detail=f"아카이브는 일주일에 한 번만 만들 수 있습니다. 다음 생성 가능 시각: {_fmt_dt(next_at)}",
+            )
+
         job = ArchiveJob(user_id=user.id, status="pending")
         s.add(job)
         s.commit()
@@ -281,11 +290,15 @@ def api_archive_request(request: Request):
 def api_archive_status(request: Request):
     user = require_auth(request)
     cleanup_user_archives(user.id)
+    next_at = archive_next_available_at(user.id)
     with get_session() as s:
         job = s.query(ArchiveJob).filter_by(user_id=user.id).order_by(
             desc(ArchiveJob.created_at), desc(ArchiveJob.id)
         ).first()
-        return {"job": archive_job_json(job)}
+        return {
+            "job": archive_job_json(job),
+            "next_available_at": _fmt_dt(next_at) if next_at else None,
+        }
 
 
 @export_router.get("/settings/archive-download/{job_uuid}")

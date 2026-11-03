@@ -14,6 +14,7 @@ type ArchiveJob = {
 export default function ExportPage() {
   const [loading, setLoading] = useState(false);
   const [archiveJob, setArchiveJob] = useState<ArchiveJob | null>(null);
+  const [archiveNextAvailableAt, setArchiveNextAvailableAt] = useState<string | null>(null);
   const [archiveError, setArchiveError] = useState("");
 
   const handleDownload = useCallback(async (type: string) => {
@@ -38,6 +39,7 @@ export default function ExportPage() {
       if (!res.ok) return;
       const d = await res.json();
       setArchiveJob(d.job || null);
+      setArchiveNextAvailableAt(d.next_available_at || null);
     } catch {}
   }, []);
 
@@ -45,7 +47,11 @@ export default function ExportPage() {
     let cancelled = false;
     fetch("/api/settings/archive-status", { credentials: "include" })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d) => { if (!cancelled) setArchiveJob(d.job || null); })
+      .then((d) => {
+        if (cancelled) return;
+        setArchiveJob(d.job || null);
+        setArchiveNextAvailableAt(d.next_available_at || null);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
@@ -55,6 +61,12 @@ export default function ExportPage() {
     const timer = setInterval(loadArchiveStatus, 3000);
     return () => clearInterval(timer);
   }, [archiveJob, loadArchiveStatus]);
+
+  const formatAvailableAt = (value: string) => {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleString("ko-KR", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  };
 
   const handleRequestArchive = useCallback(async () => {
     setLoading(true);
@@ -92,15 +104,22 @@ export default function ExportPage() {
           <label>게시물 및 업로드된 미디어</label>
           <p className="form-help" style={{ marginBottom: 8 }}>
             프로필 정보와 사진, 모든 게시글, 시리즈/에피소드, 업로드한 미디어를 하나의 ZIP으로 서버에서 생성합니다.
-            준비되면 알림을 보내드리며, 생성 후 7일간 다운로드할 수 있습니다.
+            준비되면 알림을 보내드리며, 생성 후 7일간 다운로드할 수 있습니다. 아카이브는 일주일에 한 번만 만들 수 있습니다.
           </p>
           {archiveJob?.status === "completed" ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <p style={{ color: "var(--success)", fontSize: 14, margin: 0 }}>아카이브가 준비되었습니다.</p>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <a href={archiveJob.download_url} className="btn btn-primary" download>아카이브 다운로드 (ZIP)</a>
-                <button onClick={handleRequestArchive} disabled={loading} className="btn btn-outline">새로 만들기</button>
+                {!archiveNextAvailableAt && (
+                  <button onClick={handleRequestArchive} disabled={loading} className="btn btn-outline">새로 만들기</button>
+                )}
               </div>
+              {archiveNextAvailableAt && (
+                <p style={{ color: "var(--text-secondary)", fontSize: 13, margin: 0 }}>
+                  다음 아카이브는 {formatAvailableAt(archiveNextAvailableAt)}부터 만들 수 있습니다.
+                </p>
+              )}
             </div>
           ) : archiveJob && (archiveJob.status === "pending" || archiveJob.status === "processing") ? (
             <p style={{ color: "var(--accent)", fontSize: 14 }}>

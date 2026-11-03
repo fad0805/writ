@@ -111,6 +111,8 @@ ORPHAN_MEDIA_MIN_AGE_DAYS = int(os.environ.get("ORPHAN_MEDIA_MIN_AGE_DAYS", "7")
 
 # Account archive (posts/series + profile + media) is generated on the server
 # and stored outside the public uploads directory so download links stay private.
+# The same window controls both how long the ZIP stays downloadable and how
+# often a new archive may be generated (one per window, 7 days by default).
 ARCHIVE_DIR = os.environ.get("ARCHIVE_DIR", "data/archives")
 ARCHIVE_RETENTION_DAYS = _bounded_int_env("ARCHIVE_RETENTION_DAYS", 7, 1, 365)
 

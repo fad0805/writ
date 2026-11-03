@@ -19,7 +19,7 @@ import logging
 import os
 import re
 import zipfile
-from datetime import timedelta
+from datetime import UTC, timedelta
 from typing import BinaryIO
 from urllib.parse import urlparse
 
@@ -29,6 +29,7 @@ from app.config.settings import ARCHIVE_DIR, ARCHIVE_RETENTION_DAYS
 from app.db.database import get_session
 from app.models import ArchiveJob, Episode, Notification, Novel, Post, SeriesNotice, User
 from app.utils.datetime import _fmt_dt, now
+from app.utils.media_urls import rewrite_src_urls
 from app.utils.storage import get_storage
 
 logger = logging.getLogger("writ.archive")
@@ -181,7 +182,10 @@ def _novels_json(s, user_id: int, collector: _MediaCollector) -> list[dict]:
                 "uuid": episode.uuid,
                 "episode_number": episode.episode_number,
                 "title": episode.title,
-                "content": episode.content,
+                "content": rewrite_src_urls(
+                    episode.content,
+                    lambda url: collector.add(url, "series"),
+                ),
                 "summary": episode.summary or "",
                 "comment": episode.comment or "",
                 "is_published": episode.is_published,
@@ -216,7 +220,10 @@ def _novels_json(s, user_id: int, collector: _MediaCollector) -> list[dict]:
                 {
                     "uuid": notice.uuid,
                     "title": notice.title,
-                    "content": notice.content,
+                    "content": rewrite_src_urls(
+                        notice.content,
+                        lambda url: collector.add(url, "series"),
+                    ),
                     "is_pinned": notice.is_pinned,
                     "created_at": _fmt_dt(notice.created_at),
                     "updated_at": _fmt_dt(notice.updated_at),
@@ -240,7 +247,10 @@ def _posts_json(s, user_id: int, collector: _MediaCollector) -> list[dict]:
             "boosted_at": _fmt_dt(pointer.created_at) if is_boost else None,
             "boost_of_author": post.author.username if is_boost else "",
             "boost_of_url": (post.ap_id or post.remote_url or "") if is_boost else "",
-            "content": post.content or "",
+            "content": rewrite_src_urls(
+                post.content,
+                lambda url: collector.add(url, "posts"),
+            ),
             "summary": post.summary or "",
             "visibility": post.visibility,
             "created_at": _fmt_dt(post.created_at),
@@ -427,6 +437,34 @@ def archive_job_json(job: ArchiveJob | None) -> dict | None:
         "completed_at": _fmt_dt(job.completed_at),
         "download_url": f"/api/settings/archive-download/{job.uuid}" if job.status == "completed" else "",
     }
+
+
+def _aware(dt):
+    if dt is None:
+        return None
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+
+def archive_next_available_at(user_id: int):
+    """Return when the user may generate their next archive, or None.
+
+    One archive per retention window (7 days by default): a successfully
+    generated backup keeps the cooldown active until it is removed.
+    """
+    with get_session() as s:
+        latest = s.query(ArchiveJob).filter(
+            ArchiveJob.user_id == user_id,
+            ArchiveJob.status == "completed",
+        ).order_by(
+            func.coalesce(ArchiveJob.completed_at, ArchiveJob.created_at).desc(),
+        ).first()
+        if not latest:
+            return None
+        finished = _aware(latest.completed_at or latest.created_at)
+        if not finished:
+            return None
+        next_at = finished + timedelta(days=ARCHIVE_RETENTION_DAYS)
+        return next_at if next_at > now() else None
 
 
 def _cleanup_where(*conditions) -> int:

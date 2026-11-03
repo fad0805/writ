@@ -22,6 +22,7 @@ export default function DataPage() {
   const [importResult, setImportResult] = useState<string>("");
   const [importFile, setImportFile] = useState<File | null>(null);
   const [archiveJob, setArchiveJob] = useState<ArchiveJob | null>(null);
+  const [archiveNextAvailableAt, setArchiveNextAvailableAt] = useState<string | null>(null);
   const [archiveLoading, setArchiveLoading] = useState(false);
   const [archiveError, setArchiveError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -40,6 +41,7 @@ export default function DataPage() {
       if (!res.ok) return;
       const d = await res.json();
       setArchiveJob(d.job || null);
+      setArchiveNextAvailableAt(d.next_available_at || null);
     } catch {}
   }, []);
 
@@ -47,7 +49,11 @@ export default function DataPage() {
     let cancelled = false;
     fetch("/api/settings/archive-status", { credentials: "include" })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d) => { if (!cancelled) setArchiveJob(d.job || null); })
+      .then((d) => {
+        if (cancelled) return;
+        setArchiveJob(d.job || null);
+        setArchiveNextAvailableAt(d.next_available_at || null);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
@@ -129,6 +135,12 @@ export default function DataPage() {
     return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
   };
 
+  const formatAvailableAt = (value: string) => {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleString("ko-KR", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  };
+
   const handleImport = async () => {
     if (!importFile) return;
     setLoading(true);
@@ -182,12 +194,15 @@ export default function DataPage() {
                   <button onClick={handleDownloadArchive} disabled={loading} className="btn btn-primary" style={{ alignSelf: "flex-start" }}>
                     아카이브 다운로드 (ZIP)
                   </button>
-                  <button onClick={handleRequestArchive} disabled={archiveLoading} className="btn btn-outline" style={{ alignSelf: "flex-start" }}>
-                    새로 만들기
-                  </button>
+                  {!archiveNextAvailableAt && (
+                    <button onClick={handleRequestArchive} disabled={archiveLoading} className="btn btn-outline" style={{ alignSelf: "flex-start" }}>
+                      새로 만들기
+                    </button>
+                  )}
                 </div>
                 <p className="form-help" style={{ margin: 0 }}>
                   생성 후 7일간 다운로드할 수 있으며, 이후 서버에서 자동 삭제됩니다.
+                  {archiveNextAvailableAt && ` 다음 아카이브는 ${formatAvailableAt(archiveNextAvailableAt)}부터 만들 수 있습니다.`}
                 </p>
               </>
             ) : archiveJob && (archiveJob.status === "pending" || archiveJob.status === "processing") ? (
@@ -202,6 +217,7 @@ export default function DataPage() {
                 <p className="form-help" style={{ margin: 0 }}>
                   프로필 정보와 사진, 게시물, 시리즈/에피소드를 포함한 ZIP을 서버에서 생성합니다.
                   완료되면 알림으로 알려드리며, 생성 후 7일간 다운로드할 수 있습니다.
+                  아카이브는 일주일에 한 번만 만들 수 있습니다.
                 </p>
               </>
             )}
