@@ -22,20 +22,19 @@ from app.db.database import engine, get_session
 from app.models import (
     Bookmark,
     Boost,
-    Episode,
-    EpisodeDraft,
     Like,
     Notification,
     PendingDelivery,
     Post,
-    PostEdit,
-    RemoteMedia,
-    SeriesNotice,
     User,
     Vote,
 )
 from app.utils.crypto import decrypt_key, sign_string
-from app.utils.media_urls import iter_upload_urls
+from app.utils.media_refs import (
+    collect_referenced_media_keys,
+    delete_media_urls_if_unreferenced,
+    post_media_urls,
+)
 from app.utils.storage import LocalStorage, get_storage
 
 logger = logging.getLogger(__name__)
@@ -271,6 +270,7 @@ def _run_auto_delete_once() -> int:
                         continue
                     if "media" in exc and post.media_attachments:
                         continue
+                    media_urls = post_media_urls(post, s)
                     for _n in s.query(Notification.user_id).filter(Notification.post_id == post.id).distinct().all():
                         _autodel_notif_users.add(_n[0])
                     s.query(Notification).filter(Notification.post_id == post.id).delete()
@@ -282,17 +282,6 @@ def _run_auto_delete_once() -> int:
                         {Post.boost_of_id: None}, synchronize_session=False
                     )
 
-                    media = list(post.media_attachments or [])
-                    if media:
-                        try:
-                            storage = get_storage()
-                            for m in media:
-                                if isinstance(m, dict) and m.get("url"):
-                                    with contextlib.suppress(Exception):
-                                        storage.delete(m["url"])
-                        except Exception:
-                            pass
-
                     ap_id = post.ap_id or ""
                     if ap_id and ap_id.startswith("http"):
                         with contextlib.suppress(Exception):
@@ -300,6 +289,12 @@ def _run_auto_delete_once() -> int:
 
                     s.delete(post)
                     s.flush()
+
+                    if media_urls:
+                        try:
+                            delete_media_urls_if_unreferenced(s, media_urls)
+                        except Exception:
+                            logger.warning("Auto-delete media cleanup failed for post %s", post.id, exc_info=True)
 
                     with contextlib.suppress(Exception):
                         broadcast_delete(post.id)
@@ -359,45 +354,6 @@ def auto_delete_expired_posts():
         time.sleep(AUTO_DELETE_INTERVAL_SECONDS)
 
 
-def _collect_referenced_media_keys(s, storage) -> set[str]:
-    """Every storage key still referenced by a post, episode, notice or draft.
-
-    Attachments alone are not enough: the editor inserts images directly into
-    HTML (``<img src="/uploads/media/...">``), so those URLs must protect the
-    files from the orphan-media worker as well.
-    """
-    urls: set[str] = set()
-    for (attachments,) in s.query(Post.media_attachments).filter(Post.media_attachments.isnot(None)).all():
-        for item in attachments or []:
-            if isinstance(item, dict) and item.get("url"):
-                urls.add(item["url"])
-    for (local_url,) in s.query(RemoteMedia.local_url).all():
-        if local_url:
-            urls.add(local_url)
-    for (images,) in s.query(Episode.image_urls).filter(Episode.image_urls.isnot(None)).all():
-        for url in images or []:
-            if isinstance(url, str) and url:
-                urls.add(url)
-
-    content_sources = (
-        s.query(Post.content).filter(Post.is_deleted == False).all(),
-        s.query(PostEdit.content).join(Post, PostEdit.post_id == Post.id).filter(Post.is_deleted == False).all(),
-        s.query(Episode.content).filter(Episode.content.isnot(None)).all(),
-        s.query(SeriesNotice.content).filter(SeriesNotice.content.isnot(None)).all(),
-        s.query(EpisodeDraft.content).filter(EpisodeDraft.content.isnot(None)).all(),
-    )
-    for rows in content_sources:
-        for (content,) in rows:
-            urls.update(iter_upload_urls(content))
-
-    keys: set[str] = set()
-    for url in urls:
-        key = storage.key_from_url(url)
-        if key:
-            keys.add(key.lstrip("/"))
-    return keys
-
-
 def cleanup_orphan_media():
     """Reclaim local media files (uploads/media/) no longer referenced anywhere.
 
@@ -430,7 +386,7 @@ def cleanup_orphan_media():
                 continue
 
             with get_session() as s:
-                used = _collect_referenced_media_keys(s, storage)
+                used = collect_referenced_media_keys(s, storage)
 
             now = time.time()
             deleted = 0

@@ -6,7 +6,6 @@ Builds a single, self-contained ZIP with:
 - ``posts.json`` — authored posts and live boosts
 - ``novels.json`` — authored series, episodes, and notices
 - ``media/...`` — profile images, series covers, episode images/audio, post media
-- ``manifest.json`` — media index and archive metadata
 - ``README.txt`` — short explanation of the contents
 
 The heavy work is intentionally kept in this module so both the synchronous
@@ -275,25 +274,16 @@ def write_archive(user_id: int, dest: str | BinaryIO) -> None:
             posts = _posts_json(s, user_id, collector)
             novels = _novels_json(s, user_id, collector)
 
-        manifest = {
-            "format": "writ-archive",
-            "version": 2,
-            "generated_at": generated_at,
-            "username": profile["username"],
-            "counts": {
-                "posts": len(posts),
-                "novels": len(novels),
-                "episodes": sum(len(n["episodes"]) for n in novels),
-                "media": len(collector.items),
-            },
-            "media": collector.items,
-            "missing_media": collector.missing,
-        }
+        if collector.missing:
+            logger.warning(
+                "archive for user %s: %d media file(s) could not be included",
+                user_id,
+                len(collector.missing),
+            )
 
         zf.writestr("profile.json", json.dumps(profile, ensure_ascii=False, indent=2))
         zf.writestr("posts.json", json.dumps(posts, ensure_ascii=False, indent=2))
         zf.writestr("novels.json", json.dumps(novels, ensure_ascii=False, indent=2))
-        zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
         zf.writestr("README.txt", (
             "WRIT 계정 아카이브\n"
             "==================\n\n"
@@ -303,7 +293,6 @@ def write_archive(user_id: int, dest: str | BinaryIO) -> None:
             "posts.json    - 게시물 및 부스트\n"
             "novels.json   - 시리즈, 에피소드, 공지\n"
             "media/        - 프로필 사진, 시리즈 표지, 에피소드/게시물 미디어\n"
-            "manifest.json - 파일 목록과 원본 URL\n"
         ))
 
 

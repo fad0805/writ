@@ -23,6 +23,7 @@ from app.routes.api._novels import _novel_json
 from app.utils.content_parser import process_post_content
 from app.utils.datetime import _fmt_dt
 from app.utils.log import log_admin_action
+from app.utils.media_refs import content_media_urls, delete_media_urls_if_unreferenced, episode_media_urls
 from app.utils.post import _sync_post_tags
 from app.utils.storage import get_storage
 from app.utils.to_ap_serializer import to_ap_note
@@ -304,11 +305,20 @@ def api_delete_episode(request: Request, novel_id: int, episode_id: int):
             raise HTTPException(status_code=404, detail="Episode not found")
         if episode.novel.author_id != user.id:
             log_admin_action(user.id, user.username, "delete_episode", target_type="episode", target_id=episode_id, target_username=episode.novel.author.username if episode.novel else "", details=episode.title, ip_address=request.client.host if request.client else "")
+        media_urls = episode_media_urls(episode)
         for p in s.query(Post).filter(Post.episode_id == episode_id).all():
             p.episode_id = None
         s.flush()
         s.delete(episode)
         s.commit()
+    if media_urls:
+        def _cleanup_episode_media(_urls=media_urls):
+            try:
+                with get_session() as _s:
+                    delete_media_urls_if_unreferenced(_s, _urls)
+            except Exception:
+                logger.warning("Episode media cleanup failed", exc_info=True)
+        spawn(_cleanup_episode_media)
     return {"ok": True}
 
 
@@ -366,6 +376,15 @@ def api_delete_draft(request: Request, novel_id: int, draft_id: int):
         draft = s.query(EpisodeDraft).filter_by(id=draft_id, user_id=user.id, novel_id=novel_id).first()
         if not draft:
             raise HTTPException(status_code=404, detail="Draft not found")
+        media_urls = content_media_urls(draft.content)
         s.delete(draft)
         s.commit()
-        return {"ok": True}
+    if media_urls:
+        def _cleanup_draft_media(_urls=media_urls):
+            try:
+                with get_session() as _s:
+                    delete_media_urls_if_unreferenced(_s, _urls)
+            except Exception:
+                logger.warning("Draft media cleanup failed", exc_info=True)
+        spawn(_cleanup_draft_media)
+    return {"ok": True}

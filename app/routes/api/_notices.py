@@ -1,11 +1,17 @@
 """Series notice (공지) endpoints extracted from _series.py."""
+import logging
+
 from fastapi import APIRouter, Form, HTTPException, Request
 
 from app.core.auth import require_auth
 from app.core.permissions import has_permission
+from app.core.threads import spawn
 from app.db.database import get_session
 from app.models import Novel, SeriesNotice
 from app.utils.datetime import _fmt_dt
+from app.utils.media_refs import content_media_urls, delete_media_urls_if_unreferenced
+
+logger = logging.getLogger("writ.api.notices")
 
 notices_router = APIRouter()
 
@@ -80,8 +86,17 @@ def api_delete_notice(request: Request, novel_id: int, notice_id: int):
             raise HTTPException(status_code=404, detail="Notice not found")
         if notice.novel.author_id != user.id and not has_permission(user, "content.manage"):
             raise HTTPException(status_code=404, detail="Notice not found")
+        media_urls = content_media_urls(notice.content)
         s.delete(notice)
         s.commit()
+    if media_urls:
+        def _cleanup_notice_media(_urls=media_urls):
+            try:
+                with get_session() as _s:
+                    delete_media_urls_if_unreferenced(_s, _urls)
+            except Exception:
+                logger.warning("Notice media cleanup failed", exc_info=True)
+        spawn(_cleanup_notice_media)
     return {"ok": True}
 
 

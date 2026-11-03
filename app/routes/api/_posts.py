@@ -1,5 +1,4 @@
 """Post detail, edit, and delete endpoints extracted from _core.py."""
-import contextlib
 import logging
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from datetime import UTC, datetime
@@ -23,9 +22,9 @@ from app.serializers import _post_json
 from app.utils.content_parser import extract_mentions, process_post_content
 from app.utils.datetime import _fmt_dt
 from app.utils.filter import _load_user_filters
+from app.utils.media_refs import delete_media_urls_if_unreferenced, post_media_urls
 from app.utils.post import _get_descendant_ids, _sync_post_tags
 from app.utils.post_edit import record_post_edit
-from app.utils.storage import get_storage
 from app.utils.to_ap_serializer import to_ap_note
 
 logger = logging.getLogger("writ.api.posts")
@@ -360,6 +359,7 @@ def api_edit_post(request: Request, post_id: int, content: str = Form(...), summ
 
 def _do_delete_post(s, post, user, cascade=True, keep_media=False):
     media = list(post.media_attachments or [])
+    media_urls = post_media_urls(post, s)
     ap_id = post.ap_id or ""
     is_remote_author = bool(post.author.is_remote)
     post.content = ""
@@ -407,14 +407,14 @@ def _do_delete_post(s, post, user, cascade=True, keep_media=False):
     except Exception:
         pass
 
-    if media or (ap_id and ap_id.startswith("http") and not is_remote_author):
-        def _background(_pid=post.id, _media=media, _ap_id=ap_id, _remote=is_remote_author, _user=user, _keep=keep_media):
-            if _media and not _keep:
-                storage = get_storage()
-                for m in _media:
-                    if isinstance(m, dict) and m.get("url"):
-                        with contextlib.suppress(Exception):
-                            storage.delete(m["url"])
+    if media_urls or (ap_id and ap_id.startswith("http") and not is_remote_author):
+        def _background(_pid=post.id, _media_urls=media_urls, _ap_id=ap_id, _remote=is_remote_author, _user=user, _keep=keep_media):
+            if _media_urls and not _keep:
+                try:
+                    with get_session() as _s:
+                        delete_media_urls_if_unreferenced(_s, _media_urls)
+                except Exception:
+                    logger.warning("Post media cleanup failed for post %s", _pid, exc_info=True)
             if _ap_id and _ap_id.startswith("http") and not _remote:
                 try:
                     with get_session() as _s:

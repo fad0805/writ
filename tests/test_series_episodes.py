@@ -2,6 +2,7 @@
 
 from app.db.database import get_session
 from app.models import Episode, Novel
+from app.utils.storage import get_storage
 
 
 def _create_series(client, cookie, title="My Novel", **extra):
@@ -78,6 +79,43 @@ def test_delete_series(client, auth_cookie):
     assert r.status_code == 200
     with get_session() as s:
         assert s.query(Novel).get(novel_id) is None
+
+
+def test_delete_episode_removes_its_media(client, auth_cookie, monkeypatch):
+    _alice, cookie = auth_cookie("alice")
+    novel_id = _create_series(client, cookie).json()["novel_id"]
+    ep_id = client.post(
+        f"/api/series/{novel_id}/episodes/new",
+        data={"title": "Chapter 1", "content": "<p>body</p>", "is_published": "true"},
+        cookies=cookie,
+    ).json()["episode_id"]
+
+    import app.routes.api._episodes as episodes_module
+
+    monkeypatch.setattr(episodes_module, "spawn", lambda fn, *args, **kwargs: fn(*args, **kwargs))
+    storage = get_storage()
+    keys = {
+        "inline": "test_episode_delete/inline.webp",
+        "image": "test_episode_delete/image.webp",
+        "audio": "test_episode_delete/audio.mp3",
+    }
+    urls = {name: storage.save(key, name.encode()) for name, key in keys.items()}
+    try:
+        with get_session() as s:
+            episode = s.query(Episode).get(ep_id)
+            episode.content = f'<p>body</p><img src="{urls["inline"]}">'
+            episode.image_urls = [urls["image"]]
+            episode.audio_url = urls["audio"]
+            s.commit()
+
+        r = client.post(f"/api/series/{novel_id}/episodes/{ep_id}/delete", cookies=cookie)
+        assert r.status_code == 200
+        assert not storage.exists(keys["inline"])
+        assert not storage.exists(keys["image"])
+        assert not storage.exists(keys["audio"])
+    finally:
+        for key in keys.values():
+            storage.delete(key)
 
 
 def test_create_episode(client, auth_cookie):

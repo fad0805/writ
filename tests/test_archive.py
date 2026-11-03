@@ -2,6 +2,7 @@
 
 import io
 import json
+import re
 import zipfile
 from datetime import timedelta
 
@@ -72,9 +73,8 @@ def test_archive_contains_profile_series_and_media(client, auth_cookie, make_pos
             profile = json.loads(z.read("profile.json"))
             posts = json.loads(z.read("posts.json"))
             novels = json.loads(z.read("novels.json"))
-            manifest = json.loads(z.read("manifest.json"))
-            archived = {item["original_url"]: item["archive_path"] for item in manifest["media"]}
 
+            assert "manifest.json" not in names
             assert profile["username"] == "alice"
             assert profile["summary"] == "작가 소개"
             assert profile["profile_image_archive"] in names
@@ -89,8 +89,9 @@ def test_archive_contains_profile_series_and_media(client, auth_cookie, make_pos
             assert attachment["original_url"] == urls["post"]
             assert z.read(attachment["url"]) == payloads["post"]
             assert urls["inline_post"] not in post_entry["content"]
-            assert archived[urls["inline_post"]] in post_entry["content"]
-            assert z.read(archived[urls["inline_post"]]) == payloads["inline_post"]
+            inline_post_path = re.search(r'src="(media/[^"]+)"', post_entry["content"]).group(1)
+            assert inline_post_path in names
+            assert z.read(inline_post_path) == payloads["inline_post"]
 
             novel_entry = novels[0]
             assert novel_entry["cover_image_archive"] in names
@@ -99,21 +100,24 @@ def test_archive_contains_profile_series_and_media(client, auth_cookie, make_pos
             assert episode_entry["audio_url"] in names
             assert z.read(episode_entry["audio_url"]) == payloads["audio"]
             assert urls["inline_episode"] not in episode_entry["content"]
-            assert archived[urls["inline_episode"]] in episode_entry["content"]
-            assert z.read(archived[urls["inline_episode"]]) == payloads["inline_episode"]
-            assert urls["inline_notice"] not in novel_entry["notices"][0]["content"]
-            assert archived[urls["inline_notice"]] in novel_entry["notices"][0]["content"]
-            assert z.read(archived[urls["inline_notice"]]) == payloads["inline_notice"]
+            inline_episode_path = re.search(r'src="(media/[^"]+)"', episode_entry["content"]).group(1)
+            assert inline_episode_path in names
+            assert z.read(inline_episode_path) == payloads["inline_episode"]
+            notice_content = novel_entry["notices"][0]["content"]
+            assert urls["inline_notice"] not in notice_content
+            inline_notice_path = re.search(r'src="(media/[^"]+)"', notice_content).group(1)
+            assert inline_notice_path in names
+            assert z.read(inline_notice_path) == payloads["inline_notice"]
 
-            assert manifest["counts"]["media"] == 9
-            assert manifest["counts"]["novels"] == 1
+            assert len([name for name in names if name.startswith("media/")]) == 9
+            assert len(novels) == 1
     finally:
         for key in keys.values():
             storage.delete(key)
 
 
 def test_orphan_cleanup_protects_media_embedded_in_content(client, auth_cookie, make_post):
-    from app.core.workers import _collect_referenced_media_keys
+    from app.utils.media_refs import collect_referenced_media_keys
 
     user, _cookie = auth_cookie("alice")
     storage = get_storage()
@@ -136,7 +140,7 @@ def test_orphan_cleanup_protects_media_embedded_in_content(client, auth_cookie, 
             ))
             s.commit()
         with get_session() as s:
-            used = _collect_referenced_media_keys(s, storage)
+            used = collect_referenced_media_keys(s, storage)
         assert key in used
         assert series_key in used
     finally:
