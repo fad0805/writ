@@ -55,6 +55,7 @@ export default function NewEpisodePage() {
   const [drafts, setDrafts] = useState<DraftData[]>([]);
   const [showDraftList, setShowDraftList] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editorSyncKey, setEditorSyncKey] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [pageMode, setPageMode] = useState(false);
   const [viewMode, setViewMode] = useState<"text" | "comic">("text");
@@ -149,6 +150,7 @@ export default function NewEpisodePage() {
     setDraftId(d.id);
     setLastSaved(d.updated_at);
     lastSavedContentRef.current = JSON.stringify({ title: d.title, summary: d.summary, content: d.content, comment: d.comment, isPublished: d.is_published, announce: d.announce, announceComment: d.announce_comment });
+    setEditorSyncKey((k) => k + 1);
     setShowDraftList(false);
   };
 
@@ -265,7 +267,7 @@ export default function NewEpisodePage() {
             <button type="button" className={`episode-view-mode-btn ${viewMode === "comic" ? "active" : ""}`} onClick={() => { if (viewMode === "text" && content.replace(/<[^>]*>/g, "").trim() && !confirm("전환하면 텍스트가 초기화됩니다. 계속하시겠습니까?")) return; setViewMode("comic"); setContent(""); }}>만화 모드</button>
           </div>
           {viewMode === "text" ? (
-            <EpisodeEditor value={content} onChange={(v) => setContent(v)} pageMode={pageMode} onPageModeChange={setPageMode} enableSpoiler />
+            <EpisodeEditor value={content} onChange={(v) => setContent(v)} pageMode={pageMode} onPageModeChange={setPageMode} enableSpoiler syncKey={editorSyncKey} />
           ) : (
             <div className="episode-comic-uploader">
               {imageUrls.map((url, i) => (

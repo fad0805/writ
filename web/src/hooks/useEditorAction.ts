@@ -4,7 +4,7 @@ import { Editor } from "@tiptap/core";
 import { useEditor } from "@tiptap/react";
 import { useEffect, useRef } from "react";
 
-export function useEditorInit({value, onChange}: {value: string; onChange: (html: string) => void}) {
+export function useEditorInit({value, onChange, syncKey = 0}: {value: string; onChange: (html: string) => void; syncKey?: number}) {
   const editor = useEditor({
     extensions: EDITOR_EXTENSIONS,
     content: value || "",
@@ -12,11 +12,16 @@ export function useEditorInit({value, onChange}: {value: string; onChange: (html
 
   const onChangeRef = useRef(onChange);
   const lastEmittedRef = useRef<string | null>(null);
+  const valueRef = useRef(value);
 
 
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
 
   useEffect(() => {
     if (!editor) return;
@@ -33,7 +38,12 @@ export function useEditorInit({value, onChange}: {value: string; onChange: (html
     }
   }, [editor])
 
-  // value prop 변경 시 setContent를 호출하지 않음 (타이핑 중 커서 튐 방지)
+  // 타이핑 중 커서 튐을 막기 위해 value 변경만으로는 setContent를 호출하지 않는다.
+  // 임시저장 불러오기처럼 외부에서 본문을 통째로 교체할 때만 syncKey를 올려 동기화한다.
+  useEffect(() => {
+    if (!editor || !syncKey) return;
+    editor.commands.setContent(valueRef.current || "", { emitUpdate: false });
+  }, [editor, syncKey]);
 
   return editor;
 }

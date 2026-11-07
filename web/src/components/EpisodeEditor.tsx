@@ -5,12 +5,12 @@ import { EditorContent } from "@tiptap/react";
 import { useRef, useState, useEffect } from "react";
 import ColorPicker from "./ColorPicker";
 
-export default function EpisodeEditor({ value, onChange, pageMode, onPageModeChange, enableSpoiler }: { value: string; onChange: (html: string) => void; pageMode?: boolean; onPageModeChange?: (on: boolean) => void; enableSpoiler?: boolean }) {
+export default function EpisodeEditor({ value, onChange, pageMode, onPageModeChange, enableSpoiler, syncKey }: { value: string; onChange: (html: string) => void; pageMode?: boolean; onPageModeChange?: (on: boolean) => void; enableSpoiler?: boolean; syncKey?: number }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const colorPickerRef = useRef<HTMLDivElement>(null);
 
-  const editor = useEditorInit({ value: value || "", onChange });
+  const editor = useEditorInit({ value: value || "", onChange, syncKey });
   const editorFn = useEditorActions(editor);
 
   useEffect(() => {
