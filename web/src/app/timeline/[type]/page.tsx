@@ -12,6 +12,7 @@ import { trackStream, untrackStream } from "@/lib/streamStatus";
 import Icon from "@/components/Icon";
 import { injectEmojis } from "@/lib/emojis";
 import { capPosts, pruneDeletedIds } from "@/lib/timeline";
+import { sessionGet, sessionSet, storageGet, storageSet } from "@/lib/storage";
 import Link from "next/link";
 
 const LIMIT = 20;
@@ -41,9 +42,8 @@ function timelineCacheKey(userId: number) {
 }
 
 function loadTimelineCache(userId: number): Record<string, TimelineCacheEntry> {
-  if (typeof sessionStorage === "undefined") return {};
   try {
-    const raw = sessionStorage.getItem(timelineCacheKey(userId));
+    const raw = sessionGet(timelineCacheKey(userId));
     if (!raw) return {};
     const parsed = JSON.parse(raw) as Record<string, TimelineCacheEntry>;
     const now = Date.now();
@@ -58,10 +58,7 @@ function loadTimelineCache(userId: number): Record<string, TimelineCacheEntry> {
 }
 
 function saveTimelineCache(userId: number, cache: Record<string, TimelineCacheEntry>) {
-  if (typeof sessionStorage === "undefined") return;
-  try {
-    sessionStorage.setItem(timelineCacheKey(userId), JSON.stringify(cache));
-  } catch {}
+  sessionSet(timelineCacheKey(userId), JSON.stringify(cache));
 }
 
 interface StreamPostData extends PostData {
@@ -116,7 +113,7 @@ export default function TimelinePage() {
   const [rewriteMedia, setRewriteMedia] = useState<{ url: string; type: string; alt?: string }[]>([]);
   const [rewriteInitialMedia, setRewriteInitialMedia] = useState<{ url: string; type: string; alt?: string }[]>([]);
   const [composerCollapsed, setComposerCollapsed] = useState(
-    () => typeof localStorage !== "undefined" && localStorage.getItem("writ:timeline-composer-collapsed") === "1"
+    () => storageGet("writ:timeline-composer-collapsed") === "1"
   );
 
   const totalLoadedRef = useRef(0);
@@ -397,13 +394,13 @@ export default function TimelinePage() {
   }, []);
 
   useEffect(() => {
-    if (typeof localStorage !== "undefined") localStorage.setItem("writ:timeline-composer-collapsed", composerCollapsed ? "1" : "0");
+    storageSet("writ:timeline-composer-collapsed", composerCollapsed ? "1" : "0");
   }, [composerCollapsed]);
 
   useEffect(() => { load(); }, [load, user?.id]);
 
   useEffect(() => {
-    if (typeof localStorage !== "undefined") localStorage.setItem("lastTimelineTab", tlType);
+    storageSet("lastTimelineTab", tlType);
   }, [tlType]);
 
   useEffect(() => {

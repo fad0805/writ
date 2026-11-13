@@ -2,16 +2,16 @@
 import { useEffect, useRef } from "react";
 import { useAuth } from "@/lib/auth";
 import { onNotificationStream } from "@/lib/notificationStream";
+import { storageGet, storageSet } from "@/lib/storage";
 
 const LS_KEY = "writ_notif_sound";
 
 export function isNotifSoundEnabled(): boolean {
-  if (typeof window === "undefined") return true;
-  return localStorage.getItem(LS_KEY) !== "off";
+  return storageGet(LS_KEY) !== "off";
 }
 
 export function setNotifSoundEnabled(on: boolean) {
-  localStorage.setItem(LS_KEY, on ? "on" : "off");
+  storageSet(LS_KEY, on ? "on" : "off");
 }
 
 export default function NotifSound() {

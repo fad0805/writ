@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.core.auth import verify_password
+from app.core.mastodon_scopes import normalize_scopes, scope_allowed, scopes_to_string
 from app.db.database import get_session
 from app.models import MastodonAccessToken, MastodonApp, MastodonAuthorizationCode, User
 from app.routes.api._auth import _check_auth_rate_limit, _get_client_ip, _record_auth_failure
@@ -39,6 +40,17 @@ def _authorization_code_expired(created_at) -> bool:
     return (datetime.now(UTC) - ca).total_seconds() > AUTH_CODE_TTL_SECONDS
 
 
+def _validated_scopes(app_obj: MastodonApp, raw: str) -> list[str] | None:
+    """Return normalized scopes granted by the app, or None if invalid."""
+    try:
+        scopes = normalize_scopes(raw or app_obj.scopes)
+    except ValueError:
+        return None
+    if not scopes or not all(scope_allowed(app_obj.scopes, scope) for scope in scopes):
+        return None
+    return scopes
+
+
 def _do_authorize(client_id: str, redirect_uri: str, response_type: str, scope: str, state: str, username: str, password: str, client_ip: str):
     if response_type != "code":
         return JSONResponse({"error": "unsupported_response_type"}, status_code=400)
@@ -57,6 +69,13 @@ def _do_authorize(client_id: str, redirect_uri: str, response_type: str, scope: 
         if redirect_uri not in _registered_redirect_uris(app_obj):
             return JSONResponse(
                 {"error": "invalid_request", "error_description": "Redirect URI is not registered for this client"},
+                status_code=400,
+            )
+
+        granted_scopes = _validated_scopes(app_obj, scope)
+        if granted_scopes is None:
+            return JSONResponse(
+                {"error": "invalid_scope", "error_description": "Requested scope is not allowed for this application"},
                 status_code=400,
             )
 
@@ -83,7 +102,7 @@ def _do_authorize(client_id: str, redirect_uri: str, response_type: str, scope: 
             app_id=app_obj.id,
             user_id=user.id,
             redirect_uri=redirect_uri,
-            scopes=scope,
+            scopes=scopes_to_string(granted_scopes),
         )
         db.add(auth_code)
         db.commit()
@@ -153,6 +172,8 @@ async def oauth_token(request: Request):
             return JSONResponse({"error": "invalid_client"}, status_code=400)
 
         if grant_type == "client_credentials":
+            if not scope_allowed(app_obj.scopes, "read"):
+                return JSONResponse({"error": "invalid_scope"}, status_code=400)
             token = secrets.token_urlsafe(48)
             mat = MastodonAccessToken(app_id=app_obj.id, user_id=None, access_token=token, scopes="read")
             db.add(mat)
@@ -176,7 +197,10 @@ async def oauth_token(request: Request):
                 return JSONResponse({"error": "invalid_grant"}, status_code=400)
             if user.is_suspended:
                 return JSONResponse({"error": "invalid_grant"}, status_code=400)
-            scope = body.get("scope", "read write push")
+            granted_scopes = _validated_scopes(app_obj, body.get("scope", ""))
+            if granted_scopes is None:
+                return JSONResponse({"error": "invalid_scope"}, status_code=400)
+            scope = scopes_to_string(granted_scopes)
             token = secrets.token_urlsafe(48)
             mat = MastodonAccessToken(app_id=app_obj.id, user_id=user.id, access_token=token, scopes=scope)
             db.add(mat)

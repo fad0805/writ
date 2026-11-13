@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { storageGet, storageRemove, storageSet } from "@/lib/storage";
 
 export interface CustomEmojiRaw {
   keyword: string;
@@ -65,17 +66,15 @@ let fetchPromise: Promise<CustomEmoji[]> | null = null;
 let cacheTs = 0;
 
 export async function getCustomEmojis(): Promise<CustomEmoji[]> {
-  if (typeof localStorage !== "undefined") {
-    const storedTs = parseInt(localStorage.getItem("emoji_cache_ts") || "0", 10);
-    const stored = localStorage.getItem("emoji_cache");
-    if (storedTs > cacheTs && stored) {
-      try {
-        const parsed: CustomEmoji[] = JSON.parse(stored);
-        cache = parsed;
-        cacheTs = storedTs;
-        return parsed;
-      } catch {}
-    }
+  const storedTs = parseInt(storageGet("emoji_cache_ts") || "0", 10);
+  const stored = storageGet("emoji_cache");
+  if (storedTs > cacheTs && stored) {
+    try {
+      const parsed: CustomEmoji[] = JSON.parse(stored);
+      cache = parsed;
+      cacheTs = storedTs;
+      return parsed;
+    } catch {}
   }
   if (cache !== null) return cache;
   if (fetchPromise) return fetchPromise;
@@ -103,9 +102,8 @@ export async function getCustomEmojis(): Promise<CustomEmoji[]> {
     if (typeof window !== "undefined") window.__emojiCache = cache;
     fetchPromise = null;
     cacheTs = Date.now();
-    if (typeof localStorage !== "undefined") {
-      try { localStorage.setItem("emoji_cache", JSON.stringify(cache)); localStorage.setItem("emoji_cache_ts", String(cacheTs)); } catch {}
-    }
+    storageSet("emoji_cache", JSON.stringify(cache));
+    storageSet("emoji_cache_ts", String(cacheTs));
     return cache as CustomEmoji[];
   })();
   return fetchPromise;
@@ -114,10 +112,8 @@ export async function getCustomEmojis(): Promise<CustomEmoji[]> {
 export function invalidateEmojiCache() {
   cache = null;
   fetchPromise = null;
-  if (typeof localStorage !== "undefined") {
-    localStorage.removeItem("emoji_cache");
-    localStorage.setItem("emoji_cache_ts", Date.now().toString());
-  }
+  storageRemove("emoji_cache");
+  storageSet("emoji_cache_ts", Date.now().toString());
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("emojichange"));
   }

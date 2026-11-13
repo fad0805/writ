@@ -1,8 +1,7 @@
 "use client";
 import Link from "next/link";
-import Icon from "./Icon";
 
-export default function SettingsNav({ current }: { current: "visibility" | "account" | "mutes" | "auto-delete" | "data" | "migrate" }) {
+export default function SettingsNav({ current }: { current: "visibility" | "account" | "mutes" | "auto-delete" | "data" | "migrate" | "development" }) {
   return (
     <div className="admin-tabs">
       <Link href="/users/settings" className={`btn btn-small ${current === "visibility" ? "btn-primary" : "btn-outline"}`}>기본 설정</Link>
@@ -11,6 +10,7 @@ export default function SettingsNav({ current }: { current: "visibility" | "acco
       <Link href="/users/settings/auto-delete" className={`btn btn-small ${current === "auto-delete" ? "btn-primary" : "btn-outline"}`}>자동 삭제</Link>
       <Link href="/users/settings/data" className={`btn btn-small ${current === "data" ? "btn-primary" : "btn-outline"}`}>내보내기/가져오기</Link>
       <Link href="/users/settings/migrate" className={`btn btn-small ${current === "migrate" ? "btn-primary" : "btn-outline"}`}>계정 이전</Link>
+      <Link href="/users/settings/development" className={`btn btn-small ${current === "development" ? "btn-primary" : "btn-outline"}`}>개발</Link>
     </div>
   );
 }

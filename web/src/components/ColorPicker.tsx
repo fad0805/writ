@@ -3,11 +3,12 @@
 import { COLOR_PICKER_PALLETE } from "@/const/extensions";
 import { Editor } from "@tiptap/core";
 import { useEffect, useState } from "react";
+import { storageGet, storageSet } from "@/lib/storage";
 
 export default function ColorPicker({ref, onClose, editor}: {ref: React.RefObject<HTMLDivElement | null>; onClose: (state: boolean) => void; editor: Editor}) {
   const [recentColors, setRecentColors] = useState<string[] | null>(() => {
     try {
-      const savedColor = localStorage.getItem('writ:recent-colors');
+      const savedColor = storageGet('writ:recent-colors');
       return savedColor ? JSON.parse(savedColor) : [];
     } catch {
       return [];
@@ -20,7 +21,7 @@ export default function ColorPicker({ref, onClose, editor}: {ref: React.RefObjec
       const list = prev.filter((c) => c !== color);
       list.unshift(color);
       if (list.length > 5) list.length = 5;
-      localStorage.setItem("writ:recent-colors", JSON.stringify(list));
+      storageSet("writ:recent-colors", JSON.stringify(list));
       return list;
     })
   }

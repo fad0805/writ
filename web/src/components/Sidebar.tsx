@@ -8,6 +8,7 @@ import Icon from "./Icon";
 import Avatar from "./Avatar";
 import AccountSwitcher from "./AccountSwitcher";
 import { subscribeAnnouncementStatus, refreshAnnouncementStatus } from "@/lib/announcements";
+import { storageGet } from "@/lib/storage";
 
 function NavItem({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
   const handleClick = (e: React.MouseEvent) => {
@@ -29,7 +30,7 @@ export default function Sidebar() {
   const { user, loading, refresh } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const [isDark, setIsDark] = useState(() => typeof localStorage !== "undefined" && localStorage.getItem("theme") === "dark");
+  const [isDark, setIsDark] = useState(() => storageGet("theme") === "dark");
   const [mounted, setMounted] = useState(false);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const originalFaviconRef = useRef<string>("");
@@ -54,13 +55,12 @@ export default function Sidebar() {
     return () => clearTimeout(id);
   }, []);
   useEffect(() => {
-    if (localStorage.getItem("theme") === "dark" && !document.body.classList.contains("dark-theme")) {
+    if (storageGet("theme") === "dark" && !document.body.classList.contains("dark-theme")) {
       document.body.classList.add("dark-theme");
     }
   }, []);
   useEffect(() => {
-    if (typeof localStorage === "undefined") return;
-    const id = setTimeout(() => setTimelineTab(localStorage.getItem("lastTimelineTab") || "home"), 0);
+    const id = setTimeout(() => setTimelineTab(storageGet("lastTimelineTab") || "home"), 0);
     return () => clearTimeout(id);
   }, [pathname]);
   useEffect(() => {

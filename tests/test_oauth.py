@@ -65,6 +65,56 @@ def test_authorize_rejects_unregistered_redirect(client, make_user):
     assert r.status_code == 400
 
 
+def test_authorize_rejects_scope_outside_app_scopes(client, make_user):
+    make_user("alice")
+    app_obj = _make_app()
+    # _make_app 의 기본 앱 스코프는 read write push 이므로 follow 는 허용되지 않는다.
+    r = client.post(
+        "/api/oauth/authorize",
+        json={
+            "client_id": app_obj.client_id,
+            "redirect_uri": "https://client.example/callback",
+            "response_type": "code",
+            "scope": "follow",
+            "username": "alice",
+            "password": "test-password",
+        },
+    )
+    assert r.status_code == 400
+    assert r.json()["error"] == "invalid_scope"
+
+
+def test_authorize_normalizes_top_level_scope(client, make_user):
+    make_user("alice")
+    app_obj = _make_app()
+    r = client.post(
+        "/api/oauth/authorize",
+        json={
+            "client_id": app_obj.client_id,
+            "redirect_uri": "https://client.example/callback",
+            "response_type": "code",
+            "scope": "read read:accounts write",
+            "username": "alice",
+            "password": "test-password",
+        },
+    )
+    assert r.status_code == 200
+    code = r.json()["redirect"].split("code=")[1]
+
+    r = client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "client_id": app_obj.client_id,
+            "client_secret": app_obj.client_secret,
+            "redirect_uri": "https://client.example/callback",
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["scope"] == "read write"
+
+
 def test_authorize_allows_registered_redirect(client, make_user):
     make_user("alice")
     app_obj = _make_app()

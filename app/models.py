@@ -786,6 +786,10 @@ class MastodonApp(Base):
     __tablename__ = "mastodon_apps"
 
     id = Column(Integer, primary_key=True)
+    # Nullable for apps registered through the public Mastodon-compatible
+    # POST /api/v1/apps endpoint.  Apps created from the developer settings UI
+    # are owned by the logged-in user.
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     client_name = Column(String(256), nullable=False)
     redirect_uris = Column(Text, default="urn:ietf:wg:oauth:2.0:oob")
     scopes = Column(String(256), default="read write push")

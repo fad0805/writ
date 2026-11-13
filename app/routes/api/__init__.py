@@ -13,6 +13,7 @@ from app.core.feed import _broadcast_federation
 from app.routes.api._admin import admin_router
 from app.routes.api._announcements import announcements_router
 from app.routes.api._auth import auth_router
+from app.routes.api._developer import developer_router
 from app.routes.api._emojis import emoji_router
 from app.routes.api._episodes import (
     _episode_json,
@@ -58,6 +59,7 @@ from app.routes.api.interactions import (
 )
 
 router.include_router(auth_router)
+router.include_router(developer_router)
 router.include_router(meta_router)
 router.include_router(emoji_router)
 router.include_router(pwa_router)

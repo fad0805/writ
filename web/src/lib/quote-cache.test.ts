@@ -15,7 +15,7 @@ function makePost(id: number): PostData {
 }
 
 beforeEach(() => {
-  sessionStorage.clear();
+  window.sessionStorage.clear();
   clearQuoteCache();
 });
 

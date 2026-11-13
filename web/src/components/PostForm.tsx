@@ -10,12 +10,13 @@ import { useComposerAutocomplete } from "@/hooks/useComposerAutocomplete";
 import ComposerMedia from "./ComposerMedia";
 import ComposerLinkPreview from "./ComposerLinkPreview";
 import ComposerPoll from "./ComposerPoll";
+import { storageGet, storageRemove, storageSet } from "@/lib/storage";
 
 const MAX_LENGTH = 500;
 
 export default function PostForm({ parentId, onDone, placeholder, initialContent, initialVisibility, shareUrl, parentSummary, initialSummary, initialMedia }: { parentId?: number; onDone?: (post?: PostData) => void; placeholder?: string; initialContent?: string; initialVisibility?: string; shareUrl?: string; parentSummary?: string | null; initialSummary?: string | null; initialMedia?: { url: string; type: string; alt?: string }[] }) {
   const draftKey = `draft_${parentId || "new"}`;
-  const savedDraft = typeof localStorage !== "undefined" ? (() => { try { return JSON.parse(localStorage.getItem(draftKey) || "null"); } catch { return null; } })() : null;
+  const savedDraft = (() => { try { return JSON.parse(storageGet(draftKey) || "null"); } catch { return null; } })();
   const [content, setContent] = useState((shareUrl ? initialContent : (savedDraft?.content ?? initialContent)) || "");
   const [summary, setSummary] = useState((shareUrl ? undefined : savedDraft?.summary) ?? (initialSummary !== undefined ? initialSummary : (parentId && parentSummary ? parentSummary : "")));
   const [postSensitive, setPostSensitive] = useState(shareUrl ? false : (savedDraft?.sensitive ?? false));
@@ -80,12 +81,11 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
   }, [showVisPicker]);
 
   useEffect(() => {
-    if (typeof localStorage === "undefined") return;
     const t = setTimeout(() => {
       if (content || summary || postSensitive) {
-        localStorage.setItem(draftKey, JSON.stringify({ content, summary, sensitive: postSensitive }));
+        storageSet(draftKey, JSON.stringify({ content, summary, sensitive: postSensitive }));
       } else {
-        localStorage.removeItem(draftKey);
+        storageRemove(draftKey);
       }
     }, 500);
     return () => clearTimeout(t);
@@ -213,7 +213,7 @@ export default function PostForm({ parentId, onDone, placeholder, initialContent
       }
       const result = await api.createPost({ content, summary, visibility, parent_id: parentId, share_url: shareUrlFinal, media_attachments: JSON.stringify(uploaded), is_sensitive: postSensitive, poll_options: opts.length >= 2 ? JSON.stringify(opts) : "", poll_expires_in: pollExpiresIn, link_preview: linkPreview ? JSON.stringify(linkPreview) : "" });
       resetForm();
-      if (typeof localStorage !== "undefined") localStorage.removeItem(draftKey);
+      storageRemove(draftKey);
       window.dispatchEvent(new CustomEvent("writ:draft-cleared", { detail: { key: draftKey } }));
       if (onDone) onDone(result);
       else router.refresh();

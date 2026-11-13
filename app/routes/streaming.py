@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.core.auth import _decode_session_token
 from app.core.eventbus import add_queue, add_ws, remove_queue, remove_ws
+from app.core.mastodon_scopes import scope_allowed
 from app.db.database import get_session
 from app.models import MastodonAccessToken
 
@@ -52,7 +53,7 @@ async def websocket_stream(websocket: WebSocket):
     if not token and access_token:
         with get_session() as db:
             mat = db.query(MastodonAccessToken).filter_by(access_token=access_token).first()
-            if not mat or mat.user_id is None:
+            if not mat or mat.user_id is None or not scope_allowed(mat.scopes, "read"):
                 await websocket.close(code=4001, reason="Unauthorized")
                 return
     if token and _decode_session_token(token) is None:

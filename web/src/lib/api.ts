@@ -1,3 +1,5 @@
+import { storageGet, storageRemove, storageSet } from "@/lib/storage";
+
 export interface StoredAccount {
   user_id: number;
   username: string;
@@ -9,9 +11,8 @@ const ACCOUNTS_KEY = "writ_accounts";
 const ACTIVE_ACCOUNT_KEY = "writ_active_account";
 
 export function getStoredAccounts(): StoredAccount[] {
-  if (typeof localStorage === "undefined") return [];
   try {
-    const accounts = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || "[]") as StoredAccount[];
+    const accounts = JSON.parse(storageGet(ACCOUNTS_KEY) || "[]") as StoredAccount[];
     let sanitized = false;
     for (const account of accounts) {
       const legacy = account as unknown as Record<string, unknown>;
@@ -20,7 +21,7 @@ export function getStoredAccounts(): StoredAccount[] {
         sanitized = true;
       }
     }
-    if (sanitized) localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+    if (sanitized) storageSet(ACCOUNTS_KEY, JSON.stringify(accounts));
     return accounts;
   } catch {
     return [];
@@ -35,24 +36,23 @@ export function storeAccount(account: StoredAccount): void {
   } else {
     accounts.push(account);
   }
-  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+  storageSet(ACCOUNTS_KEY, JSON.stringify(accounts));
 }
 
 export function removeStoredAccount(userId: number): void {
   const accounts = getStoredAccounts().filter(a => a.user_id !== userId);
-  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+  storageSet(ACCOUNTS_KEY, JSON.stringify(accounts));
   if (getActiveAccountId() === userId) {
-    localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
+    storageRemove(ACTIVE_ACCOUNT_KEY);
   }
 }
 
 export function getActiveAccountId(): number | null {
-  if (typeof localStorage === "undefined") return null;
-  return Number(localStorage.getItem(ACTIVE_ACCOUNT_KEY)) || null;
+  return Number(storageGet(ACTIVE_ACCOUNT_KEY)) || null;
 }
 
 export function setActiveAccountId(userId: number): void {
-  localStorage.setItem(ACTIVE_ACCOUNT_KEY, String(userId));
+  storageSet(ACTIVE_ACCOUNT_KEY, String(userId));
 }
 
 export function accountSnapshot(): number | null {
@@ -322,10 +322,42 @@ export interface EpisodeData {
   updated_at: string | null;
 }
 
+export interface DeveloperToken {
+  id: number;
+  access_token: string;
+  scopes: string[];
+  created_at: string | null;
+}
+
+export interface DeveloperApp {
+  id: number;
+  name: string;
+  website: string | null;
+  redirect_uri: string;
+  redirect_uris: string[];
+  scopes: string[];
+  client_id: string;
+  client_secret: string;
+  created_at: string | null;
+  ownerless: boolean;
+  tokens: DeveloperToken[];
+}
+
 // Auth
 export const api = {
   me: () => request<User>("/api/auth/me"),
   logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
+
+  // Developer settings
+  getDeveloperApps: () => request<{ apps: DeveloperApp[] }>("/api/developer/apps"),
+  createDeveloperApp: (data: { client_name: string; website?: string; redirect_uris: string[]; scopes: string[] }) =>
+    request<{ app: DeveloperApp }>("/api/developer/apps", { method: "POST", body: JSON.stringify(data) }),
+  deleteDeveloperApp: (id: number) =>
+    request<{ ok: boolean }>(`/api/developer/apps/${id}`, { method: "DELETE" }),
+  createDeveloperToken: (appId: number) =>
+    request<{ token: DeveloperToken }>(`/api/developer/apps/${appId}/token`, { method: "POST" }),
+  revokeDeveloperToken: (tokenId: number) =>
+    request<{ ok: boolean }>(`/api/developer/tokens/${tokenId}`, { method: "DELETE" }),
 
   // Timeline
   timeline: (type: string = "home", limit: number = 10, cursor?: string | null) =>

@@ -1,18 +1,20 @@
+import { storageGet, storageSet } from "@/lib/storage";
+
 const KEY = "writ:emoji-usage";
 
 export function recordEmojiUsage(emoji: string) {
   if (!emoji || emoji === "★") return;
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = storageGet(KEY);
     const counts: Record<string, number> = raw ? JSON.parse(raw) : {};
     counts[emoji] = (counts[emoji] || 0) + 1;
-    localStorage.setItem(KEY, JSON.stringify(counts));
+    storageSet(KEY, JSON.stringify(counts));
   } catch {}
 }
 
 export function getFrequentEmojis(limit = 14): string[] {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = storageGet(KEY);
     if (!raw) return [];
     const counts: Record<string, number> = JSON.parse(raw);
     return Object.entries(counts)

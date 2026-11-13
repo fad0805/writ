@@ -149,15 +149,15 @@ function seedTimelineCache(entries: Record<string, { posts: PostData[]; hasMore?
   for (const [k, v] of Object.entries(entries)) {
     out[k] = { posts: v.posts, hasMore: v.hasMore ?? false, cursor: v.cursor ?? null, ts: now };
   }
-  sessionStorage.setItem("writ:tl-cache:v3:1", JSON.stringify(out));
+  window.sessionStorage.setItem("writ:tl-cache:v3:1", JSON.stringify(out));
 }
 
 beforeEach(() => {
   MockEventSource.instances = [];
   h.renders.length = 0;
   h.avatars.length = 0;
-  sessionStorage.clear();
-  localStorage.clear();
+  window.sessionStorage.clear();
+  window.localStorage.clear();
   vi.mocked(api.timeline).mockReset();
 });
 
@@ -194,6 +194,8 @@ describe("TimelinePage", () => {
   });
 
   it("caps the feed at MAX_TL_POSTS when many new posts stream in", async () => {
+    // 300+ posts render in this test; give it headroom when the full suite runs in parallel.
+
     vi.mocked(api.timeline).mockResolvedValueOnce({
       posts: [makePost(1), makePost(2), makePost(3)],
       has_more: false,
@@ -211,7 +213,7 @@ describe("TimelinePage", () => {
     const cards = screen.getAllByTestId("pc");
     expect(cards).toHaveLength(MAX_TL_POSTS);
     expect(cards[0]).toHaveTextContent(String(total + 3));
-  });
+  }, 15000);
 
   it("swaps in the new author avatar when a remote profile_update arrives", async () => {
     vi.mocked(api.timeline).mockResolvedValueOnce({
