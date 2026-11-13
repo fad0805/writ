@@ -137,7 +137,7 @@ function CopyButton({ text, label = "복사" }: { text: string; label?: string }
   };
 
   return (
-    <button type="button" onClick={handleCopy} className="btn btn-small btn-outline" style={{ flexShrink: 0 }}>
+    <button type="button" onClick={handleCopy} className="btn btn-small btn-outline">
       <Icon name="link" size={13} /> {copied ? "복사됨" : label}
     </button>
   );
@@ -153,25 +153,9 @@ function TokenRow({
   const [visible, setVisible] = useState(false);
 
   return (
-    <div
-      style={{
-        border: "1px solid var(--border)",
-        borderRadius: 8,
-        padding: "10px 12px",
-        marginBottom: 8,
-        background: "var(--bg-tertiary)",
-      }}
-    >
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <code
-          style={{
-            flex: 1,
-            minWidth: 180,
-            overflowWrap: "anywhere",
-            fontSize: "0.82em",
-            color: "var(--text-secondary)",
-          }}
-        >
+    <div className="dev-token-row">
+      <div className="dev-token-main">
+        <code className="dev-token-code">
           {visible ? token.access_token : "••••••••••••••••••••••••••••••••"}
         </code>
         <button
@@ -191,26 +175,14 @@ function TokenRow({
           <Icon name="trash" size={13} /> 폐기
         </button>
       </div>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
+      <div className="dev-token-meta">
         {token.scopes.map((scope) => (
-          <span
-            key={scope}
-            style={{
-              fontSize: "0.75em",
-              padding: "1px 6px",
-              borderRadius: 10,
-              background: "var(--bg-secondary)",
-              border: "1px solid var(--border)",
-              color: "var(--text-muted)",
-            }}
-          >
+          <span key={scope} className="dev-token-scope">
             {scope}
           </span>
         ))}
         {token.created_at && (
-          <span style={{ fontSize: "0.75em", color: "var(--text-dim)" }}>
-            {formatDate(token.created_at)} 발급
-          </span>
+          <span className="dev-token-date">{formatDate(token.created_at)} 발급</span>
         )}
       </div>
     </div>
@@ -242,34 +214,19 @@ function AppCard({
   }, [app]);
 
   return (
-    <div className="admin-detail-card" style={{ padding: 18 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+    <div className="admin-detail-card dev-app-card">
+      <div className="dev-app-header">
         <div>
-          <h3 style={{ margin: 0, fontSize: "1.1em" }}>
+          <h3 className="dev-app-title">
             {app.name}
-            {app.ownerless && (
-              <span
-                style={{
-                  marginLeft: 8,
-                  fontSize: "0.62em",
-                  padding: "2px 7px",
-                  borderRadius: 10,
-                  background: "var(--bg-tertiary)",
-                  border: "1px solid var(--border)",
-                  color: "var(--text-muted)",
-                  verticalAlign: "middle",
-                }}
-              >
-                기존 API 앱
-              </span>
-            )}
+            {app.ownerless && <span className="dev-badge">기존 API 앱</span>}
           </h3>
-          <div style={{ fontSize: "0.82em", color: "var(--text-muted)", marginTop: 4 }}>
+          <div className="dev-app-meta">
             {app.created_at ? `${formatDate(app.created_at)} 생성` : "생성일 없음"}
             {app.website && (
               <>
                 {" · "}
-                <a href={app.website} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
+                <a href={app.website} target="_blank" rel="noreferrer">
                   {app.website}
                 </a>
               </>
@@ -281,61 +238,37 @@ function AppCard({
         </button>
       </div>
 
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 12 }}>
+      <div className="dev-pills">
         {app.scopes.map((scope) => (
-          <span
-            key={scope}
-            style={{
-              fontSize: "0.78em",
-              padding: "2px 8px",
-              borderRadius: 12,
-              background: "var(--bg-tertiary)",
-              border: "1px solid var(--border)",
-              color: "var(--text-secondary)",
-            }}
-          >
+          <span key={scope} className="dev-pill">
             {scope}
           </span>
         ))}
       </div>
 
-      <div className="form-group" style={{ marginTop: 16, marginBottom: 10 }}>
+      <div className="form-group dev-field">
         <label>Client ID</label>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input readOnly value={app.client_id} className="cw-input" style={{ fontFamily: "monospace", fontSize: "0.82em" }} />
+        <div className="dev-secret-row">
+          <input readOnly value={app.client_id} className="cw-input dev-mono-input" />
           <CopyButton text={app.client_id} />
         </div>
       </div>
-      <div className="form-group" style={{ marginBottom: 10 }}>
+      <div className="form-group dev-field">
         <label>Client Secret</label>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input readOnly value={app.client_secret} className="cw-input" style={{ fontFamily: "monospace", fontSize: "0.82em" }} />
+        <div className="dev-secret-row">
+          <input readOnly value={app.client_secret} className="cw-input dev-mono-input" />
           <CopyButton text={app.client_secret} />
         </div>
       </div>
 
-      <div className="form-group" style={{ marginBottom: 12 }}>
+      <div className="form-group dev-field">
         <label>리디렉트 URI</label>
-        <pre
-          style={{
-            margin: 0,
-            padding: 10,
-            borderRadius: 8,
-            background: "var(--bg-tertiary)",
-            border: "1px solid var(--border)",
-            fontSize: "0.82em",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-all",
-            color: "var(--text-secondary)",
-          }}
-        >
-          {app.redirect_uris.join("\n")}
-        </pre>
+        <pre className="dev-redirect">{app.redirect_uris.join("\n")}</pre>
       </div>
 
-      <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
-          <h4 style={{ margin: 0, fontSize: "0.95em" }}>
+      <div className="dev-token-section">
+        <div className="dev-token-header">
+          <h4>
             <Icon name="lock" size={14} /> 액세스 토큰
           </h4>
           <button
@@ -348,20 +281,18 @@ function AppCard({
           </button>
         </div>
         {app.tokens.length === 0 ? (
-          <p className="empty-small" style={{ margin: 0 }}>
-            아직 발급된 액세스 토큰이 없습니다.
-          </p>
+          <p className="empty-small dev-empty">아직 발급된 액세스 토큰이 없습니다.</p>
         ) : (
           app.tokens.map((token) => (
             <TokenRow key={token.id} token={token} onRevoke={(tokenId) => onRevokeToken(app.id, tokenId)} />
           ))
         )}
-        <p className="form-help" style={{ marginTop: 8 }}>
+        <p className="form-help dev-token-help">
           이 토큰은 현재 계정의 API 접근에 사용됩니다. 외부에 노출되지 않도록 주의하세요.
         </p>
       </div>
 
-      <div style={{ marginTop: 14 }}>
+      <div className="dev-oauth-action">
         <button
           type="button"
           onClick={() => {
@@ -563,11 +494,11 @@ export default function DevelopmentSettingsPage() {
       <div className="page-header"><h2><Icon name="settings" /> 설정 관리</h2></div>
       <SettingsNav current="development" />
 
-      <div className="novel-form" style={{ marginBottom: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+      <div className="novel-form dev-section">
+        <div className="dev-toolbar">
           <div>
-            <h3 style={{ margin: 0, fontSize: "1.05em" }}><Icon name="link" size={15} /> 애플리케이션</h3>
-            <p className="form-help" style={{ marginTop: 4 }}>
+            <h3 className="dev-toolbar-title"><Icon name="link" size={15} /> 애플리케이션</h3>
+            <p className="form-help">
               OAuth 앱을 등록하고 API 액세스 토큰을 발급할 수 있습니다.
             </p>
           </div>
@@ -584,7 +515,7 @@ export default function DevelopmentSettingsPage() {
         </div>
 
         {showForm && (
-          <form onSubmit={handleCreate} style={{ marginTop: 18, borderTop: "1px solid var(--border)", paddingTop: 18 }}>
+          <form onSubmit={handleCreate} className="dev-form">
             <div className="form-group">
               <label>애플리케이션 이름 *</label>
               <input
@@ -613,8 +544,7 @@ export default function DevelopmentSettingsPage() {
                 value={redirectUrisText}
                 onChange={(event) => setRedirectUrisText(event.target.value)}
                 rows={4}
-                className="cw-input"
-                style={{ resize: "vertical", fontFamily: "monospace", fontSize: "0.88em" }}
+                className="cw-input dev-textarea"
                 required
               />
               <p className="form-help">
@@ -624,68 +554,42 @@ export default function DevelopmentSettingsPage() {
 
             <div className="form-group">
               <label>범위 *</label>
-              <p className="form-help" style={{ marginTop: 0, marginBottom: 10 }}>
+              <p className="form-help">
                 애플리케이션에 허용할 API입니다. 최상위 스코프를 선택하면 개별 항목은 자동으로 포함됩니다.
               </p>
               {visibleGroups.map((group) => {
                 const parentSelected = selectedScopes.includes(group.scope);
                 return (
-                  <div
-                    key={group.scope}
-                    style={{
-                      border: "1px solid var(--border)",
-                      borderRadius: 8,
-                      padding: "10px 12px",
-                      marginBottom: 8,
-                      background: "var(--bg-tertiary)",
-                    }}
-                  >
-                    <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2, color: "var(--text-primary)" }}>
+                  <div key={group.scope} className="dev-scope-group">
+                    <label className="dev-scope-group-label">
                       <input
                         type="checkbox"
                         checked={parentSelected}
                         onChange={() => toggleParentScope(group)}
                       />
-                      <span style={{ fontWeight: 600 }}>{group.label}</span>
-                      <code style={{ fontSize: "0.78em", color: "var(--text-muted)" }}>{group.scope}</code>
+                      <span>{group.label}</span>
+                      <code className="dev-scope-group-code">{group.scope}</code>
                     </label>
-                    <p className="form-help" style={{ marginTop: 0, marginBottom: group.children ? 8 : 0 }}>
-                      {group.description}
-                    </p>
+                    <p className="form-help">{group.description}</p>
                     {group.children && (
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
-                          gap: 4,
-                          paddingLeft: 24,
-                        }}
-                      >
+                      <div className="dev-scope-children">
                         {group.children.map((child) => {
                           const childSelected = parentSelected || selectedScopes.includes(child.scope);
                           return (
                             <label
                               key={child.scope}
-                              style={{
-                                display: "flex",
-                                alignItems: "flex-start",
-                                gap: 6,
-                                fontSize: "0.84em",
-                                color: parentSelected ? "var(--text-muted)" : "var(--text-secondary)",
-                                cursor: parentSelected ? "default" : "pointer",
-                              }}
+                              className={`dev-scope-child${parentSelected ? " is-disabled" : ""}`}
                             >
                               <input
                                 type="checkbox"
                                 checked={childSelected}
                                 disabled={parentSelected}
                                 onChange={() => toggleChildScope(child.scope)}
-                                style={{ marginTop: 2 }}
                               />
                               <span>
                                 {child.label}
                                 <br />
-                                <code style={{ fontSize: "0.88em", color: "var(--text-dim)" }}>{child.scope}</code>
+                                <code>{child.scope}</code>
                               </span>
                             </label>
                           );
@@ -710,12 +614,12 @@ export default function DevelopmentSettingsPage() {
         )}
       </div>
 
-      {notice && <p className="auth-success" style={{ marginBottom: 12 }}>{notice}</p>}
-      {error && <p className="auth-error" style={{ marginBottom: 12 }}>{error}</p>}
+      {notice && <p className="auth-success dev-flash">{notice}</p>}
+      {error && <p className="auth-error dev-flash">{error}</p>}
 
       {apps.length === 0 ? (
         <div className="novel-form">
-          <p className="empty-small" style={{ margin: 0 }}>
+          <p className="empty-small dev-empty">
             아직 등록된 애플리케이션이 없습니다. 새 애플리케이션을 만들어 API를 사용해 보세요.
           </p>
         </div>
@@ -732,52 +636,32 @@ export default function DevelopmentSettingsPage() {
         ))
       )}
 
-      <div className="novel-form" style={{ marginTop: 20 }}>
-        <h3 style={{ marginTop: 0, fontSize: "1.05em" }}><Icon name="globe" size={15} /> API 사용</h3>
-        <p style={{ fontSize: "0.9em", color: "var(--text-secondary)" }}>
+      <div className="novel-form dev-api">
+        <h3 className="dev-api-title"><Icon name="globe" size={15} /> API 사용</h3>
+        <p>
           발급한 액세스 토큰을 <code>Authorization: Bearer</code> 헤더에 넣으면 Mastodon 호환 API를 사용할 수 있습니다.
         </p>
         <div className="form-group">
           <label>API 기본 URL</label>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input readOnly value={origin ? `${origin}/api` : "https://your-instance/api"} className="cw-input" style={{ fontFamily: "monospace", fontSize: "0.82em" }} />
+          <div className="dev-secret-row">
+            <input
+              readOnly
+              value={origin ? `${origin}/api` : "https://your-instance/api"}
+              className="cw-input dev-mono-input"
+            />
             <CopyButton text={origin ? `${origin}/api` : ""} />
           </div>
         </div>
         <div className="form-group">
           <label>토큰 확인 예시</label>
-          <pre
-            style={{
-              margin: 0,
-              padding: 12,
-              borderRadius: 8,
-              background: "var(--bg-tertiary)",
-              border: "1px solid var(--border)",
-              fontSize: "0.82em",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-all",
-              color: "var(--text-secondary)",
-            }}
-          >
+          <pre className="dev-code">
 {`curl -H "Authorization: Bearer <ACCESS_TOKEN>" \\
   ${origin || "https://your-instance"}/api/v1/accounts/verify_credentials`}
           </pre>
         </div>
-        <div className="form-group" style={{ marginBottom: 0 }}>
+        <div className="form-group dev-field-last">
           <label>OAuth 토큰 발급</label>
-          <pre
-            style={{
-              margin: 0,
-              padding: 12,
-              borderRadius: 8,
-              background: "var(--bg-tertiary)",
-              border: "1px solid var(--border)",
-              fontSize: "0.82em",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-all",
-              color: "var(--text-secondary)",
-            }}
-          >
+          <pre className="dev-code">
 {`POST ${origin || "https://your-instance"}/oauth/token
 Content-Type: application/x-www-form-urlencoded
 
