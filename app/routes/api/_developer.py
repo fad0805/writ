@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session as SASession
 
 from app.core.auth import require_active_auth
 from app.core.mastodon_scopes import (
+    has_admin_scope,
     normalize_scopes,
     parse_scopes,
     scope_allowed,
@@ -81,7 +82,7 @@ def _clean_website(raw: str) -> str:
 def _validate_scopes_for_user(user, scopes: list[str]) -> None:
     if not scopes:
         raise HTTPException(status_code=400, detail="At least one scope is required")
-    if any(scope.startswith("admin:") for scope in scopes) and not is_staff(user):
+    if has_admin_scope(scopes) and not is_staff(user):
         raise HTTPException(status_code=403, detail="Admin scopes require staff permissions")
 
 

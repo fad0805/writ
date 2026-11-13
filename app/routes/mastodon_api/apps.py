@@ -4,7 +4,7 @@ import secrets
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session as SASession
 
-from app.core.mastodon_scopes import normalize_scopes, scopes_to_string
+from app.core.mastodon_scopes import has_admin_scope, normalize_scopes, scopes_to_string
 from app.db.database import get_db
 from app.models import MastodonAccessToken, MastodonApp
 from app.routes.mastodon_api._common import MastodonAPIError
@@ -29,9 +29,15 @@ async def create_app(request: Request, db: SASession = Depends(get_db)):
     if isinstance(redirect_uris, list):
         redirect_uris = "\n".join(str(uri) for uri in redirect_uris)
     try:
-        scopes = scopes_to_string(normalize_scopes(body.get("scopes") or "read write push"))
+        requested_scopes = normalize_scopes(body.get("scopes") or "read write push")
     except ValueError as exc:
         raise MastodonAPIError(status_code=400, detail=str(exc)) from exc
+    if has_admin_scope(requested_scopes):
+        raise MastodonAPIError(
+            status_code=403,
+            detail="Admin scopes are not allowed for public applications",
+        )
+    scopes = scopes_to_string(requested_scopes)
     website = str(body.get("website") or "")[:512]
 
     client_id = secrets.token_urlsafe(32)

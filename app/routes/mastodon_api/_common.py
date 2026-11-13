@@ -11,7 +11,8 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session as SASession
 
 from app.config.settings import BASE_URL
-from app.core.mastodon_scopes import required_scope_for_request, scope_allowed
+from app.core.mastodon_scopes import has_admin_scope, required_scope_for_request, scope_allowed
+from app.core.permissions import is_staff
 from app.core.visibility import _can_view
 from app.models import Boost, Follow, Like, MastodonAccessToken, Post, User, UserBlock, UserMute, Vote, now
 from app.utils.content_parser import _sanitize_html
@@ -62,7 +63,15 @@ def _get_bearer_user(request: Request, db: SASession) -> User | None:
     mat = _get_bearer_token(request, db)
     if not mat or mat.user_id is None:
         return None
-    return db.query(User).filter_by(id=mat.user_id, is_remote=False).first()
+    user = db.query(User).filter_by(id=mat.user_id, is_remote=False).first()
+    if not user:
+        return None
+    # A token carrying admin scopes must belong to a staff account.  This also
+    # neutralizes any such token that was issued before the OAuth checks were
+    # tightened.
+    if has_admin_scope(mat.scopes) and not is_staff(user):
+        return None
+    return user
 
 
 def _require_bearer(request: Request, db: SASession, required_scope: str | None = None) -> User:
@@ -79,6 +88,8 @@ def _require_bearer(request: Request, db: SASession, required_scope: str | None 
         raise MastodonAPIError(status_code=403, detail="Account frozen")
     if getattr(user, "is_deactivated", False):
         raise MastodonAPIError(status_code=403, detail="Account deactivated")
+    if has_admin_scope(mat.scopes) and not is_staff(user):
+        raise MastodonAPIError(status_code=403, detail="Admin scopes require staff permissions")
 
     needed = required_scope or required_scope_for_request(request.method, request.url.path)
     if needed and not scope_allowed(mat.scopes, needed):

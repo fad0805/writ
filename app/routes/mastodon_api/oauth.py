@@ -7,7 +7,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.core.auth import verify_password
-from app.core.mastodon_scopes import normalize_scopes, scope_allowed, scopes_to_string
+from app.core.mastodon_scopes import has_admin_scope, normalize_scopes, scope_allowed, scopes_to_string
+from app.core.permissions import is_staff
 from app.db.database import get_session
 from app.models import MastodonAccessToken, MastodonApp, MastodonAuthorizationCode, User
 from app.routes.api._auth import _check_auth_rate_limit, _get_client_ip, _record_auth_failure
@@ -49,6 +50,16 @@ def _validated_scopes(app_obj: MastodonApp, raw: str) -> list[str] | None:
     if not scopes or not all(scope_allowed(app_obj.scopes, scope) for scope in scopes):
         return None
     return scopes
+
+
+def _admin_scope_error(user: User, scopes: str | list[str] | tuple[str, ...] | None) -> JSONResponse | None:
+    """Admin scopes may only be granted to staff accounts."""
+    if has_admin_scope(scopes) and not is_staff(user):
+        return JSONResponse(
+            {"error": "invalid_scope", "error_description": "Admin scopes require staff permissions"},
+            status_code=400,
+        )
+    return None
 
 
 def _do_authorize(client_id: str, redirect_uri: str, response_type: str, scope: str, state: str, username: str, password: str, client_ip: str):
@@ -95,6 +106,10 @@ def _do_authorize(client_id: str, redirect_uri: str, response_type: str, scope: 
         if not verify_password(password, user.password_hash):
             _record_auth_failure(client_ip)
             return JSONResponse({"error": "Invalid username or password"}, status_code=401)
+
+        scope_error = _admin_scope_error(user, granted_scopes)
+        if scope_error:
+            return scope_error
 
         code = secrets.token_urlsafe(32)
         auth_code = MastodonAuthorizationCode(
@@ -200,6 +215,9 @@ async def oauth_token(request: Request):
             granted_scopes = _validated_scopes(app_obj, body.get("scope", ""))
             if granted_scopes is None:
                 return JSONResponse({"error": "invalid_scope"}, status_code=400)
+            scope_error = _admin_scope_error(user, granted_scopes)
+            if scope_error:
+                return scope_error
             scope = scopes_to_string(granted_scopes)
             token = secrets.token_urlsafe(48)
             mat = MastodonAccessToken(app_id=app_obj.id, user_id=user.id, access_token=token, scopes=scope)
@@ -218,6 +236,12 @@ async def oauth_token(request: Request):
             requested_redirect = body.get("redirect_uri", "")
             if not requested_redirect or requested_redirect != auth_code.redirect_uri:
                 return JSONResponse({"error": "invalid_grant"}, status_code=400)
+            user = db.query(User).filter_by(id=auth_code.user_id).first()
+            if not user:
+                return JSONResponse({"error": "invalid_grant"}, status_code=400)
+            scope_error = _admin_scope_error(user, auth_code.scopes)
+            if scope_error:
+                return scope_error
             auth_code.used = True
             db.commit()
             # 토큰 스코프는 승인된(auth_code) 스코프로 고정 — 교환 시 확대를 차단한다 (RFC 6749 §4.1.4)

@@ -115,6 +115,11 @@ def scopes_to_string(scopes: str | list[str] | tuple[str, ...] | None) -> str:
     return " ".join(normalize_scopes(scopes))
 
 
+def has_admin_scope(scopes: str | list[str] | tuple[str, ...] | None) -> bool:
+    """Return whether any admin scope is present."""
+    return any(scope.startswith("admin:") for scope in parse_scopes(scopes))
+
+
 def _parent_of(scope: str) -> str | None:
     if scope.startswith("admin:read:"):
         return "admin:read"
