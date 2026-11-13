@@ -225,7 +225,6 @@ function AppCard({
         <span className="dev-app-heading">
           <span className="dev-app-title">
             <span>{app.name}</span>
-            {app.ownerless && <span className="dev-badge">기존 API 앱</span>}
           </span>
           <span className="dev-app-meta">
             {app.created_at ? `${formatDate(app.created_at)} 생성` : "생성일 없음"}

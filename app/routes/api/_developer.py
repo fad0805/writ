@@ -11,7 +11,6 @@ import secrets
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import or_
 from sqlalchemy.orm import Session as SASession
 
 from app.core.auth import require_active_auth
@@ -116,22 +115,13 @@ def _app_json(db: SASession, app: MastodonApp, user_id: int) -> dict:
         "client_id": app.client_id,
         "client_secret": app.client_secret,
         "created_at": _fmt_dt(app.created_at),
-        "ownerless": app.user_id is None,
         "tokens": [_token_json(t) for t in tokens],
     }
 
 
-def _can_manage_app(user, app: MastodonApp) -> bool:
-    if app.user_id == user.id:
-        return True
-    # Apps registered through the public POST /api/v1/apps endpoint have no
-    # owner.  Staff members may manage them from the developer settings page.
-    return app.user_id is None and is_staff(user)
-
-
 def _owned_app(db: SASession, user, app_id: int) -> MastodonApp:
-    app = db.query(MastodonApp).filter_by(id=app_id).first()
-    if not app or not _can_manage_app(user, app):
+    app = db.query(MastodonApp).filter_by(id=app_id, user_id=user.id).first()
+    if not app:
         raise HTTPException(status_code=404, detail="Application not found")
     return app
 
@@ -139,12 +129,12 @@ def _owned_app(db: SASession, user, app_id: int) -> MastodonApp:
 @developer_router.get("/developer/apps")
 def list_developer_apps(request: Request, db: SASession = Depends(get_db)):
     user = require_active_auth(request)
-    query = db.query(MastodonApp)
-    if is_staff(user):
-        query = query.filter(or_(MastodonApp.user_id == user.id, MastodonApp.user_id.is_(None)))
-    else:
-        query = query.filter(MastodonApp.user_id == user.id)
-    apps = query.order_by(MastodonApp.id.desc()).all()
+    apps = (
+        db.query(MastodonApp)
+        .filter_by(user_id=user.id)
+        .order_by(MastodonApp.id.desc())
+        .all()
+    )
     return {"apps": [_app_json(db, app, user.id) for app in apps]}
 
 
@@ -253,8 +243,8 @@ def revoke_developer_token(token_id: int, request: Request, db: SASession = Depe
     )
     if not token:
         raise HTTPException(status_code=404, detail="Token not found")
-    app = db.query(MastodonApp).filter_by(id=token.app_id).first()
-    if not app or not _can_manage_app(user, app):
+    app = db.query(MastodonApp).filter_by(id=token.app_id, user_id=user.id).first()
+    if not app:
         raise HTTPException(status_code=404, detail="Token not found")
 
     db.delete(token)

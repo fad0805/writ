@@ -339,7 +339,6 @@ export interface DeveloperApp {
   client_id: string;
   client_secret: string;
   created_at: string | null;
-  ownerless: boolean;
   tokens: DeveloperToken[];
 }
 

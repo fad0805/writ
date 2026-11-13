@@ -26,8 +26,9 @@ def test_developer_apps_require_login(client):
     assert r.status_code == 401
 
 
-def test_staff_can_manage_ownerless_app(client, auth_cookie):
-    # 공개 POST /api/v1/apps 로 만들어진 기존 앱은 소유자가 없다.
+def test_ownerless_app_is_not_visible_or_manageable(client, auth_cookie):
+    # 공개 POST /api/v1/apps 로 만들어진 기존 앱은 소유자가 없으므로
+    # 개발자 설정의 "내 애플리케이션" 목록에 노출되지 않는다.
     with get_session() as s:
         app = MastodonApp(
             client_name="기존 API 앱",
@@ -49,16 +50,13 @@ def test_staff_can_manage_ownerless_app(client, auth_cookie):
     _admin, admin_cookies = auth_cookie("alice", role="admin")
     r = client.get("/api/developer/apps", cookies=admin_cookies)
     assert r.status_code == 200
-    listed = next(a for a in r.json()["apps"] if a["id"] == app_id)
-    assert listed["ownerless"] is True
+    assert all(a["id"] != app_id for a in r.json()["apps"])
 
     r = client.post(f"/api/developer/apps/{app_id}/token", cookies=admin_cookies)
-    assert r.status_code == 200
-    token = r.json()["token"]["access_token"]
+    assert r.status_code == 404
 
-    r = client.get("/api/v1/accounts/verify_credentials", headers={"Authorization": f"Bearer {token}"})
-    assert r.status_code == 200
-    assert r.json()["username"] == "alice"
+    r = client.delete(f"/api/developer/apps/{app_id}", cookies=admin_cookies)
+    assert r.status_code == 404
 
 
 def test_create_and_list_developer_app(client, auth_cookie):

@@ -5656,16 +5656,6 @@ input[type="checkbox"] {
   font-weight: 700;
 }
 
-.dev-badge {
-  padding: 2px 7px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-tertiary);
-  color: var(--text-muted);
-  font-size: 0.62em;
-  font-weight: 500;
-}
-
 .dev-app-meta {
   display: block;
   margin-top: 4px;
