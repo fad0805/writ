@@ -5652,6 +5652,13 @@ input[type="checkbox"] {
   color: var(--accent);
 }
 
+.dev-app-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .dev-pills {
   display: flex;
   flex-wrap: wrap;

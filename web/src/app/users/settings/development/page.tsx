@@ -192,16 +192,19 @@ function TokenRow({
 function AppCard({
   app,
   busy,
+  initiallyOpen = false,
   onCreateToken,
   onDelete,
   onRevokeToken,
 }: {
   app: DeveloperApp;
   busy: boolean;
+  initiallyOpen?: boolean;
   onCreateToken: (appId: number) => void;
   onDelete: (app: DeveloperApp) => void;
   onRevokeToken: (appId: number, tokenId: number) => void;
 }) {
+  const [open, setOpen] = useState(initiallyOpen);
   const oauthUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
     const params = new URLSearchParams({
@@ -223,6 +226,7 @@ function AppCard({
           </h3>
           <div className="dev-app-meta">
             {app.created_at ? `${formatDate(app.created_at)} 생성` : "생성일 없음"}
+            {` · 토큰 ${app.tokens.length}개`}
             {app.website && (
               <>
                 {" · "}
@@ -233,76 +237,91 @@ function AppCard({
             )}
           </div>
         </div>
-        <button type="button" onClick={() => onDelete(app)} className="btn btn-small btn-danger">
-          <Icon name="trash" size={13} /> 애플리케이션 삭제
-        </button>
-      </div>
-
-      <div className="dev-pills">
-        {app.scopes.map((scope) => (
-          <span key={scope} className="dev-pill">
-            {scope}
-          </span>
-        ))}
-      </div>
-
-      <div className="form-group dev-field">
-        <label>Client ID</label>
-        <div className="dev-secret-row">
-          <input readOnly value={app.client_id} className="cw-input dev-mono-input" />
-          <CopyButton text={app.client_id} />
-        </div>
-      </div>
-      <div className="form-group dev-field">
-        <label>Client Secret</label>
-        <div className="dev-secret-row">
-          <input readOnly value={app.client_secret} className="cw-input dev-mono-input" />
-          <CopyButton text={app.client_secret} />
-        </div>
-      </div>
-
-      <div className="form-group dev-field">
-        <label>리디렉트 URI</label>
-        <pre className="dev-redirect">{app.redirect_uris.join("\n")}</pre>
-      </div>
-
-      <div className="dev-token-section">
-        <div className="dev-token-header">
-          <h4>
-            <Icon name="lock" size={14} /> 액세스 토큰
-          </h4>
+        <div className="dev-app-actions">
           <button
             type="button"
-            onClick={() => onCreateToken(app.id)}
-            disabled={busy}
-            className="btn btn-small btn-primary"
+            onClick={() => setOpen((value) => !value)}
+            className="btn btn-small btn-outline"
+            aria-expanded={open}
           >
-            <Icon name="plus" size={13} /> {busy ? "발급 중..." : "새 토큰 발급"}
+            <Icon name={open ? "chevron_up" : "chevron_down"} size={14} />
+            {open ? "접기" : "상세"}
+          </button>
+          <button type="button" onClick={() => onDelete(app)} className="btn btn-small btn-danger">
+            <Icon name="trash" size={13} /> 애플리케이션 삭제
           </button>
         </div>
-        {app.tokens.length === 0 ? (
-          <p className="empty-small dev-empty">아직 발급된 액세스 토큰이 없습니다.</p>
-        ) : (
-          app.tokens.map((token) => (
-            <TokenRow key={token.id} token={token} onRevoke={(tokenId) => onRevokeToken(app.id, tokenId)} />
-          ))
-        )}
-        <p className="form-help dev-token-help">
-          이 토큰은 현재 계정의 API 접근에 사용됩니다. 외부에 노출되지 않도록 주의하세요.
-        </p>
       </div>
 
-      <div className="dev-oauth-action">
-        <button
-          type="button"
-          onClick={() => {
-            if (oauthUrl) window.open(oauthUrl, "_blank", "noopener,noreferrer");
-          }}
-          className="btn btn-small btn-outline"
-        >
-          <Icon name="globe" size={13} /> OAuth 인증 페이지 열기
-        </button>
-      </div>
+      {open && (
+        <>
+          <div className="dev-pills">
+            {app.scopes.map((scope) => (
+              <span key={scope} className="dev-pill">
+                {scope}
+              </span>
+            ))}
+          </div>
+
+          <div className="form-group dev-field">
+            <label>Client ID</label>
+            <div className="dev-secret-row">
+              <input readOnly value={app.client_id} className="cw-input dev-mono-input" />
+              <CopyButton text={app.client_id} />
+            </div>
+          </div>
+          <div className="form-group dev-field">
+            <label>Client Secret</label>
+            <div className="dev-secret-row">
+              <input readOnly value={app.client_secret} className="cw-input dev-mono-input" />
+              <CopyButton text={app.client_secret} />
+            </div>
+          </div>
+
+          <div className="form-group dev-field">
+            <label>리디렉트 URI</label>
+            <pre className="dev-redirect">{app.redirect_uris.join("\n")}</pre>
+          </div>
+
+          <div className="dev-token-section">
+            <div className="dev-token-header">
+              <h4>
+                <Icon name="lock" size={14} /> 액세스 토큰
+              </h4>
+              <button
+                type="button"
+                onClick={() => onCreateToken(app.id)}
+                disabled={busy}
+                className="btn btn-small btn-primary"
+              >
+                <Icon name="plus" size={13} /> {busy ? "발급 중..." : "새 토큰 발급"}
+              </button>
+            </div>
+            {app.tokens.length === 0 ? (
+              <p className="empty-small dev-empty">아직 발급된 액세스 토큰이 없습니다.</p>
+            ) : (
+              app.tokens.map((token) => (
+                <TokenRow key={token.id} token={token} onRevoke={(tokenId) => onRevokeToken(app.id, tokenId)} />
+              ))
+            )}
+            <p className="form-help dev-token-help">
+              이 토큰은 현재 계정의 API 접근에 사용됩니다. 외부에 노출되지 않도록 주의하세요.
+            </p>
+          </div>
+
+          <div className="dev-oauth-action">
+            <button
+              type="button"
+              onClick={() => {
+                if (oauthUrl) window.open(oauthUrl, "_blank", "noopener,noreferrer");
+              }}
+              className="btn btn-small btn-outline"
+            >
+              <Icon name="globe" size={13} /> OAuth 인증 페이지 열기
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -323,6 +342,7 @@ export default function DevelopmentSettingsPage() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [busyAppId, setBusyAppId] = useState<number | null>(null);
+  const [newAppId, setNewAppId] = useState<number | null>(null);
 
   const adminAllowed = canUseAdminScopes(user);
   const visibleGroups = useMemo(
@@ -404,6 +424,7 @@ export default function DevelopmentSettingsPage() {
         scopes: selectedScopes,
       });
       setApps((prev) => [result.app, ...prev]);
+      setNewAppId(result.app.id);
       setShowForm(false);
       resetForm();
       setNotice("애플리케이션이 생성되었습니다.");
@@ -629,6 +650,7 @@ export default function DevelopmentSettingsPage() {
             key={app.id}
             app={app}
             busy={busyAppId === app.id}
+            initiallyOpen={app.id === newAppId}
             onCreateToken={handleCreateToken}
             onDelete={handleDeleteApp}
             onRevokeToken={handleRevokeToken}
