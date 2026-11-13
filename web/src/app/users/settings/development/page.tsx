@@ -217,44 +217,34 @@ function AppCard({
   }, [app]);
 
   return (
-    <div className="admin-detail-card dev-app-card">
-      <div className="dev-app-header">
-        <div>
-          <h3 className="dev-app-title">
-            {app.name}
+    <div
+      className={`admin-detail-card dev-panel dev-app-card${open ? " is-open" : ""}`}
+      onClick={() => setOpen((value) => !value)}
+    >
+      <button type="button" className="dev-app-header dev-app-toggle" aria-expanded={open}>
+        <span className="dev-app-heading">
+          <span className="dev-app-title">
+            <span>{app.name}</span>
             {app.ownerless && <span className="dev-badge">기존 API 앱</span>}
-          </h3>
-          <div className="dev-app-meta">
+          </span>
+          <span className="dev-app-meta">
             {app.created_at ? `${formatDate(app.created_at)} 생성` : "생성일 없음"}
             {` · 토큰 ${app.tokens.length}개`}
-            {app.website && (
-              <>
-                {" · "}
-                <a href={app.website} target="_blank" rel="noreferrer">
-                  {app.website}
-                </a>
-              </>
-            )}
-          </div>
-        </div>
-        <div className="dev-app-actions">
-          <button
-            type="button"
-            onClick={() => setOpen((value) => !value)}
-            className="btn btn-small btn-outline"
-            aria-expanded={open}
-          >
-            <Icon name={open ? "chevron_up" : "chevron_down"} size={14} />
-            {open ? "접기" : "상세"}
-          </button>
-          <button type="button" onClick={() => onDelete(app)} className="btn btn-small btn-danger">
-            <Icon name="trash" size={13} /> 애플리케이션 삭제
-          </button>
-        </div>
-      </div>
+          </span>
+        </span>
+        <Icon name={open ? "chevron_up" : "chevron_down"} size={18} />
+      </button>
 
       {open && (
-        <>
+        <div className="dev-app-body" onClick={(event) => event.stopPropagation()}>
+          {app.website && (
+            <div className="dev-app-website">
+              <a href={app.website} target="_blank" rel="noreferrer">
+                {app.website}
+              </a>
+            </div>
+          )}
+
           <div className="dev-pills">
             {app.scopes.map((scope) => (
               <span key={scope} className="dev-pill">
@@ -266,14 +256,14 @@ function AppCard({
           <div className="form-group dev-field">
             <label>Client ID</label>
             <div className="dev-secret-row">
-              <input readOnly value={app.client_id} className="cw-input dev-mono-input" />
+              <input type="text" readOnly value={app.client_id} className="cw-input dev-mono-input" />
               <CopyButton text={app.client_id} />
             </div>
           </div>
           <div className="form-group dev-field">
             <label>Client Secret</label>
             <div className="dev-secret-row">
-              <input readOnly value={app.client_secret} className="cw-input dev-mono-input" />
+              <input type="text" readOnly value={app.client_secret} className="cw-input dev-mono-input" />
               <CopyButton text={app.client_secret} />
             </div>
           </div>
@@ -320,7 +310,13 @@ function AppCard({
               <Icon name="globe" size={13} /> OAuth 인증 페이지 열기
             </button>
           </div>
-        </>
+
+          <div className="dev-app-footer">
+            <button type="button" onClick={() => onDelete(app)} className="btn btn-small btn-danger">
+              <Icon name="trash" size={13} /> 애플리케이션 삭제
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -515,7 +511,7 @@ export default function DevelopmentSettingsPage() {
       <div className="page-header"><h2><Icon name="settings" /> 설정 관리</h2></div>
       <SettingsNav current="development" />
 
-      <div className="novel-form dev-section">
+      <div className="admin-detail-card dev-panel">
         <div className="dev-toolbar">
           <div>
             <h3 className="dev-toolbar-title"><Icon name="link" size={15} /> 애플리케이션</h3>
@@ -639,7 +635,7 @@ export default function DevelopmentSettingsPage() {
       {error && <p className="auth-error dev-flash">{error}</p>}
 
       {apps.length === 0 ? (
-        <div className="novel-form">
+        <div className="admin-detail-card dev-panel">
           <p className="empty-small dev-empty">
             아직 등록된 애플리케이션이 없습니다. 새 애플리케이션을 만들어 API를 사용해 보세요.
           </p>
@@ -658,7 +654,7 @@ export default function DevelopmentSettingsPage() {
         ))
       )}
 
-      <div className="novel-form dev-api">
+      <div className="admin-detail-card dev-panel dev-api">
         <h3 className="dev-api-title"><Icon name="globe" size={15} /> API 사용</h3>
         <p>
           발급한 액세스 토큰을 <code>Authorization: Bearer</code> 헤더에 넣으면 Mastodon 호환 API를 사용할 수 있습니다.
@@ -667,6 +663,7 @@ export default function DevelopmentSettingsPage() {
           <label>API 기본 URL</label>
           <div className="dev-secret-row">
             <input
+              type="text"
               readOnly
               value={origin ? `${origin}/api` : "https://your-instance/api"}
               className="cw-input dev-mono-input"
