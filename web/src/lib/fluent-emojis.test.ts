@@ -16,5 +16,11 @@ describe("fluent emojis", () => {
     const tone = all.find((emoji) => emoji.slug === "thumbs-up-medium-light");
     expect(tone?.char).toBe("👍🏼");
     expect(tone?.aliases).toContain("thumbs-up-medium-light");
+
+    // Fluent에 국가기가 없어도 전체 Unicode 국기는 목록에 포함된다.
+    const flag = all.find((emoji) => emoji.char === "🇦🇫");
+    expect(flag).toBeTruthy();
+    expect(flag?.slug).toBeUndefined();
+    expect(all.filter((emoji) => emoji.group === "깃발").length).toBeGreaterThan(250);
   });
 });

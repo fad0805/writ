@@ -1,6 +1,6 @@
 export interface FluentEmojiItem {
   char: string;
-  slug: string;
+  slug?: string;
   name: string;
   group: string;
   aliases: string[];
@@ -22,16 +22,18 @@ const GROUP_NAMES: Record<string, string> = {
   "Objects": "사물",
   "Symbols": "기호",
   "Flags": "깃발",
-  "기타": "기타",
 };
 
-const TONE_SUFFIXES: { suffix: string; modifier: string; label: string }[] = [
-  { suffix: "-medium-light", modifier: "\u{1F3FC}", label: "medium light" },
-  { suffix: "-medium-dark", modifier: "\u{1F3FE}", label: "medium dark" },
-  { suffix: "-light", modifier: "\u{1F3FB}", label: "light" },
-  { suffix: "-medium", modifier: "\u{1F3FD}", label: "medium" },
-  { suffix: "-dark", modifier: "\u{1F3FF}", label: "dark" },
+const TONES: { suffix: string; modifier: string; label: string }[] = [
+  { suffix: "medium-light", modifier: "\u{1F3FC}", label: "medium light" },
+  { suffix: "medium-dark", modifier: "\u{1F3FE}", label: "medium dark" },
+  { suffix: "light", modifier: "\u{1F3FB}", label: "light" },
+  { suffix: "medium", modifier: "\u{1F3FD}", label: "medium" },
+  { suffix: "dark", modifier: "\u{1F3FF}", label: "dark" },
 ];
+
+type UnicodeEmoji = { emoji: string; name: string; slug: string; skin_tone_support?: boolean };
+type UnicodeGroup = { name: string; emojis: UnicodeEmoji[] };
 
 function normalize(value: string) {
   return value
@@ -46,21 +48,6 @@ function addAliases(target: string[], values: string[]) {
   }
 }
 
-type UnicodeEmoji = { emoji: string; name: string; slug: string };
-type UnicodeGroup = { name: string; emojis: UnicodeEmoji[] };
-
-function splitTone(slug: string) {
-  if (slug.endsWith("-default")) {
-    return { baseSlug: slug.slice(0, -"-default".length), tone: null };
-  }
-  for (const tone of TONE_SUFFIXES) {
-    if (slug.endsWith(tone.suffix)) {
-      return { baseSlug: slug.slice(0, -tone.suffix.length), tone };
-    }
-  }
-  return { baseSlug: slug, tone: null };
-}
-
 let cache: Promise<FluentEmojiGroup[]> | null = null;
 
 async function buildGroups(): Promise<FluentEmojiGroup[]> {
@@ -71,63 +58,65 @@ async function buildGroups(): Promise<FluentEmojiGroup[]> {
     }>,
   ]);
 
-  const byName = new Map<string, { char: string; group: string }>();
-  const groupOrder: string[] = [];
-  for (const group of unicodeData.default) {
-    const label = GROUP_NAMES[group.name] || group.name;
-    if (!groupOrder.includes(label)) groupOrder.push(label);
-    for (const emoji of group.emojis) {
-      byName.set(normalize(emoji.name), { char: emoji.emoji, group: label });
-    }
-  }
-
-  const groups = new Map<string, FluentEmojiItem[]>();
-  for (const meta of fluentMeta.default.emojis) {
-    if (meta.styles.length > 0 && !meta.styles.includes("flat")) continue;
-    const { baseSlug, tone } = splitTone(meta.slug);
-    const base = byName.get(normalize(baseSlug));
-    if (!base) continue;
-    // ZWJ 조합에 피부톤을 단순히 덧붙이면 잘못된 문자이므로 건너뛴다.
-    if (tone && base.char.includes("\u200d")) continue;
-
-    const char = tone ? base.char + tone.modifier : base.char;
-    const baseName = baseSlug.replace(/-/g, " ");
-    const aliases: string[] = [];
-    addAliases(aliases, [
-      baseSlug,
-      baseSlug.replace(/-/g, "_"),
-      baseName,
-      baseName.replace(/\s+/g, "_"),
-      meta.name.toLowerCase(),
-      meta.name.toLowerCase().replace(/\s+/g, "_"),
-    ]);
-    if (tone) {
-      addAliases(aliases, [
-        `${baseSlug}-${tone.label.replace(/\s+/g, "-")}`,
-        `${baseSlug.replace(/-/g, "_")}_${tone.label.replace(/\s+/g, "_")}`,
-        tone.label,
-      ]);
-    }
-
-    const item: FluentEmojiItem = {
-      char,
-      slug: meta.slug,
-      name: meta.name,
-      group: base.group,
-      aliases,
-    };
-    const list = groups.get(base.group) || [];
-    list.push(item);
-    groups.set(base.group, list);
-  }
+  // Fluent 슬러그 집합. 국가기는 Fluent에 없으므로 여기서 걸러진다.
+  const fluentSlugs = new Set(
+    fluentMeta.default.emojis
+      .filter((emoji) => emoji.styles.length === 0 || emoji.styles.includes("flat"))
+      .map((emoji) => emoji.slug),
+  );
 
   const ordered: FluentEmojiGroup[] = [];
-  for (const name of groupOrder) {
-    const emojis = groups.get(name);
-    if (emojis?.length) ordered.push({ name, emojis });
+  for (const group of unicodeData.default) {
+    const label = GROUP_NAMES[group.name] || group.name;
+    const items: FluentEmojiItem[] = [];
+
+    for (const emoji of group.emojis) {
+      const baseAliases: string[] = [];
+      addAliases(baseAliases, [
+        emoji.slug,
+        emoji.slug.replace(/_/g, "-"),
+        emoji.name.toLowerCase(),
+        emoji.name.toLowerCase().replace(/\s+/g, "_"),
+      ]);
+
+      const baseSlug = normalize(emoji.name);
+      const defaultSlug = emoji.skin_tone_support ? `${baseSlug}-default` : baseSlug;
+      let slug: string | undefined;
+      if (fluentSlugs.has(defaultSlug)) slug = defaultSlug;
+      else if (fluentSlugs.has(baseSlug)) slug = baseSlug;
+
+      items.push({
+        char: emoji.emoji,
+        slug,
+        name: emoji.name,
+        group: label,
+        aliases: baseAliases,
+      });
+
+      // 피부톤 변형. ZWJ 조합은 보정이 복잡해 건너뛴다.
+      if (!emoji.skin_tone_support || emoji.emoji.includes("\u200d")) continue;
+      for (const tone of TONES) {
+        const toneSlug = `${baseSlug}-${tone.suffix}`;
+        if (!fluentSlugs.has(toneSlug)) continue;
+        const aliases: string[] = [];
+        addAliases(aliases, [
+          ...baseAliases,
+          toneSlug,
+          toneSlug.replace(/-/g, "_"),
+          tone.label,
+        ]);
+        items.push({
+          char: emoji.emoji + tone.modifier,
+          slug: toneSlug,
+          name: `${emoji.name} (${tone.label})`,
+          group: label,
+          aliases,
+        });
+      }
+    }
+
+    if (items.length > 0) ordered.push({ name: label, emojis: items });
   }
-  const extra = groups.get("기타");
-  if (extra?.length) ordered.push({ name: "기타", emojis: extra });
 
   return ordered;
 }

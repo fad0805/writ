@@ -144,8 +144,12 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
               <div className="emoji-row-label">기본 이모지</div>
               <div className="emoji-row-grid emoji-row-gap">
                 {fluentSearchResults.map((emo) => (
-                  <button key={emo.slug} type="button" title={emo.name} onClick={() => { onEmoji(emo.char); setOpen(false); }} className="emoji-cell emoji-cell-lg">
-                    <img src={fluentEmojiUrl(emo.slug)} alt={emo.name} width={30} height={30} className="emoji-fluent-img" loading="lazy" />
+                  <button key={`${emo.group}-${emo.char}-${emo.slug || ""}`} type="button" title={emo.name} onClick={() => { onEmoji(emo.char); setOpen(false); }} className="emoji-cell emoji-cell-lg">
+                    {emo.slug ? (
+                      <img src={fluentEmojiUrl(emo.slug)} alt={emo.name} width={30} height={30} className="emoji-fluent-img" loading="lazy" />
+                    ) : (
+                      <span className="emoji-native-glyph">{emo.char}</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -167,8 +171,8 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
                     <button key={emoji} type="button" onClick={() => { onEmoji(emoji); setOpen(false); }} className="emoji-cell emoji-cell-large">
                       {matched ? (
                         <img src={matched.url} alt={kw} width={33} height={33} className="emoji-img" />
-                      ) : fluentByChar.get(emoji) ? (
-                        <img src={fluentEmojiUrl(fluentByChar.get(emoji)!.slug)} alt={emoji} width={30} height={30} className="emoji-fluent-img" loading="lazy" />
+                      ) : fluentByChar.get(emoji)?.slug ? (
+                        <img src={fluentEmojiUrl(fluentByChar.get(emoji)!.slug!)} alt={emoji} width={30} height={30} className="emoji-fluent-img" loading="lazy" />
                       ) : (
                         <span style={{ fontSize: 28 }}>{emoji}</span>
                       )}
@@ -210,13 +214,17 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
                 <div className="emoji-row-grid">
                   {activeEmojis.map((emoji) => (
                     <button
-                      key={emoji.slug}
+                      key={`${emoji.char}-${emoji.slug || ""}`}
                       type="button"
                       title={emoji.name}
                       onClick={() => { onEmoji(emoji.char); setOpen(false); }}
                       className="emoji-cell emoji-cell-lg"
                     >
-                      <img src={fluentEmojiUrl(emoji.slug)} alt={emoji.name} width={30} height={30} className="emoji-fluent-img" loading="lazy" />
+                      {emoji.slug ? (
+                        <img src={fluentEmojiUrl(emoji.slug)} alt={emoji.name} width={30} height={30} className="emoji-fluent-img" loading="lazy" />
+                      ) : (
+                        <span className="emoji-native-glyph">{emoji.char}</span>
+                      )}
                     </button>
                   ))}
                 </div>
