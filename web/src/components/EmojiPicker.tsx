@@ -4,14 +4,14 @@ import { createPortal } from "react-dom";
 import Icon from "./Icon";
 import { getCustomEmojis, CustomEmoji } from "@/lib/emojis";
 import { getFrequentEmojis } from "@/lib/emoji-usage";
-import { FluentEmojiGroup, FluentEmojiItem, fluentEmojiUrl, loadFluentEmojis } from "@/lib/fluent-emojis";
+import { UnicodeEmojiGroup, loadUnicodeEmojis } from "@/lib/unicode-emojis";
 
 export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: string) => void; dropUp?: boolean }) {
   const [open, setOpen] = useState(false);
   const [customEmojis, setCustomEmojis] = useState<CustomEmoji[]>([]);
   const [search, setSearch] = useState("");
   const [frequent, setFrequent] = useState<string[]>([]);
-  const [fluentGroups, setFluentGroups] = useState<FluentEmojiGroup[]>([]);
+  const [unicodeGroups, setUnicodeGroups] = useState<UnicodeEmojiGroup[]>([]);
   const [activeGroup, setActiveGroup] = useState("");
   const pickerRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -34,26 +34,20 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
   }, [open]);
 
   useEffect(() => {
-    if (!open || fluentGroups.length > 0) return;
+    if (!open || unicodeGroups.length > 0) return;
     let alive = true;
-    loadFluentEmojis().then((groups) => {
+    loadUnicodeEmojis().then((groups) => {
       if (!alive) return;
-      setFluentGroups(groups);
+      setUnicodeGroups(groups);
       setActiveGroup(groups[0]?.name || "");
     });
     return () => { alive = false; };
-  }, [open, fluentGroups.length]);
+  }, [open, unicodeGroups.length]);
 
-  const fluentByChar = new Map<string, FluentEmojiItem>();
-  for (const group of fluentGroups) {
-    for (const emoji of group.emojis) {
-      if (!fluentByChar.has(emoji.char)) fluentByChar.set(emoji.char, emoji);
-    }
-  }
-  const activeEmojis = fluentGroups.find((group) => group.name === activeGroup)?.emojis || [];
+  const activeEmojis = unicodeGroups.find((group) => group.name === activeGroup)?.emojis || [];
   const normalizedSearch = search.trim().toLowerCase();
-  const fluentSearchResults = normalizedSearch
-    ? fluentGroups
+  const unicodeSearchResults = normalizedSearch
+    ? unicodeGroups
         .flatMap((group) => group.emojis)
         .filter((emoji) => emoji.aliases.some((alias) => alias.includes(normalizedSearch)))
         .slice(0, 120)
@@ -139,17 +133,13 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
               ))}
             </div>
           )}
-          {search && fluentSearchResults.length > 0 && (
+          {search && unicodeSearchResults.length > 0 && (
             <>
               <div className="emoji-row-label">기본 이모지</div>
               <div className="emoji-row-grid emoji-row-gap">
-                {fluentSearchResults.map((emo) => (
-                  <button key={`${emo.group}-${emo.char}-${emo.slug || ""}`} type="button" title={emo.name} onClick={() => { onEmoji(emo.char); setOpen(false); }} className="emoji-cell emoji-cell-lg">
-                    {emo.slug ? (
-                      <img src={fluentEmojiUrl(emo.slug)} alt={emo.name} width={30} height={30} className="emoji-fluent-img" loading="lazy" />
-                    ) : (
-                      <span className="emoji-native-glyph">{emo.char}</span>
-                    )}
+                {unicodeSearchResults.map((emo) => (
+                  <button key={`${emo.group}-${emo.char}`} type="button" title={emo.name} onClick={() => { onEmoji(emo.char); setOpen(false); }} className="emoji-cell emoji-cell-lg">
+                    <span className="emoji-native-glyph">{emo.char}</span>
                   </button>
                 ))}
               </div>
@@ -171,8 +161,6 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
                     <button key={emoji} type="button" onClick={() => { onEmoji(emoji); setOpen(false); }} className="emoji-cell emoji-cell-large">
                       {matched ? (
                         <img src={matched.url} alt={kw} width={33} height={33} className="emoji-img" />
-                      ) : fluentByChar.get(emoji)?.slug ? (
-                        <img src={fluentEmojiUrl(fluentByChar.get(emoji)!.slug!)} alt={emoji} width={30} height={30} className="emoji-fluent-img" loading="lazy" />
                       ) : (
                         <span style={{ fontSize: 28 }}>{emoji}</span>
                       )}
@@ -195,12 +183,12 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
             </div>
           ))}
           {!search && (
-            fluentGroups.length === 0 ? (
+            unicodeGroups.length === 0 ? (
               <div className="emoji-row-label">기본 이모지 불러오는 중…</div>
             ) : (
               <>
                 <div className="emoji-group-tabs">
-                  {fluentGroups.map((group) => (
+                  {unicodeGroups.map((group) => (
                     <button
                       key={group.name}
                       type="button"
@@ -214,17 +202,13 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
                 <div className="emoji-row-grid">
                   {activeEmojis.map((emoji) => (
                     <button
-                      key={`${emoji.char}-${emoji.slug || ""}`}
+                      key={`${emoji.char}-${emoji.name}`}
                       type="button"
                       title={emoji.name}
                       onClick={() => { onEmoji(emoji.char); setOpen(false); }}
                       className="emoji-cell emoji-cell-lg"
                     >
-                      {emoji.slug ? (
-                        <img src={fluentEmojiUrl(emoji.slug)} alt={emoji.name} width={30} height={30} className="emoji-fluent-img" loading="lazy" />
-                      ) : (
-                        <span className="emoji-native-glyph">{emoji.char}</span>
-                      )}
+                      <span className="emoji-native-glyph">{emoji.char}</span>
                     </button>
                   ))}
                 </div>

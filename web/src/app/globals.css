@@ -4811,11 +4811,6 @@ input[type="checkbox"] {
 .emoji-cell-lg {
   font-size: 1.3em;
 }
-.emoji-fluent-img {
-  width: 30px;
-  height: 30px;
-  display: block;
-}
 .emoji-native-glyph {
   font-size: 24px;
   line-height: 30px;
