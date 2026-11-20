@@ -4,20 +4,15 @@ import { createPortal } from "react-dom";
 import Icon from "./Icon";
 import { getCustomEmojis, CustomEmoji } from "@/lib/emojis";
 import { getFrequentEmojis } from "@/lib/emoji-usage";
-
-const CATEGORIES: { name: string; emojis: string[] }[] = [
-  { name: "표정", emojis: ["😀","😃","😄","😁","😅","😂","🤣","😊","😇","🙂","😉","😌","😍","🥰","😘","😗","😋","😛","😜","🤪","😝","🤑","🤗","🤭","🤫","🤔","🤐","🤨","😐","😑","😶","😏","😒","🙄","😬","🤥","😌","😔","😪","🤤","😴","😷","🤒","🤕","🤢","🤮","🥴","😵","🤯","🤠","🥳","🥸","😎","🤓","🧐","😕","😟","🙁","😮","😯","😲","😳","🥺","😦","😧","😨","😰","😥","😢","😭","😱","😖","😣","😞","😓","😩","😫","🥱","😤","😡","😠","🤬"] },
-  { name: "손동작", emojis: ["👋","🤚","🖐","✋","🖖","👌","🤏","✌","🤞","🤟","🤘","🤙","👈","👉","👆","🖕","👇","👍","👎","✊","👊","🤛","🤜","👏","🙌","👐","🤲","🤝","🙏","✍","💅"] },
-  { name: "사람", emojis: ["👂","👃","👣","👀","🗣","👤","👥","💪","🦵","🦶","👑","👒","🎩","🎓","🧢","👟","👞","👡","👠","👢","👕","👔","👗","👘","👙","👚","👛","👜","👝","🎒","💼","👓","🕶","💍"] },
-  { name: "하트", emojis: ["❤️","🧡","💛","💚","💙","💜","🖤","🤍","🤎","💔","❣️","💕","💞","💓","💗","💖","💘","💝"] },
-  { name: "기타", emojis: ["💯","💠","🌈","⭐","🌟","✨","⚡","🔥","💥","💦","💨","☄️","🌊","🍕","🍔","🍟","🌭","🍿","🧁","🍩","🍪","🍫","🍬","🍭","🍮","🍯","🍰","🎂","🍨","🍧","🍦"] },
-];
+import { FluentEmojiGroup, FluentEmojiItem, fluentEmojiUrl, loadFluentEmojis } from "@/lib/fluent-emojis";
 
 export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: string) => void; dropUp?: boolean }) {
   const [open, setOpen] = useState(false);
   const [customEmojis, setCustomEmojis] = useState<CustomEmoji[]>([]);
   const [search, setSearch] = useState("");
   const [frequent, setFrequent] = useState<string[]>([]);
+  const [fluentGroups, setFluentGroups] = useState<FluentEmojiGroup[]>([]);
+  const [activeGroup, setActiveGroup] = useState("");
   const pickerRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -37,6 +32,32 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
   useEffect(() => {
     if (open) getCustomEmojis().then(setCustomEmojis);
   }, [open]);
+
+  useEffect(() => {
+    if (!open || fluentGroups.length > 0) return;
+    let alive = true;
+    loadFluentEmojis().then((groups) => {
+      if (!alive) return;
+      setFluentGroups(groups);
+      setActiveGroup(groups[0]?.name || "");
+    });
+    return () => { alive = false; };
+  }, [open, fluentGroups.length]);
+
+  const fluentByChar = new Map<string, FluentEmojiItem>();
+  for (const group of fluentGroups) {
+    for (const emoji of group.emojis) {
+      if (!fluentByChar.has(emoji.char)) fluentByChar.set(emoji.char, emoji);
+    }
+  }
+  const activeEmojis = fluentGroups.find((group) => group.name === activeGroup)?.emojis || [];
+  const normalizedSearch = search.trim().toLowerCase();
+  const fluentSearchResults = normalizedSearch
+    ? fluentGroups
+        .flatMap((group) => group.emojis)
+        .filter((emoji) => emoji.aliases.some((alias) => alias.includes(normalizedSearch)))
+        .slice(0, 120)
+    : [];
 
   const localEmojis = customEmojis.filter(e => e.category !== "remote");
   const groupedCustom = localEmojis.reduce<Record<string, CustomEmoji[]>>((acc, e) => {
@@ -118,6 +139,18 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
               ))}
             </div>
           )}
+          {search && fluentSearchResults.length > 0 && (
+            <>
+              <div className="emoji-row-label">기본 이모지</div>
+              <div className="emoji-row-grid emoji-row-gap">
+                {fluentSearchResults.map((emo) => (
+                  <button key={emo.slug} type="button" title={emo.name} onClick={() => { onEmoji(emo.char); setOpen(false); }} className="emoji-cell emoji-cell-lg">
+                    <img src={fluentEmojiUrl(emo.slug)} alt={emo.name} width={30} height={30} className="emoji-fluent-img" loading="lazy" />
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           {!search && frequent.length > 0 && (
             <div className="emoji-custom-row">
               <div className="emoji-row-label">자주 쓰는 에모지</div>
@@ -134,6 +167,8 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
                     <button key={emoji} type="button" onClick={() => { onEmoji(emoji); setOpen(false); }} className="emoji-cell emoji-cell-large">
                       {matched ? (
                         <img src={matched.url} alt={kw} width={33} height={33} className="emoji-img" />
+                      ) : fluentByChar.get(emoji) ? (
+                        <img src={fluentEmojiUrl(fluentByChar.get(emoji)!.slug)} alt={emoji} width={30} height={30} className="emoji-fluent-img" loading="lazy" />
                       ) : (
                         <span style={{ fontSize: 28 }}>{emoji}</span>
                       )}
@@ -155,18 +190,39 @@ export default function EmojiPicker({ onEmoji, dropUp }: { onEmoji: (emoji: stri
               </div>
             </div>
           ))}
-          {CATEGORIES.map((cat, ci) => (
-            <div key={ci} className="emoji-custom-row" style={{ background: ci % 2 === 0 ? "transparent" : "rgba(128,128,128,0.08)" }}>
-              <div className="emoji-row-label">{cat.name}</div>
-              <div className="emoji-row-grid">
-                {cat.emojis.map((e, i) => (
-                  <button key={i} type="button" onClick={() => { onEmoji(e); setOpen(false); }} className="emoji-cell emoji-cell-lg">
-                    {e}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
+          {!search && (
+            fluentGroups.length === 0 ? (
+              <div className="emoji-row-label">기본 이모지 불러오는 중…</div>
+            ) : (
+              <>
+                <div className="emoji-group-tabs">
+                  {fluentGroups.map((group) => (
+                    <button
+                      key={group.name}
+                      type="button"
+                      onClick={() => setActiveGroup(group.name)}
+                      className={`emoji-group-tab${group.name === activeGroup ? " active" : ""}`}
+                    >
+                      {group.name}
+                    </button>
+                  ))}
+                </div>
+                <div className="emoji-row-grid">
+                  {activeEmojis.map((emoji) => (
+                    <button
+                      key={emoji.slug}
+                      type="button"
+                      title={emoji.name}
+                      onClick={() => { onEmoji(emoji.char); setOpen(false); }}
+                      className="emoji-cell emoji-cell-lg"
+                    >
+                      <img src={fluentEmojiUrl(emoji.slug)} alt={emoji.name} width={30} height={30} className="emoji-fluent-img" loading="lazy" />
+                    </button>
+                  ))}
+                </div>
+              </>
+            )
+          )}
         </div>,
         document.body
       )}
