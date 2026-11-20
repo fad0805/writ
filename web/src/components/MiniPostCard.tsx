@@ -104,7 +104,7 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
           </div>
         )}
         {!post.summary && <div className="mini-post-body" dangerouslySetInnerHTML={{ __html: contentHtml }} />}
-        {mediaAttachments.length > 0 && (
+        {!post.summary && mediaAttachments.length > 0 && (
           <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} style={{ display: "grid", gridTemplateColumns: mediaAttachments.length <= 2 ? "1fr" : "1fr 1fr", gridAutoRows: "120px", gap: 2, marginTop: 6, borderRadius: 4, overflow: "hidden" }}>
             {mediaAttachments.slice(0, 4).map((m, i) => (
               m.type === "video" ? (
