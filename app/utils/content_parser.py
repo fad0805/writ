@@ -46,7 +46,38 @@ def extract_mentions(post_content: str, post: dict | Post | None) -> list[dict]:
     # 2. 판별된 타입에 따라 빠른 경로 선택
     if is_remote:
         return extract_mentions_from_remote(post if isinstance(post, dict) else {"object": post})
-    return extract_mentions_from_local(post_content)
+    return extract_mentions_from_local_html(post_content)
+
+
+def _is_non_mention_context(node) -> bool:
+    """<plain>, .plain, <code>, <pre> 안의 @username은 멘션이 아니다."""
+    return bool(node.find_parent(
+        lambda tag: tag.name in ("plain", "code", "pre")
+        or "plain" in (tag.get("class") or [])
+    ))
+
+
+def extract_mentions_from_local_html(text: str) -> list[dict]:
+    """로컬 본문의 텍스트 노드에서만 멘션을 추출한다.
+
+    속성(href 등)이나 plain/code 영역의 @문자열은 멘션으로 취급하지 않는다.
+    """
+    if not text:
+        return []
+    soup = BeautifulSoup(text, "html.parser")
+    mentions: list[dict] = []
+    seen: set[str] = set()
+    for node in soup.find_all(string=True):
+        if _is_non_mention_context(node):
+            continue
+        raw = re.sub(r"```[\s\S]*?```", " ", str(node))
+        raw = re.sub(r"`[^`\n]*`", " ", raw)
+        for mention in extract_mentions_from_local(raw):
+            handle = mention["handle"]
+            if handle not in seen:
+                mentions.append(mention)
+                seen.add(handle)
+    return mentions
 
 
 def _sanitize_html(html: str) -> str:

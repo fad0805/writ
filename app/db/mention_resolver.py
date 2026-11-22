@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.config.settings import BASE_URL
 from app.core.activitypub import _get_instance_actor, _resolve_actor
 from app.db.database import get_session, username_prefix_like
 from app.models import AllowedServer, FederationBlock, ServerSetting, User
@@ -158,11 +159,24 @@ def resolve_handles_to_ids(handles: list[str], resolve_remote: bool = True) -> l
 
     user_ids = []
     unresolved = []
+    # content_parser의 짧은 멘션은 urlparse(BASE_URL).netloc을 도메인으로 쓴다.
+    parsed_base = urlparse(BASE_URL)
+    own_host = (parsed_base.netloc or parsed_base.hostname or "").lower()
     with get_session() as s:
         for handle in handles:
             clean_handle = handle.lstrip('@')
             if '@' in clean_handle:
                 local_part, domain = clean_handle.split('@', 1)
+                # 로컬 짧은 멘션은 extract_mentions_from_local에서
+                # @user@내도메인 형태가 되므로 로컬 계정으로 먼저 해석한다.
+                if domain.lower() == own_host:
+                    u = s.query(User).filter(
+                        User.username == local_part,
+                        User.is_remote == False,
+                    ).first()
+                    if u:
+                        user_ids.append(u.id)
+                        continue
                 u = s.query(User).filter(
                     or_(User.username == local_part, User.username == clean_handle),
                     User.is_remote == True

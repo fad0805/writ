@@ -5,6 +5,9 @@ visibility level, regardless of how it is accessed. This is the same class of
 bug that previously leaked private/DM posts through streams and listings.
 """
 
+from app.db.database import get_session
+from app.models import Notification, Post
+
 
 def _get(client, post_id, cookies=None):
     return client.get(f"/api/posts/{post_id}", cookies=cookies)
@@ -76,6 +79,56 @@ def test_mention_post_hidden_from_username_prefix(client, auth_cookie, make_post
     )
     assert _get(client, post.id, alice_cookie).status_code == 403
     assert _get(client, post.id, alice2_cookie).status_code == 200
+
+
+def _create_mention_post(client, author_cookie, content):
+    r = client.post(
+        "/api/posts",
+        data={"content": content, "visibility": "mention"},
+        cookies=author_cookie,
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["id"]
+
+
+def test_local_mention_is_saved_as_id_and_notifies(client, auth_cookie):
+    """쓰기 시점에 로컬 멘션이 ID로 저장되고 알림도 생성된다."""
+    author, author_cookie = auth_cookie("author")
+    alice, alice_cookie = auth_cookie("alice")
+    alice2, alice2_cookie = auth_cookie("alice2")
+
+    post_id = _create_mention_post(client, author_cookie, "<p>@alice2</p>")
+
+    with get_session() as s:
+        post = s.query(Post).filter_by(id=post_id).first()
+        assert post.mentioned_user_ids == [alice2.id]
+        assert s.query(Notification).filter_by(
+            user_id=alice2.id,
+            post_id=post_id,
+            notification_type="mention",
+        ).count() == 1
+
+    # 읽기는 mentioned_user_ids만 사용하므로 @alice는 접두어로 열 수 없다.
+    assert _get(client, post_id, alice_cookie).status_code == 403
+    assert _get(client, post_id, alice2_cookie).status_code == 200
+
+
+def test_plain_mention_is_not_saved_as_id(client, auth_cookie):
+    """plain 안의 @username은 멘션으로 저장되거나 알림을 만들지 않는다."""
+    author, author_cookie = auth_cookie("author")
+    alice2, alice2_cookie = auth_cookie("alice2")
+
+    for content in ("<p><plain>@alice2</plain></p>", '<p><span class="plain">@alice2</span></p>'):
+        post_id = _create_mention_post(client, author_cookie, content)
+        with get_session() as s:
+            post = s.query(Post).filter_by(id=post_id).first()
+            assert post.mentioned_user_ids == []
+            assert s.query(Notification).filter_by(
+                user_id=alice2.id,
+                post_id=post_id,
+                notification_type="mention",
+            ).count() == 0
+        assert _get(client, post_id, alice2_cookie).status_code == 403
 
 
 def test_mention_post_hidden_from_anonymous(client, make_user, make_post):
