@@ -29,6 +29,8 @@ logger = logging.getLogger("writ.activitypub")
 # 리모트 inbox 처리용 전용 executor. 글/답글 작성과는 분리된 풀을 쓰고
 # 동시 처리 수를 제한해, 한쪽의 네트워크 부하가 다른 쪽을 막지 않게 한다.
 # 코어 수에 맞춰 워커를 제한해 GIL 경합/커넥션 소진을 막는다.
+# 주의: worker 수만 제한되며 대기 큐 자체는 무제한이다. 단일 프로세스 전제이며
+# 다중 워커로 확장할 때는 외부 큐와 백프레셔가 필요하다.
 _inbox_executor = ThreadPoolExecutor(
     max_workers=max(4, min(8, (os.cpu_count() or 1) + 1)),
     thread_name_prefix="ap-inbox",

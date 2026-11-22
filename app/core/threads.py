@@ -1,10 +1,15 @@
-"""Bounded background task execution.
+"""Background task execution with capped concurrency.
 
 Per-request `threading.Thread(...).start()` calls spawn an unbounded number of
-threads under load. This module provides a single shared, size-bounded
-executor plus a `spawn()` helper so background jobs are queued and concurrency
-is capped at a small multiple of CPU count (mirroring the pattern used in
-`app/core/push.py` and `app/core/activitypub/_inbound.py`).
+threads under load. This module provides a single shared executor plus a
+`spawn()` helper so concurrency is capped at a small multiple of CPU count
+(mirroring the pattern used in `app/core/push.py` and
+`app/core/activitypub/_inbound.py`).
+
+Note: only the worker count is bounded. `ThreadPoolExecutor` keeps pending jobs
+in an unbounded internal queue, so a sustained burst can still grow memory.
+This assumes a single-process deployment with a bounded job arrival rate;
+multi-worker scaling needs an external queue with explicit backpressure.
 """
 import logging
 import os
@@ -24,8 +29,9 @@ _executor = ThreadPoolExecutor(
 def spawn(fn, *args, **kwargs):
     """Schedule ``fn(*args, **kwargs)`` on the shared background executor.
 
-    Never blocks: jobs that exceed the pool's capacity are queued. Returns the
-    ``Future`` (or ``None`` if the executor is shutting down).
+    Never blocks: jobs that exceed the pool's worker capacity wait in the
+    executor's unbounded internal queue. Returns the ``Future`` (or ``None``
+    if the executor is shutting down).
     """
     try:
         return _executor.submit(fn, *args, **kwargs)
