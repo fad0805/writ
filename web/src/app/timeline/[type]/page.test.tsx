@@ -79,6 +79,7 @@ class MockEventSource {
   static instances: MockEventSource[] = [];
   onmessage: ((ev: { data: string }) => void) | null = null;
   onerror: (() => void) | null = null;
+  onopen: (() => void) | null = null;
   private listeners = new Map<string, Set<(ev?: unknown) => void>>();
   constructor(public url: string) {
     MockEventSource.instances.push(this);
@@ -340,5 +341,70 @@ describe("TimelinePage", () => {
     });
 
     expect(screen.queryByRole("status")).toBeNull();
+  });
+
+
+  it("backfills posts missed while the timeline stream was down", async () => {
+    vi.mocked(api.timeline)
+      .mockResolvedValueOnce({
+        posts: [makePost(1)],
+        has_more: false,
+        cursor: null,
+        timeline_type: "home",
+      })
+      .mockResolvedValueOnce({
+        posts: [makePost(2), makePost(1)],
+        has_more: false,
+        cursor: null,
+        timeline_type: "home",
+      });
+
+    render(<TimelinePage />);
+    expect((await screen.findAllByTestId("pc")).map((c) => c.textContent)).toEqual(["1"]);
+
+    act(() => { timelineEs().onerror?.(); });
+    act(() => { timelineEs().onopen?.(); });
+
+    await waitFor(() => expect(screen.getAllByTestId("pc").map((c) => c.textContent)).toEqual(["2", "1"]));
+    expect(api.timeline).toHaveBeenCalledTimes(2);
+  });
+
+  it("revalidates the timeline after returning from a long hidden tab", async () => {
+    const originalVisibility = Object.getOwnPropertyDescriptor(document, "visibilityState");
+    let clock = Date.now();
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => clock);
+    try {
+      vi.mocked(api.timeline)
+        .mockResolvedValueOnce({
+          posts: [makePost(1)],
+          has_more: false,
+          cursor: null,
+          timeline_type: "home",
+        })
+        .mockResolvedValueOnce({
+          posts: [makePost(3), makePost(2), makePost(1)],
+          has_more: false,
+          cursor: null,
+          timeline_type: "home",
+        });
+
+      render(<TimelinePage />);
+      expect((await screen.findAllByTestId("pc")).map((c) => c.textContent)).toEqual(["1"]);
+
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+      act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+      clock += 60_000;
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+      act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+
+      await waitFor(() =>
+        expect(screen.getAllByTestId("pc").map((c) => c.textContent)).toEqual(["3", "2", "1"]),
+      );
+      expect(api.timeline).toHaveBeenCalledTimes(2);
+    } finally {
+      nowSpy.mockRestore();
+      if (originalVisibility) Object.defineProperty(document, "visibilityState", originalVisibility);
+      else delete (document as unknown as { visibilityState?: string }).visibilityState;
+    }
   });
 });

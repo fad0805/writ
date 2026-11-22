@@ -80,7 +80,7 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
       {!notifType && (
         <div className="mini-post-avatar-box">
           {post.author.avatar ? (
-            <img src={post.author.avatar} alt="" className="mini-post-avatar-img" style={{ width: 28, height: 28, borderRadius: 6, objectFit: "cover" }} />
+            <img src={post.author.avatar} alt="" loading="lazy" decoding="async" className="mini-post-avatar-img" style={{ width: 28, height: 28, borderRadius: 6, objectFit: "cover" }} />
           ) : (
             <div className="mini-post-avatar-box-initials" style={{ background: `hsl(${post.author.username?.length * 37 % 360}, 35%, 40%)`, width: 28, height: 28, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>
               {(post.author.display_name || post.author.username)[0]}
@@ -109,10 +109,10 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
             {mediaAttachments.slice(0, 4).map((m, i) => (
               m.type === "video" ? (
                 <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", background: "#000", borderRadius: 4 }}>
-                  <video src={m.url} controls style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000" }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} />
+                  <video src={m.url} controls preload="none" style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000" }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} />
                 </div>
               ) : (
-                <img key={i} src={m.url} alt={m.alt || ""} style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000", borderRadius: 4, cursor: "pointer" }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); const idx = postImages.indexOf(m); setViewerIndex(idx); }} />
+                <img key={i} src={m.url} alt={m.alt || ""} loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000", borderRadius: 4, cursor: "pointer" }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); const idx = postImages.indexOf(m); setViewerIndex(idx); }} />
               )
             ))}
           </div>

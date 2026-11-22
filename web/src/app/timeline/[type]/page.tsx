@@ -125,6 +125,9 @@ export default function TimelinePage() {
   const cardRefs = useRef(new Map<string, HTMLDivElement>());
   const touchStartX = useRef(0);
   const tlTypeRef = useRef(tlType);
+  const hiddenAtRef = useRef<number | null>(null);
+  const lastStreamGapRef = useRef(0);
+  const streamWasDownRef = useRef(false);
   useEffect(() => { tlTypeRef.current = tlType; }, [tlType]);
 
   const filteredPosts = useMemo(
@@ -211,6 +214,30 @@ export default function TimelinePage() {
       // 재검증이 실패하면 이미 그린 캐시를 그대로 둔다(빈 화면으로 덮지 않는다)
     }
   }, [tlType, setCache]);
+
+  // 절전/네트워크 끊김으로 놓친 이벤트는 첫 페이지를 다시 받아 보충한다.
+  // 중복 트리거(visibilitychange + SSE 재연결)를 막기 위해 짧게 스로틀한다.
+  const revalidateAfterGap = useCallback(() => {
+    const now = Date.now();
+    if (now - lastStreamGapRef.current < 30_000) return;
+    lastStreamGapRef.current = now;
+    void revalidateInBackground();
+  }, [revalidateInBackground]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAtRef.current = Date.now();
+        return;
+      }
+      if (document.visibilityState !== "visible") return;
+      const awayMs = hiddenAtRef.current === null ? Infinity : Date.now() - hiddenAtRef.current;
+      hiddenAtRef.current = null;
+      if (awayMs >= 30_000) revalidateAfterGap();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [revalidateAfterGap]);
 
   const load = useCallback(async (force = false) => {
     const uid = accountSnapshot();
@@ -640,9 +667,14 @@ export default function TimelinePage() {
         console.error("Failed to parse SSE message:", e);
       }
     };
-    es.onerror = () => {};
+    es.onopen = () => {
+      if (!streamWasDownRef.current) return;
+      streamWasDownRef.current = false;
+      revalidateAfterGap();
+    };
+    es.onerror = () => { streamWasDownRef.current = true; };
     return () => { es?.close(); untrackStream(es); };
-  }, [tlType, user?.id, setCache, prependPosts, markDeleted]);
+  }, [tlType, user?.id, setCache, prependPosts, markDeleted, revalidateAfterGap]);
 
   if (authLoading) return <div className="empty-state">로딩 중...</div>;
   if (!user) return <div className="empty-state">로그인이 필요합니다</div>;

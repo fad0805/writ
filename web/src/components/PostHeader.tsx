@@ -6,6 +6,7 @@ import { sanitizeName, sanitizePost, sanitizeSummary } from "@/lib/sanitize";
 import Link from "next/link";
 import Avatar from "./Avatar";
 import Icon from "./Icon";
+import PostTime from "./PostTime";
 
 const VIS_ICONS: Record<string, string> = {
   public: "globe", home: "home", followers: "lock", mention: "mail",
@@ -68,10 +69,9 @@ export function PostEditHistoryModal({ postId, onClose }: { postId: number; onCl
   );
 }
 
-export default React.memo(function PostHeader({ post, mergedEmojiList, timeStr, postHref, timeHref, onShowEdits }: {
+export default React.memo(function PostHeader({ post, mergedEmojiList, postHref, timeHref, onShowEdits }: {
   post: PostData;
   mergedEmojiList: CustomEmoji[];
-  timeStr: string;
   postHref: string;
   timeHref?: string;
   onShowEdits?: () => void;
@@ -95,7 +95,7 @@ export default React.memo(function PostHeader({ post, mergedEmojiList, timeStr, 
         <span className={`vis-badge vis-${post.visibility}`}>
           <Icon name={VIS_ICONS[post.visibility] || "globe"} />
         </span>
-        {timeStr ? <Link href={finalTimeHref} className="no-underline" style={{ color: "inherit" }}>{timeStr}</Link> : null}
+        <PostTime createdAt={post.created_at} href={finalTimeHref} />
         {post.edited_at && (
           onShowEdits ? (
             <button

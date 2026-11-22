@@ -70,7 +70,7 @@ export default React.memo(function ReactionsRow({ reactions, myReaction, onToggl
               {emoji === "★" ? (
                 <Icon name="star_filled" size={18} style={{ color: "#f1c40f" }} />
               ) : emojiMap[emojiKey] ? (
-                <img src={emojiMap[emojiKey]} alt={emoji} style={{ height: 22, verticalAlign: "middle" }} />
+                <img src={emojiMap[emojiKey]} alt={emoji} loading="lazy" decoding="async" style={{ height: 22, verticalAlign: "middle" }} />
               ) : (
                 <span>{emoji}</span>
               )}

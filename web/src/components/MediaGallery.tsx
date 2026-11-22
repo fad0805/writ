@@ -32,7 +32,7 @@ export default React.memo(function MediaGallery({ media, sensitive, revealed, on
             return m.type === "video" ? (
               <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", background: "#000", borderRadius: 6 }}>
                 {blurred && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 6, zIndex: 1 }} />}
-                <video src={m.url} controls style={{ width: "100%", maxHeight: 400, borderRadius: 6, objectFit: "contain", background: "#000", filter: blurred ? "blur(20px)" : "none" }} />
+                <video src={m.url} controls preload="none" style={{ width: "100%", maxHeight: 400, borderRadius: 6, objectFit: "contain", background: "#000", filter: blurred ? "blur(20px)" : "none" }} />
               </div>
             ) : m.type === "audio" ? (
               <div key={i} style={{ position: "relative", padding: "12px 8px", background: "#1a1a2e", borderRadius: 6 }}>
@@ -42,7 +42,7 @@ export default React.memo(function MediaGallery({ media, sensitive, revealed, on
             ) : (
               <div key={i} style={{ position: "relative", lineHeight: 0, overflow: "hidden", background: "#000", borderRadius: 6 }}>
                 {blurred && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 6, zIndex: 1 }} />}
-                <img src={m.url} alt={m.alt || ""} style={{ width: "100%", maxHeight: 400, borderRadius: 6, objectFit: "contain", background: "#000", cursor: blurred ? "default" : "pointer", filter: blurred ? "blur(20px)" : "none" }} onClick={(e) => { if (!blurred) { e.stopPropagation(); onOpen(i); } }} />
+                <img src={m.url} alt={m.alt || ""} loading="lazy" decoding="async" style={{ width: "100%", maxHeight: 400, borderRadius: 6, objectFit: "contain", background: "#000", cursor: blurred ? "default" : "pointer", filter: blurred ? "blur(20px)" : "none" }} onClick={(e) => { if (!blurred) { e.stopPropagation(); onOpen(i); } }} />
               </div>
             );
           })}
@@ -72,7 +72,7 @@ export default React.memo(function MediaGallery({ media, sensitive, revealed, on
             return m.type === "video" ? (
               <div key={i} style={cellStyle}>
                 {blurred && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 4, zIndex: 1 }} />}
-                <video src={m.url} controls style={{ width: "100%", height: "100%", objectFit: "cover", background: "#000", borderRadius: 4, filter: blurred ? "blur(20px)" : "none" }} />
+                <video src={m.url} controls preload="none" style={{ width: "100%", height: "100%", objectFit: "cover", background: "#000", borderRadius: 4, filter: blurred ? "blur(20px)" : "none" }} />
               </div>
             ) : m.type === "audio" ? (
               <div key={i} style={{ ...cellStyle, padding: "12px 8px", display: "flex", alignItems: "center" }}>
@@ -82,7 +82,7 @@ export default React.memo(function MediaGallery({ media, sensitive, revealed, on
             ) : (
               <div key={i} style={cellStyle}>
                 {blurred && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", borderRadius: 4, zIndex: 1 }} />}
-                <img src={m.url} alt={m.alt || ""} style={{ width: "100%", height: "100%", objectFit: "cover", background: "#000", borderRadius: 4, cursor: blurred ? "default" : "pointer", filter: blurred ? "blur(20px)" : "none" }} onClick={(e) => { if (!blurred) { e.stopPropagation(); onOpen(i); } }} />
+                <img src={m.url} alt={m.alt || ""} loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover", background: "#000", borderRadius: 4, cursor: blurred ? "default" : "pointer", filter: blurred ? "blur(20px)" : "none" }} onClick={(e) => { if (!blurred) { e.stopPropagation(); onOpen(i); } }} />
               </div>
             );
           })}

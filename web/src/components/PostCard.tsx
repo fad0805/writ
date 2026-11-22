@@ -9,7 +9,6 @@ import { installCodeCopyButtons } from "@/lib/codeCopy";
 import { getQuote } from "@/lib/quote-cache";
 import { useAuth } from "@/lib/auth";
 import { useReactions } from "@/lib/useReactions";
-import { useNow } from "@/hooks/useNow";
 import { buildPostContentHtml } from "@/lib/postContent";
 import { WindowWithGlobals } from "@/lib/windowGlobals";
 import Icon from "./Icon";
@@ -390,21 +389,6 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
     }
   };
 
-  const nowTime = useNow(10000, post.created_at ? Date.now() - new Date(post.created_at).getTime() < 86400000 : false);
-  const timeStr = post.created_at ? (() => {
-    const t = new Date(post.created_at).getTime();
-    const diff = nowTime - t;
-    if (diff < 86400000) {
-      if (diff < 60000) return `${Math.floor(diff / 1000)}초 전`;
-      if (diff < 3600000) return `${Math.floor(diff / 60000)}분 전`;
-      return `${Math.floor(diff / 3600000)}시간 전`;
-    }
-    return new Date(post.created_at).toLocaleString("ko-KR", {
-      year: "numeric", month: "2-digit", day: "2-digit",
-      hour: "2-digit", minute: "2-digit", hour12: false,
-    }).replace(/\. /g, "-").replace(/\.$/, "");
-  })() : "";
-
   const remoteUrl = (() => {
     const u = post.url || post.ap_id || "";
     if (!u) return "";
@@ -480,7 +464,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
             <Icon name="mention" size={12} /> <Link href={`/@${mentionBy.username}`}><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(mentionBy.display_name || mentionBy.username, mergedEmojiList, 14)) }} /></Link>님이 멘션
           </div>
         )}
-        <PostHeader post={post} mergedEmojiList={mergedEmojiList} timeStr={timeStr} postHref={postHref} timeHref={timeHref} onShowEdits={() => setShowEdits(true)} />
+        <PostHeader post={post} mergedEmojiList={mergedEmojiList} postHref={postHref} timeHref={timeHref} onShowEdits={() => setShowEdits(true)} />
         {!hideContext && post.reply_context && (
           <ReplyContextBox post={post} mergedEmojiList={mergedEmojiList} />
         )}

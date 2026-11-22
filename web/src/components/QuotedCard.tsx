@@ -39,7 +39,7 @@ export default React.memo(function QuotedCard({ quotedPost, quotedSeries, quoted
             {quotedSeries.novel.cover_image ? (
               <ClickableCover src={quotedSeries.novel.cover_image} isSensitive={quotedSeries.novel.is_sensitive} className="cover-img" />
             ) : (
-              (window as WindowWithGlobals).__serverLogo ? <img src={(window as WindowWithGlobals).__serverLogo} alt="" className="cover-img" style={{width:64,height:64,objectFit:"contain",padding:8,background:"var(--bg-tertiary)"}} />
+              (window as WindowWithGlobals).__serverLogo ? <img src={(window as WindowWithGlobals).__serverLogo} alt="" loading="lazy" decoding="async" className="cover-img" style={{width:64,height:64,objectFit:"contain",padding:8,background:"var(--bg-tertiary)"}} />
               : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(quotedSeries.novel.title) }}>
                 {quotedSeries.novel.title[0]}
               </div>
@@ -59,7 +59,7 @@ export default React.memo(function QuotedCard({ quotedPost, quotedSeries, quoted
             {quotedEpisode.novel.cover_image ? (
               <ClickableCover src={quotedEpisode.novel.cover_image} isSensitive={quotedEpisode.novel.is_sensitive} className="cover-img" />
             ) : (
-              (window as WindowWithGlobals).__serverLogo ? <img src={(window as WindowWithGlobals).__serverLogo} alt="" className="cover-img" style={{width:64,height:64,objectFit:"contain",padding:8,background:"var(--bg-tertiary)"}} />
+              (window as WindowWithGlobals).__serverLogo ? <img src={(window as WindowWithGlobals).__serverLogo} alt="" loading="lazy" decoding="async" className="cover-img" style={{width:64,height:64,objectFit:"contain",padding:8,background:"var(--bg-tertiary)"}} />
               : <div className="cover-fallback cover-fallback-sm" style={{ backgroundColor: hashColor(quotedEpisode.novel.title) }}>
                 {quotedEpisode.novel.title[0]}
               </div>
