@@ -3,6 +3,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api, NovelData, EpisodeData, NoticeData, User } from "@/lib/api";
 import Icon from "@/components/Icon";
+import InfiniteScroll from "@/components/InfiniteScroll";
 import ShareButton from "@/components/ShareButton";
 import SharePostModal from "@/components/SharePostModal";
 import Link from "next/link";
@@ -21,6 +22,8 @@ interface MutesResp {
 
 type NovelWithFollowers = NovelData & { followers_count?: number };
 
+const EPISODE_PAGE_SIZE = 20;
+
 function CoverImg({ novel, coverRevealed, setCoverRevealed }: { novel: NovelData; coverRevealed: boolean; setCoverRevealed: (v: boolean) => void }) {
   const isCovSensitive = novel.is_sensitive;
   return (
@@ -38,6 +41,9 @@ export default function NovelByNumberPage() {
   const { user } = useAuth();
   const [novel, setNovel] = useState<NovelData | null>(null);
   const [episodes, setEpisodes] = useState<EpisodeData[]>([]);
+  const [episodesOffset, setEpisodesOffset] = useState(0);
+  const [episodesHasMore, setEpisodesHasMore] = useState(false);
+  const [loadingMoreEpisodes, setLoadingMoreEpisodes] = useState(false);
   const [author, setAuthor] = useState<User | null>(null);
   const [isMine, setIsMine] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -61,8 +67,11 @@ export default function NovelByNumberPage() {
       .then((r) => r.json())
       .then((d) => {
         if (!d.id) { setLoading(false); return; }
-        api.getNovel(d.id).then((nd) => {
-          setNovel(nd.novel); setEpisodes(nd.episodes);
+        api.getNovel(d.id, EPISODE_PAGE_SIZE, 0).then((nd) => {
+          setNovel(nd.novel);
+          setEpisodes(nd.episodes);
+          setEpisodesOffset(nd.episodes.length);
+          setEpisodesHasMore(nd.episodes_has_more);
           setAuthor(nd.author); setIsMine(nd.is_mine); setIsFollowing(nd.is_following); setLoading(false);
           if (user) {
             fetch("/api/mutes/series", { credentials: "include" })
@@ -78,6 +87,19 @@ export default function NovelByNumberPage() {
         }).catch(() => setLoading(false));
       }).catch(() => setLoading(false));
   }, [params.username, params.number, user]);
+
+  const loadMoreEpisodes = async () => {
+    if (loadingMoreEpisodes || !episodesHasMore || !novel) return;
+    setLoadingMoreEpisodes(true);
+    try {
+      const d = await api.getNovelEpisodes(novel.id, EPISODE_PAGE_SIZE, episodesOffset);
+      setEpisodes((prev) => [...prev, ...d.episodes]);
+      setEpisodesOffset((prev) => prev + d.episodes.length);
+      setEpisodesHasMore(d.has_more);
+    } catch {} finally {
+      setLoadingMoreEpisodes(false);
+    }
+  };
 
   const toggleFollow = async () => {
     if (!novel || !user) return;
@@ -205,6 +227,7 @@ export default function NovelByNumberPage() {
           <h3 style={{ margin: 0, border: "none", padding: 0 }}>목차</h3>
           <a href={`/series/${novel.id}/notices`} className="btn btn-small btn-outline" style={{ fontSize: "0.75em" }}>공지사항</a>
         </div>
+        <InfiniteScroll hasMore={episodesHasMore} loadingMore={loadingMoreEpisodes} loadMore={loadMoreEpisodes}>
         {episodes.length === 0 ? (
           <p className="empty-state">아직 에피소드가 없습니다.</p>
         ) : episodes.map((e) => (
@@ -234,6 +257,7 @@ export default function NovelByNumberPage() {
             )}
           </div>
         ))}
+        </InfiniteScroll>
       </div>
       {showSharePost && <SharePostModal url={`/series/by-number/${params.username}/${params.number}`} title={novel.title} authorName={author?.display_name || author?.username} description={novel.description} tags={novel.tags} onClose={() => setShowSharePost(false)} />}
       {showReport && (

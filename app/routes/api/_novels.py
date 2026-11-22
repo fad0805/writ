@@ -239,8 +239,33 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
     return {"ok": True, "novel_id": nid}
 
 
+def _episode_page(s, novel_id: int, is_mine: bool, limit: int, offset: int):
+    """시리즈 상세용 에피소드 한 페이지와 전체 개수를 조회한다."""
+    query = s.query(*EPISODE_SUMMARY_COLUMNS).filter(Episode.novel_id == novel_id)
+    count_query = s.query(func.count(Episode.id)).filter(Episode.novel_id == novel_id)
+    if not is_mine:
+        query = query.filter(Episode.is_published == True)
+        count_query = count_query.filter(Episode.is_published == True)
+
+    total = count_query.scalar() or 0
+    query = query.order_by(Episode.episode_number)
+    if limit:
+        query = query.limit(limit).offset(offset)
+    episodes = [_episode_json(e, summary_only=True) for e in query.all()]
+    if not is_mine:
+        for e in episodes:
+            e.pop("views", None)
+    has_more = bool(limit and offset + limit < total)
+    return episodes, total, has_more
+
+
 @novels_router.get("/series/{novel_id}")
-def api_get_novel(request: Request, novel_id: int):
+def api_get_novel(
+    request: Request,
+    novel_id: int,
+    limit: int = Query(20, ge=0, le=100),
+    offset: int = Query(0, ge=0),
+):
     user = get_current_user(request)
     with get_session() as s:
         # Novel.episodes는 selectin 관계라 그대로 두면 본문까지 전부 읽는다.
@@ -251,25 +276,48 @@ def api_get_novel(request: Request, novel_id: int):
             raise HTTPException(status_code=404, detail="Novel not found")
         if not user and novel.visibility in ("public", "unlisted"):
             pass
-        # 목록 응답에는 본문이 필요 없으므로 컬럼 자체를 조회하지 않는다.
-        episodes = s.query(*EPISODE_SUMMARY_COLUMNS).filter(Episode.novel_id == novel_id)
         is_mine = user.id == novel.author_id if user else False
-        if not is_mine:
-            episodes = episodes.filter(Episode.is_published == True)
-        episodes = episodes.order_by(Episode.episode_number).all()
+        episode_list, episode_total, episodes_has_more = _episode_page(
+            s, novel_id, is_mine, limit, offset
+        )
         author = s.query(User).get(novel.author_id)
-        episode_list = [_episode_json(e, summary_only=True) for e in episodes]
         novel_json = _novel_json(novel, s, _episode_meta=_load_novel_meta(s, [novel]))
         if not is_mine:
-            for e in episode_list:
-                e.pop("views", None)
             novel_json.pop("total_views", None)
         return {
             "novel": novel_json,
             "episodes": episode_list,
             "author": _user_json(author) if author else None,
-            "is_mine": user.id == novel.author_id if user else False,
+            "is_mine": is_mine,
             "is_following": s.query(SeriesFollow).filter_by(user_id=user.id, novel_id=novel.id).count() > 0 if user else False,
+            "episodes_total": episode_total,
+            "episodes_has_more": episodes_has_more,
+        }
+
+
+@novels_router.get("/series/{novel_id}/episodes")
+def api_get_novel_episodes(
+    request: Request,
+    novel_id: int,
+    limit: int = Query(20, ge=0, le=100),
+    offset: int = Query(0, ge=0),
+):
+    """시리즈 상세의 '더 보기'용 에피소드 페이지."""
+    user = get_current_user(request)
+    with get_session() as s:
+        novel = s.query(Novel).filter_by(id=novel_id).first()
+        if not novel:
+            raise HTTPException(status_code=404, detail="Novel not found")
+        if novel.visibility == "private" and (not user or novel.author_id != user.id):
+            raise HTTPException(status_code=404, detail="Novel not found")
+        is_mine = user.id == novel.author_id if user else False
+        episodes, total, has_more = _episode_page(s, novel_id, is_mine, limit, offset)
+        return {
+            "episodes": episodes,
+            "total": total,
+            "has_more": has_more,
+            "limit": limit,
+            "offset": offset,
         }
 
 

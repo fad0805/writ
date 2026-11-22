@@ -3,6 +3,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api, NovelData, EpisodeData, NoticeData, User } from "@/lib/api";
 import Icon from "@/components/Icon";
+import InfiniteScroll from "@/components/InfiniteScroll";
 import ShareButton from "@/components/ShareButton";
 import SharePostModal from "@/components/SharePostModal";
 import Link from "next/link";
@@ -12,6 +13,7 @@ import { can, PERMS } from "@/lib/permissions";
 
 const STATUS_LABELS: Record<string, string> = { ongoing: "연재중", hiatus: "휴재", discontinued: "연재중단", completed: "완결" };
 const STATUS_ICONS: Record<string, string> = { ongoing: "edit", hiatus: "moon", discontinued: "x", completed: "check" };
+const EPISODE_PAGE_SIZE = 20;
 
 interface ReportRule {
   id: number;
@@ -41,6 +43,9 @@ export default function NovelDetailPage() {
   const { user } = useAuth();
   const [novel, setNovel] = useState<NovelData | null>(null);
   const [episodes, setEpisodes] = useState<EpisodeData[]>([]);
+  const [episodesOffset, setEpisodesOffset] = useState(0);
+  const [episodesHasMore, setEpisodesHasMore] = useState(false);
+  const [loadingMoreEpisodes, setLoadingMoreEpisodes] = useState(false);
   const [author, setAuthor] = useState<User | null>(null);
   const [isMine, setIsMine] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -69,8 +74,20 @@ export default function NovelDetailPage() {
   useEffect(() => {
     const id = Number(Array.isArray(params.id) ? params.id[0] : params.id);
     if (isNaN(id)) return;
-    api.getNovel(id)
-      .then((d) => { setNovel(d.novel); setEpisodes(d.episodes); setAuthor(d.author); setIsMine(d.is_mine); setIsFollowing(d.is_following); setLoading(false); })
+    setEpisodes([]);
+    setEpisodesOffset(0);
+    setEpisodesHasMore(false);
+    api.getNovel(id, EPISODE_PAGE_SIZE, 0)
+      .then((d) => {
+        setNovel(d.novel);
+        setEpisodes(d.episodes);
+        setEpisodesOffset(d.episodes.length);
+        setEpisodesHasMore(d.episodes_has_more);
+        setAuthor(d.author);
+        setIsMine(d.is_mine);
+        setIsFollowing(d.is_following);
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
     if (user) {
       fetch("/api/mutes/series", { credentials: "include" })
@@ -85,6 +102,20 @@ export default function NovelDetailPage() {
       .catch(() => {});
     return () => clearTimeout(pinnedTimer);
   }, [params.id, user]);
+
+  const loadMoreEpisodes = async () => {
+    const id = Number(Array.isArray(params.id) ? params.id[0] : params.id);
+    if (loadingMoreEpisodes || !episodesHasMore || isNaN(id)) return;
+    setLoadingMoreEpisodes(true);
+    try {
+      const d = await api.getNovelEpisodes(id, EPISODE_PAGE_SIZE, episodesOffset);
+      setEpisodes((prev) => [...prev, ...d.episodes]);
+      setEpisodesOffset((prev) => prev + d.episodes.length);
+      setEpisodesHasMore(d.has_more);
+    } catch {} finally {
+      setLoadingMoreEpisodes(false);
+    }
+  };
 
   const toggleFollow = async () => {
     if (!novel || !user) return;
@@ -203,6 +234,7 @@ export default function NovelDetailPage() {
           <h3 style={{ margin: 0, border: "none", padding: 0 }}>목차</h3>
           <a href={`/series/${novel.id}/notices`} className="btn btn-small btn-outline" style={{ fontSize: "0.75em" }}>공지사항</a>
         </div>
+        <InfiniteScroll hasMore={episodesHasMore} loadingMore={loadingMoreEpisodes} loadMore={loadMoreEpisodes}>
         {episodes.length === 0 ? (
           <p className="empty-state">아직 에피소드가 없습니다.</p>
         ) : episodes.map((e) => (
@@ -232,6 +264,7 @@ export default function NovelDetailPage() {
             )}
           </div>
         ))}
+        </InfiniteScroll>
       </div>
       {showSharePost && <SharePostModal
         url={`/series/${novel.id}`}

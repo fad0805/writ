@@ -430,7 +430,15 @@ export const api = {
   getNovels: (limit = 12, offset = 0) => request<{ novels: NovelData[]; has_more: boolean }>(`/api/series?limit=${limit}&offset=${offset}`),
   getMyNovels: (limit = 12, offset = 0) => request<{ novels: NovelData[]; total: number; page: number; pages: number }>(`/api/series/my?limit=${limit}&offset=${offset}`),
   getFollowedNovels: (limit = 12, offset = 0) => request<{ novels: NovelData[]; total: number; page: number; pages: number }>(`/api/series/followed?limit=${limit}&offset=${offset}`),
-  getNovel: (id: number) => request<{ novel: NovelData; episodes: EpisodeData[]; author: User; is_mine: boolean; is_following: boolean }>(`/api/series/${id}`),
+  getNovel: (id: number, limit = 0, offset = 0) => request<{
+    novel: NovelData; episodes: EpisodeData[]; author: User;
+    is_mine: boolean; is_following: boolean;
+    episodes_total: number; episodes_has_more: boolean;
+  }>(`/api/series/${id}?limit=${limit}&offset=${offset}`),
+  getNovelEpisodes: (id: number, limit = 20, offset = 0) => request<{
+    episodes: EpisodeData[]; total: number; has_more: boolean;
+    limit: number; offset: number;
+  }>(`/api/series/${id}/episodes?limit=${limit}&offset=${offset}`),
   deleteNovel: (id: number) => request<{ ok: boolean }>(`/api/series/${id}/delete`, { method: "POST" }),
   getEpisode: (id: number, eid: number) => request<{
     episode: EpisodeData; novel: NovelData; is_mine: boolean;

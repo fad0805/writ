@@ -202,3 +202,45 @@ def test_series_detail_does_not_select_episode_content(client, auth_cookie):
     assert statements
     assert all("EPISODES.CONTENT" not in stmt.upper() for stmt in statements)
     assert "content" not in r.json()["episodes"][0]
+
+
+def test_episode_pagination(client, auth_cookie):
+    _alice, alice_cookie = auth_cookie("alice")
+    _bob, bob_cookie = auth_cookie("bob")
+    novel_id = _create_series(client, alice_cookie).json()["novel_id"]
+    with get_session() as s:
+        s.add_all([
+            Episode(
+                novel_id=novel_id,
+                episode_number=i,
+                title=f"Ch {i}",
+                content="<p>body</p>",
+                is_published=(i != 25),
+            )
+            for i in range(1, 26)
+        ])
+        s.commit()
+
+    first = client.get(f"/api/series/{novel_id}?limit=10", cookies=alice_cookie).json()
+    assert [e["episode_number"] for e in first["episodes"]] == list(range(1, 11))
+    assert first["episodes_total"] == 25
+    assert first["episodes_has_more"] is True
+
+    second = client.get(
+        f"/api/series/{novel_id}/episodes?limit=10&offset=10", cookies=alice_cookie
+    ).json()
+    assert [e["episode_number"] for e in second["episodes"]] == list(range(11, 21))
+    assert second["total"] == 25
+    assert second["has_more"] is True
+
+    last = client.get(
+        f"/api/series/{novel_id}/episodes?limit=10&offset=20", cookies=alice_cookie
+    ).json()
+    assert [e["episode_number"] for e in last["episodes"]] == [21, 22, 23, 24, 25]
+    assert last["has_more"] is False
+
+    # 다른 사용자는 미공개 에피소드를 페이지 총개수에서도 제외한다.
+    other = client.get(f"/api/series/{novel_id}?limit=10", cookies=bob_cookie).json()
+    assert other["episodes_total"] == 24
+    assert 25 not in [e["episode_number"] for e in other["episodes"]]
+    assert "views" not in other["episodes"][0]

@@ -8,7 +8,7 @@ async function getSeriesData(username: string, number: string) {
     if (!lookup.ok) return null;
     const brief = await lookup.json();
     if (!brief.id) return null;
-    const full = await fetch(`${API_HOST}/api/series/${brief.id}`, { next: { revalidate: 60 } });
+    const full = await fetch(`${API_HOST}/api/series/${brief.id}?limit=0`, { next: { revalidate: 60 } });
     if (!full.ok) return null;
     return await full.json();
   } catch {
