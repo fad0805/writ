@@ -101,8 +101,19 @@ def validate_url(url: str) -> bool:
     return True
 
 
+def _read_limited_body(resp, max_size: int, url: str) -> bytes | None:
+    """스트리밍 응답을 읽되 max_size를 넘으면 즉시 중단한다."""
+    body = bytearray()
+    for chunk in resp.iter_bytes():
+        body.extend(chunk)
+        if len(body) > max_size:
+            logger.warning("Response body exceeds %s bytes from %s", max_size, url)
+            return None
+    return bytes(body)
+
+
 def safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
-    """HTTP GET with redirect validation and size limit."""
+    """HTTP GET with redirect validation and streaming size limit."""
     if not validate_url(url):
         return None
     domain = urlparse(url).hostname or ""
@@ -117,12 +128,15 @@ def safe_fetch(url, timeout=10, max_size=5*1024*1024, headers=None):
         raise httpx.InvalidURL(f"Blocked redirect to {request.url}")
     client.send = _validated_send
     try:
-        resp = client.get(url, headers=headers or {})
-        if resp.status_code != 200:
-            return None
-        if len(resp.content) > max_size:
-            return None
-        return resp
+        with client.stream("GET", url, headers=headers or {}) as resp:
+            if resp.status_code != 200:
+                return None
+            body = _read_limited_body(resp, max_size, str(resp.url))
+            if body is None:
+                return None
+            # 호출자가 resp.content/.text/.json()을 그대로 쓸 수 있게 캐시한다.
+            resp._content = body
+            return resp
     except Exception:
         return None
     finally:
@@ -147,13 +161,10 @@ def validated_get(url: str, headers: dict | None = None, timeout: int = 15, max_
                         return None
                     url = next_url
                     continue
-                body = bytearray()
-                for chunk in resp.iter_bytes():
-                    body.extend(chunk)
-                    if len(body) > max_size:
-                        logger.warning("Response body exceeds %s bytes from %s", max_size, url)
-                        return None
-                resp._content = bytes(body)
+                body = _read_limited_body(resp, max_size, url)
+                if body is None:
+                    return None
+                resp._content = body
                 return resp
         return None
     except Exception:
