@@ -1,4 +1,5 @@
 import asyncio
+import datetime as dt
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -34,25 +35,99 @@ _inbox_executor = ThreadPoolExecutor(
 )
 
 
+# 처리 중 상태가 이보다 오래되면 이전 워커가 죽은 것으로 보고 재처리한다.
+_PROCESSING_TTL = dt.timedelta(minutes=15)
+
+
+def _utcnow() -> dt.datetime:
+    return dt.datetime.now(dt.UTC)
+
+
+def _claim_activity(activity_id: str) -> dt.datetime | None:
+    """활동 처리를 원자적으로 예약한다. 예약하면 소유 토큰을 반환한다.
+
+    새 행을 'processing' 상태로 INSERT 해서 동시 요청 중 하나만 처리한다.
+    기존 행이 'done'이면 중복 요청, 'processing'이면 아직 처리 중이거나
+    이전 워커가 죽은 경우다. TTL이 지난 processing 행만 원자적으로 재예약한다.
+    """
+    if not activity_id:
+        return _utcnow()
+    token = _utcnow()
+    try:
+        with get_session() as s:
+            s.add(ProcessedActivity(id=activity_id, status="processing", created_at=token))
+            s.commit()
+            return token
+    except IntegrityError:
+        pass
+
+    cutoff = _utcnow() - _PROCESSING_TTL
+    with get_session() as s:
+        row = s.query(ProcessedActivity).filter_by(id=activity_id).first()
+        if row is None or row.status == "done" or row.created_at is None:
+            return None
+        created = row.created_at
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=dt.UTC)
+        if created > cutoff:
+            return None
+        new_token = _utcnow()
+        updated = (
+            s.query(ProcessedActivity)
+            .filter(
+                ProcessedActivity.id == activity_id,
+                ProcessedActivity.status == "processing",
+                ProcessedActivity.created_at <= cutoff,
+            )
+            .update(
+                {"created_at": new_token, "status": "processing"},
+                synchronize_session=False,
+            )
+        )
+        s.commit()
+        return new_token if updated == 1 else None
+
+
+def _finish_activity(activity_id: str, token: dt.datetime | None, success: bool):
+    """예약한 활동을 완료 처리하거나, 실패 시 예약을 취소해 재전송을 허용한다."""
+    if not activity_id or token is None:
+        return
+    with get_session() as s:
+        query = s.query(ProcessedActivity).filter(
+            ProcessedActivity.id == activity_id,
+            ProcessedActivity.status == "processing",
+            ProcessedActivity.created_at == token,
+        )
+        if success:
+            query.update({"status": "done"}, synchronize_session=False)
+        else:
+            query.delete(synchronize_session=False)
+        s.commit()
+
+
 def _is_activity_processed(activity_id: str) -> bool:
-    """Return True if the activity was already processed (deduplication)."""
+    """기존 호출부용: 완료된 활동만 중복으로 간주한다."""
     if not activity_id:
         return False
     with get_session() as s:
-        return s.query(ProcessedActivity).filter_by(id=activity_id).first() is not None
+        row = s.query(ProcessedActivity).filter_by(id=activity_id).first()
+        return row is not None and row.status == "done"
 
 
 def _mark_activity_processed(activity_id: str):
-    """Record an activity as processed. No-op for empty ids."""
+    """기존 호출부용: 활동을 완료 상태로 기록한다."""
     if not activity_id:
         return
     try:
         with get_session() as s:
-            s.add(ProcessedActivity(id=activity_id))
+            s.add(ProcessedActivity(id=activity_id, status="done"))
             s.commit()
     except IntegrityError:
-        # 동시 처리(TOCTOU) 시 PK 중복은 정상 — 이미 처리됨으로 간주
-        pass
+        with get_session() as s:
+            s.query(ProcessedActivity).filter_by(id=activity_id).update(
+                {"status": "done"}, synchronize_session=False
+            )
+            s.commit()
 
 
 async def _submit_inbox(activity: dict) -> tuple[int, str]:

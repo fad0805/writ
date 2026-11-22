@@ -8,8 +8,9 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from app.config.settings import BASE_URL, DOMAIN, S3_ENABLED
 from app.core.activitypub import (
     _ap_post_visible,
+    _claim_activity,
+    _finish_activity,
     _is_activity_processed,
-    _mark_activity_processed,
     _sig_executor,
     _submit_inbox,
     _validate_inbox_activity,
@@ -36,6 +37,17 @@ from app.utils.to_ap_serializer import ap_tombstone, to_ap_actor, to_ap_create, 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _run_claimed_activity(activity: dict, activity_id: str, token):
+    """예약된 활동을 실행하고 성공 여부에 따라 완료/재시도 상태를 정리한다."""
+    try:
+        status_code, message = await _submit_inbox(activity)
+    except Exception:
+        _finish_activity(activity_id, token, success=False)
+        raise
+    _finish_activity(activity_id, token, success=status_code < 400)
+    return status_code, message
 
 
 # ---------------------------------------------------------------------------
@@ -239,11 +251,11 @@ async def shared_inbox(request: Request):
         return JSONResponse({"status": "error", "message": err[1]}, status_code=err[0])
 
     activity_id = activity.get("id", "")
-    if _is_activity_processed(activity_id):
+    token = _claim_activity(activity_id)
+    if token is None:
         return JSONResponse({"status": 200, "message": "Already processed"})
-    _mark_activity_processed(activity_id)
 
-    status_code, message = await _submit_inbox(activity)
+    status_code, message = await _run_claimed_activity(activity, activity_id, token)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)
 
 
@@ -296,9 +308,11 @@ async def user_inbox(request: Request, username: str):
         if isinstance(target, str) and target != user.actor_uri():
             return JSONResponse({"status": "error", "message": "Follow target mismatch"}, status_code=403)
 
-    _mark_activity_processed(activity_id)
+    token = _claim_activity(activity_id)
+    if token is None:
+        return JSONResponse({"status": "ok", "message": "Already processed"}, status_code=200)
 
-    status_code, message = await _submit_inbox(activity)
+    status_code, message = await _run_claimed_activity(activity, activity_id, token)
     return JSONResponse({"status": status_code, "message": message}, status_code=200)
 
 

@@ -5,14 +5,24 @@ Follow activity, which resolves locally and never touches the network (local
 inboxes fail validate_url's SSRF guard, so the Accept delivery early-returns).
 """
 
+import asyncio
 import base64
+import datetime as dt
 import email.utils
 import hashlib
 import json
 
-from app.core.activitypub._inbound import _is_activity_processed, _mark_activity_processed, handle_inbox
+import pytest
+
+from app.core.activitypub._inbound import (
+    _claim_activity,
+    _finish_activity,
+    _is_activity_processed,
+    _mark_activity_processed,
+    handle_inbox,
+)
 from app.db.database import get_session
-from app.models import Follow
+from app.models import Follow, ProcessedActivity
 from app.utils.crypto import sign_string
 
 
@@ -115,3 +125,71 @@ def test_mark_and_check_processed():
     assert _is_activity_processed(activity_id) is False
     _mark_activity_processed(activity_id)
     assert _is_activity_processed(activity_id) is True
+
+
+def test_claim_is_atomic_and_retryable():
+    activity_id = "http://example.test/activities/claim-retry"
+
+    token = _claim_activity(activity_id)
+    assert token is not None
+    # 처리 중에는 다른 요청이 같은 활동을 다시 시작할 수 없다.
+    assert _claim_activity(activity_id) is None
+
+    # 실패하면 예약을 취소해 재전송을 다시 처리한다.
+    _finish_activity(activity_id, token, success=False)
+    assert _is_activity_processed(activity_id) is False
+    token2 = _claim_activity(activity_id)
+    assert token2 is not None
+
+    _finish_activity(activity_id, token2, success=True)
+    assert _is_activity_processed(activity_id) is True
+    assert _claim_activity(activity_id) is None
+
+
+def test_stale_processing_claim_can_be_reclaimed():
+    activity_id = "http://example.test/activities/stale-claim"
+    token = _claim_activity(activity_id)
+    assert token is not None
+    with get_session() as s:
+        row = s.query(ProcessedActivity).filter_by(id=activity_id).first()
+        row.created_at = dt.datetime.now(dt.UTC) - dt.timedelta(minutes=20)
+        s.commit()
+
+    assert _claim_activity(activity_id) is not None
+
+    # 이전 워커가 늦게 끝나도 새 예약을 완료/취소하지 못한다.
+    _finish_activity(activity_id, token, success=True)
+    assert _is_activity_processed(activity_id) is False
+
+
+def test_run_claimed_activity_releases_claim_on_error(monkeypatch):
+    from app.routes import ap as ap_mod
+
+    activity_id = "http://example.test/activities/raise"
+    token = _claim_activity(activity_id)
+
+    async def boom(activity):
+        raise RuntimeError("temporary failure")
+
+    monkeypatch.setattr(ap_mod, "_submit_inbox", boom)
+    with pytest.raises(RuntimeError):
+        asyncio.run(ap_mod._run_claimed_activity({}, activity_id, token))
+
+    assert _is_activity_processed(activity_id) is False
+    assert _claim_activity(activity_id) is not None
+
+
+def test_run_claimed_activity_releases_claim_on_error_status(monkeypatch):
+    from app.routes import ap as ap_mod
+
+    activity_id = "http://example.test/activities/error-status"
+    token = _claim_activity(activity_id)
+
+    async def failure(activity):
+        return 503, "temporary failure"
+
+    monkeypatch.setattr(ap_mod, "_submit_inbox", failure)
+    assert asyncio.run(ap_mod._run_claimed_activity({}, activity_id, token))[0] == 503
+
+    assert _is_activity_processed(activity_id) is False
+    assert _claim_activity(activity_id) is not None

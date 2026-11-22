@@ -754,6 +754,8 @@ class ProcessedActivity(Base):
     __tablename__ = "processed_activities"
 
     id = Column(String(1024), primary_key=True)
+    # processing: 처리 중(retry 대상), done: 완료. 기존 행은 done으로 간주한다.
+    status = Column(String(16), nullable=False, default="done", server_default="done")
     created_at = Column(DateTime(timezone=True), default=now)
 
 

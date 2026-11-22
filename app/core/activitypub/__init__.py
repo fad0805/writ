@@ -46,6 +46,8 @@ from app.core.activitypub._inbound import (
     _handle_undo,
     _handle_update,
     _handle_vote,
+    _claim_activity,
+    _finish_activity,
     _inbox_executor,
     _is_activity_processed,
     _mark_activity_processed,
