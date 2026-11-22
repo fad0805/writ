@@ -22,7 +22,7 @@ from app.core.threads import spawn
 from app.core.visibility import _can_view
 from app.db.database import get_session, username_prefix_like
 from app.models import Bookmark, Boost, Follow, Like, Novel, Post, User, UserBlock, UserMute, Vote
-from app.routes.api._novels import _apply_latest_activity_order, _load_novel_meta, _novel_json
+from app.routes.api._novels import _apply_latest_activity_order, _novels_json
 from app.serializers import _post_json, _user_json
 from app.utils.storage import _cleanup_avatars, get_storage
 from app.utils.upload import MAX_AVATAR_SIZE, _validate_upload
@@ -253,14 +253,12 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
                           "_reactions_map": _reactions_map,
                           "_mentioned_users_map": _mentioned_users_map,
                           "_boost_originals": _boost_originals}
-        _novel_meta = _load_novel_meta(s, novels)
         _pinned_novels = s.query(Novel).filter(Novel.id.in_(profile.pinned_series or [])).all() if profile.pinned_series else []
-        _pinned_series_meta = _load_novel_meta(s, _pinned_novels)
         _pinned_posts = s.query(Post).filter(Post.id.in_(profile.pinned_posts or []), Post.is_deleted == False).all() if profile.pinned_posts else []
         return {
             "profile": _user_json(profile),
             "posts": [_post_json(p, s, user, **_pj_kwargs) for p in posts],
-            "novels": [_novel_json(n, s, _episode_meta=_novel_meta) for n in novels],
+            "novels": _novels_json(s, novels),
             "followers": [{"user": _user_json(f.follower)} for f in (followers if show_follows else [])],
             "following": [{"user": _user_json(f.following)} for f in (following if show_follows else [])],
             "total_posts": total_posts,
@@ -279,7 +277,7 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             "has_more": has_more,
             "offset": offset,
             "pinned_posts_data": [_post_json(p, s, user, **_pj_kwargs) for p in _pinned_posts if _can_view(p, user, s)],
-            "pinned_series_data": [_novel_json(n, s, _episode_meta=_pinned_series_meta) for n in _pinned_novels],
+            "pinned_series_data": _novels_json(s, _pinned_novels),
         }
 
 

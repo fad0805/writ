@@ -10,8 +10,8 @@ from app.core.auth import get_current_user
 from app.core.threads import spawn
 from app.db.database import get_session
 from app.db.mention_resolver import _federation_allowed, _resolve_remote_user
-from app.models import Bookmark, Boost, Follow, Like, Novel, Post, SeriesFollow, Tag, User
-from app.routes.api._novels import _apply_latest_activity_order, _load_novel_meta, _novel_json
+from app.models import Bookmark, Boost, Follow, Like, Novel, Post, Tag, User
+from app.routes.api._novels import _apply_latest_activity_order, _novels_json
 from app.serializers import _post_json, _user_json
 from app.utils.filter import _timeline_filter
 
@@ -31,8 +31,7 @@ def api_search_series(request: Request, q: str = Query("")):
         if query:
             qb = qb.filter(Novel.title.ilike(f"%{query}%"))
         novels = qb.limit(5).all()
-        _novel_meta = _load_novel_meta(s, novels)
-        return {"series": [_novel_json(n, s, _episode_meta=_novel_meta) for n in novels]}
+        return {"series": _novels_json(s, novels)}
 
 
 @search_router.get("/search/tags")
@@ -121,30 +120,16 @@ def api_explore(request: Request, limit: int = Query(20, le=100), offset: int = 
 
         # 3. 첫 페이지에서만 소설 목록 조회
         novels = []
-        _followers_map = {}
-        _novel_meta = {}
         if offset == 0:
-            novels = _apply_latest_activity_order(s.query(Novel).options(
-                selectinload(Novel.author),
-                selectinload(Novel.tag_list),
-            ).filter(
+            novels = _apply_latest_activity_order(s.query(Novel).filter(
                 Novel.visibility == "public",
                 Novel.is_published == True,
             ), s).limit(20).all()
-            if novels:
-                novel_ids = [n.id for n in novels]
-                _followers_map = dict(
-                    s.query(SeriesFollow.novel_id, func.count(SeriesFollow.id))
-                    .filter(SeriesFollow.novel_id.in_(novel_ids))
-                    .group_by(SeriesFollow.novel_id)
-                    .all()
-                )
-            _novel_meta = _load_novel_meta(s, novels)
 
         return {
             "posts": [_post_json(p, s, user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids, _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map, _mentioned_users_map=_mentioned_users_map, _boost_originals=_boost_originals, _skip_emojis=True) for p in posts],
             "has_more": has_more,
-            "novels": [_novel_json(n, s, _followers_map=_followers_map, _episode_meta=_novel_meta) for n in novels],
+            "novels": _novels_json(s, novels),
         }
 
 
@@ -307,11 +292,9 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
                     _reactions_map[pid] = {}
                 _reactions_map[pid][react] = cnt
 
-        _novel_meta = _load_novel_meta(s, novels)
-
         result: dict = {
             "posts": [_post_json(p, s, user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids, _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map, _mentioned_users_map=_mentioned_users_map, _boost_originals=_boost_originals) for p in posts],
-            "novels": [_novel_json(n, s, _episode_meta=_novel_meta) for n in novels],
+            "novels": _novels_json(s, novels),
             "users": [_user_json(u) for u in all_users],
         }
         if blocked_domain:

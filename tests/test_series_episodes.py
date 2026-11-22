@@ -3,7 +3,7 @@
 from sqlalchemy import event
 
 from app.db.database import engine, get_session
-from app.models import Episode, Novel
+from app.models import Episode, Novel, SeriesFollow
 from app.utils.storage import get_storage
 
 
@@ -244,3 +244,45 @@ def test_episode_pagination(client, auth_cookie):
     assert other["episodes_total"] == 24
     assert 25 not in [e["episode_number"] for e in other["episodes"]]
     assert "views" not in other["episodes"][0]
+
+
+def test_series_list_batches_relations(client, auth_cookie):
+    alice, alice_cookie = auth_cookie("alice")
+    first_id = _create_series(client, alice_cookie, title="First", tags="fantasy mystery").json()["novel_id"]
+
+    def list_with_query_count():
+        count = 0
+
+        def capture(conn, cursor, statement, parameters, context, executemany):
+            nonlocal count
+            if statement.lstrip().upper().startswith("SELECT"):
+                count += 1
+
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            r = client.get("/api/series?limit=100")
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
+        assert r.status_code == 200
+        return count, r.json()
+
+    one_count, one_data = list_with_query_count()
+    assert [n["id"] for n in one_data["novels"]] == [first_id]
+
+    _, bob_cookie = auth_cookie("bob")
+    _, carol_cookie = auth_cookie("carol")
+    for name, cookie in (("Second", bob_cookie), ("Third", carol_cookie)):
+        _create_series(client, cookie, title=name, tags="fantasy mystery")
+    with get_session() as s:
+        for novel in s.query(Novel).all():
+            s.add(SeriesFollow(user_id=alice.id, novel_id=novel.id))
+        s.commit()
+
+    many_count, many_data = list_with_query_count()
+    assert len(many_data["novels"]) == 3
+    # 시리즈 수가 늘어나도 관계 조회 쿼리 수는 증가하지 않는다.
+    assert many_count == one_count
+    for novel in many_data["novels"]:
+        assert novel["author"]["username"] in ("alice", "bob", "carol")
+        assert novel["tags"] == "fantasy mystery"
+        assert novel["followers_count"] == 1

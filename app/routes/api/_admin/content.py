@@ -4,12 +4,12 @@ import re
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from sqlalchemy import desc, or_
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload
 
 from app.core.permissions import require_permission
 from app.db.database import get_session
 from app.models import Episode, Novel, Post
-from app.routes.api._novels import _apply_latest_activity_order, _novel_json
+from app.routes.api._novels import _apply_latest_activity_order, _novels_json
 from app.utils.datetime import _fmt_dt
 from app.utils.log import log_admin_action
 
@@ -32,7 +32,7 @@ def api_admin_content_search(request: Request, q: str = "", mode: str = "series"
                 "id": ep.id, "title": ep.title, "number": ep.episode_number, "is_published": ep.is_published,
                 "created_at": _fmt_dt(ep.created_at), "novel_id": ep.novel_id,
             } for ep in episodes]}
-        novels_q = s.query(Novel).options(selectinload(Novel.author))
+        novels_q = s.query(Novel)
         if re.match(r'^\d+$', query):
             novels_q = novels_q.filter(
                 or_(Novel.title.ilike(like), Novel.id == int(query))
@@ -54,11 +54,9 @@ def api_admin_content_search(request: Request, q: str = "", mode: str = "series"
                 "id": ep.id, "title": ep.title, "number": ep.episode_number, "is_published": ep.is_published,
                 "created_at": _fmt_dt(ep.created_at), "novel_id": ep.novel_id,
             })
-        result = []
-        for n in novels:
-            nj = _novel_json(n, s)
-            nj["episodes"] = ep_map.get(n.id, [])
-            result.append(nj)
+        result = _novels_json(s, novels)
+        for nj in result:
+            nj["episodes"] = ep_map.get(nj["id"], [])
         return {"novels": result, "episodes": []}
 
 @router.post("/admin/novels/{novel_id}/toggle-sensitive")

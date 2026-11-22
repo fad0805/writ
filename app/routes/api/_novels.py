@@ -14,7 +14,7 @@ guard_image()
 
 from app.core.auth import get_current_user, require_active_auth, require_auth
 from app.db.database import get_session
-from app.models import Episode, Novel, Post, SeriesFollow, SeriesNotice, Tag, User
+from app.models import Episode, Novel, Post, SeriesFollow, SeriesNotice, Tag, User, novel_tags
 from app.routes.api._episode_serializer import EPISODE_SUMMARY_COLUMNS, _episode_json
 from app.serializers import _user_json
 from app.utils.datetime import _fmt_dt
@@ -49,11 +49,74 @@ def _load_novel_meta(s, novels):
     return meta
 
 
-def _novel_json(n, s=None, _followers_map=None, _episode_meta=None):
-    author = None
-    if hasattr(n, 'author') and n.author:
-        author = _user_json(n.author)
-    tag_names = " ".join(t.display_name or t.name for t in (n.tag_list or [])) or (n.tags or "")
+# 목록 조회 시 selectin으로 자동 로드되는 관계들을 끄고 아래 배치 헬퍼로 한 번에 조회한다.
+_NOVEL_LIST_LOAD_OPTIONS = (
+    noload(Novel.author),
+    noload(Novel.tag_list),
+    noload(Novel.notices),
+)
+
+
+def _load_novel_relations(s, novels):
+    """novel_id -> (작가 JSON, 태그 문자열, 팔로워 수)를 일괄 조회한다."""
+    if not novels:
+        return {}, {}, {}
+    ids = [n.id for n in novels]
+    author_ids = {n.author_id for n in novels}
+
+    authors = {}
+    if author_ids:
+        for u in s.query(User).filter(User.id.in_(author_ids)).all():
+            authors[u.id] = _user_json(u)
+
+    tags = {nid: [] for nid in ids}
+    for nid, display_name, name in (
+        s.query(novel_tags.c.novel_id, Tag.display_name, Tag.name)
+        .join(Tag, Tag.id == novel_tags.c.tag_id)
+        .filter(novel_tags.c.novel_id.in_(ids))
+        .all()
+    ):
+        tags[nid].append(display_name or name)
+    tag_names = {nid: " ".join(names) for nid, names in tags.items()}
+
+    followers = {nid: 0 for nid in ids}
+    for nid, count in (
+        s.query(SeriesFollow.novel_id, func.count(SeriesFollow.id))
+        .filter(SeriesFollow.novel_id.in_(ids))
+        .group_by(SeriesFollow.novel_id)
+        .all()
+    ):
+        followers[nid] = count
+    return authors, tag_names, followers
+
+
+def _novels_json(s, novels):
+    """시리즈 목록을 관계별 일괄 조회 결과로 직렬화한다."""
+    if not novels:
+        return []
+    episode_meta = _load_novel_meta(s, novels)
+    authors, tags, followers = _load_novel_relations(s, novels)
+    return [
+        _novel_json(
+            n, s,
+            _followers_map=followers,
+            _episode_meta=episode_meta,
+            _authors_map=authors,
+            _tags_map=tags,
+        )
+        for n in novels
+    ]
+
+
+def _novel_json(n, s=None, _followers_map=None, _episode_meta=None, _authors_map=None, _tags_map=None):
+    if _authors_map is not None:
+        author = _authors_map.get(n.id)
+    else:
+        author = _user_json(n.author) if hasattr(n, 'author') and n.author else None
+    if _tags_map is not None:
+        tag_names = _tags_map.get(n.id) or (n.tags or "")
+    else:
+        tag_names = " ".join(t.display_name or t.name for t in (n.tag_list or [])) or (n.tags or "")
     if _episode_meta is not None:
         _ec, _tv = _episode_meta.get(n.id, (0, 0))
         episode_count = _ec or 0
@@ -145,23 +208,24 @@ def api_unpin_series(request: Request, novel_id: int):
 @novels_router.get("/series")
 def api_novels(request: Request, limit: int = Query(12, le=100), offset: int = Query(0)):
     with get_session() as s:
-        q = _apply_latest_activity_order(s.query(Novel).filter_by(is_published=True, visibility="public"), s)
+        q = _apply_latest_activity_order(
+            s.query(Novel).options(*_NOVEL_LIST_LOAD_OPTIONS).filter_by(is_published=True, visibility="public"), s
+        )
         raw = q.offset(offset).limit(limit + 1).all()
         has_more = len(raw) > limit
-        novels = raw[:limit]
-        _episode_meta = _load_novel_meta(s, novels)
-        return {"novels": [_novel_json(n, s, _episode_meta=_episode_meta) for n in novels], "has_more": has_more}
+        return {"novels": _novels_json(s, raw[:limit]), "has_more": has_more}
 
 
 @novels_router.get("/series/my")
 def api_my_novels(request: Request, limit: int = Query(12, le=100), offset: int = Query(0)):
     user = require_auth(request)
     with get_session() as s:
-        q = _apply_latest_activity_order(s.query(Novel).filter_by(author_id=user.id), s)
+        q = _apply_latest_activity_order(
+            s.query(Novel).options(*_NOVEL_LIST_LOAD_OPTIONS).filter_by(author_id=user.id), s
+        )
         total = q.count()
         raw = q.offset(offset).limit(limit).all()
-        _episode_meta = _load_novel_meta(s, raw)
-        novels = [_novel_json(n, s, _episode_meta=_episode_meta) for n in raw]
+        novels = _novels_json(s, raw)
         return {"novels": novels, "total": total, "page": offset // limit + 1, "pages": max(1, (total + limit - 1) // limit)}
 
 
@@ -173,12 +237,14 @@ def api_followed_novels(request: Request, limit: int = Query(12, le=100), offset
         if not follow_ids:
             return {"novels": [], "total": 0, "page": 1, "pages": 1}
         q = _apply_latest_activity_order(
-            s.query(Novel).filter(Novel.id.in_(follow_ids), Novel.is_published == True), s
+            s.query(Novel)
+            .options(*_NOVEL_LIST_LOAD_OPTIONS)
+            .filter(Novel.id.in_(follow_ids), Novel.is_published == True),
+            s,
         )
         total = q.count()
         raw = q.offset(offset).limit(limit).all()
-        _episode_meta = _load_novel_meta(s, raw)
-        novels = [_novel_json(n, s, _episode_meta=_episode_meta) for n in raw]
+        novels = _novels_json(s, raw)
         return {"novels": novels, "total": total, "page": offset // limit + 1, "pages": max(1, (total + limit - 1) // limit)}
 
 
