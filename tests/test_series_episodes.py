@@ -1,6 +1,8 @@
 """Series (novel) and episode CRUD tests."""
 
-from app.db.database import get_session
+from sqlalchemy import event
+
+from app.db.database import engine, get_session
 from app.models import Episode, Novel
 from app.utils.storage import get_storage
 
@@ -168,3 +170,35 @@ def test_get_episode(client, auth_cookie):
     r = client.get(f"/api/series/{novel_id}/episodes/{ep_id}", cookies=alice_cookie)
     assert r.status_code == 200
     assert r.json()["episode"]["title"] == "Ch"
+
+
+def test_series_detail_does_not_select_episode_content(client, auth_cookie):
+    _alice, alice_cookie = auth_cookie("alice")
+    novel_id = _create_series(client, alice_cookie).json()["novel_id"]
+    client.post(
+        f"/api/series/{novel_id}/episodes/new",
+        data={
+            "title": "Long chapter",
+            "content": "<p>" + "x" * 100_000 + "</p>",
+            "is_published": "true",
+        },
+        cookies=alice_cookie,
+    )
+
+    statements = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        upper = statement.lstrip().upper()
+        if upper.startswith("SELECT") and "FROM EPISODES" in upper:
+            statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        r = client.get(f"/api/series/{novel_id}", cookies=alice_cookie)
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+
+    assert r.status_code == 200
+    assert statements
+    assert all("EPISODES.CONTENT" not in stmt.upper() for stmt in statements)
+    assert "content" not in r.json()["episodes"][0]

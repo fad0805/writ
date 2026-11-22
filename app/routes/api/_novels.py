@@ -6,6 +6,7 @@ from uuid import uuid4
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from PIL import Image, ImageOps
 from sqlalchemy import desc, func
+from sqlalchemy.orm import noload
 
 from app.utils.image import guard_image
 
@@ -14,7 +15,7 @@ guard_image()
 from app.core.auth import get_current_user, require_active_auth, require_auth
 from app.db.database import get_session
 from app.models import Episode, Novel, Post, SeriesFollow, SeriesNotice, Tag, User
-from app.routes.api._episode_serializer import _episode_json
+from app.routes.api._episode_serializer import EPISODE_SUMMARY_COLUMNS, _episode_json
 from app.serializers import _user_json
 from app.utils.datetime import _fmt_dt
 from app.utils.storage import get_storage
@@ -242,21 +243,23 @@ def api_create_novel(request: Request, title: str = Form(...), description: str 
 def api_get_novel(request: Request, novel_id: int):
     user = get_current_user(request)
     with get_session() as s:
-        novel = s.query(Novel).filter_by(id=novel_id).first()
+        # Novel.episodes는 selectin 관계라 그대로 두면 본문까지 전부 읽는다.
+        novel = s.query(Novel).options(noload(Novel.episodes)).filter_by(id=novel_id).first()
         if not novel:
             raise HTTPException(status_code=404, detail="Novel not found")
         if novel.visibility == "private" and (not user or novel.author_id != user.id):
             raise HTTPException(status_code=404, detail="Novel not found")
         if not user and novel.visibility in ("public", "unlisted"):
             pass
-        episodes = s.query(Episode).filter_by(novel_id=novel_id)
+        # 목록 응답에는 본문이 필요 없으므로 컬럼 자체를 조회하지 않는다.
+        episodes = s.query(*EPISODE_SUMMARY_COLUMNS).filter(Episode.novel_id == novel_id)
         is_mine = user.id == novel.author_id if user else False
         if not is_mine:
             episodes = episodes.filter(Episode.is_published == True)
         episodes = episodes.order_by(Episode.episode_number).all()
         author = s.query(User).get(novel.author_id)
         episode_list = [_episode_json(e, summary_only=True) for e in episodes]
-        novel_json = _novel_json(novel, s)
+        novel_json = _novel_json(novel, s, _episode_meta=_load_novel_meta(s, [novel]))
         if not is_mine:
             for e in episode_list:
                 e.pop("views", None)
