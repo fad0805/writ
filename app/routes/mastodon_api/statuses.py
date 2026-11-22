@@ -264,13 +264,10 @@ def _visible_in_thread(post: Post, viewer: User | None, following_ids: set, db: 
     if v == "followers":
         if post.mentioned_user_ids and viewer.id in post.mentioned_user_ids:
             return True
-        if viewer.username and f"@{viewer.username}" in (post.content or ""):
-            return True
         return post.author_id in following_ids
     if v == "mention":
-        if post.mentioned_user_ids and viewer.id in post.mentioned_user_ids:
-            return True
-        return bool(viewer.username and f"@{viewer.username}" in (post.content or ""))
+        # @username 문자열 검색은 @alice가 @alice2의 글까지 열어보는 문제가 있다.
+        return bool(post.mentioned_user_ids and viewer.id in post.mentioned_user_ids)
     return True
 
 

@@ -47,6 +47,37 @@ def test_mention_post_hidden_from_non_mentioned(client, auth_cookie, make_post):
     assert _get(client, post.id, bob_cookie).status_code == 200
 
 
+def test_followers_post_hidden_from_username_prefix(client, auth_cookie, make_post):
+    """@alice2 수신자에게 보낸 글을 @alice가 볼 수 없어야 한다."""
+    author, _ = auth_cookie("author")
+    alice, alice_cookie = auth_cookie("alice")
+    alice2, alice2_cookie = auth_cookie("alice2")
+    post = make_post(
+        author,
+        visibility="followers",
+        mentioned_user_ids=[alice2.id],
+        content="<p>@alice2 only</p>",
+    )
+    assert _get(client, post.id, alice_cookie).status_code == 403
+    assert _get(client, post.id, alice2_cookie).status_code == 200
+
+
+def test_mention_post_hidden_from_username_prefix(client, auth_cookie, make_post):
+    """본문에 @alice2가 있어도 실제 수신자가 아닌 @alice는 차단한다."""
+    author, _ = auth_cookie("author")
+    alice, alice_cookie = auth_cookie("alice")
+    alice2, alice2_cookie = auth_cookie("alice2")
+    post = make_post(
+        author,
+        visibility="mention",
+        mentioned_user_ids=[alice2.id],
+        is_dm=True,
+        content="<p>@alice2 only</p>",
+    )
+    assert _get(client, post.id, alice_cookie).status_code == 403
+    assert _get(client, post.id, alice2_cookie).status_code == 200
+
+
 def test_mention_post_hidden_from_anonymous(client, make_user, make_post):
     alice = make_user("alice")
     bob = make_user("bob")
@@ -108,6 +139,20 @@ def _masto_home(client, user):
     return client.get("/api/v1/timelines/home", headers={"Authorization": f"Bearer {token}"})
 
 
+def _masto_context(client, user, status_id):
+    from app.db.database import get_session
+    from app.models import MastodonAccessToken
+
+    token = _masto_oauth_header()["Authorization"].split(" ")[1]
+    with get_session() as s:
+        s.query(MastodonAccessToken).filter_by(access_token=token).update({"user_id": user.id})
+        s.commit()
+    return client.get(
+        f"/api/v1/statuses/{status_id}/context",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+
 def test_mastodon_home_timeline_includes_mentioned_dm(client, auth_cookie, make_post):
     alice, _ = auth_cookie("alice")
     bob, _ = auth_cookie("bob")
@@ -134,3 +179,27 @@ def test_mastodon_home_timeline_hides_dm_for_non_participant(client, auth_cookie
     assert r.status_code == 200
     ids = [s["id"] for s in r.json()]
     assert str(dm.id) not in ids
+
+
+def test_mastodon_context_hides_mention_post_from_username_prefix(client, auth_cookie, make_post):
+    """스레드 조회도 @alice에게 @alice2 전용 답글을 노출하면 안 된다."""
+    author, _ = auth_cookie("author")
+    alice, _ = auth_cookie("alice")
+    alice2, _ = auth_cookie("alice2")
+    root = make_post(author, visibility="public", content="<p>root</p>")
+    reply = make_post(
+        author,
+        visibility="mention",
+        mentioned_user_ids=[alice2.id],
+        is_dm=True,
+        content="<p>@alice2 private reply</p>",
+        parent=root,
+    )
+
+    r = _masto_context(client, alice, root.id)
+    assert r.status_code == 200
+    assert str(reply.id) not in [s["id"] for s in r.json()["descendants"]]
+
+    r = _masto_context(client, alice2, root.id)
+    assert r.status_code == 200
+    assert str(reply.id) in [s["id"] for s in r.json()["descendants"]]
