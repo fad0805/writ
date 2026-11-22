@@ -5,7 +5,6 @@ import json
 import logging
 import os
 import secrets
-from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
@@ -19,6 +18,7 @@ from app.core.eventbus import broadcast
 from app.core.feed import _broadcast_federation
 from app.core.push import send_push_to_user
 from app.core.timeline_stream import broadcast_notif_sound, broadcast_refresh_notifs
+from app.core.threads import BacklogFull, BoundedThreadPoolExecutor
 from app.db.database import get_session
 from app.db.mention_resolver import resolve_handles_to_ids
 from app.models import Notification, Post, User
@@ -32,11 +32,20 @@ post_create_router = APIRouter()
 
 # 글/답글 작성용 전용 executor. 리모트 inbox 처리(handle_inbox)와 기본 풀을
 # 공유하지 않아, 리모트 활동 폭주 시에도 작성 요청이 뒤에서 대기하지 않는다.
-# 코어 수에 맞춰 워커를 제한해 GIL 경합/커넥션 소진을 막는다.
-_post_create_executor = ThreadPoolExecutor(
+# 워커 수와 대기 큐를 모두 제한해 폭주 시 요청을 503으로 되돌린다.
+_post_create_executor = BoundedThreadPoolExecutor(
     max_workers=max(4, min(8, (os.cpu_count() or 1) + 1)),
+    queue_size=200,
     thread_name_prefix="post-create",
 )
+
+
+def _submit_post_followup(fn, *args, **kwargs):
+    """작성 완료 후 작업은 글이 이미 저장됐으므로 큐가 찼으면 드롭한다."""
+    try:
+        _post_create_executor.submit(fn, *args, **kwargs)
+    except BacklogFull:
+        logger.warning("Post-create backlog full, dropping follow-up %s", getattr(fn, "__name__", fn))
 
 
 def _validate_media_url(url: str) -> bool:
@@ -70,13 +79,16 @@ async def api_create_post(
 ):
     user = require_active_auth(request)
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(
-        _post_create_executor, _do_create_post,
-        user.id, user.is_limited, getattr(user, 'is_sensitive', False),
-        content, summary, visibility, parent_id,
-        dm_target_id, share_url, media_attachments, is_sensitive,
-        poll_options, poll_expires_in, link_preview,
-    )
+    try:
+        return await loop.run_in_executor(
+            _post_create_executor, _do_create_post,
+            user.id, user.is_limited, getattr(user, 'is_sensitive', False),
+            content, summary, visibility, parent_id,
+            dm_target_id, share_url, media_attachments, is_sensitive,
+            poll_options, poll_expires_in, link_preview,
+        )
+    except BacklogFull:
+        raise HTTPException(status_code=503, detail="Server busy")
 
 
 def _do_create_post(
@@ -242,7 +254,7 @@ def _do_create_post(
             except Exception as e:
                 logger.error("Failed to create notifications: %s", e, exc_info=True)
 
-        _post_create_executor.submit(_create_notifications_and_broadcast)
+        _submit_post_followup(_create_notifications_and_broadcast)
 
         def _resolve_remote_mentions_and_federate():
             try:
@@ -255,7 +267,7 @@ def _do_create_post(
                 logger.error("Failed to resolve remote mentions: %s", e)
             _broadcast_federation(user_id, post.id, visibility, content)
 
-        _post_create_executor.submit(_resolve_remote_mentions_and_federate)
+        _submit_post_followup(_resolve_remote_mentions_and_federate)
 
         try:
             broadcast("new_post", {"post_id": post.id, "author_id": user_id})
@@ -263,5 +275,5 @@ def _do_create_post(
             logger.error("Failed to broadcast new_post event: %s", e, exc_info=True)
 
         pj = _post_json(post, s, _author)
-        _post_create_executor.submit(_broadcast_timeline, pj, user_id, visibility)
+        _submit_post_followup(_broadcast_timeline, pj, user_id, visibility)
         return pj

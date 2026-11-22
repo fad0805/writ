@@ -14,7 +14,13 @@ from app.core.activitypub import _cleanup_expired_media, _cleanup_remote_data, _
 from app.core.archive import recover_interrupted_archive_jobs
 from app.core.permissions import ensure_default_roles
 from app.core.push import init_vapid_keys
-from app.core.workers import auto_delete_expired_posts, cleanup_orphan_media, delivery_worker, refresh_remote_profiles
+from app.core.workers import (
+    auto_delete_expired_posts,
+    cleanup_orphan_media,
+    delivery_worker,
+    periodic_remote_data_cleanup,
+    refresh_remote_profiles,
+)
 from app.middleware import CSRFProtectionMiddleware, LogRequestsMiddleware
 from app.routes.admin import router as admin_router
 from app.routes.ap import router as ap_router
@@ -48,6 +54,8 @@ async def lifespan(app: FastAPI):
     t3.start()
     t4 = threading.Thread(target=cleanup_orphan_media, daemon=True)
     t4.start()
+    t5 = threading.Thread(target=periodic_remote_data_cleanup, daemon=True)
+    t5.start()
     _cleanup_expired_media()
     _cleanup_remote_data()
     yield

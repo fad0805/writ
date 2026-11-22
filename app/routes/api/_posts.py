@@ -1,6 +1,6 @@
 """Post detail, edit, and delete endpoints extracted from _core.py."""
 import logging
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from concurrent.futures import TimeoutError
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Form, HTTPException, Request
@@ -12,7 +12,7 @@ from app.core.activitypub import _build_reactions, _fetch_remote_post, _send_del
 from app.core.auth import get_current_user, require_active_auth
 from app.core.broadcast import broadcast_post
 from app.core.permissions import has_permission
-from app.core.threads import spawn
+from app.core.threads import BacklogFull, BoundedThreadPoolExecutor, spawn
 from app.core.timeline_stream import broadcast_delete, broadcast_refresh_notifs
 from app.core.visibility import _can_view
 from app.db.database import get_session
@@ -29,9 +29,13 @@ from app.utils.to_ap_serializer import to_ap_note
 
 logger = logging.getLogger("writ.api.posts")
 
-# 리모트 부모 fetch 전용 바운드 실행기 — 요청 스레드풀을 잠식하지 않도록 제한된 스레드에서만
-# 느린 리모트 I/O(_fetch_remote_post → _resolve_actor)가 실행되게 한다.
-_remote_fetch_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="remote-parent")
+# 리모트 부모 fetch 전용 바운드 실행기 — 요청 스레드풀을 잠식하지 않도록 제한된 스레드와
+# 짧은 대기 큐에서만 느린 리모트 I/O(_fetch_remote_post → _resolve_actor)가 실행되게 한다.
+_remote_fetch_executor = BoundedThreadPoolExecutor(
+    max_workers=4,
+    queue_size=50,
+    thread_name_prefix="remote-parent",
+)
 
 posts_router = APIRouter()
 
@@ -167,15 +171,17 @@ def api_get_post(request: Request, post_id: int):
     if fetch_remote_url:
         # 리모트 부모 fetch는 별도 바운드 실행기에서 8초 상한으로만 대기한다.
         # 느린/응답 없는 리모트 서버가 요청 스레드를 최대 수십 초 붙잡지 않게 한다.
-        fut = _remote_fetch_executor.submit(_fetch_remote_parent_json, fetch_remote_url, user.id)
+        remote_parent_json = None
         try:
-            remote_parent_json = fut.result(timeout=8)
-        except TimeoutError:
-            logger.warning("Remote parent fetch for %s exceeded 8s, skipping", fetch_remote_url)
-            remote_parent_json = None
-        except Exception as e:
-            logger.error("Failed to fetch or process remote parent: %s", e, exc_info=True)
-            remote_parent_json = None
+            fut = _remote_fetch_executor.submit(_fetch_remote_parent_json, fetch_remote_url, user.id)
+            try:
+                remote_parent_json = fut.result(timeout=8)
+            except TimeoutError:
+                logger.warning("Remote parent fetch for %s exceeded 8s, skipping", fetch_remote_url)
+            except Exception as e:
+                logger.error("Failed to fetch or process remote parent: %s", e, exc_info=True)
+        except BacklogFull:
+            logger.warning("Remote parent fetch backlog full for %s, skipping", fetch_remote_url)
         if remote_parent_json is not None:
             result["ancestors"] = [remote_parent_json]
     return result

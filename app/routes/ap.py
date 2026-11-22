@@ -21,6 +21,7 @@ from app.core.activitypub import (
     verify_http_signature,
 )
 from app.core.rate_limit import check_burst_limit, check_daily_limit, check_rate_limit
+from app.core.threads import BacklogFull
 from app.db.database import get_session
 from app.models import (
     Boost,
@@ -231,7 +232,10 @@ async def _verify_signature_async(request: Request, body: bytes, activity: dict)
     이벤트 루프에서 직접 호출하면 서버 전체가 멈춘다.
     """
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(_sig_executor, verify_http_signature, request, body, activity)
+    try:
+        return await loop.run_in_executor(_sig_executor, verify_http_signature, request, body, activity)
+    except BacklogFull:
+        raise HTTPException(status_code=503, detail="Server busy")
 
 
 @router.post("/inbox")

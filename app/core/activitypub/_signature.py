@@ -5,13 +5,13 @@ import hashlib
 import logging
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 
 from fastapi import Request
 
 from app.config.settings import BASE_URL
 from app.core.activitypub._actor_resolver import _resolve_actor
+from app.core.threads import BoundedThreadPoolExecutor
 from app.db.database import get_session
 from app.models import Follow, User
 from app.utils.crypto import verify_signature
@@ -22,8 +22,9 @@ logger = logging.getLogger("writ.activitypub")
 # 서명 검증은 알 수 없는 액터 키를 네트워크에서 가져올 때 블로킹될 수 있다.
 # async 라우트가 이 함수를 직접 호출하면 이벤트 루프 전체가 멈추므로,
 # 인박스 처리 풀과 분리된 전용 풀에서 실행한다 (ap.py의 async 래퍼가 사용).
-_sig_executor = ThreadPoolExecutor(
+_sig_executor = BoundedThreadPoolExecutor(
     max_workers=max(2, min(4, (os.cpu_count() or 1))),
+    queue_size=100,
     thread_name_prefix="ap-signature",
 )
 

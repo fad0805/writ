@@ -11,6 +11,7 @@ from sqlalchemy import or_
 
 from app.config.settings import AUTO_DELETE_INTERVAL_SECONDS, ORPHAN_MEDIA_MIN_AGE_DAYS, SECRET_KEY
 from app.core.activitypub import (
+    _cleanup_remote_data,
     _deliver_sync_with_error,
     _get_instance_actor,
     _resolve_actor,
@@ -407,3 +408,20 @@ def cleanup_orphan_media():
         except Exception as e:
             logger.error("Media cleanup worker error: %s", e, exc_info=True)
         time.sleep(_next_3am() + 60)
+
+
+_REMOTE_DATA_CLEANUP_INTERVAL_SECONDS = 3600
+
+
+def periodic_remote_data_cleanup():
+    """오래된 중복 활동 기록/원격 데이터를 주기적으로 정리한다.
+
+    시작 시점 정리는 lifespan에서 이미 하므로, 여기서는 한 번 기다린 뒤
+    주기적으로 실행해 장시간 실행 중에도 테이블이 계속 자라지 않게 한다.
+    """
+    while True:
+        time.sleep(_REMOTE_DATA_CLEANUP_INTERVAL_SECONDS)
+        try:
+            _cleanup_remote_data()
+        except Exception as e:
+            logger.error("Remote data cleanup worker error: %s", e, exc_info=True)

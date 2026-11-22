@@ -3,8 +3,6 @@ import json
 import logging
 import os
 import re
-from concurrent.futures import ThreadPoolExecutor
-
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
@@ -12,14 +10,19 @@ from py_vapid import Vapid
 from pywebpush import WebPushException, webpush
 
 from app.config.settings import DOMAIN
+from app.core.threads import BacklogFull, BoundedThreadPoolExecutor
 from app.db.database import get_session
 from app.models import Post, PushSubscription, ServerSetting
 
 logger = logging.getLogger("writ.push")
 
-# 푸시 발송 전용 바운드 실행기 — 수신자 수만큼 무제한 스레드를 만들지 않는다.
-# 발송은 외부 VAPID 엔드포인트 I/O라 느릴 수 있으므로 워커 수를 제한해 폭주를 막는다.
-_push_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="push")
+# 푸시 발송 전용 바운드 실행기 — 워커 수와 대기 큐를 모두 제한한다.
+# 발송은 외부 VAPID 엔드포인트 I/O라 느릴 수 있으므로 폭주 시 알림을 드롭한다.
+_push_executor = BoundedThreadPoolExecutor(
+    max_workers=8,
+    queue_size=200,
+    thread_name_prefix="push",
+)
 
 # Web Push / VAPID
 def _sanitize_pem(val: str) -> str:
@@ -107,7 +110,10 @@ def _get_vapid_key():
 
 def send_push_to_user(user_id: int, notification_type: str, from_username: str = "", post_id: int | None = None, metadata: dict | None = None):
     """Send web push notification to all subscriptions of a user. Runs in background thread."""
-    _push_executor.submit(_send_push_sync, user_id, notification_type, from_username, post_id, metadata)
+    try:
+        _push_executor.submit(_send_push_sync, user_id, notification_type, from_username, post_id, metadata)
+    except BacklogFull:
+        logger.warning("Push backlog full, dropping %s for user %s", notification_type, user_id)
 
 
 def _send_push_sync(user_id: int, notification_type: str, from_username: str, post_id: int | None, metadata: dict | None):

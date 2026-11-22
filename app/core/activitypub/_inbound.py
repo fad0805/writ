@@ -2,7 +2,6 @@ import asyncio
 import datetime as dt
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 
 from sqlalchemy.exc import IntegrityError
@@ -21,18 +20,19 @@ from app.core.activitypub._inbound_interactions import (
     _handle_vote,
 )
 from app.core.federation import federation_allowed
+from app.core.threads import BacklogFull, BoundedThreadPoolExecutor
 from app.db.database import get_session
 from app.models import ProcessedActivity
 
 logger = logging.getLogger("writ.activitypub")
 
 # 리모트 inbox 처리용 전용 executor. 글/답글 작성과는 분리된 풀을 쓰고
-# 동시 처리 수를 제한해, 한쪽의 네트워크 부하가 다른 쪽을 막지 않게 한다.
-# 코어 수에 맞춰 워커를 제한해 GIL 경합/커넥션 소진을 막는다.
-# 주의: worker 수만 제한되며 대기 큐 자체는 무제한이다. 단일 프로세스 전제이며
-# 다중 워커로 확장할 때는 외부 큐와 백프레셔가 필요하다.
-_inbox_executor = ThreadPoolExecutor(
+# 동시 처리 수와 대기 큐 깊이를 제한해, 폭주 시 메모리가 무한히 늘지 않게 한다.
+# 큐가 가득 찬 활동은 503으로 거부해 리모트가 재시도하도록 한다.
+# 다중 워커로 확장할 때는 외부 큐가 필요하다.
+_inbox_executor = BoundedThreadPoolExecutor(
     max_workers=max(4, min(8, (os.cpu_count() or 1) + 1)),
+    queue_size=200,
     thread_name_prefix="ap-inbox",
 )
 
@@ -135,7 +135,11 @@ def _mark_activity_processed(activity_id: str):
 async def _submit_inbox(activity: dict) -> tuple[int, str]:
     """Run inbox processing on the dedicated executor pool."""
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(_inbox_executor, handle_inbox, activity)
+    try:
+        return await loop.run_in_executor(_inbox_executor, handle_inbox, activity)
+    except BacklogFull:
+        logger.warning("Inbox backlog full, rejecting activity")
+        return (503, "Server busy")
 
 
 def handle_inbox(activity: dict) -> tuple[int, str]:
