@@ -72,7 +72,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <ErrorBoundary>{children}</ErrorBoundary>
           </ClientProviders>
         </AuthProvider>
-        <script nonce={nonce} dangerouslySetInnerHTML={{
+        {/* 브라우저는 보안상 nonce 속성을 DOM에서 숨겨, 하이드레이션 시
+            서버의 nonce 값과 DOM의 빈 값이 달라 보인다. 실제 속성 차이가 아니므로 무시한다. */}
+        <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{
           __html: `
             if ('serviceWorker' in navigator) {
               navigator.serviceWorker.register('/sw.js').catch(function() {});
