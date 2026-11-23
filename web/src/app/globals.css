@@ -5999,14 +5999,21 @@ input[type="checkbox"] {
 }
 
 .account-hover-body {
-  padding: 0 14px 12px;
+  padding: 12px 14px 12px;
+}
+
+.account-hover-body.with-header {
+  padding-top: 0;
 }
 
 .account-hover-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+.account-hover-body.with-header .account-hover-top {
   margin-top: -24px;
 }
 
@@ -6026,11 +6033,11 @@ input[type="checkbox"] {
 }
 
 .account-hover-action {
-  margin-top: 28px;
+  margin-top: 0;
 }
 
 .account-hover-blocked {
-  margin-top: 34px;
+  margin-top: 0;
   color: var(--text-muted);
   font-size: 0.85em;
 }

@@ -208,7 +208,7 @@ function AccountHoverCardContent({ state, emojis, canFollow, onUpdate }: {
       {profile.header && (
         <div className="account-hover-header" style={{ backgroundImage: `url("${profile.header.replace(/"/g, "%22")}")` }} />
       )}
-      <div className="account-hover-body">
+      <div className={`account-hover-body${profile.header ? " with-header" : ""}`}>
         <div className="account-hover-top">
           <Link href={`/@${encodeURIComponent(profile.username)}`} className="account-hover-avatar-link" data-no-account-hover>
             <Avatar user={profile} className="account-hover-avatar" />
