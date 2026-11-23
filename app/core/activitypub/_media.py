@@ -23,6 +23,11 @@ _REMOTE_MEDIA_MAX_SIZE = 10 * 1024 * 1024
 _REMOTE_MEDIA_EXPIRY_DAYS = 30
 
 
+def _is_animated_image(img: Image.Image) -> bool:
+    """Detect animation before exif_transpose, which strips frame metadata."""
+    return bool(getattr(img, "is_animated", False) or getattr(img, "n_frames", 1) > 1)
+
+
 def _cache_remote_media(remote_url: str) -> str:
     if not validate_url(remote_url):
         return remote_url
@@ -52,10 +57,10 @@ def _cache_remote_media(remote_url: str) -> str:
             elif orig_ext == "gif":
                 try:
                     img: Image.Image = Image.open(io.BytesIO(data))
-                    img = ImageOps.exif_transpose(img) or img
-                    is_animated = getattr(img, "is_animated", False) or (img.format == "GIF")
-                    if not is_animated:
-                        # static GIF -> convert to WebP/PNG as before
+                    # exif_transpose() returns a copy that loses n_frames, so only
+                    # apply it after deciding whether the source is animated.
+                    if not _is_animated_image(img):
+                        img = ImageOps.exif_transpose(img) or img
                         max_dim = 2048
                         if img.width > max_dim or img.height > max_dim:
                             ratio = min(max_dim / img.width, max_dim / img.height)
@@ -84,15 +89,13 @@ def _cache_remote_media(remote_url: str) -> str:
             else:
                 try:
                     img: Image.Image = Image.open(io.BytesIO(data))
-                    img = ImageOps.exif_transpose(img) or img
-                    is_animated = getattr(img, "is_animated", False) or (img.format == "GIF")
-                    max_dim = 2048
-                    out = io.BytesIO()
-
-                    if is_animated:
-                        # For non-GIF animated formats (e.g., animated WebP from remote), preserve original
+                    if _is_animated_image(img):
+                        # Animated WebP/APNG: keep the original bytes so all frames survive.
                         logger.info("Preserving original animated media: %s", remote_url)
                     else:
+                        img = ImageOps.exif_transpose(img) or img
+                        max_dim = 2048
+                        out = io.BytesIO()
                         if img.width > max_dim or img.height > max_dim:
                             ratio = min(max_dim / img.width, max_dim / img.height)
                             img = img.resize((int(img.width * ratio), int(img.height * ratio)), Image.Resampling.LANCZOS)
@@ -143,52 +146,55 @@ def _save_remote_image(image_url: str, prefix: str, local_username: str, old_url
         new_url = None
 
         is_avatar = prefix == "avatars"
-        if ext in ("gif", "png") or "gif" in content_type_header or "png" in content_type_header:
-            if is_avatar and ext != "gif" and "gif" not in content_type_header:
-                img: Image.Image = Image.open(io.BytesIO(data))
-                img = ImageOps.exif_transpose(img) or img
+        img: Image.Image | None = None
+        real_format = ""
+        is_animated = False
+        try:
+            img = Image.open(io.BytesIO(data))
+            real_format = (img.format or "").lower()
+            # Check before exif_transpose(): it returns a copy without frame metadata.
+            is_animated = _is_animated_image(img)
+        except Exception as img_err:
+            logger.error("Pillow could not process image %s, saving raw data: %s", image_url, img_err, exc_info=True)
+
+        if is_animated:
+            # Animated WebP/APNG/GIF: keep the original bytes so every frame survives.
+            final_ext = real_format if real_format in ("gif", "png", "webp") else ext
+            filename = f"{uuid.uuid4().hex}.{final_ext}"
+            key = f"{prefix}/remote/{filename}"
+            new_url = storage.save(key, data, f"image/{final_ext}")
+        elif is_avatar and img is not None and (ext == "png" or "png" in content_type_header or real_format == "png"):
+            img = ImageOps.exif_transpose(img) or img
+            sz = min(img.size)
+            img = img.crop(((img.width - sz) // 2, (img.height - sz) // 2, (img.width + sz) // 2, (img.height + sz) // 2))
+            out = io.BytesIO()
+            img.save(out, format="PNG", quality=85)
+            filename = f"{uuid.uuid4().hex}.png"
+            key = f"{prefix}/remote/{filename}"
+            new_url = storage.save(key, out.getvalue(), "image/png")
+        elif real_format in ("gif", "png") or ext in ("gif", "png") or "gif" in content_type_header or "png" in content_type_header:
+            final_ext = "gif" if real_format == "gif" or "gif" in ext or "gif" in content_type_header else "png"
+            filename = f"{uuid.uuid4().hex}.{final_ext}"
+            key = f"{prefix}/remote/{filename}"
+            new_url = storage.save(key, data, f"image/{final_ext}")
+        elif img is not None:
+            img = ImageOps.exif_transpose(img) or img
+            if is_avatar:
                 sz = min(img.size)
                 img = img.crop(((img.width - sz) // 2, (img.height - sz) // 2, (img.width + sz) // 2, (img.height + sz) // 2))
-                out = io.BytesIO()
-                img.save(out, format="PNG", quality=85)
-                filename = f"{uuid.uuid4().hex}.png"
-                key = f"{prefix}/remote/{filename}"
-                new_url = storage.save(key, out.getvalue(), "image/png")
-            else:
-                final_ext = "gif" if ("gif" in ext or "gif" in content_type_header) else "png"
-                filename = f"{uuid.uuid4().hex}.{final_ext}"
-                key = f"{prefix}/remote/{filename}"
-                new_url = storage.save(key, data, f"image/{final_ext}")
+            if img.mode in ("RGBA", "P"):
+                bg = Image.new("RGB", img.size, (255, 255, 255))
+                bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
+                img = bg
+            out = io.BytesIO()
+            img.save(out, format="WEBP", quality=85)
+            filename = f"{uuid.uuid4().hex}.webp"
+            key = f"{prefix}/remote/{filename}"
+            new_url = storage.save(key, out.getvalue(), "image/webp")
         else:
-            try:
-                img = Image.open(io.BytesIO(data))
-                img = ImageOps.exif_transpose(img) or img
-                if is_avatar:
-                    sz = min(img.size)
-                    img = img.crop(((img.width - sz) // 2, (img.height - sz) // 2, (img.width + sz) // 2, (img.height + sz) // 2))
-                is_animated = getattr(img, "is_animated", False)
-                real_format = (img.format or "").lower()
-                if is_animated or real_format in ("gif", "png"):
-                    final_ext = real_format if real_format in ("gif", "png", "webp") else "webp"
-                    filename = f"{uuid.uuid4().hex}.{final_ext}"
-                    key = f"{prefix}/remote/{filename}"
-                    new_url = storage.save(key, data, f"image/{final_ext}")
-                else:
-                    if img.mode in ("RGBA", "P"):
-                        bg = Image.new("RGB", img.size, (255, 255, 255))
-                        bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
-                        img = bg
-                    out = io.BytesIO()
-                    img.save(out, format="WEBP", quality=85)
-                    filename = f"{uuid.uuid4().hex}.webp"
-                    key = f"{prefix}/remote/{filename}"
-                    new_url = storage.save(key, out.getvalue(), "image/webp")
-
-            except Exception as img_err:
-                logger.error("Pillow could not process image %s, saving raw data: %s", image_url, img_err, exc_info=True)
-                filename = f"{uuid.uuid4().hex}.{ext}"
-                key = f"{prefix}/remote/{filename}"
-                new_url = storage.save(key, data, content_type_header or f"image/{ext}")
+            filename = f"{uuid.uuid4().hex}.{ext}"
+            key = f"{prefix}/remote/{filename}"
+            new_url = storage.save(key, data, content_type_header or f"image/{ext}")
 
         if new_url and old_url:
             with contextlib.suppress(Exception):
