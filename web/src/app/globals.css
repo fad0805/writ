@@ -5970,3 +5970,175 @@ input[type="checkbox"] {
     padding-left: 0;
   }
 }
+
+/* ── Account hover card ── */
+
+.account-hover-card {
+  position: fixed;
+  z-index: 1300;
+  overflow: hidden;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.24);
+  font-size: 0.9em;
+  animation: account-hover-in 120ms ease-out;
+}
+
+@keyframes account-hover-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.account-hover-header {
+  height: 54px;
+  background-color: var(--bg-tertiary);
+  background-position: center;
+  background-size: cover;
+}
+
+.account-hover-body {
+  padding: 0 14px 12px;
+}
+
+.account-hover-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: -24px;
+}
+
+.account-hover-avatar-link {
+  display: inline-flex;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 3px solid var(--bg-secondary);
+  background: var(--bg-secondary);
+}
+
+.account-hover-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.account-hover-action {
+  margin-top: 28px;
+}
+
+.account-hover-blocked {
+  margin-top: 34px;
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+
+.account-hover-name {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-primary);
+  font-size: 1.04em;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.account-hover-name:hover {
+  color: var(--accent-light);
+  text-decoration: underline;
+}
+
+.account-hover-lock {
+  margin-left: 3px;
+  color: var(--text-muted);
+  font-size: 0.72em;
+  vertical-align: middle;
+}
+
+.account-hover-handle {
+  color: var(--text-muted);
+  font-size: 0.88em;
+  overflow-wrap: anywhere;
+}
+
+.account-hover-bio {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 0.88em;
+  line-height: 1.5;
+  max-height: 76px;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.account-hover-bio a {
+  color: var(--accent);
+}
+
+.account-hover-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+
+.account-hover-stats strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.account-hover-note {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 0.8em;
+}
+
+.account-hover-note a {
+  color: var(--accent);
+}
+
+.account-hover-loading,
+.account-hover-error {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 16px 14px;
+  min-height: 96px;
+}
+
+.account-hover-error {
+  color: var(--text-muted);
+}
+
+.account-hover-skeleton-avatar {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+}
+
+.account-hover-skeleton-lines {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.account-hover-skeleton-lines i {
+  display: block;
+  height: 9px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+}
+
+.account-hover-skeleton-lines i:nth-child(2) { width: 70%; }
+.account-hover-skeleton-lines i:nth-child(3) { width: 45%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .account-hover-card { animation: none; }
+}

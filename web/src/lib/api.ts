@@ -152,6 +152,21 @@ export interface User {
   show_badge?: boolean;
 }
 
+export interface AccountCardData {
+  profile: User;
+  total_posts: number;
+  followers_count: number;
+  following_count: number;
+  is_following: boolean;
+  is_follow_pending: boolean;
+  is_mine: boolean;
+  is_follower?: boolean;
+  has_pending_follower?: boolean;
+  is_muted?: boolean;
+  is_blocked?: boolean;
+  am_i_blocked?: boolean;
+}
+
 export interface PollOption {
   text: string;
   votes_count: number;
@@ -397,6 +412,8 @@ export const api = {
   reactionUsers: (id: number, emoji: string) => request<{ users: User[] }>(`/api/posts/${id}/reaction-users?emoji=${encodeURIComponent(emoji)}`),
 
   // Users
+  getAccountCard: (username: string) =>
+    request<AccountCardData>(`/api/users/${encodeURIComponent(username)}?limit=0`),
   getProfile: (username: string) =>
     request<{
       profile: User;

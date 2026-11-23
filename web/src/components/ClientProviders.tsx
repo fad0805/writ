@@ -6,6 +6,7 @@ import AnnouncementToast from "@/components/AnnouncementToast";
 import DeactivatedRedirect from "@/components/DeactivatedRedirect";
 import CsrfInit from "@/components/CsrfInit";
 import ScrollRestoration from "@/components/ScrollRestoration";
+import AccountHoverCard from "@/components/AccountHoverCard";
 
 const RightSidebar = dynamic(() => import("@/components/RightSidebar"), { loading: () => null });
 const MobileNav = dynamic(() => import("@/components/MobileNav"), { loading: () => null });
@@ -24,6 +25,7 @@ export default function ClientProviders({ children }: { children: React.ReactNod
       <AnnouncementToast />
       <DeactivatedRedirect />
       <CsrfInit />
+      <AccountHoverCard />
     </div>
   );
 }
