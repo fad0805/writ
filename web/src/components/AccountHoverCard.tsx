@@ -24,7 +24,7 @@ interface HoverCardState {
 
 const CARD_TTL = 60_000;
 const CARD_WIDTH = 320;
-const CARD_MAX_HEIGHT = 360;
+const CARD_ESTIMATED_HEIGHT = 180;
 
 const cardCache = new Map<string, CacheEntry>();
 const pendingCards = new Map<string, Promise<AccountCardData>>();
@@ -85,20 +85,32 @@ export function accountUsernameFromHref(href: string): string | null {
   }
 }
 
-function positionFor(rect: DOMRect): { left: number; top: number; width: number } {
+function positionFor(rect: DOMRect): React.CSSProperties {
   const width = Math.min(CARD_WIDTH, window.innerWidth - 16);
   let left = rect.left;
   if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
   if (left < 8) left = 8;
 
-  const below = rect.bottom + 8;
-  const above = rect.top - CARD_MAX_HEIGHT - 8;
-  const top = below + CARD_MAX_HEIGHT <= window.innerHeight
-    ? below
-    : above >= 8
-      ? above
-      : Math.max(8, window.innerHeight - CARD_MAX_HEIGHT - 8);
-  return { left, top, width };
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const spaceAbove = rect.top;
+  const placeBelow = spaceBelow >= CARD_ESTIMATED_HEIGHT || spaceBelow >= spaceAbove;
+
+  if (placeBelow) {
+    return {
+      left,
+      top: rect.bottom + 8,
+      width,
+      maxHeight: Math.max(120, spaceBelow - 16),
+    };
+  }
+
+  // 위쪽에 배치할 때는 카드 높이를 알 필요 없이 bottom을 기준으로 붙인다.
+  return {
+    left,
+    bottom: window.innerHeight - rect.top + 8,
+    width,
+    maxHeight: Math.max(120, spaceAbove - 16),
+  };
 }
 
 function FollowButton({ data, canFollow, onUpdate }: {
@@ -404,7 +416,7 @@ export default function AccountHoverCard() {
     <div
       ref={cardRef}
       className="account-hover-card"
-      style={{ left: position.left, top: position.top, width: position.width }}
+      style={position}
       role="tooltip"
       data-no-account-hover
       onPointerEnter={() => { overCardRef.current = true; clearHideTimer(); }}
