@@ -6036,6 +6036,18 @@ input[type="checkbox"] {
   margin-top: 0;
 }
 
+/* 카드 상단(헤더 이미지)에 겹쳐도 글씨가 읽히도록 불투명 배경을 준다. */
+.account-hover-action.btn-outline {
+  background: var(--bg-secondary);
+  border-color: var(--border-light);
+  color: var(--text-primary);
+}
+.account-hover-action.btn-outline:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 .account-hover-blocked {
   margin-top: 0;
   color: var(--text-muted);
