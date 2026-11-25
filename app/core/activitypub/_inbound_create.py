@@ -191,13 +191,7 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                     new_options[option_idx]["votes_count"] = new_options[option_idx].get("votes_count", 0) + 1
                     poll_post.poll_data = {**poll_post.poll_data, "options": new_options}
                     session.commit()
-                    _voter_ids = {v.user_id for v in session.query(Vote).filter_by(post_id=poll_post.id).all()}
-                    _voter_ids.add(poll_post.author_id)
-                    for _vid in _voter_ids:
-                        broadcast_refresh_notifs(_vid)
-                    if poll_post.author_id != actor_id:
-                        send_push_to_user(int(poll_post.author_id), "vote", str(actor_username), int(poll_post.id))
-                        broadcast_notif_sound(int(poll_post.author_id))
+                    # 투표는 익명이어야 하므로 작성자에게 참여자 알림/사운드를 보내지 않는다.
                     broadcast_post({
                         "id": int(poll_post.id),
                         "type": "update",

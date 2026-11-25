@@ -309,6 +309,10 @@ export default function NotificationsPage() {
       ) : (
         <InfiniteScroll hasMore={hasMore} loadingMore={loadingMore} loadMore={loadMore}>
         {notifs.map((n) => {
+          // 투표 참여 알림은 익명성을 위해 표시하지 않는다.
+          if (n.type === "vote") {
+            return null;
+          }
           if ((n.type === "mention" || n.type === "reply") && n.post && n.from_user) {
             return <PostCard key={n.id} post={n.post} mentionBy={n.from_user} />;
           }

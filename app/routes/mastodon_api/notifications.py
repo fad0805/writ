@@ -34,7 +34,10 @@ def list_notifications(
     types = _query_param_list(request, "types")
     exclude_types = _query_param_list(request, "exclude_types")
 
-    q = db.query(Notification).filter(Notification.user_id == user.id)
+    q = db.query(Notification).filter(
+        Notification.user_id == user.id,
+        Notification.notification_type != "vote",
+    )
 
     type_map = {
         "follow": "follow",

@@ -146,17 +146,9 @@ export default function RightSidebar() {
         <h4><Icon name="bell" /> 알림</h4>
         <div className="notif-mini-list">
           {notifs.length > 0 ? notifs.map((n) => {
+            // 투표 참여 알림은 익명성을 위해 표시하지 않는다.
             if (n.type === "vote") {
-              return (
-                n.post ? <MiniPostCard key={n.id} post={n.post} notifType={n.type} notifLabel={
-                  n.from_user ? (
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                      <Avatar user={n.from_user} style={{ width: 16, height: 16, borderRadius: 4, verticalAlign: "middle" }} />
-                      <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{renderName(n.from_user.display_name || n.from_user.username, n.post)}</strong> 님이 투표에 참여했습니다
-                    </span>
-                  ) : <><strong>{renderName("알 수 없음")}</strong> 님이 투표에 참여했습니다</>
-                } /> : <div key={n.id} />
-              );
+              return <div key={n.id} />;
             }
 
             if (n.type === "poll_ended") {

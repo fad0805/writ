@@ -45,7 +45,6 @@ NOTIF_LABELS = {
     "new_episode": ("새 에피소드", "팔로우하는 시리즈에 새 에피소드가 등록되었습니다"),
     "moderation": ("알림", "관리자에게서 알림이 있습니다"),
     "poll_ended": ("투표 종료", "참여한 투표가 종료되었습니다"),
-    "vote": ("투표", "회원님의 투표에 참여했습니다"),
     "archive": ("아카이브", "아카이브가 준비되었습니다"),
 }
 
@@ -110,6 +109,9 @@ def _get_vapid_key():
 
 def send_push_to_user(user_id: int, notification_type: str, from_username: str = "", post_id: int | None = None, metadata: dict | None = None):
     """Send web push notification to all subscriptions of a user. Runs in background thread."""
+    # 투표 참여 알림은 발신자를 노출하므로 보내지 않는다.
+    if notification_type == "vote":
+        return
     try:
         _push_executor.submit(_send_push_sync, user_id, notification_type, from_username, post_id, metadata)
     except BacklogFull:

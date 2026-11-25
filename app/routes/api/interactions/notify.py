@@ -128,11 +128,12 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
         q = s.query(Notification).options(
             selectinload(Notification.from_user),
             selectinload(Notification.post).selectinload(Post.author),
-        ).filter_by(user_id=user.id)
+        ).filter_by(user_id=user.id).filter(Notification.notification_type != "vote")
         if filter_type == "follow":
             q = q.filter(Notification.notification_type.in_(["follow", "follow_request"]))
         elif filter_type == "vote":
-            q = q.filter(Notification.notification_type.in_(["vote", "poll_ended"]))
+            # 기존에 쌓인 투표 참여 알림은 노출하지 않고 마감 알림만 보여준다.
+            q = q.filter_by(notification_type="poll_ended")
         elif filter_type:
             q = q.filter_by(notification_type=filter_type)
         q = q.order_by(desc(Notification.created_at))
@@ -255,7 +256,9 @@ def api_unread_count(request: Request):
     if cached and now - cached[1] < _UNREAD_CACHE_TTL:
         return {"count": cached[0]}
     with get_session() as s:
-        count = s.query(Notification.id).filter_by(user_id=user.id, is_read=False).count()
+        count = s.query(Notification.id).filter_by(user_id=user.id, is_read=False).filter(
+            Notification.notification_type != "vote"
+        ).count()
     _unread_cache[user.id] = (count, now)
     return {"count": count}
 
