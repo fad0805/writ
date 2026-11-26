@@ -57,6 +57,20 @@ def _refresh_emoji_cache_forcibly(session):
     _emoji_cache["ts"] = time.time()
 
 
+def pick_emoji_for_domain(emojis: list[dict], domain: str = "") -> dict | None:
+    """여러 서버에 같은 shortcode가 있을 때 도메인에 맞는 이모지를 고른다.
+
+    우선순위: 요청한 도메인 -> 로컬 정의(domain="") -> 첫 후보.
+    """
+    if not emojis:
+        return None
+    if domain:
+        chosen = next((e for e in emojis if (e.get("domain") or "").lower() == domain.lower()), None)
+        if chosen:
+            return chosen
+    return next((e for e in emojis if not e.get("domain")), None) or emojis[0]
+
+
 def _emoji_url(file_name: str, domain: str = "", category: str = "") -> str:
     """Return the correct emoji URL (local or S3)."""
     global _emoji_storage

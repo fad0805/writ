@@ -71,6 +71,9 @@ def _get_feed(user, tl_type, session, limit=10, offset=0, cursor=None):
     _timeline_emojis = _feed_used_emojis(session, posts, _boost_originals)
 
     # 4. JSON 변환
+    # 글별 _emojis를 포함시킨다. 전역 _emojis는 shortcode당 하나의 URL만 담을 수
+    # 있어 서버마다 이미지가 다른 같은 키워드를 구분하지 못한다(PostCard가
+    # 글별 _emojis를 우선 병합해 작성자 도메인의 이모지를 렌더링한다).
     feed_dicts = [
         _post_json(p, session, user, tl_type,
                    _liked_ids=posts_metadata.get("liked_ids"),
@@ -82,8 +85,7 @@ def _get_feed(user, tl_type, session, limit=10, offset=0, cursor=None):
                    _mentioned_users_map=posts_metadata.get("mentioned_users_map"),
                    _boost_originals=_boost_originals,
                    _following_ids=_following_ids,
-                   _counts_map=posts_metadata.get("counts_map"),
-                   _skip_emojis=True)
+                   _counts_map=posts_metadata.get("counts_map"))
         for p in posts
     ]
 

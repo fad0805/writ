@@ -44,10 +44,12 @@ def _background_import_emoji(url: str, keyword: str, domain: str):
             _content = _out.getvalue()
         if _ext in ("gif", "png"):
             _content = _resp.content
-        _fname = f"{keyword}.{_ext}"
+        # 같은 shortcode를 쓰는 서버가 여럿일 수 있으므로 파일명에도 도메인/UUID를
+        # 넣어 서로의 이미지를 덮어쓰지 않게 한다.
+        _fname = f"{uuid.uuid4().hex}.{_ext}"
         get_storage().save(f"emojis/remote/{_fname}", _content, _ct_save)
         with get_session() as _es:
-            _existing = _es.query(CustomEmoji).filter_by(keyword=keyword).first()
+            _existing = _es.query(CustomEmoji).filter_by(keyword=keyword, domain=domain).first()
             if not _existing:
                 _es.add(CustomEmoji(keyword=keyword, file_name=_fname, category="remote", domain=domain))
                 _es.commit()

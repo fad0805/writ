@@ -28,7 +28,7 @@ from app.routes.mastodon_api._common import (
     _status_json,
     _visibility_from_mastodon,
 )
-from app.utils.emoji import _load_emojis
+from app.utils.emoji import _load_emojis, pick_emoji_for_domain
 from app.utils.storage import get_storage
 from app.utils.upload import _validate_upload
 
@@ -499,12 +499,16 @@ def list_reactions(status_id: str, request: Request, db: SASession = Depends(get
         name = react or "★"
         emoji_url = ""
         emoji_static_url = ""
+        first_user = db.query(User).filter_by(id=first_user_id).first()
         if name != "★":
-            emoji_row = next((e for e in _load_emojis(db) if e["keyword"] == name.strip(":")), None)
+            first_domain = ""
+            if first_user and first_user.is_remote and "@" in (first_user.username or ""):
+                first_domain = first_user.username.rsplit("@", 1)[-1].lower()
+            candidates = [e for e in _load_emojis(db) if e["keyword"].lower() == name.strip(":").lower()]
+            emoji_row = pick_emoji_for_domain(candidates, first_domain)
             if emoji_row:
                 emoji_url = emoji_row["url"]
                 emoji_static_url = emoji_row["url"]
-        first_user = db.query(User).filter_by(id=first_user_id).first()
         result.append({
             "name": name,
             "count": cnt,

@@ -22,6 +22,7 @@ from app.core.threads import spawn
 from app.db.database import get_session
 from app.models import User
 from app.utils.crypto import encrypt_key, generate_keypair, get_private_key, sign_string
+from app.utils.emoji import _refresh_emoji_cache_forcibly
 from app.utils.http import WRIT_USER_AGENT, safe_fetch, validated_get
 from app.utils.urls import parse_username_from_url
 
@@ -363,6 +364,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: User | 
                 with get_session() as emoji_s:
                     _process_emoji_tags(data.get("tag", []), emoji_s)
                     emoji_s.commit()
+                    _refresh_emoji_cache_forcibly(emoji_s)
             result_user = existing
 
         # Also check by username in case remote_url is missing/stale
@@ -386,6 +388,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: User | 
                     with get_session() as emoji_s:
                         _process_emoji_tags(data.get("tag", []), emoji_s)
                         emoji_s.commit()
+                        _refresh_emoji_cache_forcibly(emoji_s)
                 result_user = by_username
 
         if result_user is None:
@@ -424,6 +427,7 @@ def _resolve_actor(actor_url: str, force_refresh: bool = False, sign_as: User | 
                 with get_session() as emoji_s:
                     _process_emoji_tags(data.get("tag", []), emoji_s)
                     emoji_s.commit()
+                    _refresh_emoji_cache_forcibly(emoji_s)
             result_user = user
 
     if _pinned_ap_ids is not None:

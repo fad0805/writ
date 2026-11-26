@@ -165,6 +165,20 @@ export function useEmojiList(): CustomEmoji[] {
   return emojis;
 }
 
+/** 글별 리액션 이모지(응답자 도메인 기준)를 렌더링 목록 앞에 붙인다. */
+export function withReactionEmojis(emojis: CustomEmoji[], reactionEmojis?: Record<string, string>): CustomEmoji[] {
+  if (!reactionEmojis || Object.keys(reactionEmojis).length === 0) return emojis;
+  const result = [...emojis];
+  for (const [keyword, url] of Object.entries(reactionEmojis)) {
+    if (!keyword || !url) continue;
+    const idx = result.findIndex(e => e.keyword.toLowerCase() === keyword.toLowerCase());
+    const entry: CustomEmoji = { keyword, file_name: "", url, aliases: [], category: "remote" };
+    if (idx >= 0) result[idx] = entry;
+    else result.unshift(entry);
+  }
+  return result;
+}
+
 export function renderReaction(reaction: string, emojis: CustomEmoji[], size?: number): string {
   const escaped = reaction.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return renderCustomEmojis(escaped, emojis, size);

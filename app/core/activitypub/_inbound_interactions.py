@@ -82,18 +82,21 @@ def _handle_like(activity: dict) -> tuple[int, str]:
         # Process remote emoji if present in tag array
         if reaction and reaction.startswith(":") and reaction.endswith(":"):
             _kw = reaction[1:-1]
-            _existing_emoji = session.query(CustomEmoji).filter_by(keyword=_kw).first()
-            if not _existing_emoji:
-                _import_data = {"kw": _kw}
-                tags = activity.get("tag", []) or []
-                for _tag in tags:
-                    if isinstance(_tag, dict) and _tag.get("type") == "Emoji":
-                        _icon = _tag.get("icon", {})
-                        _import_data["url"] = _icon.get("url", "") if isinstance(_icon, dict) else ""
-                        _import_data["domain"] = urlparse(_tag.get("id", "")).netloc if _tag.get("id", "") else ""
-                        break
-                if _import_data.get("url"):
-                    spawn(_background_import_emoji, _import_data["url"], _import_data["kw"], _import_data["domain"])
+            _import_data = {"kw": _kw, "url": "", "domain": ""}
+            tags = activity.get("tag", []) or []
+            for _tag in tags:
+                if isinstance(_tag, dict) and _tag.get("type") == "Emoji":
+                    _icon = _tag.get("icon", {})
+                    if isinstance(_icon, list):
+                        _icon = _icon[0] if _icon else {}
+                    _import_data["url"] = _icon.get("url", "") if isinstance(_icon, dict) else ""
+                    _tag_id = _tag.get("id", "")
+                    _import_data["domain"] = urlparse(_tag_id).netloc if isinstance(_tag_id, str) and _tag_id else ""
+                    break
+            # 같은 shortcode라도 서버마다 다른 이모지이므로 도메인까지 확인한다.
+            _existing_emoji = session.query(CustomEmoji).filter_by(keyword=_kw, domain=_import_data["domain"]).first()
+            if not _existing_emoji and _import_data.get("url"):
+                spawn(_background_import_emoji, _import_data["url"], _import_data["kw"], _import_data["domain"])
 
         existing = session.query(Like).filter_by(user_id=actor_id, post_id=post.id).first()
         if existing:

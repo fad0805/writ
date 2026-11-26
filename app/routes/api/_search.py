@@ -127,7 +127,7 @@ def api_explore(request: Request, limit: int = Query(20, le=100), offset: int = 
             ), s).limit(20).all()
 
         return {
-            "posts": [_post_json(p, s, user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids, _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map, _mentioned_users_map=_mentioned_users_map, _boost_originals=_boost_originals, _skip_emojis=True) for p in posts],
+            "posts": [_post_json(p, s, user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids, _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map, _mentioned_users_map=_mentioned_users_map, _boost_originals=_boost_originals) for p in posts],
             "has_more": has_more,
             "novels": _novels_json(s, novels),
         }

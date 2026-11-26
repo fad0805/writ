@@ -15,6 +15,7 @@ from app.core.mastodon_scopes import has_admin_scope, required_scope_for_request
 from app.core.permissions import is_staff
 from app.core.visibility import _can_view
 from app.models import Boost, Follow, Like, MastodonAccessToken, Post, User, UserBlock, UserMute, Vote, now
+from app.serializers import _post_reaction_emojis
 from app.utils.content_parser import _sanitize_html
 from app.utils.emoji import _load_emojis
 
@@ -624,6 +625,7 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
             my_like = db.query(Like).filter_by(user_id=viewer.id, post_id=post.id).first()
             if my_like:
                 my_reaction = my_like.reaction or "★"
+    reaction_emojis = _post_reaction_emojis(db, post.id)
     for react, cnt in reaction_rows:
         name = (react or "★").strip(":")
         emoji_url = ""
@@ -631,13 +633,14 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         if name != "★":
             emoji_row = next((e for e in all_emojis if e["keyword"] == name), None)
             if emoji_row:
-                emoji_url = emoji_row["url"]
-                emoji_static_url = emoji_row["url"]
+                # 같은 shortcode라도 리액션을 누른 서버의 이미지가 우선된다.
+                emoji_url = reaction_emojis.get(name) or emoji_row["url"]
+                emoji_static_url = emoji_url
                 if not any(e["shortcode"] == name for e in status["emojis"]):
                     status["emojis"].append({
                         "shortcode": emoji_row["keyword"],
-                        "url": emoji_row["url"],
-                        "static_url": emoji_row["url"],
+                        "url": emoji_url,
+                        "static_url": emoji_static_url,
                         "visible_in_picker": True,
                         "category": emoji_row.get("category", ""),
                     })

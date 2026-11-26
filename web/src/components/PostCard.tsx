@@ -72,8 +72,14 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
       for (const [k, v] of Object.entries(cached)) if (!map[k] && v) map[k] = v;
     }
     (window as WindowWithGlobals).__emojiMap = map;
-    return map;
-  }, [emojiList]);
+    // 리액션은 누른 사람의 서버 이모지일 수 있으므로 글별 _reaction_emojis를
+    // 우선한다. 전역 맵(__emojiMap)은 다른 글에 영향을 주지 않도록 그대로 둔다.
+    const perPost = { ...map };
+    for (const [kw, url] of Object.entries(post._reaction_emojis || {})) {
+      if (kw && url) perPost[kw] = url;
+    }
+    return perPost;
+  }, [emojiList, post._reaction_emojis]);
   const localReactionEmojiMap = useMemo(() => {
     const map: Record<string, string> = {};
     for (const e of emojiList) {
@@ -86,8 +92,12 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
       for (const [k, v] of Object.entries(cached)) if (!map[k] && v) map[k] = v;
     }
     (window as WindowWithGlobals).__localEmojiMap = map;
-    return map;
-  }, [emojiList]);
+    const perPost = { ...map };
+    for (const [kw, url] of Object.entries(post._reaction_emojis || {})) {
+      if (kw && url && !url.includes('/emojis/local/')) delete perPost[kw];
+    }
+    return perPost;
+  }, [emojiList, post._reaction_emojis]);
 
   useEffect(() => {
     if (currentUser?.pinned_posts) setPinned(currentUser.pinned_posts.includes(post.id));

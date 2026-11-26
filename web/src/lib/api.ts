@@ -227,6 +227,8 @@ export interface PostData {
   quote_hidden_url?: string;
   quoted_post?: PostData | null;
   _emojis?: { keyword: string; file_name: string; url: string; aliases: string[] }[];
+  /** reaction shortcode(콜론 제외) -> 작성자 도메인 기준 이미지 URL */
+  _reaction_emojis?: Record<string, string>;
 }
 
 export interface PostEditVersion {

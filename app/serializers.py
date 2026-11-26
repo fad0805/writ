@@ -7,7 +7,7 @@ from sqlalchemy import func
 from app.core.visibility import _can_view
 from app.models import Bookmark, Boost, Follow, Like, Post, User, Vote
 from app.utils.datetime import _fmt_dt
-from app.utils.emoji import _load_emojis
+from app.utils.emoji import _load_emojis, pick_emoji_for_domain
 from app.utils.filter import _load_user_filters
 
 # 좋아요/부스트/답글 카운트와 리액션 집계를 세션(요청) 단위로 배치 조회하는 캐시.
@@ -16,6 +16,7 @@ from app.utils.filter import _load_user_filters
 _COUNTS_CACHE_KEY = "_writ_post_counts_cache"
 _REACTIONS_CACHE_KEY = "_writ_post_reactions_cache"
 _DEFAULT_REACT = "★"
+_REACTION_EMOJIS_CACHE_KEY = "_writ_post_reaction_emojis_cache"
 
 
 def _session_post_ids(session):
@@ -83,6 +84,59 @@ def _post_reactions(session, pid):
     return cache.get(pid) or {}
 
 
+def _load_reaction_emojis_batch(session, ids):
+    """리액션에 실제로 사용된 shortcode의 이미지를 응답자 도메인 기준으로 고른다.
+
+    같은 shortcode라도 서버마다 이미지가 다르므로, 리액션을 누른 사람들의
+    도메인(다수)에 맞는 이모지를 글별로 따로 전달한다. 전역 이모지 맵은
+    shortcode당 하나의 URL만 가질 수 있어 이 정보를 담을 수 없다.
+    """
+    result = {}
+    if not ids:
+        return result
+    domain_counts: dict[tuple[int, str], dict[str, int]] = {}
+    rows = session.query(
+        Like.post_id, Like.reaction, User.username, User.is_remote, func.count(Like.id)
+    ).join(User, User.id == Like.user_id).filter(
+        Like.post_id.in_(ids),
+        Like.reaction.isnot(None),
+        Like.reaction.like(":%:"),
+    ).group_by(Like.post_id, Like.reaction, User.username, User.is_remote).all()
+    for pid, react, username, is_remote, cnt in rows:
+        if not react:
+            continue
+        domain = ""
+        if is_remote and username and "@" in username:
+            domain = username.rsplit("@", 1)[-1].lower()
+        key = (pid, react[1:-1].lower())
+        counts = domain_counts.setdefault(key, {})
+        counts[domain] = counts.get(domain, 0) + cnt
+    if not domain_counts:
+        return result
+
+    by_kw: dict[str, list[dict]] = {}
+    for e in _load_emojis(session):
+        by_kw.setdefault(e["keyword"].lower(), []).append(e)
+    for (pid, kw), counts in domain_counts.items():
+        domain = max(counts.items(), key=lambda item: item[1])[0]
+        chosen = pick_emoji_for_domain(by_kw.get(kw, []), domain)
+        if chosen and chosen.get("url"):
+            result.setdefault(pid, {})[kw] = chosen["url"]
+    return result
+
+
+def _post_reaction_emojis(session, pid):
+    cache = session.info.setdefault(_REACTION_EMOJIS_CACHE_KEY, {})
+    if pid in cache:
+        return cache[pid]
+    missing = _session_post_ids(session) | {pid}
+    missing = {i for i in missing if i not in cache}
+    if missing:
+        cache.update({i: {} for i in missing})
+        cache.update(_load_reaction_emojis_batch(session, missing))
+    return cache.get(pid) or {}
+
+
 def _post_json(p, session, user, tl_type=None,
                _liked_ids=None, _boosted_ids=None, _bookmarked_ids=None,
                _vote_map=None, _my_reaction_map=None, _reactions_map=None,
@@ -115,6 +169,7 @@ def _post_json(p, session, user, tl_type=None,
             "quote_hidden": False, "quote_hidden_url": "",
             "boost_of_id": p.boost_of_id,
             "quoted_post": None,
+            "_reaction_emojis": {},
         }
 
     # If this is a boost pointer post, resolve to the original
@@ -140,7 +195,7 @@ def _post_json(p, session, user, tl_type=None,
             if not _skip_emojis:
                 result["_emojis"] = _merge_boost_emojis(result.get("_emojis") or [], session, existing_boosted_by)
             return result
-        return {"id": p.id, "is_deleted": True, "boosted_by": [_user_json(p.author)], "boost_of_id": p.boost_of_id}
+        return {"id": p.id, "is_deleted": True, "boosted_by": [_user_json(p.author)], "boost_of_id": p.boost_of_id, "_reaction_emojis": {}}
     if user:
         if _liked_ids is not None:
             liked = p.id in _liked_ids
@@ -266,6 +321,7 @@ def _post_json(p, session, user, tl_type=None,
         "quote_hidden_url": quote_hidden_url,
         "boost_of_id": p.boost_of_id,
         "quoted_post": quoted_post,
+        "_reaction_emojis": _post_reaction_emojis(session, p.id),
         **(({}) if _skip_emojis else {"_emojis": _post_used_emojis(p, session, reactions)}),
     }
 
@@ -307,17 +363,9 @@ def _post_used_emojis(p, session, reactions=None):
         if f":{kw.lower()}:" in needle:
             candidates_by_kw.setdefault(kw.lower(), []).append(e)
 
-    def _pick(candidates):
-        if author_domain:
-            chosen = next((e for e in candidates if (e.get("domain") or "").lower() == author_domain), None)
-            if chosen:
-                return chosen
-        chosen = next((e for e in candidates if not e.get("domain")), None)
-        return chosen or candidates[0]
-
     used = []
     for candidates in candidates_by_kw.values():
-        chosen = _pick(candidates)
+        chosen = pick_emoji_for_domain(candidates, author_domain)
         used.append({"keyword": chosen["keyword"], "file_name": chosen["file_name"], "url": chosen["url"], "aliases": chosen["aliases"]})
     return used
 
@@ -346,9 +394,7 @@ def _merge_boost_emojis(base_emojis, session, boosters):
                 continue
             if f":{kw.lower()}:" not in bname:
                 continue
-            chosen = next((x for x in candidates if (x.get("domain") or "").lower() == bdomain), None)
-            if chosen is None:
-                chosen = next((x for x in candidates if not x.get("domain")), None) or candidates[0]
+            chosen = pick_emoji_for_domain(candidates, bdomain)
             result.append({"keyword": chosen["keyword"], "file_name": chosen["file_name"], "url": chosen["url"], "aliases": chosen["aliases"]})
             existing.add(kw)
     return result
