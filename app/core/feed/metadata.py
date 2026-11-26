@@ -7,7 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import Bookmark, Boost, Like, Post, User, Vote
-from app.utils.emoji import _load_emojis
+from app.utils.emoji import _emoji_index, _load_emojis, emoji_keywords_in_text
 from app.utils.reactions import build_reactions_map
 
 
@@ -81,15 +81,16 @@ def _feed_used_emojis(session, posts, boost_originals=None):
         ).all():
             texts.append(r or "")
     needle = " ".join(texts).lower()
+    index = _emoji_index(session)
     used = []
     seen = set()
-    for e in all_emojis:
-        kw = e["keyword"]
-        if kw in seen:
+    for kw in sorted(emoji_keywords_in_text(needle)):
+        candidates = index.get(kw)
+        if not candidates or kw in seen:
             continue
         seen.add(kw)
-        if f":{kw.lower()}:" in needle:
-            used.append({"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]})
+        e = candidates[0]
+        used.append({"keyword": e["keyword"], "file_name": e["file_name"], "url": e["url"], "aliases": e["aliases"]})
     return used
 
 

@@ -66,6 +66,9 @@ let fetchPromise: Promise<CustomEmoji[]> | null = null;
 let cacheTs = 0;
 
 export async function getCustomEmojis(): Promise<CustomEmoji[]> {
+  // 메모리 캐시가 있으면 localStorage를 다시 읽지 않는다. PostCard가 여러 장
+  // 마운트될 때 큰 JSON 문자열을 카드마다 getItem하는 비용을 막는다.
+  if (cache !== null) return cache;
   const storedTs = parseInt(storageGet("emoji_cache_ts") || "0", 10);
   const stored = storageGet("emoji_cache");
   if (storedTs > cacheTs && stored) {
@@ -144,20 +147,26 @@ export function subscribeEmojis(cb: (emojis: CustomEmoji[]) => void): () => void
 
 const _versionListeners = new Set<() => void>();
 
+function currentEmojiCache(): CustomEmoji[] | null {
+  if (cache !== null) return cache;
+  if (typeof window !== "undefined" && window.__emojiCache) {
+    cache = window.__emojiCache;
+    return cache;
+  }
+  return null;
+}
+
 export function useEmojiList(): CustomEmoji[] {
-  const [emojis, setEmojis] = useState<CustomEmoji[]>(() =>
-    typeof window !== "undefined" && window.__emojiCache
-      ? window.__emojiCache
-      : (cache || [])
-  );
+  const [emojis, setEmojis] = useState<CustomEmoji[]>(() => currentEmojiCache() || []);
 
   useEffect(() => {
-    const handler = () => setEmojis(window.__emojiCache || cache || []);
+    const handler = () => setEmojis(currentEmojiCache() || []);
     _versionListeners.add(handler);
 
-    getCustomEmojis().then(list => {
-      setEmojis(list);
-    });
+    // 이미 메모리/전역 캐시가 있으면 카드마다 getCustomEmojis()를 다시 부르지 않는다.
+    if (currentEmojiCache() === null) {
+      getCustomEmojis().then(list => setEmojis(list));
+    }
 
     return () => { _versionListeners.delete(handler); };
   }, []);
@@ -190,32 +199,51 @@ export function renderReaction(reaction: string, emojis: CustomEmoji[], size?: n
   return renderCustomEmojis(escaped, emojis, size);
 }
 
-const renderCache = new WeakMap<CustomEmoji[], { re: RegExp | null; emojiByKeyword: Map<string, CustomEmoji> }>();
+type RenderData = { re: RegExp | null; emojiByKeyword: Map<string, CustomEmoji> };
 
-function getRenderData(emojis: CustomEmoji[]) {
-  let data = renderCache.get(emojis);
-  if (!data) {
-    const seen = new Set<string>();
-    const uniq: CustomEmoji[] = [];
-    for (const e of emojis) {
-      if (!e || !e.keyword || !e.url) continue;
-      const lowerKw = e.keyword.toLowerCase();
-      if (seen.has(lowerKw)) continue;
-      seen.add(lowerKw);
-      const safeUrl = e.url.replace(/"/g, "%22").replace(/</g, "%3C").replace(/>/g, "%3E");
-      if (!safeUrl.startsWith("https:") && !safeUrl.startsWith("/")) continue;
-      uniq.push({ ...e, url: safeUrl });
-    }
-    uniq.sort((a, b) => b.keyword.length - a.keyword.length);
-    const parts: string[] = [];
-    const emojiByKeyword = new Map<string, CustomEmoji>();
-    for (const e of uniq) {
-      parts.push(e.keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-      emojiByKeyword.set(e.keyword.toLowerCase(), e);
-    }
-    data = { re: parts.length > 0 ? new RegExp(`:(${parts.join("|")}):`, "gi") : null, emojiByKeyword };
-    renderCache.set(emojis, data);
+const renderCache = new WeakMap<CustomEmoji[], RenderData>();
+// 글마다 새 배열(도메인별 _emojis 병합)이 만들어져도, 실제 이모지 목록이 같으면
+// 정규식을 다시 컴파일하지 않도록 내용 기반 캐시를 하나 더 둔다.
+const renderCacheByKey = new Map<string, RenderData>();
+const RENDER_KEY_CACHE_MAX = 64;
+
+function getRenderData(emojis: CustomEmoji[]): RenderData {
+  const cached = renderCache.get(emojis);
+  if (cached) return cached;
+
+  const seen = new Set<string>();
+  const uniq: CustomEmoji[] = [];
+  for (const e of emojis) {
+    if (!e || !e.keyword || !e.url) continue;
+    const lowerKw = e.keyword.toLowerCase();
+    if (seen.has(lowerKw)) continue;
+    seen.add(lowerKw);
+    const safeUrl = e.url.replace(/"/g, "%22").replace(/</g, "%3C").replace(/>/g, "%3E");
+    if (!safeUrl.startsWith("https:") && !safeUrl.startsWith("/")) continue;
+    uniq.push({ ...e, url: safeUrl });
   }
+  uniq.sort((a, b) => b.keyword.length - a.keyword.length);
+
+  const key = uniq.map(e => `${e.keyword.toLowerCase()}\x1f${e.url}`).join("\x1e");
+  const byKey = renderCacheByKey.get(key);
+  if (byKey) {
+    renderCache.set(emojis, byKey);
+    return byKey;
+  }
+
+  const parts: string[] = [];
+  const emojiByKeyword = new Map<string, CustomEmoji>();
+  for (const e of uniq) {
+    parts.push(e.keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    emojiByKeyword.set(e.keyword.toLowerCase(), e);
+  }
+  const data: RenderData = {
+    re: parts.length > 0 ? new RegExp(`:(${parts.join("|")}):`, "gi") : null,
+    emojiByKeyword,
+  };
+  renderCache.set(emojis, data);
+  if (renderCacheByKey.size >= RENDER_KEY_CACHE_MAX) renderCacheByKey.clear();
+  renderCacheByKey.set(key, data);
   return data;
 }
 

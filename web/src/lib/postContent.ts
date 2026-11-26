@@ -42,9 +42,8 @@ export function rewriteLinks(text: string): string {
 export function buildPostContentHtml(post: PostData, emojiList: CustomEmoji[]): string {
   let html = post.content || "";
 
-  const uniqueEmojis = Array.from(
-    new Map(emojiList.map(e => [e.keyword, e])).values()
-  );
+  // getRenderData()가 내부에서 중복/유효성 검사를 하므로 여기서 배열을 다시
+  // 복제하지 않는다. 배열 identity가 유지되어 정규식 캐시도 재사용된다.
 
   // 앱에서만 인용 URL을 보여주기 위해 본문에서 인용 링크/마크업 제거하지 않음
 
@@ -69,7 +68,7 @@ export function buildPostContentHtml(post: PostData, emojiList: CustomEmoji[]): 
   codeBlocks.forEach((block, i) => {
     html = html.replace(`\x00CODEBLOCK_${i}\x00`, block);
   });
-  html = renderCustomEmojis(html, uniqueEmojis);
+  html = renderCustomEmojis(html, emojiList);
   html = rewriteLinks(html);
   return html;
 }

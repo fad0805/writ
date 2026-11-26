@@ -5,7 +5,7 @@ import datetime
 from app.db.database import get_session
 from app.models import CustomEmoji, Like, User
 from app.utils.crypto import generate_keypair
-from app.utils.emoji import _refresh_emoji_cache_forcibly
+from app.utils.emoji import _refresh_emoji_cache_forcibly, emoji_keywords_in_text
 
 
 def _remote_user(username: str, domain: str):
@@ -40,6 +40,12 @@ def _emoji(keyword: str, domain: str, file_name: str, created_at: datetime.datet
         s.add(e)
         s.commit()
         return e
+
+
+def test_emoji_keywords_in_text_only_extracts_shortcodes():
+    assert emoji_keywords_in_text("hi :wave: and :A_B:") == {"wave", "a_b"}
+    assert emoji_keywords_in_text("no emoji :not valid:") == set()
+    assert emoji_keywords_in_text("") == set()
 
 
 def test_timeline_posts_use_authors_domain_emoji(client, auth_cookie, make_post):
