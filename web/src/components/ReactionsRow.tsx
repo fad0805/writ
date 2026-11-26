@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useRef, useState } from "react";
 import { User, api } from "@/lib/api";
+import { emojiKeyword, parseReactionKey } from "@/lib/reactions";
 import Icon from "./Icon";
 import Avatar from "./Avatar";
 
@@ -23,29 +24,31 @@ export default React.memo(function ReactionsRow({ reactions, myReaction, onToggl
   return (
     <>
       <div className="reactions-row" style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8, marginBottom: 4, padding: "0 8px" }} onClick={(e) => e.stopPropagation()}>
-        {Object.entries(reactions).sort(([a], [b]) => a === "★" ? -1 : b === "★" ? 1 : 0).map(([emoji, count]) => {
-
-          const emojiKey = emoji.startsWith(":") && emoji.endsWith(":") ? emoji.slice(1, -1) : emoji;
-          const isCustomEmoji = emoji.startsWith(":") && emoji.endsWith(":");
+        {Object.entries(reactions).sort(([a], [b]) => a === "★" ? -1 : b === "★" ? 1 : 0).map(([badgeKey, count]) => {
+          // 원격 커스텀 이모지는 `:shortcode:@domain` 키로 배지가 분리되어 있다.
+          const { reaction, domain } = parseReactionKey(badgeKey);
+          const emojiKey = emojiKeyword(reaction);
+          const isCustomEmoji = reaction.startsWith(":") && reaction.endsWith(":");
 
           const isMapLoaded = Object.keys(emojiMap).length > 0;
-          const emojiIsRemote = isCustomEmoji && isMapLoaded && !localEmojiMap[emojiKey];
+          // 도메인이 붙은 배지는 원격 서버 이모지이므로 클릭으로 로컬 리액션을 추가할 수 없다.
+          const emojiIsRemote = isCustomEmoji && (!!domain || (isMapLoaded && !localEmojiMap[emojiKey]));
           return (
             <span
-              key={emoji}
-               className={`reaction-badge${myReaction === emoji ? " active" : ""}`}
+              key={badgeKey}
+               className={`reaction-badge${myReaction === reaction ? " active" : ""}`}
               onClick={async () => {
                 // 💡 원격 에모지라면 클릭 시 즉시 리턴하여 백엔드 요청을 방어합니다.
                 if (emojiIsRemote) return;
-                onToggle(emoji);
+                onToggle(reaction);
               }}
               onMouseEnter={(e) => {
                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                 if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current);
                 tooltipTimerRef.current = setTimeout(() => {
-                  api.reactionUsers(targetId, emoji).then((d) => {
+                  api.reactionUsers(targetId, reaction, domain).then((d) => {
                     if (d.users.length > 0) {
-                      setReactionTooltip({ emoji, users: d.users, x: rect.left + rect.width / 2, y: rect.top - 6 });
+                      setReactionTooltip({ emoji: reaction, users: d.users, x: rect.left + rect.width / 2, y: rect.top - 6 });
                     }
                   }).catch(() => {});
                 }, 300);
@@ -63,16 +66,16 @@ export default React.memo(function ReactionsRow({ reactions, myReaction, onToggl
                 fontSize: 13,
                 cursor: emojiIsRemote ? "default" : "pointer", // 원격이면 커서 기본값
                 border: "1px solid var(--border)",
-                background: myReaction === emoji ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-secondary)",
+                background: myReaction === reaction ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-secondary)",
                 opacity: 1
               }}
             >
-              {emoji === "★" ? (
+              {reaction === "★" ? (
                 <Icon name="star_filled" size={18} style={{ color: "#f1c40f" }} />
-              ) : emojiMap[emojiKey] ? (
-                <img src={emojiMap[emojiKey]} alt={emoji} loading="lazy" decoding="async" style={{ height: 22, verticalAlign: "middle" }} />
+              ) : emojiMap[badgeKey] || emojiMap[emojiKey] ? (
+                <img src={emojiMap[badgeKey] || emojiMap[emojiKey]} alt={reaction} loading="lazy" decoding="async" style={{ height: 22, verticalAlign: "middle" }} />
               ) : (
-                <span>{emoji}</span>
+                <span>{reaction}</span>
               )}
               <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{typeof count === "number" ? count : 0}</span>
             </span>

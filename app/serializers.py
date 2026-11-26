@@ -9,13 +9,13 @@ from app.models import Bookmark, Boost, Follow, Like, Post, User, Vote
 from app.utils.datetime import _fmt_dt
 from app.utils.emoji import _load_emojis, pick_emoji_for_domain
 from app.utils.filter import _load_user_filters
+from app.utils.reactions import build_reactions_map, parse_reaction_key, reaction_key
 
 # 좋아요/부스트/답글 카운트와 리액션 집계를 세션(요청) 단위로 배치 조회하는 캐시.
 # lazy="selectin" 컬렉션(p.likes/p.boosts/p.replies)을 통째로 로드하지 않고,
 # 세션 identity map에 로드된 Post 전체에 대해 한 번에 집계한다.
 _COUNTS_CACHE_KEY = "_writ_post_counts_cache"
 _REACTIONS_CACHE_KEY = "_writ_post_reactions_cache"
-_DEFAULT_REACT = "★"
 _REACTION_EMOJIS_CACHE_KEY = "_writ_post_reaction_emojis_cache"
 
 
@@ -60,16 +60,7 @@ def _post_counts(session, pid):
 
 
 def _load_reactions_batch(session, ids):
-    reactions = {}
-    if not ids:
-        return reactions
-    for pid, react, cnt in session.query(
-        Like.post_id, func.coalesce(Like.reaction, _DEFAULT_REACT), func.count(Like.id)
-    ).filter(Like.post_id.in_(ids)).group_by(Like.post_id, Like.reaction).order_by(
-        Like.post_id, func.min(Like.id)
-    ).all():
-        reactions.setdefault(pid, {})[react] = cnt
-    return reactions
+    return build_reactions_map(session, ids)
 
 
 def _post_reactions(session, pid):
@@ -96,20 +87,24 @@ def _load_reaction_emojis_batch(session, ids):
         return result
     domain_counts: dict[tuple[int, str], dict[str, int]] = {}
     rows = session.query(
-        Like.post_id, Like.reaction, User.username, User.is_remote, func.count(Like.id)
+        Like.post_id, Like.reaction, Like.reaction_domain,
+        User.username, User.is_remote, func.count(Like.id),
     ).join(User, User.id == Like.user_id).filter(
         Like.post_id.in_(ids),
         Like.reaction.isnot(None),
         Like.reaction.like(":%:"),
-    ).group_by(Like.post_id, Like.reaction, User.username, User.is_remote).all()
-    for pid, react, username, is_remote, cnt in rows:
+    ).group_by(
+        Like.post_id, Like.reaction, Like.reaction_domain, User.username, User.is_remote
+    ).all()
+    for pid, react, stored_domain, username, is_remote, cnt in rows:
         if not react:
             continue
-        domain = ""
-        if is_remote and username and "@" in username:
+        domain = (stored_domain or "").lower()
+        # 마이그레이션 이전 리액션은 도메인이 비어 있으므로 작성자 username에서 복원.
+        if not domain and is_remote and username and "@" in username:
             domain = username.rsplit("@", 1)[-1].lower()
-        key = (pid, react[1:-1].lower())
-        counts = domain_counts.setdefault(key, {})
+        key = reaction_key(react, domain)
+        counts = domain_counts.setdefault((pid, key), {})
         counts[domain] = counts.get(domain, 0) + cnt
     if not domain_counts:
         return result
@@ -117,11 +112,12 @@ def _load_reaction_emojis_batch(session, ids):
     by_kw: dict[str, list[dict]] = {}
     for e in _load_emojis(session):
         by_kw.setdefault(e["keyword"].lower(), []).append(e)
-    for (pid, kw), counts in domain_counts.items():
+    for (pid, key), counts in domain_counts.items():
         domain = max(counts.items(), key=lambda item: item[1])[0]
-        chosen = pick_emoji_for_domain(by_kw.get(kw, []), domain)
+        reaction = parse_reaction_key(key)[0]
+        chosen = pick_emoji_for_domain(by_kw.get(reaction[1:-1].lower(), []), domain)
         if chosen and chosen.get("url"):
-            result.setdefault(pid, {})[kw] = chosen["url"]
+            result.setdefault(pid, {})[key] = chosen["url"]
     return result
 
 

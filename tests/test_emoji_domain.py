@@ -55,8 +55,10 @@ def test_timeline_posts_use_authors_domain_emoji(client, auth_cookie, make_post)
     p_kitsune = make_post(kitsune, content=f":{kw}:")
     p_dream = make_post(dream, content=f":{kw}:")
     with get_session() as s:
-        s.add(Like(user_id=kitsune.id, post_id=p_kitsune.id, reaction=f":{kw}:"))
-        s.add(Like(user_id=dream.id, post_id=p_dream.id, reaction=f":{kw}:"))
+        s.add(Like(user_id=kitsune.id, post_id=p_kitsune.id, reaction=f":{kw}:", reaction_domain="kitsunesoba.com"))
+        s.add(Like(user_id=dream.id, post_id=p_dream.id, reaction=f":{kw}:", reaction_domain="daydream.ink"))
+        # 같은 글에 두 서버가 같은 shortcode로 리액션한 경우 배지가 분리되어야 한다.
+        s.add(Like(user_id=kitsune.id, post_id=p_dream.id, reaction=f":{kw}:", reaction_domain="kitsunesoba.com"))
         s.commit()
 
     res = client.get("/api/timeline/federated?limit=20", cookies=cookies)
@@ -71,9 +73,25 @@ def test_timeline_posts_use_authors_domain_emoji(client, auth_cookie, make_post)
     assert "kitsune.png" in _url(p_kitsune)
     assert "daydream.png" in _url(p_dream)
 
-    def _reaction_url(post):
-        assert kw in posts[post.id]["_reaction_emojis"]
-        return posts[post.id]["_reaction_emojis"][kw]
+    kitsune_key = f":{kw}:@kitsunesoba.com"
+    dream_key = f":{kw}:@daydream.ink"
+    assert posts[p_kitsune.id]["reactions"] == {kitsune_key: 1}
+    assert posts[p_dream.id]["reactions"] == {dream_key: 1, kitsune_key: 1}
+    assert "kitsune.png" in posts[p_kitsune.id]["_reaction_emojis"][kitsune_key]
+    assert "kitsune.png" in posts[p_dream.id]["_reaction_emojis"][kitsune_key]
+    assert "daydream.png" in posts[p_dream.id]["_reaction_emojis"][dream_key]
 
-    assert "kitsune.png" in _reaction_url(p_kitsune)
-    assert "daydream.png" in _reaction_url(p_dream)
+    # 도메인별 배지 툴팁도 출처에 맞는 사용자만 보여줘야 한다.
+    for _key, domain, expected in (
+        (kitsune_key, "kitsunesoba.com", "villain"),
+        (dream_key, "daydream.ink", "dreamer"),
+    ):
+        r = client.get(
+            f"/api/posts/{p_dream.id}/reaction-users",
+            params={"emoji": f":{kw}:", "domain": domain},
+            cookies=cookies,
+        )
+        assert r.status_code == 200
+        users = r.json()["users"]
+        assert len(users) == 1
+        assert users[0]["username"].startswith(expected)

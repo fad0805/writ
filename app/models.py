@@ -290,6 +290,9 @@ class Like(Base):
     post_id = Column(Integer, ForeignKey("posts.id"), nullable=False, index=True)
     ap_id = Column(String(1024), unique=True)
     reaction = Column(String(100), nullable=True)
+    # 원격 커스텀 이모지 리액션은 shortcode만으로 구분되지 않으므로 이모지 출처
+    # 도메인을 함께 저장해 서버별 배지를 분리한다. 로컬/유니코드는 "".
+    reaction_domain = Column(String(128), nullable=False, default="", server_default="")
     created_at = Column(DateTime(timezone=True), default=now)
 
     user = relationship("User", lazy="selectin")

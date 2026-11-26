@@ -3,12 +3,11 @@ import json
 import logging
 import re
 
-from sqlalchemy import func
-
 from app.core.push import send_push_to_user
 from app.core.timeline_stream import broadcast_notif_sound
-from app.models import Like, Notification, User
+from app.models import Notification, User
 from app.utils.emoji import _load_emojis
+from app.utils.reactions import build_reactions_map
 
 logger = logging.getLogger("writ.activitypub")
 
@@ -19,16 +18,8 @@ def _broadcast_emoji_list(session):
 
 
 def _build_reactions(session, post_id: int) -> dict:
-    """Build reactions dict from Like table for a given post."""
-    _reactions = {}
-    _default_react = "★"
-    for _react, _cnt in session.query(
-        func.coalesce(Like.reaction, _default_react), func.count(Like.id)
-    ).filter(
-        Like.post_id == post_id
-    ).group_by(Like.reaction).order_by(func.min(Like.id)).all():
-        _reactions[_react or _default_react] = _cnt
-    return _reactions
+    """Build reactions dict from Like table, separated by emoji domain."""
+    return build_reactions_map(session, [post_id]).get(post_id, {})
 
 
 def _sanitize_reaction(reaction: str) -> str:

@@ -11,6 +11,7 @@ from sqlalchemy import desc, func, or_, select, text
 from sqlalchemy.orm import selectinload
 
 from app.utils.image import guard_image
+from app.utils.reactions import build_reactions_map
 
 guard_image()
 
@@ -216,10 +217,7 @@ def api_get_profile(request: Request, username: str, offset: int = 0, limit: int
             for like in s.query(Like).filter(Like.user_id == user.id, Like.post_id.in_(_all_post_ids), Like.reaction.isnot(None)).all():
                 _my_reaction_map[like.post_id] = like.reaction
             _reactions_map: dict = {}
-            for pid, react, cnt in s.query(Like.post_id, func.coalesce(Like.reaction, "★"), func.count(Like.id)).filter(Like.post_id.in_(_all_post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all():
-                if pid not in _reactions_map:
-                    _reactions_map[pid] = {}
-                _reactions_map[pid][react] = cnt
+            _reactions_map = build_reactions_map(s, _all_post_ids)
             all_mentioned_ids = set()
             _posts_for_mentions = s.query(Post).filter(Post.id.in_(_all_post_ids)).all()
             for pp in _posts_for_mentions:

@@ -5,7 +5,6 @@ import json
 import logging
 import uuid
 
-from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -23,6 +22,7 @@ from app.core.timeline_stream import (
 from app.core.visibility import _can_view
 from app.models import Boost, CustomEmoji, Like, Notification, Post, User
 from app.utils.emoji import _emoji_url
+from app.utils.reactions import build_reactions_map
 
 logger = logging.getLogger("writ.post_interactions")
 
@@ -45,14 +45,8 @@ def _resolve_boost_target(db: Session, post: Post) -> Post:
 
 
 def _get_reactions(db: Session, post_id: int) -> dict:
-    """Aggregate per-reaction counts for a post, keyed by display reaction."""
-    reactions = {}
-    rows = db.query(Like.reaction, func.count(Like.id)).filter(
-        Like.post_id == post_id
-    ).group_by(Like.reaction).order_by(func.min(Like.id)).all()
-    for reaction, count in rows:
-        reactions[reaction or "★"] = count
-    return reactions
+    """Aggregate per-reaction counts, separating custom emoji badges by domain."""
+    return build_reactions_map(db, [post_id]).get(post_id, {})
 
 
 def _add_like_notif(db: Session, post: Post, user: User, post_id: int, reaction: str):

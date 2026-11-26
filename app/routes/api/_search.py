@@ -3,7 +3,7 @@ import contextlib
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Query, Request
-from sqlalchemy import and_, desc, func, or_
+from sqlalchemy import and_, desc, or_
 from sqlalchemy.orm import selectinload
 
 from app.core.auth import get_current_user
@@ -14,6 +14,7 @@ from app.models import Bookmark, Boost, Follow, Like, Novel, Post, Tag, User
 from app.routes.api._novels import _apply_latest_activity_order, _novels_json
 from app.serializers import _post_json, _user_json
 from app.utils.filter import _timeline_filter
+from app.utils.reactions import build_reactions_map
 
 search_router = APIRouter()
 
@@ -95,10 +96,7 @@ def api_explore(request: Request, limit: int = Query(20, le=100), offset: int = 
             _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(post_ids)).all()}
             for like in s.query(Like.post_id, Like.reaction).filter(Like.user_id == user.id, Like.post_id.in_(post_ids), Like.reaction.isnot(None)).all():
                 _my_reaction_map[like.post_id] = like.reaction
-            for pid, react, cnt in s.query(Like.post_id, func.coalesce(Like.reaction, "★"), func.count(Like.id)).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all():
-                if pid not in _reactions_map:
-                    _reactions_map[pid] = {}
-                _reactions_map[pid][react] = cnt
+            _reactions_map = build_reactions_map(s, post_ids)
             all_mentioned_ids = set()
             for p in posts:
                 if p.mentioned_user_ids:
@@ -287,10 +285,7 @@ def api_search(request: Request, q: str = Query(""), author: str = Query("")):
             _bookmarked_ids = {bm.post_id for bm in s.query(Bookmark.post_id).filter(Bookmark.user_id == user.id, Bookmark.post_id.in_(post_ids)).all()}
             for like in s.query(Like.post_id, Like.reaction).filter(Like.user_id == user.id, Like.post_id.in_(post_ids), Like.reaction.isnot(None)).all():
                 _my_reaction_map[like.post_id] = like.reaction
-            for pid, react, cnt in s.query(Like.post_id, func.coalesce(Like.reaction, "★"), func.count(Like.id)).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all():
-                if pid not in _reactions_map:
-                    _reactions_map[pid] = {}
-                _reactions_map[pid][react] = cnt
+            _reactions_map = build_reactions_map(s, post_ids)
 
         result: dict = {
             "posts": [_post_json(p, s, user, _liked_ids=_liked_ids, _boosted_ids=_boosted_ids, _bookmarked_ids=_bookmarked_ids, _my_reaction_map=_my_reaction_map, _reactions_map=_reactions_map, _mentioned_users_map=_mentioned_users_map, _boost_originals=_boost_originals) for p in posts],

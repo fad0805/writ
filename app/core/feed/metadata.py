@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models import Bookmark, Boost, Like, Post, User, Vote
 from app.utils.emoji import _load_emojis
+from app.utils.reactions import build_reactions_map
 
 
 class PostMetadata(TypedDict):
@@ -124,7 +125,6 @@ def _load_post_metadata(
     ).all()}
 
     _reactions_map: dict[int, dict[str, int]] = {}
-    _default_react = "★"
 
     # 좋아요/부스트/답글 카운트 배치 집계 (lazy="selectin" 컬렉션 로드 대체)
     counts_map: dict[int, dict[str, int]] = {}
@@ -142,19 +142,7 @@ def _load_post_metadata(
     ).group_by(Post.in_reply_to_id).all():
         counts_map.setdefault(pid, {})["replies"] = cnt
 
-    reaction_expr = func.coalesce(Like.reaction, _default_react)
-    _reaction_rows = (
-        session.query(
-            Like.post_id,
-            reaction_expr,
-            func.count(Like.id)
-        )
-        .filter(Like.post_id.in_(post_ids))
-        .group_by(Like.post_id, reaction_expr)
-        .order_by(Like.post_id, func.min(Like.id)).all()
-    )
-    for pid, react, cnt in _reaction_rows:
-        _reactions_map.setdefault(pid, {})[react] = cnt
+    _reactions_map.update(build_reactions_map(session, post_ids))
 
     all_mentioned_ids = {
         uid

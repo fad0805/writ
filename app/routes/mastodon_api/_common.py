@@ -18,6 +18,7 @@ from app.models import Boost, Follow, Like, MastodonAccessToken, Post, User, Use
 from app.serializers import _post_reaction_emojis
 from app.utils.content_parser import _sanitize_html
 from app.utils.emoji import _load_emojis
+from app.utils.reactions import reaction_key
 
 
 class MastodonAPIError(HTTPException):
@@ -301,11 +302,16 @@ def _build_status_maps(posts: list, db: SASession, viewer: User | None = None) -
         or_(Like.reaction == STAR_REACTION, Like.reaction.is_(None)),
     ).group_by(Like.post_id).all()}
 
-    rows = db.query(Like.post_id, sqlfunc.coalesce(Like.reaction, "★"), sqlfunc.count(Like.id), sqlfunc.min(Like.id)).filter(
+    rows = db.query(
+        Like.post_id, sqlfunc.coalesce(Like.reaction, "★"), Like.reaction_domain,
+        sqlfunc.count(Like.id), sqlfunc.min(Like.id),
+    ).filter(
         Like.post_id.in_(post_ids)
-    ).group_by(Like.post_id, Like.reaction).all()
-    for pid, react, cnt, min_id in rows:
-        maps["_reactions_map"].setdefault(pid, []).append((react, cnt, min_id))
+    ).group_by(Like.post_id, Like.reaction, Like.reaction_domain).all()
+    for pid, react, domain, cnt, min_id in rows:
+        maps["_reactions_map"].setdefault(pid, []).append(
+            (reaction_key(react, domain or ""), cnt, min_id, react)
+        )
 
     if viewer:
         my_rows = db.query(Like.post_id, sqlfunc.coalesce(Like.reaction, "★")).filter(
@@ -607,15 +613,19 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
         status["reblogged"] = post.id in _boosted_ids
         status["bookmarked"] = post.id in _bookmarked_ids
 
-    reaction_rows: list[tuple[Any, Any]] = []
+    # (배지 키, 개수, 원본 리액션 문자열)
+    reaction_rows: list[tuple[Any, Any, Any]] = []
     if _reactions_map is not None:
-        reaction_rows = [(r[0], r[1]) for r in sorted(_reactions_map.get(post.id, []), key=lambda r: r[2])]
+        reaction_rows = [(r[0], r[1], r[3]) for r in sorted(_reactions_map.get(post.id, []), key=lambda r: r[2])]
     else:
         reaction_rows = [
-            (r[0], r[1])
+            (reaction_key(r[0], r[1] or ""), r[2], r[0])
             for r in db.query(
-                sqlfunc.coalesce(Like.reaction, "★"), sqlfunc.count(Like.id)
-            ).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(sqlfunc.min(Like.id)).all()
+                sqlfunc.coalesce(Like.reaction, "★"), Like.reaction_domain,
+                sqlfunc.count(Like.id), sqlfunc.min(Like.id),
+            ).filter(Like.post_id == post.id).group_by(
+                Like.reaction, Like.reaction_domain
+            ).order_by(sqlfunc.min(Like.id)).all()
         ]
     my_reaction = None
     if viewer:
@@ -626,17 +636,17 @@ def _status_json(post: Post, db: SASession, viewer: User | None = None,
             if my_like:
                 my_reaction = my_like.reaction or "★"
     reaction_emojis = _post_reaction_emojis(db, post.id)
-    for react, cnt in reaction_rows:
+    for key, cnt, react in reaction_rows:
         name = (react or "★").strip(":")
         emoji_url = ""
         emoji_static_url = ""
         if name != "★":
             emoji_row = next((e for e in all_emojis if e["keyword"] == name), None)
             if emoji_row:
-                # 같은 shortcode라도 리액션을 누른 서버의 이미지가 우선된다.
-                emoji_url = reaction_emojis.get(name) or emoji_row["url"]
+                # 도메인별 배지 키에 맞는 이미지를 사용한다(같은 shortcode라도 서버별로 다름).
+                emoji_url = reaction_emojis.get(key) or emoji_row["url"]
                 emoji_static_url = emoji_url
-                if not any(e["shortcode"] == name for e in status["emojis"]):
+                if not any(e["shortcode"] == name and e["url"] == emoji_url for e in status["emojis"]):
                     status["emojis"].append({
                         "shortcode": emoji_row["keyword"],
                         "url": emoji_url,

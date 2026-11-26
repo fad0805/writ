@@ -166,11 +166,17 @@ export function useEmojiList(): CustomEmoji[] {
 }
 
 /** 글별 리액션 이모지(응답자 도메인 기준)를 렌더링 목록 앞에 붙인다. */
-export function withReactionEmojis(emojis: CustomEmoji[], reactionEmojis?: Record<string, string>): CustomEmoji[] {
+export function withReactionEmojis(emojis: CustomEmoji[], reactionEmojis?: Record<string, string>, domain = ""): CustomEmoji[] {
   if (!reactionEmojis || Object.keys(reactionEmojis).length === 0) return emojis;
   const result = [...emojis];
-  for (const [keyword, url] of Object.entries(reactionEmojis)) {
-    if (!keyword || !url) continue;
+  let entries = Object.entries(reactionEmojis);
+  if (domain) {
+    const matched = entries.find(([key]) => key.endsWith(`@${domain}`));
+    if (matched) entries = [matched];
+  }
+  for (const [key, url] of entries) {
+    if (!key || !url) continue;
+    const keyword = key.startsWith(":") && key.endsWith(":") ? key.slice(1, -1) : key.split("@")[0];
     const idx = result.findIndex(e => e.keyword.toLowerCase() === keyword.toLowerCase());
     const entry: CustomEmoji = { keyword, file_name: "", url, aliases: [], category: "remote" };
     if (idx >= 0) result[idx] = entry;

@@ -4,7 +4,6 @@ import logging
 import uuid
 from urllib.parse import urlparse
 
-from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
 from app.config.settings import BASE_URL
@@ -73,6 +72,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
 
     actor_id = actor.id
     actor_username = actor.username
+    reaction_domain = ""
 
     with get_session() as session:
         post = session.query(Post).filter_by(ap_id=object_url).first()
@@ -97,11 +97,16 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             _existing_emoji = session.query(CustomEmoji).filter_by(keyword=_kw, domain=_import_data["domain"]).first()
             if not _existing_emoji and _import_data.get("url"):
                 spawn(_background_import_emoji, _import_data["url"], _import_data["kw"], _import_data["domain"])
+            # 태그에 도메인이 없으면 반응한 사용자의 서버를 출처로 사용한다.
+            reaction_domain = (_import_data["domain"] or "").lower()
+        if reaction and reaction.startswith(":") and reaction.endswith(":") and not reaction_domain and "@" in (actor_username or ""):
+            reaction_domain = actor_username.rsplit("@", 1)[-1].lower()
 
         existing = session.query(Like).filter_by(user_id=actor_id, post_id=post.id).first()
         if existing:
             if reaction and existing.reaction != reaction:
                 existing.reaction = reaction
+                existing.reaction_domain = reaction_domain
                 _existing_n = session.query(Notification).filter_by(
                     user_id=post.author_id, from_user_id=actor_id, notification_type="like", post_id=post.id
                 ).first()
@@ -109,10 +114,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
                     _r = reaction or "★"
                     _existing_n.metadata_json = json.dumps({"reaction": _r})
                 session.commit()
-                _reactions = {}
-                for _react, _cnt in session.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
-                    _reactions[_react or "★"] = _cnt
-                broadcast_reaction_update(post.id, _reactions)
+                broadcast_reaction_update(post.id, _build_reactions(session, post.id))
             return (200, "Already liked")
 
         like_ap_id = activity_id
@@ -124,6 +126,7 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             post_id=post.id,
             ap_id=like_ap_id,
             reaction=reaction if reaction else None,
+            reaction_domain=reaction_domain,
         )
         session.add(like)
 
@@ -144,16 +147,10 @@ def _handle_like(activity: dict) -> tuple[int, str]:
             send_push_to_user(int(post.author_id), "like", str(actor_username), int(post.id))
             broadcast_notif_sound(int(post.author_id))
             broadcast_refresh_notifs(int(post.author_id))
-            _reactions = {}
-            for _react, _cnt in session.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
-                _reactions[_react or "★"] = _cnt
-            broadcast_reaction_update(post.id, _reactions)
+            broadcast_reaction_update(post.id, _build_reactions(session, post.id))
         else:
             session.commit()
-            _reactions = {}
-            for _react, _cnt in session.query(Like.reaction, func.count(Like.id)).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(func.min(Like.id)).all():
-                _reactions[_react or "★"] = _cnt
-            broadcast_reaction_update(post.id, _reactions)
+            broadcast_reaction_update(post.id, _build_reactions(session, post.id))
 
     return (200, "Liked")
 

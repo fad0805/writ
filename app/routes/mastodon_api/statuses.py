@@ -491,18 +491,20 @@ def list_reactions(status_id: str, request: Request, db: SASession = Depends(get
         raise MastodonAPIError(status_code=404, detail="Record not found")
 
     reaction_rows = db.query(
-        Like.reaction, sqlfunc.count(Like.id), sqlfunc.min(Like.user_id)
-    ).filter(Like.post_id == post.id).group_by(Like.reaction).order_by(sqlfunc.min(Like.id)).all()
+        Like.reaction, Like.reaction_domain, sqlfunc.count(Like.id), sqlfunc.min(Like.user_id)
+    ).filter(Like.post_id == post.id).group_by(
+        Like.reaction, Like.reaction_domain
+    ).order_by(sqlfunc.min(Like.id)).all()
 
     result = []
-    for react, cnt, first_user_id in reaction_rows:
+    for react, stored_domain, cnt, first_user_id in reaction_rows:
         name = react or "★"
         emoji_url = ""
         emoji_static_url = ""
         first_user = db.query(User).filter_by(id=first_user_id).first()
+        first_domain = (stored_domain or "").lower()
         if name != "★":
-            first_domain = ""
-            if first_user and first_user.is_remote and "@" in (first_user.username or ""):
+            if not first_domain and first_user and first_user.is_remote and "@" in (first_user.username or ""):
                 first_domain = first_user.username.rsplit("@", 1)[-1].lower()
             candidates = [e for e in _load_emojis(db) if e["keyword"].lower() == name.strip(":").lower()]
             emoji_row = pick_emoji_for_domain(candidates, first_domain)
@@ -511,6 +513,7 @@ def list_reactions(status_id: str, request: Request, db: SASession = Depends(get
                 emoji_static_url = emoji_row["url"]
         result.append({
             "name": name,
+            "domain": first_domain,
             "count": cnt,
             "me": user is not None and db.query(Like).filter_by(user_id=user.id, post_id=post.id, reaction=react).first() is not None,
             "url": emoji_url,

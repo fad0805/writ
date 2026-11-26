@@ -67,7 +67,7 @@ def api_unreact_post(request: Request, post_id: int):
 
 
 @reactions_router.get("/posts/{post_id}/reaction-users")
-def api_reaction_users(request: Request, post_id: int, emoji: str = ""):
+def api_reaction_users(request: Request, post_id: int, emoji: str = "", domain: str = ""):
     user = require_active_auth(request)
     with get_session() as s:
         post = s.query(Post).filter_by(id=post_id, is_deleted=False).first()
@@ -80,6 +80,9 @@ def api_reaction_users(request: Request, post_id: int, emoji: str = ""):
             q = q.filter((Like.reaction.is_(None)) | (Like.reaction == "★"))
         elif emoji:
             q = q.filter(Like.reaction == emoji)
+            # 도메인별 배지는 같은 shortcode를 공유하므로 출처까지 좁혀서 조회.
+            if domain:
+                q = q.filter(Like.reaction_domain == domain.lower())
         else:
             q = q.filter(Like.reaction.is_(None))
         like_rows = q.order_by(Like.id.desc()).limit(20).all()

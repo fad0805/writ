@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy import and_, desc, func, or_
+from sqlalchemy import and_, desc, or_
 from sqlalchemy.orm import selectinload
 
 from app.core.auth import get_current_user, require_auth
@@ -21,6 +21,7 @@ from app.models import Bookmark, Boost, Like, Notification, Post, ProfileNote, U
 from app.routes.api.interactions._common import _generate_poll_end_notifications, _json_array_has_user
 from app.serializers import _post_json, _user_json
 from app.utils.datetime import _fmt_dt
+from app.utils.reactions import build_reactions_map
 
 logger = logging.getLogger("writ.api.notify")
 
@@ -162,10 +163,7 @@ def api_notifications(request: Request, filter_type: str = Query(""), limit: int
             for like in s.query(Like.post_id, Like.reaction).filter(Like.user_id == user.id, Like.post_id.in_(notif_post_ids), Like.reaction.isnot(None)).all():
                 _my_reaction_map[like.post_id] = like.reaction
 
-            for pid, react, cnt in s.query(Like.post_id, func.coalesce(Like.reaction, "★"), func.count(Like.id)).filter(Like.post_id.in_(notif_post_ids)).group_by(Like.post_id, Like.reaction).order_by(Like.post_id, func.min(Like.id)).all():
-                if pid not in _reactions_map:
-                    _reactions_map[pid] = {}
-                _reactions_map[pid][react] = cnt
+            _reactions_map = build_reactions_map(s, notif_post_ids)
 
             # posts_cache를 활용해 DB 재조회 제거
             all_mentioned_ids = set()

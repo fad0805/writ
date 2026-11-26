@@ -227,7 +227,7 @@ export interface PostData {
   quote_hidden_url?: string;
   quoted_post?: PostData | null;
   _emojis?: { keyword: string; file_name: string; url: string; aliases: string[] }[];
-  /** reaction shortcode(콜론 제외) -> 작성자 도메인 기준 이미지 URL */
+  /** 도메인별 배지 키(`:shortcode:@domain`, 로컬은 `:shortcode:`) -> 이미지 URL */
   _reaction_emojis?: Record<string, string>;
 }
 
@@ -411,7 +411,7 @@ export const api = {
   refreshPoll: (id: number) => request<{ ok: boolean; post?: PostData }>(`/api/posts/${id}/refresh-poll`, { method: "POST" }),
   react: (id: number, emoji: string) => formRequest<{ ok: boolean }>(`/api/posts/${id}/react`, { emoji }),
   unreact: (id: number) => formRequest<{ ok: boolean }>(`/api/posts/${id}/unreact`, {}),
-  reactionUsers: (id: number, emoji: string) => request<{ users: User[] }>(`/api/posts/${id}/reaction-users?emoji=${encodeURIComponent(emoji)}`),
+  reactionUsers: (id: number, emoji: string, domain = "") => request<{ users: User[] }>(`/api/posts/${id}/reaction-users?emoji=${encodeURIComponent(emoji)}${domain ? `&domain=${encodeURIComponent(domain)}` : ""}`),
 
   // Users
   getAccountCard: (username: string) =>

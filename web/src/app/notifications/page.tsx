@@ -10,6 +10,7 @@ import Avatar from "@/components/Avatar";
 import DirectUserCard from "@/components/DirectUserCard";
 import InfiniteScroll from "@/components/InfiniteScroll";
 import { getCustomEmojis, renderCustomEmojis, renderReaction, withReactionEmojis, CustomEmoji } from "@/lib/emojis";
+import { domainFromHandle } from "@/lib/reactions";
 import { sanitizeName } from "@/lib/sanitize";
 
 type DirectUserData = User & {
@@ -71,13 +72,13 @@ const mergeEmojis = (base: CustomEmoji[], extra?: CustomEmoji[]): CustomEmoji[] 
   return Array.from(map.values());
 };
 
-const typeText = (t: string, meta?: NotificationMeta, emojiMap?: CustomEmoji[], reactionEmojis?: Record<string, string>) => {
+const typeText = (t: string, meta?: NotificationMeta, emojiMap?: CustomEmoji[], reactionEmojis?: Record<string, string>, reactionDomain = "") => {
   if (t === "follow") return "님이 회원님을 팔로우했습니다";
   if (t === "follow_request") return "님이 회원님을 팔로우 요청했습니다";
   if (t === "like") {
     const reaction = meta?.reaction;
     if (reaction) {
-      const rendered = sanitizeName(renderReaction(reaction, withReactionEmojis(emojiMap || [], reactionEmojis)));
+      const rendered = sanitizeName(renderReaction(reaction, withReactionEmojis(emojiMap || [], reactionEmojis, reactionDomain)));
       return <span>님이 <span dangerouslySetInnerHTML={{ __html: rendered }} /> 리액션했습니다</span>;
     }
     return "님이 회원님의 글을 즐겨찾기했습니다";
@@ -383,7 +384,7 @@ export default function NotificationsPage() {
                     <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(n.from_user.display_name, emojiMap)) }} />
                   </Link>
                 )}{" "}
-                {typeText(n.type, n.metadata as NotificationMeta, mergeEmojis(emojiMap, n.post?._emojis), n.post?._reaction_emojis)}</>
+                {typeText(n.type, n.metadata as NotificationMeta, mergeEmojis(emojiMap, n.post?._emojis), n.post?._reaction_emojis, domainFromHandle(n.from_user?.username))}</>
               )}
               <span className="notif-time">{fmtTime(n.created_at)}</span>
               {n.type === "moderation" && n.metadata?.message && n.metadata?.type !== "report" && n.metadata?.type !== "new_user" && (
