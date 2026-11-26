@@ -31,6 +31,8 @@ vi.mock("@/lib/emojis", () => ({
   useEmojiList: () => [],
   injectEmojis: vi.fn(),
   renderCustomEmojis: (value: string) => value,
+  renderCustomEmojisWithOverrides: (value: string) => value,
+  getEmojiUrlMaps: () => ({ all: {}, local: {} }),
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => {

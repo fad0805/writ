@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { PostData, PostEditVersion, api } from "@/lib/api";
-import { CustomEmoji, renderCustomEmojis } from "@/lib/emojis";
+import { CustomEmoji, renderCustomEmojisWithOverrides } from "@/lib/emojis";
 import { sanitizeName, sanitizePost, sanitizeSummary } from "@/lib/sanitize";
 import Link from "next/link";
 import Avatar from "./Avatar";
@@ -69,9 +69,10 @@ export function PostEditHistoryModal({ postId, onClose }: { postId: number; onCl
   );
 }
 
-export default React.memo(function PostHeader({ post, mergedEmojiList, postHref, timeHref, onShowEdits }: {
+export default React.memo(function PostHeader({ post, emojiList, postEmojis, postHref, timeHref, onShowEdits }: {
   post: PostData;
-  mergedEmojiList: CustomEmoji[];
+  emojiList: CustomEmoji[];
+  postEmojis: CustomEmoji[];
   postHref: string;
   timeHref?: string;
   onShowEdits?: () => void;
@@ -85,7 +86,7 @@ export default React.memo(function PostHeader({ post, mergedEmojiList, postHref,
       </Link>
       <div className="post-name-wrap">
         <Link href={`/@${post.author.username}`} className="post-author" onClick={(e) => e.stopPropagation()}>
-          <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.author.display_name, mergedEmojiList, 14)) }} /> {(post.author.role === "admin" || post.author.role === "moderator" || post.author.role === "owner") && post.author.show_badge && <Icon name={post.author.role === "owner" ? "books_solid" : "shield_filled"} style={{ color: post.author.role === "owner" ? "var(--accent)" : post.author.role === "admin" ? "#27ae60" : "#cc8800", fontSize: "0.65em", verticalAlign: "middle", marginLeft: 2 }} title={post.author.role === "owner" ? "오너" : post.author.role === "admin" ? "관리자" : "조율자"} />}
+          <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojisWithOverrides(post.author.display_name, emojiList, postEmojis, 14)) }} /> {(post.author.role === "admin" || post.author.role === "moderator" || post.author.role === "owner") && post.author.show_badge && <Icon name={post.author.role === "owner" ? "books_solid" : "shield_filled"} style={{ color: post.author.role === "owner" ? "var(--accent)" : post.author.role === "admin" ? "#27ae60" : "#cc8800", fontSize: "0.65em", verticalAlign: "middle", marginLeft: 2 }} title={post.author.role === "owner" ? "오너" : post.author.role === "admin" ? "관리자" : "조율자"} />}
         </Link>
         <Link href={`/@${post.author.username}`} className="post-username" onClick={(e) => e.stopPropagation()}>
           @{post.author.display_handle || post.author.username}

@@ -7,6 +7,7 @@ vi.mock("@/lib/emojis", () => ({
   useEmojiList: () => [],
   injectEmojis: vi.fn(),
   renderCustomEmojis: (value: string) => value,
+  renderCustomEmojisWithOverrides: (value: string) => value,
 }));
 
 function makePost(overrides: Partial<PostData> = {}): PostData {

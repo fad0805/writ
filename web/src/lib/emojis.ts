@@ -202,10 +202,40 @@ export function renderReaction(reaction: string, emojis: CustomEmoji[], size?: n
 type RenderData = { re: RegExp | null; emojiByKeyword: Map<string, CustomEmoji> };
 
 const renderCache = new WeakMap<CustomEmoji[], RenderData>();
+const emojiMapCache = new WeakMap<CustomEmoji[], {
+  all: Record<string, string>;
+  local: Record<string, string>;
+}>();
+
+/** 목록 배열이 같으면 keyword→URL 맵도 재사용한다. 카드마다 전체 목록을 순회하지 않는다. */
+export function getEmojiUrlMaps(emojis: CustomEmoji[]): {
+  all: Record<string, string>;
+  local: Record<string, string>;
+} {
+  const cached = emojiMapCache.get(emojis);
+  if (cached) return cached;
+  const all: Record<string, string> = {};
+  const local: Record<string, string> = {};
+  for (const e of emojis) {
+    if (!e.keyword || !e.url) continue;
+    all[e.keyword] = e.url;
+    if (e.url.includes("/emojis/local/")) local[e.keyword] = e.url;
+  }
+  const data = { all, local };
+  emojiMapCache.set(emojis, data);
+  return data;
+}
 // 글마다 새 배열(도메인별 _emojis 병합)이 만들어져도, 실제 이모지 목록이 같으면
 // 정규식을 다시 컴파일하지 않도록 내용 기반 캐시를 하나 더 둔다.
 const renderCacheByKey = new Map<string, RenderData>();
 const RENDER_KEY_CACHE_MAX = 64;
+
+function normalizeEmoji(e: CustomEmoji): CustomEmoji | null {
+  if (!e || !e.keyword || !e.url) return null;
+  const safeUrl = e.url.replace(/"/g, "%22").replace(/</g, "%3C").replace(/>/g, "%3E");
+  if (!safeUrl.startsWith("https:") && !safeUrl.startsWith("/")) return null;
+  return { ...e, url: safeUrl };
+}
 
 function getRenderData(emojis: CustomEmoji[]): RenderData {
   const cached = renderCache.get(emojis);
@@ -213,14 +243,13 @@ function getRenderData(emojis: CustomEmoji[]): RenderData {
 
   const seen = new Set<string>();
   const uniq: CustomEmoji[] = [];
-  for (const e of emojis) {
-    if (!e || !e.keyword || !e.url) continue;
+  for (const raw of emojis) {
+    const e = normalizeEmoji(raw);
+    if (!e) continue;
     const lowerKw = e.keyword.toLowerCase();
     if (seen.has(lowerKw)) continue;
     seen.add(lowerKw);
-    const safeUrl = e.url.replace(/"/g, "%22").replace(/</g, "%3C").replace(/>/g, "%3E");
-    if (!safeUrl.startsWith("https:") && !safeUrl.startsWith("/")) continue;
-    uniq.push({ ...e, url: safeUrl });
+    uniq.push(e);
   }
   uniq.sort((a, b) => b.keyword.length - a.keyword.length);
 
@@ -247,15 +276,54 @@ function getRenderData(emojis: CustomEmoji[]): RenderData {
   return data;
 }
 
-export function renderCustomEmojis(html: string, emojis: CustomEmoji[], size?: number): string {
-  if (!html || !emojis || emojis.length === 0) return html;
-  const sz = size ?? 33;
-  const { re, emojiByKeyword } = getRenderData(emojis);
+function replaceWithData(
+  html: string,
+  data: RenderData,
+  overrides: Map<string, CustomEmoji> | null,
+  sz: number,
+): string {
+  const { re, emojiByKeyword } = data;
   if (!re) return html;
   return html.replace(re, (match, kw: string) => {
-    const emoji = emojiByKeyword.get(kw.toLowerCase());
+    const emoji = overrides?.get(kw.toLowerCase()) || emojiByKeyword.get(kw.toLowerCase());
     if (!emoji) return match;
     const kwAttr = emoji.keyword.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     return `<img src="${emoji.url}" alt=":${kwAttr}:" title=":${kwAttr}:" class="custom-emoji" width="${sz}" height="${sz}" style="width:${sz}px;height:${sz}px;vertical-align:middle;display:inline-block;object-fit:contain">`;
   });
+}
+
+export function renderCustomEmojis(html: string, emojis: CustomEmoji[], size?: number): string {
+  if (!html || !emojis || emojis.length === 0) return html;
+  return replaceWithData(html, getRenderData(emojis), null, size ?? 33);
+}
+
+/**
+ * 기본 이모지 목록의 정규식/인덱스는 재사용하고, 글별 도메인 이모지만
+ * override로 얹어 렌더링한다. 글마다 전체 목록을 병합/재컴파일하지 않는다.
+ */
+export function renderCustomEmojisWithOverrides(
+  html: string,
+  baseEmojis: CustomEmoji[],
+  overrides?: CustomEmoji[] | null,
+  size?: number,
+): string {
+  if (!html) return html;
+  if (!overrides || overrides.length === 0) {
+    return renderCustomEmojis(html, baseEmojis, size);
+  }
+  const baseData = getRenderData(baseEmojis);
+  const overrideMap = new Map<string, CustomEmoji>();
+  const extras: CustomEmoji[] = [];
+  for (const raw of overrides) {
+    const e = normalizeEmoji(raw);
+    if (!e) continue;
+    const kw = e.keyword.toLowerCase();
+    overrideMap.set(kw, e);
+    if (!baseData.emojiByKeyword.has(kw)) extras.push(e);
+  }
+  if (overrideMap.size === 0) return renderCustomEmojis(html, baseEmojis, size);
+  const sz = size ?? 33;
+  let result = replaceWithData(html, baseData, overrideMap, sz);
+  if (extras.length > 0) result = renderCustomEmojis(result, extras, sz);
+  return result;
 }

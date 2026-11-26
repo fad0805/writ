@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderCustomEmojis, renderReaction } from "@/lib/emojis";
+import { renderCustomEmojis, renderCustomEmojisWithOverrides, renderReaction } from "@/lib/emojis";
 import type { CustomEmoji } from "@/lib/emojis";
 
 const emojis: CustomEmoji[] = [
@@ -42,6 +42,32 @@ describe("renderCustomEmojis", () => {
     const evil = { keyword: "evil", file_name: "evil.jpg", url: 'https://cdn.example/a".jpg', aliases: [] } as CustomEmoji;
     const out = renderCustomEmojis(":evil:", [evil]);
     expect(out).not.toContain('src="https://cdn.example/a".jpg"');
+  });
+});
+
+describe("renderCustomEmojisWithOverrides", () => {
+  it("uses the post-specific URL for a shared keyword", () => {
+    const override = {
+      keyword: "heart",
+      file_name: "remote-heart.png",
+      url: "https://remote.example/heart.png",
+      aliases: [],
+    } as CustomEmoji;
+    const out = renderCustomEmojisWithOverrides(":heart:", emojis, [override]);
+    expect(out).toContain('src="https://remote.example/heart.png"');
+    expect(out).not.toContain('src="https://cdn.example/heart.png"');
+  });
+
+  it("renders an override keyword that is missing from the base list", () => {
+    const extra = {
+      keyword: "new_blob",
+      file_name: "new_blob.png",
+      url: "https://remote.example/new_blob.png",
+      aliases: [],
+    } as CustomEmoji;
+    const out = renderCustomEmojisWithOverrides(":new_blob: :heart:", emojis, [extra]);
+    expect(out).toContain('src="https://remote.example/new_blob.png"');
+    expect(out).toContain('src="https://cdn.example/heart.png"');
   });
 });
 

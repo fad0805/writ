@@ -1,5 +1,5 @@
 import { PostData } from "@/lib/api";
-import { CustomEmoji, renderCustomEmojis } from "@/lib/emojis";
+import { CustomEmoji, renderCustomEmojisWithOverrides } from "@/lib/emojis";
 
 export function formatRelative(iso: string, now: number = Date.now()): string {
   const diff = new Date(iso).getTime() - now;
@@ -39,7 +39,7 @@ export function rewriteLinks(text: string): string {
   return text;
 }
 
-export function buildPostContentHtml(post: PostData, emojiList: CustomEmoji[]): string {
+export function buildPostContentHtml(post: PostData, emojiList: CustomEmoji[], postEmojis?: CustomEmoji[]): string {
   let html = post.content || "";
 
   // getRenderData()가 내부에서 중복/유효성 검사를 하므로 여기서 배열을 다시
@@ -68,7 +68,7 @@ export function buildPostContentHtml(post: PostData, emojiList: CustomEmoji[]): 
   codeBlocks.forEach((block, i) => {
     html = html.replace(`\x00CODEBLOCK_${i}\x00`, block);
   });
-  html = renderCustomEmojis(html, emojiList);
+  html = renderCustomEmojisWithOverrides(html, emojiList, postEmojis);
   html = rewriteLinks(html);
   return html;
 }

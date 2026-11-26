@@ -3,14 +3,13 @@ import { PostData, User, ReplyContext, api } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { injectEmojis, renderCustomEmojis, useEmojiList, CustomEmoji } from "@/lib/emojis";
+import { getEmojiUrlMaps, renderCustomEmojisWithOverrides, useEmojiList } from "@/lib/emojis";
 import { sanitizePost, sanitizeName } from "@/lib/sanitize";
 import { installCodeCopyButtons } from "@/lib/codeCopy";
 import { getQuote } from "@/lib/quote-cache";
 import { useAuth } from "@/lib/auth";
 import { useReactions } from "@/lib/useReactions";
 import { buildPostContentHtml } from "@/lib/postContent";
-import { WindowWithGlobals } from "@/lib/windowGlobals";
 import Icon from "./Icon";
 import PostHeader, { PostEditHistoryModal } from "./PostHeader";
 import ReplyContextBox from "./ReplyContextBox";
@@ -27,6 +26,8 @@ const EditModal = dynamic(() => import("./EditModal"), { ssr: false });
 const ReplyModal = dynamic(() => import("./ReplyModal"), { ssr: false });
 const ReportModal = dynamic(() => import("./ReportModal"), { ssr: false });
 const RewriteModal = dynamic(() => import("./RewriteModal"), { ssr: false });
+
+const EMPTY_REACTION_EMOJIS: Record<string, string> = {};
 
 const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onReply, onRewrite, current, hideContext, selected, readonly, mentionBy }: { post: PostData; onUpdate?: (post: PostData, updated?: PostData) => void; onDelete?: (post: PostData) => void; onReply?: (newPost?: PostData) => void; onRewrite?: (content: string, visibility: string, summary: string, replyTo?: ReplyContext | null, media?: { url: string; type: string; alt?: string }[]) => void; current?: boolean; hideContext?: boolean; selected?: boolean; readonly?: boolean; mentionBy?: User | null }) {
   const router = useRouter();
@@ -64,36 +65,12 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
   const emojiList = useEmojiList();
   const { liked, likesCount, reactions, myReaction, toggleLike, reactTo, unreact } = useReactions(post, targetId);
 
-  const reactionEmojiMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const e of emojiList) if (e.keyword && e.url) map[e.keyword] = e.url;
-    const cached = (window as WindowWithGlobals).__emojiMap;
-    if (cached) {
-      for (const [k, v] of Object.entries(cached)) if (!map[k] && v) map[k] = v;
-    }
-    (window as WindowWithGlobals).__emojiMap = map;
-    // 리액션은 누른 사람의 서버 이모지일 수 있으므로 글별 _reaction_emojis를
-    // 우선한다. 전역 맵(__emojiMap)은 다른 글에 영향을 주지 않도록 그대로 둔다.
-    const perPost = { ...map };
-    for (const [key, url] of Object.entries(post._reaction_emojis || {})) {
-      if (key && url) perPost[key] = url;
-    }
-    return perPost;
-  }, [emojiList, post._reaction_emojis]);
-  const localReactionEmojiMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const e of emojiList) {
-      if (e.keyword && e.url && e.url.includes('/emojis/local/')) {
-        map[e.keyword] = e.url;
-      }
-    }
-    const cached = (window as WindowWithGlobals).__localEmojiMap;
-    if (cached) {
-      for (const [k, v] of Object.entries(cached)) if (!map[k] && v) map[k] = v;
-    }
-    (window as WindowWithGlobals).__localEmojiMap = map;
-    return map;
-  }, [emojiList]);
+  const { all: reactionEmojiMap, local: localReactionEmojiMap } = useMemo(
+    () => getEmojiUrlMaps(emojiList),
+    [emojiList],
+  );
+  // 글별 리액션 이모지는 기본 맵을 복제하지 않고 override로만 전달한다.
+  const perPostReactionEmojis = post._reaction_emojis || EMPTY_REACTION_EMOJIS;
 
   useEffect(() => {
     if (currentUser?.pinned_posts) setPinned(currentUser.pinned_posts.includes(post.id));
@@ -156,25 +133,14 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
     else if (current) router.back();
   };
 
-  const mergedEmojiList = useMemo(() => {
-    if (!post._emojis || post._emojis.length === 0) return emojiList;
-    // 같은 키워드 충돌 시 이 글의 _emojis(작성자 도메인 기준)를 우선한다.
-    const map = new Map<string, CustomEmoji>();
-    for (const e of post._emojis) {
-      if (e.keyword && e.url) map.set(e.keyword, { ...e, category: "remote" });
-    }
-    for (const e of emojiList) {
-      if (!map.has(e.keyword)) map.set(e.keyword, e);
-    }
-    return Array.from(map.values());
-  }, [emojiList, post._emojis]);
+  // 글별 _emojis는 기본 이모지 목록에 덮어쓰는 override로만 사용한다.
+  const postEmojis = useMemo(() => post._emojis || [], [post._emojis]);
 
-  useEffect(() => {
-    if (post._emojis) injectEmojis(post._emojis);
-  }, [post._emojis]);
-
-  // contentHtml: emojiList 변경 시 즉시 재계산하여 이모지 렌더링 깜빡임 방지
-  const contentHtml = useMemo(() => sanitizePost(buildPostContentHtml(post, mergedEmojiList)), [post, mergedEmojiList]);
+  // contentHtml: 기본 이모지 렌더러는 공유하고, 이 글의 도메인 이모지만 override한다.
+  const contentHtml = useMemo(
+    () => sanitizePost(buildPostContentHtml(post, emojiList, postEmojis)),
+    [post, emojiList, postEmojis],
+  );
 
   // 코드 복사 버튼 플러그인 Effect
   useEffect(() => {
@@ -224,7 +190,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
             .then(r => { if (r.ok) return r.json(); throw new Error(); })
         )
           .then(d => {
-            if (d) { if (d._emojis) injectEmojis(d._emojis); setQuotedPost(d); }
+            if (d) { setQuotedPost(d); }
           })
           .finally(() => setLoadingQuote(false));
       } else {
@@ -242,7 +208,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
               .catch(() => null)
           )
             .then(d => {
-              if (d && d.id) { if (d._emojis) injectEmojis(d._emojis); setQuotedPost(d); }
+              if (d && d.id) { setQuotedPost(d); }
             })
             .finally(() => setLoadingQuote(false));
         }
@@ -255,7 +221,6 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
     if (post.quote_hidden || quotedPost || quotedSeries || quotedEpisode || loadingQuote) return;
     const embedded = post.quoted_post;
     if (embedded && embedded.id && embedded.author) {
-      if (embedded._emojis) injectEmojis(embedded._emojis);
       setQuotedPost(embedded);
       return;
     }
@@ -270,7 +235,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
     setLoadingQuote(true);
     if (qid) {
       getQuote(quoteKey, () => api.getPost(qid, 0, 0, 0, 0).catch(() => null))
-        .then(d => { if (d) { if (d._emojis) injectEmojis(d._emojis); setQuotedPost(d); } })
+        .then(d => { if (d) { setQuotedPost(d); } })
         .finally(() => setLoadingQuote(false));
     } else if (qApId) {
       const form = new FormData(); form.append("url", qApId);
@@ -279,7 +244,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
           .then(r => { if (r.ok) return r.json(); throw new Error(); })
           .catch(() => null)
       )
-        .then(d => { if (d) { if (d._emojis) injectEmojis(d._emojis); setQuotedPost(d); } })
+        .then(d => { if (d) { setQuotedPost(d); } })
         .finally(() => setLoadingQuote(false));
     }
   }, [post, loadingQuote, quotedPost, quotedSeries, quotedEpisode]);
@@ -462,21 +427,21 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
       <div ref={cardRef} className={`post-card${current ? " current" : ""}${selected ? " selected" : ""}${post.visibility === "mention" ? " mention-card" : ""}`}>
         {post.boosted_by && post.boosted_by.length > 0 && (
           <div className="boost-badge">
-            <Icon name="refresh" size={12} /> <Link href={`/@${post.boosted_by[0].username}`}><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.boosted_by[0].display_name || post.boosted_by[0].username, mergedEmojiList, 14)) }} /></Link>님이 부스트
+            <Icon name="refresh" size={12} /> <Link href={`/@${post.boosted_by[0].username}`}><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojisWithOverrides(post.boosted_by[0].display_name || post.boosted_by[0].username, emojiList, postEmojis, 14)) }} /></Link>님이 부스트
           </div>
         )}
         {mentionBy && (
           <div className="boost-badge">
-            <Icon name="mention" size={12} /> <Link href={`/@${mentionBy.username}`}><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(mentionBy.display_name || mentionBy.username, mergedEmojiList, 14)) }} /></Link>님이 멘션
+            <Icon name="mention" size={12} /> <Link href={`/@${mentionBy.username}`}><span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojisWithOverrides(mentionBy.display_name || mentionBy.username, emojiList, postEmojis, 14)) }} /></Link>님이 멘션
           </div>
         )}
-        <PostHeader post={post} mergedEmojiList={mergedEmojiList} postHref={postHref} timeHref={timeHref} onShowEdits={() => setShowEdits(true)} />
+        <PostHeader post={post} emojiList={emojiList} postEmojis={postEmojis} postHref={postHref} timeHref={timeHref} onShowEdits={() => setShowEdits(true)} />
         {!hideContext && post.reply_context && (
-          <ReplyContextBox post={post} mergedEmojiList={mergedEmojiList} />
+          <ReplyContextBox post={post} emojiList={emojiList} postEmojis={postEmojis} />
         )}
         {post.summary ? (
           <details className="cw-box">
-            <summary onClick={(e) => e.stopPropagation()} dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.summary, mergedEmojiList)) }} />
+            <summary onClick={(e) => e.stopPropagation()} dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojisWithOverrides(post.summary, emojiList, postEmojis)) }} />
             <div className="post-content" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: contentHtml }} />
             {(post.media_attachments?.length ?? 0) > 0 && mediaGallery(postSensitive)}
             {post.poll_data && <PollBox post={post} targetId={targetId} readonly={readonly} onUpdate={handlePollUpdate} />}
@@ -507,7 +472,7 @@ const PostCard = React.memo(function PostCard({ post, onUpdate, onDelete, onRepl
         <QuotedCard quotedPost={quotedPost} quotedSeries={quotedSeries} quotedEpisode={quotedEpisode} hiddenQuoteUrl={post.quote_hidden ? (post.quote_hidden_url || null) : null} onNavigate={(href) => router.push(href)} />
         {!post.summary && post.link_preview && !post.quote_of_id && !post.quote_of_ap_id && !quotedPost && !seriesMatch && !episodeMatch && <LinkPreviewCard lp={post.link_preview} />}
         {reactions && Object.keys(reactions).length > 0 && currentUser?.enable_reactions !== false && (
-          <ReactionsRow reactions={reactions} myReaction={myReaction} onToggle={handleToggleReaction} targetId={targetId} emojiMap={reactionEmojiMap} localEmojiMap={localReactionEmojiMap} />
+          <ReactionsRow reactions={reactions} myReaction={myReaction} onToggle={handleToggleReaction} targetId={targetId} emojiMap={reactionEmojiMap} localEmojiMap={localReactionEmojiMap} reactionEmojiMap={perPostReactionEmojis} />
         )}
         {!readonly && (
           <PostActions

@@ -5,13 +5,14 @@ import { emojiKeyword, parseReactionKey } from "@/lib/reactions";
 import Icon from "./Icon";
 import Avatar from "./Avatar";
 
-export default React.memo(function ReactionsRow({ reactions, myReaction, onToggle, targetId, emojiMap, localEmojiMap }: {
+export default React.memo(function ReactionsRow({ reactions, myReaction, onToggle, targetId, emojiMap, localEmojiMap, reactionEmojiMap }: {
   reactions: Record<string, number>;
   myReaction: string | null;
   onToggle: (emoji: string) => void;
   targetId: number;
   emojiMap: Record<string, string>;
   localEmojiMap: Record<string, string>;
+  reactionEmojiMap?: Record<string, string>;
 }) {
   const [reactionTooltip, setReactionTooltip] = useState<{ emoji: string; users: User[]; x: number; y: number } | null>(null);
   const tooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -72,8 +73,8 @@ export default React.memo(function ReactionsRow({ reactions, myReaction, onToggl
             >
               {reaction === "★" ? (
                 <Icon name="star_filled" size={18} style={{ color: "#f1c40f" }} />
-              ) : emojiMap[badgeKey] || emojiMap[emojiKey] ? (
-                <img src={emojiMap[badgeKey] || emojiMap[emojiKey]} alt={reaction} loading="lazy" decoding="async" style={{ height: 22, verticalAlign: "middle" }} />
+              ) : (reactionEmojiMap?.[badgeKey] || emojiMap[badgeKey] || emojiMap[emojiKey]) ? (
+                <img src={reactionEmojiMap?.[badgeKey] || emojiMap[badgeKey] || emojiMap[emojiKey]} alt={reaction} loading="lazy" decoding="async" style={{ height: 22, verticalAlign: "middle" }} />
               ) : (
                 <span>{reaction}</span>
               )}

@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { PostData } from "@/lib/api";
 import Link from "next/link";
 import MediaViewer from "./MediaViewer";
-import { injectEmojis, renderCustomEmojis, CustomEmoji, useEmojiList } from "@/lib/emojis";
+import { renderCustomEmojisWithOverrides, useEmojiList } from "@/lib/emojis";
 import { sanitizePost, sanitizeName } from "@/lib/sanitize";
 import { rewriteLinks } from "@/lib/postContent";
 
@@ -31,35 +31,20 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsDark(document.body.classList.contains("dark-theme"));
   }, []);
-  useEffect(() => {
-    if (post._emojis) injectEmojis(post._emojis);
-  }, [post._emojis]);
+  const postEmojis = useMemo(() => post._emojis || [], [post._emojis]);
   const bg = post.is_dm
     ? (isDark ? DARK_BG.dm : LIGHT_BG.dm)
     : notifType
       ? (isDark ? DARK_BG[notifType] : LIGHT_BG[notifType]) || "var(--bg-tertiary)"
       : "var(--bg-tertiary)";
-  const mergedEmojiList = useMemo(() => {
-    const postEmojis = post._emojis;
-    if (!postEmojis || postEmojis.length === 0) return emojiList;
-    // 같은 키워드 충돌 시 이 글의 _emojis(작성자 도메인 기준)를 우선한다.
-    const seen = new Map<string, CustomEmoji>();
-    for (const e of postEmojis) {
-      if (e.keyword && e.url) seen.set(e.keyword, { ...e, category: "remote" });
-    }
-    for (const e of emojiList) {
-      if (!seen.has(e.keyword)) seen.set(e.keyword, e);
-    }
-    return Array.from(seen.values());
-  }, [emojiList, post._emojis]);
   const contentHtml = useMemo(() => {
     let html = post.content || "";
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     html = html.replace(/\n/g, '<br>');
-    html = renderCustomEmojis(html, mergedEmojiList);
+    html = renderCustomEmojisWithOverrides(html, emojiList, postEmojis);
     return sanitizePost(rewriteLinks(html));
-  }, [post.content, mergedEmojiList]);
+  }, [post.content, emojiList, postEmojis]);
   const makeUrl = (p: PostData): string => {
     if (p.number && p.author?.username) {
       return `/@${p.author.username}/${p.number}`;
@@ -92,7 +77,7 @@ export default function MiniPostCard({ post, notifType, notifLabel }: { post: Po
         {notifLabel && <div style={{ fontSize: "0.82em", color: "var(--text-muted)", marginBottom: 6, lineHeight: 1.4 }}>{notifLabel}</div>}
         {!notifType && (
           <div className="mini-post-author">
-            <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(post.author.display_name || post.author.username, mergedEmojiList, 14)) }} />
+            <span dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojisWithOverrides(post.author.display_name || post.author.username, emojiList, postEmojis, 14)) }} />
             <span className="mini-post-handle">
               @{post.author.display_handle || post.author.username}
             </span>

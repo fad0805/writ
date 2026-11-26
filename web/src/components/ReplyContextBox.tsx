@@ -1,21 +1,22 @@
 "use client";
 import React from "react";
 import { PostData } from "@/lib/api";
-import { CustomEmoji, renderCustomEmojis } from "@/lib/emojis";
+import { CustomEmoji, renderCustomEmojisWithOverrides } from "@/lib/emojis";
 import { sanitizeName, sanitizePost } from "@/lib/sanitize";
 import { rewriteLinks } from "@/lib/postContent";
 import Link from "next/link";
 
-export default React.memo(function ReplyContextBox({ post, mergedEmojiList }: {
+export default React.memo(function ReplyContextBox({ post, emojiList, postEmojis }: {
   post: PostData;
-  mergedEmojiList: CustomEmoji[];
+  emojiList: CustomEmoji[];
+  postEmojis: CustomEmoji[];
 }) {
   if (!post.reply_context) return null;
   const rc = post.reply_context;
   return (
     <Link href={rc.number ? `/@${rc.author.username}/${rc.number}` : `/post/${rc.id}`} className={`reply-context${rc.visibility === "mention" ? " mention-context" : ""}`} onClick={(e) => e.stopPropagation()}>
       <span className="reply-context-label">답글 대상</span>
-      <strong dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojis(rc.author.display_name || rc.author.username, mergedEmojiList, 14)) }} />
+      <strong dangerouslySetInnerHTML={{ __html: sanitizeName(renderCustomEmojisWithOverrides(rc.author.display_name || rc.author.username, emojiList, postEmojis, 14)) }} />
       <span>@{rc.author.username}</span>
       <p dangerouslySetInnerHTML={{ __html: (() => {
         const hasCw = !!rc.summary || !!rc.is_sensitive;
@@ -29,7 +30,7 @@ export default React.memo(function ReplyContextBox({ post, mergedEmojiList }: {
         html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
         html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
         html = html.replace(/\n/g, '<br>');
-        html = renderCustomEmojis(html, mergedEmojiList);
+        html = renderCustomEmojisWithOverrides(html, emojiList, postEmojis);
         html = rewriteLinks(html);
         if (rawText.length > 200) html += "...";
         return sanitizePost(html);
