@@ -1,4 +1,5 @@
 """Emoji CRUD endpoints extracted from _misc.py."""
+import hashlib
 import io
 import logging
 import os
@@ -6,7 +7,7 @@ import re
 from uuid import uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from PIL import Image
 from sqlalchemy import desc, or_
 
@@ -20,7 +21,7 @@ from app.config.settings import S3_ENABLED
 from app.core.permissions import require_permission
 from app.db.database import get_session
 from app.models import CustomEmoji
-from app.utils.emoji import EMOJI_DIR, _emoji_url, _refresh_emoji_cache_forcibly
+from app.utils.emoji import EMOJI_DIR, _emoji_url, _load_emojis, _refresh_emoji_cache_forcibly
 from app.utils.storage import get_storage
 
 logger = logging.getLogger("writ.api.emojis")
@@ -29,36 +30,60 @@ emoji_router = APIRouter()
 
 
 @emoji_router.get("/emojis")
-def api_list_emojis(limit: int = Query(30, le=10000), offset: int = Query(0), q: str = Query(""), category: str = Query("")):
+def api_list_emojis(
+    request: Request,
+    limit: int = Query(30, le=10000),
+    offset: int = Query(0),
+    q: str = Query(""),
+    category: str = Query(""),
+):
     with get_session() as s:
-        query = s.query(CustomEmoji)
-        if q:
-            query = query.filter(
-                or_(
-                    CustomEmoji.keyword.ilike(f"%{q}%"),
-                    CustomEmoji.category.ilike(f"%{q}%"),
+        if not q and not category and offset == 0 and limit >= 9999:
+            # 프론트가 전체 목록을 받아갈 때는 이미 만들어 둔 캐시를 재사용한다.
+            # 수천 개 이모지를 매 요청마다 DB에서 다시 읽고 URL을 재계산하지 않는다.
+            cached = _load_emojis(s)
+            total = len(cached)
+            result = cached[:limit]
+        else:
+            query = s.query(CustomEmoji)
+            if q:
+                query = query.filter(
+                    or_(
+                        CustomEmoji.keyword.ilike(f"%{q}%"),
+                        CustomEmoji.category.ilike(f"%{q}%"),
+                    )
                 )
-            )
-        if category == "remote":
-            query = query.filter(CustomEmoji.category == "remote")
-        elif category == "local":
-            query = query.filter(CustomEmoji.category != "remote")
-        total = query.count()
-        emojis = query.order_by(desc(CustomEmoji.created_at)).offset(offset).limit(limit).all()
-        result = [
-            {
-                "id": e.id,
-                "keyword": e.keyword,
-                "file_name": e.file_name,
-                "category": e.category or "",
-                "aliases": e.aliases or [],
-                "url": _emoji_url(e.file_name, e.domain or "", e.category or ""),
-                "source_url": e.source_url or "",
-                "domain": e.domain or "",
-            }
-            for e in emojis
-        ]
-    return JSONResponse({"emojis": result, "total": total, "has_more": offset + limit < total}, headers={"Cache-Control": "no-cache, must-revalidate"})
+            if category == "remote":
+                query = query.filter(CustomEmoji.category == "remote")
+            elif category == "local":
+                query = query.filter(CustomEmoji.category != "remote")
+            total = query.count()
+            emojis = query.order_by(desc(CustomEmoji.created_at)).offset(offset).limit(limit).all()
+            result = [
+                {
+                    "id": e.id,
+                    "keyword": e.keyword,
+                    "file_name": e.file_name,
+                    "category": e.category or "",
+                    "aliases": e.aliases or [],
+                    "url": _emoji_url(e.file_name, e.domain or "", e.category or ""),
+                    "source_url": e.source_url or "",
+                    "domain": e.domain or "",
+                }
+                for e in emojis
+            ]
+    etag_src = repr([
+        (e.get("id"), e.get("keyword"), e.get("file_name"), e.get("domain") or "")
+        for e in result
+    ])
+    etag = f'"{hashlib.sha1(etag_src.encode()).hexdigest()}"'
+    headers = {"Cache-Control": "no-cache, must-revalidate", "ETag": etag}
+    if request.headers.get("if-none-match") in (etag, f"W/{etag}"):
+        return Response(status_code=304, headers=headers)
+    return JSONResponse(
+        {"emojis": result, "total": total, "has_more": offset + limit < total},
+        headers=headers,
+    )
 
 
 @emoji_router.post("/emojis")

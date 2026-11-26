@@ -19,7 +19,6 @@ from app.models import Post, Tag, User
 from app.serializers import _post_json
 from app.utils.content_parser import _sanitize_html, process_post_content
 from app.utils.crypto import get_private_key, sign_string
-from app.utils.emoji import _refresh_emoji_cache_forcibly
 from app.utils.http import WRIT_USER_AGENT, validate_url, validated_get
 from app.utils.post_edit import record_post_edit
 from app.utils.urls import extract_remote_url
@@ -593,8 +592,6 @@ def _fetch_and_save_ap_object(obj, user, _visited=None, _depth=0):
             # 💡 페치가 성공했을 때만 확실하게 DB 세션 커밋을 보장
             if post:
                 session.commit()
-                # 원격 글 페치 중 새 이모지가 등록됐을 수 있으면 캐시를 즉시 갱신한다.
-                _refresh_emoji_cache_forcibly(session)
         except Exception as e:
             # 💡 단순 print 대신 에러가 발생한 정확한 라인과 원인을 추적하기 위해 traceback 추가
             logger.error("Failed to fetch remote post from %s: %s", actor_url, e)

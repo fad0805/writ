@@ -7,7 +7,7 @@ from sqlalchemy import func
 from app.core.visibility import _can_view
 from app.models import Bookmark, Boost, Follow, Like, Post, User, Vote
 from app.utils.datetime import _fmt_dt
-from app.utils.emoji import _load_emojis, pick_emoji_for_domain
+from app.utils.emoji import _emoji_index, emoji_keywords_in_text, pick_emoji_for_domain
 from app.utils.filter import _load_user_filters
 from app.utils.reactions import build_reactions_map, parse_reaction_key, reaction_key
 
@@ -109,13 +109,11 @@ def _load_reaction_emojis_batch(session, ids):
     if not domain_counts:
         return result
 
-    by_kw: dict[str, list[dict]] = {}
-    for e in _load_emojis(session):
-        by_kw.setdefault(e["keyword"].lower(), []).append(e)
+    index = _emoji_index(session)
     for (pid, key), counts in domain_counts.items():
         domain = max(counts.items(), key=lambda item: item[1])[0]
         reaction = parse_reaction_key(key)[0]
-        chosen = pick_emoji_for_domain(by_kw.get(reaction[1:-1].lower(), []), domain)
+        chosen = pick_emoji_for_domain(index.get(reaction[1:-1].lower(), []), domain)
         if chosen and chosen.get("url"):
             result.setdefault(pid, {})[key] = chosen["url"]
     return result
@@ -329,9 +327,6 @@ def _post_used_emojis(p, session, reactions=None):
     이모지를 우선 선택한다. 해당 도메인 이모지가 없으면 로컬 정의(domain=""),
     그것도 없으면 첫 번째 후보로 폴백한다.
     """
-    all_emojis = _load_emojis(session)
-    if not all_emojis:
-        return []
     texts = [p.content or "", p.summary or ""]
     if p.author:
         texts.append(p.author.display_name or "")
@@ -353,11 +348,12 @@ def _post_used_emojis(p, session, reactions=None):
         if "@" in uname:
             author_domain = uname.rsplit("@", 1)[-1]
 
+    index = _emoji_index(session)
     candidates_by_kw = {}
-    for e in all_emojis:
-        kw = e["keyword"]
-        if f":{kw.lower()}:" in needle:
-            candidates_by_kw.setdefault(kw.lower(), []).append(e)
+    for kw in emoji_keywords_in_text(needle):
+        candidates = index.get(kw)
+        if candidates:
+            candidates_by_kw[kw] = candidates
 
     used = []
     for candidates in candidates_by_kw.values():
@@ -373,10 +369,7 @@ def _merge_boost_emojis(base_emojis, session, boosters):
     """
     result = list(base_emojis)
     existing = {e["keyword"] for e in result}
-    all_emojis = _load_emojis(session)
-    by_kw = {}
-    for e in all_emojis:
-        by_kw.setdefault(e["keyword"], []).append(e)
+    index = _emoji_index(session)
     for b in (boosters or []):
         bname = (b.get("display_name") or "").lower()
         if not bname:
@@ -385,10 +378,11 @@ def _merge_boost_emojis(base_emojis, session, boosters):
         uname = (b.get("username") or "").lower()
         if "@" in uname:
             bdomain = uname.rsplit("@", 1)[-1]
-        for kw, candidates in by_kw.items():
+        for kw in emoji_keywords_in_text(bname):
             if kw in existing:
                 continue
-            if f":{kw.lower()}:" not in bname:
+            candidates = index.get(kw)
+            if not candidates:
                 continue
             chosen = pick_emoji_for_domain(candidates, bdomain)
             result.append({"keyword": chosen["keyword"], "file_name": chosen["file_name"], "url": chosen["url"], "aliases": chosen["aliases"]})

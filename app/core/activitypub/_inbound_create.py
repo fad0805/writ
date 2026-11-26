@@ -27,7 +27,6 @@ from app.core.timeline_stream import broadcast_notif_sound, broadcast_refresh_no
 from app.db.database import get_session, username_prefix_like
 from app.models import Follow, MutedServer, Notification, Post, Tag, User, Vote
 from app.utils.content_parser import _sanitize_html, process_post_content
-from app.utils.emoji import _refresh_emoji_cache_forcibly
 from app.utils.http import validate_url, validated_get
 from app.utils.urls import extract_remote_url
 
@@ -519,7 +518,6 @@ def _handle_create(activity: dict) -> tuple[int, str]:
                 with get_session() as emoji_s:
                     _process_emoji_tags(obj.get("tag", []), emoji_s)
                     emoji_s.commit()
-                    _refresh_emoji_cache_forcibly(emoji_s)
             except Exception:
                 pass
             _push_notified = set()

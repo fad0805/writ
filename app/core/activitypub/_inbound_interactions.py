@@ -43,7 +43,6 @@ from app.models import (
 from app.utils.alias import actor_urls_include
 from app.utils.content_parser import _sanitize_html, process_post_content
 from app.utils.crypto import generate_keypair
-from app.utils.emoji import _refresh_emoji_cache_forcibly
 from app.utils.http import WRIT_USER_AGENT, validated_get
 from app.utils.post_edit import record_post_edit
 from app.utils.urls import parse_username_from_url
@@ -769,7 +768,6 @@ def _handle_update(activity: dict) -> tuple[int, str]:
                             edited_at=_edited_at,
                         )
                     session.commit()
-                    _refresh_emoji_cache_forcibly(session)
                     logger.info(
                         "[REMOTE-EDIT] Update applied post id=%s ap_id=%s actor=%s",
                         post.id, obj_id, actor_url,

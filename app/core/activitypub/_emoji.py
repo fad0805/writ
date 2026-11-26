@@ -16,7 +16,7 @@ import contextlib
 from app.config.settings import S3_ENABLED
 from app.db.database import get_session
 from app.models import CustomEmoji
-from app.utils.emoji import EMOJI_DIR, _refresh_emoji_cache_forcibly
+from app.utils.emoji import EMOJI_DIR, _invalidate_emoji_cache
 from app.utils.http import WRIT_USER_AGENT, validate_url, validated_get
 from app.utils.storage import get_storage
 
@@ -53,7 +53,7 @@ def _background_import_emoji(url: str, keyword: str, domain: str):
             if not _existing:
                 _es.add(CustomEmoji(keyword=keyword, file_name=_fname, category="remote", domain=domain))
                 _es.commit()
-                _refresh_emoji_cache_forcibly(_es)
+                _invalidate_emoji_cache()
     except Exception as e:
         logger.error("Background emoji import failed %s: %s", keyword, e, exc_info=True)
 
@@ -61,7 +61,8 @@ def _background_import_emoji(url: str, keyword: str, domain: str):
 def _process_emoji_tags(tags: list, session):
     """Parse Emoji tags from an ActivityPub object, download and save custom emojis safely."""
     if not tags or not isinstance(tags, list):
-        return
+        return 0
+    added = 0
     _storage = get_storage()
     if not S3_ENABLED:
         with contextlib.suppress(Exception):
@@ -161,5 +162,10 @@ def _process_emoji_tags(tags: list, session):
                 domain=domain,
             )
             session.add(emoji)
+            added += 1
         except Exception as e:
             logger.error("Failed to process remote emoji %s: %s", keyword, e, exc_info=True)
+    if added:
+        # 커밋 전이지만 캐시만 비워 두면 다음 조회 때 한 번만 재생성된다.
+        _invalidate_emoji_cache()
+    return added

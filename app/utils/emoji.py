@@ -1,5 +1,6 @@
 import contextlib
 import os
+import re
 import shutil
 import time
 
@@ -39,6 +40,21 @@ _EMOJI_CACHE_TTL = 60  # seconds
 
 _emoji_cache = {"data": None, "ts": 0}
 _emoji_storage = None
+_EMOJI_TOKEN_RE = re.compile(r":([a-z0-9_]+):")
+
+
+def _invalidate_emoji_cache():
+    """다음 조회 때 DB에서 다시 읽도록만 표시한다.
+
+    원격 이모지가 추가될 때마다 전체 목록을 즉시 재생성하면, 임포트가 몰릴 때
+    매번 전체 테이블을 스캔하게 된다. 실제로 목록이 필요한 시점에 한 번만
+    재생성하는 편이 훨씬 싸다.
+    """
+    _emoji_cache["data"] = None
+    _emoji_cache["ts"] = 0
+    _emoji_cache.pop("index", None)
+    _emoji_cache.pop("index_data", None)
+
 
 def _refresh_emoji_cache_forcibly(session):
     emojis = session.query(CustomEmoji).all()
@@ -112,5 +128,26 @@ def _load_emojis(session):
     ]
     _emoji_cache["data"] = result
     _emoji_cache["ts"] = now
+    _emoji_cache.pop("index", None)
+    _emoji_cache.pop("index_data", None)
     return result
+
+
+def emoji_keywords_in_text(text: str) -> set[str]:
+    """텍스트에 등장하는 ``:keyword:`` 형태의 shortcode만 뽑는다."""
+    return set(_EMOJI_TOKEN_RE.findall((text or "").lower()))
+
+
+def _emoji_index(session):
+    """keyword -> 후보 이모지 목록 인덱스를 캐시한다."""
+    data = _load_emojis(session)
+    index = _emoji_cache.get("index")
+    if index is not None and _emoji_cache.get("index_data") is data:
+        return index
+    index = {}
+    for e in data:
+        index.setdefault(e["keyword"].lower(), []).append(e)
+    _emoji_cache["index"] = index
+    _emoji_cache["index_data"] = data
+    return index
 
